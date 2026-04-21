@@ -1,0 +1,37 @@
+# Build artifacts
+target/
+debug/
+
+# Environment files (secrets should be passed at runtime)
+.env
+.env.*
+.dev.vars
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Documentation & meta
+.handovers/
+.issues/
+*.md
+LICENSE
+
+# Logs
+*.log
+
+# Docker
+Dockerfile
+.dockerignore
+docker-compose*.yml
