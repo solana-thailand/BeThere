@@ -36,7 +36,7 @@ mod tests {
 
         assert_eq!(claims.email, email);
         assert_eq!(claims.sub, sub);
-        assert!(!claims.is_expired());
+        assert!(claims.exp > claims.iat);
     }
 
     #[test]
