@@ -10,15 +10,16 @@ QR-based event check-in system. Staff scan attendee QR codes to check them in. A
 # 1. Copy env and fill in your values
 cp .env.example .env
 
-# 2. Run backend (port 3000)
-cargo run
+# 2. Build frontend (only needed once, or after frontend changes)
+cd frontend-leptos && trunk build && cd ..
 
-# 3. Run frontend dev server (port 3001)
-cd frontend-leptos
-trunk serve --port 3001
+# 3. Run server
+cargo run
 ```
 
-Open `http://localhost:3001`
+Open `http://localhost:3000` — Axum serves both the API and the pre-built WASM frontend from `frontend-leptos/dist/`.
+
+**Frontend dev with hot-reload:** `cd frontend-leptos && trunk serve --port 3001` (separate terminal, proxies `/api` to port 3000)
 
 ## Environment Variables
 
