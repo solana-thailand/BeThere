@@ -1,3 +1,8 @@
+//! API client for the event check-in backend.
+//!
+//! Provides typed response structs and authenticated request helpers
+//! for all backend endpoints.
+
 use serde::{Deserialize, Serialize};
 
 use crate::auth::{clear_token, get_token};
@@ -38,16 +43,27 @@ pub struct MeResponse {
     pub is_staff: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct AttendeeResponse {
+    #[serde(default)]
     pub api_id: String,
+    #[serde(default)]
     pub name: String,
+    #[serde(default)]
     pub email: String,
+    #[serde(default)]
     pub ticket_name: String,
+    #[serde(default)]
     pub approval_status: String,
+    #[serde(default)]
     pub checked_in_at: Option<String>,
+    #[serde(default)]
     pub qr_code_url: Option<String>,
+    #[serde(default)]
     pub row_index: usize,
+    /// Participation type from Google Sheet column Y (e.g. "In-Person", "Online").
+    #[serde(default)]
+    pub participation_type: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -57,50 +73,77 @@ pub struct RecentCheckIn {
     pub checked_in_at: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct StatsResponse {
+    #[serde(default)]
     pub total_approved: usize,
+    #[serde(default)]
     pub total_checked_in: usize,
+    #[serde(default)]
     pub total_remaining: usize,
+    #[serde(default)]
     pub check_in_percentage: f64,
     #[serde(default)]
     pub recent_check_ins: Vec<RecentCheckIn>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AttendeesData {
+    #[serde(default)]
     pub attendees: Vec<AttendeeResponse>,
+    #[serde(default)]
     pub stats: StatsResponse,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AttendeeData {
+    #[serde(default)]
     pub attendee: AttendeeResponse,
+    #[serde(default)]
     pub qr_image: Option<String>,
+    #[serde(default)]
     pub is_checked_in: bool,
+    #[serde(default)]
     pub is_approved: bool,
+    /// Whether the attendee is in-person (from backend `is_in_person()`).
+    #[serde(default)]
+    pub is_in_person: bool,
+    /// Raw participation type string from backend.
+    #[serde(default)]
+    pub participation_type: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct CheckInData {
+    #[serde(default)]
     pub api_id: String,
+    #[serde(default)]
     pub name: String,
+    #[serde(default)]
     pub checked_in_at: String,
+    #[serde(default)]
     pub message: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct QrGenerationDetail {
+    #[serde(default)]
     pub api_id: String,
+    #[serde(default)]
     pub name: String,
+    #[serde(default)]
     pub qr_code_url: String,
+    #[serde(default)]
     pub status: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct GenerateQrData {
+    #[serde(default)]
     pub total: usize,
+    #[serde(default)]
     pub generated: usize,
+    #[serde(default)]
     pub skipped: usize,
     #[serde(default)]
     pub details: Vec<QrGenerationDetail>,
@@ -122,7 +165,9 @@ pub struct ApiResponse<T> {
 fn api_base() -> String {
     let window = web_sys::window().expect("no window");
     let location = window.location();
-    let origin = location.origin().unwrap_or_else(|_| "http://localhost:3000".to_string());
+    let origin = location
+        .origin()
+        .unwrap_or_else(|_| "http://localhost:3000".to_string());
     format!("{origin}/api")
 }
 
@@ -142,8 +187,6 @@ async fn api_get(path: &str) -> Result<gloo::net::http::Response, ApiError> {
 
     if response.status() == 401 {
         clear_token();
-        let window = web_sys::window().expect("no window");
-        let _ = window.location().set_href("/?error=session_expired");
         return Err(ApiError {
             message: "Session expired".to_string(),
             status: 401,
@@ -180,8 +223,6 @@ async fn api_post(path: &str) -> Result<gloo::net::http::Response, ApiError> {
 
     if response.status() == 401 {
         clear_token();
-        let window = web_sys::window().expect("no window");
-        let _ = window.location().set_href("/?error=session_expired");
         return Err(ApiError {
             message: "Session expired".to_string(),
             status: 401,
@@ -206,13 +247,10 @@ pub async fn get_auth_url() -> Result<AuthUrlResponse, ApiError> {
         });
     }
 
-    response
-        .json()
-        .await
-        .map_err(|e| ApiError {
-            message: format!("Failed to parse auth URL response: {e}"),
-            status: 0,
-        })
+    response.json().await.map_err(|e| ApiError {
+        message: format!("Failed to parse auth URL response: {e}"),
+        status: 0,
+    })
 }
 
 /// GET /api/auth/me
@@ -227,13 +265,10 @@ pub async fn get_me() -> Result<MeResponse, ApiError> {
         });
     }
 
-    response
-        .json()
-        .await
-        .map_err(|e| ApiError {
-            message: format!("Failed to parse user info: {e}"),
-            status: 0,
-        })
+    response.json().await.map_err(|e| ApiError {
+        message: format!("Failed to parse user info: {e}"),
+        status: 0,
+    })
 }
 
 /// GET /api/attendees
@@ -242,27 +277,21 @@ pub async fn get_attendees() -> Result<AttendeesData, ApiError> {
     let response = api_get("/attendees").await?;
 
     if !response.ok() {
-        let body: ApiResponse<()> = response
-            .json()
-            .await
-            .unwrap_or(ApiResponse {
-                success: false,
-                data: None,
-                error: Some("Failed to load attendees".to_string()),
-            });
+        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
+            success: false,
+            data: None,
+            error: Some("Failed to load attendees".to_string()),
+        });
         return Err(ApiError {
             message: body.error.unwrap_or_default(),
             status: 0,
         });
     }
 
-    let wrapper: ApiResponse<AttendeesData> = response
-        .json()
-        .await
-        .map_err(|e| ApiError {
-            message: format!("Failed to parse attendees: {e}"),
-            status: 0,
-        })?;
+    let wrapper: ApiResponse<AttendeesData> = response.json().await.map_err(|e| ApiError {
+        message: format!("Failed to parse attendees: {e}"),
+        status: 0,
+    })?;
 
     wrapper.data.ok_or_else(|| ApiError {
         message: wrapper.error.unwrap_or("No data".to_string()),
@@ -273,31 +302,25 @@ pub async fn get_attendees() -> Result<AttendeesData, ApiError> {
 /// GET /api/attendee/:id
 /// Returns a single attendee by their api_id.
 pub async fn get_attendee(id: &str) -> Result<AttendeeData, ApiError> {
-    let path = format!("/attendee/{}", id);
+    let path = format!("/attendee/{id}");
     let response = api_get(&path).await?;
 
     if !response.ok() {
-        let body: ApiResponse<()> = response
-            .json()
-            .await
-            .unwrap_or(ApiResponse {
-                success: false,
-                data: None,
-                error: Some("Attendee not found".to_string()),
-            });
+        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
+            success: false,
+            data: None,
+            error: Some("Attendee not found".to_string()),
+        });
         return Err(ApiError {
             message: body.error.unwrap_or_default(),
             status: 0,
         });
     }
 
-    let wrapper: ApiResponse<AttendeeData> = response
-        .json()
-        .await
-        .map_err(|e| ApiError {
-            message: format!("Failed to parse attendee: {e}"),
-            status: 0,
-        })?;
+    let wrapper: ApiResponse<AttendeeData> = response.json().await.map_err(|e| ApiError {
+        message: format!("Failed to parse attendee: {e}"),
+        status: 0,
+    })?;
 
     wrapper.data.ok_or_else(|| ApiError {
         message: wrapper.error.unwrap_or("No data".to_string()),
@@ -308,31 +331,25 @@ pub async fn get_attendee(id: &str) -> Result<AttendeeData, ApiError> {
 /// POST /api/checkin/:id
 /// Check in an attendee by their api_id.
 pub async fn check_in(id: &str) -> Result<CheckInData, ApiError> {
-    let path = format!("/checkin/{}", id);
+    let path = format!("/checkin/{id}");
     let response = api_post(&path).await?;
 
     if !response.ok() {
-        let body: ApiResponse<()> = response
-            .json()
-            .await
-            .unwrap_or(ApiResponse {
-                success: false,
-                data: None,
-                error: Some("Check-in failed".to_string()),
-            });
+        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
+            success: false,
+            data: None,
+            error: Some("Check-in failed".to_string()),
+        });
         return Err(ApiError {
             message: body.error.unwrap_or_default(),
             status: 0,
         });
     }
 
-    let wrapper: ApiResponse<CheckInData> = response
-        .json()
-        .await
-        .map_err(|e| ApiError {
-            message: format!("Failed to parse check-in response: {e}"),
-            status: 0,
-        })?;
+    let wrapper: ApiResponse<CheckInData> = response.json().await.map_err(|e| ApiError {
+        message: format!("Failed to parse check-in response: {e}"),
+        status: 0,
+    })?;
 
     wrapper.data.ok_or_else(|| ApiError {
         message: wrapper.error.unwrap_or("No data".to_string()),
@@ -340,33 +357,35 @@ pub async fn check_in(id: &str) -> Result<CheckInData, ApiError> {
     })
 }
 
-/// POST /api/generate-qrs
+/// POST /api/generate-qrs?force={force}
 /// Bulk generate QR codes for all approved attendees.
-pub async fn generate_qrs() -> Result<GenerateQrData, ApiError> {
-    let response = api_post("/generate-qrs").await?;
+///
+/// When `force` is true, regenerates QR URLs even for attendees
+/// that already have one (overwrites existing).
+pub async fn generate_qrs(force: bool) -> Result<GenerateQrData, ApiError> {
+    let path = if force {
+        "/generate-qrs?force=true"
+    } else {
+        "/generate-qrs"
+    };
+    let response = api_post(path).await?;
 
     if !response.ok() {
-        let body: ApiResponse<()> = response
-            .json()
-            .await
-            .unwrap_or(ApiResponse {
-                success: false,
-                data: None,
-                error: Some("QR generation failed".to_string()),
-            });
+        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
+            success: false,
+            data: None,
+            error: Some("QR generation failed".to_string()),
+        });
         return Err(ApiError {
             message: body.error.unwrap_or_default(),
             status: 0,
         });
     }
 
-    let wrapper: ApiResponse<GenerateQrData> = response
-        .json()
-        .await
-        .map_err(|e| ApiError {
-            message: format!("Failed to parse QR generation response: {e}"),
-            status: 0,
-        })?;
+    let wrapper: ApiResponse<GenerateQrData> = response.json().await.map_err(|e| ApiError {
+        message: format!("Failed to parse QR generation response: {e}"),
+        status: 0,
+    })?;
 
     wrapper.data.ok_or_else(|| ApiError {
         message: wrapper.error.unwrap_or("No data".to_string()),
