@@ -1,69 +1,69 @@
 # ============================================
-# Stage 1: Build the Rust binary
+# Stage 1: Build Leptos WASM frontend
 # ============================================
-FROM rust:1.85-bookworm AS builder
+FROM rust:1.85-bookworm AS frontend-builder
+
+RUN rustup target add wasm32-unknown-unknown
+RUN cargo install trunk
 
 WORKDIR /app
 
-# Cache dependencies by copying manifests first
-COPY Cargo.toml Cargo.lock ./
+# Cache frontend Rust dependencies
+COPY frontend-leptos/Cargo.toml frontend-leptos/Cargo.lock ./
+RUN mkdir src && echo "" > src/lib.rs
+RUN CARGO_BUILD_JOBS=1 cargo build --target wasm32-unknown-unknown --release 2>/dev/null || true
 
-# Create a dummy main.rs to build dependencies cache layer
-RUN mkdir src && echo "fn main() {}" > src/main.rs
+# Copy frontend source and build
+COPY frontend-leptos/ ./
+RUN CARGO_BUILD_JOBS=1 trunk build --release
 
-# Build dependencies only (this layer is cached unless Cargo.toml/lock changes)
-RUN cargo build --release && rm -rf src
-
-# Copy the actual source code
-COPY src/ src/
-
-# Touch main.rs to ensure rebuild (not cached dummy)
-RUN touch src/main.rs
-
-# Build the actual binary
-RUN cargo build --release
+# Clean trunk artifacts (nonces, live-reload script, template vars)
+RUN sed -i 's/ nonce="[^"]*"//g' dist/index.html && \
+    sed -i '/{{__TRUNK/d' dist/index.html
 
 # ============================================
-# Stage 2: Minimal runtime image
+# Stage 2: Build Rust backend
+# ============================================
+FROM rust:1.85-bookworm AS backend-builder
+
+WORKDIR /app
+
+# Cache backend dependencies
+COPY Cargo.toml Cargo.lock ./
+RUN mkdir src && echo "fn main() {}" > src/main.rs
+RUN cargo build --release && rm -rf src
+
+# Copy actual source and build
+COPY src/ src/
+RUN touch src/main.rs && cargo build --release
+
+# ============================================
+# Stage 3: Minimal runtime
 # ============================================
 FROM debian:bookworm-slim AS runtime
 
-# Install ca-certificates for HTTPS (Google API calls) and timezone data
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-        ca-certificates \
-        tzdata && \
+    apt-get install -y --no-install-recommends ca-certificates tzdata curl && \
     rm -rf /var/lib/apt/lists/*
 
-# Create non-root user
 RUN groupadd --gid 1000 appuser && \
     useradd --uid 1000 --gid appuser --shell /bin/bash --create-home appuser
 
 WORKDIR /app
 
-# Copy the compiled binary from builder
-COPY --from=builder /app/target/release/event-checkin .
+COPY --from=backend-builder /app/target/release/event-checkin .
+COPY --from=frontend-builder /app/dist ./frontend-leptos/dist/
 
-# Copy frontend static assets
-COPY frontend/ ./frontend/
-
-# Set ownership to non-root user
 RUN chown -R appuser:appuser /app
-
-# Switch to non-root user
 USER appuser
 
-# Expose the default port
 EXPOSE 3000
 
-# Environment defaults (overridden at runtime via docker run -e or docker-compose)
 ENV HOST=0.0.0.0
 ENV PORT=3000
 ENV RUST_LOG=event_checkin=info,tower_http=warn
 
-# Health check
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD curl -f http://localhost:3000/api/health || exit 1
 
-# Run the binary
 ENTRYPOINT ["./event-checkin"]

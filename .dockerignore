@@ -1,10 +1,14 @@
 # Build artifacts
 target/
 debug/
+frontend-leptos/dist/
+frontend-leptos/target/
+frontend-leptos/.cargo/
 
-# Environment files (secrets should be passed at runtime)
+# Environment files (secrets passed at runtime)
 .env
 .env.*
+!.env.example
 .dev.vars
 
 # IDE
@@ -35,3 +39,6 @@ LICENSE
 Dockerfile
 .dockerignore
 docker-compose*.yml
+
+# Legacy JS frontend (not used in Docker)
+frontend/
