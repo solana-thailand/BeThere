@@ -40,7 +40,7 @@ pub async fn auth_callback(
     // Check for OAuth error from Google
     if let Some(ref error) = query.error {
         tracing::warn!("oauth callback error: {error}");
-        return Redirect::to(&format!("/?error=oauth_failed&message={error}")).into_response();
+        return Redirect::to("/?error=oauth_failed").into_response();
     }
 
     // Extract authorization code
@@ -56,11 +56,7 @@ pub async fn auth_callback(
         Ok(info) => info,
         Err(ref e) => {
             tracing::error!("oauth callback failed: {e}");
-            return Redirect::to(&format!(
-                "/?error=auth_failed&message={}",
-                urlencoding::encode(e)
-            ))
-            .into_response();
+            return Redirect::to("/?error=auth_failed").into_response();
         }
     };
 
@@ -81,15 +77,21 @@ pub async fn auth_callback(
 
     tracing::info!("staff login successful: {}", user_info.email);
 
-    // Set HTTP-only cookie and redirect to staff page (no token in URL)
-    let cookie =
-        format!("event_checkin_token={token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=86400");
-    let mut response = Redirect::to("/staff.html").into_response();
-    if let Ok(cookie_value) = axum::http::HeaderValue::from_str(&cookie) {
+    // Set HttpOnly cookie for browser-based auth. The frontend calls GET /api/auth/me
+    // which reads the JWT from this cookie (no localStorage or URL token passing needed).
+    // Cookie is scoped to /api so it's only sent on API requests.
+    let http_only_cookie =
+        format!("event_checkin_token={token}; HttpOnly; SameSite=Lax; Path=/api; Max-Age=86400");
+
+    let redirect_url = "/staff".to_string();
+    let mut response = Redirect::to(&redirect_url).into_response();
+
+    if let Ok(cookie_value) = axum::http::HeaderValue::from_str(&http_only_cookie) {
         response
             .headers_mut()
             .insert(axum::http::header::SET_COOKIE, cookie_value);
     }
+
     response
 }
 
@@ -108,16 +110,29 @@ pub async fn auth_me(
 }
 
 /// GET /api/auth/logout
-/// Clears the session cookie and redirects to the login page.
+/// Clears the session cookie and returns JSON 200 (no redirect).
+/// The frontend calls this via fetch(), then navigates client-side.
+/// Clears cookies at both Path=/api and Path=/ to handle stale cookies
+/// from earlier development iterations.
 pub async fn auth_logout() -> impl IntoResponse {
-    let cookie = "event_checkin_token=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0";
-    let mut response = Redirect::to("/").into_response();
-    if let Ok(cookie_value) = axum::http::HeaderValue::from_str(cookie) {
-        response
-            .headers_mut()
-            .insert(axum::http::header::SET_COOKIE, cookie_value);
+    let cookie_api = "event_checkin_token=; HttpOnly; SameSite=Lax; Path=/api; Max-Age=0";
+    let cookie_root = "event_checkin_token=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0";
+
+    let mut headers = axum::http::HeaderMap::new();
+    if let Ok(v) = axum::http::HeaderValue::from_str(cookie_api) {
+        headers.append(axum::http::header::SET_COOKIE, v);
     }
-    response
+    if let Ok(v) = axum::http::HeaderValue::from_str(cookie_root) {
+        headers.append(axum::http::header::SET_COOKIE, v);
+    }
+
+    (
+        headers,
+        Json(json!({
+            "success": true,
+            "message": "logged out",
+        })),
+    )
 }
 
 /// Auth middleware that extracts and verifies JWT from the Authorization header or cookie.
@@ -180,9 +195,10 @@ fn extract_token_from_request(req: &Request) -> Option<String> {
         .headers()
         .get("Authorization")
         .and_then(|v| v.to_str().ok())
-        && let Some(token) = auth_header.strip_prefix("Bearer ") {
-            return Some(token.to_string());
-        }
+        && let Some(token) = auth_header.strip_prefix("Bearer ")
+    {
+        return Some(token.to_string());
+    }
 
     // Try cookie (for browser sessions)
     for cookie_header in req.headers().get_all("cookie").iter() {

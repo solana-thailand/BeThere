@@ -28,13 +28,6 @@ impl Claims {
             exp,
         }
     }
-
-    /// Check if the token has expired.
-    #[allow(dead_code)]
-    pub fn is_expired(&self) -> bool {
-        let now = Utc::now().timestamp() as u64;
-        self.exp < now
-    }
 }
 
 /// Google OAuth 2.0 token exchange response.

@@ -9,7 +9,6 @@ default-run = "event-checkin"
 # Web framework
 axum = { version = "0.8", features = ["macros", "ws"] }
 tokio = { version = "1", features = ["full"] }
-tower = "0.5"
 tower-http = { version = "0.6", features = ["cors", "fs", "trace"] }
 
 # Serialization
@@ -33,9 +32,6 @@ dotenv = "0.15"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
-# Error handling
-thiserror = "2"
-
 # URL handling
 url = "2"
 urlencoding = "2"
@@ -45,13 +41,9 @@ chrono = { version = "0.4", features = ["serde"] }
 
 # Crypto
 rsa = { version = "0.9", features = ["sha2"] }
-pkcs1 = "0.7"
 pem = "3"
 sha2 = "0.10"
-rand = "0.8"
-
-# UUID
-uuid = { version = "1", features = ["v7", "serde"] }
 
 [dev-dependencies]
 axum-test = "16"
+tower = "0.5"

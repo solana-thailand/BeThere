@@ -9,7 +9,7 @@ mod sheets;
 use axum::Router;
 use tokio::signal;
 use tower_http::cors::{AllowHeaders, AllowMethods, AllowOrigin, CorsLayer};
-use tower_http::services::ServeDir;
+use tower_http::services::{ServeDir, ServeFile};
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::EnvFilter;
 
@@ -30,9 +30,26 @@ async fn main() {
 
     let cors_layer = build_cors_layer(&state);
 
+    // Serve Leptos frontend if built, otherwise fall back to legacy JS frontend
+    let frontend_dir = if std::path::Path::new("frontend-leptos/dist/index.html").exists() {
+        tracing::info!("📦 serving Leptos frontend from frontend-leptos/dist/");
+        "frontend-leptos/dist"
+    } else {
+        tracing::info!("📦 serving legacy frontend from frontend/");
+        "frontend"
+    };
+
+    // SPA fallback: serve static files (CSS, JS, WASM) from the frontend dir.
+    // Any path that doesn't match a real file falls back to index.html so that
+    // Leptos client-side router can handle routes like /staff and /admin.
+    let index_path = format!("{frontend_dir}/index.html");
+    let serve_dir = ServeDir::new(frontend_dir)
+        .append_index_html_on_directories(true)
+        .fallback(ServeFile::new(index_path));
+
     let app = Router::new()
         .merge(api_routes)
-        .fallback_service(ServeDir::new("frontend").append_index_html_on_directories(true))
+        .fallback_service(serve_dir)
         .layer(cors_layer)
         .layer(axum::middleware::from_fn(
             middleware::security_headers_layer,

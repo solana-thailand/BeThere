@@ -84,7 +84,7 @@ impl Attendee {
 
 /// Represents a raw row from Google Sheets.
 /// Column mapping based on the sheet structure:
-/// A=api_id, B=first_name, C=last_name, D=name, E=email,
+/// A=api_id, B=name, C=last_name, D=display_name, E=email,
 /// F=ticket_name, G=solana_address, H=approval_status,
 /// I=checked_in_at, K=qr_code_url
 /// Y=participation_type (In-Person / Online)
@@ -135,7 +135,7 @@ impl AttendeeRow {
             api_id,
             first_name: get(1),
             last_name: get(2),
-            name: get(3),
+            name: get(1),
             email: get(4),
             ticket_name: get(5),
             solana_address: get_opt(6),

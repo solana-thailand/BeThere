@@ -82,34 +82,6 @@ pub async fn fetch_user_info(
         .map_err(|e| format!("failed to parse user info: {e}"))
 }
 
-/// Verify a Google ID token by calling Google's tokeninfo endpoint.
-/// Returns the user info if valid.
-#[allow(dead_code)]
-pub async fn verify_google_token(
-    id_token: &str,
-    state: &AppState,
-) -> Result<GoogleUserInfo, String> {
-    let response = state
-        .http_client
-        .get(format!(
-            "https://oauth2.googleapis.com/tokeninfo?id_token={id_token}"
-        ))
-        .send()
-        .await
-        .map_err(|e| format!("failed to verify token: {e}"))?;
-
-    if !response.status().is_success() {
-        let status = response.status();
-        let body = response.text().await.unwrap_or_default();
-        return Err(format!("token verification failed ({status}): {body}"));
-    }
-
-    response
-        .json()
-        .await
-        .map_err(|e| format!("failed to parse token info: {e}"))
-}
-
 /// Check if a given email is in the staff emails allowlist.
 pub fn is_staff(email: &str, state: &AppState) -> bool {
     state

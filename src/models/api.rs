@@ -1,35 +1,5 @@
 use serde::{Deserialize, Serialize};
 
-/// Generic API response wrapper.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[allow(dead_code)]
-pub struct ApiResponse<T: Serialize> {
-    pub success: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub data: Option<T>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<String>,
-}
-
-#[allow(dead_code)]
-impl<T: Serialize> ApiResponse<T> {
-    pub fn ok(data: T) -> Self {
-        Self {
-            success: true,
-            data: Some(data),
-            error: None,
-        }
-    }
-
-    pub fn err(message: impl Into<String>) -> ApiResponse<()> {
-        ApiResponse {
-            success: false,
-            data: None,
-            error: Some(message.into()),
-        }
-    }
-}
-
 /// Response for a single attendee or attendee in a list.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AttendeeResponse {

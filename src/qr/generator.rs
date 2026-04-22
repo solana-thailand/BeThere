@@ -22,9 +22,9 @@ pub fn generate_qr_base64(data: &str) -> Result<String, String> {
 }
 
 /// Build a check-in URL for a given attendee API ID.
-/// Format: `{server_url}/staff.html?scan={api_id}`
+/// Format: `{server_url}/staff/?scan={api_id}`
 pub fn build_checkin_url(api_id: &str, server_url: &str) -> String {
-    format!("{server_url}/staff.html?scan={api_id}")
+    format!("{server_url}/staff/?scan={api_id}")
 }
 
 /// Generate QR code URLs for all approved attendees that don't have one yet.
@@ -78,10 +78,7 @@ mod tests {
     #[test]
     fn test_build_checkin_url() {
         let url = build_checkin_url("gst-abc123", "https://checkin.example.com");
-        assert_eq!(
-            url,
-            "https://checkin.example.com/staff.html?scan=gst-abc123"
-        );
+        assert_eq!(url, "https://checkin.example.com/staff/?scan=gst-abc123");
     }
 
     #[test]
