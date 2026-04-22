@@ -146,7 +146,8 @@ const api = {
   checkIn: (id) => api.post(`/checkin/${encodeURIComponent(id)}`),
 
   // QR generation endpoint
-  generateQrs: () => api.post("/generate-qrs"),
+  generateQrs: (force = false) =>
+    api.post(`/generate-qrs${force ? "?force=true" : ""}`),
 };
 
 // ===== Login Page Logic =====
@@ -185,7 +186,7 @@ function showLoginError(error, message) {
   switch (error) {
     case "not_authorized":
       text =
-        "You are not authorized to access this system. Only approved staff members can sign in.";
+        "⛔ Access Denied — This system is for authorized staff only. If you are an event attendee, you do not need to log in here. If you believe you should have access, please contact the event organizer.";
       break;
     case "auth_failed":
       text = "Authentication failed. Please try again.";
@@ -210,6 +211,9 @@ function showLoginError(error, message) {
 
   errorEl.textContent = text;
   errorEl.classList.add("visible");
+  if (error === "not_authorized") {
+    errorEl.classList.add("not-authorized");
+  }
 }
 
 /**
