@@ -5,6 +5,8 @@ debug/
 
 # Environment
 .env
+.env.*
+!.env.example
 .dev.vars
 
 # IDE
@@ -24,3 +26,17 @@ Thumbs.db
 # Build artifacts
 *.d
 *.rlib
+*.wasm
+
+# Merge conflict leftovers
+*.orig
+*.rej
+
+# Node (if any tooling uses it)
+node_modules/
+
+# Leptos / WASM frontend
+frontend-leptos/target/
+frontend-leptos/dist/
+frontend-leptos/.cargo/
+frontend-leptos/Cargo.lock
