@@ -119,11 +119,27 @@ Additionally, the column B name fix from Handover 010 was verified working durin
 | `auth/google.rs` | Added `staff_sheet_name` to test config |
 | `qr/generator.rs` | Added `checked_in_by: None` to mock attendee |
 
-### Frontend (`frontend/js/`)
+### Frontend — Legacy JS (`frontend/js/`)
 
 | File | Changes |
 |------|---------|
 | `admin.js` | Shows "by staff@email" in attendee list and recent check-ins panel |
+
+### Frontend — Leptos WASM (`frontend-leptos/src/`)
+
+| File | Changes |
+|------|---------|
+| `api.rs` | Added `checked_in_by: Option<String>` to `AttendeeResponse`, `RecentCheckIn`; `checked_in_by: String` to `CheckInData` |
+| `pages/admin.rs` | Pre-computes `by_suffix` string, appends to attendee list time-ago and recent check-ins timestamp |
+| `pages/scanner.rs` | Pre-computes `by_suffix` for `AlreadyCheckedIn` and `Success` states, shows "by staff@email" |
+| `Cargo.toml` | Added empty `[workspace]` table to decouple from parent workspace for trunk builds |
+
+### Build Config
+
+| File | Changes |
+|------|---------|
+| `Cargo.toml` (root) | Added `exclude = ["frontend-leptos"]` so trunk can build independently |
+| `frontend-leptos/dist/` | Rebuilt with `~/.cargo/bin/trunk build` — includes new `checked_in_by` display |
 
 ---
 
@@ -208,7 +224,7 @@ The `get_staff_emails()` function will fail if the "staff" sheet tab doesn't exi
 
 ---
 
-## Issues Ref
+
 
 - Handover 010: Column B name fix
 - Handover 009: Workers migration (Phases 3-6)
