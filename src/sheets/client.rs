@@ -149,27 +149,83 @@ pub async fn get_attendee_by_id(
         .find(|a: &Attendee| a.api_id == api_id))
 }
 
-/// Mark an attendee as checked in by updating the checked_in_at column (column I).
-/// Sets the value to the current ISO 8601 timestamp.
-pub async fn mark_checked_in(row_index: usize, state: &AppState) -> Result<String, String> {
+/// Fetch staff email addresses from the staff sheet tab.
+/// Reads column A starting from row 2, trims, lowercases, and filters empty values.
+pub async fn get_staff_emails(state: &AppState) -> Result<Vec<String>, String> {
     let access_token = get_access_token(state).await?;
-    let timestamp = Utc::now().to_rfc3339();
-
-    let range = format!("{}!I{row_index}", state.config.sheets.sheet_name);
+    let range = format!("{}!A2:A", state.config.sheets.staff_sheet_name);
     let url = format!(
-        "https://sheets.googleapis.com/v4/spreadsheets/{}/values/{}?valueInputOption=USER_ENTERED",
+        "https://sheets.googleapis.com/v4/spreadsheets/{}/values/{}",
         state.config.sheets.sheet_id,
         urlencoding::encode(&range)
     );
 
-    let body = ValueRange {
-        range,
-        values: vec![vec![timestamp.clone()]],
+    let response = state
+        .http_client
+        .get(&url)
+        .header("Authorization", format!("Bearer {access_token}"))
+        .send()
+        .await
+        .map_err(|e| format!("failed to fetch staff emails: {e}"))?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        return Err(format!("staff emails request failed ({status}): {body}"));
+    }
+
+    let value_range: ValueRange = response
+        .json()
+        .await
+        .map_err(|e| format!("failed to parse staff emails: {e}"))?;
+
+    let emails: Vec<String> = value_range
+        .values
+        .into_iter()
+        .filter_map(|row| row.into_iter().next())
+        .map(|v| v.trim().to_lowercase())
+        .filter(|v| !v.is_empty())
+        .collect();
+
+    tracing::info!("fetched {} staff emails from google sheets", emails.len());
+    Ok(emails)
+}
+
+/// Mark an attendee as checked in by updating columns I (timestamp) and J (staff email).
+/// Uses batch update to write both values in a single request.
+pub async fn mark_checked_in(
+    row_index: usize,
+    staff_email: &str,
+    state: &AppState,
+) -> Result<String, String> {
+    let access_token = get_access_token(state).await?;
+    let timestamp = Utc::now().to_rfc3339();
+    let sheet_name = &state.config.sheets.sheet_name;
+
+    let data = vec![
+        ValueRange {
+            range: format!("{sheet_name}!I{row_index}"),
+            values: vec![vec![timestamp.clone()]],
+        },
+        ValueRange {
+            range: format!("{sheet_name}!J{row_index}"),
+            values: vec![vec![staff_email.to_string()]],
+        },
+    ];
+
+    let url = format!(
+        "https://sheets.googleapis.com/v4/spreadsheets/{}/values:batchUpdate",
+        state.config.sheets.sheet_id
+    );
+
+    let body = BatchUpdateRequest {
+        data,
+        value_input_option: "USER_ENTERED".to_string(),
     };
 
     let response = state
         .http_client
-        .put(&url)
+        .post(&url)
         .header("Authorization", format!("Bearer {access_token}"))
         .json(&body)
         .send()
@@ -182,7 +238,7 @@ pub async fn mark_checked_in(row_index: usize, state: &AppState) -> Result<Strin
         return Err(format!("check-in update failed ({status}): {body}"));
     }
 
-    tracing::info!("marked row {row_index} as checked in at {timestamp}");
+    tracing::info!("marked row {row_index} as checked in at {timestamp} by {staff_email}");
     Ok(timestamp)
 }
 

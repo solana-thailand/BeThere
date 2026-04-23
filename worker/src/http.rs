@@ -119,6 +119,7 @@ pub async fn post_json<T: DeserializeOwned>(
 
 /// Perform a PUT request with a JSON body and a Bearer token.
 /// Returns the raw response text (Google Sheets PUT doesn't always return JSON).
+#[allow(dead_code)]
 pub async fn put_json(url: &str, body: &impl Serialize, access_token: &str) -> Result<(), String> {
     let json_body =
         serde_json::to_string(body).map_err(|e| format!("failed to serialize JSON body: {e}"))?;
@@ -220,6 +221,7 @@ pub async fn fetch_sheet_range(sheet_url: &str, access_token: &str) -> Result<Va
 }
 
 /// Update a single cell range in a Google Sheet.
+#[allow(dead_code)]
 pub async fn update_sheet_range(
     url: &str,
     body: &ValueRange,

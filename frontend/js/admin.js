@@ -245,7 +245,7 @@ function renderAttendeeList() {
             <span class="badge ${badgeClass}">
               ${badgeIcon} ${badgeText}
             </span>
-            ${isCheckedIn ? `<div style="font-size:0.7rem;color:var(--text-muted);margin-top:4px;text-align:right">${timeAgo(attendee.checked_in_at)}</div>` : ""}
+            ${isCheckedIn ? `<div style="font-size:0.7rem;color:var(--text-muted);margin-top:4px;text-align:right">${timeAgo(attendee.checked_in_at)}${attendee.checked_in_by ? ` by ${escapeHtml(attendee.checked_in_by)}` : ""}</div>` : ""}
           </div>
         </div>
       `;
@@ -286,7 +286,7 @@ function renderRecentCheckIns() {
           </div>
           <div class="attendee-status text-right">
             <span class="badge ${participation.class}" style="font-size:0.7rem;margin-bottom:4px">${participation.label}</span>
-            <div style="font-size:0.8rem;color:var(--text-secondary)">${formatTimestamp(checkIn.checked_in_at)}</div>
+            <div style="font-size:0.8rem;color:var(--text-secondary)">${formatTimestamp(checkIn.checked_in_at)}${checkIn.checked_in_by ? ` by ${escapeHtml(checkIn.checked_in_by)}` : ""}</div>
           </div>
         </div>
       `;

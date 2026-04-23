@@ -13,7 +13,7 @@ use event_checkin_domain::models::auth::ServiceAccountClaim;
 use crate::crypto;
 use crate::http::{
     AccessTokenResponse, BatchUpdateRequest, ValueRange, batch_update_sheet,
-    exchange_jwt_assertion, fetch_sheet_range, update_sheet_range,
+    exchange_jwt_assertion, fetch_sheet_range,
 };
 use crate::state::AppState;
 
@@ -99,30 +99,77 @@ pub async fn get_attendee_by_id(
 }
 
 // ---------------------------------------------------------------------------
-// Sheet mutations
+// Staff queries
 // ---------------------------------------------------------------------------
 
-/// Mark an attendee as checked in by updating the checked_in_at column (column I).
-/// Sets the value to the current ISO 8601 timestamp.
-pub async fn mark_checked_in(row_index: usize, state: &AppState) -> Result<String, String> {
+/// Fetch staff email addresses from the dedicated "staff" sheet tab.
+/// Reads column A starting from row 2 (row 1 is header).
+/// Returns lowercased, trimmed, non-empty email strings.
+pub async fn get_staff_emails(state: &AppState) -> Result<Vec<String>, String> {
     let access_token = get_access_token(state).await?;
-    let timestamp = Utc::now().to_rfc3339();
-
-    let range = format!("{}!I{row_index}", state.config.sheets.sheet_name);
+    let range = format!("{}!A2:A", state.config.sheets.staff_sheet_name);
     let url = format!(
-        "https://sheets.googleapis.com/v4/spreadsheets/{}/values/{}?valueInputOption=USER_ENTERED",
+        "https://sheets.googleapis.com/v4/spreadsheets/{}/values/{}",
         state.config.sheets.sheet_id,
         urlencoding::encode(&range)
     );
 
-    let body = ValueRange {
-        range,
-        values: vec![vec![timestamp.clone()]],
+    let value_range: ValueRange = fetch_sheet_range(&url, &access_token).await?;
+
+    let emails: Vec<String> = value_range
+        .values
+        .iter()
+        .filter_map(|row| row.first().cloned())
+        .map(|s| s.trim().to_lowercase())
+        .filter(|s| !s.is_empty())
+        .collect();
+
+    tracing::debug!("fetched {} staff emails from sheet", emails.len());
+    Ok(emails)
+}
+
+// ---------------------------------------------------------------------------
+// Sheet mutations
+// ---------------------------------------------------------------------------
+
+/// Mark an attendee as checked in by updating both:
+/// - Column I: checked_in_at timestamp (ISO 8601)
+/// - Column J: checked_in_by staff email
+///
+/// Uses batch update to write both columns in a single API call.
+pub async fn mark_checked_in(
+    row_index: usize,
+    staff_email: &str,
+    state: &AppState,
+) -> Result<String, String> {
+    let access_token = get_access_token(state).await?;
+    let timestamp = Utc::now().to_rfc3339();
+    let sheet_name = &state.config.sheets.sheet_name;
+
+    let data = vec![
+        ValueRange {
+            range: format!("{sheet_name}!I{row_index}"),
+            values: vec![vec![timestamp.clone()]],
+        },
+        ValueRange {
+            range: format!("{sheet_name}!J{row_index}"),
+            values: vec![vec![staff_email.to_string()]],
+        },
+    ];
+
+    let url = format!(
+        "https://sheets.googleapis.com/v4/spreadsheets/{}/values:batchUpdate",
+        state.config.sheets.sheet_id
+    );
+
+    let body = BatchUpdateRequest {
+        data,
+        value_input_option: "USER_ENTERED".to_string(),
     };
 
-    update_sheet_range(&url, &body, &access_token).await?;
+    batch_update_sheet(&url, &body, &access_token).await?;
 
-    tracing::info!("marked row {row_index} as checked in at {timestamp}");
+    tracing::info!("marked row {row_index} as checked in at {timestamp} by {staff_email}");
     Ok(timestamp)
 }
 

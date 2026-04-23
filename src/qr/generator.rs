@@ -68,6 +68,7 @@ mod tests {
             ticket_name: "General".to_string(),
             approval_status: status,
             checked_in_at: None,
+            checked_in_by: None,
             qr_code_url: qr_url.map(|s| s.to_string()),
             solana_address: None,
             participation_type: "In-Person".to_string(),

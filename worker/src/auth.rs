@@ -15,6 +15,7 @@ use event_checkin_domain::models::auth::{Claims, GoogleUserInfo, TokenRequest};
 
 use crate::crypto;
 use crate::http;
+use crate::sheets;
 use crate::state::AppState;
 
 // ---------------------------------------------------------------------------
@@ -61,8 +62,26 @@ pub async fn handle_callback(code: &str, state: &AppState) -> Result<GoogleUserI
 }
 
 /// Check if a given email is in the staff emails allowlist.
-pub fn is_staff(email: &str, state: &AppState) -> bool {
-    state.is_staff(email)
+///
+/// Checks both the env var `STAFF_EMAILS` list (fast, static) and the
+/// Google Sheets "staff" tab (dynamic). Returns `true` if the email
+/// appears in either source.
+pub async fn is_staff(email: &str, state: &AppState) -> bool {
+    // Fast path: check the static env var allowlist first
+    if state.is_staff(email) {
+        return true;
+    }
+
+    // Slow path: fetch staff emails from the Google Sheets "staff" tab
+    match sheets::get_staff_emails(state).await {
+        Ok(sheet_emails) => sheet_emails
+            .iter()
+            .any(|allowed| allowed.eq_ignore_ascii_case(email)),
+        Err(e) => {
+            tracing::warn!("failed to fetch staff emails from sheet, using env var list only: {e}");
+            false
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -122,8 +141,8 @@ pub async fn require_auth(
         }
     };
 
-    // Verify staff status
-    if !is_staff(&claims.email, &state) {
+    // Verify staff status (checks both env var list and staff sheet)
+    if !is_staff(&claims.email, &state).await {
         tracing::warn!("non-staff user attempted access: {}", claims.email);
         return (
             axum::http::StatusCode::FORBIDDEN,
@@ -220,6 +239,7 @@ mod tests {
             sheets: SheetsConfig {
                 sheet_id: "test-sheet-id".to_string(),
                 sheet_name: "Sheet1".to_string(),
+                staff_sheet_name: "staff".to_string(),
             },
             jwt_secret: "test-jwt-secret".to_string(),
             staff_emails: vec![
@@ -248,19 +268,22 @@ mod tests {
         assert!(url.contains("scope=openid+email+profile"));
     }
 
+    /// Test the static (env var) staff check via AppState::is_staff.
+    /// The async is_staff() also queries the Google Sheets "staff" tab,
+    /// which is not available in unit tests, so we test the fast path only.
     #[test]
     fn test_is_staff_allowed() {
         let state = test_state();
-        assert!(is_staff("admin@example.com", &state));
-        assert!(is_staff("staff@example.com", &state));
-        assert!(is_staff("Admin@Example.COM", &state)); // case insensitive
+        assert!(state.is_staff("admin@example.com"));
+        assert!(state.is_staff("staff@example.com"));
+        assert!(state.is_staff("Admin@Example.COM")); // case insensitive
     }
 
     #[test]
     fn test_is_staff_not_allowed() {
         let state = test_state();
-        assert!(!is_staff("random@example.com", &state));
-        assert!(!is_staff("unknown@gmail.com", &state));
+        assert!(!state.is_staff("random@example.com"));
+        assert!(!state.is_staff("unknown@gmail.com"));
     }
 
     #[test]

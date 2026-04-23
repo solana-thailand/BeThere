@@ -18,6 +18,7 @@ pub struct GoogleServiceAccountConfig {
 pub struct SheetsConfig {
     pub sheet_id: String,
     pub sheet_name: String,
+    pub staff_sheet_name: String,
 }
 
 #[derive(Debug, Clone)]

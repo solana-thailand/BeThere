@@ -36,6 +36,8 @@ impl AppState {
         let sheets = SheetsConfig {
             sheet_id: get_secret(env, "GOOGLE_SHEET_ID")?,
             sheet_name: get_var(env, "GOOGLE_SHEET_NAME").unwrap_or_else(|_| "Sheet1".to_string()),
+            staff_sheet_name: get_var(env, "GOOGLE_STAFF_SHEET_NAME")
+                .unwrap_or_else(|_| "staff".to_string()),
         };
 
         let staff_emails_str = get_secret(env, "STAFF_EMAILS")?;

@@ -22,6 +22,7 @@ pub struct GoogleServiceAccountConfig {
 pub struct SheetsConfig {
     pub sheet_id: String,
     pub sheet_name: String,
+    pub staff_sheet_name: String,
 }
 
 #[derive(Debug, Clone)]
@@ -53,6 +54,8 @@ impl AppConfig {
         let sheets = SheetsConfig {
             sheet_id: env_required("GOOGLE_SHEET_ID")?,
             sheet_name: env::var("GOOGLE_SHEET_NAME").unwrap_or_else(|_| "Sheet1".to_string()),
+            staff_sheet_name: env::var("GOOGLE_STAFF_SHEET_NAME")
+                .unwrap_or_else(|_| "staff".to_string()),
         };
 
         let staff_emails_str = env_required("STAFF_EMAILS")?;

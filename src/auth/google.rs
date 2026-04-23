@@ -112,6 +112,7 @@ mod tests {
             sheets: SheetsConfig {
                 sheet_id: "test-sheet-id".to_string(),
                 sheet_name: "Sheet1".to_string(),
+                staff_sheet_name: "staff".to_string(),
             },
             jwt_secret: "test-jwt-secret".to_string(),
             staff_emails: vec![

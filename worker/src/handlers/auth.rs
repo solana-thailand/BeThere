@@ -67,7 +67,7 @@ pub async fn auth_callback(
     };
 
     // Verify user is in the staff allowlist
-    if !auth::is_staff(&user_info.email, &state) {
+    if !auth::is_staff(&user_info.email, &state).await {
         tracing::warn!("non-staff user attempted login: {}", user_info.email);
         return Redirect::to("/?error=not_authorized").into_response();
     }
@@ -115,7 +115,7 @@ pub async fn auth_me(
     Json(json!({
         "email": claims.email,
         "sub": claims.sub,
-        "is_staff": auth::is_staff(&claims.email, &state),
+        "is_staff": auth::is_staff(&claims.email, &state).await,
     }))
 }
 

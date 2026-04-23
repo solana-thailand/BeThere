@@ -9,6 +9,7 @@ pub struct AttendeeResponse {
     pub ticket_name: String,
     pub approval_status: String,
     pub checked_in_at: Option<String>,
+    pub checked_in_by: Option<String>,
     pub qr_code_url: Option<String>,
     pub participation_type: String,
     pub row_index: usize,
@@ -23,6 +24,7 @@ impl AttendeeResponse {
             ticket_name: attendee.ticket_name.clone(),
             approval_status: attendee.approval_status.to_string(),
             checked_in_at: attendee.checked_in_at.clone(),
+            checked_in_by: attendee.checked_in_by.clone(),
             qr_code_url: attendee.qr_code_url.clone(),
             participation_type: attendee.participation_type.clone(),
             row_index: attendee.row_index,
@@ -36,6 +38,7 @@ pub struct CheckInResponse {
     pub api_id: String,
     pub name: String,
     pub checked_in_at: String,
+    pub checked_in_by: String,
     pub message: String,
 }
 
@@ -82,4 +85,5 @@ pub struct RecentCheckIn {
     pub api_id: String,
     pub name: String,
     pub checked_in_at: String,
+    pub checked_in_by: Option<String>,
 }

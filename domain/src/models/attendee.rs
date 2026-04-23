@@ -52,6 +52,7 @@ pub struct Attendee {
     pub ticket_name: String,
     pub approval_status: CheckInStatus,
     pub checked_in_at: Option<String>,
+    pub checked_in_by: Option<String>,
     pub qr_code_url: Option<String>,
     pub solana_address: Option<String>,
     pub participation_type: String,
@@ -92,7 +93,7 @@ impl Attendee {
 /// Column mapping based on the sheet structure:
 /// A=api_id, B=name, C=last_name, D=display_name, E=email,
 /// F=ticket_name, G=solana_address, H=approval_status,
-/// I=checked_in_at, K=qr_code_url
+/// I=checked_in_at, J=checked_in_by, K=qr_code_url
 /// Y=participation_type (In-Person / Online)
 #[derive(Debug, Clone)]
 pub struct AttendeeRow {
@@ -105,6 +106,7 @@ pub struct AttendeeRow {
     pub solana_address: Option<String>,
     pub approval_status: String,
     pub checked_in_at: Option<String>,
+    pub checked_in_by: Option<String>,
     pub qr_code_url: Option<String>,
     pub participation_type: String,
     pub row_index: usize,
@@ -150,6 +152,7 @@ impl AttendeeRow {
             solana_address: get_opt(6),
             approval_status: get(7),
             checked_in_at: get_opt(8),
+            checked_in_by: get_opt(9),
             qr_code_url: get_opt(10),
             participation_type,
             row_index,
@@ -172,6 +175,7 @@ impl AttendeeRow {
             ticket_name: self.ticket_name.clone(),
             approval_status: status,
             checked_in_at: self.checked_in_at.clone(),
+            checked_in_by: self.checked_in_by.clone(),
             qr_code_url: self.qr_code_url.clone(),
             solana_address: self.solana_address.clone(),
             participation_type: self.participation_type.clone(),
@@ -194,6 +198,7 @@ mod tests {
             ticket_name: "General".to_string(),
             approval_status: CheckInStatus::Approved,
             checked_in_at: None,
+            checked_in_by: None,
             qr_code_url: None,
             solana_address: None,
             participation_type: participation_type.to_string(),

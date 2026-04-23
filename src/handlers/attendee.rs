@@ -56,6 +56,7 @@ pub async fn list_attendees(
                 api_id: a.api_id.clone(),
                 name: a.display_name().to_string(),
                 checked_in_at: ts.clone(),
+                checked_in_by: a.checked_in_by.clone(),
             })
         })
         .collect();

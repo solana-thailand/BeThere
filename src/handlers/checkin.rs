@@ -97,10 +97,11 @@ pub async fn check_in(
     }
 
     // Update the Google Sheet
-    match sheets::mark_checked_in(attendee.row_index, &state).await {
+    let staff_email = claims.email.clone();
+    match sheets::mark_checked_in(attendee.row_index, &staff_email, &state).await {
         Ok(timestamp) => {
             tracing::info!(
-                "check-in successful: {} ({}) at {timestamp}",
+                "check-in successful: {} ({}) at {timestamp} by {staff_email}",
                 attendee.display_name(),
                 attendee.api_id
             );
@@ -109,6 +110,7 @@ pub async fn check_in(
                 api_id: attendee.api_id.clone(),
                 name: attendee.display_name().to_string(),
                 checked_in_at: timestamp,
+                checked_in_by: staff_email,
                 message: format!("Successfully checked in {}", attendee.display_name()),
             };
 
