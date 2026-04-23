@@ -135,7 +135,14 @@ impl AttendeeRow {
             api_id,
             first_name: get(1),
             last_name: get(2),
-            name: get(1),
+            name: {
+                let display = get(3);
+                if display.is_empty() {
+                    format!("{} {}", get(1), get(2)).trim().to_string()
+                } else {
+                    display
+                }
+            },
             email: get(4),
             ticket_name: get(5),
             solana_address: get_opt(6),
