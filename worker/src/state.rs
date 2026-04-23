@@ -50,6 +50,9 @@ impl AppState {
         let server_url = get_var(env, "SERVER_URL")
             .unwrap_or_else(|_| "https://event-checkin.workers.dev".to_string());
 
+        let claim_base_url =
+            get_var(env, "CLAIM_BASE_URL").unwrap_or_else(|_| format!("{server_url}/claim"));
+
         let config = AppConfig {
             google_oauth,
             service_account,
@@ -57,6 +60,7 @@ impl AppState {
             jwt_secret: get_secret(env, "JWT_SECRET")?,
             staff_emails,
             server_url,
+            claim_base_url,
             // host/port unused on Workers — placeholder values
             host: "0.0.0.0".to_string(),
             port: 0,

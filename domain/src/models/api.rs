@@ -39,6 +39,7 @@ pub struct CheckInResponse {
     pub name: String,
     pub checked_in_at: String,
     pub checked_in_by: String,
+    pub claim_url: Option<String>,
     pub message: String,
 }
 

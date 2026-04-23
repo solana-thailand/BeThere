@@ -29,6 +29,8 @@ pub struct AppConfig {
     pub jwt_secret: String,
     pub staff_emails: Vec<String>,
     pub server_url: String,
+    /// Base URL for claim links (e.g. https://bethere.solana-thailand.workers.dev/claim)
+    pub claim_base_url: String,
     pub host: String,
     pub port: u16,
 }

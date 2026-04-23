@@ -10,6 +10,7 @@ use axum::{
     response::Json,
 };
 use serde_json::json;
+use uuid::Uuid;
 
 use event_checkin_domain::models::api::CheckInResponse;
 use event_checkin_domain::models::attendee::Attendee;
@@ -25,8 +26,9 @@ use crate::state::AppState;
 /// 1. Looks up the attendee by api_id
 /// 2. Verifies the attendee is approved
 /// 3. Checks if already checked in
-/// 4. Updates the `checked_in_at` column (column I) in Google Sheets
-/// 5. Returns the check-in confirmation
+/// 4. Updates columns I (timestamp), J (staff email), L (claim_token) in Google Sheets
+/// 5. Generates a UUID v7 claim token for NFT/refund claim link
+/// 6. Returns the check-in confirmation with claim URL
 #[worker::send]
 pub async fn check_in(
     State(state): State<AppState>,
@@ -104,11 +106,15 @@ pub async fn check_in(
         }));
     }
 
-    // Update the Google Sheet (writes timestamp to column I and staff email to column J)
-    match sheets::mark_checked_in(attendee.row_index, &claims.email, &state).await {
+    // Generate claim token (UUID v7) and build claim URL
+    let claim_token = Uuid::now_v7().to_string();
+    let claim_url = format!("{}/{}", state.config.claim_base_url, claim_token);
+
+    // Update the Google Sheet (writes timestamp, staff email, and claim_token)
+    match sheets::mark_checked_in(attendee.row_index, &claims.email, &claim_token, &state).await {
         Ok(timestamp) => {
             tracing::info!(
-                "check-in successful: {} ({}) at {timestamp} by {}",
+                "check-in successful: {} ({}) at {timestamp} by {} claim_url={claim_url}",
                 attendee.display_name(),
                 attendee.api_id,
                 claims.email
@@ -119,6 +125,7 @@ pub async fn check_in(
                 name: attendee.display_name().to_string(),
                 checked_in_at: timestamp,
                 checked_in_by: claims.email.clone(),
+                claim_url: Some(claim_url),
                 message: format!("Successfully checked in {}", attendee.display_name()),
             };
 

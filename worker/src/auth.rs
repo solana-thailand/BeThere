@@ -247,6 +247,7 @@ mod tests {
                 "staff@example.com".to_string(),
             ],
             server_url: "http://localhost:3000".to_string(),
+            claim_base_url: "http://localhost:3000/claim".to_string(),
             host: "0.0.0.0".to_string(),
             port: 3000,
         };

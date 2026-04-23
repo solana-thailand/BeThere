@@ -132,14 +132,16 @@ pub async fn get_staff_emails(state: &AppState) -> Result<Vec<String>, String> {
 // Sheet mutations
 // ---------------------------------------------------------------------------
 
-/// Mark an attendee as checked in by updating both:
+/// Mark an attendee as checked in by updating:
 /// - Column I: checked_in_at timestamp (ISO 8601)
 /// - Column J: checked_in_by staff email
+/// - Column L: claim_token (UUID v7 for NFT/refund claim link)
 ///
-/// Uses batch update to write both columns in a single API call.
+/// Uses batch update to write all columns in a single API call.
 pub async fn mark_checked_in(
     row_index: usize,
     staff_email: &str,
+    claim_token: &str,
     state: &AppState,
 ) -> Result<String, String> {
     let access_token = get_access_token(state).await?;
@@ -155,6 +157,10 @@ pub async fn mark_checked_in(
             range: format!("{sheet_name}!J{row_index}"),
             values: vec![vec![staff_email.to_string()]],
         },
+        ValueRange {
+            range: format!("{sheet_name}!L{row_index}"),
+            values: vec![vec![claim_token.to_string()]],
+        },
     ];
 
     let url = format!(
@@ -169,7 +175,9 @@ pub async fn mark_checked_in(
 
     batch_update_sheet(&url, &body, &access_token).await?;
 
-    tracing::info!("marked row {row_index} as checked in at {timestamp} by {staff_email}");
+    tracing::info!(
+        "marked row {row_index} as checked in at {timestamp} by {staff_email} claim_token={claim_token}"
+    );
     Ok(timestamp)
 }
 
