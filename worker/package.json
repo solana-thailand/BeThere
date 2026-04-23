@@ -3,6 +3,7 @@
   "private": true,
   "description": "Cloudflare Worker for event-checkin — local wrangler avoids global Yarn PnP issues",
   "devDependencies": {
+    "@cloudflare/unenv-preset": "^2.16.0",
     "wrangler": "^4.84.0"
   }
 }

@@ -27,13 +27,12 @@ npx wrangler secret put GOOGLE_SHEET_ID
 npx wrangler secret put STAFF_EMAILS
 
 # 4. Run locally
-npx wrangler dev --port 8787
+cd worker && ./deploy.sh dev
 ```
 
 Open `http://localhost:8787`.
 
-> **Note:** If you have `~/.pnp.cjs` (Yarn PnP), temporarily rename it before running wrangler:
-> `mv ~/.pnp.cjs ~/.pnp.cjs.bak` — restore after build completes.
+> **Note:** `deploy.sh` automatically handles the Yarn PnP (`~/.pnp.cjs`) conflict with wrangler's esbuild bundler — no manual `mv` needed.
 
 ## Workspace Structure
 
@@ -76,8 +75,10 @@ A separate **"staff"** sheet tab (configurable via `GOOGLE_STAFF_SHEET_NAME`) ho
 cd frontend-leptos && trunk build && cd ..
 
 # Deploy to Cloudflare Workers
-cd worker && npx wrangler deploy
+cd worker && ./deploy.sh
 ```
+
+The `deploy.sh` script handles the Yarn PnP conflict automatically. Alternatively, you can run `npx wrangler deploy` directly if you don't have `~/.pnp.cjs`.
 
 Non-secret vars are in `worker/wrangler.toml` `[vars]`:
 
