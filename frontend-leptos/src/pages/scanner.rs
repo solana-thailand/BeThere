@@ -115,9 +115,13 @@ pub fn Scanner() -> impl IntoView {
     let (check_in_state, set_check_in_state) = signal(CheckInState::Idle);
     let (toast, set_toast) = signal(None::<components::ToastMessage>);
     let (camera_error, set_camera_error) = signal(None::<String>);
+    // Incremented on reset to restart the polling loop without leaving the tab.
+    let (scan_round, set_scan_round) = signal(0u32);
 
     // Start/stop camera when switching between Scanner and Manual tabs.
+    // Also re-triggers when scan_round changes (reset after a scan).
     Effect::new(move |_| {
+        let _round = scan_round.get(); // track for re-trigger on reset
         if active_tab.get() == ScannerTab::Scanner {
             set_camera_error.set(None);
             start_camera_js();
@@ -234,10 +238,13 @@ pub fn Scanner() -> impl IntoView {
         }
     };
 
-    // Reset scanner to idle state
+    // Reset scanner to idle state and restart camera polling.
     let handle_reset = move |_: web_sys::MouseEvent| {
+        stop_camera_js();
+        set_camera_error.set(None);
         set_check_in_state.set(CheckInState::Idle);
         set_manual_input.set(String::new());
+        set_scan_round.update(|r| *r += 1);
     };
 
     // Handle sign out
