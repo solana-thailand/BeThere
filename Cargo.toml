@@ -1,3 +1,7 @@
+[workspace]
+members = ["domain", "worker", "."]
+resolver = "2"
+
 [package]
 name = "event-checkin"
 version = "0.1.0"
@@ -44,6 +48,13 @@ rsa = { version = "0.9", features = ["sha2"] }
 pem = "3"
 sha2 = "0.10"
 
+# Shared domain
+event-checkin-domain = { path = "domain" }
+
 [dev-dependencies]
 axum-test = "16"
 tower = "0.5"
+
+[profile.release]
+lto = "thin"
+strip = true

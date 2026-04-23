@@ -1,0 +1,23 @@
+[package]
+name = "event-checkin-domain"
+version = "0.1.0"
+edition = "2024"
+description = "Shared domain types and logic for event-checkin (compiles x86_64 + wasm32)"
+
+[dependencies]
+# Serialization — WASM-compatible
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# QR code generation — pure Rust, WASM-compatible
+qrcode = "0.14"
+
+# Encoding — WASM-compatible
+base64 = "0.22"
+
+# URL handling — WASM-compatible
+url = "2"
+urlencoding = "2"
+
+# Time — WASM-compatible
+chrono = { version = "0.4", features = ["serde"] }

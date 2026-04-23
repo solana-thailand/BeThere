@@ -1,0 +1,8 @@
+{
+  "name": "event-checkin-worker",
+  "private": true,
+  "description": "Cloudflare Worker for event-checkin — local wrangler avoids global Yarn PnP issues",
+  "devDependencies": {
+    "wrangler": "^4.84.0"
+  }
+}
