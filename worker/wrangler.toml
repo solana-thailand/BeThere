@@ -1,4 +1,4 @@
-name = "event-checkin"
+name = "bethere"
 main = "build/worker/shim.mjs"
 compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
@@ -41,7 +41,7 @@ SHIM
 
 # Environment variables (non-secret config)
 [vars]
-SERVER_URL = "https://event-checkin.workers.dev"
+SERVER_URL = "https://bethere.solana-thailand.workers.dev"
 GOOGLE_SHEET_NAME = "checkin"
 GOOGLE_STAFF_SHEET_NAME = "staff"
 
