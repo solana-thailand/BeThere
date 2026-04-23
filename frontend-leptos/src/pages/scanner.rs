@@ -524,6 +524,17 @@ fn render_check_in_state(
             let email = data.attendee.email.clone();
             let checked_at = data.attendee.checked_in_at.clone().unwrap_or_default();
             let formatted = utils::format_timestamp(&checked_at);
+            let by_suffix = data
+                .attendee
+                .checked_in_by
+                .as_ref()
+                .map_or(String::new(), |by| {
+                    if by.is_empty() {
+                        String::new()
+                    } else {
+                        format!(" by {}", utils::escape_html(by))
+                    }
+                });
             view! {
                 <div class="card">
                     <div class="result-warning">
@@ -534,7 +545,7 @@ fn render_check_in_state(
                             <p>{email}</p>
                             <p style="margin-top:0.5rem;">
                                 "Checked in at: "
-                                {formatted}
+                                {formatted}{by_suffix}
                             </p>
                         </div>
                     </div>
@@ -639,6 +650,14 @@ fn render_check_in_state(
             let name = result.name.clone();
             let checked_at = result.checked_in_at.clone();
             let formatted = utils::format_timestamp(&checked_at);
+            let by_suffix = {
+                let by = result.checked_in_by.clone();
+                if by.is_empty() {
+                    String::new()
+                } else {
+                    format!(" by {}", utils::escape_html(&by))
+                }
+            };
             view! {
                 <div class="card">
                     <div class="result-success">
@@ -646,7 +665,7 @@ fn render_check_in_state(
                         <h2>"Checked In!"</h2>
                         <div class="result-details">
                             <p style="font-weight:600;color:#fff;">{name}</p>
-                            <p>"Checked in at: "{formatted}</p>
+                            <p>"Checked in at: "{formatted}{by_suffix}</p>
                         </div>
                     </div>
                     <button

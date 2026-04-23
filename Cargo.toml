@@ -1,5 +1,6 @@
 [workspace]
 members = ["domain", "worker", "."]
+exclude = ["frontend-leptos"]
 resolver = "2"
 
 [package]

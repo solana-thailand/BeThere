@@ -520,6 +520,9 @@ fn render_attendee_list(filtered: &[AttendeeResponse]) -> AnyView {
                 .map(utils::time_ago)
                 .unwrap_or_default();
             let has_time_ago = is_checked_in && !time_ago_str.is_empty();
+            let checked_in_by_suffix = attendee.checked_in_by.as_ref().map_or(String::new(), |by| {
+                if by.is_empty() { String::new() } else { format!(" by {}", utils::escape_html(by)) }
+            });
 
             view! {
                 <div class="attendee-item">
@@ -543,7 +546,7 @@ fn render_attendee_list(filtered: &[AttendeeResponse]) -> AnyView {
                             fallback=|| view! { <div></div> }
                         >
                             <div style="font-size:0.7rem;color:var(--text-muted);margin-top:4px;text-align:right;">
-                                {time_ago_str.clone()}
+                                {time_ago_str.clone()}{checked_in_by_suffix.clone()}
                             </div>
                         </Show>
                     </div>
@@ -588,6 +591,9 @@ fn render_recent_check_ins(
                             let api_id = check_in.api_id.clone();
                             let at = check_in.checked_in_at.clone();
                             let formatted = utils::format_timestamp(&at);
+                            let by_suffix = check_in.checked_in_by.as_ref().map_or(String::new(), |by| {
+                                if by.is_empty() { String::new() } else { format!(" by {}", utils::escape_html(by)) }
+                            });
 
                             let p_type = participation_map
                                 .get(&api_id)
@@ -610,7 +616,7 @@ fn render_recent_check_ins(
                                             {p_label.clone()}
                                         </span>
                                         <div style="font-size:0.8rem;color:var(--text-secondary);">
-                                            {formatted}
+                                            {formatted}{by_suffix}
                                         </div>
                                     </div>
                                 </div>
