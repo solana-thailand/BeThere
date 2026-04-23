@@ -40,3 +40,8 @@ frontend-leptos/target/
 frontend-leptos/dist/
 frontend-leptos/.cargo/
 frontend-leptos/Cargo.lock
+
+# Cloudflare Worker
+worker/build/
+worker/.wrangler/
+worker/.dev.vars

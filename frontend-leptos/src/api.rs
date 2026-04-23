@@ -58,6 +58,8 @@ pub struct AttendeeResponse {
     #[serde(default)]
     pub checked_in_at: Option<String>,
     #[serde(default)]
+    pub checked_in_by: Option<String>,
+    #[serde(default)]
     pub qr_code_url: Option<String>,
     #[serde(default)]
     pub row_index: usize,
@@ -71,6 +73,8 @@ pub struct RecentCheckIn {
     pub api_id: String,
     pub name: String,
     pub checked_in_at: String,
+    #[serde(default)]
+    pub checked_in_by: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -121,6 +125,8 @@ pub struct CheckInData {
     pub name: String,
     #[serde(default)]
     pub checked_in_at: String,
+    #[serde(default)]
+    pub checked_in_by: String,
     #[serde(default)]
     pub message: String,
 }

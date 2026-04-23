@@ -1,0 +1,51 @@
+[package]
+name = "event-checkin-worker"
+version = "0.1.0"
+edition = "2024"
+description = "Cloudflare Worker for event-checkin with Axum-on-Workers"
+
+[dependencies]
+# Cloudflare Workers SDK
+worker = { version = "0.8", features = ["http"] }
+
+# Web framework (Axum-on-Workers via http feature)
+# Note: no tower/axum defaults that pull in tokio — Workers runtime handles async
+axum = { version = "0.8", default-features = false, features = [
+  "macros",
+  "json",
+  "query",
+  "matched-path",
+  "original-uri",
+] }
+tower-service = "0.3"
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Encoding — WASM-compatible
+base64 = "0.22"
+
+# URL handling — WASM-compatible
+url = "2"
+urlencoding = "2"
+
+# Shared domain types
+event-checkin-domain = { path = "../domain" }
+
+# WASM/JS interop for SubtleCrypto bridge
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+js-sys = "0.3"
+
+# Time
+chrono = { version = "0.4", features = ["serde"] }
+
+# Logging
+tracing = "0.1"
+tracing-wasm = "0.2"
+console_log = "1"
+log = "0.4"
+
+[lib]
+crate-type = ["cdylib", "rlib"]

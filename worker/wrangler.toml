@@ -1,0 +1,57 @@
+name = "event-checkin"
+main = "build/worker/shim.mjs"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+# Static assets — serve the Leptos WASM frontend
+# SPA mode: non-API routes fall back to index.html
+[assets]
+directory = "../frontend-leptos/dist"
+not_found_handling = "single-page-application"
+
+# Build configuration for workers-rs (Rust → WASM)
+# Manual build instead of worker-build to reduce memory usage.
+# Requires: wasm-bindgen CLI matching the crate version (0.2.118)
+#
+# The shim.mjs is rewritten after wasm-bindgen runs to create a proper
+# ES Module entry point. Workers imports WASM as a WebAssembly.Module,
+# so we must instantiate it manually before calling __wbg_set_wasm.
+[build]
+command = """
+  mkdir -p build/worker && \
+  CARGO_BUILD_JOBS=2 cargo build -p event-checkin-worker --target wasm32-unknown-unknown --release && \
+  wasm-bindgen \
+    --target bundler \
+    --no-typescript \
+    --remove-name-section \
+    ../target/wasm32-unknown-unknown/release/event_checkin_worker.wasm \
+    --out-dir build/worker && \
+  cat > build/worker/shim.mjs << 'SHIM'
+import * as imports from "./event_checkin_worker_bg.js";
+import wasmModule from "./event_checkin_worker_bg.wasm";
+
+const instance = new WebAssembly.Instance(wasmModule, {
+  "./event_checkin_worker_bg.js": imports,
+});
+imports.__wbg_set_wasm(instance.exports);
+
+export default imports;
+SHIM
+"""
+
+# Environment variables (non-secret config)
+[vars]
+SERVER_URL = "https://event-checkin.workers.dev"
+GOOGLE_SHEET_NAME = "checkin"
+GOOGLE_STAFF_SHEET_NAME = "staff"
+
+# Secrets (set via `npx wrangler secret put <NAME>`):
+# - JWT_SECRET
+# - GOOGLE_CLIENT_ID
+# - GOOGLE_CLIENT_SECRET
+# - GOOGLE_REDIRECT_URI
+# - GOOGLE_SERVICE_ACCOUNT_EMAIL
+# - GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY
+# - GOOGLE_SERVICE_ACCOUNT_TOKEN_URI
+# - GOOGLE_SHEET_ID
+# - STAFF_EMAILS
