@@ -2,7 +2,7 @@
 
 > **Date**: 2025-06-30
 > **Branch**: `feature/014_solana_integration` (branched from `develop`)
-> **Status**: Planning complete, Phase 1 implementation starting
+> **Status**: Phase 1 complete (claim token generation), Phase 2 next
 > **Depends on**: `DISCUSSION.md` in repo root
 
 ## What Happened
@@ -76,7 +76,7 @@ event-checkin/
 
 ## Implementation Plan
 
-### Phase 1: Claim Token (0.5 day) ← STARTING HERE
+### Phase 1: Claim Token (0.5 day) ✅ DONE (commit `221bed9`)
 
 **What:** Generate UUID claim token at check-in, store in Google Sheet column L, return claim URL to staff.
 
@@ -184,8 +184,8 @@ event-checkin/
 
 ## Remain Work
 
-- [ ] Phase 1: Claim token generation ← NEXT
-- [ ] Phase 2a: Claim page frontend
+- [x] Phase 1: Claim token generation ✅ `221bed9`
+- [ ] Phase 2a: Claim page frontend ← NEXT
 - [ ] Phase 2b: Wallet connect UI
 - [ ] Phase 2c: cNFT minting (Bubblegum)
 - [ ] Phase 3a: SOL airdrop
@@ -235,3 +235,17 @@ The key principle: **Web3 is additive, never blocking.** Check-in works without 
 
 - **Git branch naming**: `develop/feature/014_solana_integration` is invalid because `develop` exists as a branch. Solution: use flat namespace `feature/014_solana_integration` instead.
 - **Column indexing**: Google Sheets API uses 0-based column indices. Column L = index 11, Column M = index 12. Must be consistent in sheets.rs batch update.
+- **Test fixture update**: `auth.rs` tests create `AppConfig` manually — must add new `claim_base_url` field when config struct changes. Build succeeded but `cargo test` caught it.
+
+### Phase 1 Changes Summary
+
+| File | Change |
+|------|--------|
+| `worker/Cargo.toml` | Added `uuid = { version = "1", features = ["v7", "serde"] }` |
+| `worker/wrangler.toml` | Added `CLAIM_BASE_URL` to `[vars]` |
+| `worker/src/state.rs` | Read `CLAIM_BASE_URL` var, pass to `AppConfig` with fallback |
+| `domain/src/config/types.rs` | Added `claim_base_url: String` to `AppConfig` |
+| `domain/src/models/api.rs` | Added `claim_url: Option<String>` to `CheckInResponse` |
+| `worker/src/handlers/checkin.rs` | Generate `Uuid::now_v7()`, build claim URL, pass to sheet + response |
+| `worker/src/sheets.rs` | `mark_checked_in` now accepts `claim_token`, writes to column L |
+| `worker/src/auth.rs` | Fixed test fixture with `claim_base_url` field |
