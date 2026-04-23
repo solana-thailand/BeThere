@@ -1,13 +1,13 @@
-# Handover 014: Solana Integration Plan — NFT Badge + Hybrid Refund
+# Handover 014: Solana Integration — NFT Badge + Hybrid Refund
 
 > **Date**: 2025-06-30
-> **Branch**: `main` (planning — no code changes yet)
-> **Status**: Planning complete, awaiting implementation
-> **Depends on**: DISCUSSION.md in repo root
+> **Branch**: `feature/014_solana_integration` (branched from `develop`)
+> **Status**: Planning complete, Phase 1 implementation starting
+> **Depends on**: `DISCUSSION.md` in repo root
 
 ## What Happened
 
-Completed a full architecture discussion with the team and CTO about evolving BeThere from a Google Sheets-only system to a Solana-integrated event platform. Key decisions were made about the role of NFTs, refund mechanism, and user onboarding flow.
+Completed a full architecture discussion with the team and CTO about evolving BeThere from a Google Sheets-only system to a Solana-integrated event platform. Key decisions were made about the role of NFTs, refund mechanism, and user onboarding flow. Created `develop` branch and `feature/014_solana_integration` branch to begin implementation.
 
 ### Discussion Outcome
 
@@ -15,6 +15,51 @@ Completed a full architecture discussion with the team and CTO about evolving Be
 - Architecture direction finalized: **NFT Badge (post-check-in reward), not NFT Ticket (pre-event gate)**
 - Refund method decided: **Hybrid SOL airdrop + USDC**
 - Implementation phased: 3 phases over 7-10 days
+- Git branches created: `develop` → `feature/014_solana_integration`
+
+## Current Codebase State
+
+### Repository Structure
+```
+event-checkin/
+├── Cargo.toml              # workspace root
+├── DISCUSSION.md           # architecture decisions (new)
+├── README.md               # updated with roadmap + columns L/M
+├── domain/                 # shared types and config
+│   └── src/
+│       ├── config.rs       # AppConfig, SheetsConfig, etc.
+│       └── models/         # Attendee, CheckinResponse, etc.
+├── worker/                 # Cloudflare Workers (Rust WASM)
+│   ├── Cargo.toml
+│   ├── wrangler.toml
+│   └── src/
+│       ├── lib.rs          # entry point, router, SPA fallback
+│       ├── state.rs        # AppState::from_env()
+│       ├── sheets.rs       # Google Sheets API client
+│       ├── auth.rs         # Google OAuth + JWT
+│       ├── crypto.rs       # service account JWT signing
+│       ├── http.rs         # HTTP helpers
+│       ├── middleware.rs   # security headers
+│       └── handlers/
+│           ├── mod.rs      # routes() function
+│           ├── attendee.rs # attendee lookup
+│           ├── auth.rs     # login/logout/callback
+│           ├── checkin.rs  # QR scan check-in
+│           ├── health.rs   # health check
+│           └── qr.rs       # QR code generation
+└── frontend-leptos/        # Leptos WASM frontend
+```
+
+### Key Files for Phase 1 Implementation
+
+| File | What to Change |
+|------|---------------|
+| `worker/src/handlers/checkin.rs` | Generate UUID claim_token, include claim URL in response |
+| `worker/src/sheets.rs` | Add column L (claim_token) to batch update writes |
+| `worker/src/state.rs` | Add `CLAIM_BASE_URL` var from wrangler.toml |
+| `worker/Cargo.toml` | Add `uuid` dependency (Uuid::now_v7()) |
+| `worker/wrangler.toml` | Add `CLAIM_BASE_URL` to `[vars]` |
+| `domain/src/models/mod.rs` | Add `claim_url` field to CheckinResponse |
 
 ## Key Decisions
 
@@ -26,26 +71,33 @@ Completed a full architecture discussion with the team and CTO about evolving Be
 | NFT standard? | **Compressed NFT (cNFT) via Bubblegum** |
 | Claim flow? | **URL-based, generated at check-in, accessed on attendee's phone** |
 | Non-claimers? | **NFT claimable anytime, cash refund fallback** |
+| Check-in verification? | **Keep Google Sheets** — Solana is additive |
+| Data store? | **Google Sheets remains source of truth** |
 
 ## Implementation Plan
 
-### Phase 1: Claim Token (0.5 day)
+### Phase 1: Claim Token (0.5 day) ← STARTING HERE
 
-**What:** Generate UUID claim token at check-in, store in Google Sheet column L.
+**What:** Generate UUID claim token at check-in, store in Google Sheet column L, return claim URL to staff.
 
-**Files to modify:**
-- `worker/src/handlers/checkin.rs` — generate UUID, include claim URL in response
-- `worker/src/sheets.rs` — add `claim_token` and `claimed_at` columns to batch update
-- `worker/src/state.rs` — add `CLAIM_BASE_URL` var from wrangler.toml
+**Step-by-step:**
 
-**Files to create:**
-- None
+1. Add `uuid` crate to `worker/Cargo.toml` with `v7` feature
+2. Add `CLAIM_BASE_URL` to `worker/wrangler.toml` `[vars]`
+3. Add `claim_base_url` to `AppState` / domain config
+4. In `checkin.rs` handler:
+   - After successful check-in, generate `Uuid::now_v7()`
+   - Build claim URL: `{CLAIM_BASE_URL}/{uuid}`
+   - Include claim URL in JSON response
+5. In `sheets.rs` batch update:
+   - Write UUID to column L (index 11) during check-in
+6. Add `claim_url` field to `CheckinResponse` in domain models
+
+**Dependencies:** None — purely additive, no breaking changes.
 
 **Sheet changes:**
 - Column L (index 11): `claim_token` — UUID generated at check-in
-- Column M (index 12): `claimed_at` — filled when attendee claims NFT/refund
-
-**Dependencies:** None — purely additive, no breaking changes.
+- Column M (index 12): `claimed_at` — filled when attendee claims NFT/refund (Phase 2)
 
 ### Phase 2: Claim Page + NFT Minting (4-5 days)
 
@@ -58,10 +110,8 @@ Completed a full architecture discussion with the team and CTO about evolving Be
 
 **Files to modify:**
 - `worker/src/handlers/mod.rs` — add claim routes
-- `worker/src/lib.rs` — no change (SPA fallback handles /claim/*)
 - `worker/src/state.rs` — add SOLANA_RPC_URL, NFT_COLLECTION_MINT secrets
-- `worker/Cargo.toml` — add `uuid` dependency (for claim token, use Uuid::now_v7())
-- `domain/Cargo.toml` — no change
+- `worker/Cargo.toml` — add Solana-related dependencies
 - `domain/src/models/mod.rs` — add ClaimResponse type
 - `frontend-leptos/src/pages/mod.rs` — add claim route
 
@@ -81,7 +131,6 @@ Completed a full architecture discussion with the team and CTO about evolving Be
 - `worker/src/solana.rs` — add transaction building, signing, sending
 - `worker/src/handlers/claim.rs` — trigger refund after NFT mint
 - `worker/src/state.rs` — add TREASURY_PRIVATE_KEY, REFUND_SOL_AMOUNT, REFUND_USDC_AMOUNT secrets
-- `worker/Cargo.toml` — add `ed25519-dalek` or equivalent for tx signing (if WASM-compatible)
 
 **Dependencies:**
 - Treasury wallet funded with SOL + USDC
@@ -109,6 +158,7 @@ Completed a full architecture discussion with the team and CTO about evolving Be
 | Phase | Test Type | What |
 |-------|-----------|------|
 | Phase 1 | Unit | UUID generation, claim URL format |
+| Phase 1 | Manual | Check-in returns claim URL, sheet has column L filled |
 | Phase 2 | Integration | Solana RPC calls against devnet |
 | Phase 2 | Unit | Claim token validation |
 | Phase 3 | Integration | SOL transfer on devnet |
@@ -134,7 +184,7 @@ Completed a full architecture discussion with the team and CTO about evolving Be
 
 ## Remain Work
 
-- [ ] Phase 1: Claim token generation
+- [ ] Phase 1: Claim token generation ← NEXT
 - [ ] Phase 2a: Claim page frontend
 - [ ] Phase 2b: Wallet connect UI
 - [ ] Phase 2c: cNFT minting (Bubblegum)
@@ -149,7 +199,11 @@ Completed a full architecture discussion with the team and CTO about evolving Be
 ## How to Dev/Test
 
 ```bash
-# Phase 1: Just run existing tests
+# Branch setup (done)
+git checkout develop
+git checkout feature/014_solana_integration
+
+# Phase 1: Run existing tests after changes
 cargo test
 
 # Phase 2: Need devnet SOL and RPC
@@ -176,3 +230,8 @@ This plan preserves the existing Google Sheets workflow that organizers trust, w
 4. The system degrades gracefully (no wallet = no NFT, but still checked in)
 
 The key principle: **Web3 is additive, never blocking.** Check-in works without Solana. The NFT and refund are rewards for those who want them.
+
+### Struggling / Solved
+
+- **Git branch naming**: `develop/feature/014_solana_integration` is invalid because `develop` exists as a branch. Solution: use flat namespace `feature/014_solana_integration` instead.
+- **Column indexing**: Google Sheets API uses 0-based column indices. Column L = index 11, Column M = index 12. Must be consistent in sheets.rs batch update.
