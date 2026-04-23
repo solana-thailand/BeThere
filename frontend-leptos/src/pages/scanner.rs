@@ -79,13 +79,13 @@ enum CheckInState {
     /// Attendee is not In-Person (e.g. Online/Virtual).
     NotInPerson(Box<AttendeeData>),
     /// Attendee not found by api_id.
-    NotFound(String),
+    NotFound,
     /// Performing the check-in POST request.
     CheckingIn { name: String, _id: String },
     /// Check-in succeeded.
     Success(Box<CheckInData>),
     /// An error occurred at any step.
-    Error(String),
+    Error,
 }
 
 /// Active tab in the scanner page.
@@ -230,8 +230,12 @@ pub fn Scanner() -> impl IntoView {
                     }
                     Err(err) => {
                         log::error!("[scanner] check-in failed: {err}");
-                        set_state.set(CheckInState::Error(format!("{err}")));
-                        components::show_toast(&set_t, &format!("{err}"), ToastType::Error);
+                        set_state.set(CheckInState::Error);
+                        components::show_toast(
+                            &set_t,
+                            "Check-in failed. Please try again.",
+                            ToastType::Error,
+                        );
                     }
                 }
             });
@@ -417,9 +421,9 @@ fn process_attendee_id(
                 }
             }
             Err(err) => {
-                log::warn!("[scanner] attendee lookup failed: {err}");
-                set_state.set(CheckInState::NotFound(attendee_id));
-                components::show_toast(&set_toast, &format!("{err}"), ToastType::Error);
+                log::warn!("[scanner] attendee lookup failed for id={attendee_id}: {err}");
+                set_state.set(CheckInState::NotFound);
+                components::show_toast(&set_toast, "Attendee not found", ToastType::Error);
             }
         }
     });
@@ -600,16 +604,13 @@ fn render_check_in_state(
             }
             .into_any()
         }
-        CheckInState::NotFound(id) => view! {
+        CheckInState::NotFound => view! {
             <div class="card">
                 <div class="result-error">
                     <div style="font-size:2.5rem;">"❌"</div>
                     <h2>"Not Found"</h2>
                     <div class="result-details">
-                        <p>"No attendee found for ID:"</p>
-                        <p style="font-weight:600;color:#fff;font-family:monospace;">
-                            {id}
-                        </p>
+                        <p>"No matching attendee found. Please try again."</p>
                     </div>
                 </div>
                 <button
@@ -656,13 +657,13 @@ fn render_check_in_state(
             }
             .into_any()
         }
-        CheckInState::Error(err) => view! {
+        CheckInState::Error => view! {
             <div class="card">
                 <div class="result-error">
                     <div style="font-size:2.5rem;">"❌"</div>
                     <h2>"Error"</h2>
                     <div class="result-details">
-                        <p>{err}</p>
+                        <p>"Something went wrong. Please try again."</p>
                     </div>
                 </div>
                 <button
