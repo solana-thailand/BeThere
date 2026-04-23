@@ -296,12 +296,11 @@ pub fn Scanner() -> impl IntoView {
                 // Scanner tab (camera QR scanner) — always in DOM to avoid
                 // race between Effect and <Show> mounting the <video> element.
                 // Visibility toggled via CSS display instead of conditional rendering.
+                // Hidden when showing attendee info (non-Idle state) so staff can focus.
                 <div style=move || {
-                    if active_tab.get() == ScannerTab::Scanner {
-                        ""
-                    } else {
-                        "display:none"
-                    }
+                    let scanning = active_tab.get() == ScannerTab::Scanner
+                        && matches!(check_in_state.get(), CheckInState::Idle);
+                    if scanning { "" } else { "display:none" }
                 }>
                     <div class="card" style="padding:0;overflow:hidden;position:relative;">
                         <video
