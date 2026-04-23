@@ -1,8 +1,8 @@
-# Event Check-In
+# BeThere — Event Check-In
 
-QR-based event check-in system. Staff scan attendee QR codes to check them in. Admin dashboard shows stats.
+QR-based event check-in system with Solana NFT badges and hybrid refund (SOL + USDC). Staff scan attendee QR codes to check them in. Attendees claim a **BeThere NFT badge** (proof of attendance) and receive their deposit refund on-chain.
 
-**Stack:** Rust (Cloudflare Workers) + Leptos WASM frontend + Google Sheets
+**Stack:** Rust (Cloudflare Workers) + Leptos WASM frontend + Google Sheets + Solana (cNFT + SPL tokens)
 
 ## Quick Start
 
@@ -59,11 +59,13 @@ The attendee sheet (tab name configurable via `GOOGLE_SHEET_NAME`, default `"che
 | D | 3 | `display_name` | Fallback display name |
 | E | 4 | `email` | Attendee email |
 | F | 5 | `ticket_name` | Ticket type |
-| G | 6 | `solana_address` | Optional Solana wallet |
+| G | 6 | `solana_address` | Filled at claim time (attendee wallet) |
 | H | 7 | `approval_status` | Approval state |
 | I | 8 | `checked_in_at` | ISO 8601 timestamp |
 | J | 9 | `checked_in_by` | Staff email who checked in |
 | K | 10 | `qr_code_url` | QR code link |
+| L | 11 | `claim_token` | UUID generated at check-in (for NFT claim) |
+| M | 12 | `claimed_at` | Timestamp when NFT + refund claimed |
 | Y | 24 | `participation_type` | In-Person / Online |
 
 A separate **"staff"** sheet tab (configurable via `GOOGLE_STAFF_SHEET_NAME`) holds authorized staff emails in column A (header in row 1, emails from row 2). This is unioned with the `STAFF_EMAILS` secret — a user is staff if their email appears in either source.
@@ -163,3 +165,19 @@ cargo clippy --all-targets
 - **Force QR regenerate** — Admin can regenerate codes per attendee
 - **CSP compliant** — Zero `eval()` calls, no `unsafe-eval` directive
 - **Edge deployment** — Cloudflare Workers with SubtleCrypto for JWT signing
+
+## Roadmap
+
+See **[DISCUSSION.md](./DISCUSSION.md)** for the full architecture direction and decisions.
+
+| Phase | Feature | Status |
+|-------|---------|--------|
+| **1** | Claim token generation (column L + M) | Planned |
+| **2a** | Claim page (frontend) | Planned |
+| **2b** | Wallet connect UI (Phantom/Solflare/Backpack) | Planned |
+| **2c** | cNFT badge minting (Bubblegum) | Planned |
+| **3a** | SOL airdrop for gas | Planned |
+| **3b** | USDC refund transfer | Planned |
+| **3c** | On-chain check-in transaction | Planned |
+
+Implementation details in [`.handovers/014_solana_integration_plan.md`](./.handovers/014_solana_integration_plan.md).
