@@ -110,7 +110,7 @@ pub fn Scanner() -> impl IntoView {
     });
 
     // Reactive state
-    let (active_tab, set_active_tab) = signal(ScannerTab::Manual);
+    let (active_tab, set_active_tab) = signal(ScannerTab::Scanner);
     let (manual_input, set_manual_input) = signal(String::new());
     let (check_in_state, set_check_in_state) = signal(CheckInState::Idle);
     let (toast, set_toast) = signal(None::<components::ToastMessage>);
