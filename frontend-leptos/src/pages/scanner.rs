@@ -243,8 +243,12 @@ pub fn Scanner() -> impl IntoView {
     };
 
     // Reset scanner to idle state and restart camera polling.
+    // Don't stop the camera here — the JS startCamera() guard skips if already
+    // active, avoiding the rapid stop/start race that causes "media resource
+    // aborted" errors. Just drain any stale QR result and re-trigger the Effect.
     let handle_reset = move |_: web_sys::MouseEvent| {
-        stop_camera_js();
+        let _ = check_qr_result_js(); // drain stale result
+        let _ = check_camera_error_js(); // drain stale error
         set_camera_error.set(None);
         set_check_in_state.set(CheckInState::Idle);
         set_manual_input.set(String::new());

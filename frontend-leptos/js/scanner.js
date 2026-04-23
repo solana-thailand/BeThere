@@ -25,6 +25,12 @@
  * The Rust side polls these via checkQrResult() / checkCameraError().
  */
 export function startCamera() {
+  // Guard: skip if scanner is already active (prevents double-start race)
+  if (window.__scannerActive) {
+    console.log("[scanner] already active, skipping startCamera");
+    return;
+  }
+
   // Reset state
   window.__cameraError = null;
   window.__qrResult = null;
