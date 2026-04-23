@@ -147,7 +147,14 @@ pub fn Scanner() -> impl IntoView {
                     // Check for QR detection results
                     if let Some(qr_data) = check_qr_result_js() {
                         log::info!("[scanner] QR code detected: {qr_data}");
-                        process_attendee_id(&qr_data, set_state, set_t);
+                        match extract_attendee_id(&qr_data) {
+                            Some(id) => process_attendee_id(&id, set_state, set_t),
+                            None => components::show_toast(
+                                &set_t,
+                                "Invalid QR code format",
+                                ToastType::Error,
+                            ),
+                        }
                         break;
                     }
                 }
@@ -168,11 +175,7 @@ pub fn Scanner() -> impl IntoView {
             url.search_params().delete("scan");
             let clean_path = url.pathname();
             let _ = window.history().and_then(|h| {
-                h.replace_state_with_url(
-                    &wasm_bindgen::JsValue::NULL,
-                    "",
-                    Some(&clean_path),
-                )
+                h.replace_state_with_url(&wasm_bindgen::JsValue::NULL, "", Some(&clean_path))
             });
             process_attendee_id(&scan_id, set_check_in_state, set_toast);
         }
@@ -193,11 +196,7 @@ pub fn Scanner() -> impl IntoView {
         match extract_attendee_id(&value) {
             Some(id) => process_attendee_id(&id, set_check_in_state, set_toast),
             None => {
-                components::show_toast(
-                    &set_toast,
-                    "Invalid attendee ID format",
-                    ToastType::Error,
-                )
+                components::show_toast(&set_toast, "Invalid attendee ID format", ToastType::Error)
             }
         }
     };
@@ -457,17 +456,15 @@ fn render_check_in_state(
 ) -> AnyView {
     match state {
         CheckInState::Idle => view! { <div></div> }.into_any(),
-        CheckInState::LookingUp => {
-            view! {
-                <div class="card text-center">
-                    <div class="page-loading" style="min-height:auto;padding:1rem;">
-                        <span class="spinner spinner-lg"></span>
-                        <span>"Looking up attendee..."</span>
-                    </div>
+        CheckInState::LookingUp => view! {
+            <div class="card text-center">
+                <div class="page-loading" style="min-height:auto;padding:1rem;">
+                    <span class="spinner spinner-lg"></span>
+                    <span>"Looking up attendee..."</span>
                 </div>
-            }
-            .into_any()
+            </div>
         }
+        .into_any(),
         CheckInState::Found(data) => {
             let name = data.attendee.name.clone();
             let email = data.attendee.email.clone();
@@ -596,41 +593,37 @@ fn render_check_in_state(
             }
             .into_any()
         }
-        CheckInState::NotFound(id) => {
-            view! {
-                <div class="card">
-                    <div class="result-error">
-                        <div style="font-size:2.5rem;">"❌"</div>
-                        <h2>"Not Found"</h2>
-                        <div class="result-details">
-                            <p>"No attendee found for ID:"</p>
-                            <p style="font-weight:600;color:#fff;font-family:monospace;">
-                                {id}
-                            </p>
-                        </div>
-                    </div>
-                    <button
-                        class="btn btn-outline btn-block"
-                        style="margin-top:1rem;"
-                        on:click=on_reset
-                    >
-                        "Try Again"
-                    </button>
-                </div>
-            }
-            .into_any()
-        }
-        CheckInState::CheckingIn { name, .. } => {
-            view! {
-                <div class="card text-center">
-                    <div class="page-loading" style="min-height:auto;padding:1rem;">
-                        <span class="spinner spinner-lg"></span>
-                        <span>"Checking in "{name}"..."</span>
+        CheckInState::NotFound(id) => view! {
+            <div class="card">
+                <div class="result-error">
+                    <div style="font-size:2.5rem;">"❌"</div>
+                    <h2>"Not Found"</h2>
+                    <div class="result-details">
+                        <p>"No attendee found for ID:"</p>
+                        <p style="font-weight:600;color:#fff;font-family:monospace;">
+                            {id}
+                        </p>
                     </div>
                 </div>
-            }
-            .into_any()
+                <button
+                    class="btn btn-outline btn-block"
+                    style="margin-top:1rem;"
+                    on:click=on_reset
+                >
+                    "Try Again"
+                </button>
+            </div>
         }
+        .into_any(),
+        CheckInState::CheckingIn { name, .. } => view! {
+            <div class="card text-center">
+                <div class="page-loading" style="min-height:auto;padding:1rem;">
+                    <span class="spinner spinner-lg"></span>
+                    <span>"Checking in "{name}"..."</span>
+                </div>
+            </div>
+        }
+        .into_any(),
         CheckInState::Success(result) => {
             let name = result.name.clone();
             let checked_at = result.checked_in_at.clone();
@@ -656,26 +649,24 @@ fn render_check_in_state(
             }
             .into_any()
         }
-        CheckInState::Error(err) => {
-            view! {
-                <div class="card">
-                    <div class="result-error">
-                        <div style="font-size:2.5rem;">"❌"</div>
-                        <h2>"Error"</h2>
-                        <div class="result-details">
-                            <p>{err}</p>
-                        </div>
+        CheckInState::Error(err) => view! {
+            <div class="card">
+                <div class="result-error">
+                    <div style="font-size:2.5rem;">"❌"</div>
+                    <h2>"Error"</h2>
+                    <div class="result-details">
+                        <p>{err}</p>
                     </div>
-                    <button
-                        class="btn btn-outline btn-block"
-                        style="margin-top:1rem;"
-                        on:click=on_reset
-                    >
-                        "Try Again"
-                    </button>
                 </div>
-            }
-            .into_any()
+                <button
+                    class="btn btn-outline btn-block"
+                    style="margin-top:1rem;"
+                    on:click=on_reset
+                >
+                    "Try Again"
+                </button>
+            </div>
         }
+        .into_any(),
     }
 }
