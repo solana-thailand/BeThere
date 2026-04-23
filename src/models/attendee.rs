@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -9,17 +11,21 @@ pub enum CheckInStatus {
     CheckedIn,
 }
 
-impl CheckInStatus {
-    pub fn from_str(s: &str) -> Self {
-        match s.trim().to_lowercase().as_str() {
+impl FromStr for CheckInStatus {
+    type Err = std::convert::Infallible;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s.trim().to_lowercase().as_str() {
             "approved" => Self::Approved,
             "pending_approval" => Self::PendingApproval,
             "invited" => Self::Invited,
             "checked_in" | "checked in" => Self::CheckedIn,
             _ => Self::PendingApproval,
-        }
+        })
     }
+}
 
+impl CheckInStatus {
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::PendingApproval => "pending_approval",
@@ -136,12 +142,8 @@ impl AttendeeRow {
             first_name: get(1),
             last_name: get(2),
             name: {
-                let display = get(3);
-                if display.is_empty() {
-                    format!("{} {}", get(1), get(2)).trim().to_string()
-                } else {
-                    display
-                }
+                let col_b = get(1);
+                if !col_b.is_empty() { col_b } else { get(3) }
             },
             email: get(4),
             ticket_name: get(5),
@@ -156,7 +158,7 @@ impl AttendeeRow {
 
     /// Convert raw row into a typed Attendee
     pub fn to_attendee(&self) -> Attendee {
-        let mut status = CheckInStatus::from_str(&self.approval_status);
+        let mut status = self.approval_status.parse::<CheckInStatus>().unwrap();
         if self.checked_in_at.is_some() && status == CheckInStatus::Approved {
             status = CheckInStatus::CheckedIn;
         }
