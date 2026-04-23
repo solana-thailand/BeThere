@@ -43,6 +43,7 @@ SHIM
 [vars]
 SERVER_URL = "https://event-checkin.workers.dev"
 GOOGLE_SHEET_NAME = "checkin"
+GOOGLE_STAFF_SHEET_NAME = "staff"
 
 # Secrets (set via `npx wrangler secret put <NAME>`):
 # - JWT_SECRET
