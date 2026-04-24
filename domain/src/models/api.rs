@@ -42,7 +42,9 @@ pub struct CheckInResponse {
     pub name: String,
     pub checked_in_at: String,
     pub checked_in_by: String,
-    pub claim_url: Option<String>,
+    /// Claim token for NFT/refund claim link (UUID v7).
+    /// Frontend constructs the full claim URL using `window.location.origin + /claim/{token}`.
+    pub claim_token: Option<String>,
     pub message: String,
 }
 

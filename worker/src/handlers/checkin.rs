@@ -106,15 +106,15 @@ pub async fn check_in(
         }));
     }
 
-    // Generate claim token (UUID v7) and build claim URL
+    // Generate claim token (UUID v7) for NFT/refund claim link.
+    // Frontend constructs the full claim URL using window.location.origin + /claim/{token}.
     let claim_token = Uuid::now_v7().to_string();
-    let claim_url = format!("{}/{}", state.config.claim_base_url, claim_token);
 
     // Update the Google Sheet (writes timestamp, staff email, and claim_token)
     match sheets::mark_checked_in(attendee.row_index, &claims.email, &claim_token, &state).await {
         Ok(timestamp) => {
             tracing::info!(
-                "check-in successful: {} ({}) at {timestamp} by {} claim_url={claim_url}",
+                "check-in successful: {} ({}) at {timestamp} by {} claim_token={claim_token}",
                 attendee.display_name(),
                 attendee.api_id,
                 claims.email
@@ -125,7 +125,7 @@ pub async fn check_in(
                 name: attendee.display_name().to_string(),
                 checked_in_at: timestamp,
                 checked_in_by: claims.email.clone(),
-                claim_url: Some(claim_url),
+                claim_token: Some(claim_token),
                 message: format!("Successfully checked in {}", attendee.display_name()),
             };
 

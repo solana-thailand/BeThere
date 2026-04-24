@@ -141,6 +141,14 @@ pub fn Scanner() -> impl IntoView {
     // Incremented on reset to restart the polling loop without leaving the tab.
     let (scan_round, set_scan_round) = signal(0u32);
 
+    // Stop camera when component unmounts (e.g. navigating to /admin).
+    // Without this, window.__scannerActive remains true and startCamera()
+    // skips on remount, leaving the camera broken until page refresh.
+    on_cleanup(move || {
+        log::info!("[scanner] component unmounting — stopping camera");
+        stop_camera_js();
+    });
+
     // Start/stop camera when switching between Scanner and Manual tabs.
     // Also re-triggers when scan_round changes (reset after a scan).
     Effect::new(move |_| {
@@ -483,6 +491,21 @@ fn extract_attendee_id(text: &str) -> Option<String> {
     Some(trimmed.to_string())
 }
 
+// ===== Claim URL Helpers =====
+
+/// Build the full claim URL from a claim token using the current window origin.
+///
+/// This makes the QR code dynamic — works correctly on both localhost:8787
+/// (local testing) and the production domain without backend config changes.
+fn build_claim_url(token: &str) -> String {
+    let window = web_sys::window().expect("no window");
+    let origin = window
+        .location()
+        .origin()
+        .unwrap_or_else(|_| "http://localhost:8787".to_string());
+    format!("{origin}/claim/{token}")
+}
+
 // ===== State View Rendering =====
 
 /// Render the current check-in state as a view.
@@ -558,7 +581,7 @@ fn render_check_in_state(
                         format!(" by {}", utils::escape_html(by))
                     }
                 });
-            let claim_url = data.claim_url.clone();
+            let claim_url = data.attendee.claim_token.as_ref().map(|t| build_claim_url(t));
             let qr_data_url = claim_url
                 .as_ref()
                 .and_then(|url| generate_qr_data_url(url, 200));
@@ -723,11 +746,10 @@ fn render_check_in_state(
                     format!(" by {}", utils::escape_html(&by))
                 }
             };
-            let claim_url = result.claim_url.clone();
+            let claim_url = result.claim_token.as_ref().map(|t| build_claim_url(t));
             let qr_data_url = claim_url
                 .as_ref()
                 .and_then(|url| generate_qr_data_url(url, 200));
-
             let claim_url_for_display = claim_url.clone();
             view! {
                 <div class="card">

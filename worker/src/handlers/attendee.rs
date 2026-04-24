@@ -124,12 +124,6 @@ pub async fn get_attendee(
         .as_ref()
         .and_then(|url| event_checkin_domain::qr::generate_qr_base64(url).ok());
 
-    // Build claim URL from claim_token if attendee has been checked in
-    let claim_url = attendee
-        .claim_token
-        .as_ref()
-        .map(|token| format!("{}/{}", state.config.claim_base_url, token));
-
     Json(json!({
         "success": true,
         "data": {
@@ -139,7 +133,6 @@ pub async fn get_attendee(
             "is_approved": attendee.is_approved(),
             "is_in_person": attendee.is_in_person(),
             "participation_type": attendee.participation_type,
-            "claim_url": claim_url,
         },
     }))
 }

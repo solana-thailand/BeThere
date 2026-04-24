@@ -118,9 +118,6 @@ pub struct AttendeeData {
     /// Raw participation type string from backend.
     #[serde(default)]
     pub participation_type: String,
-    /// Claim URL for NFT minting (available after check-in).
-    #[serde(default)]
-    pub claim_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -134,7 +131,7 @@ pub struct CheckInData {
     #[serde(default)]
     pub checked_in_by: String,
     #[serde(default)]
-    pub claim_url: Option<String>,
+    pub claim_token: Option<String>,
     #[serde(default)]
     pub message: String,
 }
