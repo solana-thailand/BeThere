@@ -61,6 +61,29 @@ extern "C" {
     fn is_scanner_active_js() -> bool;
 }
 
+// ===== QR Code Generation JS Interop =====
+// Uses the QRious library (CDN-loaded in index.html) to generate QR code images
+// as base64 data URLs. The JS module at frontend-leptos/js/qr_generate.js provides:
+// - generateQrDataUrl(text, size) — returns base64 PNG data URL for a QR code
+// - copyToClipboard(text)         — copies text to system clipboard
+
+#[wasm_bindgen(module = "/js/qr_generate.js")]
+extern "C" {
+    /// Generate a QR code image as a base64 PNG data URL.
+    ///
+    /// Returns something like "data:image/png;base64,..." or null if
+    /// the QRious library hasn't loaded yet.
+    #[wasm_bindgen(js_name = "generateQrDataUrl")]
+    fn generate_qr_data_url(text: &str, size: u32) -> Option<String>;
+
+    /// Copy text to the system clipboard.
+    ///
+    /// Uses the Clipboard API with a textarea fallback for older browsers.
+    /// Returns true if the copy operation was initiated successfully.
+    #[wasm_bindgen(js_name = "copyToClipboard")]
+    fn copy_to_clipboard_js(text: &str) -> bool;
+}
+
 // ===== State Types =====
 
 /// Current state of the check-in flow.
@@ -658,6 +681,12 @@ fn render_check_in_state(
                     format!(" by {}", utils::escape_html(&by))
                 }
             };
+            let claim_url = result.claim_url.clone();
+            let qr_data_url = claim_url
+                .as_ref()
+                .and_then(|url| generate_qr_data_url(url, 200));
+            let claim_url_for_copy = claim_url.clone();
+            let claim_url_for_display = claim_url.clone();
             view! {
                 <div class="card">
                     <div class="result-success">
@@ -668,6 +697,43 @@ fn render_check_in_state(
                             <p>"Checked in at: "{formatted}{by_suffix}</p>
                         </div>
                     </div>
+
+                    // Claim URL QR code — show to attendee so they can scan it
+                    {move || {
+                        match (&qr_data_url, &claim_url_for_display) {
+                            (Some(img_src), Some(url)) => {
+                                let url_for_copy = url.clone();
+                                view! {
+                                    <div style="margin-top:1.25rem;text-align:center;">
+                                        <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:1rem;">
+                                            <p style="font-size:0.8rem;color:var(--text-secondary);margin-bottom:0.75rem;">
+                                                "Show this QR to the attendee to claim their NFT:"
+                                            </p>
+                                            <img
+                                                src=img_src
+                                                alt="Claim URL QR Code"
+                                                style="width:200px;height:200px;border-radius:8px;"
+                                            />
+                                            <div style="margin-top:0.75rem;display:flex;gap:0.5rem;">
+                                                <button
+                                                    class="btn btn-primary btn-sm"
+                                                    style="flex:1;"
+                                                    on:click=move |_| {
+                                                        let _ = copy_to_clipboard_js(&url_for_copy);
+                                                    }
+                                                >
+                                                    "📋 Copy Link"
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                }
+                                    .into_any()
+                            }
+                            _ => view! { <div></div> }.into_any(),
+                        }
+                    }}
+
                     <button
                         class="btn btn-success btn-block"
                         style="margin-top:1rem;"
