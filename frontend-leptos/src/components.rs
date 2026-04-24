@@ -4,6 +4,7 @@
 //! to eliminate code duplication between scanner and admin pages.
 
 use leptos::prelude::*;
+use leptos_router::components::A;
 use leptos_router::hooks::use_navigate;
 
 // ===== Toast Notification =====
@@ -105,6 +106,15 @@ pub fn AppHeader(
             <div class="header-inner">
                 <span class="header-title">{title}</span>
                 <div style="display:flex;align-items:center;gap:0.75rem;">
+                    // Staff ↔ Admin navigation
+                    <nav style="display:flex;gap:0.25rem;">
+                        <A href="/staff" attr:class="btn btn-outline btn-sm">
+                            "📷 Scanner"
+                        </A>
+                        <A href="/admin" attr:class="btn btn-outline btn-sm">
+                            "📊 Admin"
+                        </A>
+                    </nav>
                     <span class="header-user">{move || user_email.get()}</span>
                     <button class="btn btn-outline btn-sm" on:click=on_sign_out>
                         "Sign Out"
