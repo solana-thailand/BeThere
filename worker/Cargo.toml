@@ -39,7 +39,7 @@ wasm-bindgen-futures = "0.4"
 js-sys = "0.3"
 
 # UUID generation (v7 for claim tokens)
-uuid = { version = "1", features = ["v7", "serde"] }
+uuid = { version = "1", features = ["v7", "serde", "js"] }
 
 # Time
 chrono = { version = "0.4", features = ["serde"] }
