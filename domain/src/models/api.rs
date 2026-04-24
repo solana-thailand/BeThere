@@ -11,6 +11,8 @@ pub struct AttendeeResponse {
     pub checked_in_at: Option<String>,
     pub checked_in_by: Option<String>,
     pub qr_code_url: Option<String>,
+    /// Claim token for NFT/refund claim link (set after check-in).
+    pub claim_token: Option<String>,
     pub participation_type: String,
     pub row_index: usize,
 }
@@ -26,6 +28,7 @@ impl AttendeeResponse {
             checked_in_at: attendee.checked_in_at.clone(),
             checked_in_by: attendee.checked_in_by.clone(),
             qr_code_url: attendee.qr_code_url.clone(),
+            claim_token: attendee.claim_token.clone(),
             participation_type: attendee.participation_type.clone(),
             row_index: attendee.row_index,
         }

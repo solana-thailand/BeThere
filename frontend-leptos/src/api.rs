@@ -61,6 +61,9 @@ pub struct AttendeeResponse {
     pub checked_in_by: Option<String>,
     #[serde(default)]
     pub qr_code_url: Option<String>,
+    /// Claim token for NFT/refund claim link (set after check-in).
+    #[serde(default)]
+    pub claim_token: Option<String>,
     #[serde(default)]
     pub row_index: usize,
     /// Participation type from Google Sheet column Y (e.g. "In-Person", "Online").
@@ -115,6 +118,9 @@ pub struct AttendeeData {
     /// Raw participation type string from backend.
     #[serde(default)]
     pub participation_type: String,
+    /// Claim URL for NFT minting (available after check-in).
+    #[serde(default)]
+    pub claim_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
