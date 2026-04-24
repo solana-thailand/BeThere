@@ -1,8 +1,8 @@
 //! Admin dashboard page — stats, attendee list, QR generation.
 //!
 //! Features:
-//! - Check-in statistics with progress bar
-//! - In-Person / Online breakdown stat cards
+//! - In-Person / Online tab separation
+//! - Check-in statistics with progress bar (in-person focused)
 //! - Attendee list with search, participation badges, check-in status
 //! - QR code generation with force-regenerate option
 //! - Recent check-in history
@@ -19,6 +19,32 @@ use crate::api::{self, AttendeeResponse, GenerateQrData, StatsResponse};
 use crate::auth;
 use crate::components::{self, ToastType};
 use crate::utils;
+
+// ===== Tab Type =====
+
+/// Dashboard tab selection.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum DashboardTab {
+    InPerson,
+    Online,
+}
+
+impl DashboardTab {
+    fn label(&self) -> &'static str {
+        match self {
+            DashboardTab::InPerson => "In-Person",
+            DashboardTab::Online => "Online",
+        }
+    }
+
+    /// Whether an attendee belongs to this tab.
+    fn matches(&self, participation_type: &str) -> bool {
+        match self {
+            DashboardTab::InPerson => utils::is_in_person(participation_type),
+            DashboardTab::Online => !utils::is_in_person(participation_type),
+        }
+    }
+}
 
 // ===== Admin Component =====
 
@@ -60,30 +86,36 @@ pub fn Admin() -> impl IntoView {
     let (qr_result, set_qr_result) = signal(None::<GenerateQrData>);
     let (toast, set_toast) = signal(None::<components::ToastMessage>);
 
+    // Active tab — In-Person by default
+    let (active_tab, set_active_tab) = signal(DashboardTab::InPerson);
+
     // Refresh counter — increment to trigger data reload
     let (refresh_counter, set_refresh_counter) = signal(0u32);
 
-    // Filtered attendees: derived from search query
+    // Filtered attendees: tab-filtered + search query + sort
     let filtered_attendees = Memo::new(move |_| {
         let query = search_query.get().to_lowercase();
+        let tab = active_tab.get();
         let list = attendees.get();
-        let mut filtered: Vec<AttendeeResponse> = if query.is_empty() {
-            list.to_vec()
-        } else {
-            list.iter()
-                .filter(|a| {
-                    let name = a.name.to_lowercase();
-                    let email = a.email.to_lowercase();
-                    let api_id = a.api_id.to_lowercase();
-                    let ticket = a.ticket_name.to_lowercase();
-                    name.contains(&query)
-                        || email.contains(&query)
-                        || api_id.contains(&query)
-                        || ticket.contains(&query)
-                })
-                .cloned()
-                .collect()
-        };
+
+        let mut filtered: Vec<AttendeeResponse> = list
+            .iter()
+            .filter(|a| tab.matches(&a.participation_type))
+            .filter(|a| {
+                if query.is_empty() {
+                    return true;
+                }
+                let name = a.name.to_lowercase();
+                let email = a.email.to_lowercase();
+                let api_id = a.api_id.to_lowercase();
+                let ticket = a.ticket_name.to_lowercase();
+                name.contains(&query)
+                    || email.contains(&query)
+                    || api_id.contains(&query)
+                    || ticket.contains(&query)
+            })
+            .cloned()
+            .collect();
 
         // Sort: not checked in first, then by name
         filtered.sort_by(|a, b| {
@@ -168,7 +200,7 @@ pub fn Admin() -> impl IntoView {
     view! {
         <div>
             <components::AppHeader
-                title="📊 Admin Dashboard"
+                title="Admin Dashboard"
                 user_email=user_email
                 user_role=user_role
                 on_sign_out=handle_sign_out
@@ -188,23 +220,20 @@ pub fn Admin() -> impl IntoView {
                     // Action buttons row
                     <div style="display:flex;gap:0.5rem;margin-bottom:1rem;flex-wrap:wrap;">
                         <button class="btn btn-outline btn-sm" on:click=handle_refresh>
-                            "🔄 Refresh"
+                            "Refresh"
                         </button>
-                        <a href="/staff" class="btn btn-outline btn-sm" style="text-decoration:none;">
-                            "🎫 Scanner"
-                        </a>
                         <button
                             class="btn btn-primary btn-sm"
                             on:click=handle_generate_qrs
                             disabled=move || qr_generating.get()
                         >
                             {move || {
-                                if qr_generating.get() {
-                                    "⏳ Generating...".to_string()
-                                } else {
-                                    "🏷️ Generate QR Codes".to_string()
-                                }
-                            }}
+                                    if qr_generating.get() {
+                                        "Generating...".to_string()
+                                    } else {
+                                        "Generate QR Codes".to_string()
+                                    }
+                                }}
                         </button>
                     </div>
 
@@ -217,7 +246,7 @@ pub fn Admin() -> impl IntoView {
                         // Force regenerate button (shown after any generation)
                         <div style="margin-top:0.5rem;display:flex;align-items:center;gap:0.5rem;">
                             <button class="btn btn-outline btn-sm" on:click=handle_force_generate_qrs>
-                                "🔄 Force Regenerate All"
+                                "Force Regenerate All"
                             </button>
                             <span style="font-size:0.75rem;color:var(--text-muted);">
                                 "Overwrites existing QR URLs"
@@ -225,12 +254,30 @@ pub fn Admin() -> impl IntoView {
                         </div>
                     </Show>
 
-                    // Stats cards
-                    {move || render_stats(&stats.get(), &attendees.get())}
+                    // Tab switcher
+                    <div class="tabs">
+                        <button
+                            class="tab"
+                            class:active=move || active_tab.get() == DashboardTab::InPerson
+                            on:click=move |_| set_active_tab.set(DashboardTab::InPerson)
+                        >
+                            "In-Person"
+                        </button>
+                        <button
+                            class="tab"
+                            class:active=move || active_tab.get() == DashboardTab::Online
+                            on:click=move |_| set_active_tab.set(DashboardTab::Online)
+                        >
+                            "Online"
+                        </button>
+                    </div>
+
+                    // Stats cards (tab-aware)
+                    {move || render_stats(&stats.get(), &attendees.get(), active_tab.get())}
 
                     // Search box
                     <div class="search-box">
-                        <span class="search-icon">"🔍"</span>
+                        <span class="search-icon"></span>
                         <input
                             type="text"
                             placeholder="Search by name, email, ID, or ticket..."
@@ -247,7 +294,8 @@ pub fn Admin() -> impl IntoView {
                         <span style="font-size:0.85rem;color:var(--text-secondary);">
                             {move || {
                                 let count = filtered_attendees.get().len();
-                                format!("{count} attendee{}", if count != 1 { "s" } else { "" })
+                                let tab = active_tab.get();
+                                format!("{count} {} attendee{}", tab.label().to_lowercase(), if count != 1 { "s" } else { "" })
                             }}
                         </span>
                     </div>
@@ -265,11 +313,16 @@ pub fn Admin() -> impl IntoView {
                         {move || render_attendee_list(&filtered_attendees.get())}
                     </div>
 
-                    // Recent check-ins
-                    {move || render_recent_check_ins(&stats.get(), &attendees.get())}
+                    // Recent check-ins (tab-aware)
+                    {move || render_recent_check_ins(&stats.get(), &attendees.get(), active_tab.get())}
 
                     // Footer
-                    <div class="footer">"Built with 🦀 Rust (Leptos + Axum)"</div>
+                    <div class="claim-footer">
+                        <div class="brand-line">
+                            <span class="accent">"BeThere"</span>
+                            " x Solana Thailand"
+                        </div>
+                    </div>
                 </Show>
             </div>
 
@@ -278,9 +331,9 @@ pub fn Admin() -> impl IntoView {
     }
 }
 
-// ===== QR Generation Logic =====
+// ===== QR Generation =====
 
-/// Spawn a QR generation request (normal or forced).
+/// Spawn QR code generation task.
 fn spawn_qr_generation(
     force: bool,
     set_qr_generating: WriteSignal<bool>,
@@ -289,41 +342,19 @@ fn spawn_qr_generation(
     set_refresh_counter: WriteSignal<u32>,
 ) {
     set_qr_generating.set(true);
-    set_qr_result.set(None);
-
     leptos::task::spawn_local(async move {
         match api::generate_qrs(force).await {
-            Ok(result) => {
-                log::info!(
-                    "[admin] QR generation complete (force={force}): {} \
-                     generated, {} skipped",
-                    result.generated,
-                    result.skipped
-                );
-
-                if result.generated > 0 {
-                    components::show_toast(
-                        &set_toast,
-                        &format!(
-                            "Generated {} QR codes ({} skipped)",
-                            result.generated, result.skipped
-                        ),
-                        ToastType::Success,
-                    );
+            Ok(data) => {
+                let count = data.generated;
+                let skipped = data.skipped;
+                let msg = if skipped > 0 {
+                    format!("Generated {count} QR codes ({skipped} skipped)")
                 } else {
-                    components::show_toast(
-                        &set_toast,
-                        &format!(
-                            "All {} approved attendees already have QR \
-                             codes. Use \"Force Regenerate\" to overwrite.",
-                            result.skipped
-                        ),
-                        ToastType::Warning,
-                    );
-                }
-
-                set_qr_result.set(Some(result));
-                // Refresh data to reflect new QR codes
+                    format!("Generated {count} QR codes")
+                };
+                components::show_toast(&set_toast, &msg, ToastType::Success);
+                set_qr_result.set(Some(data));
+                // Refresh attendee list after generation
                 set_refresh_counter.update(|c| *c += 1);
             }
             Err(err) => {
@@ -339,66 +370,89 @@ fn spawn_qr_generation(
     });
 }
 
-// ===== Render Helpers =====
+// ===== Render Functions =====
 
-/// Render stats cards including In-Person/Online breakdown.
-fn render_stats(stats: &Option<StatsResponse>, attendees: &[AttendeeResponse]) -> AnyView {
+/// Render tab-aware stats cards and progress bar.
+fn render_stats(
+    stats: &Option<StatsResponse>,
+    attendees: &[AttendeeResponse],
+    tab: DashboardTab,
+) -> AnyView {
     match stats {
-        Some(s) => {
-            let total = s.total_approved;
-            let checked_in = s.total_checked_in;
-            let remaining = s.total_remaining;
-            let percentage = s.check_in_percentage;
-
-            // Compute participation type counts from attendees
-            let in_person_count = attendees
+        Some(_s) => {
+            // Compute counts for this tab
+            let tab_attendees: Vec<_> = attendees
                 .iter()
-                .filter(|a| utils::is_in_person(&a.participation_type))
+                .filter(|a| tab.matches(&a.participation_type))
+                .collect();
+
+            let tab_total = tab_attendees.len();
+            let tab_checked_in = tab_attendees
+                .iter()
+                .filter(|a| a.checked_in_at.is_some())
                 .count();
-            let online_count = attendees.len().saturating_sub(in_person_count);
+            let tab_remaining = tab_total.saturating_sub(tab_checked_in);
+            let tab_percentage = if tab_total > 0 {
+                (tab_checked_in as f64 / tab_total as f64) * 100.0
+            } else {
+                0.0
+            };
+
+            // Also show the other tab count as a summary line
+            let other_tab = match tab {
+                DashboardTab::InPerson => DashboardTab::Online,
+                DashboardTab::Online => DashboardTab::InPerson,
+            };
+            let other_count = attendees
+                .iter()
+                .filter(|a| other_tab.matches(&a.participation_type))
+                .count();
 
             view! {
                 <div class="stats-grid">
                     <div class="stat-card info">
-                        <div class="stat-value">{total}</div>
-                        <div class="stat-label">"Total"</div>
+                        <div class="stat-value">{tab_total}</div>
+                        <div class="stat-label">{format!("{} Total", tab.label())}</div>
                     </div>
                     <div class="stat-card success">
-                        <div class="stat-value">{checked_in}</div>
+                        <div class="stat-value">{tab_checked_in}</div>
                         <div class="stat-label">"Checked In"</div>
                     </div>
                     <div class="stat-card warning">
-                        <div class="stat-value">{remaining}</div>
+                        <div class="stat-value">{tab_remaining}</div>
                         <div class="stat-label">"Remaining"</div>
                     </div>
                 </div>
 
-                // Participation type breakdown
-                <div class="stats-grid" style="margin-top:0.5rem;">
-                    <div class="stat-card" style="background:rgba(59,130,246,0.1);border-color:rgba(59,130,246,0.3);">
-                        <div class="stat-value" style="color:#3b82f6;">{in_person_count}</div>
-                        <div class="stat-label">"In-Person"</div>
-                    </div>
-                    <div class="stat-card" style="background:rgba(245,158,11,0.1);border-color:rgba(245,158,11,0.3);">
-                        <div class="stat-value" style="color:#f59e0b;">{online_count}</div>
-                        <div class="stat-label">"Online"</div>
-                    </div>
+                // Cross-tab summary
+                <div style="text-align:center;margin:0.5rem 0;font-size:0.8rem;color:var(--text-muted);">
+                    {format!("{} {} attendee{}", other_count, other_tab.label(), if other_count != 1 { "s" } else { "" })}
+                    " — "
+                    <span
+                        style="cursor:pointer;text-decoration:underline;"
+                        on:click=move |_| {
+                            // This won't work in a render function since we can't access set_active_tab
+                            // The tab summary is informational; switching is done via the tab bar
+                        }
+                    >
+                        "switch tab to view"
+                    </span>
                 </div>
 
                 // Progress bar
                 <div class="card mb-2">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
                         <span style="font-size:0.85rem;font-weight:600;color:var(--text-primary);">
-                            "Check-In Progress"
+                            {format!("{} Check-In Progress", tab.label())}
                         </span>
                         <span style="font-size:0.85rem;color:var(--text-secondary);">
-                            {format!("{percentage:.1}% ({checked_in} / {total})")}
+                            {format!("{tab_percentage:.1}% ({tab_checked_in} / {tab_total})")}
                         </span>
                     </div>
                     <div class="progress-bar">
                         <div
                             class="progress-fill"
-                            style=move || format!("width: {percentage}%")
+                            style=move || format!("width: {tab_percentage}%")
                         ></div>
                     </div>
                 </div>
@@ -409,96 +463,33 @@ fn render_stats(stats: &Option<StatsResponse>, attendees: &[AttendeeResponse]) -
     }
 }
 
-/// Render the QR generation result panel with force regenerate option.
-fn render_qr_result(result: &Option<GenerateQrData>) -> AnyView {
-    match result {
-        Some(r) => {
-            let generated_details: Vec<_> = r
-                .details
-                .iter()
-                .filter(|d| d.status == "generated")
-                .cloned()
-                .collect();
-            let skipped_details: Vec<_> = r
-                .details
-                .iter()
-                .filter(|d| d.status == "skipped")
-                .cloned()
-                .collect();
-            let skipped_count = skipped_details.len();
-            let has_generated = !generated_details.is_empty();
-            let show_skipped_list = skipped_count > 0 && skipped_count <= 20;
-            let show_skipped_summary = skipped_count > 20;
-
+/// Render QR generation result summary.
+fn render_qr_result(data: &Option<GenerateQrData>) -> AnyView {
+    match data {
+        Some(d) => {
+            let generated = d.generated;
+            let skipped = d.skipped;
+            let has_skipped = skipped > 0;
             view! {
-                <div class="card mb-2">
-                    <h3>"QR Generation Complete"</h3>
-                    <div class="stats-grid" style="margin-top:0.75rem;">
-                        <div class="stat-card info">
-                            <div class="stat-value">{r.total}</div>
-                            <div class="stat-label">"Total"</div>
-                        </div>
-                        <div class="stat-card success">
-                            <div class="stat-value">{r.generated}</div>
-                            <div class="stat-label">"Generated"</div>
-                        </div>
-                        <div class="stat-card warning">
-                            <div class="stat-value">{r.skipped}</div>
-                            <div class="stat-label">"Skipped"</div>
-                        </div>
+                <div class="card mb-2" style="border-color:rgba(34,197,94,0.4);background:rgba(34,197,94,0.05);">
+                    <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem;">
+
+                        <span style="font-weight:600;color:var(--text-primary);">
+                            "QR Codes Generated"
+                        </span>
                     </div>
-
-                    // Generated attendee details
-                    <Show when=move || has_generated fallback=|| view! { <div></div> }>
-                        <div style="margin-top:1rem;max-height:200px;overflow-y:auto;">
-                            {generated_details.iter().map(|d| {
-                                let name = d.name.clone();
-                                let api_id = d.api_id.clone();
-                                view! {
-                                    <div class="attendee-item" style="padding:0.5rem 0.75rem;">
-                                        <div class="attendee-info">
-                                            <div class="attendee-name" style="font-size:0.85rem;">
-                                                {utils::escape_html(&name)}
-                                            </div>
-                                            <div class="attendee-email" style="font-size:0.7rem;">
-                                                {utils::escape_html(&api_id)}
-                                            </div>
-                                        </div>
-                                        <span class="badge badge-success" style="font-size:0.7rem;">"Generated"</span>
-                                    </div>
-                                }
-                            }).collect_view()}
+                    <div style="display:flex;gap:1rem;">
+                        <div>
+                            <span style="font-weight:600;color:#22c55e;">{generated}</span>
+                            <span style="color:var(--text-secondary);">" created"</span>
                         </div>
-                    </Show>
-
-                    // Skipped attendee details (show up to 20)
-                    <Show when=move || show_skipped_list fallback=|| view! { <div></div> }>
-                        <div style="margin-top:0.75rem;font-size:0.8rem;color:var(--text-muted);">
-                            "Skipped (already have QR URLs):"
-                        </div>
-                        <div style="max-height:150px;overflow-y:auto;">
-                            {skipped_details.iter().map(|d| {
-                                let name = d.name.clone();
-                                view! {
-                                    <div class="attendee-item" style="padding:0.4rem;opacity:0.7;">
-                                        <div class="attendee-info">
-                                            <div class="attendee-name" style="font-size:0.8rem;">
-                                                {utils::escape_html(&name)}
-                                            </div>
-                                        </div>
-                                        <span class="badge badge-warning" style="font-size:0.65rem;">"Skipped"</span>
-                                    </div>
-                                }
-                            }).collect_view()}
-                        </div>
-                    </Show>
-
-                    // Large skip count summary
-                    <Show when=move || show_skipped_summary fallback=|| view! { <div></div> }>
-                        <div style="font-size:0.8rem;color:var(--text-muted);margin-top:0.5rem;">
-                            {format!("{skipped_count} attendees skipped (already have QR URLs)")}
-                        </div>
-                    </Show>
+                        <Show when=move || has_skipped fallback=|| view! { <div></div> }>
+                            <div>
+                                <span style="font-weight:600;color:#f59e0b;">{skipped}</span>
+                                <span style="color:var(--text-secondary);">" skipped (already exist)"</span>
+                            </div>
+                        </Show>
+                    </div>
                 </div>
             }
                 .into_any()
@@ -519,9 +510,9 @@ fn render_attendee_list(filtered: &[AttendeeResponse]) -> AnyView {
                 "badge badge-warning"
             };
             let badge_text = if is_checked_in {
-                "✓ Checked In"
+                "Checked In"
             } else {
-                "⏳ Pending"
+                "Pending"
             };
 
             let participation =
@@ -576,13 +567,20 @@ fn render_attendee_list(filtered: &[AttendeeResponse]) -> AnyView {
         .into_any()
 }
 
-/// Render the recent check-ins panel with participation badges.
+/// Render the recent check-ins panel, filtered by tab.
 fn render_recent_check_ins(
     stats: &Option<StatsResponse>,
     attendees: &[AttendeeResponse],
+    tab: DashboardTab,
 ) -> AnyView {
     match stats {
         Some(s) if !s.recent_check_ins.is_empty() => {
+            // Build a lookup map for participation type by api_id
+            let participation_map: HashMap<String, String> = attendees
+                .iter()
+                .map(|a| (a.api_id.clone(), a.participation_type.clone()))
+                .collect();
+
             let recent: Vec<_> = {
                 let mut r = s.recent_check_ins.clone();
                 r.sort_by(|a, b| {
@@ -592,18 +590,36 @@ fn render_recent_check_ins(
                         .partial_cmp(&a_time)
                         .unwrap_or(std::cmp::Ordering::Equal)
                 });
-                r.into_iter().take(10).collect()
+                // Filter by active tab
+                r.into_iter()
+                    .filter(|ci| {
+                        let p_type = participation_map
+                            .get(&ci.api_id)
+                            .cloned()
+                            .unwrap_or_default();
+                        tab.matches(&p_type)
+                    })
+                    .take(10)
+                    .collect()
             };
 
-            // Build a lookup map for participation type by api_id
-            let participation_map: HashMap<String, String> = attendees
-                .iter()
-                .map(|a| (a.api_id.clone(), a.participation_type.clone()))
-                .collect();
+            if recent.is_empty() {
+                return view! {
+                    <div class="card mt-3">
+                        <h3 style="margin-bottom:0.75rem;">"Recent Check-Ins"</h3>
+                        <div style="text-align:center;padding:1.5rem;color:var(--text-muted);">
+                            {format!("No recent {} check-ins", tab.label().to_lowercase())}
+                        </div>
+                    </div>
+                }
+                    .into_any();
+            }
 
             view! {
                 <div class="card mt-3">
-                    <h3 style="margin-bottom:0.75rem;">"Recent Check-Ins"</h3>
+                    <h3 style="margin-bottom:0.75rem;">
+                        {format!("Recent {} Check-Ins", tab.label())}
+                    </h3>
                     <div class="attendee-list">
                         {recent.iter().map(|check_in| {
                             let name = check_in.name.clone();

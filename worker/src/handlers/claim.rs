@@ -58,12 +58,18 @@ pub async fn get_claim(
     let claimed = attendee.claimed_at.is_some();
     let claimed_at = attendee.claimed_at.clone();
 
+    // Check if NFT minting is fully configured (all required secrets present)
+    let nft_available = !state.config.helius_api_key.is_empty()
+        && !state.config.nft_metadata_uri.is_empty()
+        && !state.config.nft_image_url.is_empty();
+
     let response = ClaimLookupResponse {
         name: display_name,
         checked_in_at,
         claim_token: token,
         claimed,
         claimed_at,
+        nft_available,
     };
 
     Json(json!({

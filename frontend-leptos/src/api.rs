@@ -7,6 +7,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::auth::{clear_token, get_token};
 
+/// Helper for serde `#[serde(default = "default_true")]` — defaults to `true`.
+const fn default_true() -> bool {
+    true
+}
+
 /// API error type.
 #[derive(Debug)]
 pub struct ApiError {
@@ -421,6 +426,9 @@ pub struct ClaimLookupData {
     pub claimed: bool,
     #[serde(default)]
     pub claimed_at: Option<String>,
+    /// Whether NFT minting is configured on the backend.
+    #[serde(default = "default_true")]
+    pub nft_available: bool,
 }
 
 /// Response data for POST /api/claim/{token} — NFT mint result.

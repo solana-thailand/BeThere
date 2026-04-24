@@ -102,6 +102,8 @@ pub struct ClaimLookupResponse {
     pub claim_token: String,
     pub claimed: bool,
     pub claimed_at: Option<String>,
+    /// Whether NFT minting is configured (all required secrets present).
+    pub nft_available: bool,
 }
 
 /// Response for POST /api/claim/{token} — mint cNFT and mark as claimed.

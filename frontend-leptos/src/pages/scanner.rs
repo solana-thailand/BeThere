@@ -301,7 +301,7 @@ pub fn Scanner() -> impl IntoView {
     view! {
         <div>
             <components::AppHeader
-                title="🎫 Scanner"
+                title="Scanner"
                 user_email=user_email
                 user_role=user_role
                 on_sign_out=handle_sign_out
@@ -320,7 +320,7 @@ pub fn Scanner() -> impl IntoView {
                         }
                         on:click=move |_| set_active_tab.set(ScannerTab::Scanner)
                     >
-                        "📷 Scanner"
+                        "Scanner"
                     </button>
                     <button
                         class=move || {
@@ -332,7 +332,7 @@ pub fn Scanner() -> impl IntoView {
                         }
                         on:click=move |_| set_active_tab.set(ScannerTab::Manual)
                     >
-                        "✏️ Manual"
+                        "Manual"
                     </button>
                 </div>
 
@@ -425,6 +425,13 @@ pub fn Scanner() -> impl IntoView {
                         let state = check_in_state.get();
                         render_check_in_state(state, handle_check_in, handle_reset)
                     }}
+                </div>
+
+                <div class="claim-footer">
+                    <div class="brand-line">
+                        <span class="accent">"BeThere"</span>
+                        " x Solana Thailand"
+                    </div>
                 </div>
             </div>
 
@@ -542,7 +549,11 @@ fn render_check_in_state(
             view! {
                 <div class="card">
                     <div class="text-center mb-2">
-                        <div style="font-size:2.5rem;">"✅"</div>
+                        <div class="success-check">
+                            <svg viewBox="0 0 24 24">
+                                <polyline points="20 6 9 17 4 12"></polyline>
+                            </svg>
+                        </div>
                         <h2>"Ready to Check In"</h2>
                     </div>
                     <div class="card" style="background:var(--bg-secondary);">
@@ -597,7 +608,6 @@ fn render_check_in_state(
             view! {
                 <div class="card">
                     <div class="result-warning">
-                        <div style="font-size:2.5rem;">"⚠️"</div>
                         <h2>"Already Checked In"</h2>
                         <div class="result-details">
                             <p style="font-weight:600;color:#fff;">{name}</p>
@@ -663,7 +673,6 @@ fn render_check_in_state(
             view! {
                 <div class="card">
                     <div class="result-error">
-                        <div style="font-size:2.5rem;">"🚫"</div>
                         <h2>"Not Approved"</h2>
                         <div class="result-details">
                             <p style="font-weight:600;color:#fff;">{name}</p>
@@ -692,7 +701,6 @@ fn render_check_in_state(
             view! {
                 <div class="card">
                     <div class="result-warning">
-                        <div style="font-size:2.5rem;">"💻"</div>
                         <h2>"Not In-Person"</h2>
                         <div class="result-details">
                             <p style="font-weight:600;color:#fff;">{name}</p>
@@ -717,7 +725,6 @@ fn render_check_in_state(
         CheckInState::NotFound => view! {
             <div class="card">
                 <div class="result-error">
-                    <div style="font-size:2.5rem;">"❌"</div>
                     <h2>"Not Found"</h2>
                     <div class="result-details">
                         <p>"No matching attendee found. Please try again."</p>
@@ -760,10 +767,14 @@ fn render_check_in_state(
                 .and_then(|url| generate_qr_data_url(url, 200));
             let claim_url_for_display = claim_url.clone();
             view! {
-                <div class="card">
+                <div class="card claim-success">
                     <div class="result-success">
-                        <div style="font-size:2.5rem;">"🎉"</div>
-                        <h2>"Checked In!"</h2>
+                        <div class="success-check">
+                            <svg viewBox="0 0 24 24">
+                                <polyline points="20 6 9 17 4 12"></polyline>
+                            </svg>
+                        </div>
+                        <h2 class="claim-success-title">"Checked In!"</h2>
                         <div class="result-details">
                             <p style="font-weight:600;color:#fff;">{name}</p>
                             <p>"Checked in at: "{formatted}{by_suffix}</p>
@@ -820,7 +831,6 @@ fn render_check_in_state(
         CheckInState::Error => view! {
             <div class="card">
                 <div class="result-error">
-                    <div style="font-size:2.5rem;">"❌"</div>
                     <h2>"Error"</h2>
                     <div class="result-details">
                         <p>"Something went wrong. Please try again."</p>

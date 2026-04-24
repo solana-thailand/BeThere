@@ -40,6 +40,8 @@ enum ClaimState {
     NotFound(String),
     /// Attendee found, has not yet claimed. Ready for wallet input.
     Ready(ClaimLookupData),
+    /// Attendee found but NFT minting is not configured yet.
+    NftComingSoon(ClaimLookupData),
     /// Minting in progress (POST /api/claim/{token} sent).
     Minting(ClaimLookupData),
     /// NFT minted successfully.
@@ -92,6 +94,8 @@ pub fn Claim() -> impl IntoView {
                 Ok(data) => {
                     if data.claimed {
                         set_state.set(ClaimState::AlreadyClaimed(data));
+                    } else if !data.nft_available {
+                        set_state.set(ClaimState::NftComingSoon(data));
                     } else {
                         set_state.set(ClaimState::Ready(data));
                     }
@@ -153,17 +157,25 @@ pub fn Claim() -> impl IntoView {
         <div class="center-page">
             <Title text="Claim Your NFT — BeThere" />
             <div class="container" style="display:flex;flex-direction:column;align-items:center;">
-                // Logo
-                <div class="logo">"🎫"</div>
+                // Brand header
+                <div class="brand-logo">"BeThere"</div>
+                <div class="brand-logo-sub">"Proof of Attendance"</div>
 
                 // Title
-                <h1>"Claim Your NFT"</h1>
+                <h1 class="claim-title">"Claim Your NFT"</h1>
 
-                <p class="subtitle">
-                    "You checked in at "
-                    <strong>"Road to Mainnet 1 — Bangkok"</strong>
-                    ". Claim your proof-of-attendance NFT badge."
+                <p class="claim-subtitle">
+                    "Road to Mainnet #1 — Bangkok"
                 </p>
+                <p class="claim-event-link">
+                    <a href="https://solana-thailand.github.io/genesis/events/road-to-mainnet-1-bangkok/" target="_blank" rel="noopener noreferrer">
+                        "solana-thailand.github.io/genesis/events/road-to-mainnet-1-bangkok/"
+                    </a>
+                </p>
+                <div class="powered-badge">
+                    <span class="sol-dot"></span>
+                    "Powered by Solana"
+                </div>
 
                 // State-dependent rendering
                 {move || {
@@ -182,8 +194,7 @@ pub fn Claim() -> impl IntoView {
                         // ---- Not Found / Error ----
                         ClaimState::NotFound(msg) => {
                             view! {
-                                <div class="result-error" style="width:100%;">
-                                    <div class="icon">"❌"</div>
+                                <div class="claim-error">
                                     <h2>"Claim Not Found"</h2>
                                     <div class="result-details">
                                         <p>{escape_html(&msg)}</p>
@@ -196,18 +207,104 @@ pub fn Claim() -> impl IntoView {
                                 .into_any()
                         }
 
+                        // ---- NFT Coming Soon ----
+                        ClaimState::NftComingSoon(data) => {
+                            let checked_in_display = format_timestamp(&data.checked_in_at);
+                            view! {
+                                <div style="width:100%;">
+                                    // Attendee welcome
+                                    <div class="claim-welcome-card">
+                                        <h3>"Welcome, "{escape_html(&data.name)}"!"</h3>
+                                        <p class="checked-in-label">"Checked in "{checked_in_display}</p>
+                                    </div>
+
+                                    // NFT coming soon with shimmer
+                                    <div class="claim-nft-soon-card">
+                                        <h3>"NFT Badge Coming Soon"</h3>
+                                        <p>"Your proof-of-attendance NFT badge is being prepared."</p>
+                                        <div class="nft-description">
+                                            "You will receive a compressed NFT on Solana — a permanent, on-chain proof that you attended this event."
+                                        </div>
+                                    </div>
+
+                                    // Event information with timeline
+                                    <div class="claim-event-card">
+                                        <div class="event-title">"Road to Mainnet #1 — Bangkok"</div>
+                                        <div class="event-meta">
+                                            <div><strong>"Date: "</strong>"Sunday, 26 April 2026"</div>
+                                            <div><strong>"Time: "</strong>"9:30 AM - 1:00 PM (ICT)"</div>
+                                            <div><strong>"Venue: "</strong>"ContributeDAO (CDAO), 3rd Floor CP Tower, Phaya Thai"</div>
+                                        </div>
+
+                                        <div class="schedule-section">
+                                            <div class="schedule-label">"Schedule"</div>
+                                            <div class="timeline">
+                                                <div class="timeline-item">
+                                                    <span class="time-slot">"09:30"</span>" — Registration"
+                                                </div>
+                                                <div class="timeline-item">
+                                                    <span class="time-slot">"10:00"</span>" — Opening & Community Roadmap"
+                                                </div>
+                                                <div class="timeline-item highlight">
+                                                    <span class="time-slot">"10:10"</span>" — Rust, AI & Gaming (Ep. 2) — "<span class="speaker">"Katopz"</span>
+                                                </div>
+                                                <div class="timeline-item">
+                                                    <span class="time-slot">"11:00"</span>" — Group Photo"
+                                                </div>
+                                                <div class="timeline-item highlight">
+                                                    <span class="time-slot">"11:10"</span>" — NFT Engine Workshop — "<span class="speaker">"Golf (ByteCat)"</span>
+                                                </div>
+                                                <div class="timeline-item highlight">
+                                                    <span class="time-slot">"11:40"</span>" — Ephemeral Rollups — "<span class="speaker">"Andy (Magicblock)"</span>
+                                                </div>
+                                                <div class="timeline-item highlight">
+                                                    <span class="time-slot">"11:55"</span>" — APAC Ecosystem Spotlight — "<span class="speaker">"Chaerin (Solana Foundation)"</span>
+                                                </div>
+                                                <div class="timeline-item">
+                                                    <span class="time-slot">"12:10"</span>" — Networking Session"
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <a
+                                            href="https://solana-thailand.github.io/genesis/events/road-to-mainnet-1-bangkok/"
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            class="btn btn-outline btn-sm"
+                                            style="margin-top:0.75rem;width:100%;"
+                                        >
+                                            "View Full Event Details"
+                                        </a>
+                                    </div>
+
+                                    // Wallet preparation
+                                    <div class="claim-wallet-prep-card">
+                                        <p>
+                                            "You will need a "
+                                            <a href="https://phantom.app/" target="_blank" rel="noopener noreferrer">
+                                                "Solana wallet"
+                                            </a>
+                                            " to claim your NFT badge. Download one before you return."
+                                        </p>
+                                    </div>
+
+                                    <p class="claim-bookmark-hint">
+                                        "Bookmark this page and come back to claim your NFT."
+                                    </p>
+                                </div>
+                            }
+                                .into_any()
+                        }
+
                         // ---- Ready: show wallet input ----
                         ClaimState::Ready(data) => {
                             let checked_in_display = format_timestamp(&data.checked_in_at);
                             view! {
-                                <div class="claim-card" style="width:100%;">
-                                    // Attendee info
-                                    <div class="card" style="text-align:center;">
-                                        <div style="font-size:2rem;margin-bottom:0.5rem;">"🎉"</div>
+                                <div style="width:100%;">
+                                    // Attendee welcome
+                                    <div class="claim-welcome-card">
                                         <h3>"Welcome, "{escape_html(&data.name)}"!"</h3>
-                                        <p class="claim-checked-in" style="font-size:0.85rem;color:var(--text-secondary);margin-top:0.25rem;">
-                                            "Checked in "{checked_in_display}
-                                        </p>
+                                        <p class="checked-in-label">"Checked in "{checked_in_display}</p>
                                     </div>
 
                                     // Wallet input
@@ -218,13 +315,12 @@ pub fn Claim() -> impl IntoView {
                                         <input
                                             class="claim-wallet-input"
                                             type="text"
-                                            placeholder="Enter your Solana wallet address (e.g. 7xK...pKT)"
+                                            placeholder="Enter your Solana wallet address"
                                             prop:value=move || wallet_input.get()
                                             on:input=move |ev| {
                                                 let val = event_target_value(&ev);
                                                 set_wallet_input.set(val);
                                             }
-                                            style="width:100%;padding:0.7rem 0.85rem;background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text-primary);font-size:0.85rem;font-family:monospace;outline:none;transition:border-color 0.2s;"
                                         />
                                         <p style="font-size:0.75rem;color:var(--text-muted);margin-top:0.5rem;">
                                             "Paste your Phantom, Solflare, or Backpack wallet address."
@@ -233,8 +329,7 @@ pub fn Claim() -> impl IntoView {
 
                                     // Claim button
                                     <button
-                                        class="btn btn-primary btn-block"
-                                        style="margin-top:0.5rem;padding:0.85rem;font-size:1rem;"
+                                        class="claim-btn-mint"
                                         on:click=handle_claim
                                         disabled=move || {
                                             let w = wallet_input.get();
@@ -277,19 +372,21 @@ pub fn Claim() -> impl IntoView {
                                 data.asset_id
                             );
                             view! {
-                                <div class="result-success" style="width:100%;">
-                                    <div class="icon">"🎊"</div>
-                                    <h2>"NFT Claimed!"</h2>
-                                    <div class="result-details" style="text-align:left;margin-top:1rem;">
+                                <div class="claim-success">
+                                    <div class="success-check">
+                                        <svg viewBox="0 0 24 24">
+                                            <polyline points="20 6 9 17 4 12"></polyline>
+                                        </svg>
+                                    </div>
+                                    <h2>"NFT Claimed"</h2>
+                                    <div class="success-details">
                                         <p><strong>"Name:"</strong>" "{escape_html(&data.name)}</p>
                                         <p><strong>"Wallet:"</strong>
-                                            <code style="font-size:0.75rem;color:var(--accent);word-break:break-all;">
-                                                {escape_html(&data.wallet_address)}
-                                            </code>
+                                            <code>{escape_html(&data.wallet_address)}</code>
                                         </p>
                                         <p><strong>"Claimed:"</strong>" "{format_timestamp(&data.claimed_at)}</p>
                                     </div>
-                                    <div style="margin-top:1.25rem;display:flex;flex-direction:column;gap:0.5rem;">
+                                    <div class="success-actions">
                                         <a
                                             href=explorer_url
                                             target="_blank"
@@ -320,8 +417,7 @@ pub fn Claim() -> impl IntoView {
                                 .map(format_timestamp)
                                 .unwrap_or_else(|| "previously".to_string());
                             view! {
-                                <div class="result-warning" style="width:100%;">
-                                    <div class="icon">"✅"</div>
+                                <div class="claim-warning">
                                     <h2>"Already Claimed"</h2>
                                     <div class="result-details">
                                         <p>
@@ -340,8 +436,7 @@ pub fn Claim() -> impl IntoView {
                         // ---- Mint error ----
                         ClaimState::MintError(data, error) => {
                             view! {
-                                <div class="result-error" style="width:100%;">
-                                    <div class="icon">"⚠️"</div>
+                                <div class="claim-error">
                                     <h2>"Minting Failed"</h2>
                                     <div class="result-details">
                                         <p>{escape_html(&error)}</p>
@@ -363,8 +458,11 @@ pub fn Claim() -> impl IntoView {
                 }}
 
                 // Footer
-                <div class="footer">
-                    "Built with 🦀 Rust — BeThere × Solana Thailand"
+                <div class="claim-footer">
+                    <div class="brand-line">
+                        <span class="accent">"BeThere"</span>
+                        " x Solana Thailand"
+                    </div>
                 </div>
             </div>
         </div>

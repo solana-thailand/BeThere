@@ -129,13 +129,6 @@ pub struct StaffMember {
     pub role: String,
 }
 
-impl StaffMember {
-    /// Whether this staff member has admin privileges.
-    pub fn is_admin(&self) -> bool {
-        self.role.eq_ignore_ascii_case("admin")
-    }
-}
-
 /// Fetch staff members from the dedicated "staff" sheet tab.
 ///
 /// Reads columns A (email) and B (role) starting from row 2 (row 1 is header).
