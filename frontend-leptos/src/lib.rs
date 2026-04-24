@@ -10,7 +10,7 @@ use leptos_router::components::{Route, Router, Routes};
 use leptos_router::path;
 
 use crate::components::ProtectedRoute;
-use crate::pages::{admin::Admin, login::Login, scanner::Scanner};
+use crate::pages::{admin::Admin, claim::Claim, login::Login, scanner::Scanner};
 
 /// Main application component.
 ///
@@ -40,6 +40,7 @@ pub fn App() -> impl IntoView {
                     }
                 }>
                     <Route path=path!("/") view=Login />
+                    <Route path=path!("/claim/:token") view=Claim />
                     <Route path=path!("/staff") view=ProtectedScanner />
                     <Route path=path!("/admin") view=ProtectedAdmin />
                 </Routes>

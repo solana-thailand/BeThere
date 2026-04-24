@@ -61,27 +61,43 @@ pub async fn handle_callback(code: &str, state: &AppState) -> Result<GoogleUserI
     Ok(user_info)
 }
 
-/// Check if a given email is in the staff emails allowlist.
+/// Check if a given email is in the staff allowlist.
 ///
 /// Checks both the env var `STAFF_EMAILS` list (fast, static) and the
-/// Google Sheets "staff" tab (dynamic). Returns `true` if the email
-/// appears in either source.
+/// Google Sheets "staff" tab (dynamic, with role column). Returns `true`
+/// if the email appears in either source.
 pub async fn is_staff(email: &str, state: &AppState) -> bool {
-    // Fast path: check the static env var allowlist first
-    if state.is_staff(email) {
-        return true;
-    }
+    get_staff_role(email, state).await.is_some()
+}
 
-    // Slow path: fetch staff emails from the Google Sheets "staff" tab
-    match sheets::get_staff_emails(state).await {
-        Ok(sheet_emails) => sheet_emails
-            .iter()
-            .any(|allowed| allowed.eq_ignore_ascii_case(email)),
+/// Get the role for a staff member by email.
+///
+/// Checks the Google Sheets "staff" tab first (dynamic, supports roles),
+/// then falls back to the env var `STAFF_EMAILS` list with default "staff" role.
+///
+/// Returns `Some(role)` if the email is authorized, `None` otherwise.
+/// Role values: "admin" (scanner + admin dashboard) or "staff" (scanner only).
+pub async fn get_staff_role(email: &str, state: &AppState) -> Option<String> {
+    // Check the Google Sheets "staff" tab first (supports role column B)
+    match sheets::get_staff_members(state).await {
+        Ok(members) => {
+            if let Some(member) = members.iter().find(|m| m.email.eq_ignore_ascii_case(email)) {
+                return Some(member.role.clone());
+            }
+        }
         Err(e) => {
-            tracing::warn!("failed to fetch staff emails from sheet, using env var list only: {e}");
-            false
+            tracing::warn!(
+                "failed to fetch staff members from sheet, falling back to env var list: {e}"
+            );
         }
     }
+
+    // Fallback: check the static env var allowlist (default role: "staff")
+    if state.is_staff(email) {
+        return Some("staff".to_string());
+    }
+
+    None
 }
 
 // ---------------------------------------------------------------------------
@@ -247,6 +263,12 @@ mod tests {
                 "staff@example.com".to_string(),
             ],
             server_url: "http://localhost:3000".to_string(),
+            claim_base_url: "http://localhost:3000/claim".to_string(),
+            helius_rpc_url: "https://devnet.helius-rpc.com".to_string(),
+            helius_api_key: "test-helius-key".to_string(),
+            nft_collection_mint: "test-collection-mint".to_string(),
+            nft_metadata_uri: "https://arweave.net/test-metadata".to_string(),
+            nft_image_url: "https://arweave.net/test-image".to_string(),
             host: "0.0.0.0".to_string(),
             port: 3000,
         };

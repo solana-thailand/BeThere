@@ -56,6 +56,8 @@ pub struct Attendee {
     pub qr_code_url: Option<String>,
     pub solana_address: Option<String>,
     pub participation_type: String,
+    pub claim_token: Option<String>,
+    pub claimed_at: Option<String>,
     pub row_index: usize,
 }
 
@@ -90,11 +92,19 @@ impl Attendee {
 }
 
 /// Represents a raw row from Google Sheets.
-/// Column mapping based on the sheet structure:
-/// A=api_id, B=name, C=last_name, D=display_name, E=email,
-/// F=ticket_name, G=solana_address, H=approval_status,
-/// I=checked_in_at, J=checked_in_by, K=qr_code_url
-/// Y=participation_type (In-Person / Online)
+///
+/// Column mapping (Google Form fills A-O, Y):
+///   A[0]  = api_id              B[1]  = name
+///   C[2]  = first_name          D[3]  = last_name
+///   E[4]  = email               F[5]  = ticket_name
+///   G[6]  = registration_date   H[7]  = approval_status
+///   I[8]  = checked_in_at       J[9]  = checked_in_by
+///   K[10] = luma_url            L[11] = payment_amount
+///   M[12] = payment_fee         N[13] = payment_total
+///   O[14] = currency
+///   P[15] = solana_address      Q[16] = qr_code_url
+///   R[17] = claim_token         S[18] = claimed_at
+///   Y[24] = participation_type
 #[derive(Debug, Clone)]
 pub struct AttendeeRow {
     pub api_id: String,
@@ -109,6 +119,8 @@ pub struct AttendeeRow {
     pub checked_in_by: Option<String>,
     pub qr_code_url: Option<String>,
     pub participation_type: String,
+    pub claim_token: Option<String>,
+    pub claimed_at: Option<String>,
     pub row_index: usize,
 }
 
@@ -139,6 +151,12 @@ impl AttendeeRow {
         // Column Y = index 24 (participation_type)
         let participation_type = get(24);
 
+        // Custom columns P-S (indices 15-18)
+        let solana_address = get_opt(15);
+        let qr_code_url = get_opt(16);
+        let claim_token = get_opt(17);
+        let claimed_at = get_opt(18);
+
         Some(Self {
             api_id,
             first_name: get(1),
@@ -149,12 +167,14 @@ impl AttendeeRow {
             },
             email: get(4),
             ticket_name: get(5),
-            solana_address: get_opt(6),
+            solana_address,
             approval_status: get(7),
             checked_in_at: get_opt(8),
             checked_in_by: get_opt(9),
-            qr_code_url: get_opt(10),
+            qr_code_url,
             participation_type,
+            claim_token,
+            claimed_at,
             row_index,
         })
     }
@@ -179,6 +199,8 @@ impl AttendeeRow {
             qr_code_url: self.qr_code_url.clone(),
             solana_address: self.solana_address.clone(),
             participation_type: self.participation_type.clone(),
+            claim_token: self.claim_token.clone(),
+            claimed_at: self.claimed_at.clone(),
             row_index: self.row_index,
         }
     }
@@ -202,6 +224,8 @@ mod tests {
             qr_code_url: None,
             solana_address: None,
             participation_type: participation_type.to_string(),
+            claim_token: None,
+            claimed_at: None,
             row_index: 2,
         }
     }

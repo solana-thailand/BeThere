@@ -35,8 +35,10 @@
 }
 
 body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-    background: var(--bg-primary);
+    font-family:
+        -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
+        Arial, sans-serif;
+    background: linear-gradient(170deg, #0f0f0f 0%, #111118 40%, #0d0d14 100%);
     color: var(--text-primary);
     min-height: 100vh;
     line-height: 1.5;
@@ -56,6 +58,30 @@ body {
     width: 100%;
     margin: 0 auto;
     padding: 1rem;
+    position: relative;
+}
+
+/* Subtle ambient glow behind page content (admin/scanner) */
+.page-container::before {
+    content: "";
+    position: fixed;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 700px;
+    height: 500px;
+    background: radial-gradient(
+        ellipse at center,
+        rgba(99, 102, 241, 0.04) 0%,
+        transparent 70%
+    );
+    pointer-events: none;
+    z-index: 0;
+}
+
+.page-container > * {
+    position: relative;
+    z-index: 1;
 }
 
 .center-page {
@@ -65,6 +91,30 @@ body {
     justify-content: center;
     min-height: 100vh;
     padding: 2rem;
+    position: relative;
+}
+
+/* Subtle ambient glow behind the center content */
+.center-page::before {
+    content: "";
+    position: absolute;
+    top: -10%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 600px;
+    height: 600px;
+    background: radial-gradient(
+        circle,
+        rgba(99, 102, 241, 0.06) 0%,
+        transparent 70%
+    );
+    pointer-events: none;
+    z-index: 0;
+}
+
+.center-page > * {
+    position: relative;
+    z-index: 1;
 }
 
 /* ===== Typography ===== */
@@ -104,6 +154,30 @@ h3 {
     text-align: center;
 }
 
+/* Brand gradient text for the BeThere logo */
+.brand-logo {
+    font-size: 1.5rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    background: linear-gradient(135deg, #818cf8 0%, #6366f1 40%, #a78bfa 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    text-align: center;
+    margin-bottom: 0.5rem;
+}
+
+.brand-logo-sub {
+    font-size: 0.7rem;
+    font-weight: 500;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    text-align: center;
+    margin-top: -0.25rem;
+    margin-bottom: 1rem;
+}
+
 /* ===== Buttons ===== */
 .btn {
     display: inline-flex;
@@ -116,13 +190,21 @@ h3 {
     font-size: 0.9rem;
     font-weight: 600;
     cursor: pointer;
-    transition: background 0.2s, transform 0.1s, opacity 0.2s;
+    transition:
+        background 0.2s,
+        transform 0.15s,
+        box-shadow 0.2s,
+        opacity 0.2s;
     text-decoration: none;
     white-space: nowrap;
 }
 
+.btn:hover {
+    transform: translateY(-1px);
+}
+
 .btn:active {
-    transform: scale(0.97);
+    transform: scale(0.97) translateY(0);
 }
 
 .btn:disabled {
@@ -143,25 +225,41 @@ h3 {
     font-size: 1rem;
     font-weight: 600;
     cursor: pointer;
-    transition: background 0.2s, transform 0.1s;
     width: 100%;
+    position: relative;
+    box-shadow:
+        0 2px 16px rgba(0, 0, 0, 0.2),
+        0 0 0 1px rgba(255, 255, 255, 0.1);
+    transition:
+        background 0.2s,
+        transform 0.15s,
+        box-shadow 0.2s;
 }
 
 .btn-google:hover {
-    background: #f0f0f0;
+    background: #f5f5f5;
+    transform: translateY(-1px);
+    box-shadow:
+        0 4px 24px rgba(0, 0, 0, 0.25),
+        0 0 0 1px rgba(255, 255, 255, 0.15);
 }
 
 .btn-google:active {
-    transform: scale(0.98);
+    transform: scale(0.98) translateY(0);
+    box-shadow:
+        0 1px 8px rgba(0, 0, 0, 0.2),
+        0 0 0 1px rgba(255, 255, 255, 0.1);
 }
 
 .btn-primary {
-    background: var(--accent);
+    background: linear-gradient(135deg, #6366f1 0%, #818cf8 100%);
     color: #fff;
+    box-shadow: 0 2px 12px rgba(99, 102, 241, 0.25);
 }
 
 .btn-primary:hover {
-    background: var(--accent-hover);
+    background: linear-gradient(135deg, #818cf8 0%, #a5b4fc 100%);
+    box-shadow: 0 4px 20px rgba(99, 102, 241, 0.35);
 }
 
 .btn-success {
@@ -208,6 +306,13 @@ h3 {
     border-radius: var(--radius);
     padding: 1.25rem;
     margin-bottom: 1rem;
+    transition:
+        border-color 0.2s,
+        box-shadow 0.2s;
+}
+
+.card:hover {
+    border-color: #333;
 }
 
 .card-header {
@@ -232,11 +337,50 @@ h3 {
 }
 
 .stat-card {
-    background: var(--bg-secondary);
+    background: linear-gradient(
+        135deg,
+        rgba(30, 30, 30, 0.95) 0%,
+        rgba(26, 26, 26, 0.98) 100%
+    );
     border: 1px solid var(--border);
     border-radius: var(--radius);
     padding: 1rem;
     text-align: center;
+    transition:
+        border-color 0.3s,
+        box-shadow 0.3s;
+}
+
+.stat-card:hover {
+    border-color: #333;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+}
+
+.stat-card.success {
+    border-color: rgba(34, 197, 94, 0.25);
+    background: linear-gradient(
+        135deg,
+        rgba(34, 197, 94, 0.06) 0%,
+        rgba(30, 30, 30, 0.95) 100%
+    );
+}
+
+.stat-card.warning {
+    border-color: rgba(245, 158, 11, 0.25);
+    background: linear-gradient(
+        135deg,
+        rgba(245, 158, 11, 0.06) 0%,
+        rgba(30, 30, 30, 0.95) 100%
+    );
+}
+
+.stat-card.info {
+    border-color: rgba(59, 130, 246, 0.25);
+    background: linear-gradient(
+        135deg,
+        rgba(59, 130, 246, 0.06) 0%,
+        rgba(30, 30, 30, 0.95) 100%
+    );
 }
 
 .stat-value {
@@ -278,9 +422,10 @@ h3 {
 
 .progress-fill {
     height: 100%;
-    background: var(--success);
+    background: linear-gradient(90deg, #22c55e 0%, #16a34a 100%);
     border-radius: 4px;
     transition: width 0.5s ease;
+    box-shadow: 0 0 8px rgba(34, 197, 94, 0.3);
 }
 
 /* ===== Header / Nav ===== */
@@ -304,12 +449,23 @@ h3 {
 .header-title {
     font-size: 1.1rem;
     font-weight: 700;
-    color: #fff;
+    background: linear-gradient(135deg, #e0e0e0 0%, #fff 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
 }
 
 .header-user {
     font-size: 0.8rem;
     color: var(--text-secondary);
+}
+
+/* Active nav link in header */
+nav a[aria-current="page"],
+nav a.active {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
 }
 
 /* ===== Tabs ===== */
@@ -331,7 +487,9 @@ h3 {
     border: none;
     border-bottom: 2px solid transparent;
     cursor: pointer;
-    transition: color 0.2s, border-color 0.2s;
+    transition:
+        color 0.2s,
+        border-color 0.2s;
 }
 
 .tab:hover {
@@ -350,20 +508,7 @@ h3 {
     gap: 0.5rem;
 }
 
-.attendee-item {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0.85rem 1rem;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    transition: background 0.2s;
-}
-
-.attendee-item:hover {
-    background: var(--bg-hover);
-}
+/* attendee-item gradient styles defined below (near EOF) */
 
 .attendee-info {
     flex: 1;
@@ -473,8 +618,13 @@ h3 {
 }
 
 @keyframes scan {
-    0%, 100% { top: 20%; }
-    50% { top: 75%; }
+    0%,
+    100% {
+        top: 20%;
+    }
+    50% {
+        top: 75%;
+    }
 }
 
 .scanner-placeholder {
@@ -532,56 +682,7 @@ h3 {
     display: block;
 }
 
-.result-success {
-    background: var(--success-bg);
-    border: 1px solid var(--success-border);
-    border-radius: var(--radius);
-    padding: 1.5rem;
-    text-align: center;
-}
-
-.result-success .icon {
-    font-size: 3rem;
-    margin-bottom: 0.5rem;
-}
-
-.result-success h2 {
-    color: var(--success);
-}
-
-.result-error {
-    background: var(--danger-bg);
-    border: 1px solid var(--danger-border);
-    border-radius: var(--radius);
-    padding: 1.5rem;
-    text-align: center;
-}
-
-.result-error .icon {
-    font-size: 3rem;
-    margin-bottom: 0.5rem;
-}
-
-.result-error h2 {
-    color: var(--danger);
-}
-
-.result-warning {
-    background: var(--warning-bg);
-    border: 1px solid var(--warning-border);
-    border-radius: var(--radius);
-    padding: 1.5rem;
-    text-align: center;
-}
-
-.result-warning .icon {
-    font-size: 3rem;
-    margin-bottom: 0.5rem;
-}
-
-.result-warning h2 {
-    color: var(--warning);
-}
+/* result-success/error/warning gradient styles defined below (near EOF) */
 
 .result-details {
     margin-top: 0.75rem;
@@ -658,7 +759,9 @@ h3 {
 }
 
 @keyframes spin {
-    to { transform: rotate(360deg); }
+    to {
+        transform: rotate(360deg);
+    }
 }
 
 .page-loading {
@@ -701,8 +804,22 @@ h3 {
     left: 0.85rem;
     top: 50%;
     transform: translateY(-50%);
-    color: var(--text-muted);
-    font-size: 0.9rem;
+    width: 14px;
+    height: 14px;
+    border: 2px solid var(--text-muted);
+    border-radius: 50%;
+}
+
+.search-box .search-icon::after {
+    content: "";
+    position: absolute;
+    width: 6px;
+    height: 2px;
+    background: var(--text-muted);
+    bottom: -3px;
+    right: -4px;
+    transform: rotate(45deg);
+    border-radius: 1px;
 }
 
 /* ===== QR Code Display ===== */
@@ -727,28 +844,641 @@ h3 {
 }
 
 /* ===== Utility ===== */
-.text-center { text-align: center; }
-.text-left { text-align: left; }
-.text-right { text-align: right; }
-.mt-1 { margin-top: 0.5rem; }
-.mt-2 { margin-top: 1rem; }
-.mt-3 { margin-top: 1.5rem; }
-.mb-1 { margin-bottom: 0.5rem; }
-.mb-2 { margin-bottom: 1rem; }
-.mb-3 { margin-bottom: 1.5rem; }
-.gap-1 { gap: 0.5rem; }
-.gap-2 { gap: 1rem; }
-.flex { display: flex; }
-.flex-col { flex-direction: column; }
-.items-center { align-items: center; }
-.justify-between { justify-content: space-between; }
-.hidden { display: none !important; }
-.w-full { width: 100%; }
+.text-center {
+    text-align: center;
+}
+.text-left {
+    text-align: left;
+}
+.text-right {
+    text-align: right;
+}
+.mt-1 {
+    margin-top: 0.5rem;
+}
+.mt-2 {
+    margin-top: 1rem;
+}
+.mt-3 {
+    margin-top: 1.5rem;
+}
+.mb-1 {
+    margin-bottom: 0.5rem;
+}
+.mb-2 {
+    margin-bottom: 1rem;
+}
+.mb-3 {
+    margin-bottom: 1.5rem;
+}
+.gap-1 {
+    gap: 0.5rem;
+}
+.gap-2 {
+    gap: 1rem;
+}
+.flex {
+    display: flex;
+}
+.flex-col {
+    flex-direction: column;
+}
+.items-center {
+    align-items: center;
+}
+.justify-between {
+    justify-content: space-between;
+}
+.hidden {
+    display: none !important;
+}
+.w-full {
+    width: 100%;
+}
+
+/* ===== Claim Page: Brand Header ===== */
+.claim-header {
+    text-align: center;
+    margin-bottom: 1.5rem;
+}
+
+.claim-title {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 0.25rem;
+}
+
+.claim-subtitle {
+    font-size: 0.95rem;
+    color: var(--text-secondary);
+    margin-top: 0.25rem;
+}
+
+/* ===== Claim Page: Event Info Card ===== */
+.claim-event-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.25rem;
+    margin-bottom: 1rem;
+}
+
+.claim-event-card .event-title {
+    font-size: 1rem;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 0.75rem;
+}
+
+.claim-event-card .event-meta {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.claim-event-card .event-meta strong {
+    color: var(--text-primary);
+}
+
+/* ===== Claim Page: Schedule Timeline ===== */
+.schedule-section {
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--border);
+}
+
+.schedule-section .schedule-label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 0.6rem;
+}
+
+.timeline {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    padding-left: 1rem;
+    border-left: 2px solid #2a2a3a;
+    margin-left: 0.35rem;
+}
+
+.timeline-item {
+    position: relative;
+    padding: 0.3rem 0 0.3rem 0.85rem;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    line-height: 1.5;
+}
+
+.timeline-item::before {
+    content: "";
+    position: absolute;
+    left: -1.55rem;
+    top: 0.55rem;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #3a3a4a;
+    border: 2px solid #2a2a3a;
+}
+
+.timeline-item.highlight::before {
+    background: var(--accent);
+    border-color: rgba(99, 102, 241, 0.3);
+    box-shadow: 0 0 6px rgba(99, 102, 241, 0.4);
+}
+
+.timeline-item .speaker {
+    color: var(--accent-hover);
+    font-weight: 600;
+}
+
+.timeline-item .time-slot {
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+/* ===== Claim Page: Welcome Card ===== */
+.claim-welcome-card {
+    background: linear-gradient(
+        135deg,
+        rgba(99, 102, 241, 0.08) 0%,
+        rgba(30, 30, 30, 0.95) 100%
+    );
+    border: 1px solid rgba(99, 102, 241, 0.2);
+    border-radius: var(--radius);
+    padding: 1.25rem;
+    margin-bottom: 1rem;
+    text-align: center;
+}
+
+.claim-welcome-card h3 {
+    color: #fff;
+    font-size: 1.1rem;
+    font-weight: 700;
+    margin-bottom: 0.25rem;
+}
+
+.claim-welcome-card .checked-in-label {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+/* ===== Claim Page: NFT Coming Soon ===== */
+.claim-nft-soon-card {
+    background: linear-gradient(
+        135deg,
+        rgba(245, 158, 11, 0.06) 0%,
+        rgba(30, 30, 30, 0.95) 100%
+    );
+    border: 1px solid rgba(245, 158, 11, 0.25);
+    border-radius: var(--radius);
+    padding: 1.5rem 1.25rem;
+    margin-bottom: 1rem;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+}
+
+.claim-nft-soon-card::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 60%;
+    height: 100%;
+    background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(245, 158, 11, 0.04),
+        transparent
+    );
+    animation: shimmer 3s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+    0% {
+        left: -60%;
+    }
+    100% {
+        left: 160%;
+    }
+}
+
+.claim-nft-soon-card h3 {
+    color: var(--text-primary);
+    font-size: 1rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+    position: relative;
+}
+
+.claim-nft-soon-card p {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    position: relative;
+}
+
+.claim-nft-soon-card .nft-description {
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid rgba(245, 158, 11, 0.15);
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    position: relative;
+}
+
+/* ===== Claim Page: Wallet Prep Card ===== */
+.claim-wallet-prep-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.25rem;
+    margin-bottom: 1rem;
+}
+
+.claim-wallet-prep-card p {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    line-height: 1.6;
+}
+
+.claim-wallet-prep-card a {
+    color: var(--accent);
+    text-decoration: underline;
+    font-weight: 500;
+}
+
+.claim-wallet-prep-card a:hover {
+    color: var(--accent-hover);
+}
+
+/* ===== Claim Page: Wallet Input ===== */
+.claim-wallet-input {
+    width: 100%;
+    padding: 0.75rem 0.85rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-size: 0.85rem;
+    font-family: "SF Mono", "Fira Code", monospace;
+    outline: none;
+    transition:
+        border-color 0.2s,
+        box-shadow 0.2s;
+}
+
+.claim-wallet-input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+
+.claim-wallet-input::placeholder {
+    color: var(--text-muted);
+    font-family:
+        -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+/* ===== Claim Page: Claim Button ===== */
+.claim-btn-mint {
+    background: linear-gradient(135deg, #6366f1 0%, #818cf8 100%);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius-sm);
+    padding: 0.9rem 1.5rem;
+    font-size: 1rem;
+    font-weight: 700;
+    cursor: pointer;
+    width: 100%;
+    transition: all 0.2s;
+    box-shadow: 0 2px 16px rgba(99, 102, 241, 0.3);
+    margin-top: 0.5rem;
+}
+
+.claim-btn-mint:hover:not(:disabled) {
+    background: linear-gradient(135deg, #818cf8 0%, #a5b4fc 100%);
+    box-shadow: 0 4px 24px rgba(99, 102, 241, 0.4);
+    transform: translateY(-1px);
+}
+
+.claim-btn-mint:active:not(:disabled) {
+    transform: scale(0.98) translateY(0);
+}
+
+.claim-btn-mint:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
+/* ===== Claim Page: Success State ===== */
+.claim-success {
+    width: 100%;
+    background: linear-gradient(
+        135deg,
+        rgba(34, 197, 94, 0.08) 0%,
+        rgba(30, 30, 30, 0.95) 100%
+    );
+    border: 1px solid rgba(34, 197, 94, 0.3);
+    border-radius: var(--radius);
+    padding: 2rem 1.5rem;
+    text-align: center;
+    position: relative;
+    box-shadow: 0 0 40px rgba(34, 197, 94, 0.08);
+}
+
+.claim-success::before {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    border-radius: var(--radius);
+    background: linear-gradient(
+        135deg,
+        rgba(34, 197, 94, 0.3),
+        transparent,
+        rgba(99, 102, 241, 0.2)
+    );
+    z-index: -1;
+    mask:
+        linear-gradient(#fff 0 0) content-box,
+        linear-gradient(#fff 0 0);
+    mask-composite: exclude;
+    -webkit-mask-composite: xor;
+    padding: 1px;
+}
+
+.claim-success h2 {
+    color: var(--success);
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin-bottom: 0.25rem;
+}
+
+.claim-success .success-check,
+.success-check {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 0.75rem;
+    box-shadow: 0 0 20px rgba(34, 197, 94, 0.3);
+}
+
+.claim-success .success-check svg,
+.success-check svg {
+    width: 24px;
+    height: 24px;
+    stroke: #fff;
+    stroke-width: 3;
+    fill: none;
+}
+
+.claim-success .success-details {
+    text-align: left;
+    margin-top: 1rem;
+    font-size: 0.9rem;
+}
+
+.claim-success .success-details p {
+    margin-bottom: 0.4rem;
+    color: var(--text-secondary);
+}
+
+.claim-success .success-details strong {
+    color: var(--text-primary);
+}
+
+.claim-success .success-details code {
+    font-size: 0.75rem;
+    color: var(--accent);
+    word-break: break-all;
+    font-family: "SF Mono", "Fira Code", monospace;
+}
+
+.claim-success .success-actions {
+    margin-top: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+/* ===== Claim Page: Error State ===== */
+.claim-error {
+    width: 100%;
+    background: var(--danger-bg);
+    border: 1px solid var(--danger-border);
+    border-radius: var(--radius);
+    padding: 1.5rem;
+    text-align: center;
+}
+
+.claim-error h2 {
+    color: var(--danger);
+    font-size: 1.25rem;
+    font-weight: 700;
+}
+
+/* ===== Claim Page: Warning State (Already Claimed) ===== */
+.claim-warning {
+    width: 100%;
+    background: linear-gradient(
+        135deg,
+        rgba(245, 158, 11, 0.06) 0%,
+        rgba(30, 30, 30, 0.95) 100%
+    );
+    border: 1px solid var(--warning-border);
+    border-radius: var(--radius);
+    padding: 1.5rem;
+    text-align: center;
+}
+
+.claim-warning h2 {
+    color: var(--warning);
+    font-size: 1.25rem;
+    font-weight: 700;
+}
+
+/* ===== Claim Page: Loading State ===== */
+.claim-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    padding: 2rem;
+    color: var(--text-secondary);
+}
+
+.claim-loading h3 {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+/* ===== Claim Page: Bookmark Footer ===== */
+.claim-bookmark-hint {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    text-align: center;
+    margin-top: 0.5rem;
+}
+
+/* ===== Claim Page: Event Link ===== */
+.claim-event-link {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    text-align: center;
+    margin-top: 0.25rem;
+}
+
+.claim-event-link a {
+    color: var(--accent);
+    text-decoration: underline;
+}
+
+/* ===== Claim Page: Powered-by Badge ===== */
+.powered-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    letter-spacing: 0.03em;
+    margin-top: 0.75rem;
+}
+
+.powered-badge .sol-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #9945ff, #14f195);
+}
+
+/* ===== Claim Page: Footer Brand ===== */
+.claim-footer {
+    margin-top: 2.5rem;
+    text-align: center;
+}
+
+.claim-footer .brand-line {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.claim-footer .brand-line .accent {
+    color: var(--accent);
+    font-weight: 600;
+}
+
+/* ===== Shared: Scanner Success Title ===== */
+.claim-success-title {
+    color: var(--success);
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin-bottom: 0.25rem;
+}
+
+/* ===== Shared: Result Cards Enhancement ===== */
+.result-success {
+    background: linear-gradient(
+        135deg,
+        rgba(34, 197, 94, 0.08) 0%,
+        rgba(30, 30, 30, 0.95) 100%
+    );
+    border: 1px solid rgba(34, 197, 94, 0.3);
+    border-radius: var(--radius);
+    padding: 1.5rem;
+    text-align: center;
+}
+
+.result-error {
+    background: linear-gradient(
+        135deg,
+        rgba(239, 68, 68, 0.08) 0%,
+        rgba(30, 30, 30, 0.95) 100%
+    );
+    border: 1px solid var(--danger-border);
+    border-radius: var(--radius);
+    padding: 1.5rem;
+    text-align: center;
+}
+
+.result-warning {
+    background: linear-gradient(
+        135deg,
+        rgba(245, 158, 11, 0.08) 0%,
+        rgba(30, 30, 30, 0.95) 100%
+    );
+    border: 1px solid var(--warning-border);
+    border-radius: var(--radius);
+    padding: 1.5rem;
+    text-align: center;
+}
+
+.result-success h2,
+.result-error h2,
+.result-warning h2 {
+    margin-bottom: 0.5rem;
+}
+
+.result-success h2 {
+    color: var(--success);
+}
+
+.result-error h2 {
+    color: var(--danger);
+}
+
+.result-warning h2 {
+    color: var(--warning);
+}
+
+.result-success .icon,
+.result-error .icon,
+.result-warning .icon {
+    font-size: 3rem;
+    margin-bottom: 0.5rem;
+}
+
+/* ===== Shared: Attendee Item Enhancement ===== */
+.attendee-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.85rem 1rem;
+    background: linear-gradient(
+        135deg,
+        rgba(30, 30, 30, 0.95) 0%,
+        rgba(26, 26, 26, 0.98) 100%
+    );
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    transition:
+        border-color 0.2s,
+        background 0.2s;
+}
+
+.attendee-item:hover {
+    background: var(--bg-hover);
+    border-color: #333;
+}
 
 /* ===== Responsive ===== */
 @media (max-width: 480px) {
     .container {
         padding: 1.5rem 1rem;
+    }
+
+    .page-container::before {
+        width: 400px;
+        height: 300px;
     }
 
     .stats-grid {
@@ -766,6 +1496,29 @@ h3 {
 
     h1 {
         font-size: 1.5rem;
+    }
+
+    .claim-title {
+        font-size: 1.5rem;
+    }
+
+    .claim-success {
+        padding: 1.5rem 1.25rem;
+    }
+
+    .timeline {
+        padding-left: 0.75rem;
+    }
+
+    .timeline-item {
+        font-size: 0.75rem;
+        padding-left: 0.6rem;
+    }
+
+    .timeline-item::before {
+        left: -1.3rem;
+        width: 6px;
+        height: 6px;
     }
 
     .header-title {
