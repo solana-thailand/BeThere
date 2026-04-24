@@ -685,7 +685,7 @@ fn render_check_in_state(
             let qr_data_url = claim_url
                 .as_ref()
                 .and_then(|url| generate_qr_data_url(url, 200));
-            let claim_url_for_copy = claim_url.clone();
+
             let claim_url_for_display = claim_url.clone();
             view! {
                 <div class="card">
