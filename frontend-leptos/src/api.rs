@@ -173,7 +173,7 @@ fn api_base() -> String {
     let location = window.location();
     let origin = location
         .origin()
-        .unwrap_or_else(|_| "http://localhost:3000".to_string());
+        .unwrap_or_else(|_| "http://localhost:8787".to_string());
     format!("{origin}/api")
 }
 
