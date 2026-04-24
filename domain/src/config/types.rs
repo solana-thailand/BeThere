@@ -31,6 +31,16 @@ pub struct AppConfig {
     pub server_url: String,
     /// Base URL for claim links (e.g. https://bethere.solana-thailand.workers.dev/claim)
     pub claim_base_url: String,
+    /// Helius RPC URL for Solana JSON-RPC calls (e.g. https://devnet.helius-rpc.com)
+    pub helius_rpc_url: String,
+    /// Helius API key for RPC authentication
+    pub helius_api_key: String,
+    /// NFT collection mint address for compressed NFTs
+    pub nft_collection_mint: String,
+    /// URI to metadata JSON on Arweave/IPFS for the NFT
+    pub nft_metadata_uri: String,
+    /// NFT badge image URL
+    pub nft_image_url: String,
     pub host: String,
     pub port: u16,
 }

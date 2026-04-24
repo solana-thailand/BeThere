@@ -98,6 +98,19 @@ pub async fn get_attendee_by_id(
     Ok(attendees.into_iter().find(|a| a.api_id == api_id))
 }
 
+/// Find an attendee by their claim token (column L).
+/// Scans all attendees and returns the first matching claim_token.
+/// Returns `None` if no attendee has the given token.
+pub async fn get_attendee_by_claim_token(
+    claim_token: &str,
+    state: &AppState,
+) -> Result<Option<Attendee>, String> {
+    let attendees: Vec<Attendee> = get_attendees(state).await?;
+    Ok(attendees
+        .into_iter()
+        .find(|a| a.claim_token.as_deref() == Some(claim_token)))
+}
+
 // ---------------------------------------------------------------------------
 // Staff queries
 // ---------------------------------------------------------------------------
@@ -135,7 +148,7 @@ pub async fn get_staff_emails(state: &AppState) -> Result<Vec<String>, String> {
 /// Mark an attendee as checked in by updating:
 /// - Column I: checked_in_at timestamp (ISO 8601)
 /// - Column J: checked_in_by staff email
-/// - Column L: claim_token (UUID v7 for NFT/refund claim link)
+/// - Column R: claim_token (UUID v7 for NFT/refund claim link)
 ///
 /// Uses batch update to write all columns in a single API call.
 pub async fn mark_checked_in(
@@ -158,7 +171,7 @@ pub async fn mark_checked_in(
             values: vec![vec![staff_email.to_string()]],
         },
         ValueRange {
-            range: format!("{sheet_name}!L{row_index}"),
+            range: format!("{sheet_name}!R{row_index}"),
             values: vec![vec![claim_token.to_string()]],
         },
     ];
@@ -181,8 +194,46 @@ pub async fn mark_checked_in(
     Ok(timestamp)
 }
 
+/// Mark an attendee as claimed by writing wallet to column P and claimed_at to column S.
+/// Called after a successful cNFT mint to persist the claim on the Google Sheet.
+pub async fn mark_claimed(
+    row_index: usize,
+    wallet_address: &str,
+    claimed_at: &str,
+    state: &AppState,
+) -> Result<String, String> {
+    let access_token = get_access_token(state).await?;
+    let sheet_name = &state.config.sheets.sheet_name;
+
+    let data = vec![
+        ValueRange {
+            range: format!("{sheet_name}!P{row_index}"),
+            values: vec![vec![wallet_address.to_string()]],
+        },
+        ValueRange {
+            range: format!("{sheet_name}!S{row_index}"),
+            values: vec![vec![claimed_at.to_string()]],
+        },
+    ];
+
+    let url = format!(
+        "https://sheets.googleapis.com/v4/spreadsheets/{}/values:batchUpdate",
+        state.config.sheets.sheet_id
+    );
+
+    let body = BatchUpdateRequest {
+        data,
+        value_input_option: "USER_ENTERED".to_string(),
+    };
+
+    batch_update_sheet(&url, &body, &access_token).await?;
+
+    tracing::info!("marked row {row_index} as claimed at {claimed_at} wallet={wallet_address}");
+    Ok(claimed_at.to_string())
+}
+
 /// Bulk update QR code URLs for approved attendees.
-/// Updates column K (qr_code_url) for each attendee.
+/// Updates column Q (qr_code_url) for each attendee.
 pub async fn update_qr_urls(
     updates: &[(usize, String)],
     state: &AppState,
@@ -198,7 +249,7 @@ pub async fn update_qr_urls(
     let data: Vec<ValueRange> = updates
         .iter()
         .map(|(row_index, url)| ValueRange {
-            range: format!("{sheet_name}!K{row_index}"),
+            range: format!("{sheet_name}!Q{row_index}"),
             values: vec![vec![url.clone()]],
         })
         .collect();

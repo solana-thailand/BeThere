@@ -88,3 +88,23 @@ pub struct RecentCheckIn {
     pub checked_in_at: String,
     pub checked_in_by: Option<String>,
 }
+
+/// Response for GET /api/claim/{token} — look up an attendee by claim token.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClaimLookupResponse {
+    pub name: String,
+    pub checked_in_at: String,
+    pub claim_token: String,
+    pub claimed: bool,
+    pub claimed_at: Option<String>,
+}
+
+/// Response for POST /api/claim/{token} — mint cNFT and mark as claimed.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClaimResponse {
+    pub name: String,
+    pub asset_id: String,
+    pub signature: String,
+    pub wallet_address: String,
+    pub claimed_at: String,
+}

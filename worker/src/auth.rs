@@ -248,6 +248,11 @@ mod tests {
             ],
             server_url: "http://localhost:3000".to_string(),
             claim_base_url: "http://localhost:3000/claim".to_string(),
+            helius_rpc_url: "https://devnet.helius-rpc.com".to_string(),
+            helius_api_key: "test-helius-key".to_string(),
+            nft_collection_mint: "test-collection-mint".to_string(),
+            nft_metadata_uri: "https://arweave.net/test-metadata".to_string(),
+            nft_image_url: "https://arweave.net/test-image".to_string(),
             host: "0.0.0.0".to_string(),
             port: 3000,
         };

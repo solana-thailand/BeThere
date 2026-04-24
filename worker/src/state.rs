@@ -53,6 +53,17 @@ impl AppState {
         let claim_base_url =
             get_var(env, "CLAIM_BASE_URL").unwrap_or_else(|_| format!("{server_url}/claim"));
 
+        // Phase 2: Helius / NFT config (secrets)
+        let helius_rpc_url = get_secret(env, "HELIUS_RPC_URL")
+            .unwrap_or_else(|_| "https://devnet.helius-rpc.com".to_string());
+        let helius_api_key = get_secret(env, "HELIUS_API_KEY")?;
+        // Collection is optional — Helius mints to its own tree without one
+        let nft_collection_mint =
+            get_secret(env, "NFT_COLLECTION_MINT").unwrap_or_else(|_| String::new());
+        let nft_metadata_uri =
+            get_secret(env, "NFT_METADATA_URI").unwrap_or_else(|_| String::new());
+        let nft_image_url = get_secret(env, "NFT_IMAGE_URL").unwrap_or_else(|_| String::new());
+
         let config = AppConfig {
             google_oauth,
             service_account,
@@ -61,6 +72,11 @@ impl AppState {
             staff_emails,
             server_url,
             claim_base_url,
+            helius_rpc_url,
+            helius_api_key,
+            nft_collection_mint,
+            nft_metadata_uri,
+            nft_image_url,
             // host/port unused on Workers — placeholder values
             host: "0.0.0.0".to_string(),
             port: 0,

@@ -398,3 +398,113 @@ pub async fn generate_qrs(force: bool) -> Result<GenerateQrData, ApiError> {
         status: 0,
     })
 }
+
+// ===== Claim API types (public — no auth required) =====
+
+/// Response data for GET /api/claim/{token} — attendee claim lookup.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ClaimLookupData {
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub checked_in_at: String,
+    #[serde(default)]
+    pub claim_token: String,
+    #[serde(default)]
+    pub claimed: bool,
+    #[serde(default)]
+    pub claimed_at: Option<String>,
+}
+
+/// Response data for POST /api/claim/{token} — NFT mint result.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ClaimMintData {
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub asset_id: String,
+    #[serde(default)]
+    pub signature: String,
+    #[serde(default)]
+    pub wallet_address: String,
+    #[serde(default)]
+    pub claimed_at: String,
+}
+
+// ===== Claim API functions (public — no auth) =====
+
+/// GET /api/claim/{token}
+/// Look up an attendee's claim status by their claim token.
+///
+/// Public endpoint — no authentication required.
+/// Returns attendee name, check-in time, and whether already claimed.
+pub async fn get_claim(token: &str) -> Result<ClaimLookupData, ApiError> {
+    let url = format!("{}/claim/{token}", api_base());
+    let response = gloo::net::http::Request::get(&url).send().await?;
+
+    if !response.ok() {
+        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
+            success: false,
+            data: None,
+            error: Some("Claim lookup failed".to_string()),
+        });
+        return Err(ApiError {
+            message: body.error.unwrap_or_default(),
+            status: response.status(),
+        });
+    }
+
+    let wrapper: ApiResponse<ClaimLookupData> =
+        response.json().await.map_err(|e| ApiError {
+            message: format!("Failed to parse claim response: {e}"),
+            status: 0,
+        })?;
+
+    wrapper.data.ok_or_else(|| ApiError {
+        message: wrapper.error.unwrap_or("No data".to_string()),
+        status: 0,
+    })
+}
+
+/// POST /api/claim/{token}
+/// Mint a compressed NFT to the given wallet address.
+///
+/// Public endpoint — no authentication required.
+/// The attendee must be checked in and not already claimed.
+pub async fn post_claim(token: &str, wallet_address: &str) -> Result<ClaimMintData, ApiError> {
+    let url = format!("{}/claim/{token}", api_base());
+    let body = serde_json::json!({ "wallet_address": wallet_address });
+
+    let response = gloo::net::http::Request::post(&url)
+        .header("Content-Type", "application/json")
+        .body(serde_json::to_string(&body).unwrap_or_default())
+        .map_err(|e| ApiError {
+            message: format!("Failed to build request: {e}"),
+            status: 0,
+        })?
+        .send()
+        .await?;
+
+    if !response.ok() {
+        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
+            success: false,
+            data: None,
+            error: Some("Claim mint failed".to_string()),
+        });
+        return Err(ApiError {
+            message: body.error.unwrap_or_default(),
+            status: response.status(),
+        });
+    }
+
+    let wrapper: ApiResponse<ClaimMintData> =
+        response.json().await.map_err(|e| ApiError {
+            message: format!("Failed to parse mint response: {e}"),
+            status: 0,
+        })?;
+
+    wrapper.data.ok_or_else(|| ApiError {
+        message: wrapper.error.unwrap_or("No data".to_string()),
+        status: 0,
+    })
+}

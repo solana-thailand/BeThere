@@ -72,6 +72,8 @@ mod tests {
             qr_code_url: qr_url.map(|s| s.to_string()),
             solana_address: None,
             participation_type: "In-Person".to_string(),
+            claim_token: None,
+            claimed_at: None,
             row_index: 2,
         }
     }
