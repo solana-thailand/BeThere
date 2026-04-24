@@ -128,6 +128,8 @@ pub struct CheckInData {
     #[serde(default)]
     pub checked_in_by: String,
     #[serde(default)]
+    pub claim_url: Option<String>,
+    #[serde(default)]
     pub message: String,
 }
 
