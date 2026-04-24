@@ -2,7 +2,7 @@
 
 > **Date**: 2025-06-30
 > **Branch**: `feature/014_solana_integration` (branched from `develop`)
-> **Status**: Phase 1 complete (claim token generation), Phase 2 next
+> **Status**: Phase 1 tested & deployed, ready for Phase 2
 > **Depends on**: `DISCUSSION.md` in repo root
 
 ## What Happened
@@ -185,12 +185,21 @@ event-checkin/
 ## Remain Work
 
 - [x] Phase 1: Claim token generation ✅ `221bed9`
+- [x] Phase 1: WASM build fix (uuid `js` feature) ✅ `027bfa4`
+- [x] Phase 1: localhost:3000 → 8787 fixes ✅ `177fd09`
+- [x] Phase 1: Local integration test ✅ all pass
+- [x] Phase 1: Production deploy ✅
 - [ ] Phase 2a: Claim page frontend ← NEXT
 - [ ] Phase 2b: Wallet connect UI
 - [ ] Phase 2c: cNFT minting (Bubblegum)
 - [ ] Phase 3a: SOL airdrop
 - [ ] Phase 3b: USDC transfer
 - [ ] Phase 3c: On-chain check-in tx (optional)
+
+### Before Real Event
+
+- [ ] Regenerate QR URLs on production (`POST /api/generate-qrs?force=true`) so they point to `https://bethere.solana-thailand.workers.dev/staff/?scan=...`
+- [ ] Add `claim_token` header to column L row 1 in Google Sheet
 
 ## Issues Ref
 
@@ -236,12 +245,15 @@ The key principle: **Web3 is additive, never blocking.** Check-in works without 
 - **Git branch naming**: `develop/feature/014_solana_integration` is invalid because `develop` exists as a branch. Solution: use flat namespace `feature/014_solana_integration` instead.
 - **Column indexing**: Google Sheets API uses 0-based column indices. Column L = index 11, Column M = index 12. Must be consistent in sheets.rs batch update.
 - **Test fixture update**: `auth.rs` tests create `AppConfig` manually — must add new `claim_base_url` field when config struct changes. Build succeeded but `cargo test` caught it.
+- **UUID WASM compatibility**: `uuid` crate needs `"js"` feature for `wasm32-unknown-unknown` target. Native tests pass but WASM build fails — this is a recurring pattern for any crate using randomness/IO in Workers.
+- **localhost port mismatch**: Old Axum server used port 3000, Workers uses 8787. Found stale references in `Trunk.toml` (proxy), `api.rs` (fallback), and 21 QR URLs in the Google Sheet. Rule: any port change requires regenerating QR URLs.
+- **JWT generation for testing**: Worker uses HMAC-SHA256 JWT via SubtleCrypto. To test locally, generate JWT with Python using compact JSON (no spaces in `separators=(',',':')`) to match Rust's `serde_json` output. Cookie name is `event_checkin_token`, not `session`.
 
 ### Phase 1 Changes Summary
 
 | File | Change |
 |------|--------|
-| `worker/Cargo.toml` | Added `uuid = { version = "1", features = ["v7", "serde"] }` |
+| `worker/Cargo.toml` | Added `uuid = { version = "1", features = ["v7", "serde", "js"] }` |
 | `worker/wrangler.toml` | Added `CLAIM_BASE_URL` to `[vars]` |
 | `worker/src/state.rs` | Read `CLAIM_BASE_URL` var, pass to `AppConfig` with fallback |
 | `domain/src/config/types.rs` | Added `claim_base_url: String` to `AppConfig` |
@@ -249,3 +261,60 @@ The key principle: **Web3 is additive, never blocking.** Check-in works without 
 | `worker/src/handlers/checkin.rs` | Generate `Uuid::now_v7()`, build claim URL, pass to sheet + response |
 | `worker/src/sheets.rs` | `mark_checked_in` now accepts `claim_token`, writes to column L |
 | `worker/src/auth.rs` | Fixed test fixture with `claim_base_url` field |
+| `frontend-leptos/Trunk.toml` | Updated proxy `localhost:3000` → `localhost:8787` |
+| `frontend-leptos/src/api.rs` | Updated fallback origin `localhost:3000` → `localhost:8787` |
+
+### Phase 1 Testing & Bug Fixes
+
+#### Bug 1: WASM build failure (commit `027bfa4`)
+
+`uuid` crate requires a randomness source on `wasm32-unknown-unknown`. Native tests passed (macOS) but `wrangler dev` failed:
+
+```
+error: to use `uuid` on `wasm32-unknown-unknown`, specify a source of randomness
+using one of the `js`, `rng-getrandom`, or `rng-rand` features
+```
+
+**Fix:** Added `"js"` feature to `uuid` dependency in `worker/Cargo.toml`:
+```toml
+uuid = { version = "1", features = ["v7", "serde", "js"] }
+```
+
+This enables `crypto.getRandomValues()` via wasm-bindgen, available in Cloudflare Workers runtime.
+
+#### Bug 2: Stale localhost:3000 references (commit `177fd09`)
+
+Found 2 runtime files and 21 Google Sheet QR URLs still pointing to `localhost:3000` (old Axum port). The Worker runs on `localhost:8787`.
+
+**Fix:**
+- `frontend-leptos/Trunk.toml`: proxy backend updated
+- `frontend-leptos/src/api.rs`: fallback origin updated
+- Regenerated all 21 QR URLs via `POST /api/generate-qrs?force=true`
+
+#### Local Integration Test Results
+
+All tests performed on `localhost:8787` with HMAC-SHA256 JWT:
+
+| Test | Result |
+|------|--------|
+| `GET /api/health` | ✅ `{"status":"ok"}` |
+| `GET /api/auth/me` (valid JWT) | ✅ Returns email + is_staff |
+| `GET /api/attendees` | ✅ Lists all from Google Sheet |
+| `POST /api/checkin/{id}` (In-Person, approved) | ✅ Returns `claim_url` with UUID v7 |
+| `POST /api/checkin/{id}` (duplicate) | ✅ Blocked: "already checked in" |
+| `POST /api/checkin/{id}` (Online) | ✅ Blocked: "not In-Person" |
+| `POST /api/checkin/{id}` (no auth) | ✅ 401: "missing authentication token" |
+
+Sample claim_url returned:
+```
+https://bethere.solana-thailand.workers.dev/claim/019dbd2a-1b2d-70c0-9a54-810e99631c99
+```
+
+#### Production Deploy
+
+Deployed to `https://bethere.solana-thailand.workers.dev`:
+- Version ID: `db7c8fff-d93c-43fa-828f-b599bea01693`
+- Health check: ✅
+- Auth URL: ✅
+- Unauthenticated check-in: ✅ returns 401
+- **⚠️ Production QR URLs still need regeneration** via `POST /api/generate-qrs?force=true` on production (they'll use production `SERVER_URL`)
