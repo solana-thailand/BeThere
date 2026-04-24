@@ -115,12 +115,37 @@ pub async fn get_attendee_by_claim_token(
 // Staff queries
 // ---------------------------------------------------------------------------
 
-/// Fetch staff email addresses from the dedicated "staff" sheet tab.
-/// Reads column A starting from row 2 (row 1 is header).
-/// Returns lowercased, trimmed, non-empty email strings.
-pub async fn get_staff_emails(state: &AppState) -> Result<Vec<String>, String> {
+/// A staff member entry from the Google Sheets "staff" tab.
+///
+/// Column mapping:
+///   A[0] = email
+///   B[1] = role ("admin" or "staff")
+#[derive(Debug, Clone)]
+pub struct StaffMember {
+    /// Staff email address (lowercased).
+    pub email: String,
+    /// Role: "admin" (full access) or "staff" (scanner only).
+    /// Defaults to "staff" if column B is empty.
+    pub role: String,
+}
+
+impl StaffMember {
+    /// Whether this staff member has admin privileges.
+    pub fn is_admin(&self) -> bool {
+        self.role.eq_ignore_ascii_case("admin")
+    }
+}
+
+/// Fetch staff members from the dedicated "staff" sheet tab.
+///
+/// Reads columns A (email) and B (role) starting from row 2 (row 1 is header).
+/// Returns a list of `StaffMember` with lowercased emails and role.
+///
+/// If column B (role) is empty, defaults to "staff".
+/// Valid roles: "admin" (scanner + admin dashboard), "staff" (scanner only).
+pub async fn get_staff_members(state: &AppState) -> Result<Vec<StaffMember>, String> {
     let access_token = get_access_token(state).await?;
-    let range = format!("{}!A2:A", state.config.sheets.staff_sheet_name);
+    let range = format!("{}!A2:B", state.config.sheets.staff_sheet_name);
     let url = format!(
         "https://sheets.googleapis.com/v4/spreadsheets/{}/values/{}",
         state.config.sheets.sheet_id,
@@ -129,16 +154,28 @@ pub async fn get_staff_emails(state: &AppState) -> Result<Vec<String>, String> {
 
     let value_range: ValueRange = fetch_sheet_range(&url, &access_token).await?;
 
-    let emails: Vec<String> = value_range
+    let members: Vec<StaffMember> = value_range
         .values
         .iter()
-        .filter_map(|row| row.first().cloned())
-        .map(|s| s.trim().to_lowercase())
-        .filter(|s| !s.is_empty())
+        .filter_map(|row| {
+            let email = row.first().cloned().unwrap_or_default().trim().to_string();
+            if email.is_empty() {
+                return None;
+            }
+            let role = row
+                .get(1)
+                .map(|s| s.trim().to_lowercase())
+                .filter(|s| !s.is_empty())
+                .unwrap_or_else(|| "staff".to_string());
+            Some(StaffMember {
+                email: email.to_lowercase(),
+                role,
+            })
+        })
         .collect();
 
-    tracing::debug!("fetched {} staff emails from sheet", emails.len());
-    Ok(emails)
+    tracing::debug!("fetched {} staff members from sheet", members.len());
+    Ok(members)
 }
 
 // ---------------------------------------------------------------------------

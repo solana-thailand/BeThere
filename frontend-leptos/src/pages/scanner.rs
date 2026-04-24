@@ -123,10 +123,17 @@ enum ScannerTab {
 /// Staff scanner page component.
 #[component]
 pub fn Scanner() -> impl IntoView {
-    // Get user email from ProtectedRoute context
+    // Get user email and role from ProtectedRoute context
     let user_email = use_context::<ReadSignal<String>>().unwrap_or_else(|| {
         log::error!(
             "[scanner] no user_email in context — route not wrapped in \
+                 ProtectedRoute?"
+        );
+        signal(String::new()).0
+    });
+    let user_role = use_context::<ReadSignal<String>>().unwrap_or_else(|| {
+        log::error!(
+            "[scanner] no user_role in context — route not wrapped in \
                  ProtectedRoute?"
         );
         signal(String::new()).0
@@ -296,6 +303,7 @@ pub fn Scanner() -> impl IntoView {
             <components::AppHeader
                 title="🎫 Scanner"
                 user_email=user_email
+                user_role=user_role
                 on_sign_out=handle_sign_out
             />
 

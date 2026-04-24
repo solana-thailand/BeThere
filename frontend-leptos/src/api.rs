@@ -40,7 +40,9 @@ pub struct AuthUrlResponse {
 pub struct MeResponse {
     pub email: String,
     pub sub: String,
-    pub is_staff: bool,
+    /// Role from staff sheet: "admin" (scanner + admin) or "staff" (scanner only).
+    #[serde(default)]
+    pub role: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]

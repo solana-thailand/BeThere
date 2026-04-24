@@ -13,6 +13,7 @@
 use std::collections::HashMap;
 
 use leptos::prelude::*;
+use leptos_router::hooks::use_navigate;
 
 use crate::api::{self, AttendeeResponse, GenerateQrData, StatsResponse};
 use crate::auth;
@@ -24,13 +25,30 @@ use crate::utils;
 /// Admin dashboard page component.
 #[component]
 pub fn Admin() -> impl IntoView {
-    // Get user email from ProtectedRoute context
+    // Get user email and role from ProtectedRoute context
     let user_email = use_context::<ReadSignal<String>>().unwrap_or_else(|| {
         log::error!(
             "[admin] no user_email in context — route not wrapped in \
                  ProtectedRoute?"
         );
         signal(String::new()).0
+    });
+    let user_role = use_context::<ReadSignal<String>>().unwrap_or_else(|| {
+        log::error!(
+            "[admin] no user_role in context — route not wrapped in \
+                 ProtectedRoute?"
+        );
+        signal(String::new()).0
+    });
+
+    // Redirect non-admin users to /staff
+    let navigate = use_navigate();
+    Effect::new(move |_| {
+        let role = user_role.get();
+        if !role.is_empty() && !crate::components::is_admin_role(&role) {
+            log::warn!("[admin] non-admin user attempted access, redirecting to /staff");
+            navigate("/staff", Default::default());
+        }
     });
 
     // Data state
@@ -152,6 +170,7 @@ pub fn Admin() -> impl IntoView {
             <components::AppHeader
                 title="📊 Admin Dashboard"
                 user_email=user_email
+                user_role=user_role
                 on_sign_out=handle_sign_out
             />
 

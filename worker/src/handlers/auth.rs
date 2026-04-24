@@ -107,15 +107,22 @@ pub async fn auth_callback(
 /// GET /api/auth/me
 /// Returns the current authenticated user's info from their JWT claims.
 /// Requires valid JWT in the Authorization header or cookie (enforced by middleware).
+///
+/// Returns the user's role ("admin" or "staff") from the Google Sheets "staff" tab.
+/// Role determines access: "admin" sees scanner + admin dashboard, "staff" sees scanner only.
 #[worker::send]
 pub async fn auth_me(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
 ) -> Json<serde_json::Value> {
+    let role = auth::get_staff_role(&claims.email, &state)
+        .await
+        .unwrap_or_else(|| "staff".to_string());
+
     Json(json!({
         "email": claims.email,
         "sub": claims.sub,
-        "is_staff": auth::is_staff(&claims.email, &state).await,
+        "role": role,
     }))
 }
 
