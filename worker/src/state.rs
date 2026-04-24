@@ -56,7 +56,7 @@ impl AppState {
         // Phase 2: Helius / NFT config (secrets)
         let helius_rpc_url = get_secret(env, "HELIUS_RPC_URL")
             .unwrap_or_else(|_| "https://devnet.helius-rpc.com".to_string());
-        let helius_api_key = get_secret(env, "HELIUS_API_KEY")?;
+        let helius_api_key = get_secret(env, "HELIUS_API_KEY").unwrap_or_else(|_| String::new());
         // Collection is optional — Helius mints to its own tree without one
         let nft_collection_mint =
             get_secret(env, "NFT_COLLECTION_MINT").unwrap_or_else(|_| String::new());
