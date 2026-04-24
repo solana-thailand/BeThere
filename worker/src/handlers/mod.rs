@@ -19,13 +19,14 @@ pub fn routes(state: AppState) -> Router<()> {
         .route("/auth/url", get(auth::auth_url))
         .route("/auth/callback", get(auth::auth_callback))
         .route("/auth/logout", get(auth::auth_logout))
-        .route("/auth/me", get(auth::auth_me))
         // Claim routes (public — attendees claim NFTs without staff login)
         .route("/claim/{token}", get(claim::get_claim))
         .route("/claim/{token}", post(claim::post_claim));
 
     // Protected routes — require staff auth
     let protected = Router::new()
+        // Auth route that requires session (reads Claims from middleware)
+        .route("/auth/me", get(auth::auth_me))
         .route("/attendees", get(attendee::list_attendees))
         .route("/attendee/{id}", get(attendee::get_attendee))
         .route("/checkin/{id}", post(checkin::check_in))
