@@ -61,6 +61,29 @@ extern "C" {
     fn is_scanner_active_js() -> bool;
 }
 
+// ===== QR Code Generation JS Interop =====
+// Uses the QRious library (CDN-loaded in index.html) to generate QR code images
+// as base64 data URLs. The JS module at frontend-leptos/js/qr_generate.js provides:
+// - generateQrDataUrl(text, size) — returns base64 PNG data URL for a QR code
+// - copyToClipboard(text)         — copies text to system clipboard
+
+#[wasm_bindgen(module = "/js/qr_generate.js")]
+extern "C" {
+    /// Generate a QR code image as a base64 PNG data URL.
+    ///
+    /// Returns something like "data:image/png;base64,..." or null if
+    /// the QRious library hasn't loaded yet.
+    #[wasm_bindgen(js_name = "generateQrDataUrl")]
+    fn generate_qr_data_url(text: &str, size: u32) -> Option<String>;
+
+    /// Copy text to the system clipboard.
+    ///
+    /// Uses the Clipboard API with a textarea fallback for older browsers.
+    /// Returns true if the copy operation was initiated successfully.
+    #[wasm_bindgen(js_name = "copyToClipboard")]
+    fn copy_to_clipboard_js(text: &str) -> bool;
+}
+
 // ===== State Types =====
 
 /// Current state of the check-in flow.
@@ -100,10 +123,17 @@ enum ScannerTab {
 /// Staff scanner page component.
 #[component]
 pub fn Scanner() -> impl IntoView {
-    // Get user email from ProtectedRoute context
+    // Get user email and role from ProtectedRoute context
     let user_email = use_context::<ReadSignal<String>>().unwrap_or_else(|| {
         log::error!(
             "[scanner] no user_email in context — route not wrapped in \
+                 ProtectedRoute?"
+        );
+        signal(String::new()).0
+    });
+    let user_role = use_context::<ReadSignal<String>>().unwrap_or_else(|| {
+        log::error!(
+            "[scanner] no user_role in context — route not wrapped in \
                  ProtectedRoute?"
         );
         signal(String::new()).0
@@ -118,13 +148,29 @@ pub fn Scanner() -> impl IntoView {
     // Incremented on reset to restart the polling loop without leaving the tab.
     let (scan_round, set_scan_round) = signal(0u32);
 
-    // Start/stop camera when switching between Scanner and Manual tabs.
-    // Also re-triggers when scan_round changes (reset after a scan).
+    // Stop camera when component unmounts (e.g. navigating to /admin).
+    // Without this, window.__scannerActive remains true and startCamera()
+    // skips on remount, leaving the camera broken until page refresh.
+    on_cleanup(move || {
+        log::info!("[scanner] component unmounting — stopping camera");
+        stop_camera_js();
+    });
+
+    // Camera lifecycle: start when video element is visible, stop when hidden.
+    // Video is visible only when: Scanner tab active AND check_in_state is Idle.
+    // Stops on: Manual tab, non-Idle state (attendee info shown), or unmount.
+    // Re-triggers on scan_round (reset) or check_in_state changes.
     Effect::new(move |_| {
-        let _round = scan_round.get(); // track for re-trigger on reset
-        if active_tab.get() == ScannerTab::Scanner {
-            set_camera_error.set(None);
-            start_camera_js();
+        let round = scan_round.get(); // generation counter for polling loop
+        let should_scan = active_tab.get() == ScannerTab::Scanner
+            && matches!(check_in_state.get(), CheckInState::Idle);
+
+        if should_scan {
+            // Only start camera if not already running (avoids rapid stop/start)
+            if !is_scanner_active_js() {
+                set_camera_error.set(None);
+                start_camera_js();
+            }
 
             let set_cam_err = set_camera_error;
             let set_state = set_check_in_state;
@@ -136,6 +182,11 @@ pub fn Scanner() -> impl IntoView {
 
                 loop {
                     gloo::timers::future::TimeoutFuture::new(300).await;
+
+                    // Stop polling when superseded by a new round
+                    if scan_round.get() != round {
+                        break;
+                    }
 
                     // Stop polling when scanner is deactivated (tab switch / unmount)
                     if !is_scanner_active_js() {
@@ -242,10 +293,9 @@ pub fn Scanner() -> impl IntoView {
         }
     };
 
-    // Reset scanner to idle state and restart camera polling.
-    // Don't stop the camera here — the JS startCamera() guard skips if already
-    // active, avoiding the rapid stop/start race that causes "media resource
-    // aborted" errors. Just drain any stale QR result and re-trigger the Effect.
+    // Reset scanner to idle state and re-trigger camera via Effect.
+    // The Effect tracks check_in_state: setting Idle + incrementing scan_round
+    // causes it to re-evaluate should_scan=true → start camera fresh.
     let handle_reset = move |_: web_sys::MouseEvent| {
         let _ = check_qr_result_js(); // drain stale result
         let _ = check_camera_error_js(); // drain stale error
@@ -263,8 +313,9 @@ pub fn Scanner() -> impl IntoView {
     view! {
         <div>
             <components::AppHeader
-                title="🎫 Scanner"
+                title="Scanner"
                 user_email=user_email
+                user_role=user_role
                 on_sign_out=handle_sign_out
             />
 
@@ -281,7 +332,7 @@ pub fn Scanner() -> impl IntoView {
                         }
                         on:click=move |_| set_active_tab.set(ScannerTab::Scanner)
                     >
-                        "📷 Scanner"
+                        "Scanner"
                     </button>
                     <button
                         class=move || {
@@ -293,7 +344,7 @@ pub fn Scanner() -> impl IntoView {
                         }
                         on:click=move |_| set_active_tab.set(ScannerTab::Manual)
                     >
-                        "✏️ Manual"
+                        "Manual"
                     </button>
                 </div>
 
@@ -387,6 +438,13 @@ pub fn Scanner() -> impl IntoView {
                         render_check_in_state(state, handle_check_in, handle_reset)
                     }}
                 </div>
+
+                <div class="claim-footer">
+                    <div class="brand-line">
+                        <span class="accent">"BeThere"</span>
+                        " x Solana Thailand"
+                    </div>
+                </div>
             </div>
 
             <components::Toast toast_signal=toast />
@@ -460,6 +518,21 @@ fn extract_attendee_id(text: &str) -> Option<String> {
     Some(trimmed.to_string())
 }
 
+// ===== Claim URL Helpers =====
+
+/// Build the full claim URL from a claim token using the current window origin.
+///
+/// This makes the QR code dynamic — works correctly on both localhost:8787
+/// (local testing) and the production domain without backend config changes.
+fn build_claim_url(token: &str) -> String {
+    let window = web_sys::window().expect("no window");
+    let origin = window
+        .location()
+        .origin()
+        .unwrap_or_else(|_| "http://localhost:8787".to_string());
+    format!("{origin}/claim/{token}")
+}
+
 // ===== State View Rendering =====
 
 /// Render the current check-in state as a view.
@@ -488,7 +561,11 @@ fn render_check_in_state(
             view! {
                 <div class="card">
                     <div class="text-center mb-2">
-                        <div style="font-size:2.5rem;">"✅"</div>
+                        <div class="success-check">
+                            <svg viewBox="0 0 24 24">
+                                <polyline points="20 6 9 17 4 12"></polyline>
+                            </svg>
+                        </div>
                         <h2>"Ready to Check In"</h2>
                     </div>
                     <div class="card" style="background:var(--bg-secondary);">
@@ -535,10 +612,14 @@ fn render_check_in_state(
                         format!(" by {}", utils::escape_html(by))
                     }
                 });
+            let claim_url = data.attendee.claim_token.as_ref().map(|t| build_claim_url(t));
+            let qr_data_url = claim_url
+                .as_ref()
+                .and_then(|url| generate_qr_data_url(url, 200));
+            let claim_url_for_display = claim_url.clone();
             view! {
                 <div class="card">
                     <div class="result-warning">
-                        <div style="font-size:2.5rem;">"⚠️"</div>
                         <h2>"Already Checked In"</h2>
                         <div class="result-details">
                             <p style="font-weight:600;color:#fff;">{name}</p>
@@ -549,6 +630,43 @@ fn render_check_in_state(
                             </p>
                         </div>
                     </div>
+
+                    // Claim URL QR code — re-show in case staff needs to display it again
+                    {move || {
+                        match (&qr_data_url, &claim_url_for_display) {
+                            (Some(img_src), Some(url)) => {
+                                let url_for_copy = url.clone();
+                                view! {
+                                    <div style="margin-top:1.25rem;text-align:center;">
+                                        <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:1rem;">
+                                            <p style="font-size:0.8rem;color:var(--text-secondary);margin-bottom:0.75rem;">
+                                                "Claim QR (show to attendee):"
+                                            </p>
+                                            <img
+                                                src=img_src
+                                                alt="Claim URL QR Code"
+                                                style="width:200px;height:200px;border-radius:8px;"
+                                            />
+                                            <div style="margin-top:0.75rem;display:flex;gap:0.5rem;">
+                                                <button
+                                                    class="btn btn-primary btn-sm"
+                                                    style="flex:1;"
+                                                    on:click=move |_| {
+                                                        let _ = copy_to_clipboard_js(&url_for_copy);
+                                                    }
+                                                >
+                                                    "📋 Copy Link"
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                }
+                                    .into_any()
+                            }
+                            _ => view! { <div></div> }.into_any(),
+                        }
+                    }}
+
                     <button
                         class="btn btn-outline btn-block"
                         style="margin-top:1rem;"
@@ -567,7 +685,6 @@ fn render_check_in_state(
             view! {
                 <div class="card">
                     <div class="result-error">
-                        <div style="font-size:2.5rem;">"🚫"</div>
                         <h2>"Not Approved"</h2>
                         <div class="result-details">
                             <p style="font-weight:600;color:#fff;">{name}</p>
@@ -596,7 +713,6 @@ fn render_check_in_state(
             view! {
                 <div class="card">
                     <div class="result-warning">
-                        <div style="font-size:2.5rem;">"💻"</div>
                         <h2>"Not In-Person"</h2>
                         <div class="result-details">
                             <p style="font-weight:600;color:#fff;">{name}</p>
@@ -621,7 +737,6 @@ fn render_check_in_state(
         CheckInState::NotFound => view! {
             <div class="card">
                 <div class="result-error">
-                    <div style="font-size:2.5rem;">"❌"</div>
                     <h2>"Not Found"</h2>
                     <div class="result-details">
                         <p>"No matching attendee found. Please try again."</p>
@@ -658,16 +773,62 @@ fn render_check_in_state(
                     format!(" by {}", utils::escape_html(&by))
                 }
             };
+            let claim_url = result.claim_token.as_ref().map(|t| build_claim_url(t));
+            let qr_data_url = claim_url
+                .as_ref()
+                .and_then(|url| generate_qr_data_url(url, 200));
+            let claim_url_for_display = claim_url.clone();
             view! {
-                <div class="card">
+                <div class="card claim-success">
                     <div class="result-success">
-                        <div style="font-size:2.5rem;">"🎉"</div>
-                        <h2>"Checked In!"</h2>
+                        <div class="success-check">
+                            <svg viewBox="0 0 24 24">
+                                <polyline points="20 6 9 17 4 12"></polyline>
+                            </svg>
+                        </div>
+                        <h2 class="claim-success-title">"Checked In!"</h2>
                         <div class="result-details">
                             <p style="font-weight:600;color:#fff;">{name}</p>
                             <p>"Checked in at: "{formatted}{by_suffix}</p>
                         </div>
                     </div>
+
+                    // Claim URL QR code — show to attendee so they can scan it
+                    {move || {
+                        match (&qr_data_url, &claim_url_for_display) {
+                            (Some(img_src), Some(url)) => {
+                                let url_for_copy = url.clone();
+                                view! {
+                                    <div style="margin-top:1.25rem;text-align:center;">
+                                        <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:1rem;">
+                                            <p style="font-size:0.8rem;color:var(--text-secondary);margin-bottom:0.75rem;">
+                                                "Show this QR to the attendee to claim their NFT:"
+                                            </p>
+                                            <img
+                                                src=img_src
+                                                alt="Claim URL QR Code"
+                                                style="width:200px;height:200px;border-radius:8px;"
+                                            />
+                                            <div style="margin-top:0.75rem;display:flex;gap:0.5rem;">
+                                                <button
+                                                    class="btn btn-primary btn-sm"
+                                                    style="flex:1;"
+                                                    on:click=move |_| {
+                                                        let _ = copy_to_clipboard_js(&url_for_copy);
+                                                    }
+                                                >
+                                                    "📋 Copy Link"
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                }
+                                    .into_any()
+                            }
+                            _ => view! { <div></div> }.into_any(),
+                        }
+                    }}
+
                     <button
                         class="btn btn-success btn-block"
                         style="margin-top:1rem;"
@@ -682,7 +843,6 @@ fn render_check_in_state(
         CheckInState::Error => view! {
             <div class="card">
                 <div class="result-error">
-                    <div style="font-size:2.5rem;">"❌"</div>
                     <h2>"Error"</h2>
                     <div class="result-details">
                         <p>"Something went wrong. Please try again."</p>

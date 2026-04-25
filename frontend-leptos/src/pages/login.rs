@@ -87,14 +87,15 @@ pub fn Login() -> impl IntoView {
         <div class="center-page">
             <div class="container" style="display:flex;flex-direction:column;align-items:center;">
                 // Logo
-                <div class="logo">"🎫"</div>
+                <div class="brand-logo">"BeThere"</div>
+                <div class="brand-logo-sub">"Proof of Attendance"</div>
 
                 // Title
-                <h1>"Event Check-In"</h1>
+                <h1 class="claim-title">"Staff Portal"</h1>
 
                 // Subtitle
                 <p class="subtitle">
-                    "Sign in with your Google account to access the staff check-in portal."
+                    "Sign in with Google to access the staff check-in portal."
                 </p>
 
                 // Event link
@@ -104,8 +105,14 @@ pub fn Login() -> impl IntoView {
                     rel="noopener noreferrer"
                     style="color:var(--primary);font-size:0.9rem;margin-bottom:0.5rem;"
                 >
-                    "🔗 Road to Mainnet 1 — Bangkok"
+                    "Road to Mainnet 1 — Bangkok"
                 </a>
+
+                // Powered by Solana badge
+                <div class="powered-badge">
+                    <span class="sol-dot"></span>
+                    "Powered by Solana"
+                </div>
 
                 // Google sign-in button (hidden when loading)
                 <Show
@@ -136,7 +143,12 @@ pub fn Login() -> impl IntoView {
                 </Show>
 
                 // Footer
-                <div class="footer">"Built with 🦀 Rust (Leptos + Axum)"</div>
+                <div class="claim-footer">
+                    <div class="brand-line">
+                        <span class="accent">"BeThere"</span>
+                        " x Solana Thailand"
+                    </div>
+                </div>
             </div>
         </div>
     }

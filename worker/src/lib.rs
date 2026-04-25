@@ -4,6 +4,7 @@ mod handlers;
 mod http;
 mod middleware;
 mod sheets;
+mod solana;
 mod state;
 
 use axum::Router;

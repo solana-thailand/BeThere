@@ -42,8 +42,16 @@ SHIM
 # Environment variables (non-secret config)
 [vars]
 SERVER_URL = "https://bethere.solana-thailand.workers.dev"
+CLAIM_BASE_URL = "https://bethere.solana-thailand.workers.dev/claim"
 GOOGLE_SHEET_NAME = "checkin"
 GOOGLE_STAFF_SHEET_NAME = "staff"
+
+# Phase 3: Event config (change per event without WASM rebuild)
+EVENT_NAME = "Solana x AI Builders: The Road to Mainnet #1 (Bangkok)"
+EVENT_TAGLINE = "Deep Dive into Rust, AI Agents, and the Solana Ecosystem"
+EVENT_LINK = "https://solana-thailand.github.io/genesis/events/road-to-mainnet-1-bangkok/"
+EVENT_START_MS = "1777170600000"
+EVENT_END_MS = "1777183200000"
 
 # Secrets (set via `npx wrangler secret put <NAME>`):
 # - JWT_SECRET
@@ -55,3 +63,10 @@ GOOGLE_STAFF_SHEET_NAME = "staff"
 # - GOOGLE_SERVICE_ACCOUNT_TOKEN_URI
 # - GOOGLE_SHEET_ID
 # - STAFF_EMAILS
+
+# Phase 2 secrets (Solana / Helius NFT minting):
+# - HELIUS_RPC_URL          (optional — defaults to https://devnet.helius-rpc.com)
+# - HELIUS_API_KEY           (required)
+# - NFT_COLLECTION_MINT     (optional — Helius mints to its own tree without a collection)
+# - NFT_METADATA_URI        (optional — metadata JSON on Arweave/IPFS)
+# - NFT_IMAGE_URL           (optional — NFT badge image URL)
