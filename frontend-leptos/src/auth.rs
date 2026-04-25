@@ -204,7 +204,7 @@ pub fn get_url_error() -> Option<String> {
 pub fn require_auth(navigate: &dyn Fn(&str)) {
     if !is_authenticated() {
         clear_token();
-        navigate("/");
+        navigate("/login");
     }
 }
 
@@ -223,6 +223,6 @@ pub fn logout() {
         let _ = gloo::net::http::Request::get("/api/auth/logout")
             .send()
             .await;
-        let _ = window.location().set_href("/");
+        let _ = window.location().set_href("/login");
     });
 }
