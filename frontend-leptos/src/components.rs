@@ -183,7 +183,7 @@ pub fn ProtectedRoute(children: Children) -> impl IntoView {
                 }
                 Err(e) => {
                     log::warn!("[protected] auth check failed: {e}");
-                    nav("/", Default::default());
+                    nav("/login", Default::default());
                 }
             }
         });

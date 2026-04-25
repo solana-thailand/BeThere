@@ -10,12 +10,14 @@ use leptos_router::components::{Route, Router, Routes};
 use leptos_router::path;
 
 use crate::components::ProtectedRoute;
-use crate::pages::{admin::Admin, claim::Claim, login::Login, scanner::Scanner};
+use crate::pages::{admin::Admin, claim::Claim, landing::Landing, login::Login, scanner::Scanner};
 
 /// Main application component.
 ///
-/// Sets up the Leptos router with three routes:
-/// - `/` — Login page (Google OAuth sign-in)
+/// Sets up the Leptos router with routes:
+/// - `/` — Landing page (public marketing page)
+/// - `/login` — Login page (Google OAuth sign-in)
+/// - `/claim/:token` — NFT claim page for attendees
 /// - `/staff` — Staff scanner page (QR code scanning + manual check-in)
 /// - `/admin` — Admin dashboard (stats, attendee list, QR generation)
 ///
@@ -25,7 +27,7 @@ use crate::pages::{admin::Admin, claim::Claim, login::Login, scanner::Scanner};
 pub fn App() -> impl IntoView {
     view! {
         <Router>
-            <Title text="Event Check-In" />
+            <Title text="BeThere — Event Check-In" />
             <main>
                 <Routes fallback=|| {
                     view! {
@@ -34,12 +36,13 @@ pub fn App() -> impl IntoView {
                                 <div class="logo">"🔍"</div>
                                 <h1>"Page Not Found"</h1>
                                 <p class="subtitle">"The page you're looking for doesn't exist."</p>
-                                <a href="/" class="btn btn-primary">"Go to Login"</a>
+                                <a href="/" class="btn btn-primary">"Go Home"</a>
                             </div>
                         </div>
                     }
                 }>
-                    <Route path=path!("/") view=Login />
+                    <Route path=path!("/") view=Landing />
+                    <Route path=path!("/login") view=Login />
                     <Route path=path!("/claim/:token") view=Claim />
                     <Route path=path!("/staff") view=ProtectedScanner />
                     <Route path=path!("/admin") view=ProtectedAdmin />
@@ -53,7 +56,7 @@ pub fn App() -> impl IntoView {
 ///
 /// Nests the Scanner component inside `ProtectedRoute`, which handles:
 /// - Capturing OAuth tokens from URL params
-/// - Redirecting to `/` if not authenticated
+/// - Redirecting to `/login` if not authenticated
 /// - Loading user email via `GET /api/auth/me`
 /// - Providing `ReadSignal<String>` via context
 #[component]
