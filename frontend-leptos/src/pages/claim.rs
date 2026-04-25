@@ -53,6 +53,164 @@ enum ClaimState {
 }
 
 // ---------------------------------------------------------------------------
+// Helper functions
+// ---------------------------------------------------------------------------
+
+/// Format seconds into "Xh Xm Xs" or "Xm Xs" or "Xs".
+fn format_duration(secs: i64) -> String {
+    let h = secs / 3600;
+    let m = (secs % 3600) / 60;
+    let s = secs % 60;
+    if h > 0 {
+        format!("{h}h {m}m {s}s")
+    } else if m > 0 {
+        format!("{m}m {s}s")
+    } else {
+        format!("{s}s")
+    }
+}
+
+/// Get initials from a name (first letter of first and last word).
+fn get_initials(name: &str) -> String {
+    let parts: Vec<&str> = name.split_whitespace().collect();
+    match parts.len() {
+        0 => "?".to_string(),
+        1 => parts[0].chars().next().unwrap_or('?').to_uppercase().collect(),
+        _ => {
+            let first = parts[0].chars().next().unwrap_or('?');
+            let last = parts.last().unwrap().chars().next().unwrap_or('?');
+            format!("{}{}", first.to_uppercase(), last.to_uppercase())
+        }
+    }
+}
+
+/// Simple deterministic hash for generating avatar colors from name.
+fn simple_hash(s: &str) -> u32 {
+    let mut hash: u32 = 0;
+    for b in s.bytes() {
+        hash = hash.wrapping_mul(31).wrapping_add(b as u32);
+    }
+    hash
+}
+
+// ---------------------------------------------------------------------------
+// Interactive widgets (client-side only)
+// ---------------------------------------------------------------------------
+
+/// Floating hearts widget — audience taps to send hearts.
+/// Purely cosmetic, client-side only. Hearts float up and fade out.
+#[component]
+fn HeartsWidget() -> impl IntoView {
+    let (hearts, set_hearts) = signal(Vec::<u32>::new());
+    let (count, set_count) = signal(0u32);
+    let heart_id = std::cell::Cell::new(0u32);
+
+    let send_heart = move |_: web_sys::MouseEvent| {
+        let id = heart_id.get();
+        heart_id.set(id + 1);
+        set_hearts.update(|h| h.push(id));
+        set_count.update(|c| *c += 1);
+
+        // Remove heart after animation (3 seconds)
+        let set_h = set_hearts;
+        set_timeout(move || {
+            set_h.update(|h| h.retain(|&x| x != id));
+        }, std::time::Duration::from_secs(3));
+    };
+
+    view! {
+        <div class="hearts-widget">
+            <button class="heart-btn" on:click=send_heart>
+                <svg viewBox="0 0 24 24" width="28" height="28">
+                    <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" fill="#ef4444"/>
+                </svg>
+                <span class="heart-count">{move || count.get()}</span>
+            </button>
+            <div class="hearts-container">
+                {move || hearts.get().iter().map(|&id| {
+                    let left = (id % 5) as f64 * 15.0 + 10.0;
+                    let delay = (id % 3) as f64 * 0.2;
+                    let style = format!(
+                        "left:{}%;animation-delay:{}s;",
+                        left, delay
+                    );
+                    view! {
+                        <span class="floating-heart" style=style>
+                            <svg viewBox="0 0 24 24" width="20" height="20">
+                                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" fill="#ef4444"/>
+                            </svg>
+                        </span>
+                    }
+                }).collect_view()}
+            </div>
+        </div>
+    }
+}
+
+/// Live session timer showing event progress.
+/// Shows elapsed time since event start or countdown to start.
+#[component]
+fn SessionTimer() -> impl IntoView {
+    // Event start: April 26, 2026, 09:30 Bangkok time (UTC+7)
+    let event_start_ms: f64 = 1_778_160_000_000.0; // approximate UTC ms
+    let event_end_ms: f64 = 1_778_173_800_000.0; // 13:00 Bangkok
+
+    let (time_display, set_time_display) = signal(String::new());
+    let (status_label, set_status_label) = signal(String::new());
+
+    Effect::new(move |_| {
+        let set_t = set_time_display;
+        let set_s = set_status_label;
+
+        leptos::task::spawn_local(async move {
+            loop {
+                let now = js_sys::Date::now();
+                let (label, display) = if now < event_start_ms {
+                    let diff = ((event_start_ms - now) / 1000.0) as i64;
+                    let label = "Starts in".to_string();
+                    let display = format_duration(diff);
+                    (label, display)
+                } else if now < event_end_ms {
+                    let diff = ((now - event_start_ms) / 1000.0) as i64;
+                    let label = "Live".to_string();
+                    let display = format!("+{}", format_duration(diff));
+                    (label, display)
+                } else {
+                    let label = "Ended".to_string();
+                    let display = "Thanks for coming!".to_string();
+                    (label, display)
+                };
+                set_s.set(label);
+                set_t.set(display);
+                gloo::timers::future::TimeoutFuture::new(1000).await;
+            }
+        });
+    });
+
+    view! {
+        <div class="session-timer">
+            <span class="timer-label">{move || status_label.get()}</span>
+            <span class="timer-value">{move || time_display.get()}</span>
+        </div>
+    }
+}
+
+/// Simple avatar showing initials with a gradient background.
+#[component]
+fn ParticipantAvatar(name: String) -> impl IntoView {
+    let initials = get_initials(&name);
+    let hue = simple_hash(&name) % 360;
+    let bg = format!("hsl({hue}, 60%, 35%)");
+    let border = format!("hsl({hue}, 70%, 50%)");
+
+    view! {
+        <div class="participant-avatar" style=format!("background:{bg};border-color:{border};")>
+            {initials}
+        </div>
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Claim page component
 // ---------------------------------------------------------------------------
 
@@ -177,6 +335,9 @@ pub fn Claim() -> impl IntoView {
                     "Powered by Solana"
                 </div>
 
+                // Live session timer
+                <SessionTimer />
+
                 // State-dependent rendering
                 {move || {
                     match state.get() {
@@ -214,6 +375,7 @@ pub fn Claim() -> impl IntoView {
                                 <div style="width:100%;">
                                     // Attendee welcome
                                     <div class="claim-welcome-card">
+                                        <ParticipantAvatar name=data.name.clone() />
                                         <h3>"Welcome, "{escape_html(&data.name)}"!"</h3>
                                         <p class="checked-in-label">"Checked in "{checked_in_display}</p>
                                     </div>
@@ -303,6 +465,7 @@ pub fn Claim() -> impl IntoView {
                                 <div style="width:100%;">
                                     // Attendee welcome
                                     <div class="claim-welcome-card">
+                                        <ParticipantAvatar name=data.name.clone() />
                                         <h3>"Welcome, "{escape_html(&data.name)}"!"</h3>
                                         <p class="checked-in-label">"Checked in "{checked_in_display}</p>
                                     </div>
@@ -418,6 +581,7 @@ pub fn Claim() -> impl IntoView {
                                 .unwrap_or_else(|| "previously".to_string());
                             view! {
                                 <div class="claim-warning">
+                                    <ParticipantAvatar name=data.name.clone() />
                                     <h2>"Already Claimed"</h2>
                                     <div class="result-details">
                                         <p>
@@ -456,6 +620,9 @@ pub fn Claim() -> impl IntoView {
                         }
                     }
                 }}
+
+                // Fun: hearts reaction widget
+                <HeartsWidget />
 
                 // Footer
                 <div class="claim-footer">

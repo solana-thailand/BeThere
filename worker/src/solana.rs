@@ -6,6 +6,11 @@
 use serde::Deserialize;
 use worker::{Fetch, Headers, Method, Request, RequestInit};
 
+/// Priority fee in microLamports per compute unit for faster transaction inclusion.
+/// Set to 100_000 (0.1 SOL per 1M CU) to land in the leader's next block.
+/// Adjust based on network congestion — higher = faster confirmation.
+const PRIORITY_FEE_MICROLAMPORTS: u64 = 100_000;
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -61,6 +66,8 @@ pub async fn mint_compressed_nft(
     let url = format!("{rpc_url}/?api-key={api_key}");
 
     // Build params — include collection/uri/imageUrl only when non-empty
+    // Priority fee ensures the transaction lands in the leader's next block
+    // for fastest confirmation (~400ms on a healthy network).
     let mut params = serde_json::json!({
         "name": "BeThere - Road to Mainnet",
         "symbol": "BETH",
@@ -68,7 +75,8 @@ pub async fn mint_compressed_nft(
         "owner": wallet_address,
         "externalUrl": "https://solana-thailand.workers.dev",
         "sellerFeeBasisPoints": 0,
-        "confirmTransaction": true
+        "confirmTransaction": true,
+        "priorityFee": PRIORITY_FEE_MICROLAMPORTS
     });
 
     if !collection_mint.is_empty() {
@@ -140,9 +148,10 @@ pub async fn mint_compressed_nft(
     }
 
     tracing::info!(
-        "minted compressed nft: asset_id={} signature={}",
+        "minted compressed nft: asset_id={} signature={} priority_fee={}",
         result.asset_id,
-        result.signature
+        result.signature,
+        PRIORITY_FEE_MICROLAMPORTS
     );
 
     Ok(MintResult {
