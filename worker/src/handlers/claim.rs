@@ -12,7 +12,7 @@ use chrono::Utc;
 use serde::Deserialize;
 use serde_json::json;
 
-use event_checkin_domain::models::api::{ClaimLookupResponse, ClaimResponse};
+use event_checkin_domain::models::api::{ClaimLookupResponse, ClaimResponse, EventConfig};
 
 use crate::solana::{self, validate_wallet_address};
 use crate::state::AppState;
@@ -63,6 +63,14 @@ pub async fn get_claim(
         && !state.config.nft_metadata_uri.is_empty()
         && !state.config.nft_image_url.is_empty();
 
+    let event = EventConfig {
+        event_name: state.config.event_name.clone(),
+        event_tagline: state.config.event_tagline.clone(),
+        event_link: state.config.event_link.clone(),
+        event_start_ms: state.config.event_start_ms,
+        event_end_ms: state.config.event_end_ms,
+    };
+
     let response = ClaimLookupResponse {
         name: display_name,
         checked_in_at,
@@ -70,6 +78,7 @@ pub async fn get_claim(
         claimed,
         claimed_at,
         nft_available,
+        event,
     };
 
     Json(json!({
@@ -191,12 +200,19 @@ pub async fn post_claim(
         body.wallet_address
     );
 
+    let cluster = if config.helius_rpc_url.contains("mainnet") {
+        "mainnet-beta"
+    } else {
+        "devnet"
+    };
+
     let response = ClaimResponse {
         name: display_name,
         asset_id: mint_result.asset_id,
         signature: mint_result.signature,
         wallet_address: body.wallet_address,
         claimed_at,
+        cluster: cluster.to_string(),
     };
 
     Json(json!({

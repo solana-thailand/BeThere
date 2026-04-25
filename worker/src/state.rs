@@ -64,6 +64,26 @@ impl AppState {
             get_secret(env, "NFT_METADATA_URI").unwrap_or_else(|_| String::new());
         let nft_image_url = get_secret(env, "NFT_IMAGE_URL").unwrap_or_else(|_| String::new());
 
+        // Phase 3: Event config (vars — change per event without rebuild)
+        let event_name = get_var(env, "EVENT_NAME").unwrap_or_else(|_| {
+            "Solana x AI Builders: The Road to Mainnet #1 (Bangkok)".to_string()
+        });
+        let event_tagline = get_var(env, "EVENT_TAGLINE").unwrap_or_else(|_| {
+            "Deep Dive into Rust, AI Agents, and the Solana Ecosystem".to_string()
+        });
+        let event_link = get_var(env, "EVENT_LINK").unwrap_or_else(|_| {
+            "https://solana-thailand.github.io/genesis/events/road-to-mainnet-1-bangkok/"
+                .to_string()
+        });
+        let event_start_ms = get_var(env, "EVENT_START_MS")
+            .ok()
+            .and_then(|s| s.parse::<i64>().ok())
+            .unwrap_or(1_777_170_600_000);
+        let event_end_ms = get_var(env, "EVENT_END_MS")
+            .ok()
+            .and_then(|s| s.parse::<i64>().ok())
+            .unwrap_or(1_777_183_200_000);
+
         let config = AppConfig {
             google_oauth,
             service_account,
@@ -77,6 +97,11 @@ impl AppState {
             nft_collection_mint,
             nft_metadata_uri,
             nft_image_url,
+            event_name,
+            event_tagline,
+            event_link,
+            event_start_ms,
+            event_end_ms,
             // host/port unused on Workers — placeholder values
             host: "0.0.0.0".to_string(),
             port: 0,

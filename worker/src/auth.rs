@@ -269,6 +269,11 @@ mod tests {
             nft_collection_mint: "test-collection-mint".to_string(),
             nft_metadata_uri: "https://arweave.net/test-metadata".to_string(),
             nft_image_url: "https://arweave.net/test-image".to_string(),
+            event_name: "Test Event".to_string(),
+            event_tagline: "Test Tagline".to_string(),
+            event_link: "https://example.com/event".to_string(),
+            event_start_ms: 0,
+            event_end_ms: 0,
             host: "0.0.0.0".to_string(),
             port: 3000,
         };

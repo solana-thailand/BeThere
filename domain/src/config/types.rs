@@ -41,6 +41,16 @@ pub struct AppConfig {
     pub nft_metadata_uri: String,
     /// NFT badge image URL
     pub nft_image_url: String,
+    /// Full event name (e.g. "Solana x AI Builders: The Road to Mainnet #1 (Bangkok)")
+    pub event_name: String,
+    /// Event tagline / subtitle
+    pub event_tagline: String,
+    /// External event page URL
+    pub event_link: String,
+    /// Event start time as Unix epoch milliseconds
+    pub event_start_ms: i64,
+    /// Event end time as Unix epoch milliseconds
+    pub event_end_ms: i64,
     pub host: String,
     pub port: u16,
 }

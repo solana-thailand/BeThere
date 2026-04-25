@@ -94,6 +94,22 @@ pub struct RecentCheckIn {
     pub checked_in_by: Option<String>,
 }
 
+/// Dynamic event metadata served from backend config.
+/// Eliminates hardcoded event name/timestamps in the frontend WASM.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EventConfig {
+    /// Full event name (e.g. "Solana x AI Builders: The Road to Mainnet #1 (Bangkok)")
+    pub event_name: String,
+    /// Event tagline / subtitle
+    pub event_tagline: String,
+    /// External event page URL
+    pub event_link: String,
+    /// Event start time as Unix epoch milliseconds
+    pub event_start_ms: i64,
+    /// Event end time as Unix epoch milliseconds
+    pub event_end_ms: i64,
+}
+
 /// Response for GET /api/claim/{token} — look up an attendee by claim token.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClaimLookupResponse {
@@ -104,6 +120,8 @@ pub struct ClaimLookupResponse {
     pub claimed_at: Option<String>,
     /// Whether NFT minting is configured (all required secrets present).
     pub nft_available: bool,
+    /// Dynamic event metadata (name, tagline, link, timestamps).
+    pub event: EventConfig,
 }
 
 /// Response for POST /api/claim/{token} — mint cNFT and mark as claimed.
@@ -114,4 +132,6 @@ pub struct ClaimResponse {
     pub signature: String,
     pub wallet_address: String,
     pub claimed_at: String,
+    /// Solana cluster for explorer links (e.g. "devnet", "mainnet-beta").
+    pub cluster: String,
 }
