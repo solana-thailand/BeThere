@@ -156,13 +156,21 @@ pub fn Scanner() -> impl IntoView {
         stop_camera_js();
     });
 
-    // Start/stop camera when switching between Scanner and Manual tabs.
-    // Also re-triggers when scan_round changes (reset after a scan).
+    // Camera lifecycle: start when video element is visible, stop when hidden.
+    // Video is visible only when: Scanner tab active AND check_in_state is Idle.
+    // Stops on: Manual tab, non-Idle state (attendee info shown), or unmount.
+    // Re-triggers on scan_round (reset) or check_in_state changes.
     Effect::new(move |_| {
-        let _round = scan_round.get(); // track for re-trigger on reset
-        if active_tab.get() == ScannerTab::Scanner {
-            set_camera_error.set(None);
-            start_camera_js();
+        let round = scan_round.get(); // generation counter for polling loop
+        let should_scan = active_tab.get() == ScannerTab::Scanner
+            && matches!(check_in_state.get(), CheckInState::Idle);
+
+        if should_scan {
+            // Only start camera if not already running (avoids rapid stop/start)
+            if !is_scanner_active_js() {
+                set_camera_error.set(None);
+                start_camera_js();
+            }
 
             let set_cam_err = set_camera_error;
             let set_state = set_check_in_state;
@@ -174,6 +182,11 @@ pub fn Scanner() -> impl IntoView {
 
                 loop {
                     gloo::timers::future::TimeoutFuture::new(300).await;
+
+                    // Stop polling when superseded by a new round
+                    if scan_round.get() != round {
+                        break;
+                    }
 
                     // Stop polling when scanner is deactivated (tab switch / unmount)
                     if !is_scanner_active_js() {
@@ -280,10 +293,9 @@ pub fn Scanner() -> impl IntoView {
         }
     };
 
-    // Reset scanner to idle state and restart camera polling.
-    // Don't stop the camera here — the JS startCamera() guard skips if already
-    // active, avoiding the rapid stop/start race that causes "media resource
-    // aborted" errors. Just drain any stale QR result and re-trigger the Effect.
+    // Reset scanner to idle state and re-trigger camera via Effect.
+    // The Effect tracks check_in_state: setting Idle + incrementing scan_round
+    // causes it to re-evaluate should_scan=true → start camera fresh.
     let handle_reset = move |_: web_sys::MouseEvent| {
         let _ = check_qr_result_js(); // drain stale result
         let _ = check_camera_error_js(); // drain stale error

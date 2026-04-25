@@ -47,9 +47,11 @@ export function startCamera() {
       );
 
       // Wait for video element to exist AND be visible (parent not display:none).
-      // When the Manual tab is active the wrapper div has display:none.
+      // Keeps checking while __scannerActive is true — no fixed timeout.
+      // This handles DOM races where Leptos hasn't rendered the video yet,
+      // or the video div is temporarily hidden during state transitions.
       var video = null;
-      for (var i = 0; i < 20; i++) {
+      while (window.__scannerActive) {
         video = document.getElementById("scanner-video");
         if (video) {
           var el = video;
@@ -66,17 +68,16 @@ export function startCamera() {
           video = null; // not yet visible, keep waiting
         }
         await new Promise(function (r) {
-          setTimeout(r, 150);
+          setTimeout(r, 200);
         });
       }
 
+      // If scanner was stopped externally while waiting, clean up and exit.
       if (!video) {
         stream.getTracks().forEach(function (t) {
           t.stop();
         });
-        window.__cameraError =
-          "Scanner video element not visible. Try switching tabs again.";
-        console.error("[scanner] video element not visible after 3s");
+        console.log("[scanner] camera stopped while waiting for video element");
         return;
       }
 
