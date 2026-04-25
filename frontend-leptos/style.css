@@ -90,7 +90,7 @@ body {
     align-items: center;
     justify-content: center;
     min-height: 100vh;
-    padding: 2rem;
+    padding: 1.5rem;
     position: relative;
 }
 
@@ -911,97 +911,18 @@ nav a.active {
 
 .claim-subtitle {
     font-size: 0.95rem;
+    font-weight: 600;
     color: var(--text-secondary);
     margin-top: 0.25rem;
 }
 
-/* ===== Claim Page: Event Info Card ===== */
-.claim-event-card {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 1.25rem;
-    margin-bottom: 1rem;
-}
-
-.claim-event-card .event-title {
-    font-size: 1rem;
-    font-weight: 700;
-    color: #fff;
-    margin-bottom: 0.75rem;
-}
-
-.claim-event-card .event-meta {
-    font-size: 0.85rem;
-    color: var(--text-secondary);
-    display: flex;
-    flex-direction: column;
-    gap: 0.4rem;
-}
-
-.claim-event-card .event-meta strong {
-    color: var(--text-primary);
-}
-
-/* ===== Claim Page: Schedule Timeline ===== */
-.schedule-section {
-    margin-top: 0.75rem;
-    padding-top: 0.75rem;
-    border-top: 1px solid var(--border);
-}
-
-.schedule-section .schedule-label {
-    font-size: 0.85rem;
-    font-weight: 600;
-    color: var(--text-primary);
-    margin-bottom: 0.6rem;
-}
-
-.timeline {
-    display: flex;
-    flex-direction: column;
-    gap: 0;
-    padding-left: 1rem;
-    border-left: 2px solid #2a2a3a;
-    margin-left: 0.35rem;
-}
-
-.timeline-item {
-    position: relative;
-    padding: 0.3rem 0 0.3rem 0.85rem;
+.claim-tagline {
     font-size: 0.8rem;
-    color: var(--text-secondary);
-    line-height: 1.5;
+    color: var(--text-muted);
+    margin-top: 0.25rem;
 }
 
-.timeline-item::before {
-    content: "";
-    position: absolute;
-    left: -1.55rem;
-    top: 0.55rem;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: #3a3a4a;
-    border: 2px solid #2a2a3a;
-}
-
-.timeline-item.highlight::before {
-    background: var(--accent);
-    border-color: rgba(99, 102, 241, 0.3);
-    box-shadow: 0 0 6px rgba(99, 102, 241, 0.4);
-}
-
-.timeline-item .speaker {
-    color: var(--accent-hover);
-    font-weight: 600;
-}
-
-.timeline-item .time-slot {
-    color: var(--text-primary);
-    font-weight: 500;
-}
-
+/* ===== Claim Page: Event Info Card ===== */
 /* ===== Claim Page: Welcome Card ===== */
 .claim-welcome-card {
     background: linear-gradient(
@@ -1026,6 +947,49 @@ nav a.active {
 .claim-welcome-card .checked-in-label {
     font-size: 0.8rem;
     color: var(--text-secondary);
+}
+
+/* ===== Claim Page: NFT Badge Preview ===== */
+.nft-preview-card {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    background: linear-gradient(
+        135deg,
+        rgba(99, 102, 241, 0.06) 0%,
+        rgba(30, 30, 30, 0.95) 100%
+    );
+    border: 1px solid rgba(99, 102, 241, 0.2);
+    border-radius: var(--radius);
+    padding: 1rem 1.25rem;
+    margin-bottom: 1rem;
+}
+
+.nft-preview-badge {
+    flex-shrink: 0;
+    width: 80px;
+    height: 80px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.85;
+}
+
+.nft-preview-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.nft-preview-title {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 0.25rem;
+}
+
+.nft-preview-sub {
+    font-size: 0.75rem;
+    color: var(--text-muted);
 }
 
 /* ===== Claim Page: NFT Coming Soon ===== */
@@ -1092,31 +1056,6 @@ nav a.active {
     position: relative;
 }
 
-/* ===== Claim Page: Wallet Prep Card ===== */
-.claim-wallet-prep-card {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 1.25rem;
-    margin-bottom: 1rem;
-}
-
-.claim-wallet-prep-card p {
-    font-size: 0.85rem;
-    color: var(--text-secondary);
-    line-height: 1.6;
-}
-
-.claim-wallet-prep-card a {
-    color: var(--accent);
-    text-decoration: underline;
-    font-weight: 500;
-}
-
-.claim-wallet-prep-card a:hover {
-    color: var(--accent-hover);
-}
-
 /* ===== Claim Page: Wallet Input ===== */
 .claim-wallet-input {
     width: 100%;
@@ -1142,6 +1081,31 @@ nav a.active {
     color: var(--text-muted);
     font-family:
         -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+/* ===== Claim Page: Paste Button ===== */
+.claim-paste-btn {
+    flex-shrink: 0;
+    min-height: 44px;
+    padding: 0.65rem 1rem;
+    background: rgba(99, 102, 241, 0.15);
+    border: 1px solid rgba(99, 102, 241, 0.3);
+    border-radius: 8px;
+    color: #fff;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.claim-paste-btn:hover {
+    background: rgba(99, 102, 241, 0.25);
+    border-color: rgba(99, 102, 241, 0.5);
+}
+
+.claim-paste-btn:active {
+    transform: scale(0.95);
 }
 
 /* ===== Claim Page: Claim Button ===== */
@@ -1330,6 +1294,16 @@ nav a.active {
     margin-top: 0.5rem;
 }
 
+.claim-bookmark-hint a {
+    color: var(--accent);
+    text-decoration: underline;
+    font-weight: 500;
+}
+
+.claim-bookmark-hint a:hover {
+    color: var(--accent-hover);
+}
+
 /* ===== Claim Page: Event Link ===== */
 .claim-event-link {
     font-size: 0.8rem;
@@ -1341,24 +1315,6 @@ nav a.active {
 .claim-event-link a {
     color: var(--accent);
     text-decoration: underline;
-}
-
-/* ===== Claim Page: Powered-by Badge ===== */
-.powered-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    font-size: 0.7rem;
-    color: var(--text-muted);
-    letter-spacing: 0.03em;
-    margin-top: 0.75rem;
-}
-
-.powered-badge .sol-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: linear-gradient(135deg, #9945ff, #14f195);
 }
 
 /* ===== Claim Page: Footer Brand ===== */
@@ -1530,27 +1486,16 @@ nav a.active {
         padding: 1.25rem 1rem;
     }
 
-    .timeline {
-        padding-left: 0.75rem;
-    }
-
-    .timeline-item {
-        font-size: 0.7rem;
-        padding-left: 0.5rem;
-    }
-
-    .timeline-item::before {
-        left: -1.2rem;
-        width: 5px;
-        height: 5px;
-    }
-
     .header-title {
         font-size: 0.9rem;
     }
 
     .stat-label {
         font-size: 0.6rem;
+    }
+
+    .center-page {
+        padding: 1rem 0.75rem;
     }
 }
 
@@ -1590,21 +1535,6 @@ nav a.active {
         padding: 1.5rem 1.25rem;
     }
 
-    .timeline {
-        padding-left: 0.75rem;
-    }
-
-    .timeline-item {
-        font-size: 0.75rem;
-        padding-left: 0.6rem;
-    }
-
-    .timeline-item::before {
-        left: -1.3rem;
-        width: 6px;
-        height: 6px;
-    }
-
     .header-title {
         font-size: 1rem;
     }
@@ -1616,6 +1546,10 @@ nav a.active {
 
     .claim-btn-mint {
         min-height: 48px;
+    }
+
+    .center-page {
+        padding: 1.25rem;
     }
 }
 
@@ -1818,22 +1752,19 @@ nav a.active {
     font-weight: 500;
 }
 
-/* ===== Participant Avatar ===== */
-.participant-avatar {
-    width: 56px;
-    height: 56px;
-    border-radius: 50%;
+/* ===== Participant Pixel Avatar ===== */
+.participant-avatar-pixel {
+    width: 72px;
+    height: 72px;
+    border-radius: 16px;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 1.1rem;
-    font-weight: 700;
-    color: #fff;
     margin: 0 auto 0.5rem;
-    border: 2px solid;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+    border: 2px solid rgba(255, 255, 255, 0.15);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
-.claim-welcome-card .participant-avatar {
+.claim-welcome-card .participant-avatar-pixel {
     margin-bottom: 0.5rem;
 }

@@ -70,20 +70,6 @@ fn format_duration(secs: i64) -> String {
     }
 }
 
-/// Get initials from a name (first letter of first and last word).
-fn get_initials(name: &str) -> String {
-    let parts: Vec<&str> = name.split_whitespace().collect();
-    match parts.len() {
-        0 => "?".to_string(),
-        1 => parts[0].chars().next().unwrap_or('?').to_uppercase().collect(),
-        _ => {
-            let first = parts[0].chars().next().unwrap_or('?');
-            let last = parts.last().unwrap().chars().next().unwrap_or('?');
-            format!("{}{}", first.to_uppercase(), last.to_uppercase())
-        }
-    }
-}
-
 /// Simple deterministic hash for generating avatar colors from name.
 fn simple_hash(s: &str) -> u32 {
     let mut hash: u32 = 0;
@@ -150,10 +136,9 @@ fn HeartsWidget() -> impl IntoView {
 /// Live session timer showing event progress.
 /// Shows elapsed time since event start or countdown to start.
 #[component]
-fn SessionTimer() -> impl IntoView {
-    // Event start: April 26, 2026, 09:30 Bangkok time (UTC+7)
-    let event_start_ms: f64 = 1_778_160_000_000.0; // approximate UTC ms
-    let event_end_ms: f64 = 1_778_173_800_000.0; // 13:00 Bangkok
+fn SessionTimer(start_ms: i64, end_ms: i64) -> impl IntoView {
+    let event_start_ms = start_ms as f64;
+    let event_end_ms = end_ms as f64;
 
     let (time_display, set_time_display) = signal(String::new());
     let (status_label, set_status_label) = signal(String::new());
@@ -165,23 +150,19 @@ fn SessionTimer() -> impl IntoView {
         leptos::task::spawn_local(async move {
             loop {
                 let now = js_sys::Date::now();
-                let (label, display) = if now < event_start_ms {
+                if now < event_start_ms {
                     let diff = ((event_start_ms - now) / 1000.0) as i64;
-                    let label = "Starts in".to_string();
-                    let display = format_duration(diff);
-                    (label, display)
+                    set_s.set("Starts in".to_string());
+                    set_t.set(format_duration(diff));
                 } else if now < event_end_ms {
                     let diff = ((now - event_start_ms) / 1000.0) as i64;
-                    let label = "Live".to_string();
-                    let display = format!("+{}", format_duration(diff));
-                    (label, display)
+                    set_s.set("Live".to_string());
+                    set_t.set(format!("+{}", format_duration(diff)));
                 } else {
-                    let label = "Ended".to_string();
-                    let display = "Thanks for coming!".to_string();
-                    (label, display)
-                };
-                set_s.set(label);
-                set_t.set(display);
+                    set_s.set("Ended".to_string());
+                    set_t.set("Thanks for coming!".to_string());
+                    break; // stop polling after event ends
+                }
                 gloo::timers::future::TimeoutFuture::new(1000).await;
             }
         });
@@ -195,19 +176,123 @@ fn SessionTimer() -> impl IntoView {
     }
 }
 
-/// Simple avatar showing initials with a gradient background.
+/// Generative pixel art avatar — 8x8 grid with face features.
+/// Deterministic from name hash: each person gets a unique cute face.
 #[component]
 fn ParticipantAvatar(name: String) -> impl IntoView {
-    let initials = get_initials(&name);
-    let hue = simple_hash(&name) % 360;
-    let bg = format!("hsl({hue}, 60%, 35%)");
-    let border = format!("hsl({hue}, 70%, 50%)");
+    let hash = simple_hash(&name);
+
+    let skin_hues = [30, 25, 35, 20, 40, 28];
+    let skin_hue = skin_hues[(hash % 6) as usize];
+    let skin_lightness = 70 + (hash % 15);
+    let face_color = format!("hsl({skin_hue}, 60%, {skin_lightness}%)");
+
+    let eye_style = (hash / 6) % 4;
+    let mouth_style = (hash / 24) % 4;
+    let has_blush = (hash / 96) % 3 == 0;
+    let bg_hue = (hash / 288) % 360;
+    let bg_color = format!("hsl({bg_hue}, 50%, 25%)");
+
+    let grid = build_face_grid(eye_style, mouth_style, has_blush);
+
+    let svg_cells = grid.iter().enumerate().flat_map(|(row, cells)| {
+        let fc = face_color.clone();
+        cells.iter().enumerate().filter_map(move |(col, &cell)| {
+            if cell == 0 { return None; }
+            let color = match cell {
+                1 => fc.clone(),
+                2 => "#1a1a2e".to_string(),
+                3 => "#e74c3c".to_string(),
+                4 => "rgba(255,150,150,0.6)".to_string(),
+                _ => "#333".to_string(),
+            };
+            Some(format!(
+                "<rect x=\"{x}\" y=\"{y}\" width=\"1\" height=\"1\" fill=\"{color}\" rx=\"0.15\"/>",
+                x = col,
+                y = row,
+                color = color
+            ))
+        }).collect::<Vec<_>>()
+    }).collect::<Vec<_>>().join("");
 
     view! {
-        <div class="participant-avatar" style=format!("background:{bg};border-color:{border};")>
-            {initials}
+        <div class="participant-avatar-pixel" style=format!("background:{bg_color};")>
+            <svg viewBox="0 0 8 8" width="56" height="56" style="image-rendering:pixelated;" inner_html=svg_cells></svg>
         </div>
     }
+}
+
+/// NFT badge preview placeholder — shows a stylized mystery badge card
+/// until real NFT artwork is uploaded. Pure CSS/SVG, no external image.
+#[component]
+fn NftBadgePreview() -> impl IntoView {
+    view! {
+        <div class="nft-preview-card">
+            <div class="nft-preview-badge">
+                <svg viewBox="0 0 80 80" width="80" height="80">
+                    // Outer hexagon
+                    <polygon
+                        points="40,4 72,22 72,58 40,76 8,58 8,22"
+                        fill="none"
+                        stroke="rgba(99,102,241,0.4)"
+                        stroke-width="1.5"
+                    />
+                    // Inner diamond
+                    <polygon
+                        points="40,16 60,40 40,64 20,40"
+                        fill="rgba(99,102,241,0.08)"
+                        stroke="rgba(99,102,241,0.25)"
+                        stroke-width="1"
+                    />
+                    // Center star
+                    <circle cx="40" cy="40" r="6" fill="rgba(99,102,241,0.5)" />
+                    <circle cx="40" cy="40" r="3" fill="rgba(129,140,248,0.8)" />
+                </svg>
+            </div>
+            <div class="nft-preview-info">
+                <div class="nft-preview-title">"Proof of Attendance"</div>
+                <div class="nft-preview-sub">"Compressed NFT on Solana"</div>
+            </div>
+        </div>
+    }
+}
+
+/// Build an 8x8 face grid with symmetric features.
+fn build_face_grid(eye_style: u32, mouth_style: u32, has_blush: bool) -> [[u8; 8]; 8] {
+    let mut grid: [[u8; 8]; 8] = [
+        [0,0,1,1,1,1,0,0],
+        [0,1,1,1,1,1,1,0],
+        [1,1,1,1,1,1,1,1],
+        [1,1,1,1,1,1,1,1],
+        [1,1,1,1,1,1,1,1],
+        [1,1,1,1,1,1,1,1],
+        [0,1,1,1,1,1,1,0],
+        [0,0,1,1,1,1,0,0],
+    ];
+
+    // Eyes (symmetric)
+    match eye_style {
+        0 => { grid[3][2] = 2; grid[3][5] = 2; }           // dot eyes
+        1 => { grid[2][2] = 2; grid[2][5] = 2; grid[3][2] = 2; grid[3][5] = 2; } // tall eyes
+        2 => { grid[3][2] = 2; grid[3][3] = 2; grid[3][4] = 2; grid[3][5] = 2; } // wide eyes
+        _ => { grid[2][2] = 2; grid[3][3] = 2; grid[2][5] = 2; grid[3][4] = 2; } // anime eyes
+    }
+
+    // Mouth (centered)
+    match mouth_style {
+        0 => { grid[5][3] = 3; grid[5][4] = 3; }           // small smile
+        1 => { grid[5][2] = 3; grid[5][3] = 3; grid[5][4] = 3; grid[5][5] = 3; } // wide smile
+        2 => { grid[5][3] = 3; grid[5][4] = 3; grid[6][3] = 3; grid[6][4] = 3; } // open mouth
+        _ => { grid[4][4] = 3; grid[5][3] = 3; grid[5][4] = 3; } // smirk
+    }
+
+    // Blush
+    if has_blush {
+        grid[4][1] = 4;
+        grid[4][6] = 4;
+    }
+
+    grid
 }
 
 // ---------------------------------------------------------------------------
@@ -226,6 +311,13 @@ pub fn Claim() -> impl IntoView {
     // Reactive state
     let (state, set_state) = signal(ClaimState::Loading);
     let (wallet_input, set_wallet_input) = signal(String::new());
+
+    // Dynamic event config (fetched from backend, replaces hardcoded values)
+    let (evt_name, set_evt_name) = signal(String::new());
+    let (evt_tagline, set_evt_tagline) = signal(String::new());
+    let (evt_link, set_evt_link) = signal(String::new());
+    let (evt_start, set_evt_start) = signal(0i64);
+    let (evt_end, set_evt_end) = signal(0i64);
 
     // Extract token from URL params and fetch claim info on mount
     Effect::new(move |_| {
@@ -250,6 +342,13 @@ pub fn Claim() -> impl IntoView {
         leptos::task::spawn_local(async move {
             match api::get_claim(&token).await {
                 Ok(data) => {
+                    // Set dynamic event config from backend
+                    set_evt_name.set(data.event.event_name.clone());
+                    set_evt_tagline.set(data.event.event_tagline.clone());
+                    set_evt_link.set(data.event.event_link.clone());
+                    set_evt_start.set(data.event.event_start_ms);
+                    set_evt_end.set(data.event.event_end_ms);
+
                     if data.claimed {
                         set_state.set(ClaimState::AlreadyClaimed(data));
                     } else if !data.nft_available {
@@ -311,6 +410,26 @@ pub fn Claim() -> impl IntoView {
         });
     };
 
+    // One-tap paste from clipboard — big mobile UX win
+    let handle_paste = move |_| {
+        let set_w = set_wallet_input.clone();
+        leptos::task::spawn_local(async move {
+            if let Ok(promise_val) = js_sys::eval(
+                "navigator.clipboard ? navigator.clipboard.readText() : Promise.resolve('')"
+            ) {
+                let promise = js_sys::Promise::from(promise_val);
+                if let Ok(val) = js_sys::futures::JsFuture::from(promise).await {
+                    if let Some(text) = val.as_string() {
+                        let trimmed: String = text.trim().to_string();
+                        if !trimmed.is_empty() {
+                            set_w.set(trimmed);
+                        }
+                    }
+                }
+            }
+        });
+    };
+
     view! {
         <div class="center-page">
             <Title text="Claim Your NFT — BeThere" />
@@ -323,20 +442,27 @@ pub fn Claim() -> impl IntoView {
                 <h1 class="claim-title">"Claim Your NFT"</h1>
 
                 <p class="claim-subtitle">
-                    "Road to Mainnet #1 — Bangkok"
+                    {move || evt_name.get()}
+                </p>
+                <p class="claim-tagline">
+                    {move || evt_tagline.get()}
                 </p>
                 <p class="claim-event-link">
-                    <a href="https://solana-thailand.github.io/genesis/events/road-to-mainnet-1-bangkok/" target="_blank" rel="noopener noreferrer">
-                        "solana-thailand.github.io/genesis/events/road-to-mainnet-1-bangkok/"
+                    <a href=move || evt_link.get() target="_blank" rel="noopener noreferrer">
+                        {move || evt_link.get()}
                     </a>
                 </p>
-                <div class="powered-badge">
-                    <span class="sol-dot"></span>
-                    "Powered by Solana"
-                </div>
 
-                // Live session timer
-                <SessionTimer />
+                // Live session timer (reactive — waits for event config from backend)
+                {move || {
+                    let start = evt_start.get();
+                    let end = evt_end.get();
+                    if start > 0 && end > 0 {
+                        view! { <SessionTimer start_ms=start end_ms=end /> }.into_any()
+                    } else {
+                        view! { <div class="session-timer"></div> }.into_any()
+                    }
+                }}
 
                 // State-dependent rendering
                 {move || {
@@ -380,6 +506,9 @@ pub fn Claim() -> impl IntoView {
                                         <p class="checked-in-label">"Checked in "{checked_in_display}</p>
                                     </div>
 
+                                    // NFT badge preview
+                                    <NftBadgePreview />
+
                                     // NFT coming soon with shimmer
                                     <div class="claim-nft-soon-card">
                                         <h3>"NFT Badge Coming Soon"</h3>
@@ -389,69 +518,11 @@ pub fn Claim() -> impl IntoView {
                                         </div>
                                     </div>
 
-                                    // Event information with timeline
-                                    <div class="claim-event-card">
-                                        <div class="event-title">"Road to Mainnet #1 — Bangkok"</div>
-                                        <div class="event-meta">
-                                            <div><strong>"Date: "</strong>"Sunday, 26 April 2026"</div>
-                                            <div><strong>"Time: "</strong>"9:30 AM - 1:00 PM (ICT)"</div>
-                                            <div><strong>"Venue: "</strong>"ContributeDAO (CDAO), 3rd Floor CP Tower, Phaya Thai"</div>
-                                        </div>
-
-                                        <div class="schedule-section">
-                                            <div class="schedule-label">"Schedule"</div>
-                                            <div class="timeline">
-                                                <div class="timeline-item">
-                                                    <span class="time-slot">"09:30"</span>" — Registration"
-                                                </div>
-                                                <div class="timeline-item">
-                                                    <span class="time-slot">"10:00"</span>" — Opening & Community Roadmap"
-                                                </div>
-                                                <div class="timeline-item highlight">
-                                                    <span class="time-slot">"10:10"</span>" — Rust, AI & Gaming (Ep. 2) — "<span class="speaker">"Katopz"</span>
-                                                </div>
-                                                <div class="timeline-item">
-                                                    <span class="time-slot">"11:00"</span>" — Group Photo"
-                                                </div>
-                                                <div class="timeline-item highlight">
-                                                    <span class="time-slot">"11:10"</span>" — NFT Engine Workshop — "<span class="speaker">"Golf (ByteCat)"</span>
-                                                </div>
-                                                <div class="timeline-item highlight">
-                                                    <span class="time-slot">"11:40"</span>" — Ephemeral Rollups — "<span class="speaker">"Andy (Magicblock)"</span>
-                                                </div>
-                                                <div class="timeline-item highlight">
-                                                    <span class="time-slot">"11:55"</span>" — APAC Ecosystem Spotlight — "<span class="speaker">"Chaerin (Solana Foundation)"</span>
-                                                </div>
-                                                <div class="timeline-item">
-                                                    <span class="time-slot">"12:10"</span>" — Networking Session"
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <a
-                                            href="https://solana-thailand.github.io/genesis/events/road-to-mainnet-1-bangkok/"
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            class="btn btn-outline btn-sm"
-                                            style="margin-top:0.75rem;width:100%;"
-                                        >
-                                            "View Full Event Details"
-                                        </a>
-                                    </div>
-
-                                    // Wallet preparation
-                                    <div class="claim-wallet-prep-card">
-                                        <p>
-                                            "You will need a "
-                                            <a href="https://phantom.app/" target="_blank" rel="noopener noreferrer">
-                                                "Solana wallet"
-                                            </a>
-                                            " to claim your NFT badge. Download one before you return."
-                                        </p>
-                                    </div>
-
+                                    // Compact wallet hint
                                     <p class="claim-bookmark-hint">
-                                        "Bookmark this page and come back to claim your NFT."
+                                        "Get a "
+                                        <a href="https://phantom.app/" target="_blank" rel="noopener noreferrer">"Solana wallet"</a>
+                                        " ready — bookmark this page to claim your NFT later."
                                     </p>
                                 </div>
                             }
@@ -470,23 +541,36 @@ pub fn Claim() -> impl IntoView {
                                         <p class="checked-in-label">"Checked in "{checked_in_display}</p>
                                     </div>
 
+                                    // NFT badge preview
+                                    <NftBadgePreview />
+
                                     // Wallet input
                                     <div class="card">
                                         <label style="font-size:0.9rem;font-weight:600;color:var(--text-primary);display:block;margin-bottom:0.5rem;">
                                             "Solana Wallet Address"
                                         </label>
-                                        <input
-                                            class="claim-wallet-input"
-                                            type="text"
-                                            placeholder="Enter your Solana wallet address"
-                                            prop:value=move || wallet_input.get()
-                                            on:input=move |ev| {
-                                                let val = event_target_value(&ev);
-                                                set_wallet_input.set(val);
-                                            }
-                                        />
+                                        <div style="display:flex;gap:0.5rem;">
+                                            <input
+                                                class="claim-wallet-input"
+                                                type="text"
+                                                placeholder="Enter your Solana wallet address"
+                                                prop:value=move || wallet_input.get()
+                                                on:input=move |ev| {
+                                                    let val = event_target_value(&ev);
+                                                    set_wallet_input.set(val);
+                                                }
+                                                style="flex:1;min-width:0;"
+                                            />
+                                            <button
+                                                class="claim-paste-btn"
+                                                on:click=handle_paste
+                                                type="button"
+                                            >
+                                                "Paste"
+                                            </button>
+                                        </div>
                                         <p style="font-size:0.75rem;color:var(--text-muted);margin-top:0.5rem;">
-                                            "Paste your Phantom, Solflare, or Backpack wallet address."
+                                            "Tap Paste or type your Phantom, Solflare, or Backpack address."
                                         </p>
                                     </div>
 
@@ -526,12 +610,17 @@ pub fn Claim() -> impl IntoView {
 
                         // ---- Success! ----
                         ClaimState::Success(data) => {
+                            let cluster_param = if data.cluster == "mainnet-beta" {
+                                String::new()
+                            } else {
+                                format!("?cluster={}", data.cluster)
+                            };
                             let explorer_url = format!(
-                                "https://solscan.io/tx/{}?cluster=devnet",
+                                "https://solscan.io/tx/{}{cluster_param}",
                                 data.signature
                             );
                             let asset_url = format!(
-                                "https://solscan.io/token/{}?cluster=devnet",
+                                "https://solscan.io/token/{}{cluster_param}",
                                 data.asset_id
                             );
                             view! {
@@ -621,8 +710,18 @@ pub fn Claim() -> impl IntoView {
                     }
                 }}
 
-                // Fun: hearts reaction widget
-                <HeartsWidget />
+                // Fun: hearts reaction widget (only on loaded/engaged states)
+                {move || {
+                    match state.get() {
+                        ClaimState::NftComingSoon(_) |
+                        ClaimState::Ready(_) |
+                        ClaimState::Success(_) |
+                        ClaimState::AlreadyClaimed(_) => {
+                            view! { <HeartsWidget /> }.into_any()
+                        }
+                        _ => view! { <div></div> }.into_any()
+                    }
+                }}
 
                 // Footer
                 <div class="claim-footer">

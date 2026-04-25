@@ -413,6 +413,23 @@ pub async fn generate_qrs(force: bool) -> Result<GenerateQrData, ApiError> {
 
 // ===== Claim API types (public — no auth required) =====
 
+/// Dynamic event metadata served from backend config.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct EventConfig {
+    #[serde(default)]
+    pub event_name: String,
+    #[serde(default)]
+    pub event_tagline: String,
+    #[serde(default)]
+    pub event_link: String,
+    /// Event start time as Unix epoch milliseconds.
+    #[serde(default)]
+    pub event_start_ms: i64,
+    /// Event end time as Unix epoch milliseconds.
+    #[serde(default)]
+    pub event_end_ms: i64,
+}
+
 /// Response data for GET /api/claim/{token} — attendee claim lookup.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ClaimLookupData {
@@ -429,6 +446,9 @@ pub struct ClaimLookupData {
     /// Whether NFT minting is configured on the backend.
     #[serde(default = "default_true")]
     pub nft_available: bool,
+    /// Dynamic event metadata (name, tagline, link, timestamps).
+    #[serde(default)]
+    pub event: EventConfig,
 }
 
 /// Response data for POST /api/claim/{token} — NFT mint result.
@@ -444,6 +464,9 @@ pub struct ClaimMintData {
     pub wallet_address: String,
     #[serde(default)]
     pub claimed_at: String,
+    /// Solana cluster for explorer links (e.g. "devnet", "mainnet-beta").
+    #[serde(default)]
+    pub cluster: String,
 }
 
 // ===== Claim API functions (public — no auth) =====
