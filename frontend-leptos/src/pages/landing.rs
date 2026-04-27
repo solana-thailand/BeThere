@@ -67,14 +67,22 @@ pub fn Landing() -> impl IntoView {
             </section>
 
             // ===== Social Proof =====
+            // Social proof — real users + CTA for organizers
             <section class="social-proof">
-                <div class="social-proof-label">"Trusted by leading communities"</div>
+                <div class="social-proof-label">"Alpha · Building with"</div>
                 <div class="social-proof-logos">
-                    <span class="social-proof-pill">"Solana Thailand"</span>
-                    <span class="social-proof-pill">"ETH Bangkok"</span>
-                    <span class="social-proof-pill">"Devfolio"</span>
-                    <span class="social-proof-pill">"Builderz"</span>
-                    <span class="social-proof-pill">"Web3 CLI"</span>
+                    <a
+                        href="https://github.com/solana-developer-thailand"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="social-proof-pill"
+                        style="text-decoration:none;color:var(--text-secondary);border-color:rgba(99,102,241,0.3);"
+                    >
+                        "Solana Developer Thailand"
+                    </a>
+                    <A href="/login" attr:class="social-proof-pill" attr:style="text-decoration:none;color:var(--accent);border-color:rgba(99,102,241,0.4);cursor:pointer;">
+                        "Want to join? → Get in touch"
+                    </A>
                 </div>
             </section>
 
@@ -238,8 +246,8 @@ pub fn Landing() -> impl IntoView {
                         </div>
                         <div class="landing-footer-brand-tagline" style="margin-top:0.5rem;">
                             "Built with "
-                            <span style="color:var(--text-secondary);">"♥"</span>
-                            " by Solana Thailand"
+                            <span style="color:var(--accent);">"🦀"</span>
+                            " Rust & Solana"
                         </div>
                     </div>
 
@@ -251,19 +259,11 @@ pub fn Landing() -> impl IntoView {
                         <A href="/login">"Claim NFT"</A>
                     </div>
 
-                    // Column 3 — Resources
+                    // Column 3 — Community
                     <div class="landing-footer-col">
-                        <h4>"Resources"</h4>
-                        <a href="https://github.com/solana-thailand" target="_blank" rel="noopener noreferrer">"GitHub"</a>
-                        <a href="https://docs.solana.com" target="_blank" rel="noopener noreferrer">"Solana Docs"</a>
-                        <a href="mailto:dev@solana.org">"Support"</a>
-                    </div>
-
-                    // Column 4 — Legal
-                    <div class="landing-footer-col">
-                        <h4>"Legal"</h4>
-                        <a href="#">"Privacy Policy"</a>
-                        <a href="#">"Terms of Service"</a>
+                        <h4>"Community"</h4>
+                        <a href="https://github.com/solana-developer-thailand" target="_blank" rel="noopener noreferrer">"GitHub"</a>
+                        <a href="https://github.com/solana-developer-thailand/event-checkin" target="_blank" rel="noopener noreferrer">"Source Code"</a>
                     </div>
 
                 </div>
