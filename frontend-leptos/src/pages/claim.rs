@@ -597,15 +597,25 @@ pub fn Claim() -> impl IntoView {
                                         <label style="font-size:0.9rem;font-weight:600;color:var(--text-primary);display:block;margin-bottom:0.5rem;">
                                             "Solana Wallet Address"
                                         </label>
-                                        // Locked wallet indicator — shown when pre-registered wallet exists
+                                        // Locked wallet pill badge — shown when pre-registered wallet exists
                                         {move || {
                                             match &locked_wallet {
-                                                Some(w) if !w.is_empty() => view! {
-                                                    <div class="claim-wallet-locked">
-                                                        <span style="color:var(--accent);margin-right:0.25rem;">"Locked"</span>
-                                                        " — this claim is tied to your pre-registered wallet"
-                                                    </div>
-                                                }.into_any(),
+                                                Some(w) if !w.is_empty() => {
+                                                    let truncated = if w.len() > 12 {
+                                                        format!("{}...{}", &w[..4], &w[w.len()-4..])
+                                                    } else {
+                                                        w.clone()
+                                                    };
+                                                    view! {
+                                                        <div class="claim-wallet-locked">
+                                                            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                                                                <rect x="3" y="7" width="10" height="7" rx="1.5"></rect>
+                                                                <path d="M5 7V5a3 3 0 0 1 6 0v2"></path>
+                                                            </svg>
+                                                            <span class="locked-wallet-addr">{truncated}</span>
+                                                        </div>
+                                                    }.into_any()
+                                                }
                                                 _ => view! { <div></div> }.into_any(),
                                             }
                                         }}

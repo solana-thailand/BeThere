@@ -21,6 +21,11 @@ pub fn Landing() -> impl IntoView {
                             "BeThere"
                         </span>
                     </div>
+                    <div class="landing-nav-links">
+                        <a href="#features">"Features"</a>
+                        <a href="#how-it-works">"How it works"</a>
+                        <a href="#organizers">"Organizers"</a>
+                    </div>
                     <div style="display:flex;align-items:center;gap:0.75rem;">
                         <A href="/login" attr:class="btn btn-outline btn-sm">
                             "Sign In"
@@ -31,7 +36,16 @@ pub fn Landing() -> impl IntoView {
 
             // ===== Hero =====
             <section style="max-width:960px;margin:0 auto;padding:5rem 1.5rem 4rem;text-align:center;">
-                <div style="font-size:3rem;margin-bottom:1rem;">"🎫"</div>
+                // Solana pill badge
+                <div class="solana-pill">
+                    <svg viewBox="0 0 397 311" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1l62.7-62.7z" fill="currentColor"/>
+                        <path d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z" fill="currentColor"/>
+                        <path d="M333.1 120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1l62.7 62.7c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z" fill="currentColor"/>
+                    </svg>
+                    "Powered by Solana"
+                </div>
+
                 <h1 style="font-size:clamp(1.75rem,5vw,2.75rem);font-weight:800;line-height:1.15;margin-bottom:1.25rem;color:#fff;">
                     "Check in. Mint."
                     <br />
@@ -52,8 +66,8 @@ pub fn Landing() -> impl IntoView {
                 </div>
             </section>
 
-            // ===== Problem =====
-            <section style="max-width:960px;margin:0 auto;padding:3rem 1.5rem 4rem;">
+            // ===== Problem / Features =====
+            <section id="features" style="max-width:960px;margin:0 auto;padding:3rem 1.5rem 4rem;">
                 <div style="text-align:center;margin-bottom:2.5rem;">
                     <h2 style="font-size:1.5rem;font-weight:700;color:#fff;margin-bottom:0.5rem;">
                         "Attendance tracking is broken"
@@ -65,7 +79,12 @@ pub fn Landing() -> impl IntoView {
                 <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:1rem;">
 
                     <div class="card" style="text-align:center;padding:1.5rem;">
-                        <div style="font-size:1.75rem;margin-bottom:0.75rem;">"📋"</div>
+                        <div class="landing-svg-icon icon-clipboard">
+                            <svg viewBox="0 0 24 24">
+                                <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+                                <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
+                            </svg>
+                        </div>
                         <h3 style="font-size:0.95rem;font-weight:600;color:#fff;margin-bottom:0.4rem;">
                             "Paper wristbands"
                         </h3>
@@ -75,7 +94,13 @@ pub fn Landing() -> impl IntoView {
                     </div>
 
                     <div class="card" style="text-align:center;padding:1.5rem;">
-                        <div style="font-size:1.75rem;margin-bottom:0.75rem;">"📊"</div>
+                        <div class="landing-svg-icon icon-chart">
+                            <svg viewBox="0 0 24 24">
+                                <line x1="18" y1="20" x2="18" y2="10"/>
+                                <line x1="12" y1="20" x2="12" y2="4"/>
+                                <line x1="6" y1="20" x2="6" y2="14"/>
+                            </svg>
+                        </div>
                         <h3 style="font-size:0.95rem;font-weight:600;color:#fff;margin-bottom:0.4rem;">
                             "Spreadsheets"
                         </h3>
@@ -85,7 +110,11 @@ pub fn Landing() -> impl IntoView {
                     </div>
 
                     <div class="card" style="text-align:center;padding:1.5rem;">
-                        <div style="font-size:1.75rem;margin-bottom:0.75rem;">"🤷"</div>
+                        <div class="landing-svg-icon icon-proof">
+                            <svg viewBox="0 0 24 24">
+                                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                            </svg>
+                        </div>
                         <h3 style="font-size:0.95rem;font-weight:600;color:#fff;margin-bottom:0.4rem;">
                             "No lasting proof"
                         </h3>
@@ -149,7 +178,7 @@ pub fn Landing() -> impl IntoView {
             </section>
 
             // ===== For Organizers & Attendees =====
-            <section style="max-width:960px;margin:0 auto;padding:4rem 1.5rem;">
+            <section id="organizers" style="max-width:960px;margin:0 auto;padding:4rem 1.5rem;">
                 <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1.5rem;">
 
                     // Organizers
@@ -206,6 +235,13 @@ pub fn Landing() -> impl IntoView {
                             "Powered by Solana"
                         </span>
                     </div>
+                </div>
+                // Brand line
+                <div class="landing-footer-brand">
+                    <span class="accent">"BeThere"</span>
+                    " — On-chain proof of attendance. Built with "
+                    <span style="color:var(--text-secondary);">"♥"</span>
+                    " by Solana Thailand."
                 </div>
             </footer>
 

@@ -573,6 +573,16 @@ nav a.active {
     border: 1px solid var(--info-border);
 }
 
+/* Enhanced pill variant for participation type badges (scanner) */
+.badge-pill {
+    text-transform: uppercase;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    font-size: 0.65rem;
+    padding: 0.3rem 0.7rem;
+    border-radius: 20px;
+}
+
 /* ===== Scanner ===== */
 .scanner-area {
     position: relative;
@@ -963,6 +973,27 @@ nav a.active {
     border-radius: var(--radius);
     padding: 1rem 1.25rem;
     margin-bottom: 1rem;
+    position: relative;
+}
+
+.nft-preview-card::before {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    border-radius: var(--radius);
+    background: linear-gradient(
+        135deg,
+        rgba(99, 102, 241, 0.4),
+        transparent,
+        rgba(129, 140, 248, 0.3)
+    );
+    z-index: -1;
+    mask:
+        linear-gradient(#fff 0 0) content-box,
+        linear-gradient(#fff 0 0);
+    mask-composite: exclude;
+    -webkit-mask-composite: xor;
+    padding: 1px;
 }
 
 .nft-preview-badge {
@@ -1085,13 +1116,41 @@ nav a.active {
 
 /* ===== Claim Page: Locked Wallet Indicator ===== */
 .claim-wallet-locked {
-    font-size: 0.75rem;
-    color: var(--text-secondary);
-    background: var(--info-bg);
-    border: 1px solid var(--info-border);
-    border-radius: var(--radius-sm);
-    padding: 0.4rem 0.6rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.7rem;
+    color: var(--accent);
+    background: rgba(99, 102, 241, 0.1);
+    border: 1px solid rgba(99, 102, 241, 0.25);
+    border-radius: 20px;
+    padding: 0.3rem 0.65rem;
     margin-bottom: 0.5rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+}
+
+.claim-wallet-locked svg {
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+    opacity: 0.7;
+}
+
+.claim-wallet-locked .locked-wallet-addr {
+    font-family: var(
+        --font-mono,
+        ui-monospace,
+        SFMono-Regular,
+        Menlo,
+        monospace
+    );
+    color: var(--text-secondary);
+    font-weight: 400;
+    max-width: 8rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 /* ===== Claim Page: Paste Button ===== */
@@ -2122,4 +2181,200 @@ nav a.active {
     .scanner-bottom-session-sub {
         font-size: 0.65rem;
     }
+}
+
+/* ===== Landing Page — Phase B ===== */
+
+.landing-nav-links {
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+}
+
+.landing-nav-links a {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    text-decoration: none;
+    transition: color 0.2s;
+}
+
+.landing-nav-links a:hover {
+    color: #fff;
+}
+
+.solana-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.3rem 0.85rem;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #9945ff;
+    background: rgba(153, 69, 255, 0.08);
+    border: 1px solid rgba(153, 69, 255, 0.2);
+    margin-bottom: 1.25rem;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+}
+
+.solana-pill svg {
+    width: 14px;
+    height: 14px;
+}
+
+.landing-svg-icon {
+    width: 2.5rem;
+    height: 2.5rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    margin-bottom: 0.75rem;
+}
+
+.landing-svg-icon svg {
+    width: 1.25rem;
+    height: 1.25rem;
+    stroke: var(--text-secondary);
+    fill: none;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.landing-svg-icon.icon-clipboard {
+    background: rgba(59, 130, 246, 0.1);
+    border: 1px solid rgba(59, 130, 246, 0.25);
+}
+
+.landing-svg-icon.icon-clipboard svg {
+    stroke: #3b82f6;
+}
+
+.landing-svg-icon.icon-chart {
+    background: rgba(245, 158, 11, 0.1);
+    border: 1px solid rgba(245, 158, 11, 0.25);
+}
+
+.landing-svg-icon.icon-chart svg {
+    stroke: #f59e0b;
+}
+
+.landing-svg-icon.icon-proof {
+    background: rgba(167, 139, 250, 0.1);
+    border: 1px solid rgba(167, 139, 250, 0.25);
+}
+
+.landing-svg-icon.icon-proof svg {
+    stroke: #a78bfa;
+}
+
+.landing-footer-brand {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    text-align: center;
+    padding: 2rem 1rem 1rem;
+    border-top: 1px solid var(--border);
+    margin-top: 2rem;
+}
+
+.landing-footer-brand .accent {
+    font-weight: 700;
+    background: linear-gradient(135deg, #818cf8, #6366f1);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+/* ===== Admin Page — Phase B ===== */
+
+.filter-pills {
+    display: flex;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.75rem;
+}
+
+.filter-pill {
+    padding: 0.35rem 0.85rem;
+    border-radius: 20px;
+    font-size: 0.78rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    transition:
+        color 0.2s,
+        background 0.2s,
+        border-color 0.2s;
+    white-space: nowrap;
+}
+
+.filter-pill:hover {
+    color: var(--text-primary);
+    border-color: #444;
+}
+
+.filter-pill.active {
+    color: #fff;
+    background: var(--accent);
+    border-color: var(--accent);
+}
+
+.stat-progress {
+    width: 100%;
+    height: 4px;
+    background: var(--bg-tertiary);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-top: 0.6rem;
+}
+
+.stat-progress-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.5s ease;
+}
+
+.stat-card.success .stat-progress-fill {
+    background: var(--success);
+}
+
+.stat-card.warning .stat-progress-fill {
+    background: var(--warning);
+}
+
+.stat-card.info .stat-progress-fill {
+    background: var(--info);
+}
+
+.attendee-item.vip {
+    border-color: rgba(234, 179, 8, 0.3);
+    background: linear-gradient(
+        135deg,
+        rgba(234, 179, 8, 0.06) 0%,
+        rgba(30, 30, 30, 0.95) 100%
+    );
+}
+
+.attendee-item.vip:hover {
+    border-color: rgba(234, 179, 8, 0.5);
+}
+
+.vip-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.15rem 0.5rem;
+    border-radius: 10px;
+    font-size: 0.65rem;
+    font-weight: 700;
+    color: #eab308;
+    background: rgba(234, 179, 8, 0.12);
+    border: 1px solid rgba(234, 179, 8, 0.3);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-left: 0.35rem;
 }

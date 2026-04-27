@@ -46,6 +46,34 @@ impl DashboardTab {
     }
 }
 
+// ===== Filter Pills =====
+
+/// Attendee list filter pill selection.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum FilterPill {
+    All,
+    CheckedIn,
+    NotCheckedIn,
+    Vip,
+}
+
+impl FilterPill {
+    /// Whether an attendee passes this filter.
+    fn matches(&self, a: &AttendeeResponse) -> bool {
+        match self {
+            FilterPill::All => true,
+            FilterPill::CheckedIn => a.checked_in_at.is_some(),
+            FilterPill::NotCheckedIn => a.checked_in_at.is_none(),
+            FilterPill::Vip => a.ticket_name.to_lowercase().contains("vip"),
+        }
+    }
+}
+
+/// Check if a ticket name indicates VIP status.
+fn is_vip_ticket(ticket_name: &str) -> bool {
+    ticket_name.to_lowercase().contains("vip")
+}
+
 // ===== Admin Component =====
 
 /// Admin dashboard page component.
@@ -89,13 +117,17 @@ pub fn Admin() -> impl IntoView {
     // Active tab — In-Person by default
     let (active_tab, set_active_tab) = signal(DashboardTab::InPerson);
 
+    // Active filter pill — All by default
+    let (filter_pill, set_filter_pill) = signal(FilterPill::All);
+
     // Refresh counter — increment to trigger data reload
     let (refresh_counter, set_refresh_counter) = signal(0u32);
 
-    // Filtered attendees: tab-filtered + search query + sort
+    // Filtered attendees: tab-filtered + search query + filter pill + sort
     let filtered_attendees = Memo::new(move |_| {
         let query = search_query.get().to_lowercase();
         let tab = active_tab.get();
+        let pill = filter_pill.get();
         let list = attendees.get();
 
         let mut filtered: Vec<AttendeeResponse> = list
@@ -114,6 +146,7 @@ pub fn Admin() -> impl IntoView {
                     || api_id.contains(&query)
                     || ticket.contains(&query)
             })
+            .filter(|a| pill.matches(a))
             .cloned()
             .collect();
 
@@ -289,6 +322,38 @@ pub fn Admin() -> impl IntoView {
                         />
                     </div>
 
+                    // Filter pills
+                    <div class="filter-pills">
+                        <button
+                            class="filter-pill"
+                            class:active=move || filter_pill.get() == FilterPill::All
+                            on:click=move |_| set_filter_pill.set(FilterPill::All)
+                        >
+                            "All"
+                        </button>
+                        <button
+                            class="filter-pill"
+                            class:active=move || filter_pill.get() == FilterPill::CheckedIn
+                            on:click=move |_| set_filter_pill.set(FilterPill::CheckedIn)
+                        >
+                            "Checked In"
+                        </button>
+                        <button
+                            class="filter-pill"
+                            class:active=move || filter_pill.get() == FilterPill::NotCheckedIn
+                            on:click=move |_| set_filter_pill.set(FilterPill::NotCheckedIn)
+                        >
+                            "Not Checked In"
+                        </button>
+                        <button
+                            class="filter-pill"
+                            class:active=move || filter_pill.get() == FilterPill::Vip
+                            on:click=move |_| set_filter_pill.set(FilterPill::Vip)
+                        >
+                            "VIP"
+                        </button>
+                    </div>
+
                     // Attendee count
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">
                         <span style="font-size:0.85rem;color:var(--text-secondary);">
@@ -397,6 +462,11 @@ fn render_stats(
             } else {
                 0.0
             };
+            let remaining_percentage = if tab_total > 0 {
+                (tab_remaining as f64 / tab_total as f64) * 100.0
+            } else {
+                0.0
+            };
 
             // Also show the other tab count as a summary line
             let other_tab = match tab {
@@ -417,10 +487,16 @@ fn render_stats(
                     <div class="stat-card success">
                         <div class="stat-value">{tab_checked_in}</div>
                         <div class="stat-label">"Checked In"</div>
+                        <div class="stat-progress">
+                            <div class="stat-progress-fill" style=format!("width: {tab_percentage:.1}%")></div>
+                        </div>
                     </div>
                     <div class="stat-card warning">
                         <div class="stat-value">{tab_remaining}</div>
                         <div class="stat-label">"Remaining"</div>
+                        <div class="stat-progress">
+                            <div class="stat-progress-fill" style=format!("width: {remaining_percentage:.1}%")></div>
+                        </div>
                     </div>
                 </div>
 
@@ -504,6 +580,7 @@ fn render_attendee_list(filtered: &[AttendeeResponse]) -> AnyView {
         .iter()
         .map(|attendee| {
             let is_checked_in = attendee.checked_in_at.is_some();
+            let is_vip = is_vip_ticket(&attendee.ticket_name);
             let badge_class = if is_checked_in {
                 "badge badge-success"
             } else {
@@ -535,7 +612,7 @@ fn render_attendee_list(filtered: &[AttendeeResponse]) -> AnyView {
             });
 
             view! {
-                <div class="attendee-item">
+                <div class="attendee-item" class:vip=is_vip>
                     <div class="attendee-info">
                         <div class="attendee-name">{utils::escape_html(&name)}</div>
                         <div class="attendee-email">{utils::escape_html(&email)}</div>
@@ -545,6 +622,9 @@ fn render_attendee_list(filtered: &[AttendeeResponse]) -> AnyView {
                         >
                             <div style="font-size:0.75rem;color:var(--text-muted);margin-top:2px;">
                                 {utils::escape_html(&ticket)}
+                                <Show when=move || is_vip fallback=|| view! { <span></span> }>
+                                    <span class="vip-badge">"VIP"</span>
+                                </Show>
                             </div>
                         </Show>
                     </div>

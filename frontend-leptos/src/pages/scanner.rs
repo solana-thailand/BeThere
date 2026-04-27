@@ -563,8 +563,8 @@ fn render_check_in_state(
                             {email}
                         </p>
                         <div style="display:flex;gap:0.5rem;margin-top:0.5rem;">
-                            <span class="badge badge-info">{ticket}</span>
-                            <span class=badge.css_class>{badge.label}</span>
+                            <span class="badge badge-info badge-pill">{ticket}</span>
+                            <span class=format!("badge badge-pill {}", badge.css_class)>{badge.label}</span>
                         </div>
                     </div>
                     <div style="display:flex;gap:0.5rem;margin-top:1rem;">
@@ -704,10 +704,9 @@ fn render_check_in_state(
                         <div class="result-details">
                             <p style="font-weight:600;color:#fff;">{name}</p>
                             <p>{email}</p>
-                            <p>
-                                "Participation: "
-                                <span style="color:var(--warning);">{badge.label}</span>
-                            </p>
+                            <div style="display:flex;gap:0.5rem;margin-top:0.5rem;">
+                                <span class=format!("badge badge-pill {}", badge.css_class)>{badge.label}</span>
+                            </div>
                         </div>
                     </div>
                     <button
