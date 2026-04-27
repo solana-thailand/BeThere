@@ -1,0 +1,9 @@
+Time start,Link start,Duration,Cue,Title,Skip,Note,Colour,End action,Timer type,Time warning,Time danger,Presenter
+09:30,false,00:30,1,Registration,false,Registration desk opens,grey,load-next,count-down,00:05:00,00:01:00,
+10:00,false,00:10,2,Opening by Solana Developer Thailand & Solana Thailand DAO,false,"Community Roadmap & Intro to the Dev Series",green,load-next,count-down,00:02:00,00:01:00,Solana Developer Thailand & Solana Thailand DAO
+10:10,false,00:50,3,Rust AI and Gaming Ep. 2,false,Deep dive session,blue,load-next,count-down,00:05:00,00:02:00,Katopz
+11:00,false,00:10,4,Group Photo Session,false,Everyone gather for group photo,yellow,load-next,count-down,00:02:00,00:00:30,
+11:10,false,00:30,5,Hands-on: Solana Account Model & Building Your First NFT with Metaplex,false,Workshop session,purple,load-next,count-down,00:05:00,00:02:00,Golf
+11:40,false,00:15,6,The Future of On-chain Gaming & Ephemeral Rollups,false,Tech talk,orange,load-next,count-down,00:02:00,00:01:00,Andy (Magicblock)
+11:55,false,00:15,7,APAC Ecosystem Spotlight - Foundation Updates & Opportunities,false,Ecosystem updates,green,load-next,count-down,00:02:00,00:01:00,Chaerin (Solana Foundation)
+12:10,false,00:50,8,Networking Session,false,Open networking and discussions,grey,none,count-down,00:05:00,00:02:00,

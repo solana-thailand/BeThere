@@ -1,0 +1,377 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Solana Dev Thailand - Ontime Links</title>
+        <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+            body {
+                font-family:
+                    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                    sans-serif;
+                background: #0a0a0a;
+                color: #e0e0e0;
+                min-height: 100vh;
+                padding: 20px;
+                padding-bottom: 60px;
+            }
+            .header {
+                text-align: center;
+                margin-bottom: 24px;
+                padding-bottom: 16px;
+                border-bottom: 1px solid #222;
+            }
+            .header h1 {
+                font-size: 1.4rem;
+                color: #9945ff;
+                margin-bottom: 4px;
+            }
+            .header p {
+                font-size: 0.85rem;
+                color: #666;
+            }
+            .ip-badge {
+                display: inline-block;
+                background: #1a1a2e;
+                border: 1px solid #9945ff33;
+                border-radius: 6px;
+                padding: 4px 10px;
+                font-family: monospace;
+                font-size: 0.8rem;
+                color: #9945ff;
+                margin-top: 8px;
+            }
+            .section-title {
+                font-size: 0.75rem;
+                text-transform: uppercase;
+                letter-spacing: 1px;
+                color: #555;
+                margin: 20px 0 10px 4px;
+            }
+            .link-card {
+                display: flex;
+                align-items: center;
+                gap: 14px;
+                background: #141414;
+                border: 1px solid #1e1e1e;
+                border-radius: 12px;
+                padding: 14px 16px;
+                margin-bottom: 8px;
+                text-decoration: none;
+                color: inherit;
+                transition: all 0.15s ease;
+                cursor: pointer;
+            }
+            .link-card:hover,
+            .link-card:active {
+                background: #1a1a2e;
+                border-color: #9945ff44;
+                transform: translateY(-1px);
+            }
+            .link-icon {
+                width: 44px;
+                height: 44px;
+                border-radius: 10px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 1.3rem;
+                flex-shrink: 0;
+            }
+            .link-icon.timer {
+                background: #14f19522;
+                color: #14f195;
+            }
+            .link-icon.backstage {
+                background: #9945ff22;
+                color: #9945ff;
+            }
+            .link-icon.timeline {
+                background: #00d4ff22;
+                color: #00d4ff;
+            }
+            .link-icon.cuesheet {
+                background: #ff6b3522;
+                color: #ff6b35;
+            }
+            .link-icon.countdown {
+                background: #ffd70022;
+                color: #ffd700;
+            }
+            .link-icon.operator {
+                background: #ff475722;
+                color: #ff4757;
+            }
+            .link-icon.studio {
+                background: #5f7fff22;
+                color: #5f7fff;
+            }
+            .link-icon.editor {
+                background: #ff69b422;
+                color: #ff69b4;
+            }
+            .link-icon.scanner {
+                background: #14f19522;
+                color: #14f195;
+            }
+            .link-icon.admin {
+                background: #9945ff22;
+                color: #9945ff;
+            }
+            .link-info {
+                flex: 1;
+                min-width: 0;
+            }
+            .link-title {
+                font-size: 0.95rem;
+                font-weight: 600;
+                color: #f0f0f0;
+                margin-bottom: 2px;
+            }
+            .link-desc {
+                font-size: 0.75rem;
+                color: #777;
+                line-height: 1.3;
+            }
+            .link-arrow {
+                color: #333;
+                font-size: 1.1rem;
+                flex-shrink: 0;
+            }
+            .footer {
+                text-align: center;
+                margin-top: 28px;
+                padding-top: 16px;
+                border-top: 1px solid #1a1a1a;
+                font-size: 0.7rem;
+                color: #444;
+                line-height: 1.5;
+            }
+            .toast {
+                position: fixed;
+                bottom: 30px;
+                left: 50%;
+                transform: translateX(-50%) translateY(100px);
+                background: #14f195;
+                color: #0a0a0a;
+                padding: 10px 20px;
+                border-radius: 8px;
+                font-size: 0.85rem;
+                font-weight: 600;
+                opacity: 0;
+                transition: all 0.3s ease;
+                z-index: 100;
+                pointer-events: none;
+            }
+            .toast.show {
+                transform: translateX(-50%) translateY(0);
+                opacity: 1;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <h1>Solana Dev Thailand</h1>
+            <p>April 26, 2026 &mdash; Event Control Links</p>
+            <div class="ip-badge" id="ip-badge">detecting…</div>
+        </div>
+
+        <div class="section-title">STAGE &amp; DISPLAY</div>
+
+        <a
+            class="link-card"
+            href="http://192.168.0.117:4001/timer"
+            target="_blank"
+        >
+            <div class="link-icon timer">&#9201;</div>
+            <div class="link-info">
+                <div class="link-title">Stage Timer</div>
+                <div class="link-desc">
+                    Countdown for presenter &mdash; project to TV
+                </div>
+            </div>
+            <span class="link-arrow">&#8250;</span>
+        </a>
+
+        <a
+            class="link-card"
+            href="http://192.168.0.117:4001/backstage"
+            target="_blank"
+        >
+            <div class="link-icon backstage">&#128203;</div>
+            <div class="link-info">
+                <div class="link-title">Backstage</div>
+                <div class="link-desc">Full schedule + delay info for crew</div>
+            </div>
+            <span class="link-arrow">&#8250;</span>
+        </a>
+
+        <a
+            class="link-card"
+            href="http://192.168.0.117:4001/timeline"
+            target="_blank"
+        >
+            <div class="link-icon timeline">&#128202;</div>
+            <div class="link-info">
+                <div class="link-title">Timeline</div>
+                <div class="link-desc">Visual timeline overview of the day</div>
+            </div>
+            <span class="link-arrow">&#8250;</span>
+        </a>
+
+        <a
+            class="link-card"
+            href="http://192.168.0.117:4001/countdown"
+            target="_blank"
+        >
+            <div class="link-icon countdown">&#8987;</div>
+            <div class="link-info">
+                <div class="link-title">Countdown</div>
+                <div class="link-desc">Simple countdown to next event</div>
+            </div>
+            <span class="link-arrow">&#8250;</span>
+        </a>
+
+        <a
+            class="link-card"
+            href="http://192.168.0.117:4001/studio"
+            target="_blank"
+        >
+            <div class="link-icon studio">&#128336;</div>
+            <div class="link-info">
+                <div class="link-title">Studio Clock</div>
+                <div class="link-desc">Clock with current event info</div>
+            </div>
+            <span class="link-arrow">&#8250;</span>
+        </a>
+
+        <div class="section-title">PRODUCTION CONTROL</div>
+
+        <a
+            class="link-card"
+            href="http://192.168.0.117:4001/editor"
+            target="_blank"
+        >
+            <div class="link-icon editor">&#9999;</div>
+            <div class="link-info">
+                <div class="link-title">Editor</div>
+                <div class="link-desc">
+                    Main control &mdash; start/stop events, manage schedule
+                </div>
+            </div>
+            <span class="link-arrow">&#8250;</span>
+        </a>
+
+        <a
+            class="link-card"
+            href="http://192.168.0.117:4001/cuesheet"
+            target="_blank"
+        >
+            <div class="link-icon cuesheet">&#128221;</div>
+            <div class="link-info">
+                <div class="link-title">Cuesheet</div>
+                <div class="link-desc">
+                    Collaborative view &mdash; add notes per event
+                </div>
+            </div>
+            <span class="link-arrow">&#8250;</span>
+        </a>
+
+        <a
+            class="link-card"
+            href="http://192.168.0.117:4001/op"
+            target="_blank"
+        >
+            <div class="link-icon operator">&#127918;</div>
+            <div class="link-info">
+                <div class="link-title">Operator</div>
+                <div class="link-desc">Show caller / operator control view</div>
+            </div>
+            <span class="link-arrow">&#8250;</span>
+        </a>
+
+        <div class="section-title">CHECK-IN SYSTEM</div>
+
+        <a
+            class="link-card"
+            href="https://bethere.solana-thailand.workers.dev/staff"
+            target="_blank"
+        >
+            <div class="link-icon scanner">&#128247;</div>
+            <div class="link-info">
+                <div class="link-title">BeThere Scanner</div>
+                <div class="link-desc">
+                    QR check-in for staff &mdash; cloud hosted
+                </div>
+            </div>
+            <span class="link-arrow">&#8250;</span>
+        </a>
+
+        <a
+            class="link-card"
+            href="https://bethere.solana-thailand.workers.dev/admin"
+            target="_blank"
+        >
+            <div class="link-icon admin">&#128101;</div>
+            <div class="link-info">
+                <div class="link-title">BeThere Admin</div>
+                <div class="link-desc">Attendee list, stats, QR management</div>
+            </div>
+            <span class="link-arrow">&#8250;</span>
+        </a>
+
+        <div class="footer">
+            <p id="footer-network">Ontime links: same WiFi network required</p>
+            <p>BeThere check-in: works from any network (Cloudflare Workers)</p>
+        </div>
+
+        <div class="toast" id="toast">Copied!</div>
+
+        <script>
+            var DEFAULT_IP = "192.168.0.117";
+            var PORT = 4001;
+            var PLACEHOLDER = "http://192.168.0.117:" + PORT;
+
+            // Detect IP: from hostname if served via http, else fall back to default
+            var detectedIp = window.location.hostname;
+            if (
+                !detectedIp ||
+                detectedIp === "" ||
+                detectedIp === "file" ||
+                detectedIp === "localhost" ||
+                detectedIp === "127.0.0.1"
+            ) {
+                detectedIp = DEFAULT_IP;
+            }
+            var BASE = "http://" + detectedIp + ":" + PORT;
+
+            // Rewrite all Ontime links
+            document.querySelectorAll(".link-card").forEach(function (card) {
+                var href = card.getAttribute("href");
+                if (href && href.indexOf(PLACEHOLDER) !== -1) {
+                    card.setAttribute("href", href.replace(PLACEHOLDER, BASE));
+                }
+            });
+
+            // Update UI elements
+            document.getElementById("ip-badge").textContent =
+                detectedIp + ":" + PORT;
+            document.getElementById("footer-network").textContent =
+                "Ontime links: same WiFi network required (" + detectedIp + ")";
+
+            function showToast(msg) {
+                var t = document.getElementById("toast");
+                t.textContent = msg;
+                t.classList.add("show");
+                setTimeout(function () {
+                    t.classList.remove("show");
+                }, 1500);
+            }
+        </script>
+    </body>
+</html>
