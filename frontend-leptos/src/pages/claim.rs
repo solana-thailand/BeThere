@@ -354,6 +354,12 @@ pub fn Claim() -> impl IntoView {
                     } else if !data.nft_available {
                         set_state.set(ClaimState::NftComingSoon(data));
                     } else {
+                        // Pre-fill wallet if locked to a pre-registered address
+                        if let Some(ref wallet) = data.locked_wallet {
+                            if !wallet.is_empty() {
+                                set_wallet_input.set(wallet.clone());
+                            }
+                        }
                         set_state.set(ClaimState::Ready(data));
                     }
                 }
@@ -532,6 +538,8 @@ pub fn Claim() -> impl IntoView {
                         // ---- Ready: show wallet input ----
                         ClaimState::Ready(data) => {
                             let checked_in_display = format_timestamp(&data.checked_in_at);
+                            let locked_wallet = data.locked_wallet.clone();
+                            let locked_wallet_hint = data.locked_wallet.clone();
                             view! {
                                 <div style="width:100%;">
                                     // Attendee welcome
@@ -549,6 +557,18 @@ pub fn Claim() -> impl IntoView {
                                         <label style="font-size:0.9rem;font-weight:600;color:var(--text-primary);display:block;margin-bottom:0.5rem;">
                                             "Solana Wallet Address"
                                         </label>
+                                        // Locked wallet indicator — shown when pre-registered wallet exists
+                                        {move || {
+                                            match &locked_wallet {
+                                                Some(w) if !w.is_empty() => view! {
+                                                    <div class="claim-wallet-locked">
+                                                        <span style="color:var(--accent);margin-right:0.25rem;">"Locked"</span>
+                                                        " — this claim is tied to your pre-registered wallet"
+                                                    </div>
+                                                }.into_any(),
+                                                _ => view! { <div></div> }.into_any(),
+                                            }
+                                        }}
                                         <div style="display:flex;gap:0.5rem;">
                                             <input
                                                 class="claim-wallet-input"
@@ -570,7 +590,12 @@ pub fn Claim() -> impl IntoView {
                                             </button>
                                         </div>
                                         <p style="font-size:0.75rem;color:var(--text-muted);margin-top:0.5rem;">
-                                            "Tap Paste or type your Phantom, Solflare, or Backpack address."
+                                            {move || {
+                                                match &locked_wallet_hint {
+                                                    Some(w) if !w.is_empty() => "Use the pre-filled wallet address to claim.".into_any(),
+                                                    _ => "Tap Paste or type your Phantom, Solflare, or Backpack address.".into_any(),
+                                                }
+                                            }}
                                         </p>
                                     </div>
 

@@ -120,6 +120,10 @@ pub struct ClaimLookupResponse {
     pub claimed_at: Option<String>,
     /// Whether NFT minting is configured (all required secrets present).
     pub nft_available: bool,
+    /// Pre-registered wallet address from column P.
+    /// When present, the claim is locked to this wallet — any other address is rejected.
+    /// `None` means no pre-registered wallet; any valid address may claim.
+    pub locked_wallet: Option<String>,
     /// Dynamic event metadata (name, tagline, link, timestamps).
     pub event: EventConfig,
 }

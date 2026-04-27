@@ -446,6 +446,10 @@ pub struct ClaimLookupData {
     /// Whether NFT minting is configured on the backend.
     #[serde(default = "default_true")]
     pub nft_available: bool,
+    /// Pre-registered wallet address from column P.
+    /// When present, the claim is locked to this wallet — any other address is rejected.
+    #[serde(default)]
+    pub locked_wallet: Option<String>,
     /// Dynamic event metadata (name, tagline, link, timestamps).
     #[serde(default)]
     pub event: EventConfig,

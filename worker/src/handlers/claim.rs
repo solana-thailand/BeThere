@@ -17,6 +17,17 @@ use event_checkin_domain::models::api::{ClaimLookupResponse, ClaimResponse, Even
 use crate::solana::{self, validate_wallet_address};
 use crate::state::AppState;
 
+/// Mask a wallet address for safe display in error messages.
+/// Shows first 4 and last 4 characters: "BxRW...3KjF".
+/// Returns "****" if the address is too short to mask.
+fn mask_wallet(addr: &str) -> String {
+    if addr.len() > 8 {
+        format!("{}...{}", &addr[..4], &addr[addr.len() - 4..])
+    } else {
+        "****".to_string()
+    }
+}
+
 /// Request body for POST /api/claim/{token}.
 #[derive(Debug, Deserialize)]
 pub struct ClaimRequest {
@@ -71,6 +82,13 @@ pub async fn get_claim(
         event_end_ms: state.config.event_end_ms,
     };
 
+    // Pre-registered wallet from column P — locks claim to this address if present
+    let locked_wallet = attendee
+        .solana_address
+        .as_ref()
+        .map(|w| w.trim().to_string())
+        .filter(|w| !w.is_empty());
+
     let response = ClaimLookupResponse {
         name: display_name,
         checked_in_at,
@@ -78,6 +96,7 @@ pub async fn get_claim(
         claimed,
         claimed_at,
         nft_available,
+        locked_wallet,
         event,
     };
 
@@ -150,6 +169,29 @@ pub async fn post_claim(
                 "claimed_at": claimed_at,
             },
         }));
+    }
+
+    // Wallet match guard: if attendee pre-registered a Solana address (column P),
+    // the claiming wallet must match exactly. Prevents claim theft via leaked URLs.
+    if let Some(ref registered) = attendee.solana_address {
+        let registered = registered.trim();
+        if !registered.is_empty() {
+            let claiming = body.wallet_address.trim();
+            if registered != claiming {
+                tracing::warn!(
+                    "wallet mismatch for token {token}: registered={} claiming={}",
+                    mask_wallet(registered),
+                    mask_wallet(claiming)
+                );
+                return Json(json!({
+                    "success": false,
+                    "error": format!(
+                        "This claim is locked to a pre-registered wallet ({})",
+                        mask_wallet(registered)
+                    ),
+                }));
+            }
+        }
     }
 
     // Mint compressed NFT via Helius

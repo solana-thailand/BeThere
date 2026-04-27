@@ -1083,6 +1083,17 @@ nav a.active {
         -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
+/* ===== Claim Page: Locked Wallet Indicator ===== */
+.claim-wallet-locked {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    background: var(--info-bg);
+    border: 1px solid var(--info-border);
+    border-radius: var(--radius-sm);
+    padding: 0.4rem 0.6rem;
+    margin-bottom: 0.5rem;
+}
+
 /* ===== Claim Page: Paste Button ===== */
 .claim-paste-btn {
     flex-shrink: 0;
