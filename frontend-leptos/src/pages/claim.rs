@@ -15,6 +15,21 @@ use leptos_router::params::Params;
 
 use crate::api::{self, ClaimLookupData, ClaimMintData};
 use crate::utils::{escape_html, format_timestamp};
+use wasm_bindgen::prelude::*;
+
+// ---------------------------------------------------------------------------
+// JS interop
+// ---------------------------------------------------------------------------
+
+#[wasm_bindgen(module = "/js/qr_generate.js")]
+extern "C" {
+    /// Copy text to the system clipboard.
+    ///
+    /// Uses the Clipboard API with a textarea fallback for older browsers.
+    /// Returns true if the copy operation was initiated successfully.
+    #[wasm_bindgen(js_name = "copyToClipboard")]
+    fn copy_to_clipboard_js(text: &str) -> bool;
+}
 
 // ---------------------------------------------------------------------------
 // Route params
@@ -476,9 +491,34 @@ pub fn Claim() -> impl IntoView {
                         // ---- Loading ----
                         ClaimState::Loading => {
                             view! {
-                                <div class="claim-loading">
-                                    <span class="spinner spinner-lg"></span>
-                                    <p>"Loading claim info..."</p>
+                                <div style="width:100%;">
+                                    // Shimmer: welcome card (avatar + 2 text lines)
+                                    <div class="shimmer-card" style="display:flex;align-items:center;gap:1rem;margin-bottom:1rem;">
+                                        <div class="shimmer shimmer-avatar" style="flex-shrink:0;"></div>
+                                        <div style="flex:1;display:flex;flex-direction:column;gap:0.5rem;">
+                                            <div class="shimmer shimmer-line" style="width:60%;"></div>
+                                            <div class="shimmer shimmer-line-sm" style="width:40%;"></div>
+                                        </div>
+                                    </div>
+
+                                    // Shimmer: NFT preview card (square + 2 text lines)
+                                    <div class="shimmer-card" style="display:flex;align-items:center;gap:1rem;margin-bottom:1rem;">
+                                        <div class="shimmer" style="width:72px;height:72px;border-radius:12px;flex-shrink:0;"></div>
+                                        <div style="flex:1;display:flex;flex-direction:column;gap:0.5rem;">
+                                            <div class="shimmer shimmer-line" style="width:75%;"></div>
+                                            <div class="shimmer shimmer-line-sm" style="width:50%;"></div>
+                                        </div>
+                                    </div>
+
+                                    // Shimmer: wallet input card (label + input bar + hint)
+                                    <div class="shimmer-card" style="margin-bottom:1rem;">
+                                        <div class="shimmer shimmer-line-sm" style="width:40%;margin-bottom:0.75rem;"></div>
+                                        <div class="shimmer shimmer-line" style="width:100%;height:42px;border-radius:8px;margin-bottom:0.5rem;"></div>
+                                        <div class="shimmer shimmer-line-sm" style="width:55%;"></div>
+                                    </div>
+
+                                    // Shimmer: claim button
+                                    <div class="shimmer shimmer-btn" style="width:100%;"></div>
                                 </div>
                             }
                                 .into_any()
@@ -619,13 +659,17 @@ pub fn Claim() -> impl IntoView {
                         // ---- Minting in progress ----
                         ClaimState::Minting(data) => {
                             view! {
-                                <div class="claim-loading" style="width:100%;">
-                                    <span class="spinner spinner-lg"></span>
-                                    <h3 style="margin-top:1rem;">"Minting your NFT..."</h3>
-                                    <p style="font-size:0.9rem;color:var(--text-secondary);margin-top:0.5rem;">
+                                <div style="width:100%;display:flex;flex-direction:column;align-items:center;gap:1rem;padding:1.5rem 0;">
+                                    // Pulsing minting indicator
+                                    <div style="position:relative;width:64px;height:64px;">
+                                        <div class="shimmer" style="width:64px;height:64px;border-radius:50%;position:absolute;top:0;left:0;"></div>
+                                        <span class="spinner spinner-lg" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);"></span>
+                                    </div>
+                                    <h3 style="color:var(--text-primary);font-weight:600;">"Minting your NFT..."</h3>
+                                    <p style="font-size:0.9rem;color:var(--text-secondary);">
                                         "Minting for "{escape_html(&data.name)}
                                     </p>
-                                    <p style="font-size:0.8rem;color:var(--text-muted);margin-top:0.25rem;">
+                                    <p style="font-size:0.8rem;color:var(--text-muted);">
                                         "This usually takes 3-5 seconds."
                                     </p>
                                 </div>
@@ -648,6 +692,16 @@ pub fn Claim() -> impl IntoView {
                                 "https://solscan.io/token/{}{cluster_param}",
                                 data.asset_id
                             );
+                            let asset_id_display = {
+                                let id = &data.asset_id;
+                                if id.len() > 12 {
+                                    format!("{}...{}", &id[..6], &id[id.len()-4..])
+                                } else {
+                                    id.clone()
+                                }
+                            };
+                            let asset_id_full = data.asset_id.clone();
+                            let share_url = asset_url.clone();
                             view! {
                                 <div class="claim-success">
                                     <div class="success-check">
@@ -656,6 +710,34 @@ pub fn Claim() -> impl IntoView {
                                         </svg>
                                     </div>
                                     <h2>"NFT Claimed"</h2>
+
+                                    // Asset ID card
+                                    <div class="claim-asset-card">
+                                        <div class="claim-asset-header">
+                                            <span class="claim-asset-label">"Asset ID"</span>
+                                            <span class="claim-asset-status">
+                                                <span class="claim-asset-status-dot"></span>
+                                                "On-Chain"
+                                            </span>
+                                        </div>
+                                        <div class="claim-asset-value-row">
+                                            <span class="claim-asset-code">{asset_id_display}</span>
+                                            <button
+                                                class="claim-copy-btn"
+                                                type="button"
+                                                title="Copy Asset ID"
+                                                on:click=move |_| {
+                                                    let _ = copy_to_clipboard_js(&asset_id_full);
+                                                }
+                                            >
+                                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    </div>
+
                                     <div class="success-details">
                                         <p><strong>"Name:"</strong>" "{escape_html(&data.name)}</p>
                                         <p><strong>"Wallet:"</strong>
@@ -679,6 +761,15 @@ pub fn Claim() -> impl IntoView {
                                             class="btn btn-outline btn-block"
                                         >
                                             "View NFT Asset"
+                                        </a>
+                                        <a
+                                            href=share_url
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            class="btn btn-outline btn-block"
+                                            style="border-color:var(--accent);color:var(--accent);"
+                                        >
+                                            "Share your NFT"
                                         </a>
                                     </div>
                                 </div>

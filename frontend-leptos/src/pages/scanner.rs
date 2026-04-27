@@ -1,12 +1,11 @@
-//! Staff scanner page — QR code scanning and manual attendee check-in.
+//! Staff scanner page — fullscreen camera QR scanning with slide-up bottom sheet.
 //!
-//! Provides two tabs:
-//! - Scanner (camera QR code scanning via BarcodeDetector API + jsQR fallback)
-//! - Manual (text input for attendee ID lookup)
+//! The camera fills the entire screen. A bottom sheet slides up with session info
+//! and a manual entry toggle. Scan results appear as glass panel overlays on top
+//! of the camera view.
 //!
-//! The video element is always present in the DOM (hidden via CSS `display:none`
-//! when the Manual tab is active) to avoid race conditions between the reactive
-//! Effect and DOM mounting. Visibility is toggled via CSS, not `<Show>`.
+//! The video element is always present in the DOM (never conditionally rendered)
+//! to avoid race conditions between the reactive Effect and DOM mounting.
 //!
 //! Requires being wrapped in `<ProtectedRoute>` to provide
 //! `ReadSignal<String>` (user email) via context.
@@ -111,12 +110,6 @@ enum CheckInState {
     Error,
 }
 
-/// Active tab in the scanner page.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum ScannerTab {
-    Scanner,
-    Manual,
-}
 
 // ===== Scanner Component =====
 
@@ -140,7 +133,7 @@ pub fn Scanner() -> impl IntoView {
     });
 
     // Reactive state
-    let (active_tab, set_active_tab) = signal(ScannerTab::Scanner);
+    let (manual_mode, set_manual_mode) = signal(false);
     let (manual_input, set_manual_input) = signal(String::new());
     let (check_in_state, set_check_in_state) = signal(CheckInState::Idle);
     let (toast, set_toast) = signal(None::<components::ToastMessage>);
@@ -156,14 +149,13 @@ pub fn Scanner() -> impl IntoView {
         stop_camera_js();
     });
 
-    // Camera lifecycle: start when video element is visible, stop when hidden.
-    // Video is visible only when: Scanner tab active AND check_in_state is Idle.
-    // Stops on: Manual tab, non-Idle state (attendee info shown), or unmount.
+    // Camera lifecycle: start when Idle, stop when showing results.
+    // Camera runs whenever check_in_state is Idle (regardless of manual_mode).
+    // Stops on: non-Idle state (attendee info shown), or unmount.
     // Re-triggers on scan_round (reset) or check_in_state changes.
     Effect::new(move |_| {
         let round = scan_round.get(); // generation counter for polling loop
-        let should_scan = active_tab.get() == ScannerTab::Scanner
-            && matches!(check_in_state.get(), CheckInState::Idle);
+        let should_scan = matches!(check_in_state.get(), CheckInState::Idle);
 
         if should_scan {
             // Only start camera if not already running (avoids rapid stop/start)
@@ -188,7 +180,7 @@ pub fn Scanner() -> impl IntoView {
                         break;
                     }
 
-                    // Stop polling when scanner is deactivated (tab switch / unmount)
+                    // Stop polling when scanner is deactivated (unmount)
                     if !is_scanner_active_js() {
                         break;
                     }
@@ -302,6 +294,7 @@ pub fn Scanner() -> impl IntoView {
         set_camera_error.set(None);
         set_check_in_state.set(CheckInState::Idle);
         set_manual_input.set(String::new());
+        set_manual_mode.set(false);
         set_scan_round.update(|r| *r += 1);
     };
 
@@ -319,133 +312,127 @@ pub fn Scanner() -> impl IntoView {
                 on_sign_out=handle_sign_out
             />
 
-            <div class="page-container">
-                // Tab selector
-                <div class="tabs">
-                    <button
-                        class=move || {
-                            if active_tab.get() == ScannerTab::Scanner {
-                                "tab active"
-                            } else {
-                                "tab"
-                            }
+            // Fullscreen camera — always in DOM, never conditionally rendered.
+            <div class="scanner-fullscreen">
+                <video
+                    id="scanner-video"
+                    autoplay=true
+                    playsinline=true
+                    muted=true
+                />
+                // Scanning frame overlay
+                <div class="scanner-frame-overlay">
+                    <div style=move || {
+                        if camera_error.get().is_none()
+                            && matches!(check_in_state.get(), CheckInState::Idle)
+                        {
+                            "width:180px;height:180px;border:3px solid rgba(99,102,241,0.7);border-radius:12px;box-shadow:0 0 0 2000px rgba(0,0,0,0.3);"
+                        } else {
+                            "display:none;"
                         }
-                        on:click=move |_| set_active_tab.set(ScannerTab::Scanner)
-                    >
-                        "Scanner"
-                    </button>
-                    <button
-                        class=move || {
-                            if active_tab.get() == ScannerTab::Manual {
-                                "tab active"
-                            } else {
-                                "tab"
-                            }
-                        }
-                        on:click=move |_| set_active_tab.set(ScannerTab::Manual)
-                    >
-                        "Manual"
-                    </button>
+                    } />
                 </div>
-
-                // Scanner tab (camera QR scanner) — always in DOM to avoid
-                // race between Effect and <Show> mounting the <video> element.
-                // Visibility toggled via CSS display instead of conditional rendering.
-                // Hidden when showing attendee info (non-Idle state) so staff can focus.
-                <div style=move || {
-                    let scanning = active_tab.get() == ScannerTab::Scanner
-                        && matches!(check_in_state.get(), CheckInState::Idle);
-                    if scanning { "" } else { "display:none" }
-                }>
-                    <div class="card" style="padding:0;overflow:hidden;position:relative;">
-                        <video
-                            id="scanner-video"
-                            autoplay=true
-                            playsinline=true
-                            muted=true
-                            style="width:100%;display:block;border-radius:8px;min-height:200px;background:#1a1a2e;"
-                        />
-                        // Scanning overlay indicator
-                        <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none;">
-                            <div style=move || {
-                                if camera_error.get().is_none() {
-                                    "width:180px;height:180px;border:3px solid rgba(99,102,241,0.7);border-radius:12px;box-shadow:0 0 0 2000px rgba(0,0,0,0.3);"
-                                } else {
-                                    "display:none;"
-                                }
-                            } />
-                        </div>
-                    </div>
-                    // Camera error message
-                    <Show
-                        when=move || camera_error.get().is_some()
-                        fallback=|| view! { <div></div> }
-                    >
-                        <div class="error-msg visible" style="margin-top:0.75rem;">
-                            {move || camera_error.get().unwrap_or_default()}
-                        </div>
-                    </Show>
-                    // Hint when camera is active
-                    <Show
-                        when=move || camera_error.get().is_none()
-                        fallback=|| view! { <div></div> }
-                    >
-                        <p style="color:var(--text-muted);font-size:0.8rem;text-align:center;margin-top:0.5rem;">
-                            "Point your camera at a QR code to scan"
-                        </p>
-                    </Show>
-                </div>
-
-                // Manual tab — always in DOM, toggled via CSS display
-                <div style=move || {
-                    if active_tab.get() == ScannerTab::Manual {
-                        ""
-                    } else {
-                        "display:none"
+                // Scan hint
+                <Show
+                    when=move || {
+                        camera_error.get().is_none()
+                            && matches!(check_in_state.get(), CheckInState::Idle)
                     }
-                }>
-                    <div class="card">
-                        <form on:submit=handle_manual_submit>
-                            <div class="manual-input-group">
-                                <input
-                                    type="text"
-                                    placeholder="Enter attendee ID (e.g. gst-abc123)"
-                                    prop:value=move || manual_input.get()
-                                    on:input=move |ev| {
-                                        let val = event_target_value(&ev);
-                                        set_manual_input.set(val);
-                                    }
-                                />
-                                <button
-                                    class="btn btn-primary"
-                                    type="submit"
-                                    disabled=move || matches!(
-                                        check_in_state.get(),
-                                        CheckInState::LookingUp | CheckInState::CheckingIn { .. }
-                                    )
-                                >
-                                    "Look Up"
-                                </button>
-                            </div>
-                        </form>
+                    fallback=|| view! { <div></div> }
+                >
+                    <div class="scanner-scan-hint">"Point camera at QR code"</div>
+                </Show>
+                // Camera error overlay
+                <Show
+                    when=move || camera_error.get().is_some()
+                    fallback=|| view! { <div></div> }
+                >
+                    <div
+                        class="scanner-scan-hint"
+                        style="background:rgba(239,68,68,0.15);border-color:var(--danger-border);color:var(--danger);"
+                    >
+                        {move || camera_error.get().unwrap_or_default()}
                     </div>
-                </div>
-
-                // Check-in state display
-                <div class="mt-2">
-                    {move || {
-                        let state = check_in_state.get();
-                        render_check_in_state(state, handle_check_in, handle_reset)
-                    }}
-                </div>
-
-                <div class="claim-footer">
-                    <div class="brand-line">
-                        <span class="accent">"BeThere"</span>
-                        " x Solana Thailand"
-                    </div>
-                </div>
+                </Show>
             </div>
+
+            // Success flash animation
+            <Show
+                when=move || matches!(check_in_state.get(), CheckInState::Success(_))
+                fallback=|| view! { <div></div> }
+            >
+                <div class="scanner-success-flash"></div>
+            </Show>
+
+            // Result overlay (glass panel) when not Idle
+            <Show
+                when=move || !matches!(check_in_state.get(), CheckInState::Idle)
+                fallback=|| view! { <div></div> }
+            >
+                <div class="scanner-result-overlay">
+                    <div class="scanner-glass-card">
+                        {move || {
+                            let state = check_in_state.get();
+                            render_check_in_state(state, handle_check_in, handle_reset)
+                        }}
+                    </div>
+                </div>
+            </Show>
+
+            // Bottom sheet (only when Idle)
+            <Show
+                when=move || matches!(check_in_state.get(), CheckInState::Idle)
+                fallback=|| view! { <div></div> }
+            >
+                <div class="scanner-bottom-sheet">
+                    // Drag handle
+                    <div class="scanner-bottom-handle"></div>
+                    // Session info
+                    <div class="scanner-bottom-session">
+                        <div class="scanner-bottom-session-info">
+                            <div class="scanner-bottom-session-title">"Scanner"</div>
+                            <div class="scanner-bottom-session-sub">"Ready to scan"</div>
+                        </div>
+                        <button
+                            class="scanner-manual-toggle"
+                            on:click=move |_| set_manual_mode.update(|m| *m = !*m)
+                        >
+                            {move || if manual_mode.get() { "Cancel" } else { "Enter manually" }}
+                        </button>
+                    </div>
+                    // Manual input form (toggled inline)
+                    <Show
+                        when=move || manual_mode.get()
+                        fallback=|| view! { <div></div> }
+                    >
+                        <div class="scanner-manual-form">
+                            <form on:submit=handle_manual_submit>
+                                <div class="manual-input-group">
+                                    <input
+                                        type="text"
+                                        placeholder="Enter attendee ID (e.g. gst-abc123)"
+                                        prop:value=move || manual_input.get()
+                                        on:input=move |ev| {
+                                            let val = event_target_value(&ev);
+                                            set_manual_input.set(val);
+                                        }
+                                    />
+                                    <button
+                                        class="btn btn-primary"
+                                        type="submit"
+                                        disabled=move || matches!(
+                                            check_in_state.get(),
+                                            CheckInState::LookingUp | CheckInState::CheckingIn { .. }
+                                        )
+                                    >
+                                        "Look Up"
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </Show>
+                </div>
+            </Show>
 
             <components::Toast toast_signal=toast />
         </div>
@@ -544,7 +531,7 @@ fn render_check_in_state(
     match state {
         CheckInState::Idle => view! { <div></div> }.into_any(),
         CheckInState::LookingUp => view! {
-            <div class="card text-center">
+            <div class="text-center">
                 <div class="page-loading" style="min-height:auto;padding:1rem;">
                     <span class="spinner spinner-lg"></span>
                     <span>"Looking up attendee..."</span>
@@ -559,7 +546,7 @@ fn render_check_in_state(
             let participation = data.participation_type.clone();
             let badge = utils::get_participation_badge(&participation);
             view! {
-                <div class="card">
+                <div>
                     <div class="text-center mb-2">
                         <div class="success-check">
                             <svg viewBox="0 0 24 24">
@@ -568,7 +555,7 @@ fn render_check_in_state(
                         </div>
                         <h2>"Ready to Check In"</h2>
                     </div>
-                    <div class="card" style="background:var(--bg-secondary);">
+                    <div style="background:rgba(255,255,255,0.05);border-radius:var(--radius);padding:0.75rem;">
                         <p style="font-weight:600;color:#fff;font-size:1rem;margin-bottom:0.25rem;">
                             {name}
                         </p>
@@ -618,7 +605,7 @@ fn render_check_in_state(
                 .and_then(|url| generate_qr_data_url(url, 200));
             let claim_url_for_display = claim_url.clone();
             view! {
-                <div class="card">
+                <div>
                     <div class="result-warning">
                         <h2>"Already Checked In"</h2>
                         <div class="result-details">
@@ -683,7 +670,7 @@ fn render_check_in_state(
             let email = data.attendee.email.clone();
             let status = data.attendee.approval_status.clone();
             view! {
-                <div class="card">
+                <div>
                     <div class="result-error">
                         <h2>"Not Approved"</h2>
                         <div class="result-details">
@@ -711,7 +698,7 @@ fn render_check_in_state(
             let email = data.attendee.email.clone();
             let badge = utils::get_participation_badge(&data.participation_type);
             view! {
-                <div class="card">
+                <div>
                     <div class="result-warning">
                         <h2>"Not In-Person"</h2>
                         <div class="result-details">
@@ -735,7 +722,7 @@ fn render_check_in_state(
             .into_any()
         }
         CheckInState::NotFound => view! {
-            <div class="card">
+            <div>
                 <div class="result-error">
                     <h2>"Not Found"</h2>
                     <div class="result-details">
@@ -753,7 +740,7 @@ fn render_check_in_state(
         }
         .into_any(),
         CheckInState::CheckingIn { name, .. } => view! {
-            <div class="card text-center">
+            <div class="text-center">
                 <div class="page-loading" style="min-height:auto;padding:1rem;">
                     <span class="spinner spinner-lg"></span>
                     <span>"Checking in "{name}"..."</span>
@@ -779,7 +766,7 @@ fn render_check_in_state(
                 .and_then(|url| generate_qr_data_url(url, 200));
             let claim_url_for_display = claim_url.clone();
             view! {
-                <div class="card claim-success">
+                <div>
                     <div class="result-success">
                         <div class="success-check">
                             <svg viewBox="0 0 24 24">
@@ -841,7 +828,7 @@ fn render_check_in_state(
             .into_any()
         }
         CheckInState::Error => view! {
-            <div class="card">
+            <div>
                 <div class="result-error">
                     <h2>"Error"</h2>
                     <div class="result-details">
