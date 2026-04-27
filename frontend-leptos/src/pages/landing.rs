@@ -66,6 +66,18 @@ pub fn Landing() -> impl IntoView {
                 </div>
             </section>
 
+            // ===== Social Proof =====
+            <section class="social-proof">
+                <div class="social-proof-label">"Trusted by leading communities"</div>
+                <div class="social-proof-logos">
+                    <span class="social-proof-pill">"Solana Thailand"</span>
+                    <span class="social-proof-pill">"ETH Bangkok"</span>
+                    <span class="social-proof-pill">"Devfolio"</span>
+                    <span class="social-proof-pill">"Builderz"</span>
+                    <span class="social-proof-pill">"Web3 CLI"</span>
+                </div>
+            </section>
+
             // ===== Problem / Features =====
             <section id="features" style="max-width:960px;margin:0 auto;padding:3rem 1.5rem 4rem;">
                 <div style="text-align:center;margin-bottom:2.5rem;">
@@ -213,35 +225,60 @@ pub fn Landing() -> impl IntoView {
             </section>
 
             // ===== Footer =====
-            <footer style="border-top:1px solid var(--border);margin-top:2rem;">
-                <div style="max-width:960px;margin:0 auto;padding:2rem 1.5rem;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:1rem;">
-                    <div style="display:flex;align-items:center;gap:0.5rem;font-size:0.85rem;color:var(--text-muted);">
-                        <span style="font-weight:700;background:linear-gradient(135deg,#818cf8,#6366f1);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">
+            <footer class="landing-footer">
+                <div class="landing-footer-grid">
+
+                    // Column 1 — Brand
+                    <div class="landing-footer-col">
+                        <span style="font-weight:800;font-size:1.1rem;background:linear-gradient(135deg,#818cf8 0%,#6366f1 40%,#a78bfa 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">
                             "BeThere"
                         </span>
-                        <span>"×"</span>
-                        <span>"Solana Thailand"</span>
+                        <div class="landing-footer-brand-tagline">
+                            "On-chain proof of attendance"
+                        </div>
+                        <div class="landing-footer-brand-tagline" style="margin-top:0.5rem;">
+                            "Built with "
+                            <span style="color:var(--text-secondary);">"♥"</span>
+                            " by Solana Thailand"
+                        </div>
                     </div>
-                    <div style="display:flex;align-items:center;gap:1.25rem;">
-                        <a
-                            href="https://github.com/solana-thailand"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            style="color:var(--text-muted);font-size:0.8rem;text-decoration:none;transition:color 0.2s;"
-                        >
-                            "GitHub"
-                        </a>
-                        <span style="color:var(--text-muted);font-size:0.8rem;">
-                            "Powered by Solana"
-                        </span>
+
+                    // Column 2 — Product
+                    <div class="landing-footer-col">
+                        <h4>"Product"</h4>
+                        <a href="#features">"Features"</a>
+                        <a href="#how-it-works">"How It Works"</a>
+                        <A href="/login">"Claim NFT"</A>
                     </div>
+
+                    // Column 3 — Resources
+                    <div class="landing-footer-col">
+                        <h4>"Resources"</h4>
+                        <a href="https://github.com/solana-thailand" target="_blank" rel="noopener noreferrer">"GitHub"</a>
+                        <a href="https://docs.solana.com" target="_blank" rel="noopener noreferrer">"Solana Docs"</a>
+                        <a href="mailto:dev@solana.org">"Support"</a>
+                    </div>
+
+                    // Column 4 — Legal
+                    <div class="landing-footer-col">
+                        <h4>"Legal"</h4>
+                        <a href="#">"Privacy Policy"</a>
+                        <a href="#">"Terms of Service"</a>
+                    </div>
+
                 </div>
-                // Brand line
-                <div class="landing-footer-brand">
-                    <span class="accent">"BeThere"</span>
-                    " — On-chain proof of attendance. Built with "
-                    <span style="color:var(--text-secondary);">"♥"</span>
-                    " by Solana Thailand."
+
+                // Bottom row
+                <div class="landing-footer-bottom">
+                    <span class="landing-footer-copy">"© 2025 BeThere. All rights reserved."</span>
+                    <span class="landing-footer-powered">
+                        <svg viewBox="0 0 397 311" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1l62.7-62.7z" fill="currentColor"/>
+                            <path d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z" fill="currentColor"/>
+                            <path d="M333.1 120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1l62.7 62.7c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z" fill="currentColor"/>
+                        </svg>
+                        "Powered by Solana"
+                    </span>
                 </div>
             </footer>
 

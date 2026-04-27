@@ -714,10 +714,15 @@ pub fn Claim() -> impl IntoView {
                             let share_url = asset_url.clone();
                             view! {
                                 <div class="claim-success">
-                                    <div class="success-check">
-                                        <svg viewBox="0 0 24 24">
-                                            <polyline points="20 6 9 17 4 12"></polyline>
-                                        </svg>
+                                    <div class="claim-success-rings">
+                                        <div class="claim-success-ring claim-success-ring-3"></div>
+                                        <div class="claim-success-ring claim-success-ring-2"></div>
+                                        <div class="claim-success-ring claim-success-ring-1"></div>
+                                        <div class="success-check">
+                                            <svg viewBox="0 0 24 24">
+                                                <polyline points="20 6 9 17 4 12"></polyline>
+                                            </svg>
+                                        </div>
                                     </div>
                                     <h2>"NFT Claimed"</h2>
 

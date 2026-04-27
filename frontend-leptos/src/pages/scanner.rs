@@ -140,6 +140,7 @@ pub fn Scanner() -> impl IntoView {
     let (camera_error, set_camera_error) = signal(None::<String>);
     // Incremented on reset to restart the polling loop without leaving the tab.
     let (scan_round, set_scan_round) = signal(0u32);
+    let (flash_enabled, set_flash_enabled) = signal(true);
 
     // Stop camera when component unmounts (e.g. navigating to /admin).
     // Without this, window.__scannerActive remains true and startCamera()
@@ -358,7 +359,7 @@ pub fn Scanner() -> impl IntoView {
 
             // Success flash animation
             <Show
-                when=move || matches!(check_in_state.get(), CheckInState::Success(_))
+                when=move || matches!(check_in_state.get(), CheckInState::Success(_)) && flash_enabled.get()
                 fallback=|| view! { <div></div> }
             >
                 <div class="scanner-success-flash"></div>
@@ -393,12 +394,23 @@ pub fn Scanner() -> impl IntoView {
                             <div class="scanner-bottom-session-title">"Scanner"</div>
                             <div class="scanner-bottom-session-sub">"Ready to scan"</div>
                         </div>
-                        <button
-                            class="scanner-manual-toggle"
-                            on:click=move |_| set_manual_mode.update(|m| *m = !*m)
-                        >
-                            {move || if manual_mode.get() { "Cancel" } else { "Enter manually" }}
-                        </button>
+                        <div style="display:flex;gap:0.5rem;align-items:center;">
+                            <button
+                                class="scanner-manual-toggle"
+                                on:click=move |_| set_manual_mode.update(|m| *m = !*m)
+                            >
+                                {move || if manual_mode.get() { "Cancel" } else { "Enter manually" }}
+                            </button>
+                            <button
+                                class="scanner-manual-toggle"
+                                style=move || if flash_enabled.get() { "color:var(--accent);" } else { "" }
+                                on:click=move |_| set_flash_enabled.update(|e| *e = !*e)
+                                title="Toggle success flash"
+                            >
+                                "⚡"
+                                {move || if flash_enabled.get() { " Flash On" } else { " Flash Off" }}
+                            </button>
+                        </div>
                     </div>
                     // Manual input form (toggled inline)
                     <Show

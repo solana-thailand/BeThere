@@ -239,7 +239,61 @@ pub fn Admin() -> impl IntoView {
                 on_sign_out=handle_sign_out
             />
 
-            <div class="page-container">
+            <div class="admin-layout">
+                // Sidebar
+                <aside class="admin-sidebar">
+                    <div class="admin-sidebar-section">
+                        <div class="admin-sidebar-heading">"Dashboard"</div>
+                    </div>
+                    <div class="admin-sidebar-section">
+                        <div class="admin-sidebar-heading">"Attendance"</div>
+                        <button
+                            class="admin-sidebar-item"
+                            class:active=move || active_tab.get() == DashboardTab::InPerson
+                            on:click=move |_| set_active_tab.set(DashboardTab::InPerson)
+                        >
+                            <span class="admin-sidebar-icon">"👥"</span>
+                            "In-Person"
+                        </button>
+                        <button
+                            class="admin-sidebar-item"
+                            class:active=move || active_tab.get() == DashboardTab::Online
+                            on:click=move |_| set_active_tab.set(DashboardTab::Online)
+                        >
+                            <span class="admin-sidebar-icon">"🌐"</span>
+                            "Online"
+                        </button>
+                    </div>
+                    // Quick stats at bottom of sidebar
+                    <div class="admin-sidebar-stats">
+                        {move || {
+                            let attendees_list = attendees.get();
+                            let tab_attendees: Vec<_> = attendees_list.iter()
+                                .filter(|a| active_tab.get().matches(&a.participation_type))
+                                .collect();
+                            let total = tab_attendees.len();
+                            let checked_in = tab_attendees.iter().filter(|a| a.checked_in_at.is_some()).count();
+                            let remaining = total.saturating_sub(checked_in);
+                            view! {
+                                <div class="admin-sidebar-stat">
+                                    <span class="admin-sidebar-stat-value">{total}</span>
+                                    <span class="admin-sidebar-stat-label">"Total"</span>
+                                </div>
+                                <div class="admin-sidebar-stat">
+                                    <span class="admin-sidebar-stat-value" style="color:var(--success);">{checked_in}</span>
+                                    <span class="admin-sidebar-stat-label">"Checked In"</span>
+                                </div>
+                                <div class="admin-sidebar-stat">
+                                    <span class="admin-sidebar-stat-value" style="color:var(--warning);">{remaining}</span>
+                                    <span class="admin-sidebar-stat-label">"Remaining"</span>
+                                </div>
+                            }.into_any()
+                        }}
+                    </div>
+                </aside>
+
+                // Content area
+                <main class="admin-content">
                 // Loading state
                 <Show when=show_loading fallback=|| view! { <div></div> }>
                     <div class="page-loading">
@@ -286,24 +340,6 @@ pub fn Admin() -> impl IntoView {
                             </span>
                         </div>
                     </Show>
-
-                    // Tab switcher
-                    <div class="tabs">
-                        <button
-                            class="tab"
-                            class:active=move || active_tab.get() == DashboardTab::InPerson
-                            on:click=move |_| set_active_tab.set(DashboardTab::InPerson)
-                        >
-                            "In-Person"
-                        </button>
-                        <button
-                            class="tab"
-                            class:active=move || active_tab.get() == DashboardTab::Online
-                            on:click=move |_| set_active_tab.set(DashboardTab::Online)
-                        >
-                            "Online"
-                        </button>
-                    </div>
 
                     // Stats cards (tab-aware)
                     {move || render_stats(&stats.get(), &attendees.get(), active_tab.get())}
@@ -389,6 +425,7 @@ pub fn Admin() -> impl IntoView {
                         </div>
                     </div>
                 </Show>
+                </main>
             </div>
 
             <components::Toast toast_signal=toast />
