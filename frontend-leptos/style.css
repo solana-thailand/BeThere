@@ -6,11 +6,11 @@
 }
 
 :root {
-    --bg-primary: #0f0f0f;
-    --bg-secondary: #1a1a1a;
-    --bg-tertiary: #242424;
-    --bg-card: #1e1e1e;
-    --bg-hover: #2a2a2a;
+    --bg-primary: #13131b;
+    --bg-secondary: #1a1a24;
+    --bg-tertiary: #242430;
+    --bg-card: #1e1e2a;
+    --bg-hover: #2a2a38;
     --text-primary: #e0e0e0;
     --text-secondary: #999;
     --text-muted: #666;
@@ -34,11 +34,28 @@
     --shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
+html {
+    scroll-behavior: smooth;
+}
+
+/* Scroll-margin for anchored sections so sticky nav doesn't cover them */
+#features,
+#how-it-works,
+#organizers {
+    scroll-margin-top: 80px;
+}
+
 body {
     font-family:
-        -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
-        Arial, sans-serif;
-    background: linear-gradient(170deg, #0f0f0f 0%, #111118 40%, #0d0d14 100%);
+        "Inter",
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        Roboto,
+        "Helvetica Neue",
+        Arial,
+        sans-serif;
+    background: linear-gradient(170deg, #13131b 0%, #14141e 40%, #111118 100%);
     color: var(--text-primary);
     min-height: 100vh;
     line-height: 1.5;
@@ -194,7 +211,7 @@ h3 {
         background 0.2s,
         transform 0.15s,
         box-shadow 0.2s,
-        opacity 0.2s;
+        opacity 0.15s;
     text-decoration: none;
     white-space: nowrap;
 }
@@ -262,6 +279,11 @@ h3 {
     box-shadow: 0 4px 20px rgba(99, 102, 241, 0.35);
 }
 
+.btn:active {
+    transform: scale(0.97);
+    opacity: 0.9;
+}
+
 .btn-success {
     background: var(--success);
     color: #fff;
@@ -308,11 +330,14 @@ h3 {
     margin-bottom: 1rem;
     transition:
         border-color 0.2s,
-        box-shadow 0.2s;
+        box-shadow 0.2s,
+        transform 0.15s;
 }
 
 .card:hover {
     border-color: #333;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+    transform: translateY(-1px);
 }
 
 .card-header {
@@ -2604,10 +2629,17 @@ nav a.active {
 }
 
 .admin-sidebar-icon {
-    font-size: 1rem;
     flex-shrink: 0;
-    width: 24px;
-    text-align: center;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.admin-sidebar-icon svg {
+    width: 100%;
+    height: 100%;
 }
 
 .admin-sidebar-stats {

@@ -72,7 +72,7 @@ pub fn Landing() -> impl IntoView {
                 <div class="social-proof-label">"Alpha · Building with"</div>
                 <div class="social-proof-logos">
                     <a
-                        href="https://github.com/solana-developer-thailand"
+                        href="https://github.com/solana-thailand"
                         target="_blank"
                         rel="noopener noreferrer"
                         class="social-proof-pill"
@@ -203,7 +203,12 @@ pub fn Landing() -> impl IntoView {
 
                     // Organizers
                     <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:2rem;">
-                        <div style="font-size:1.5rem;margin-bottom:0.75rem;">"🎪"</div>
+                        <div class="landing-svg-icon" style="width:36px;height:36px;margin-bottom:0.75rem;background:rgba(99,102,241,0.12);">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path>
+                                <line x1="4" y1="22" x2="4" y2="15"></line>
+                            </svg>
+                        </div>
                         <h2 style="font-size:1.25rem;font-weight:700;color:#fff;margin-bottom:0.5rem;">
                             "For Organizers"
                         </h2>
@@ -217,7 +222,11 @@ pub fn Landing() -> impl IntoView {
 
                     // Attendees
                     <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:2rem;">
-                        <div style="font-size:1.5rem;margin-bottom:0.75rem;">"✨"</div>
+                        <div class="landing-svg-icon" style="width:36px;height:36px;margin-bottom:0.75rem;background:rgba(167,139,250,0.12);">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                            </svg>
+                        </div>
                         <h2 style="font-size:1.25rem;font-weight:700;color:#fff;margin-bottom:0.5rem;">
                             "For Attendees"
                         </h2>
@@ -262,8 +271,9 @@ pub fn Landing() -> impl IntoView {
                     // Column 3 — Community
                     <div class="landing-footer-col">
                         <h4>"Community"</h4>
-                        <a href="https://github.com/solana-developer-thailand" target="_blank" rel="noopener noreferrer">"GitHub"</a>
-                        <a href="https://github.com/solana-developer-thailand/event-checkin" target="_blank" rel="noopener noreferrer">"Source Code"</a>
+                        <a href="https://x.com/ozoneRatchapon" target="_blank" rel="noopener noreferrer">"X / Twitter"</a>
+                        <a href="https://github.com/solana-thailand" target="_blank" rel="noopener noreferrer">"GitHub"</a>
+                        <a href="https://github.com/solana-thailand/BeThere" target="_blank" rel="noopener noreferrer">"Source Code"</a>
                     </div>
 
                 </div>
