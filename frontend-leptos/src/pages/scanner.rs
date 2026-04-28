@@ -572,6 +572,36 @@ fn build_claim_url(token: &str) -> String {
     format!("{origin}/claim/{token}")
 }
 
+// ===== State View Helper Components =====
+
+/// QR code card for claim URLs — displayed on Success and AlreadyCheckedIn.
+#[component]
+fn ClaimQrCard(qr_src: String, claim_url: String, label: &'static str) -> impl IntoView {
+    view! {
+        <div class="scanner-qr-wrapper">
+            <div class="scanner-qr-card">
+                <p class="scanner-qr-label">{label}</p>
+                <img src=qr_src alt="Claim URL QR Code" class="scanner-qr-img" />
+                <button class="btn btn-primary btn-sm scanner-qr-copy-btn"
+                    on:click=move |_| { let _ = copy_to_clipboard_js(&claim_url); }>
+                    "📋 Copy Link"
+                </button>
+            </div>
+        </div>
+    }
+}
+
+/// Attendee name + email info block.
+#[component]
+fn AttendeeInfoCard(name: String, email: String) -> impl IntoView {
+    view! {
+        <div class="scanner-attendee-info">
+            <p class="scanner-attendee-name">{name}</p>
+            <p class="scanner-attendee-email">{email}</p>
+        </div>
+    }
+}
+
 // ===== State View Rendering =====
 
 /// Render the current check-in state as a view.
@@ -583,8 +613,8 @@ fn render_check_in_state(
     match state {
         CheckInState::Idle => view! { <div></div> }.into_any(),
         CheckInState::LookingUp => view! {
-            <div class="text-center">
-                <div class="page-loading" style="min-height:auto;padding:1rem;">
+            <div class="scanner-state-loading">
+                <div class="page-loading">
                     <span class="spinner spinner-lg"></span>
                     <span>"Looking up attendee..."</span>
                 </div>
@@ -599,7 +629,7 @@ fn render_check_in_state(
             let badge = utils::get_participation_badge(&participation);
             view! {
                 <div>
-                    <div class="text-center mb-2">
+                    <div class="scanner-state-header">
                         <div class="success-check">
                             <svg viewBox="0 0 24 24">
                                 <polyline points="20 6 9 17 4 12"></polyline>
@@ -607,28 +637,17 @@ fn render_check_in_state(
                         </div>
                         <h2>"Ready to Check In"</h2>
                     </div>
-                    <div style="background:rgba(255,255,255,0.05);border-radius:var(--radius);padding:0.75rem;">
-                        <p style="font-weight:600;color:#fff;font-size:1rem;margin-bottom:0.25rem;">
-                            {name}
-                        </p>
-                        <p style="color:var(--text-secondary);font-size:0.85rem;margin-bottom:0.25rem;">
-                            {email}
-                        </p>
-                        <div style="display:flex;gap:0.5rem;margin-top:0.5rem;">
-                            <span class="badge badge-info badge-pill">{ticket}</span>
-                            <span class=format!("badge badge-pill {}", badge.css_class)>{badge.label}</span>
-                        </div>
+                    <AttendeeInfoCard name=name email=email />
+                    <div class="scanner-attendee-badges">
+                        <span class="badge badge-info badge-pill">{ticket}</span>
+                        <span class=format!("badge badge-pill {}", badge.css_class)>{badge.label}</span>
                     </div>
-                    <div style="display:flex;gap:0.5rem;margin-top:1rem;">
+                    <div class="scanner-actions">
                         <button class="btn btn-success btn-block" on:click=on_check_in>
                             "✓ Confirm Check-In"
                         </button>
                     </div>
-                    <button
-                        class="btn btn-outline btn-block"
-                        style="margin-top:0.5rem;"
-                        on:click=on_reset
-                    >
+                    <button class="btn btn-outline btn-block" style="margin-top:0.5rem;" on:click=on_reset>
                         "Cancel"
                     </button>
                 </div>
@@ -654,51 +673,28 @@ fn render_check_in_state(
             let claim_url = data.attendee.claim_token.as_ref().map(|t| build_claim_url(t));
             let qr_data_url = claim_url
                 .as_ref()
-                .and_then(|url| generate_qr_data_url(url, 200));
+                .and_then(|url| generate_qr_data_url(url, 240));
             let claim_url_for_display = claim_url.clone();
             view! {
                 <div>
                     <div class="result-warning">
                         <h2>"Already Checked In"</h2>
-                        <div class="result-details">
-                            <p style="font-weight:600;color:#fff;">{name}</p>
-                            <p>{email}</p>
-                            <p style="margin-top:0.5rem;">
-                                "Checked in at: "
-                                {formatted}{by_suffix}
-                            </p>
-                        </div>
+                        <AttendeeInfoCard name=name email=email />
+                        <p class="scanner-result-detail-line">
+                            "Checked in at: "{formatted}{by_suffix}
+                        </p>
                     </div>
 
                     // Claim URL QR code — re-show in case staff needs to display it again
                     {move || {
                         match (&qr_data_url, &claim_url_for_display) {
                             (Some(img_src), Some(url)) => {
-                                let url_for_copy = url.clone();
                                 view! {
-                                    <div style="margin-top:1.25rem;text-align:center;">
-                                        <div style="display:flex;flex-direction:column;align-items:center;background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:1rem;">
-                                            <p style="font-size:0.8rem;color:var(--text-secondary);margin-bottom:0.75rem;">
-                                                "Claim QR (show to attendee):"
-                                            </p>
-                                            <img
-                                                src=img_src
-                                                alt="Claim URL QR Code"
-                                                style="display:block;width:200px;height:200px;border-radius:8px;margin:0 auto;"
-                                            />
-                                            <div style="margin-top:0.75rem;display:flex;gap:0.5rem;justify-content:center;width:100%;">
-                                                <button
-                                                    class="btn btn-primary btn-sm"
-                                                    style="flex:1;"
-                                                    on:click=move |_| {
-                                                        let _ = copy_to_clipboard_js(&url_for_copy);
-                                                    }
-                                                >
-                                                    "📋 Copy Link"
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </div>
+                                    <ClaimQrCard
+                                        qr_src=img_src.clone()
+                                        claim_url=url.clone()
+                                        label="Claim QR (show to attendee):"
+                                    />
                                 }
                                     .into_any()
                             }
@@ -706,11 +702,7 @@ fn render_check_in_state(
                         }
                     }}
 
-                    <button
-                        class="btn btn-outline btn-block"
-                        style="margin-top:1rem;"
-                        on:click=on_reset
-                    >
+                    <button class="btn btn-outline btn-block" style="margin-top:1rem;" on:click=on_reset>
                         "Scan Another"
                     </button>
                 </div>
@@ -725,20 +717,13 @@ fn render_check_in_state(
                 <div>
                     <div class="result-error">
                         <h2>"Not Approved"</h2>
-                        <div class="result-details">
-                            <p style="font-weight:600;color:#fff;">{name}</p>
-                            <p>{email}</p>
-                            <p style="margin-top:0.5rem;">
-                                "Status: "
-                                <span style="color:var(--warning);">{status}</span>
-                            </p>
-                        </div>
+                        <AttendeeInfoCard name=name email=email />
+                        <p class="scanner-result-detail-line">
+                            "Status: "
+                            <span style="color:var(--warning);">{status}</span>
+                        </p>
                     </div>
-                    <button
-                        class="btn btn-outline btn-block"
-                        style="margin-top:1rem;"
-                        on:click=on_reset
-                    >
+                    <button class="btn btn-outline btn-block" style="margin-top:1rem;" on:click=on_reset>
                         "Scan Another"
                     </button>
                 </div>
@@ -753,19 +738,12 @@ fn render_check_in_state(
                 <div>
                     <div class="result-warning">
                         <h2>"Not In-Person"</h2>
-                        <div class="result-details">
-                            <p style="font-weight:600;color:#fff;">{name}</p>
-                            <p>{email}</p>
-                            <div style="display:flex;gap:0.5rem;margin-top:0.5rem;">
-                                <span class=format!("badge badge-pill {}", badge.css_class)>{badge.label}</span>
-                            </div>
+                        <AttendeeInfoCard name=name email=email />
+                        <div class="scanner-attendee-badges">
+                            <span class=format!("badge badge-pill {}", badge.css_class)>{badge.label}</span>
                         </div>
                     </div>
-                    <button
-                        class="btn btn-outline btn-block"
-                        style="margin-top:1rem;"
-                        on:click=on_reset
-                    >
+                    <button class="btn btn-outline btn-block" style="margin-top:1rem;" on:click=on_reset>
                         "Scan Another"
                     </button>
                 </div>
@@ -791,8 +769,8 @@ fn render_check_in_state(
         }
         .into_any(),
         CheckInState::CheckingIn { name, .. } => view! {
-            <div class="text-center">
-                <div class="page-loading" style="min-height:auto;padding:1rem;">
+            <div class="scanner-state-loading">
+                <div class="page-loading">
                     <span class="spinner spinner-lg"></span>
                     <span>"Checking in "{name}"..."</span>
                 </div>
@@ -814,7 +792,7 @@ fn render_check_in_state(
             let claim_url = result.claim_token.as_ref().map(|t| build_claim_url(t));
             let qr_data_url = claim_url
                 .as_ref()
-                .and_then(|url| generate_qr_data_url(url, 200));
+                .and_then(|url| generate_qr_data_url(url, 240));
             let claim_url_for_display = claim_url.clone();
             view! {
                 <div>
@@ -826,7 +804,7 @@ fn render_check_in_state(
                         </div>
                         <h2 class="claim-success-title">"Checked In!"</h2>
                         <div class="result-details">
-                            <p style="font-weight:600;color:#fff;">{name}</p>
+                            <p class="scanner-attendee-name">{name}</p>
                             <p>"Checked in at: "{formatted}{by_suffix}</p>
                         </div>
                     </div>
@@ -835,31 +813,12 @@ fn render_check_in_state(
                     {move || {
                         match (&qr_data_url, &claim_url_for_display) {
                             (Some(img_src), Some(url)) => {
-                                let url_for_copy = url.clone();
                                 view! {
-                                    <div style="margin-top:1.25rem;text-align:center;">
-                                        <div style="display:flex;flex-direction:column;align-items:center;background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:1rem;">
-                                            <p style="font-size:0.8rem;color:var(--text-secondary);margin-bottom:0.75rem;">
-                                                "Show this QR to the attendee to claim their NFT:"
-                                            </p>
-                                            <img
-                                                src=img_src
-                                                alt="Claim URL QR Code"
-                                                style="display:block;width:200px;height:200px;border-radius:8px;margin:0 auto;"
-                                            />
-                                            <div style="margin-top:0.75rem;display:flex;gap:0.5rem;justify-content:center;width:100%;">
-                                                <button
-                                                    class="btn btn-primary btn-sm"
-                                                    style="flex:1;"
-                                                    on:click=move |_| {
-                                                        let _ = copy_to_clipboard_js(&url_for_copy);
-                                                    }
-                                                >
-                                                    "📋 Copy Link"
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </div>
+                                    <ClaimQrCard
+                                        qr_src=img_src.clone()
+                                        claim_url=url.clone()
+                                        label="Show this QR to the attendee to claim their NFT:"
+                                    />
                                 }
                                     .into_any()
                             }
@@ -867,11 +826,7 @@ fn render_check_in_state(
                         }
                     }}
 
-                    <button
-                        class="btn btn-success btn-block"
-                        style="margin-top:1rem;"
-                        on:click=on_reset
-                    >
+                    <button class="btn btn-success btn-block" style="margin-top:1rem;" on:click=on_reset>
                         "Scan Next"
                     </button>
                 </div>
