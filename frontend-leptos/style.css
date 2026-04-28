@@ -1195,6 +1195,8 @@ nav a.active {
 
 /* ===== Claim Page: Wallet Input ===== */
 .claim-wallet-input {
+    flex: 1;
+    min-width: 0;
     width: 100%;
     padding: 0.75rem 0.85rem;
     background: var(--bg-secondary);
@@ -1314,6 +1316,160 @@ nav a.active {
     opacity: 0.4;
     cursor: not-allowed;
     box-shadow: none;
+}
+
+/* ===== Claim Page: Component Styles ===== */
+
+/* Main claim container — centered column layout */
+.claim-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+/* Claim state wrapper — full width within center-page */
+.claim-state-full {
+    width: 100%;
+}
+
+/* Shimmer skeleton row — avatar + text lines */
+.claim-shimmer-row {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+/* Shimmer inner column — text line placeholders */
+.claim-shimmer-col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+/* Shimmer NFT square */
+.claim-shimmer-nft {
+    width: 72px;
+    height: 72px;
+    border-radius: 12px;
+    flex-shrink: 0;
+}
+
+/* Shimmer input bar */
+.claim-shimmer-input {
+    width: 100%;
+    height: 42px;
+    border-radius: 8px;
+    margin-bottom: 0.5rem;
+}
+
+/* Wallet label */
+.claim-wallet-label {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    display: block;
+    margin-bottom: 0.5rem;
+}
+
+/* Wallet input row — flex for input + paste button */
+.claim-wallet-row {
+    display: flex;
+    gap: 0.5rem;
+}
+
+/* Wallet hint text */
+.claim-wallet-hint {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 0.5rem;
+}
+
+/* Minting state container */
+.claim-minting {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    padding: 1.5rem 0;
+}
+
+/* Minting spinner wrapper */
+.claim-minting-spinner {
+    position: relative;
+    width: 64px;
+    height: 64px;
+}
+
+/* Minting spinner shimmer bg */
+.claim-minting-shimmer {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    position: absolute;
+    top: 0;
+    left: 0;
+}
+
+/* Minting spinner position */
+.claim-minting-spinner .spinner-lg {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+
+/* Minting title */
+.claim-minting-title {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+/* Minting sub-detail */
+.claim-minting-detail {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+
+/* Minting timing hint */
+.claim-minting-hint {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+/* Share to X button */
+.claim-share-x {
+    border-color: #1da1f2;
+    color: #1da1f2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+}
+
+/* Share to X SVG icon */
+.claim-share-x svg {
+    width: 18px;
+    height: 18px;
+}
+
+/* Already claimed detail text */
+.claim-already-detail {
+    margin-top: 0.5rem;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+/* Pixelated SVG rendering for avatar */
+.claim-avatar-svg {
+    image-rendering: pixelated;
+}
+
+/* Retry button margin */
+.claim-retry-btn {
+    margin-top: 1rem;
 }
 
 /* ===== Claim Page: Success State ===== */

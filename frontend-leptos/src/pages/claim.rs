@@ -232,7 +232,7 @@ fn ParticipantAvatar(name: String) -> impl IntoView {
 
     view! {
         <div class="participant-avatar-pixel" style=format!("background:{bg_color};")>
-            <svg viewBox="0 0 8 8" width="56" height="56" style="image-rendering:pixelated;" inner_html=svg_cells></svg>
+            <svg viewBox="0 0 8 8" width="56" height="56" class="claim-avatar-svg" inner_html=svg_cells></svg>
         </div>
     }
 }
@@ -454,7 +454,7 @@ pub fn Claim() -> impl IntoView {
     view! {
         <div class="center-page">
             <Title text="Claim Your NFT — BeThere" />
-            <div class="container" style="display:flex;flex-direction:column;align-items:center;">
+            <div class="container claim-container">
                 // Brand header
                 <div class="brand-logo">"BeThere"</div>
                 <div class="brand-logo-sub">"Proof of Attendance"</div>
@@ -491,20 +491,20 @@ pub fn Claim() -> impl IntoView {
                         // ---- Loading ----
                         ClaimState::Loading => {
                             view! {
-                                <div style="width:100%;">
+                                <div class="claim-state-full">
                                     // Shimmer: welcome card (avatar + 2 text lines)
-                                    <div class="shimmer-card" style="display:flex;align-items:center;gap:1rem;margin-bottom:1rem;">
-                                        <div class="shimmer shimmer-avatar" style="flex-shrink:0;"></div>
-                                        <div style="flex:1;display:flex;flex-direction:column;gap:0.5rem;">
+                                    <div class="shimmer-card claim-shimmer-row">
+                                        <div class="shimmer shimmer-avatar"></div>
+                                        <div class="claim-shimmer-col">
                                             <div class="shimmer shimmer-line" style="width:60%;"></div>
                                             <div class="shimmer shimmer-line-sm" style="width:40%;"></div>
                                         </div>
                                     </div>
 
                                     // Shimmer: NFT preview card (square + 2 text lines)
-                                    <div class="shimmer-card" style="display:flex;align-items:center;gap:1rem;margin-bottom:1rem;">
-                                        <div class="shimmer" style="width:72px;height:72px;border-radius:12px;flex-shrink:0;"></div>
-                                        <div style="flex:1;display:flex;flex-direction:column;gap:0.5rem;">
+                                    <div class="shimmer-card claim-shimmer-row">
+                                        <div class="shimmer claim-shimmer-nft"></div>
+                                        <div class="claim-shimmer-col">
                                             <div class="shimmer shimmer-line" style="width:75%;"></div>
                                             <div class="shimmer shimmer-line-sm" style="width:50%;"></div>
                                         </div>
@@ -513,7 +513,7 @@ pub fn Claim() -> impl IntoView {
                                     // Shimmer: wallet input card (label + input bar + hint)
                                     <div class="shimmer-card" style="margin-bottom:1rem;">
                                         <div class="shimmer shimmer-line-sm" style="width:40%;margin-bottom:0.75rem;"></div>
-                                        <div class="shimmer shimmer-line" style="width:100%;height:42px;border-radius:8px;margin-bottom:0.5rem;"></div>
+                                        <div class="shimmer claim-shimmer-input"></div>
                                         <div class="shimmer shimmer-line-sm" style="width:55%;"></div>
                                     </div>
 
@@ -532,7 +532,7 @@ pub fn Claim() -> impl IntoView {
                                     <div class="result-details">
                                         <p>{escape_html(&msg)}</p>
                                     </div>
-                                    <a href="/" class="btn btn-outline mt-2" style="margin-top:1rem;">
+                                    <a href="/" class="btn btn-outline claim-retry-btn">
                                         "Go to Home"
                                     </a>
                                 </div>
@@ -544,7 +544,7 @@ pub fn Claim() -> impl IntoView {
                         ClaimState::NftComingSoon(data) => {
                             let checked_in_display = format_timestamp(&data.checked_in_at);
                             view! {
-                                <div style="width:100%;">
+                                <div class="claim-state-full">
                                     // Attendee welcome
                                     <div class="claim-welcome-card">
                                         <ParticipantAvatar name=data.name.clone() />
@@ -581,7 +581,7 @@ pub fn Claim() -> impl IntoView {
                             let locked_wallet = data.locked_wallet.clone();
                             let locked_wallet_hint = data.locked_wallet.clone();
                             view! {
-                                <div style="width:100%;">
+                                <div class="claim-state-full">
                                     // Attendee welcome
                                     <div class="claim-welcome-card">
                                         <ParticipantAvatar name=data.name.clone() />
@@ -594,7 +594,7 @@ pub fn Claim() -> impl IntoView {
 
                                     // Wallet input
                                     <div class="card">
-                                        <label style="font-size:0.9rem;font-weight:600;color:var(--text-primary);display:block;margin-bottom:0.5rem;">
+                                        <label class="claim-wallet-label">
                                             "Solana Wallet Address"
                                         </label>
                                         // Locked wallet pill badge — shown when pre-registered wallet exists
@@ -619,7 +619,7 @@ pub fn Claim() -> impl IntoView {
                                                 _ => view! { <div></div> }.into_any(),
                                             }
                                         }}
-                                        <div style="display:flex;gap:0.5rem;">
+                                        <div class="claim-wallet-row">
                                             <input
                                                 class="claim-wallet-input"
                                                 type="text"
@@ -629,7 +629,7 @@ pub fn Claim() -> impl IntoView {
                                                     let val = event_target_value(&ev);
                                                     set_wallet_input.set(val);
                                                 }
-                                                style="flex:1;min-width:0;"
+
                                             />
                                             <button
                                                 class="claim-paste-btn"
@@ -639,7 +639,7 @@ pub fn Claim() -> impl IntoView {
                                                 "Paste"
                                             </button>
                                         </div>
-                                        <p style="font-size:0.75rem;color:var(--text-muted);margin-top:0.5rem;">
+                                        <p class="claim-wallet-hint">
                                             {move || {
                                                 match &locked_wallet_hint {
                                                     Some(w) if !w.is_empty() => "Use the pre-filled wallet address to claim.".into_any(),
@@ -669,17 +669,17 @@ pub fn Claim() -> impl IntoView {
                         // ---- Minting in progress ----
                         ClaimState::Minting(data) => {
                             view! {
-                                <div style="width:100%;display:flex;flex-direction:column;align-items:center;gap:1rem;padding:1.5rem 0;">
+                                <div class="claim-minting">
                                     // Pulsing minting indicator
-                                    <div style="position:relative;width:64px;height:64px;">
-                                        <div class="shimmer" style="width:64px;height:64px;border-radius:50%;position:absolute;top:0;left:0;"></div>
-                                        <span class="spinner spinner-lg" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);"></span>
+                                    <div class="claim-minting-spinner">
+                                        <div class="shimmer claim-minting-shimmer"></div>
+                                        <span class="spinner spinner-lg"></span>
                                     </div>
-                                    <h3 style="color:var(--text-primary);font-weight:600;">"Minting your NFT..."</h3>
-                                    <p style="font-size:0.9rem;color:var(--text-secondary);">
+                                    <h3 class="claim-minting-title">"Minting your NFT..."</h3>
+                                    <p class="claim-minting-detail">
                                         "Minting for "{escape_html(&data.name)}
                                     </p>
-                                    <p style="font-size:0.8rem;color:var(--text-muted);">
+                                    <p class="claim-minting-hint">
                                         "This usually takes 3-5 seconds."
                                     </p>
                                 </div>
@@ -793,10 +793,9 @@ pub fn Claim() -> impl IntoView {
                                             href=share_to_x_url
                                             target="_blank"
                                             rel="noopener noreferrer"
-                                            class="btn btn-outline btn-block"
-                                            style="border-color:#1da1f2;color:#1da1f2;display:flex;align-items:center;justify-content:center;gap:0.5rem;"
+                                            class="btn btn-outline btn-block claim-share-x"
                                         >
-                                            <svg viewBox="0 0 24 24" fill="currentColor" style="width:18px;height:18px;">
+                                            <svg viewBox="0 0 24 24" fill="currentColor">
                                                 <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
                                             </svg>
                                             "Share to X"
@@ -823,7 +822,7 @@ pub fn Claim() -> impl IntoView {
                                             <strong>{escape_html(&data.name)}</strong>
                                             " — your NFT was claimed "{claimed_display}"."
                                         </p>
-                                        <p style="margin-top:0.5rem;font-size:0.85rem;color:var(--text-secondary);">
+                                        <p class="claim-already-detail">
                                             "Check your Solana wallet for the NFT badge."
                                         </p>
                                     </div>
@@ -841,8 +840,7 @@ pub fn Claim() -> impl IntoView {
                                         <p>{escape_html(&error)}</p>
                                     </div>
                                     <button
-                                        class="btn btn-primary mt-2"
-                                        style="margin-top:1rem;"
+                                        class="btn btn-primary claim-retry-btn"
                                         on:click=move |_| {
                                             set_state.set(ClaimState::Ready(data.clone()));
                                         }
