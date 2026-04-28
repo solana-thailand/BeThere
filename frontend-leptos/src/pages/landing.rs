@@ -169,11 +169,11 @@ pub fn Landing() -> impl IntoView {
                     "Commit. Show up."
                     <br />
                     <span style="background:linear-gradient(135deg,#818cf8,#6366f1,#a78bfa);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">
-                        "Get your SOL back."
+                        "Get your money back."
                     </span>
                 </h1>
                 <p style="font-size:1.1rem;color:var(--text-secondary);max-width:520px;margin:0 auto 2.25rem;line-height:1.6;">
-                    "Lock a SOL deposit to secure your spot. Show up, get refunded — plus an on-chain NFT as proof. Don't? Your deposit goes to the organizer. No more no-shows."
+                    "Put down a small deposit to reserve your spot. Show up, get every cent back — plus a digital badge you own forever. Don't show up? The organizer keeps your deposit. Simple."
                 </p>
                 <div style="display:flex;flex-wrap:wrap;gap:0.75rem;justify-content:center;">
                     <A href="/login" attr:class="btn btn-primary" attr:style="padding:0.85rem 2rem;font-size:1rem;">
@@ -282,10 +282,10 @@ pub fn Landing() -> impl IntoView {
                             "1"
                         </div>
                         <h3 style="font-size:1rem;font-weight:600;color:#fff;margin-bottom:0.5rem;">
-                            "Commit to Attend"
+                            "Put Down a Deposit"
                         </h3>
                         <p style="font-size:0.85rem;color:var(--text-secondary);line-height:1.5;">
-                            "Lock a small SOL deposit to reserve your spot. Your commitment is held in an on-chain escrow."
+                            "Reserve your spot with a small deposit. It's safely held until the event is over."
                         </p>
                     </div>
 
@@ -297,7 +297,7 @@ pub fn Landing() -> impl IntoView {
                             "Show Up & Scan"
                         </h3>
                         <p style="font-size:0.85rem;color:var(--text-secondary);line-height:1.5;">
-                            "Get scanned at the event. Check-in is verified on-chain — you proved you were there."
+                            "Get your QR scanned at the door. That's it — you're checked in and your deposit is marked for return."
                         </p>
                     </div>
 
@@ -306,10 +306,10 @@ pub fn Landing() -> impl IntoView {
                             "3"
                         </div>
                         <h3 style="font-size:1rem;font-weight:600;color:#fff;margin-bottom:0.5rem;">
-                            "Get Refunded + NFT"
+                            "Get Your Money Back + A Badge"
                         </h3>
                         <p style="font-size:0.85rem;color:var(--text-secondary);line-height:1.5;">
-                            "Your deposit auto-refunds to your wallet. Plus a compressed NFT — permanent, on-chain proof you attended."
+                            "Your deposit returns to your wallet automatically. You also get a digital badge — yours forever, proof you were there."
                         </p>
                     </div>
 
@@ -332,7 +332,7 @@ pub fn Landing() -> impl IntoView {
                             "For Organizers"
                         </h2>
                         <p style="font-size:0.9rem;color:var(--text-secondary);line-height:1.6;margin-bottom:1.5rem;">
-                            "Set up deposit-based events in minutes. No-shows forfeit their deposit — covering your costs. Staff scan QR codes with any phone. Real-time dashboard shows who's here."
+                            "Require a deposit to register. No-shows lose theirs — covering your costs. Staff scan QR codes with any phone. Real-time dashboard shows who showed up."
                         </p>
                         <A href="/login" attr:class="btn btn-primary">
                             "Start Your Event"
@@ -350,7 +350,7 @@ pub fn Landing() -> impl IntoView {
                             "For Attendees"
                         </h2>
                         <p style="font-size:0.9rem;color:var(--text-secondary);line-height:1.6;margin-bottom:1.5rem;">
-                            "Lock a small deposit, show up, get refunded. Keep the NFT as proof. Build an on-chain attendance portfolio across every event. Don't show up? You only lose your deposit."
+                            "Put down a small deposit, show up, get it all back. Keep the digital badge as proof. Collect badges from every event you attend. The only risk? Not showing up."
                         </p>
                         <a href="#how-it-works" class="btn btn-outline">
                             "Learn More"
@@ -367,7 +367,7 @@ pub fn Landing() -> impl IntoView {
                         "Ready to end no-shows?"
                     </h2>
                     <p style="font-size:0.95rem;color:var(--text-secondary);margin-bottom:1.5rem;line-height:1.6;">
-                        "Join the waitlist to bring deposit-based attendance to your next event."
+                        "Join the waitlist to bring deposit-backed events to your community."
                     </p>
                     <WaitlistForm />
                 </div>
@@ -397,7 +397,7 @@ pub fn Landing() -> impl IntoView {
                         <h4>"Product"</h4>
                         <a href="#features">"Features"</a>
                         <a href="#how-it-works">"How It Works"</a>
-                        <A href="/login">"Claim NFT"</A>
+                        <A href="/login">"Claim Badge"</A>
                     </div>
 
                     // Column 3 — Community
