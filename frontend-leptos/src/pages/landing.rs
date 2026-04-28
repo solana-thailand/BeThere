@@ -166,14 +166,14 @@ pub fn Landing() -> impl IntoView {
                 </div>
 
                 <h1 style="font-size:clamp(1.75rem,5vw,2.75rem);font-weight:800;line-height:1.15;margin-bottom:1.25rem;color:#fff;">
-                    "Check in. Mint."
+                    "Commit. Show up."
                     <br />
                     <span style="background:linear-gradient(135deg,#818cf8,#6366f1,#a78bfa);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">
-                        "Prove you were there."
+                        "Get your SOL back."
                     </span>
                 </h1>
                 <p style="font-size:1.1rem;color:var(--text-secondary);max-width:520px;margin:0 auto 2.25rem;line-height:1.6;">
-                    "Solana-powered event check-ins with compressed NFTs as proof of attendance. No more lost wristbands. No more forgotten spreadsheets."
+                    "Lock a SOL deposit to secure your spot. Show up, get refunded — plus an on-chain NFT as proof. Don't? Your deposit goes to the organizer. No more no-shows."
                 </p>
                 <div style="display:flex;flex-wrap:wrap;gap:0.75rem;justify-content:center;">
                     <A href="/login" attr:class="btn btn-primary" attr:style="padding:0.85rem 2rem;font-size:1rem;">
@@ -209,10 +209,10 @@ pub fn Landing() -> impl IntoView {
             <section id="features" style="max-width:960px;margin:0 auto;padding:3rem 1.5rem 4rem;">
                 <div style="text-align:center;margin-bottom:2.5rem;">
                     <h2 style="font-size:1.5rem;font-weight:700;color:#fff;margin-bottom:0.5rem;">
-                        "Attendance tracking is broken"
+                        "Events have a no-show problem"
                     </h2>
                     <p style="color:var(--text-secondary);font-size:0.95rem;">
-                        "Paper gets lost. Spreadsheets get forgotten. Data stays siloed."
+                        "Up to 40% of registered attendees don't show up. Organizers pay for empty seats."
                     </p>
                 </div>
                 <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:1rem;">
@@ -255,10 +255,10 @@ pub fn Landing() -> impl IntoView {
                             </svg>
                         </div>
                         <h3 style="font-size:0.95rem;font-weight:600;color:#fff;margin-bottom:0.4rem;">
-                            "No lasting proof"
+                            "No-shows waste money"
                         </h3>
                         <p style="font-size:0.85rem;color:var(--text-secondary);line-height:1.5;">
-                            "Attendance should be permanent, verifiable, and yours to keep."
+                            "Registered attendees who don't show up cost organizers real money — food, swag, venue. There's no accountability."
                         </p>
                     </div>
 
@@ -282,10 +282,10 @@ pub fn Landing() -> impl IntoView {
                             "1"
                         </div>
                         <h3 style="font-size:1rem;font-weight:600;color:#fff;margin-bottom:0.5rem;">
-                            "Register Event"
+                            "Commit to Attend"
                         </h3>
                         <p style="font-size:0.85rem;color:var(--text-secondary);line-height:1.5;">
-                            "Organizer creates an event and gets a unique check-in page with QR codes."
+                            "Lock a small SOL deposit to reserve your spot. Your commitment is held in an on-chain escrow."
                         </p>
                     </div>
 
@@ -294,10 +294,10 @@ pub fn Landing() -> impl IntoView {
                             "2"
                         </div>
                         <h3 style="font-size:1rem;font-weight:600;color:#fff;margin-bottom:0.5rem;">
-                            "Scan & Check In"
+                            "Show Up & Scan"
                         </h3>
                         <p style="font-size:0.85rem;color:var(--text-secondary);line-height:1.5;">
-                            "Staff scans attendee QR codes — instant verification on Solana."
+                            "Get scanned at the event. Check-in is verified on-chain — you proved you were there."
                         </p>
                     </div>
 
@@ -306,10 +306,10 @@ pub fn Landing() -> impl IntoView {
                             "3"
                         </div>
                         <h3 style="font-size:1rem;font-weight:600;color:#fff;margin-bottom:0.5rem;">
-                            "Claim NFT"
+                            "Get Refunded + NFT"
                         </h3>
                         <p style="font-size:0.85rem;color:var(--text-secondary);line-height:1.5;">
-                            "Attendees claim a compressed NFT — permanent, verifiable proof of attendance."
+                            "Your deposit auto-refunds to your wallet. Plus a compressed NFT — permanent, on-chain proof you attended."
                         </p>
                     </div>
 
@@ -332,7 +332,7 @@ pub fn Landing() -> impl IntoView {
                             "For Organizers"
                         </h2>
                         <p style="font-size:0.9rem;color:var(--text-secondary);line-height:1.6;margin-bottom:1.5rem;">
-                            "Set up check-in in minutes. Staff scan QR codes with any phone. Real-time dashboard shows who's here. No app downloads, no custom hardware."
+                            "Set up deposit-based events in minutes. No-shows forfeit their deposit — covering your costs. Staff scan QR codes with any phone. Real-time dashboard shows who's here."
                         </p>
                         <A href="/login" attr:class="btn btn-primary">
                             "Start Your Event"
@@ -350,7 +350,7 @@ pub fn Landing() -> impl IntoView {
                             "For Attendees"
                         </h2>
                         <p style="font-size:0.9rem;color:var(--text-secondary);line-height:1.6;margin-bottom:1.5rem;">
-                            "Get checked in with a scan, then claim a compressed NFT as proof you were there. Build an on-chain attendance portfolio across every event you attend."
+                            "Lock a small deposit, show up, get refunded. Keep the NFT as proof. Build an on-chain attendance portfolio across every event. Don't show up? You only lose your deposit."
                         </p>
                         <a href="#how-it-works" class="btn btn-outline">
                             "Learn More"
@@ -364,10 +364,10 @@ pub fn Landing() -> impl IntoView {
             <section id="waitlist" style="max-width:960px;margin:0 auto;padding:3rem 1.5rem 4rem;">
                 <div style="text-align:center;max-width:480px;margin:0 auto;">
                     <h2 style="font-size:1.5rem;font-weight:700;color:#fff;margin-bottom:0.5rem;">
-                        "Want BeThere at your event?"
+                        "Ready to end no-shows?"
                     </h2>
                     <p style="font-size:0.95rem;color:var(--text-secondary);margin-bottom:1.5rem;line-height:1.6;">
-                        "Join the waitlist and we'll reach out when we're ready to onboard new events."
+                        "Join the waitlist to bring deposit-based attendance to your next event."
                     </p>
                     <WaitlistForm />
                 </div>
@@ -383,7 +383,7 @@ pub fn Landing() -> impl IntoView {
                             "BeThere"
                         </span>
                         <div class="landing-footer-brand-tagline">
-                            "On-chain proof of attendance"
+                            "Show up. Get refunded."
                         </div>
                         <div class="landing-footer-brand-tagline" style="margin-top:0.5rem;">
                             "Built with "
