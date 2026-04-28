@@ -115,19 +115,26 @@ pub fn AppHeader(
     view! {
         <header class="header">
             <div class="header-inner">
-                <span class="header-title">{title}</span>
-                <div style="display:flex;align-items:center;gap:0.75rem;">
-                    // Staff ↔ Admin navigation — admin link only shown for admin role
-                    <nav style="display:flex;gap:0.25rem;">
-                        <A href="/staff" attr:class="btn btn-outline btn-sm">
-                            "📷 Scanner"
+                // Left: Brand + page title
+                <div class="header-brand">
+                    <span class="header-logo">"BeThere"</span>
+                    <span class="header-page-title">{title}</span>
+                </div>
+
+                // Right: Nav + User + Sign out
+                <div class="header-actions">
+                    <nav class="header-nav">
+                        <A href="/staff" attr:class="header-nav-link" attr:title="Scanner">
+                            "📷"
+                            <span class="header-nav-label">"Scanner"</span>
                         </A>
                         {move || {
                             let role = user_role.get();
                             if is_admin_role(&role) {
                                 view! {
-                                    <A href="/admin" attr:class="btn btn-outline btn-sm">
-                                        "📊 Admin"
+                                    <A href="/admin" attr:class="header-nav-link" attr:title="Admin">
+                                        "📊"
+                                        <span class="header-nav-label">"Admin"</span>
                                     </A>
                                 }
                                     .into_any()
@@ -136,9 +143,12 @@ pub fn AppHeader(
                             }
                         }}
                     </nav>
-                    <span class="header-user">{move || user_email.get()}</span>
-                    <button class="btn btn-outline btn-sm" on:click=on_sign_out>
-                        "Sign Out"
+                    <div class="header-user-avatar" title=move || user_email.get()>
+                        {move || user_email.get().chars().next().unwrap_or('?').to_uppercase().to_string()}
+                    </div>
+                    <button class="btn btn-outline btn-sm header-sign-out" on:click=on_sign_out>
+                        <span class="header-sign-out-icon">"↗"</span>
+                        <span class="header-sign-out-label">"Sign Out"</span>
                     </button>
                 </div>
             </div>

@@ -199,9 +199,9 @@ pub fn Landing() -> impl IntoView {
                     >
                         "Solana Developer Thailand"
                     </a>
-                    <A href="/login" attr:class="social-proof-pill" attr:style="text-decoration:none;color:var(--accent);border-color:rgba(99,102,241,0.4);cursor:pointer;">
+                    <a href="#waitlist" class="social-proof-pill" style="text-decoration:none;color:var(--accent);border-color:rgba(99,102,241,0.4);cursor:pointer;">
                         "Want to join? → Get in touch"
-                    </A>
+                    </a>
                 </div>
             </section>
 
@@ -361,7 +361,7 @@ pub fn Landing() -> impl IntoView {
             </section>
 
             // ===== Waitlist =====
-            <section style="max-width:960px;margin:0 auto;padding:3rem 1.5rem 4rem;">
+            <section id="waitlist" style="max-width:960px;margin:0 auto;padding:3rem 1.5rem 4rem;">
                 <div style="text-align:center;max-width:480px;margin:0 auto;">
                     <h2 style="font-size:1.5rem;font-weight:700;color:#fff;margin-bottom:0.5rem;">
                         "Want BeThere at your event?"

@@ -677,16 +677,16 @@ fn render_check_in_state(
                                 let url_for_copy = url.clone();
                                 view! {
                                     <div style="margin-top:1.25rem;text-align:center;">
-                                        <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:1rem;">
+                                        <div style="display:flex;flex-direction:column;align-items:center;background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:1rem;">
                                             <p style="font-size:0.8rem;color:var(--text-secondary);margin-bottom:0.75rem;">
                                                 "Claim QR (show to attendee):"
                                             </p>
                                             <img
                                                 src=img_src
                                                 alt="Claim URL QR Code"
-                                                style="width:200px;height:200px;border-radius:8px;"
+                                                style="display:block;width:200px;height:200px;border-radius:8px;margin:0 auto;"
                                             />
-                                            <div style="margin-top:0.75rem;display:flex;gap:0.5rem;">
+                                            <div style="margin-top:0.75rem;display:flex;gap:0.5rem;justify-content:center;width:100%;">
                                                 <button
                                                     class="btn btn-primary btn-sm"
                                                     style="flex:1;"
@@ -838,16 +838,16 @@ fn render_check_in_state(
                                 let url_for_copy = url.clone();
                                 view! {
                                     <div style="margin-top:1.25rem;text-align:center;">
-                                        <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:1rem;">
+                                        <div style="display:flex;flex-direction:column;align-items:center;background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:1rem;">
                                             <p style="font-size:0.8rem;color:var(--text-secondary);margin-bottom:0.75rem;">
                                                 "Show this QR to the attendee to claim their NFT:"
                                             </p>
                                             <img
                                                 src=img_src
                                                 alt="Claim URL QR Code"
-                                                style="width:200px;height:200px;border-radius:8px;"
+                                                style="display:block;width:200px;height:200px;border-radius:8px;margin:0 auto;"
                                             />
-                                            <div style="margin-top:0.75rem;display:flex;gap:0.5rem;">
+                                            <div style="margin-top:0.75rem;display:flex;gap:0.5rem;justify-content:center;width:100%;">
                                                 <button
                                                     class="btn btn-primary btn-sm"
                                                     style="flex:1;"

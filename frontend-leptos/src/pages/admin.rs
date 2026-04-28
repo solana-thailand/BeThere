@@ -110,30 +110,56 @@ fn generate_csv(attendees: &[AttendeeResponse]) -> String {
     csv
 }
 
-/// Trigger CSV file download in browser.
+/// Trigger CSV file download in browser using proper web_sys APIs.
 fn download_csv(filename: &str, content: &str) {
-    let escaped_content = content
-        .replace('\\', "\\\\")
-        .replace('`', "\\`")
-        .replace('$', "\\$");
-    let escaped_filename = filename
-        .replace('\\', "\\\\")
-        .replace('`', "\\`")
-        .replace('$', "\\$");
-    let js = format!(
-        r#"(function() {{
-            var blob = new Blob([`{escaped_content}`], {{ type: 'text/csv;charset=utf-8;' }});
-            var url = URL.createObjectURL(blob);
-            var a = document.createElement('a');
-            a.href = url;
-            a.download = '{escaped_filename}';
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-        }})()"#
-    );
-    let _ = js_sys::eval(&js);
+    use js_sys::{Array, Uint8Array};
+
+    let window = match web_sys::window() {
+        Some(w) => w,
+        None => return,
+    };
+    let document = match window.document() {
+        Some(d) => d,
+        None => return,
+    };
+
+    // Encode CSV content as UTF-8 bytes
+    let bytes = content.as_bytes();
+    let uint8 = Uint8Array::new_with_length(bytes.len() as u32);
+    uint8.copy_from(bytes);
+
+    // Create Blob from byte array
+    let parts = Array::new();
+    parts.push(&uint8.buffer());
+
+    let blob_options = web_sys::BlobPropertyBag::new();
+    blob_options.set_type("text/csv;charset=utf-8;");
+
+    let blob = match web_sys::Blob::new_with_u8_array_sequence_and_options(&parts, &blob_options) {
+        Ok(b) => b,
+        Err(_) => return,
+    };
+
+    // Create object URL
+    let url = match web_sys::Url::create_object_url_with_blob(&blob) {
+        Ok(u) => u,
+        Err(_) => return,
+    };
+
+    // Create temporary <a> element, trigger click, cleanup
+    if let Ok(a) = document.create_element("a") {
+        let _ = a.set_attribute("href", &url);
+        let _ = a.set_attribute("download", filename);
+        if let Some(body) = document.body() {
+            let _ = body.append_child(&a);
+            // Cast Element → HtmlElement for .click()
+            use wasm_bindgen::JsCast;
+            a.unchecked_ref::<web_sys::HtmlElement>().click();
+            let _ = body.remove_child(&a);
+        }
+    }
+
+    web_sys::Url::revoke_object_url(&url).unwrap_or(());
 }
 
 // ===== Admin Component =====
