@@ -10,7 +10,7 @@
 //! Requires being wrapped in `<ProtectedRoute>` to provide
 //! `ReadSignal<String>` (user email) via context.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use leptos::prelude::*;
 use leptos_router::hooks::use_navigate;
@@ -74,6 +74,68 @@ fn is_vip_ticket(ticket_name: &str) -> bool {
     ticket_name.to_lowercase().contains("vip")
 }
 
+/// Generate CSV content from a filtered attendee list.
+fn generate_csv(attendees: &[AttendeeResponse]) -> String {
+    let mut csv = String::from(
+        "Name,Email,Ticket,Participation,Status,Checked In At,Checked In By,API ID\n",
+    );
+    for a in attendees {
+        let status = if a.checked_in_at.is_some() {
+            "Checked In"
+        } else {
+            "Pending"
+        };
+        let checked_at = a.checked_in_at.as_deref().unwrap_or("");
+        let checked_by = a.checked_in_by.as_deref().unwrap_or("");
+        // Escape CSV fields containing commas or quotes
+        let escape = |s: &str| -> String {
+            if s.contains(',') || s.contains('"') || s.contains('\n') {
+                format!("\"{}\"", s.replace('"', "\"\""))
+            } else {
+                s.to_string()
+            }
+        };
+        csv.push_str(&format!(
+            "{},{},{},{},{},{},{},{}\n",
+            escape(&a.name),
+            escape(&a.email),
+            escape(&a.ticket_name),
+            escape(&a.participation_type),
+            status,
+            escape(checked_at),
+            escape(checked_by),
+            escape(&a.api_id),
+        ));
+    }
+    csv
+}
+
+/// Trigger CSV file download in browser.
+fn download_csv(filename: &str, content: &str) {
+    let escaped_content = content
+        .replace('\\', "\\\\")
+        .replace('`', "\\`")
+        .replace('$', "\\$");
+    let escaped_filename = filename
+        .replace('\\', "\\\\")
+        .replace('`', "\\`")
+        .replace('$', "\\$");
+    let js = format!(
+        r#"(function() {{
+            var blob = new Blob([`{escaped_content}`], {{ type: 'text/csv;charset=utf-8;' }});
+            var url = URL.createObjectURL(blob);
+            var a = document.createElement('a');
+            a.href = url;
+            a.download = '{escaped_filename}';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }})()"#
+    );
+    let _ = js_sys::eval(&js);
+}
+
 // ===== Admin Component =====
 
 /// Admin dashboard page component.
@@ -122,6 +184,10 @@ pub fn Admin() -> impl IntoView {
 
     // Refresh counter — increment to trigger data reload
     let (refresh_counter, set_refresh_counter) = signal(0u32);
+
+    // Bulk selection state
+    let (selected_ids, set_selected_ids) = signal(HashSet::<String>::new());
+    let (bulk_checking_in, set_bulk_checking_in) = signal(false);
 
     // Filtered attendees: tab-filtered + search query + filter pill + sort
     let filtered_attendees = Memo::new(move |_| {
@@ -191,6 +257,86 @@ pub fn Admin() -> impl IntoView {
     // Handle refresh button click
     let handle_refresh = move |_: web_sys::MouseEvent| {
         set_refresh_counter.update(|c| *c += 1);
+    };
+
+    // Handle CSV export
+    let handle_export_csv = move |_: web_sys::MouseEvent| {
+        let filtered = filtered_attendees.get();
+        let tab = active_tab.get();
+        let tab_label = tab.label().to_lowercase().replace('-', "_");
+        let filename = format!("attendees_{tab_label}.csv");
+        let csv = generate_csv(&filtered);
+        download_csv(&filename, &csv);
+        components::show_toast(
+            &set_toast,
+            &format!("Exported {} attendees", filtered.len()),
+            ToastType::Success,
+        );
+    };
+
+    // Select all visible (filtered) attendees that are NOT checked in
+    let handle_select_all = move |_: web_sys::MouseEvent| {
+        let filtered = filtered_attendees.get();
+        set_selected_ids.update(|ids| {
+            ids.clear();
+            for a in &filtered {
+                if a.checked_in_at.is_none() {
+                    ids.insert(a.api_id.clone());
+                }
+            }
+        });
+    };
+
+    // Clear selection
+    let handle_clear_selection = move |_: web_sys::MouseEvent| {
+        set_selected_ids.set(HashSet::new());
+    };
+
+    // Bulk check-in all selected attendees
+    let handle_bulk_checkin = move |_: web_sys::MouseEvent| {
+        if bulk_checking_in.get() {
+            return;
+        }
+        let ids: Vec<String> = selected_ids.get().into_iter().collect();
+        if ids.is_empty() {
+            return;
+        }
+
+        set_bulk_checking_in.set(true);
+        let set_toast = set_toast;
+        let set_selected = set_selected_ids;
+        let set_refresh = set_refresh_counter;
+        let set_busy = set_bulk_checking_in;
+
+        leptos::task::spawn_local(async move {
+            let mut succeeded = 0u32;
+            let mut failed = 0u32;
+
+            for id in ids {
+                match api::check_in(&id).await {
+                    Ok(_) => succeeded += 1,
+                    Err(e) => {
+                        failed += 1;
+                        log::warn!("[admin] bulk check-in failed for {id}: {e}");
+                    }
+                }
+            }
+
+            let msg = if failed > 0 {
+                format!("Checked in {succeeded}, {failed} failed")
+            } else {
+                format!("Checked in {succeeded} attendees")
+            };
+            let toast_type = if failed > 0 {
+                ToastType::Warning
+            } else {
+                ToastType::Success
+            };
+            components::show_toast(&set_toast, &msg, toast_type);
+            set_selected.set(HashSet::new());
+            set_refresh.update(|c| *c += 1);
+            set_busy.set(false);
+        });
     };
 
     // Handle QR code generation (normal)
@@ -335,6 +481,12 @@ pub fn Admin() -> impl IntoView {
                                     }
                                 }}
                         </button>
+                        <button class="btn btn-outline btn-sm" on:click=handle_export_csv>
+                            "Export CSV"
+                        </button>
+                        <button class="btn btn-outline btn-sm" on:click=handle_select_all>
+                            "Select All Pending"
+                        </button>
                     </div>
 
                     // QR generation result
@@ -414,17 +566,102 @@ pub fn Admin() -> impl IntoView {
                         </span>
                     </div>
 
-                    // Attendee list
+                    // Attendee list with selection
                     <div class="attendee-list">
+                        // Bulk action bar (shown when items selected)
                         <Show
-                            when=move || filtered_attendees.get().is_empty()
+                            when=move || !selected_ids.get().is_empty()
                             fallback=|| view! { <div></div> }
                         >
-                            <div style="text-align:center;padding:2rem;color:var(--text-muted);">
-                                "No attendees found"
+                            <div class="bulk-action-bar">
+                                <span>{move || format!("{} selected", selected_ids.get().len())}</span>
+                                <button
+                                    class="btn btn-success btn-sm"
+                                    disabled=move || bulk_checking_in.get()
+                                    on:click=handle_bulk_checkin
+                                >
+                                    {move || if bulk_checking_in.get() { "Checking in..." } else { "Check In Selected" }}
+                                </button>
+                                <button class="btn btn-outline btn-sm" on:click=handle_clear_selection>
+                                    "Clear"
+                                </button>
                             </div>
                         </Show>
-                        {move || render_attendee_list(&filtered_attendees.get())}
+
+                        // Inline attendee items with checkboxes
+                        {move || {
+                            let filtered = filtered_attendees.get();
+                            let selected = selected_ids.get();
+                            if filtered.is_empty() {
+                                view! {
+                                    <div style="text-align:center;padding:2rem;color:var(--text-muted);">
+                                        "No attendees found"
+                                    </div>
+                                }.into_any()
+                            } else {
+                                filtered.iter().map(|attendee| {
+                                    let is_checked_in = attendee.checked_in_at.is_some();
+                                    let is_vip = is_vip_ticket(&attendee.ticket_name);
+                                    let is_selected = selected.contains(&attendee.api_id);
+                                    let api_id = attendee.api_id.clone();
+                                    let badge_class = if is_checked_in { "badge badge-success" } else { "badge badge-warning" };
+                                    let badge_text = if is_checked_in { "Checked In" } else { "Pending" };
+                                    let participation = utils::get_participation_badge(&attendee.participation_type);
+                                    let p_class = participation.css_class.to_string();
+                                    let p_label = participation.label;
+                                    let name = attendee.name.clone();
+                                    let email = attendee.email.clone();
+                                    let ticket = attendee.ticket_name.clone();
+                                    let has_ticket = !ticket.is_empty();
+                                    let time_ago_str = attendee.checked_in_at.as_deref().map(utils::time_ago).unwrap_or_default();
+                                    let has_time_ago = is_checked_in && !time_ago_str.is_empty();
+                                    let checked_in_by_suffix = attendee.checked_in_by.as_ref().map_or(String::new(), |by| {
+                                        if by.is_empty() { String::new() } else { format!(" by {}", utils::escape_html(by)) }
+                                    });
+
+                                    view! {
+                                        <div class="attendee-item" class:vip=is_vip class:selected=is_selected>
+                                            <button
+                                                class=format!("attendee-checkbox{}", if is_selected { " checked" } else { "" })
+                                                on:click=move |_| set_selected_ids.update(|ids| {
+                                                    if ids.contains(&api_id) { ids.remove(&api_id); } else { ids.insert(api_id.clone()); }
+                                                })
+                                                disabled=is_checked_in
+                                            >
+                                                {if is_selected { "✓" } else { "" }}
+                                            </button>
+                                            <div class="attendee-info">
+                                                <div class="attendee-name">{utils::escape_html(&name)}</div>
+                                                <div class="attendee-email">{utils::escape_html(&email)}</div>
+                                                <Show
+                                                    when=move || has_ticket
+                                                    fallback=|| view! { <div></div> }
+                                                >
+                                                    <div style="font-size:0.75rem;color:var(--text-muted);margin-top:2px;">
+                                                        {utils::escape_html(&ticket)}
+                                                        <Show when=move || is_vip fallback=|| view! { <span></span> }>
+                                                            <span class="vip-badge">"VIP"</span>
+                                                        </Show>
+                                                    </div>
+                                                </Show>
+                                            </div>
+                                            <div class="attendee-status">
+                                                <span class=p_class.clone()>{p_label.clone()}</span>
+                                                <span class=badge_class>{badge_text}</span>
+                                                <Show
+                                                    when=move || has_time_ago
+                                                    fallback=|| view! { <div></div> }
+                                                >
+                                                    <div style="font-size:0.7rem;color:var(--text-muted);margin-top:4px;text-align:right;">
+                                                        {time_ago_str.clone()}{checked_in_by_suffix.clone()}
+                                                    </div>
+                                                </Show>
+                                            </div>
+                                        </div>
+                                    }
+                                }).collect_view().into_any()
+                            }
+                        }}
                     </div>
 
                     // Recent check-ins (tab-aware)
@@ -622,79 +859,6 @@ fn render_qr_result(data: &Option<GenerateQrData>) -> AnyView {
         }
         None => view! { <div></div> }.into_any(),
     }
-}
-
-/// Render the attendee list with participation badges and check-in status.
-fn render_attendee_list(filtered: &[AttendeeResponse]) -> AnyView {
-    filtered
-        .iter()
-        .map(|attendee| {
-            let is_checked_in = attendee.checked_in_at.is_some();
-            let is_vip = is_vip_ticket(&attendee.ticket_name);
-            let badge_class = if is_checked_in {
-                "badge badge-success"
-            } else {
-                "badge badge-warning"
-            };
-            let badge_text = if is_checked_in {
-                "Checked In"
-            } else {
-                "Pending"
-            };
-
-            let participation =
-                utils::get_participation_badge(&attendee.participation_type);
-            let p_class = participation.css_class.to_string();
-            let p_label = participation.label;
-
-            let name = attendee.name.clone();
-            let email = attendee.email.clone();
-            let ticket = attendee.ticket_name.clone();
-            let has_ticket = !ticket.is_empty();
-            let time_ago_str = attendee
-                .checked_in_at
-                .as_deref()
-                .map(utils::time_ago)
-                .unwrap_or_default();
-            let has_time_ago = is_checked_in && !time_ago_str.is_empty();
-            let checked_in_by_suffix = attendee.checked_in_by.as_ref().map_or(String::new(), |by| {
-                if by.is_empty() { String::new() } else { format!(" by {}", utils::escape_html(by)) }
-            });
-
-            view! {
-                <div class="attendee-item" class:vip=is_vip>
-                    <div class="attendee-info">
-                        <div class="attendee-name">{utils::escape_html(&name)}</div>
-                        <div class="attendee-email">{utils::escape_html(&email)}</div>
-                        <Show
-                            when=move || has_ticket
-                            fallback=|| view! { <div></div> }
-                        >
-                            <div style="font-size:0.75rem;color:var(--text-muted);margin-top:2px;">
-                                {utils::escape_html(&ticket)}
-                                <Show when=move || is_vip fallback=|| view! { <span></span> }>
-                                    <span class="vip-badge">"VIP"</span>
-                                </Show>
-                            </div>
-                        </Show>
-                    </div>
-                    <div class="attendee-status">
-                        <span class=p_class.clone()>{p_label.clone()}</span>
-                        <span class=badge_class>{badge_text}</span>
-                        <Show
-                            when=move || has_time_ago
-                            fallback=|| view! { <div></div> }
-                        >
-                            <div style="font-size:0.7rem;color:var(--text-muted);margin-top:4px;text-align:right;">
-                                {time_ago_str.clone()}{checked_in_by_suffix.clone()}
-                            </div>
-                        </Show>
-                    </div>
-                </div>
-            }
-        })
-        .collect_view()
-        .into_any()
 }
 
 /// Render the recent check-ins panel, filtered by tab.

@@ -711,7 +711,19 @@ pub fn Claim() -> impl IntoView {
                                 }
                             };
                             let asset_id_full = data.asset_id.clone();
-                            let share_url = asset_url.clone();
+                            // Build Share to X URL with pre-filled tweet
+                            let tweet_text = {
+                                let event = evt_name.get();
+                                if event.is_empty() {
+                                    format!("I just claimed my POAP NFT! 🎫✨\n\n#BeThere #Solana")
+                                } else {
+                                    format!("I just claimed my POAP at {event}! 🎫✨\n\n#BeThere #Solana")
+                                }
+                            };
+                            let share_to_x_url = format!(
+                                "https://twitter.com/intent/tweet?text={}",
+                                js_sys::encode_uri_component(&tweet_text)
+                            );
                             view! {
                                 <div class="claim-success">
                                     <div class="claim-success-rings">
@@ -778,13 +790,16 @@ pub fn Claim() -> impl IntoView {
                                             "View NFT Asset"
                                         </a>
                                         <a
-                                            href=share_url
+                                            href=share_to_x_url
                                             target="_blank"
                                             rel="noopener noreferrer"
                                             class="btn btn-outline btn-block"
-                                            style="border-color:var(--accent);color:var(--accent);"
+                                            style="border-color:#1da1f2;color:#1da1f2;display:flex;align-items:center;justify-content:center;gap:0.5rem;"
                                         >
-                                            "Share your NFT"
+                                            <svg viewBox="0 0 24 24" fill="currentColor" style="width:18px;height:18px;">
+                                                <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                                            </svg>
+                                            "Share to X"
                                         </a>
                                     </div>
                                 </div>

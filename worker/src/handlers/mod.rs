@@ -4,6 +4,7 @@ pub mod checkin;
 pub mod claim;
 pub mod health;
 pub mod qr;
+pub mod waitlist;
 
 use crate::state::AppState;
 use axum::{
@@ -21,7 +22,9 @@ pub fn routes(state: AppState) -> Router<()> {
         .route("/auth/logout", get(auth::auth_logout))
         // Claim routes (public — attendees claim NFTs without staff login)
         .route("/claim/{token}", get(claim::get_claim))
-        .route("/claim/{token}", post(claim::post_claim));
+        .route("/claim/{token}", post(claim::post_claim))
+        // Waitlist signup (public)
+        .route("/waitlist", post(waitlist::join_waitlist));
 
     // Protected routes — require staff auth
     let protected = Router::new()

@@ -7,6 +7,125 @@
 use leptos::prelude::*;
 use leptos_router::components::A;
 
+/// Waitlist signup form component.
+#[component]
+fn WaitlistForm() -> impl IntoView {
+    let (email, set_email) = signal(String::new());
+    let (submitted, set_submitted) = signal(false);
+    let (error, set_error) = signal(None::<String>);
+    let (submitting, set_submitting) = signal(false);
+    let (already_registered, set_already_registered) = signal(false);
+
+    let handle_submit = move |ev: leptos::ev::SubmitEvent| {
+        ev.prevent_default();
+        let email_val = email.get().trim().to_string();
+
+        if email_val.is_empty() || !email_val.contains('@') || !email_val.contains('.') {
+            set_error.set(Some("Please enter a valid email".to_string()));
+            return;
+        }
+
+        set_error.set(None);
+        set_submitting.set(true);
+
+        leptos::task::spawn_local(async move {
+            let window = web_sys::window().expect("no window");
+            let origin = window.location().origin().unwrap_or("http://localhost:8787".to_string());
+            let url = format!("{origin}/api/waitlist");
+
+            let body = serde_json::json!({ "email": email_val });
+
+            let request = match gloo::net::http::Request::post(&url)
+                .header("Content-Type", "application/json")
+                .body(serde_json::to_string(&body).unwrap_or_default())
+            {
+                Ok(req) => req,
+                Err(e) => {
+                    set_error.set(Some(format!("Failed to submit: {e}")));
+                    set_submitting.set(false);
+                    return;
+                }
+            };
+
+            match request.send().await {
+                Ok(response) => {
+                    if response.ok() {
+                        // Parse JSON to check for duplicate
+                        match response.json::<serde_json::Value>().await {
+                            Ok(body) => {
+                                if body.get("code").and_then(|v| v.as_str()) == Some("duplicate") {
+                                    set_already_registered.set(true);
+                                } else if body.get("success").and_then(|v| v.as_bool()) == Some(true) {
+                                    set_submitted.set(true);
+                                } else {
+                                    let msg = body.get("error").and_then(|v| v.as_str()).unwrap_or("Something went wrong");
+                                    set_error.set(Some(msg.to_string()));
+                                }
+                            }
+                            Err(_) => {
+                                // Can't parse JSON — treat as success
+                                set_submitted.set(true);
+                            }
+                        }
+                    } else {
+                        set_error.set(Some("Something went wrong. Please try again.".to_string()));
+                    }
+                }
+                Err(e) => {
+                    set_error.set(Some(format!("Network error: {e}")));
+                }
+            }
+            set_submitting.set(false);
+        });
+    };
+
+    view! {
+        <Show
+            when=move || submitted.get() || already_registered.get()
+            fallback=|| view! { <div></div> }
+        >
+            <div style="padding:1.5rem;background:var(--success-bg);border:1px solid var(--success-border);border-radius:var(--radius);text-align:center;">
+                <div style="font-size:1.25rem;margin-bottom:0.5rem;">"✓"</div>
+                <div style="font-weight:600;color:var(--success);margin-bottom:0.25rem;">
+                    {move || if already_registered.get() { "You're already on the list!" } else { "You're on the list!" }}
+                </div>
+                <div style="font-size:0.85rem;color:var(--text-secondary);">"We'll reach out when we're ready to onboard new events."</div>
+            </div>
+        </Show>
+        <Show
+            when=move || !submitted.get() && !already_registered.get()
+            fallback=|| view! { <div></div> }
+        >
+            <form on:submit=handle_submit style="display:flex;gap:0.5rem;max-width:400px;margin:0 auto;">
+                <input
+                    type="email"
+                    placeholder="your@email.com"
+                    prop:value=move || email.get()
+                    on:input=move |ev| set_email.set(event_target_value(&ev))
+                    disabled=move || submitting.get()
+                    style="flex:1;min-width:0;padding:0.75rem 1rem;border-radius:var(--radius-sm);border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-size:0.9rem;outline:none;"
+                />
+                <button
+                    type="submit"
+                    disabled=move || submitting.get() || email.get().trim().is_empty()
+                    class="btn btn-primary"
+                    style="white-space:nowrap;padding:0.75rem 1.25rem;"
+                >
+                    {move || if submitting.get() { "Joining..." } else { "Join Waitlist" }}
+                </button>
+            </form>
+            <Show
+                when=move || error.get().is_some()
+                fallback=|| view! { <div></div> }
+            >
+                <p style="color:var(--danger);font-size:0.8rem;margin-top:0.5rem;">
+                    {move || error.get().unwrap_or_default()}
+                </p>
+            </Show>
+        </Show>
+    }
+}
+
 /// Landing page component.
 #[component]
 pub fn Landing() -> impl IntoView {
@@ -238,6 +357,19 @@ pub fn Landing() -> impl IntoView {
                         </a>
                     </div>
 
+                </div>
+            </section>
+
+            // ===== Waitlist =====
+            <section style="max-width:960px;margin:0 auto;padding:3rem 1.5rem 4rem;">
+                <div style="text-align:center;max-width:480px;margin:0 auto;">
+                    <h2 style="font-size:1.5rem;font-weight:700;color:#fff;margin-bottom:0.5rem;">
+                        "Want BeThere at your event?"
+                    </h2>
+                    <p style="font-size:0.95rem;color:var(--text-secondary);margin-bottom:1.5rem;line-height:1.6;">
+                        "Join the waitlist and we'll reach out when we're ready to onboard new events."
+                    </p>
+                    <WaitlistForm />
                 </div>
             </section>
 

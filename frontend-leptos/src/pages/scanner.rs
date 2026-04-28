@@ -142,6 +142,11 @@ pub fn Scanner() -> impl IntoView {
     let (scan_round, set_scan_round) = signal(0u32);
     let (flash_enabled, set_flash_enabled) = signal(true);
 
+    // Session tracking signals
+    let (session_total, set_session_total) = signal(0u32);
+    let (session_success, set_session_success) = signal(0u32);
+    let (_session_started_at, _set_session_started_at) = signal(Some(js_sys::Date::now()));
+
     // Stop camera when component unmounts (e.g. navigating to /admin).
     // Without this, window.__scannerActive remains true and startCamera()
     // skips on remount, leaving the camera broken until page refresh.
@@ -168,6 +173,7 @@ pub fn Scanner() -> impl IntoView {
             let set_cam_err = set_camera_error;
             let set_state = set_check_in_state;
             let set_t = set_toast;
+            let set_s_total = set_session_total;
 
             leptos::task::spawn_local(async move {
                 // Brief delay for camera to initialize
@@ -196,7 +202,7 @@ pub fn Scanner() -> impl IntoView {
                     if let Some(qr_data) = check_qr_result_js() {
                         log::info!("[scanner] QR code detected: {qr_data}");
                         match extract_attendee_id(&qr_data) {
-                            Some(id) => process_attendee_id(&id, set_state, set_t),
+                            Some(id) => process_attendee_id(&id, set_state, set_t, set_s_total),
                             None => components::show_toast(
                                 &set_t,
                                 "Invalid QR code format",
@@ -225,7 +231,7 @@ pub fn Scanner() -> impl IntoView {
             let _ = window.history().and_then(|h| {
                 h.replace_state_with_url(&wasm_bindgen::JsValue::NULL, "", Some(&clean_path))
             });
-            process_attendee_id(&scan_id, set_check_in_state, set_toast);
+            process_attendee_id(&scan_id, set_check_in_state, set_toast, set_session_total);
         }
     });
 
@@ -242,7 +248,7 @@ pub fn Scanner() -> impl IntoView {
             return;
         }
         match extract_attendee_id(&value) {
-            Some(id) => process_attendee_id(&id, set_check_in_state, set_toast),
+            Some(id) => process_attendee_id(&id, set_check_in_state, set_toast, set_session_total),
             None => {
                 components::show_toast(&set_toast, "Invalid attendee ID format", ToastType::Error)
             }
@@ -261,11 +267,13 @@ pub fn Scanner() -> impl IntoView {
             });
             let set_state = set_check_in_state;
             let set_t = set_toast;
+            let set_s_success = set_session_success;
             leptos::task::spawn_local(async move {
                 match api::check_in(&id).await {
                     Ok(result) => {
                         log::info!("[scanner] check-in successful: {}", result.name);
                         set_state.set(CheckInState::Success(Box::new(result)));
+                        set_s_success.update(|c| *c += 1);
                         components::show_toast(
                             &set_t,
                             &format!("{name} checked in successfully!"),
@@ -392,7 +400,17 @@ pub fn Scanner() -> impl IntoView {
                     <div class="scanner-bottom-session">
                         <div class="scanner-bottom-session-info">
                             <div class="scanner-bottom-session-title">"Scanner"</div>
-                            <div class="scanner-bottom-session-sub">"Ready to scan"</div>
+                            <div class="scanner-bottom-session-sub">
+                                {move || {
+                                    let total = session_total.get();
+                                    let success = session_success.get();
+                                    if total == 0 {
+                                        "Ready to scan".to_string()
+                                    } else {
+                                        format!("{success}/{total} checked in")
+                                    }
+                                }}
+                            </div>
                         </div>
                         <div style="display:flex;gap:0.5rem;align-items:center;">
                             <button
@@ -412,6 +430,26 @@ pub fn Scanner() -> impl IntoView {
                             </button>
                         </div>
                     </div>
+                    // Session stats (shown when scans > 0)
+                    <Show
+                        when=move || { session_total.get() > 0 }
+                        fallback=|| view! { <div></div> }
+                    >
+                        <div class="scanner-session-stats">
+                            <div class="scanner-session-stat">
+                                <span class="scanner-session-stat-value">{move || session_total.get()}</span>
+                                <span class="scanner-session-stat-label">"Scanned"</span>
+                            </div>
+                            <div class="scanner-session-stat">
+                                <span class="scanner-session-stat-value" style="color:var(--success);">{move || session_success.get()}</span>
+                                <span class="scanner-session-stat-label">"Checked In"</span>
+                            </div>
+                            <div class="scanner-session-stat">
+                                <span class="scanner-session-stat-value" style="color:var(--warning);">{move || session_total.get() - session_success.get()}</span>
+                                <span class="scanner-session-stat-label">"Other"</span>
+                            </div>
+                        </div>
+                    </Show>
                     // Manual input form (toggled inline)
                     <Show
                         when=move || manual_mode.get()
@@ -464,7 +502,9 @@ fn process_attendee_id(
     id: &str,
     set_state: WriteSignal<CheckInState>,
     set_toast: WriteSignal<Option<components::ToastMessage>>,
+    set_session_total: WriteSignal<u32>,
 ) {
+    set_session_total.update(|c| *c += 1);
     let attendee_id = id.to_string();
     set_state.set(CheckInState::LookingUp);
     leptos::task::spawn_local(async move {

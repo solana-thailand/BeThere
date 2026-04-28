@@ -1521,6 +1521,64 @@ nav a.active {
     border-color: #333;
 }
 
+/* Attendee checkbox */
+.attendee-checkbox {
+    width: 22px;
+    height: 22px;
+    min-width: 22px;
+    border-radius: 4px;
+    border: 2px solid var(--border);
+    background: transparent;
+    color: transparent;
+    font-size: 0.7rem;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+    padding: 0;
+    align-self: center;
+}
+
+.attendee-checkbox:hover:not(:disabled) {
+    border-color: var(--accent);
+}
+
+.attendee-checkbox.checked {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+}
+
+.attendee-checkbox:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+
+.attendee-item.selected {
+    background: rgba(99, 102, 241, 0.06);
+    border-color: rgba(99, 102, 241, 0.3);
+}
+
+/* Bulk action bar */
+.bulk-action-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    background: rgba(99, 102, 241, 0.08);
+    border: 1px solid rgba(99, 102, 241, 0.25);
+    border-radius: var(--radius);
+    margin-bottom: 0.75rem;
+    font-size: 0.85rem;
+    color: var(--text-primary);
+}
+
+.bulk-action-bar span {
+    font-weight: 500;
+}
+
 /* ===== Responsive ===== */
 
 /* Tiny phones (< 360px) */
@@ -2098,6 +2156,34 @@ nav a.active {
     color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 0.05em;
+}
+
+/* Scanner session stats */
+.scanner-session-stats {
+    display: flex;
+    gap: 1rem;
+    padding: 0.5rem 0;
+    border-top: 1px solid var(--border);
+    margin-top: 0.5rem;
+}
+
+.scanner-session-stat {
+    flex: 1;
+    text-align: center;
+}
+
+.scanner-session-stat-value {
+    display: block;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.scanner-session-stat-label {
+    display: block;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    margin-top: 2px;
 }
 
 .scanner-manual-toggle {
