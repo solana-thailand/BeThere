@@ -3357,6 +3357,156 @@ nav a.active {
     }
 }
 
+/* ===== Admin Inline Style Classes ===== */
+.admin-stat-value-success {
+    color: var(--success);
+}
+
+.admin-stat-value-warning {
+    color: var(--warning);
+}
+
+.admin-actions-row {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+}
+
+.admin-force-regen-row {
+    margin-top: 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.admin-force-regen-hint {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.admin-count-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.75rem;
+}
+
+.admin-count-text {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.admin-empty-state {
+    text-align: center;
+    padding: 2rem;
+    color: var(--text-muted);
+}
+
+.admin-empty-state-sm {
+    text-align: center;
+    padding: 1.5rem;
+    color: var(--text-muted);
+}
+
+.admin-ticket-row {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
+.admin-time-ago {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    margin-top: 4px;
+    text-align: right;
+}
+
+.admin-cross-tab-summary {
+    text-align: center;
+    margin: 0.5rem 0;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.admin-tab-switch-link {
+    cursor: pointer;
+    text-decoration: underline;
+}
+
+.admin-progress-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+
+.admin-progress-title {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.admin-progress-pct {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.admin-qr-result-card {
+    border-color: rgba(34, 197, 94, 0.4);
+    background: rgba(34, 197, 94, 0.05);
+}
+
+.admin-qr-result-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.admin-qr-result-title {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.admin-qr-stats-row {
+    display: flex;
+    gap: 1rem;
+}
+
+.admin-qr-count-success {
+    font-weight: 600;
+    color: #22c55e;
+}
+
+.admin-qr-count-warning {
+    font-weight: 600;
+    color: #f59e0b;
+}
+
+.admin-qr-count-label {
+    color: var(--text-secondary);
+}
+
+.admin-section-heading {
+    margin-bottom: 0.75rem;
+}
+
+.admin-recent-email {
+    font-size: 0.8rem;
+}
+
+.admin-badge-inline {
+    font-size: 0.7rem;
+    margin-bottom: 4px;
+    display: inline-block;
+}
+
+.admin-checkin-time {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
 @keyframes ring-pulse {
     0% {
         transform: scale(0.85);

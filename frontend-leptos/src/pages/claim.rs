@@ -204,7 +204,7 @@ fn ParticipantAvatar(name: String) -> impl IntoView {
 
     let eye_style = (hash / 6) % 4;
     let mouth_style = (hash / 24) % 4;
-    let has_blush = (hash / 96) % 3 == 0;
+    let has_blush = (hash / 96).is_multiple_of(3);
     let bg_hue = (hash / 288) % 360;
     let bg_color = format!("hsl({bg_hue}, 50%, 25%)");
 
@@ -370,10 +370,10 @@ pub fn Claim() -> impl IntoView {
                         set_state.set(ClaimState::NftComingSoon(data));
                     } else {
                         // Pre-fill wallet if locked to a pre-registered address
-                        if let Some(ref wallet) = data.locked_wallet {
-                            if !wallet.is_empty() {
-                                set_wallet_input.set(wallet.clone());
-                            }
+                        if let Some(ref wallet) = data.locked_wallet
+                            && !wallet.is_empty()
+                        {
+                            set_wallet_input.set(wallet.clone());
                         }
                         set_state.set(ClaimState::Ready(data));
                     }
@@ -433,18 +433,18 @@ pub fn Claim() -> impl IntoView {
 
     // One-tap paste from clipboard — big mobile UX win
     let handle_paste = move |_| {
-        let set_w = set_wallet_input.clone();
+        let set_w = set_wallet_input;
         leptos::task::spawn_local(async move {
             if let Ok(promise_val) = js_sys::eval(
                 "navigator.clipboard ? navigator.clipboard.readText() : Promise.resolve('')"
             ) {
                 let promise = js_sys::Promise::from(promise_val);
-                if let Ok(val) = js_sys::futures::JsFuture::from(promise).await {
-                    if let Some(text) = val.as_string() {
-                        let trimmed: String = text.trim().to_string();
-                        if !trimmed.is_empty() {
-                            set_w.set(trimmed);
-                        }
+                if let Ok(val) = js_sys::futures::JsFuture::from(promise).await
+                    && let Some(text) = val.as_string()
+                {
+                    let trimmed: String = text.trim().to_string();
+                    if !trimmed.is_empty() {
+                        set_w.set(trimmed);
                     }
                 }
             }
@@ -715,7 +715,7 @@ pub fn Claim() -> impl IntoView {
                             let tweet_text = {
                                 let event = evt_name.get();
                                 if event.is_empty() {
-                                    format!("I just claimed my POAP NFT! 🎫✨\n\n#BeThere #Solana")
+                                    "I just claimed my POAP NFT! 🎫✨\n\n#BeThere #Solana".to_string()
                                 } else {
                                     format!("I just claimed my POAP at {event}! 🎫✨\n\n#BeThere #Solana")
                                 }

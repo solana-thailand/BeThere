@@ -118,16 +118,16 @@ pub fn handle_token_from_url() -> bool {
 
     // Primary: check URL hash #token=<jwt>
     let hash = window.location().hash().unwrap_or_default();
-    if let Some(token) = hash.strip_prefix("#token=") {
-        if !token.is_empty() {
-            set_token(token);
-            // Clean up the URL hash
-            let _ = window
-                .history()
-                .and_then(|h| h.replace_state_with_url(&JsValue::NULL, "", Some("/")));
-            log::info!("[auth] token saved from URL hash");
-            return true;
-        }
+    if let Some(token) = hash.strip_prefix("#token=")
+        && !token.is_empty()
+    {
+        set_token(token);
+        // Clean up the URL hash
+        let _ = window
+            .history()
+            .and_then(|h| h.replace_state_with_url(&JsValue::NULL, "", Some("/")));
+        log::info!("[auth] token saved from URL hash");
+        return true;
     }
 
     // Fallback: check URL query params ?token=<jwt> (backward compat)

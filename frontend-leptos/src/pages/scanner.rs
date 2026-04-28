@@ -542,14 +542,14 @@ fn extract_attendee_id(text: &str) -> Option<String> {
     }
 
     // Try URL parameter extraction
-    if trimmed.starts_with("http") {
-        if let Ok(url) = web_sys::Url::new(trimmed) {
-            if let Some(scan) = url.search_params().get("scan") {
-                return Some(scan);
-            }
-            if let Some(id_param) = url.search_params().get("id") {
-                return Some(id_param);
-            }
+    if trimmed.starts_with("http")
+        && let Ok(url) = web_sys::Url::new(trimmed)
+    {
+        if let Some(scan) = url.search_params().get("scan") {
+            return Some(scan);
+        }
+        if let Some(id_param) = url.search_params().get("id") {
+            return Some(id_param);
         }
     }
 

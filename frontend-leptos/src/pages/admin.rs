@@ -465,11 +465,11 @@ pub fn Admin() -> impl IntoView {
                                     <span class="admin-sidebar-stat-label">"Total"</span>
                                 </div>
                                 <div class="admin-sidebar-stat">
-                                    <span class="admin-sidebar-stat-value" style="color:var(--success);">{checked_in}</span>
+                                    <span class="admin-sidebar-stat-value admin-stat-value-success">{checked_in}</span>
                                     <span class="admin-sidebar-stat-label">"Checked In"</span>
                                 </div>
                                 <div class="admin-sidebar-stat">
-                                    <span class="admin-sidebar-stat-value" style="color:var(--warning);">{remaining}</span>
+                                    <span class="admin-sidebar-stat-value admin-stat-value-warning">{remaining}</span>
                                     <span class="admin-sidebar-stat-label">"Remaining"</span>
                                 </div>
                             }.into_any()
@@ -490,7 +490,7 @@ pub fn Admin() -> impl IntoView {
                 // Dashboard content
                 <Show when=show_content fallback=|| view! { <div></div> }>
                     // Action buttons row
-                    <div style="display:flex;gap:0.5rem;margin-bottom:1rem;flex-wrap:wrap;">
+                    <div class="admin-actions-row">
                         <button class="btn btn-outline btn-sm" on:click=handle_refresh>
                             "Refresh"
                         </button>
@@ -522,11 +522,11 @@ pub fn Admin() -> impl IntoView {
                     >
                         {move || render_qr_result(&qr_result.get())}
                         // Force regenerate button (shown after any generation)
-                        <div style="margin-top:0.5rem;display:flex;align-items:center;gap:0.5rem;">
+                        <div class="admin-force-regen-row">
                             <button class="btn btn-outline btn-sm" on:click=handle_force_generate_qrs>
                                 "Force Regenerate All"
                             </button>
-                            <span style="font-size:0.75rem;color:var(--text-muted);">
+                            <span class="admin-force-regen-hint">
                                 "Overwrites existing QR URLs"
                             </span>
                         </div>
@@ -582,8 +582,8 @@ pub fn Admin() -> impl IntoView {
                     </div>
 
                     // Attendee count
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">
-                        <span style="font-size:0.85rem;color:var(--text-secondary);">
+                    <div class="admin-count-row">
+                        <span class="admin-count-text">
                             {move || {
                                 let count = filtered_attendees.get().len();
                                 let tab = active_tab.get();
@@ -620,7 +620,7 @@ pub fn Admin() -> impl IntoView {
                             let selected = selected_ids.get();
                             if filtered.is_empty() {
                                 view! {
-                                    <div style="text-align:center;padding:2rem;color:var(--text-muted);">
+                                    <div class="admin-empty-state">
                                         "No attendees found"
                                     </div>
                                 }.into_any()
@@ -663,7 +663,7 @@ pub fn Admin() -> impl IntoView {
                                                     when=move || has_ticket
                                                     fallback=|| view! { <div></div> }
                                                 >
-                                                    <div style="font-size:0.75rem;color:var(--text-muted);margin-top:2px;">
+                                                    <div class="admin-ticket-row">
                                                         {utils::escape_html(&ticket)}
                                                         <Show when=move || is_vip fallback=|| view! { <span></span> }>
                                                             <span class="vip-badge">"VIP"</span>
@@ -678,7 +678,7 @@ pub fn Admin() -> impl IntoView {
                                                     when=move || has_time_ago
                                                     fallback=|| view! { <div></div> }
                                                 >
-                                                    <div style="font-size:0.7rem;color:var(--text-muted);margin-top:4px;text-align:right;">
+                                                    <div class="admin-time-ago">
                                                         {time_ago_str.clone()}{checked_in_by_suffix.clone()}
                                                     </div>
                                                 </Show>
@@ -814,11 +814,11 @@ fn render_stats(
                 </div>
 
                 // Cross-tab summary
-                <div style="text-align:center;margin:0.5rem 0;font-size:0.8rem;color:var(--text-muted);">
+                <div class="admin-cross-tab-summary">
                     {format!("{} {} attendee{}", other_count, other_tab.label(), if other_count != 1 { "s" } else { "" })}
                     " — "
                     <span
-                        style="cursor:pointer;text-decoration:underline;"
+                        class="admin-tab-switch-link"
                         on:click=move |_| {
                             // This won't work in a render function since we can't access set_active_tab
                             // The tab summary is informational; switching is done via the tab bar
@@ -830,11 +830,11 @@ fn render_stats(
 
                 // Progress bar
                 <div class="card mb-2">
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
-                        <span style="font-size:0.85rem;font-weight:600;color:var(--text-primary);">
+                    <div class="admin-progress-header">
+                        <span class="admin-progress-title">
                             {format!("{} Check-In Progress", tab.label())}
                         </span>
-                        <span style="font-size:0.85rem;color:var(--text-secondary);">
+                        <span class="admin-progress-pct">
                             {format!("{tab_percentage:.1}% ({tab_checked_in} / {tab_total})")}
                         </span>
                     </div>
@@ -860,22 +860,22 @@ fn render_qr_result(data: &Option<GenerateQrData>) -> AnyView {
             let skipped = d.skipped;
             let has_skipped = skipped > 0;
             view! {
-                <div class="card mb-2" style="border-color:rgba(34,197,94,0.4);background:rgba(34,197,94,0.05);">
-                    <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem;">
+                <div class="card mb-2 admin-qr-result-card">
+                    <div class="admin-qr-result-header">
 
-                        <span style="font-weight:600;color:var(--text-primary);">
+                        <span class="admin-qr-result-title">
                             "QR Codes Generated"
                         </span>
                     </div>
-                    <div style="display:flex;gap:1rem;">
+                    <div class="admin-qr-stats-row">
                         <div>
-                            <span style="font-weight:600;color:#22c55e;">{generated}</span>
-                            <span style="color:var(--text-secondary);">" created"</span>
+                            <span class="admin-qr-count-success">{generated}</span>
+                            <span class="admin-qr-count-label">" created"</span>
                         </div>
                         <Show when=move || has_skipped fallback=|| view! { <div></div> }>
                             <div>
-                                <span style="font-weight:600;color:#f59e0b;">{skipped}</span>
-                                <span style="color:var(--text-secondary);">" skipped (already exist)"</span>
+                                <span class="admin-qr-count-warning">{skipped}</span>
+                                <span class="admin-qr-count-label">" skipped (already exist)"</span>
                             </div>
                         </Show>
                     </div>
@@ -926,8 +926,8 @@ fn render_recent_check_ins(
             if recent.is_empty() {
                 return view! {
                     <div class="card mt-3">
-                        <h3 style="margin-bottom:0.75rem;">"Recent Check-Ins"</h3>
-                        <div style="text-align:center;padding:1.5rem;color:var(--text-muted);">
+                        <h3 class="admin-section-heading">"Recent Check-Ins"</h3>
+                        <div class="admin-empty-state-sm">
                             {format!("No recent {} check-ins", tab.label().to_lowercase())}
                         </div>
                     </div>
@@ -937,7 +937,7 @@ fn render_recent_check_ins(
 
             view! {
                 <div class="card mt-3">
-                    <h3 style="margin-bottom:0.75rem;">
+                    <h3 class="admin-section-heading">
                         {format!("Recent {} Check-Ins", tab.label())}
                     </h3>
                     <div class="attendee-list">
@@ -962,15 +962,15 @@ fn render_recent_check_ins(
                                 <div class="attendee-item">
                                     <div class="attendee-info">
                                         <div class="attendee-name">{utils::escape_html(&name)}</div>
-                                        <div class="attendee-email" style="font-size:0.8rem;">
+                                        <div class="attendee-email admin-recent-email">
                                             {utils::escape_html(&api_id)}
                                         </div>
                                     </div>
                                     <div class="attendee-status text-right">
-                                        <span class=p_class.clone() style="font-size:0.7rem;margin-bottom:4px;display:inline-block;">
+                                        <span class=format!("{p_class} admin-badge-inline")>
                                             {p_label.clone()}
                                         </span>
-                                        <div style="font-size:0.8rem;color:var(--text-secondary);">
+                                        <div class="admin-checkin-time">
                                             {formatted}{by_suffix}
                                         </div>
                                     </div>
