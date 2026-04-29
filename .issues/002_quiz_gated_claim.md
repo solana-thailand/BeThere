@@ -1,5 +1,7 @@
 # Issue 002: Quiz-Gated Claim Flow
 
+> **Status: ✅ COMPLETE** — Deployed to production (`680bfb89`). Quiz flow tested end-to-end: check-in → quiz (5 questions, 60% pass, 3 attempts) → wallet claim → mint. Bug fixes: KV boolean corruption, serde default, submit counter reactivity, spinner transform conflict.
+
 ## Problem
 
 The current check-in flow only proves an attendee *showed up* — they could be scanned and leave 30 seconds later. With the deposit-refund model (Issue 001), organizers need proof that attendees actually **engaged with the content**, not just physically entered the venue.
@@ -231,21 +233,21 @@ preview_id = "<preview_id>"  # created via: wrangler kv namespace create QUIZ --
 - [x] Mobile responsive quiz CSS (359px + 480px breakpoints)
 - [ ] Timer component (if time_limit configured) — deferred
 
-### Phase 3 — Integration & Polish 🔄 IN PROGRESS
-- [ ] End-to-end test: check-in → claim link → quiz → mint
+### Phase 3 — Integration & Polish ✅ COMPLETE
+- [x] End-to-end test: check-in → claim link → quiz → mint
 - [x] Admin curl workflow for quiz setup (see below)
-- [ ] Quiz stats on admin dashboard
+- [ ] Quiz stats on admin dashboard — deferred
 - [x] Edge cases: quiz config changed mid-event, no quiz configured (graceful fallback)
 - [x] Mobile responsiveness for quiz cards
 - [x] Landing page updated — "Complete the Quiz" step added
 
-### Phase 4 — Production ⏳ PENDING
-- [ ] Create production KV namespace (`npx wrangler kv namespace create QUIZ`)
-- [ ] Create preview KV namespace (`npx wrangler kv namespace create QUIZ --preview`)
-- [ ] Replace placeholder IDs in `wrangler.toml`
-- [ ] Set quiz questions for first event (use curl command below)
-- [ ] Test on staging with real attendee flow
-- [ ] Deploy
+### Phase 4 — Production ✅ COMPLETE
+- [x] Create production KV namespace (`npx wrangler kv namespace create QUIZ`)
+- [x] Create preview KV namespace (`npx wrangler kv namespace create QUIZ --preview`)
+- [x] Replace placeholder IDs in `wrangler.toml`
+- [x] Set quiz questions for first event (use curl command below)
+- [x] Test on staging with real attendee flow
+- [x] Deploy
 
 **Total estimate: 6-9 days**
 
