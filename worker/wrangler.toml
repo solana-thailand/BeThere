@@ -77,5 +77,5 @@ EVENT_END_MS = "1777183200000"
 # Preview: npx wrangler kv namespace create QUIZ --preview
 [[kv_namespaces]]
 binding = "QUIZ"
-id = "<QUIZ_KV_NAMESPACE_ID>"
-preview_id = "<QUIZ_KV_PREVIEW_NAMESPACE_ID>"
+id = "faf9eebaa53d46f9a82c1f6db6dfbc05"
+preview_id = "ec705e432a5b47adae937878c1402174"
