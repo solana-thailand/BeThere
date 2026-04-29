@@ -1,0 +1,67 @@
+{
+  "questions": [
+    {
+      "id": "q1",
+      "text": "What consensus mechanism does Solana use to achieve high throughput?",
+      "options": [
+        "Proof of Work",
+        "Proof of History",
+        "Delegated Proof of Stake",
+        "Practical Byzantine Fault Tolerance"
+      ],
+      "correct_index": 1,
+      "explanation": "Solana uses Proof of History (PoH) as a cryptographic clock to order transactions, combined with Tower BFT consensus."
+    },
+    {
+      "id": "q2",
+      "text": "What is the primary advantage of compressed NFTs on Solana?",
+      "options": [
+        "They are encrypted for privacy",
+        "They cost significantly less to mint at scale",
+        "They can only be held by validators",
+        "They use a different blockchain"
+      ],
+      "correct_index": 1,
+      "explanation": "Compressed NFTs use Merkle trees to reduce storage costs by ~100-500x, making large-scale distribution practical."
+    },
+    {
+      "id": "q3",
+      "text": "Which programming language is used to write Solana smart contracts (programs)?",
+      "options": [
+        "JavaScript",
+        "Python",
+        "Rust",
+        "Go"
+      ],
+      "correct_index": 2,
+      "explanation": "Solana programs are primarily written in Rust, compiled to BPF bytecode, and deployed on-chain."
+    },
+    {
+      "id": "q4",
+      "text": "What does an AI agent need to interact with a Solana program?",
+      "options": [
+        "A web browser",
+        "An IDL (Interface Description Language) and RPC connection",
+        "A physical hardware wallet",
+        "Permission from the program author"
+      ],
+      "correct_index": 1,
+      "explanation": "AI agents use the program's IDL to serialize/deserialize instructions and communicate via RPC."
+    },
+    {
+      "id": "q5",
+      "text": "What is the deposit commitment concept in BeThere?",
+      "options": [
+        "Attendees pay for their NFT badge",
+        "Attendees lock a deposit, get it back when they show up",
+        "Organizers pay to create events",
+        "Staff pay to use the scanner"
+      ],
+      "correct_index": 1,
+      "explanation": "BeThere's deposit model: attendees commit money upfront, get refunded when they show up and complete the quiz. No-shows forfeit their deposit."
+    }
+  ],
+  "passing_score_percent": 60,
+  "max_attempts": 3,
+  "time_limit_seconds": null
+}

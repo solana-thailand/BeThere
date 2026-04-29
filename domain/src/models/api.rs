@@ -195,7 +195,7 @@ pub struct QuizConfig {
     /// Maximum submission attempts allowed per attendee.
     pub max_attempts: u8,
     /// Optional per-attempt timer in seconds.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub time_limit_seconds: Option<u16>,
 }
 
