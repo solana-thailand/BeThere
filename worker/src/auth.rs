@@ -280,6 +280,7 @@ mod tests {
 
         AppState {
             config: std::sync::Arc::new(config),
+            quiz_kv: None,
         }
     }
 

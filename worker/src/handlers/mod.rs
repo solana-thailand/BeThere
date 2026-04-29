@@ -4,6 +4,7 @@ pub mod checkin;
 pub mod claim;
 pub mod health;
 pub mod qr;
+pub mod quiz;
 pub mod waitlist;
 
 use crate::state::AppState;
@@ -23,6 +24,10 @@ pub fn routes(state: AppState) -> Router<()> {
         // Claim routes (public — attendees claim NFTs without staff login)
         .route("/claim/{token}", get(claim::get_claim))
         .route("/claim/{token}", post(claim::post_claim))
+        // Quiz routes (public — attendees take quiz after check-in)
+        .route("/quiz", get(quiz::get_quiz))
+        .route("/quiz/{token}/submit", post(quiz::submit_quiz))
+        .route("/quiz/{token}/status", get(quiz::get_quiz_status))
         // Waitlist signup (public)
         .route("/waitlist", post(waitlist::join_waitlist));
 
@@ -34,6 +39,8 @@ pub fn routes(state: AppState) -> Router<()> {
         .route("/attendee/{id}", get(attendee::get_attendee))
         .route("/checkin/{id}", post(checkin::check_in))
         .route("/generate-qrs", post(qr::generate_qrs))
+        // Admin quiz management (protected — organizer sets questions)
+        .route("/admin/quiz", post(quiz::put_quiz))
         .layer(middleware::from_fn_with_state(
             state.clone(),
             crate::auth::require_auth,

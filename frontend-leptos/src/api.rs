@@ -430,6 +430,17 @@ pub struct EventConfig {
     pub event_end_ms: i64,
 }
 
+/// Quiz requirement status for a claim.
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum QuizStatus {
+    #[default]
+    NotRequired,
+    NotStarted,
+    InProgress,
+    Passed,
+}
+
 /// Response data for GET /api/claim/{token} — attendee claim lookup.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ClaimLookupData {
@@ -453,6 +464,9 @@ pub struct ClaimLookupData {
     /// Dynamic event metadata (name, tagline, link, timestamps).
     #[serde(default)]
     pub event: EventConfig,
+    /// Quiz requirement status for this attendee's claim.
+    #[serde(default)]
+    pub quiz_status: QuizStatus,
 }
 
 /// Response data for POST /api/claim/{token} — NFT mint result.
@@ -471,6 +485,90 @@ pub struct ClaimMintData {
     /// Solana cluster for explorer links (e.g. "devnet", "mainnet-beta").
     #[serde(default)]
     pub cluster: String,
+}
+
+// ===== Quiz API types (public — no auth required) =====
+
+/// A single quiz question as served to the frontend (no correct answer).
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct QuizQuestionPublic {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub text: String,
+    #[serde(default)]
+    pub options: Vec<String>,
+}
+
+/// Response data for GET /api/quiz — quiz questions and config.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct QuizQuestionsData {
+    #[serde(default)]
+    pub configured: bool,
+    #[serde(default)]
+    pub questions: Vec<QuizQuestionPublic>,
+    #[serde(default)]
+    pub passing_score_percent: u8,
+    #[serde(default)]
+    pub max_attempts: u8,
+    #[serde(default)]
+    pub time_limit_seconds: Option<u16>,
+}
+
+/// A single answer in a quiz submission (text-based, not index).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QuizAnswer {
+    pub question_id: String,
+    pub selected_text: String,
+}
+
+/// Per-question feedback after submission.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct QuestionExplanation {
+    #[serde(default)]
+    pub question_id: String,
+    #[serde(default)]
+    pub correct: bool,
+    #[serde(default)]
+    pub explanation: Option<String>,
+}
+
+/// Response data for POST /api/quiz/{token}/submit — scored result.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct QuizSubmitData {
+    #[serde(default)]
+    pub attempt_number: u8,
+    #[serde(default)]
+    pub score_percent: u8,
+    #[serde(default)]
+    pub passed: bool,
+    #[serde(default)]
+    pub correct_count: usize,
+    #[serde(default)]
+    pub total_questions: usize,
+    #[serde(default)]
+    pub remaining_attempts: u8,
+    #[serde(default)]
+    pub explanations: Vec<QuestionExplanation>,
+}
+
+/// Response data for GET /api/quiz/{token}/status — quiz progress.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct QuizStatusData {
+    #[serde(default)]
+    pub configured: bool,
+    #[serde(default)]
+    pub quiz_status: String,
+    #[serde(default)]
+    pub attempts: u8,
+    #[serde(default)]
+    pub max_attempts: u8,
+    #[serde(default)]
+    pub best_score_percent: u8,
+    #[serde(default)]
+    pub passed: bool,
+    #[serde(default)]
+    pub passing_threshold_percent: u8,
 }
 
 // ===== Claim API functions (public — no auth) =====
@@ -499,6 +597,118 @@ pub async fn get_claim(token: &str) -> Result<ClaimLookupData, ApiError> {
     let wrapper: ApiResponse<ClaimLookupData> =
         response.json().await.map_err(|e| ApiError {
             message: format!("Failed to parse claim response: {e}"),
+            status: 0,
+        })?;
+
+    wrapper.data.ok_or_else(|| ApiError {
+        message: wrapper.error.unwrap_or("No data".to_string()),
+        status: 0,
+    })
+}
+
+// ===== Quiz API functions (public — no auth) =====
+
+/// GET /api/quiz
+/// Fetch quiz questions for the frontend (no correct answers).
+///
+/// Public endpoint — no authentication required.
+pub async fn get_quiz() -> Result<QuizQuestionsData, ApiError> {
+    let url = format!("{}/quiz", api_base());
+    let response = gloo::net::http::Request::get(&url).send().await?;
+
+    if !response.ok() {
+        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
+            success: false,
+            data: None,
+            error: Some("Quiz fetch failed".to_string()),
+        });
+        return Err(ApiError {
+            message: body.error.unwrap_or_default(),
+            status: response.status(),
+        });
+    }
+
+    let wrapper: ApiResponse<QuizQuestionsData> =
+        response.json().await.map_err(|e| ApiError {
+            message: format!("Failed to parse quiz response: {e}"),
+            status: 0,
+        })?;
+
+    wrapper.data.ok_or_else(|| ApiError {
+        message: wrapper.error.unwrap_or("No data".to_string()),
+        status: 0,
+    })
+}
+
+/// POST /api/quiz/{token}/submit
+/// Submit quiz answers for scoring.
+///
+/// Public endpoint — no authentication required.
+/// The attendee must be checked in (valid claim token).
+pub async fn submit_quiz(
+    token: &str,
+    answers: &[QuizAnswer],
+) -> Result<QuizSubmitData, ApiError> {
+    let url = format!("{}/quiz/{token}/submit", api_base());
+    let body = serde_json::json!({ "answers": answers });
+
+    let response = gloo::net::http::Request::post(&url)
+        .header("Content-Type", "application/json")
+        .body(serde_json::to_string(&body).unwrap_or_default())
+        .map_err(|e| ApiError {
+            message: format!("Failed to build request: {e}"),
+            status: 0,
+        })?
+        .send()
+        .await?;
+
+    if !response.ok() {
+        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
+            success: false,
+            data: None,
+            error: Some("Quiz submit failed".to_string()),
+        });
+        return Err(ApiError {
+            message: body.error.unwrap_or_default(),
+            status: response.status(),
+        });
+    }
+
+    let wrapper: ApiResponse<QuizSubmitData> =
+        response.json().await.map_err(|e| ApiError {
+            message: format!("Failed to parse quiz submit response: {e}"),
+            status: 0,
+        })?;
+
+    wrapper.data.ok_or_else(|| ApiError {
+        message: wrapper.error.unwrap_or("No data".to_string()),
+        status: 0,
+    })
+}
+
+/// GET /api/quiz/{token}/status
+/// Get quiz progress for an attendee.
+///
+/// Public endpoint — no authentication required.
+pub async fn get_quiz_status(token: &str) -> Result<QuizStatusData, ApiError> {
+    let url = format!("{}/quiz/{token}/status", api_base());
+    let response = gloo::net::http::Request::get(&url).send().await?;
+
+    if !response.ok() {
+        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
+            success: false,
+            data: None,
+            error: Some("Quiz status fetch failed".to_string()),
+        });
+        return Err(ApiError {
+            message: body.error.unwrap_or_default(),
+            status: response.status(),
+        });
+    }
+
+    let wrapper: ApiResponse<QuizStatusData> =
+        response.json().await.map_err(|e| ApiError {
+            message: format!("Failed to parse quiz status response: {e}"),
             status: 0,
         })?;
 

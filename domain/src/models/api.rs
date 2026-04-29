@@ -110,6 +110,21 @@ pub struct EventConfig {
     pub event_end_ms: i64,
 }
 
+/// Quiz requirement status for a claim.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum QuizStatus {
+    /// No quiz configured for this event — claim works normally.
+    #[default]
+    NotRequired,
+    /// Quiz exists but attendee hasn't attempted yet.
+    NotStarted,
+    /// Quiz exists, attendee attempted but hasn't passed.
+    InProgress,
+    /// Quiz passed — claim unlocked.
+    Passed,
+}
+
 /// Response for GET /api/claim/{token} — look up an attendee by claim token.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClaimLookupResponse {
@@ -126,6 +141,9 @@ pub struct ClaimLookupResponse {
     pub locked_wallet: Option<String>,
     /// Dynamic event metadata (name, tagline, link, timestamps).
     pub event: EventConfig,
+    /// Quiz requirement status for this attendee's claim.
+    #[serde(default)]
+    pub quiz_status: QuizStatus,
 }
 
 /// Response for POST /api/claim/{token} — mint cNFT and mark as claimed.
@@ -138,4 +156,142 @@ pub struct ClaimResponse {
     pub claimed_at: String,
     /// Solana cluster for explorer links (e.g. "devnet", "mainnet-beta").
     pub cluster: String,
+}
+
+// ---------------------------------------------------------------------------
+// Quiz types — activity-gated claim flow (Issue 002)
+// ---------------------------------------------------------------------------
+
+/// A single quiz question as stored in KV (includes correct answer — server-side only).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QuizQuestion {
+    /// Unique question identifier (e.g. "q1", "q2").
+    pub id: String,
+    /// Question text displayed to attendee.
+    pub text: String,
+    /// Multiple-choice options.
+    pub options: Vec<String>,
+    /// Index of the correct option (0-based).
+    pub correct_index: u8,
+    /// Optional explanation shown after submission.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub explanation: Option<String>,
+}
+
+/// A quiz question as sent to the frontend (correct answer stripped).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QuizQuestionPublic {
+    pub id: String,
+    pub text: String,
+    pub options: Vec<String>,
+}
+
+/// Full quiz configuration stored in KV under key "questions".
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QuizConfig {
+    pub questions: Vec<QuizQuestion>,
+    /// Percentage of correct answers required to pass (e.g. 60 = 60%).
+    pub passing_score_percent: u8,
+    /// Maximum submission attempts allowed per attendee.
+    pub max_attempts: u8,
+    /// Optional per-attempt timer in seconds.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub time_limit_seconds: Option<u16>,
+}
+
+/// Response for GET /api/quiz — quiz questions for the frontend.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QuizQuestionsResponse {
+    pub questions: Vec<QuizQuestionPublic>,
+    pub passing_score_percent: u8,
+    pub max_attempts: u8,
+    pub time_limit_seconds: Option<u16>,
+}
+
+/// A single answer in a quiz submission.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QuizAnswer {
+    pub question_id: String,
+    /// Selected option text (not index — survives option shuffling).
+    pub selected_text: String,
+}
+
+/// Request body for POST /api/quiz/{token}/submit.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QuizSubmitRequest {
+    pub answers: Vec<QuizAnswer>,
+}
+
+/// Per-question feedback after submission.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QuestionExplanation {
+    pub question_id: String,
+    pub correct: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub explanation: Option<String>,
+}
+
+/// Response for POST /api/quiz/{token}/submit.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QuizSubmitResponse {
+    /// Which attempt number this was (1-based).
+    pub attempt_number: u8,
+    /// Score as percentage (0-100).
+    pub score_percent: u8,
+    /// Whether the attendee passed.
+    pub passed: bool,
+    /// Number of correct answers.
+    pub correct_count: usize,
+    /// Total number of questions.
+    pub total_questions: usize,
+    /// Remaining attempts (0 = exhausted).
+    pub remaining_attempts: u8,
+    /// Per-question feedback.
+    pub explanations: Vec<QuestionExplanation>,
+}
+
+/// Record of a single quiz attempt.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QuizAttempt {
+    /// Attempt number (1-based).
+    pub attempt_number: u8,
+    /// Selected option text per question (question_id → selected_text).
+    pub answers: Vec<(String, String)>,
+    /// Score as percentage (0-100).
+    pub score_percent: u8,
+    /// ISO 8601 timestamp of submission.
+    pub submitted_at: String,
+}
+
+/// Per-attendee quiz progress stored in KV under key "progress:{claim_token}".
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QuizProgress {
+    pub claim_token: String,
+    /// Total attempts so far.
+    pub attempts: u8,
+    /// Best score achieved across all attempts.
+    pub best_score_percent: u8,
+    /// Whether the attendee has passed.
+    pub passed: bool,
+    /// ISO 8601 timestamp of when they passed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub passed_at: Option<String>,
+    /// History of all attempts.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub attempt_history: Vec<QuizAttempt>,
+}
+
+/// Response for GET /api/quiz/{token}/status — current quiz progress.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QuizStatusResponse {
+    /// Attempts used so far.
+    pub attempts: u8,
+    /// Maximum attempts allowed.
+    pub max_attempts: u8,
+    /// Best score achieved (0-100).
+    pub best_score_percent: u8,
+    /// Whether the attendee has passed.
+    pub passed: bool,
+    /// Percentage required to pass.
+    pub passing_threshold_percent: u8,
 }

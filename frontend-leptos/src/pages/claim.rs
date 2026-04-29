@@ -13,9 +13,16 @@ use leptos_meta::Title;
 use leptos_router::hooks::use_params;
 use leptos_router::params::Params;
 
-use crate::api::{self, ClaimLookupData, ClaimMintData};
+use crate::api::{self, ClaimLookupData, ClaimMintData, QuizQuestionsData, QuizStatus, QuizSubmitData};
 use crate::utils::{escape_html, format_timestamp};
 use wasm_bindgen::prelude::*;
+
+// ---------------------------------------------------------------------------
+// Type aliases
+// ---------------------------------------------------------------------------
+
+/// Quiz answers: question_id → selected option text.
+type QuizAnswers = std::collections::HashMap<String, String>;
 
 // ---------------------------------------------------------------------------
 // JS interop
@@ -57,6 +64,11 @@ enum ClaimState {
     Ready(ClaimLookupData),
     /// Attendee found but NFT minting is not configured yet.
     NftComingSoon(ClaimLookupData),
+    /// Quiz required — attendee must complete quiz before claiming.
+    /// Holds claim data + fetched quiz questions.
+    Quiz(ClaimLookupData, QuizQuestionsData),
+    /// Quiz submitted — showing results. If passed, transition to Ready.
+    QuizSubmitted(ClaimLookupData, QuizQuestionsData, QuizSubmitData),
     /// Minting in progress (POST /api/claim/{token} sent).
     Minting(ClaimLookupData),
     /// NFT minted successfully.
@@ -314,9 +326,503 @@ fn build_face_grid(eye_style: u32, mouth_style: u32, has_blush: bool) -> [[u8; 8
 // Claim page component
 // ---------------------------------------------------------------------------
 
-/// Claim page component — public route at `/claim/:token`.
-///
-/// Attendees scan their claim QR code (or follow the claim URL) to land here.
+// Claim page component — public route at `/claim/:token`.
+//
+// Attendees scan their claim QR code (or follow the claim URL) to land here.
+// ---------------------------------------------------------------------------
+// Quiz rendering helpers (extracted to avoid nested view! macro issues)
+// ---------------------------------------------------------------------------
+
+/// Build quiz question cards as pre-rendered views.
+fn build_quiz_questions(
+    questions: &[crate::api::QuizQuestionPublic],
+    total_q: usize,
+    quiz_answers: ReadSignal<QuizAnswers>,
+    set_quiz_answers: WriteSignal<QuizAnswers>,
+) -> Vec<AnyView> {
+    questions.iter().enumerate().map(|(idx, q)| {
+        let q_id = q.id.clone();
+        let q_text = q.text.clone();
+        let q_num = idx + 1;
+        let options = q.options.clone();
+
+        let option_views: Vec<AnyView> = options.iter().map(|opt| {
+            let opt_display = opt.clone();
+            // Clones for class:dyn closure
+            let qid_c = q_id.clone();
+            let opt_c = opt.clone();
+            let qa_c = quiz_answers;
+            // Clones for radio closure
+            let qid_r = q_id.clone();
+            let opt_r = opt.clone();
+            let qa_r = quiz_answers;
+            // Clones for click handler
+            let qid_click = q_id.clone();
+            let opt_click = opt.clone();
+            let set_qa = set_quiz_answers;
+            let qa_click = quiz_answers;
+
+            view! {
+                <button
+                    class="claim-quiz-opt"
+                    class:claim-quiz-opt-selected=move || qa_c.get().get(&qid_c).map(|s| s == &opt_c).unwrap_or(false)
+                    on:click=move |_| {
+                        let mut answers = qa_click.get();
+                        answers.insert(qid_click.clone(), opt_click.clone());
+                        set_qa.set(answers);
+                    }
+                >
+                    <span class="claim-quiz-opt-radio">
+                        {move || match qa_r.get().get(&qid_r).map(|s| s == &opt_r).unwrap_or(false) {
+                            true => "●",
+                            _ => "○",
+                        }}
+                    </span>
+                    <span>{opt_display}</span>
+                </button>
+            }.into_any()
+        }).collect();
+
+        view! {
+            <div class="card claim-quiz-question">
+                <div class="claim-quiz-q-header">
+                    <span class="claim-quiz-q-num">{format!("{q_num}")}</span>
+                    <span class="claim-quiz-q-of">"of "{total_q}</span>
+                </div>
+                <p class="claim-quiz-q-text">{q_text}</p>
+                <div class="claim-quiz-options">{option_views}</div>
+            </div>
+        }.into_any()
+    }).collect()
+}
+
+/// Build quiz explanation cards as a pre-rendered view.
+fn build_quiz_explanations(
+    explanations: &[crate::api::QuestionExplanation],
+    questions: &[crate::api::QuizQuestionPublic],
+) -> AnyView {
+    if explanations.is_empty() {
+        return view! { <div></div> }.into_any();
+    }
+
+    let items: Vec<AnyView> = explanations.iter().enumerate().map(|(idx, exp)| {
+        let q_text = questions.iter().find(|q| q.id == exp.question_id)
+            .map(|q| q.text.clone())
+            .unwrap_or_default();
+        let icon = match exp.correct { true => "✓", _ => "✗" };
+        let exp_class = match exp.correct {
+            true => "claim-quiz-exp-correct",
+            _ => "claim-quiz-exp-wrong",
+        };
+        let exp_text = exp.explanation.clone();
+        let num = idx + 1;
+
+        view! {
+            <div class="claim-quiz-exp-item">
+                <div class="claim-quiz-exp-header">
+                    <span class=exp_class>{icon}</span>
+                    <span class="claim-quiz-exp-q">{format!("{num}. {q_text}")}</span>
+                </div>
+                {match exp_text {
+                    Some(t) => view! { <p class="claim-quiz-exp-text">{t}</p> }.into_any(),
+                    None => view! { <div></div> }.into_any(),
+                }}
+            </div>
+        }.into_any()
+    }).collect();
+
+    view! {
+        <div class="card claim-quiz-explanations">
+            <h4>"Answer Review"</h4>
+            {items}
+        </div>
+    }.into_any()
+}
+
+/// Allowed quiz actions after submission.
+enum QuizAction {
+    Passed,
+    Retry,
+    Exhausted,
+}
+
+/// Build the action section for quiz results (wallet+claim, retry, or exhausted).
+/// Extracted to avoid nested view! macros inside conditional blocks.
+#[allow(clippy::too_many_arguments)]
+fn build_quiz_action(
+    action: QuizAction,
+    claim_data_for_claim: ClaimLookupData,
+    claim_data_for_retry: ClaimLookupData,
+    quiz_data_for_retry: crate::api::QuizQuestionsData,
+    set_quiz_answers: WriteSignal<QuizAnswers>,
+    wallet_input: ReadSignal<String>,
+    set_wallet_input: WriteSignal<String>,
+    locked_wallet: Option<String>,
+    locked_wallet_hint: Option<String>,
+    handle_paste: impl Fn(leptos::ev::MouseEvent) + Clone + 'static,
+    claim_token: String,
+    set_state: WriteSignal<ClaimState>,
+) -> AnyView {
+    match action {
+        QuizAction::Passed => {
+            let claim_data_c = claim_data_for_claim;
+            let lw = locked_wallet;
+            let lw_hint = locked_wallet_hint;
+            let wi = wallet_input;
+            let set_wi = set_wallet_input;
+            let hp = handle_paste;
+            let token = claim_token;
+            let ss = set_state;
+
+            view! {
+                // NFT badge preview
+                <NftBadgePreview />
+
+                // Wallet input
+                <div class="card">
+                    <label class="claim-wallet-label">"Solana Wallet Address"</label>
+                    {move || {
+                        match &lw {
+                            Some(w) if !w.is_empty() => {
+                                let truncated = if w.len() > 12 {
+                                    format!("{}...{}", &w[..4], &w[w.len()-4..])
+                                } else {
+                                    w.clone()
+                                };
+                                view! {
+                                    <div class="claim-wallet-locked">
+                                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                                            <rect x="3" y="7" width="10" height="7" rx="1.5"></rect>
+                                            <path d="M5 7V5a3 3 0 0 1 6 0v2"></path>
+                                        </svg>
+                                        <span class="locked-wallet-addr">{truncated}</span>
+                                    </div>
+                                }.into_any()
+                            }
+                            _ => view! { <div></div> }.into_any(),
+                        }
+                    }}
+                    <div class="claim-wallet-row">
+                        <input
+                            class="claim-wallet-input"
+                            type="text"
+                            placeholder="Enter your Solana wallet address"
+                            prop:value=move || wi.get()
+                            on:input=move |ev| {
+                                let val = event_target_value(&ev);
+                                set_wi.set(val);
+                            }
+                        />
+                        <button class="claim-paste-btn" on:click=hp.clone() type="button">"Paste"</button>
+                    </div>
+                    <p class="claim-wallet-hint">
+                        {move || {
+                            match &lw_hint {
+                                Some(w) if !w.is_empty() => "Use the pre-filled wallet address to claim.".into_any(),
+                                _ => "Tap Paste or type your Phantom, Solflare, or Backpack address.".into_any(),
+                            }
+                        }}
+                    </p>
+                </div>
+
+                <button
+                    class="claim-btn-mint"
+                    on:click=move |_| {
+                        let wallet = wi.get().trim().to_string();
+                        let wallet_len = wallet.len();
+                        if wallet.is_empty() || !(32..=44).contains(&wallet_len) {
+                            return;
+                        }
+                        let current_data = claim_data_c.clone();
+                        ss.set(ClaimState::Minting(current_data.clone()));
+                        let t = token.clone();
+                        leptos::task::spawn_local(async move {
+                            match api::post_claim(&t, &wallet).await {
+                                Ok(mint_data) => {
+                                    log::info!("[claim] minted nft: asset_id={}", mint_data.asset_id);
+                                    ss.set(ClaimState::Success(mint_data));
+                                }
+                                Err(e) => {
+                                    log::error!("[claim] mint failed: {e}");
+                                    ss.set(ClaimState::MintError(current_data.clone(), format!("{e}")));
+                                }
+                            }
+                        });
+                    }
+                    disabled=move || {
+                        let w = wi.get();
+                        let w_trimmed = w.trim();
+                        w_trimmed.is_empty() || !(32..=44).contains(&w_trimmed.len())
+                    }
+                >
+                    "Claim NFT Badge"
+                </button>
+            }.into_any()
+        }
+        QuizAction::Retry => {
+            let claim_d = claim_data_for_retry;
+            let quiz_d = quiz_data_for_retry;
+            view! {
+                <button
+                    class="claim-btn-mint claim-quiz-retry-btn"
+                    on:click=move |_| {
+                        set_quiz_answers.set(QuizAnswers::new());
+                        set_state.set(ClaimState::Quiz(claim_d.clone(), quiz_d.clone()));
+                    }
+                >
+                    "Try Again"
+                </button>
+            }.into_any()
+        }
+        QuizAction::Exhausted => {
+            view! {
+                <div class="card claim-quiz-exhausted">
+                    <p>"You've used all your attempts. Please contact event staff for assistance."</p>
+                </div>
+            }.into_any()
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Extracted quiz components (reduce nesting in main view! macro)
+// ---------------------------------------------------------------------------
+
+/// Quiz view — handles the ClaimState::Quiz state.
+/// Extracted from the main Claim component to avoid the unclosed delimiter
+/// caused by deeply nested view! macro content.
+#[component]
+fn QuizView(
+    claim_data: ClaimLookupData,
+    quiz_data: QuizQuestionsData,
+    quiz_answers: ReadSignal<QuizAnswers>,
+    set_quiz_answers: WriteSignal<QuizAnswers>,
+    set_state: WriteSignal<ClaimState>,
+) -> impl IntoView {
+    let checked_in_display = format_timestamp(&claim_data.checked_in_at);
+    let total_q = quiz_data.questions.len();
+    let _answered = move || quiz_answers.get().len();
+    let all_answered = move || quiz_answers.get().len() == total_q;
+    let passing = quiz_data.passing_score_percent;
+    let max_att = quiz_data.max_attempts;
+    let questions_clone = quiz_data.questions.clone();
+    let attempts_label = format!("{max_att} attempt{}", if max_att != 1 { "s" } else { "" });
+    let claim_token = claim_data.claim_token.clone();
+
+    // Pre-render question cards to avoid nested view! macro issues
+    let question_views = build_quiz_questions(
+        &quiz_data.questions, total_q, quiz_answers, set_quiz_answers,
+    );
+
+    view! {
+        <div class="claim-state-full">
+            // Attendee welcome
+            <div class="claim-welcome-card">
+                <ParticipantAvatar name=claim_data.name.clone() />
+                <h3>"Welcome, "{escape_html(&claim_data.name)}"!"</h3>
+                <p class="checked-in-label">"Checked in "{checked_in_display}</p>
+            </div>
+
+            // Quiz intro card
+            <div class="card claim-quiz-intro">
+                <div class="claim-quiz-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                        <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                    </svg>
+                </div>
+                <h3>"Complete the Quiz"</h3>
+                <p class="claim-quiz-desc">
+                    "Answer all questions to unlock your badge. You need "
+                    <strong>{passing}"%"</strong>" correct to pass."
+                </p>
+                <p class="claim-quiz-meta">
+                    <span>{total_q}" questions"</span>
+                    <span class="claim-quiz-sep">"·"</span>
+                    <span>{attempts_label}</span>
+                </p>
+            </div>
+
+            // Questions (pre-rendered to avoid nested view! macro)
+            {question_views}
+
+            // Submit button
+            <button
+                class="claim-btn-mint claim-quiz-submit"
+                disabled=move || !all_answered()
+                on:click=move |_| {
+                    let answers_map = quiz_answers.get();
+                    let answers_vec: Vec<crate::api::QuizAnswer> = questions_clone.iter().filter_map(|q| {
+                        answers_map.get(&q.id).map(|text| crate::api::QuizAnswer {
+                            question_id: q.id.clone(),
+                            selected_text: text.clone(),
+                        })
+                    }).collect();
+                    let token = claim_token.clone();
+                    let claim_data_c = claim_data.clone();
+                    let quiz_data_c = quiz_data.clone();
+                    leptos::task::spawn_local(async move {
+                        match api::submit_quiz(&token, &answers_vec).await {
+                            Ok(result) => {
+                                if result.passed {
+                                    log::info!("[quiz] passed! score={}%", result.score_percent);
+                                } else {
+                                    log::info!("[quiz] not passed. score={}%, attempts remaining={}", result.score_percent, result.remaining_attempts);
+                                }
+                                set_state.set(ClaimState::QuizSubmitted(claim_data_c, quiz_data_c, result));
+                            }
+                            Err(e) => {
+                                log::error!("[quiz] submit failed: {e}");
+                            }
+                        }
+                    });
+                }
+            >
+                "Submit Answers"
+                <span class="claim-quiz-submit-count">
+                    "("(answered)"/"{total_q}")"
+                </span>
+            </button>
+        </div>
+    }
+}
+
+/// Quiz submitted view — handles the ClaimState::QuizSubmitted state.
+/// Extracted from the main Claim component to avoid the unclosed delimiter
+/// caused by deeply nested view! macro content.
+#[component]
+fn QuizSubmittedView(
+    claim_data: ClaimLookupData,
+    quiz_data: QuizQuestionsData,
+    submit_result: QuizSubmitData,
+    set_quiz_answers: WriteSignal<QuizAnswers>,
+    wallet_input: ReadSignal<String>,
+    set_wallet_input: WriteSignal<String>,
+    set_state: WriteSignal<ClaimState>,
+) -> impl IntoView {
+    let checked_in_display = format_timestamp(&claim_data.checked_in_at);
+    let passed = submit_result.passed;
+    let score = submit_result.score_percent;
+    let remaining = submit_result.remaining_attempts;
+    let correct = submit_result.correct_count;
+    let total_q = submit_result.total_questions;
+    let result_class = match passed {
+        true => "card claim-quiz-result claim-quiz-passed",
+        false => "card claim-quiz-result claim-quiz-failed",
+    };
+    let locked_wallet = claim_data.locked_wallet.clone();
+    let locked_wallet_hint = claim_data.locked_wallet.clone();
+    let quiz_data_for_retry = quiz_data.clone();
+    let claim_data_for_retry = claim_data.clone();
+    let claim_data_for_claim = claim_data.clone();
+    let claim_token = claim_data.claim_token.clone();
+    let retry_info = match remaining {
+        0 => "No attempts remaining. Contact event staff for help.".to_string(),
+        n => format!("{n} attempt{} left.", if n != 1 { "s" } else { "" }),
+    };
+    let score_label = format!("{score}% — {correct} of {total_q} correct");
+    let action = match passed {
+        true => QuizAction::Passed,
+        false if remaining > 0 => QuizAction::Retry,
+        false => QuizAction::Exhausted,
+    };
+
+    // One-tap paste from clipboard — recreated for this component
+    let handle_paste = move |_| {
+        let set_w = set_wallet_input;
+        leptos::task::spawn_local(async move {
+            if let Ok(promise_val) = js_sys::eval(
+                "navigator.clipboard ? navigator.clipboard.readText() : Promise.resolve('')"
+            ) {
+                let promise = js_sys::Promise::from(promise_val);
+                if let Ok(val) = js_sys::futures::JsFuture::from(promise).await
+                    && let Some(text) = val.as_string()
+                {
+                    let trimmed: String = text.trim().to_string();
+                    if !trimmed.is_empty() {
+                        set_w.set(trimmed);
+                    }
+                }
+            }
+        });
+    };
+
+    // Pre-build conditional views outside view! macro to avoid delimiter counting issues
+    let result_icon: AnyView = match passed {
+        true => view! {
+            <svg viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <polyline points="16 9 10.5 14.5 8 12"></polyline>
+            </svg>
+        }.into_any(),
+        false => view! {
+            <svg viewBox="0 0 24 24" fill="none" stroke="var(--warning)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="15" y1="9" x2="9" y2="15"></line>
+                <line x1="9" y1="9" x2="15" y2="15"></line>
+            </svg>
+        }.into_any(),
+    };
+
+    let result_title: &str = match passed { true => "Quiz Passed!", false => "Not Quite..." };
+
+    let retry_info_view: AnyView = match passed {
+        true => view! { <div></div> }.into_any(),
+        false => view! {
+            <p class="claim-quiz-retry-info">{retry_info}</p>
+        }.into_any(),
+    };
+
+    let explanations_view = build_quiz_explanations(&submit_result.explanations, &quiz_data.questions);
+
+    let action_view = build_quiz_action(
+        action,
+        claim_data_for_claim,
+        claim_data_for_retry,
+        quiz_data_for_retry,
+        set_quiz_answers,
+        wallet_input,
+        set_wallet_input,
+        locked_wallet,
+        locked_wallet_hint,
+        handle_paste,
+        claim_token,
+        set_state,
+    );
+
+    view! {
+        <div class="claim-state-full">
+            // Attendee welcome
+            <div class="claim-welcome-card">
+                <ParticipantAvatar name=claim_data.name.clone() />
+                <h3>"Welcome, "{escape_html(&claim_data.name)}"!"</h3>
+                <p class="checked-in-label">"Checked in "{checked_in_display}</p>
+            </div>
+
+            // Quiz result card
+            <div class=result_class>
+                <div class="claim-quiz-result-icon">
+                    {result_icon}
+                </div>
+                <h3>{result_title}</h3>
+                <div class="claim-quiz-score">
+                    <span class="claim-quiz-score-num">{format!("{score}")}</span>
+                    <span class="claim-quiz-score-pct">"%"</span>
+                </div>
+                <p class="claim-quiz-score-detail">{score_label}</p>
+                {retry_info_view}
+            </div>
+
+            // Explanations (pre-rendered to avoid nested view! macro)
+            {explanations_view}
+
+            // Actions: retry or proceed to claim
+            {action_view}
+        </div>
+    }
+}
+
 /// The page looks up their check-in record and allows them to mint a
 /// compressed NFT badge to their Solana wallet.
 #[component]
@@ -326,6 +832,9 @@ pub fn Claim() -> impl IntoView {
     // Reactive state
     let (state, set_state) = signal(ClaimState::Loading);
     let (wallet_input, set_wallet_input) = signal(String::new());
+
+    // Quiz state — selected answer text per question (question_id → option text)
+    let (quiz_answers, set_quiz_answers): (ReadSignal<QuizAnswers>, WriteSignal<QuizAnswers>) = signal(QuizAnswers::new());
 
     // Dynamic event config (fetched from backend, replaces hardcoded values)
     let (evt_name, set_evt_name) = signal(String::new());
@@ -368,6 +877,42 @@ pub fn Claim() -> impl IntoView {
                         set_state.set(ClaimState::AlreadyClaimed(data));
                     } else if !data.nft_available {
                         set_state.set(ClaimState::NftComingSoon(data));
+                    } else if matches!(
+                        data.quiz_status,
+                        QuizStatus::NotStarted | QuizStatus::InProgress
+                    ) {
+                        // Quiz required — fetch questions, then route to Quiz state
+                        let claim_data = data.clone();
+                        leptos::task::spawn_local(async move {
+                            match api::get_quiz().await {
+                                Ok(quiz_data) if quiz_data.configured => {
+                                    set_state.set(ClaimState::Quiz(claim_data, quiz_data));
+                                }
+                                Ok(_) => {
+                                    // Quiz not configured despite status — fallback to Ready
+                                    log::warn!(
+                                        "[claim] quiz status={:?} but quiz not configured, falling back to Ready",
+                                        claim_data.quiz_status
+                                    );
+                                    if let Some(ref wallet) = claim_data.locked_wallet
+                                        && !wallet.is_empty()
+                                    {
+                                        set_wallet_input.set(wallet.clone());
+                                    }
+                                    set_state.set(ClaimState::Ready(claim_data));
+                                }
+                                Err(e) => {
+                                    log::error!("[claim] failed to fetch quiz: {e}");
+                                    // Fallback to Ready so attendee isn't stuck
+                                    if let Some(ref wallet) = claim_data.locked_wallet
+                                        && !wallet.is_empty()
+                                    {
+                                        set_wallet_input.set(wallet.clone());
+                                    }
+                                    set_state.set(ClaimState::Ready(claim_data));
+                                }
+                            }
+                        });
                     } else {
                         // Pre-fill wallet if locked to a pre-registered address
                         if let Some(ref wallet) = data.locked_wallet
@@ -571,6 +1116,36 @@ pub fn Claim() -> impl IntoView {
                                         " ready — bookmark this page to claim your NFT later."
                                     </p>
                                 </div>
+                            }
+                                .into_any()
+                        }
+
+                        // ---- Quiz required ----
+                        ClaimState::Quiz(claim_data, quiz_data) => {
+                            view! {
+                                <QuizView
+                                    claim_data=claim_data
+                                    quiz_data=quiz_data
+                                    quiz_answers=quiz_answers
+                                    set_quiz_answers=set_quiz_answers
+                                    set_state=set_state
+                                />
+                            }
+                                .into_any()
+                        }
+
+                        // ---- Quiz submitted — results ----
+                        ClaimState::QuizSubmitted(claim_data, quiz_data, submit_result) => {
+                            view! {
+                                <QuizSubmittedView
+                                    claim_data=claim_data
+                                    quiz_data=quiz_data
+                                    submit_result=submit_result
+                                    set_quiz_answers=set_quiz_answers
+                                    wallet_input=wallet_input
+                                    set_wallet_input=set_wallet_input
+                                    set_state=set_state
+                                />
                             }
                                 .into_any()
                         }

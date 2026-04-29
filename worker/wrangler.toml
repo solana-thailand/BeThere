@@ -70,3 +70,12 @@ EVENT_END_MS = "1777183200000"
 # - NFT_COLLECTION_MINT     (optional — Helius mints to its own tree without a collection)
 # - NFT_METADATA_URI        (optional — metadata JSON on Arweave/IPFS)
 # - NFT_IMAGE_URL           (optional — NFT badge image URL)
+
+# Phase 4: Quiz KV namespace (Issue 002 — activity-gated claim)
+# Create with: npx wrangler kv namespace create QUIZ
+# Then paste the returned ID below.
+# Preview: npx wrangler kv namespace create QUIZ --preview
+[[kv_namespaces]]
+binding = "QUIZ"
+id = "<QUIZ_KV_NAMESPACE_ID>"
+preview_id = "<QUIZ_KV_PREVIEW_NAMESPACE_ID>"

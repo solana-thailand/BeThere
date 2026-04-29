@@ -2008,6 +2008,65 @@ nav a.active {
     .nft-preview-card::before {
         display: none;
     }
+
+    /* Quiz responsive (Issue 002) */
+    .claim-quiz-intro {
+        padding: 1rem 0.85rem;
+    }
+    .claim-quiz-intro h3 {
+        font-size: 1rem;
+    }
+    .claim-quiz-icon {
+        width: 40px;
+        height: 40px;
+    }
+    .claim-quiz-icon svg {
+        width: 22px;
+        height: 22px;
+    }
+    .claim-quiz-desc {
+        font-size: 0.82rem;
+    }
+    .claim-quiz-question {
+        padding: 1rem 0.85rem;
+    }
+    .claim-quiz-q-text {
+        font-size: 0.88rem;
+    }
+    .claim-quiz-opt {
+        padding: 0.6rem 0.75rem;
+        font-size: 0.82rem;
+        gap: 0.5rem;
+    }
+    .claim-quiz-result {
+        padding: 1rem 0.85rem;
+    }
+    .claim-quiz-score-num {
+        font-size: 2rem;
+    }
+    .claim-quiz-result-icon {
+        width: 48px;
+        height: 48px;
+    }
+    .claim-quiz-result-icon svg {
+        width: 28px;
+        height: 28px;
+    }
+    .claim-quiz-explanations {
+        padding: 1rem 0.85rem;
+    }
+    .claim-quiz-exp-q {
+        font-size: 0.8rem;
+    }
+    .claim-quiz-exp-text {
+        font-size: 0.78rem;
+    }
+    .claim-quiz-submit-count {
+        font-size: 0.78rem;
+    }
+    .claim-quiz-exhausted {
+        padding: 1rem;
+    }
 }
 
 /* Standard phones (360-480px) */
@@ -2101,11 +2160,22 @@ nav a.active {
     }
 
     .claim-wallet-input {
-        font-size: 0.8rem;
+        font-size: 0.82rem;
     }
 
     .claim-event-link {
-        font-size: 0.75rem;
+        font-size: 0.78rem;
+    }
+
+    /* Quiz responsive (Issue 002) */
+    .claim-quiz-opt {
+        font-size: 0.84rem;
+    }
+    .claim-quiz-q-text {
+        font-size: 0.92rem;
+    }
+    .claim-quiz-score-num {
+        font-size: 2.2rem;
     }
 
     .session-timer {
@@ -2223,6 +2293,255 @@ nav a.active {
     .page-container {
         padding: 1rem;
     }
+}
+
+/* ===== Quiz (Issue 002 — activity-gated claim) ===== */
+.claim-quiz-intro {
+    text-align: center;
+    padding: 1.5rem 1.25rem;
+}
+.claim-quiz-intro h3 {
+    margin: 0.75rem 0 0.5rem;
+    font-size: 1.15rem;
+    font-weight: 600;
+    color: var(--fg);
+}
+.claim-quiz-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: rgba(99, 102, 241, 0.1);
+}
+.claim-quiz-icon svg {
+    width: 26px;
+    height: 26px;
+    color: var(--primary);
+}
+.claim-quiz-desc {
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    margin: 0.5rem 0;
+}
+.claim-quiz-desc strong {
+    color: var(--primary);
+}
+.claim-quiz-meta {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    color: var(--muted);
+    font-size: 0.8rem;
+    margin-top: 0.5rem;
+}
+.claim-quiz-sep {
+    opacity: 0.4;
+}
+.claim-quiz-question {
+    padding: 1.25rem;
+}
+.claim-quiz-q-header {
+    display: flex;
+    align-items: baseline;
+    gap: 0.3rem;
+    margin-bottom: 0.6rem;
+}
+.claim-quiz-q-num {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--primary);
+}
+.claim-quiz-q-of {
+    font-size: 0.75rem;
+    color: var(--muted);
+}
+.claim-quiz-q-text {
+    font-size: 0.95rem;
+    font-weight: 500;
+    line-height: 1.5;
+    margin: 0 0 0.85rem;
+    color: var(--fg);
+}
+.claim-quiz-options {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+.claim-quiz-opt {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    width: 100%;
+    padding: 0.7rem 0.9rem;
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    background: var(--bg);
+    color: var(--fg);
+    font-size: 0.88rem;
+    text-align: left;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+.claim-quiz-opt:hover {
+    border-color: var(--primary);
+    background: rgba(99, 102, 241, 0.04);
+}
+.claim-quiz-opt-selected {
+    border-color: var(--primary);
+    background: rgba(99, 102, 241, 0.08);
+    color: var(--primary);
+    font-weight: 500;
+}
+.claim-quiz-opt-radio {
+    flex-shrink: 0;
+    font-size: 0.75rem;
+    line-height: 1;
+    color: var(--muted);
+    width: 16px;
+    text-align: center;
+}
+.claim-quiz-opt-selected .claim-quiz-opt-radio {
+    color: var(--primary);
+}
+.claim-quiz-submit {
+    margin-top: 0.5rem;
+}
+.claim-quiz-submit-count {
+    opacity: 0.75;
+    font-size: 0.85rem;
+    margin-left: 0.3rem;
+}
+.claim-quiz-result {
+    text-align: center;
+    padding: 1.5rem 1.25rem;
+}
+.claim-quiz-result h3 {
+    font-size: 1.15rem;
+    font-weight: 600;
+    margin: 0.75rem 0 0.5rem;
+}
+.claim-quiz-passed h3 {
+    color: var(--success);
+}
+.claim-quiz-failed h3 {
+    color: var(--warning);
+}
+.claim-quiz-result-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+}
+.claim-quiz-passed .claim-quiz-result-icon {
+    background: rgba(16, 185, 129, 0.1);
+}
+.claim-quiz-failed .claim-quiz-result-icon {
+    background: rgba(245, 158, 11, 0.1);
+}
+.claim-quiz-result-icon svg {
+    width: 32px;
+    height: 32px;
+}
+.claim-quiz-score {
+    display: inline-flex;
+    align-items: baseline;
+    margin: 0.5rem 0;
+}
+.claim-quiz-score-num {
+    font-size: 2.5rem;
+    font-weight: 700;
+    line-height: 1;
+}
+.claim-quiz-passed .claim-quiz-score-num {
+    color: var(--success);
+}
+.claim-quiz-failed .claim-quiz-score-num {
+    color: var(--warning);
+}
+.claim-quiz-score-pct {
+    font-size: 1.1rem;
+    font-weight: 600;
+    opacity: 0.7;
+    margin-left: 2px;
+}
+.claim-quiz-score-detail {
+    font-size: 0.88rem;
+    color: var(--muted);
+    margin: 0.25rem 0 0.5rem;
+}
+.claim-quiz-retry-info {
+    font-size: 0.85rem;
+    color: var(--muted);
+    margin-top: 0.5rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--border);
+}
+.claim-quiz-retry-btn {
+    margin-top: 0.75rem;
+    background: var(--bg);
+    color: var(--fg);
+    border: 1.5px solid var(--border);
+}
+.claim-quiz-retry-btn:hover:not(:disabled) {
+    border-color: var(--primary);
+    color: var(--primary);
+}
+.claim-quiz-exhausted {
+    text-align: center;
+    padding: 1.25rem;
+}
+.claim-quiz-exhausted p {
+    color: var(--muted);
+    font-size: 0.9rem;
+}
+.claim-quiz-explanations {
+    padding: 1.25rem;
+}
+.claim-quiz-explanations h4 {
+    font-size: 0.95rem;
+    font-weight: 600;
+    margin: 0 0 0.75rem;
+    color: var(--fg);
+}
+.claim-quiz-exp-item {
+    padding: 0.65rem 0;
+    border-bottom: 1px solid var(--border);
+}
+.claim-quiz-exp-item:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+}
+.claim-quiz-exp-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+}
+.claim-quiz-exp-correct {
+    color: var(--success);
+    font-weight: 700;
+    flex-shrink: 0;
+}
+.claim-quiz-exp-wrong {
+    color: var(--warning);
+    font-weight: 700;
+    flex-shrink: 0;
+}
+.claim-quiz-exp-q {
+    font-size: 0.85rem;
+    color: var(--fg);
+    line-height: 1.4;
+}
+.claim-quiz-exp-text {
+    font-size: 0.82rem;
+    color: var(--muted);
+    margin: 0.3rem 0 0 1.4rem;
+    line-height: 1.45;
 }
 
 /* ===== Hearts Widget ===== */

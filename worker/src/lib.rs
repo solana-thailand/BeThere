@@ -3,6 +3,7 @@ mod crypto;
 mod handlers;
 mod http;
 mod middleware;
+mod quiz;
 mod sheets;
 mod solana;
 mod state;

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use worker::Env;
+use worker::{Env, KvStore};
 
 use event_checkin_domain::config::{
     AppConfig, GoogleOAuthConfig, GoogleServiceAccountConfig, SheetsConfig,
@@ -13,6 +13,9 @@ use event_checkin_domain::config::{
 #[derive(Clone)]
 pub struct AppState {
     pub config: Arc<AppConfig>,
+    /// KV namespace for quiz questions and progress (Issue 002).
+    /// `None` if the `QUIZ` binding is not configured in `wrangler.toml`.
+    pub quiz_kv: Option<KvStore>,
 }
 
 impl AppState {
@@ -107,8 +110,12 @@ impl AppState {
             port: 0,
         };
 
+        // Quiz KV namespace — optional, quiz feature disabled if not bound
+        let quiz_kv = env.kv("QUIZ").ok();
+
         Ok(Self {
             config: Arc::new(config),
+            quiz_kv,
         })
     }
 

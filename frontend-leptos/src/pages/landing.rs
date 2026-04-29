@@ -173,7 +173,7 @@ pub fn Landing() -> impl IntoView {
                     </span>
                 </h1>
                 <p style="font-size:1.1rem;color:var(--text-secondary);max-width:520px;margin:0 auto 2.25rem;line-height:1.6;">
-                    "Put down a small deposit to reserve your spot. Show up, get every cent back — plus a digital badge you own forever. Don't show up? The organizer keeps your deposit. Simple."
+                    "Put down a small deposit to reserve your spot. Show up, prove you paid attention with a quick quiz, and get every cent back — plus a digital badge you own forever. Don't show up? The organizer keeps your deposit. Simple."
                 </p>
                 <div style="display:flex;flex-wrap:wrap;gap:0.75rem;justify-content:center;">
                     <A href="/login" attr:class="btn btn-primary" attr:style="padding:0.85rem 2rem;font-size:1rem;">
@@ -272,12 +272,12 @@ pub fn Landing() -> impl IntoView {
                         "How it works"
                     </h2>
                     <p style="color:var(--text-secondary);font-size:0.95rem;">
-                        "Three steps. Under a minute."
+                        "Four steps. Under a minute."
                     </p>
                 </div>
-                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:1.5rem;">
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1.25rem;">
 
-                    <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:2rem 1.5rem;text-align:center;">
+                    <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:1.75rem 1.25rem;text-align:center;">
                         <div style="width:3.5rem;height:3.5rem;border-radius:50%;background:linear-gradient(135deg,rgba(99,102,241,0.2),rgba(129,140,248,0.1));display:inline-flex;align-items:center;justify-content:center;font-size:1.25rem;margin-bottom:1rem;border:1px solid rgba(99,102,241,0.3);">
                             "1"
                         </div>
@@ -289,7 +289,7 @@ pub fn Landing() -> impl IntoView {
                         </p>
                     </div>
 
-                    <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:2rem 1.5rem;text-align:center;">
+                    <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:1.75rem 1.25rem;text-align:center;">
                         <div style="width:3.5rem;height:3.5rem;border-radius:50%;background:linear-gradient(135deg,rgba(34,197,94,0.2),rgba(34,197,94,0.1));display:inline-flex;align-items:center;justify-content:center;font-size:1.25rem;margin-bottom:1rem;border:1px solid rgba(34,197,94,0.3);">
                             "2"
                         </div>
@@ -301,9 +301,21 @@ pub fn Landing() -> impl IntoView {
                         </p>
                     </div>
 
-                    <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:2rem 1.5rem;text-align:center;">
-                        <div style="width:3.5rem;height:3.5rem;border-radius:50%;background:linear-gradient(135deg,rgba(167,139,250,0.2),rgba(167,139,250,0.1));display:inline-flex;align-items:center;justify-content:center;font-size:1.25rem;margin-bottom:1rem;border:1px solid rgba(167,139,250,0.3);">
+                    <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:1.75rem 1.25rem;text-align:center;">
+                        <div style="width:3.5rem;height:3.5rem;border-radius:50%;background:linear-gradient(135deg,rgba(245,158,11,0.2),rgba(245,158,11,0.1));display:inline-flex;align-items:center;justify-content:center;font-size:1.25rem;margin-bottom:1rem;border:1px solid rgba(245,158,11,0.3);">
                             "3"
+                        </div>
+                        <h3 style="font-size:1rem;font-weight:600;color:#fff;margin-bottom:0.5rem;">
+                            "Complete the Quiz"
+                        </h3>
+                        <p style="font-size:0.85rem;color:var(--text-secondary);line-height:1.5;">
+                            "Answer a few questions about the event content. Prove you actually engaged — not just physically showed up."
+                        </p>
+                    </div>
+
+                    <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:1.75rem 1.25rem;text-align:center;">
+                        <div style="width:3.5rem;height:3.5rem;border-radius:50%;background:linear-gradient(135deg,rgba(167,139,250,0.2),rgba(167,139,250,0.1));display:inline-flex;align-items:center;justify-content:center;font-size:1.25rem;margin-bottom:1rem;border:1px solid rgba(167,139,250,0.3);">
+                            "4"
                         </div>
                         <h3 style="font-size:1rem;font-weight:600;color:#fff;margin-bottom:0.5rem;">
                             "Get Your Money Back + A Badge"
@@ -350,7 +362,7 @@ pub fn Landing() -> impl IntoView {
                             "For Attendees"
                         </h2>
                         <p style="font-size:0.9rem;color:var(--text-secondary);line-height:1.6;margin-bottom:1.5rem;">
-                            "Put down a small deposit, show up, get it all back. Keep the digital badge as proof. Collect badges from every event you attend. The only risk? Not showing up."
+                            "Put down a small deposit, show up, complete a quick quiz about the event, and get it all back. Keep the digital badge as proof. Collect badges from every event you attend. The only risk? Not showing up — or not paying attention."
                         </p>
                         <a href="#how-it-works" class="btn btn-outline">
                             "Learn More"

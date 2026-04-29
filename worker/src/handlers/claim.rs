@@ -12,7 +12,9 @@ use chrono::Utc;
 use serde::Deserialize;
 use serde_json::json;
 
-use event_checkin_domain::models::api::{ClaimLookupResponse, ClaimResponse, EventConfig};
+use event_checkin_domain::models::api::{
+    ClaimLookupResponse, ClaimResponse, EventConfig, QuizStatus,
+};
 
 use crate::solana::{self, validate_wallet_address};
 use crate::state::AppState;
@@ -89,15 +91,24 @@ pub async fn get_claim(
         .map(|w| w.trim().to_string())
         .filter(|w| !w.is_empty());
 
+    // Determine quiz status (Issue 002 — activity-gated claim)
+    let quiz_status = match &state.quiz_kv {
+        Some(kv) => crate::quiz::get_quiz_status(kv, &token)
+            .await
+            .unwrap_or(QuizStatus::NotRequired),
+        None => QuizStatus::NotRequired,
+    };
+
     let response = ClaimLookupResponse {
         name: display_name,
         checked_in_at,
-        claim_token: token,
+        claim_token: token.clone(),
         claimed,
         claimed_at,
         nft_available,
         locked_wallet,
         event,
+        quiz_status,
     };
 
     Json(json!({
@@ -155,6 +166,40 @@ pub async fn post_claim(
             "success": false,
             "error": "attendee has not been checked in yet",
         }));
+    }
+
+    // Quiz gate — must pass quiz before claiming (Issue 002)
+    if let Some(ref kv) = state.quiz_kv {
+        let quiz_status = match crate::quiz::get_quiz_status(kv, &token).await {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::error!("claim mint: failed to check quiz status for token {token}: {e}");
+                return Json(json!({
+                    "success": false,
+                    "error": format!("failed to verify quiz status: {e}"),
+                }));
+            }
+        };
+        match quiz_status {
+            QuizStatus::NotRequired => {} // no quiz configured, proceed
+            QuizStatus::Passed => {}      // quiz passed, proceed
+            QuizStatus::NotStarted => {
+                tracing::warn!("claim mint blocked: quiz not attempted for token {token}");
+                return Json(json!({
+                    "success": false,
+                    "error": "you must complete the quiz before claiming your badge",
+                    "quiz_status": "not_started",
+                }));
+            }
+            QuizStatus::InProgress => {
+                tracing::warn!("claim mint blocked: quiz not passed for token {token}");
+                return Json(json!({
+                    "success": false,
+                    "error": "you must pass the quiz before claiming your badge",
+                    "quiz_status": "in_progress",
+                }));
+            }
+        }
     }
 
     // Must not be already claimed
