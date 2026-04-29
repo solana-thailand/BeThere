@@ -45,3 +45,6 @@ frontend-leptos/Cargo.lock
 worker/build/
 worker/.wrangler/
 worker/.dev.vars
+
+# Wrangler local state (root level)
+.wrangler/
