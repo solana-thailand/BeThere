@@ -264,7 +264,8 @@ pub struct QuizAttempt {
 }
 
 /// Per-attendee quiz progress stored in KV under key "progress:{claim_token}".
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
 pub struct QuizProgress {
     pub claim_token: String,
     /// Total attempts so far.

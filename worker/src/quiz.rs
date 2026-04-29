@@ -29,7 +29,11 @@ pub async fn get_quiz_config(kv: &KvStore) -> Result<Option<QuizConfig>, String>
 
 /// Write quiz configuration to KV (admin endpoint).
 pub async fn save_quiz_config(kv: &KvStore, config: &QuizConfig) -> Result<(), String> {
-    kv.put("questions", config)
+    // Serialize to JSON string manually — kv.put() with a struct goes through
+    // serde_wasm_bindgen which corrupts booleans to {"props":{}}.
+    let json_str = serde_json::to_string(config)
+        .map_err(|e| format!("failed to serialize quiz config: {e:?}"))?;
+    kv.put("questions", &json_str)
         .map_err(|e| format!("failed to build quiz config put: {e:?}"))?
         .execute()
         .await
@@ -79,7 +83,11 @@ pub async fn get_quiz_progress(
 /// Write quiz progress for an attendee.
 async fn save_quiz_progress(kv: &KvStore, progress: &QuizProgress) -> Result<(), String> {
     let key = progress_key(&progress.claim_token);
-    kv.put(&key, progress)
+    // Serialize to JSON string manually — kv.put() with a struct goes through
+    // serde_wasm_bindgen which corrupts booleans to {"props":{}}.
+    let json_str = serde_json::to_string(progress)
+        .map_err(|e| format!("failed to serialize quiz progress: {e:?}"))?;
+    kv.put(&key, &json_str)
         .map_err(|e| format!("failed to build quiz progress put: {e:?}"))?
         .execute()
         .await

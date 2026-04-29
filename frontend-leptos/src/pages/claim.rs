@@ -537,7 +537,15 @@ fn build_quiz_action(
                         ss.set(ClaimState::Minting(current_data.clone()));
                         let t = token.clone();
                         leptos::task::spawn_local(async move {
-                            match api::post_claim(&t, &wallet).await {
+                            let start = js_sys::Date::now();
+                            let result = api::post_claim(&t, &wallet).await;
+                            // Ensure spinner displays for at least 1.5s for smooth UX
+                            let elapsed = js_sys::Date::now() - start;
+                            if elapsed < 1500.0 {
+                                let wait = (1500.0 - elapsed) as u32;
+                                gloo::timers::future::TimeoutFuture::new(wait).await;
+                            }
+                            match result {
                                 Ok(mint_data) => {
                                     log::info!("[claim] minted nft: asset_id={}", mint_data.asset_id);
                                     ss.set(ClaimState::Success(mint_data));
@@ -601,7 +609,7 @@ fn QuizView(
 ) -> impl IntoView {
     let checked_in_display = format_timestamp(&claim_data.checked_in_at);
     let total_q = quiz_data.questions.len();
-    let _answered = move || quiz_answers.get().len();
+    let answered = move || quiz_answers.get().len();
     let all_answered = move || quiz_answers.get().len() == total_q;
     let passing = quiz_data.passing_score_percent;
     let max_att = quiz_data.max_attempts;
@@ -681,7 +689,7 @@ fn QuizView(
             >
                 "Submit Answers"
                 <span class="claim-quiz-submit-count">
-                    "("(answered)"/"{total_q}")"
+                    "("{answered}"/"{total_q}")"
                 </span>
             </button>
         </div>
@@ -959,7 +967,15 @@ pub fn Claim() -> impl IntoView {
 
         let current_data_clone = current_data.clone();
         leptos::task::spawn_local(async move {
-            match api::post_claim(&token, &wallet).await {
+            let start = js_sys::Date::now();
+            let result = api::post_claim(&token, &wallet).await;
+            // Ensure spinner displays for at least 1.5s for smooth UX
+            let elapsed = js_sys::Date::now() - start;
+            if elapsed < 1500.0 {
+                let wait = (1500.0 - elapsed) as u32;
+                gloo::timers::future::TimeoutFuture::new(wait).await;
+            }
+            match result {
                 Ok(mint_data) => {
                     log::info!(
                         "[claim] minted nft: asset_id={} sig={}",
