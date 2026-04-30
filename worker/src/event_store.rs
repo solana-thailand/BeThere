@@ -506,11 +506,7 @@ pub fn has_event_access(config: &EventConfig, email: &str) -> bool {
 /// backward compatibility with the old QUIZ KV namespace.
 /// Otherwise returns `"event:{id}:quiz:questions"` for the EVENTS KV namespace.
 pub fn quiz_questions_key(event_id: &str) -> String {
-    if event_id == "default" {
-        "questions".to_string()
-    } else {
-        format!("event:{event_id}:quiz:questions")
-    }
+    format!("event:{event_id}:quiz:questions")
 }
 
 /// Build the event-scoped KV key for quiz progress.
@@ -519,11 +515,7 @@ pub fn quiz_questions_key(event_id: &str) -> String {
 /// for backward compatibility with the old QUIZ KV namespace.
 /// Otherwise returns `"event:{id}:quiz:progress:{token}"`.
 pub fn quiz_progress_key(event_id: &str, claim_token: &str) -> String {
-    if event_id == "default" {
-        format!("progress:{claim_token}")
-    } else {
-        format!("event:{event_id}:quiz:progress:{claim_token}")
-    }
+    format!("event:{event_id}:quiz:progress:{claim_token}")
 }
 
 /// Resolve an event, falling back to global config if EVENTS KV is not available.
