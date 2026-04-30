@@ -23,10 +23,14 @@ use event_checkin_domain::models::event::{CreateEventRequest, UpdateEventRequest
 use crate::state::AppState;
 
 /// GET /api/events
-/// List all events (summary metadata only, not full config).
+/// List events visible to the current user.
+///
+/// - **SuperAdmin**: sees all events
+/// - **Organizer/Staff**: sees only events they are assigned to
+///   (matched by `organizer_emails` or `staff_emails` in event config,
+///   or by Google Sheet staff role)
 ///
 /// Returns events sorted by creation date (newest first).
-/// Any authenticated staff member can view the event list.
 #[worker::send]
 pub async fn list_events(
     State(state): State<AppState>,
@@ -44,21 +48,62 @@ pub async fn list_events(
         }
     };
 
-    match crate::event_store::list_events(kv).await {
-        Ok(events) => Json(json!({
-            "success": true,
-            "data": {
-                "events": events,
-            },
-        })),
+    let all_events = match crate::event_store::list_events(kv).await {
+        Ok(events) => events,
         Err(e) => {
             tracing::error!("failed to list events: {e}");
-            Json(json!({
+            return Json(json!({
                 "success": false,
                 "error": format!("failed to list events: {e}"),
-            }))
+            }));
+        }
+    };
+
+    // SuperAdmin sees everything
+    if state
+        .config
+        .super_admin_emails
+        .iter()
+        .any(|e| e.eq_ignore_ascii_case(&claims.email))
+    {
+        return Json(json!({
+            "success": true,
+            "data": {
+                "events": all_events,
+            },
+        }));
+    }
+
+    // Organizer/Staff: only see events they are assigned to.
+    // EventMeta only has organizer_emails, not staff_emails.
+    // We must load full configs to check both lists.
+    let mut visible = Vec::new();
+    for meta in &all_events {
+        // Quick check: organizer_emails is in meta (no need to load full config)
+        let in_organizer_list = meta
+            .organizer_emails
+            .iter()
+            .any(|e| e.eq_ignore_ascii_case(&claims.email));
+
+        if in_organizer_list {
+            visible.push(meta.clone());
+            continue;
+        }
+
+        // Slower check: load full config to check staff_emails
+        if let Ok(Some(config)) = crate::event_store::get_event_config(kv, &meta.id).await {
+            if crate::event_store::has_event_access(&config, &claims.email) {
+                visible.push(meta.clone());
+            }
         }
     }
+
+    Json(json!({
+        "success": true,
+        "data": {
+            "events": visible,
+        },
+    }))
 }
 
 /// POST /api/events/seed
@@ -256,7 +301,10 @@ pub async fn create_event(
 
 /// GET /api/events/{id}
 /// Get full configuration for a single event.
-/// Any authenticated staff member can view event details.
+///
+/// Access rules:
+/// - **SuperAdmin**: can view any event
+/// - **Organizer/Staff**: can only view events they are assigned to
 #[worker::send]
 pub async fn get_event(
     State(state): State<AppState>,
@@ -275,25 +323,49 @@ pub async fn get_event(
         }
     };
 
-    match crate::event_store::get_event(kv, &id).await {
-        Ok(Some(config)) => Json(json!({
-            "success": true,
-            "data": {
-                "event": config,
-            },
-        })),
-        Ok(None) => Json(json!({
-            "success": false,
-            "error": format!("event '{id}' not found"),
-        })),
+    let config = match crate::event_store::get_event(kv, &id).await {
+        Ok(Some(config)) => config,
+        Ok(None) => {
+            return Json(json!({
+                "success": false,
+                "error": format!("event '{id}' not found"),
+            }));
+        }
         Err(e) => {
             tracing::error!("failed to get event '{id}': {e}");
-            Json(json!({
+            return Json(json!({
                 "success": false,
                 "error": format!("failed to read event: {e}"),
-            }))
+            }));
         }
+    };
+
+    // Access check: non-super_admin must be assigned to this event
+    let is_super_admin = state
+        .config
+        .super_admin_emails
+        .iter()
+        .any(|e| e.eq_ignore_ascii_case(&claims.email));
+
+    if !is_super_admin && !crate::event_store::has_event_access(&config, &claims.email) {
+        tracing::warn!(
+            "get event denied: {} has no access to event '{}' ({})",
+            claims.email,
+            config.name,
+            config.id,
+        );
+        return Json(json!({
+            "success": false,
+            "error": format!("you do not have access to event '{id}'"),
+        }));
     }
+
+    Json(json!({
+        "success": true,
+        "data": {
+            "event": config,
+        },
+    }))
 }
 
 /// PUT /api/events/{id}
