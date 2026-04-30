@@ -18,6 +18,7 @@ use event_checkin_domain::models::api::{
 use event_checkin_domain::models::auth::Claims;
 use event_checkin_domain::qr;
 
+use crate::event_store;
 use crate::sheets;
 use crate::state::AppState;
 
@@ -26,6 +27,9 @@ pub struct GenerateQrQuery {
     /// If true, regenerate QR URLs even for attendees that already have one.
     #[serde(default)]
     pub force: bool,
+    /// Optional event ID for multi-event support.
+    #[serde(default)]
+    pub event_id: Option<String>,
 }
 
 /// POST /api/generate-qrs?force=true
@@ -46,13 +50,41 @@ pub async fn generate_qrs(
     Query(query): Query<GenerateQrQuery>,
 ) -> Json<serde_json::Value> {
     let force = query.force;
+
+    let event = match event_store::resolve_event_or_fallback(
+        state.events_kv.as_ref(),
+        query.event_id.as_deref(),
+        &state.config,
+    )
+    .await
+    {
+        Ok(e) => e,
+        Err(e) => {
+            return Json(json!({ "success": false, "error": e }));
+        }
+    };
+
+    // Per-event access guard: staff can only generate QRs for their assigned events
+    if let Err(e) = crate::auth::check_event_access(&claims.email, &state, &event) {
+        tracing::warn!(
+            "QR generation denied: {} has no access to event '{}' ({})",
+            claims.email,
+            event.name,
+            event.id,
+        );
+        return Json(json!({
+            "success": false,
+            "error": e,
+        }));
+    }
+
     tracing::info!(
         "QR generation requested by {} (force={force})",
         claims.email
     );
 
     // Fetch all attendees
-    let attendees = match sheets::get_attendees(&state).await {
+    let attendees = match sheets::get_attendees(&state, &event.sheet_id, &event.sheet_name).await {
         Ok(a) => a,
         Err(ref e) => {
             tracing::error!("failed to fetch attendees for QR generation: {e}");
@@ -186,7 +218,7 @@ pub async fn generate_qrs(
         .collect();
 
     // Batch update the Google Sheet
-    match sheets::update_qr_urls(&updates, &state).await {
+    match sheets::update_qr_urls(&updates, &state, &event.sheet_id, &event.sheet_name).await {
         Ok(updated) => {
             tracing::info!(
                 "QR generation complete: {updated} URLs written to sheet (requested by: {})",

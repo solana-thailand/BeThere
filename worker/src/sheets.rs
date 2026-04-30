@@ -60,12 +60,15 @@ pub async fn get_access_token(state: &AppState) -> Result<String, String> {
 
 /// Fetch all attendees from the Google Sheet.
 /// Returns a list of typed Attendee structs parsed from sheet rows.
-pub async fn get_attendees(state: &AppState) -> Result<Vec<Attendee>, String> {
+pub async fn get_attendees(
+    state: &AppState,
+    sheet_id: &str,
+    sheet_name: &str,
+) -> Result<Vec<Attendee>, String> {
     let access_token = get_access_token(state).await?;
-    let range = format!("{}!A2:Z", state.config.sheets.sheet_name);
+    let range = format!("{sheet_name}!A2:Z");
     let url = format!(
-        "https://sheets.googleapis.com/v4/spreadsheets/{}/values/{}",
-        state.config.sheets.sheet_id,
+        "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{}",
         urlencoding::encode(&range)
     );
 
@@ -93,8 +96,10 @@ pub async fn get_attendees(state: &AppState) -> Result<Vec<Attendee>, String> {
 pub async fn get_attendee_by_id(
     api_id: &str,
     state: &AppState,
+    sheet_id: &str,
+    sheet_name: &str,
 ) -> Result<Option<Attendee>, String> {
-    let attendees: Vec<Attendee> = get_attendees(state).await?;
+    let attendees: Vec<Attendee> = get_attendees(state, sheet_id, sheet_name).await?;
     Ok(attendees.into_iter().find(|a| a.api_id == api_id))
 }
 
@@ -104,8 +109,10 @@ pub async fn get_attendee_by_id(
 pub async fn get_attendee_by_claim_token(
     claim_token: &str,
     state: &AppState,
+    sheet_id: &str,
+    sheet_name: &str,
 ) -> Result<Option<Attendee>, String> {
-    let attendees: Vec<Attendee> = get_attendees(state).await?;
+    let attendees: Vec<Attendee> = get_attendees(state, sheet_id, sheet_name).await?;
     Ok(attendees
         .into_iter()
         .find(|a| a.claim_token.as_deref() == Some(claim_token)))
@@ -136,12 +143,15 @@ pub struct StaffMember {
 ///
 /// If column B (role) is empty, defaults to "staff".
 /// Valid roles: "admin" (scanner + admin dashboard), "staff" (scanner only).
-pub async fn get_staff_members(state: &AppState) -> Result<Vec<StaffMember>, String> {
+pub async fn get_staff_members(
+    state: &AppState,
+    sheet_id: &str,
+    staff_sheet_name: &str,
+) -> Result<Vec<StaffMember>, String> {
     let access_token = get_access_token(state).await?;
-    let range = format!("{}!A2:B", state.config.sheets.staff_sheet_name);
+    let range = format!("{staff_sheet_name}!A2:B");
     let url = format!(
-        "https://sheets.googleapis.com/v4/spreadsheets/{}/values/{}",
-        state.config.sheets.sheet_id,
+        "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{}",
         urlencoding::encode(&range)
     );
 
@@ -186,10 +196,11 @@ pub async fn mark_checked_in(
     staff_email: &str,
     claim_token: &str,
     state: &AppState,
+    sheet_id: &str,
+    sheet_name: &str,
 ) -> Result<String, String> {
     let access_token = get_access_token(state).await?;
     let timestamp = Utc::now().to_rfc3339();
-    let sheet_name = &state.config.sheets.sheet_name;
 
     let data = vec![
         ValueRange {
@@ -206,10 +217,8 @@ pub async fn mark_checked_in(
         },
     ];
 
-    let url = format!(
-        "https://sheets.googleapis.com/v4/spreadsheets/{}/values:batchUpdate",
-        state.config.sheets.sheet_id
-    );
+    let url =
+        format!("https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values:batchUpdate");
 
     let body = BatchUpdateRequest {
         data,
@@ -231,9 +240,10 @@ pub async fn mark_claimed(
     wallet_address: &str,
     claimed_at: &str,
     state: &AppState,
+    sheet_id: &str,
+    sheet_name: &str,
 ) -> Result<String, String> {
     let access_token = get_access_token(state).await?;
-    let sheet_name = &state.config.sheets.sheet_name;
 
     let data = vec![
         ValueRange {
@@ -246,10 +256,8 @@ pub async fn mark_claimed(
         },
     ];
 
-    let url = format!(
-        "https://sheets.googleapis.com/v4/spreadsheets/{}/values:batchUpdate",
-        state.config.sheets.sheet_id
-    );
+    let url =
+        format!("https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values:batchUpdate");
 
     let body = BatchUpdateRequest {
         data,
@@ -267,13 +275,14 @@ pub async fn mark_claimed(
 pub async fn update_qr_urls(
     updates: &[(usize, String)],
     state: &AppState,
+    sheet_id: &str,
+    sheet_name: &str,
 ) -> Result<usize, String> {
     if updates.is_empty() {
         return Ok(0);
     }
 
     let access_token = get_access_token(state).await?;
-    let sheet_name = &state.config.sheets.sheet_name;
 
     // Build batch update with individual value ranges
     let data: Vec<ValueRange> = updates
@@ -284,10 +293,8 @@ pub async fn update_qr_urls(
         })
         .collect();
 
-    let url = format!(
-        "https://sheets.googleapis.com/v4/spreadsheets/{}/values:batchUpdate",
-        state.config.sheets.sheet_id
-    );
+    let url =
+        format!("https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values:batchUpdate");
 
     let body = BatchUpdateRequest {
         data,

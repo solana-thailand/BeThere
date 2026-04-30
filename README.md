@@ -25,9 +25,18 @@ npx wrangler secret put GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY
 npx wrangler secret put GOOGLE_SERVICE_ACCOUNT_TOKEN_URI
 npx wrangler secret put GOOGLE_SHEET_ID
 npx wrangler secret put STAFF_EMAILS
+npx wrangler secret put SUPER_ADMIN_EMAILS
 
-# 4. Run locally
+# 4. Create KV namespaces (first time only)
+npx wrangler kv namespace create EVENTS
+npx wrangler kv namespace create EVENTS --preview
+# Update wrangler.toml with returned IDs
+
+# 5. Run locally
 cd worker && ./deploy.sh dev
+
+# 6. Seed first event (after server is running)
+curl -X POST http://localhost:8787/api/events/seed -H "Cookie: session=<jwt>"
 ```
 
 Open `http://localhost:8787`.
@@ -89,6 +98,9 @@ Non-secret vars are in `worker/wrangler.toml` `[vars]`:
 | `SERVER_URL` | `https://event-checkin.workers.dev` | Public URL for OAuth redirect |
 | `GOOGLE_SHEET_NAME` | `checkin` | Attendee sheet tab name |
 | `GOOGLE_STAFF_SHEET_NAME` | `staff` | Staff sheet tab name |
+| `EVENT_NAME` | _(none)_ | Default event name for seeding |
+| `ORGANIZER_EMAILS` | _(none)_ | Comma-separated organizer emails for seeding |
+| `SUPER_ADMIN_EMAILS` | _(secret)_ | Global admins who can create/manage all events |
 
 The frontend is served from `frontend-leptos/dist/` via Workers Assets with SPA fallback.
 
@@ -99,12 +111,25 @@ The frontend is served from `frontend-leptos/dist/` via Workers Assets with SPA 
 | GET | `/api/health` | No | Health check |
 | GET | `/api/auth/url` | No | Google OAuth URL |
 | GET | `/api/auth/callback` | No | OAuth callback, sets cookie |
-| GET | `/api/auth/me` | Cookie | Current user info |
+| GET | `/api/auth/me` | Cookie | Current user info + role |
 | GET | `/api/auth/logout` | No | Clear session cookie |
-| GET | `/api/attendees` | Cookie | List all attendees + stats |
-| GET | `/api/attendee/{id}` | Cookie | Single attendee details |
-| POST | `/api/checkin/{id}` | Cookie + Staff | Check in attendee |
-| POST | `/api/generate-qrs` | Cookie + Staff | Generate QR codes |
+| GET | `/api/events` | Cookie | List all events |
+| POST | `/api/events` | Cookie + SuperAdmin | Create new event |
+| GET | `/api/events/{id}` | Cookie | Get event config |
+| PUT | `/api/events/{id}` | Cookie + SuperAdmin | Update event config |
+| DELETE | `/api/events/{id}` | Cookie + SuperAdmin | Archive event |
+| POST | `/api/events/seed` | Cookie + SuperAdmin | Seed event from env vars |
+| POST | `/api/events/migrate` | Cookie + SuperAdmin | Migrate quiz KV → event KV |
+| GET | `/api/attendees` | Cookie + Event Staff | List all attendees + stats |
+| GET | `/api/attendee/{id}` | Cookie + Event Staff | Single attendee details |
+| POST | `/api/checkin/{id}` | Cookie + Event Staff | Check in attendee |
+| POST | `/api/generate-qrs` | Cookie + Event Staff | Generate QR codes |
+| GET | `/api/quiz` | No | Get quiz questions (public) |
+| POST | `/api/quiz/{token}/submit` | No | Submit quiz answers |
+| GET | `/api/quiz/{token}/status` | No | Get quiz progress |
+| PUT | `/api/admin/quiz` | Cookie + Staff | Create/update quiz config |
+| GET | `/api/claim/{token}` | No | Get claim info |
+| POST | `/api/claim/{token}` | No | Claim NFT badge + refund |
 
 ## Frontend Routes
 
@@ -113,13 +138,17 @@ The frontend is served from `frontend-leptos/dist/` via Workers Assets with SPA 
 | `/` | Login (Google OAuth) |
 | `/staff` | Scanner — camera QR + manual lookup |
 | `/admin` | Dashboard — attendee list, stats, QR management |
+| `/admin/events` | Event management — create, edit, manage events |
+| `/claim/{token}` | Claim page — quiz + NFT badge + refund |
 
 ## Architecture
 
 ```
 worker/src/             — Cloudflare Worker
-  handlers/             — API endpoints (auth, check-in, QR, attendee, health)
-  auth.rs               — Google OAuth + JWT (SubtleCrypto HMAC-SHA256)
+  handlers/             — API endpoints (auth, check-in, QR, attendee, events, quiz, claim, health)
+  auth.rs               — Google OAuth + JWT + role resolution (super_admin/organizer/staff)
+  event_store.rs        — KV event registry CRUD, seed, migration
+  quiz.rs               — Quiz business logic (scoring, KV interaction)
   sheets.rs             — Google Sheets read/write (worker::Fetch)
   crypto.rs             — SubtleCrypto bridge (RSA-SHA256, HMAC-SHA256)
   http.rs               — HTTP client wrapping worker::Fetch
@@ -128,12 +157,13 @@ worker/src/             — Cloudflare Worker
 
 domain/src/             — Shared (compiles x86_64 + wasm32)
   config/               — AppConfig, OAuthConfig, SheetsConfig
-  models/               — Attendee, Claims, API response types
+  models/               — Attendee, Claims, EventConfig, API response types
   qr/                   — QR URL generation + base64 image
 
 frontend-leptos/src/
-  pages/                — Scanner (camera QR), Admin, Login
+  pages/                — Scanner, Admin, Login, Events, Quiz Editor, Claim
   api.rs                — API client types and fetch wrappers
+  components.rs         — Shared components + role helpers
   utils.rs              — Helpers (timestamps, badges, participation)
   js/                   — Camera + QR detection module
 ```
@@ -141,12 +171,12 @@ frontend-leptos/src/
 ## Tests
 
 ```bash
-# All tests (27 total)
+# All tests (34 total)
 cargo test
 
 # Individual crates
 cargo test -p event-checkin-domain   # 14 tests — shared types, QR logic
-cargo test -p event-checkin-worker   # 13 tests — crypto, auth, sheets
+cargo test -p event-checkin-worker   # 20 tests — crypto, auth, sheets, events
 
 # Worker WASM build check
 cargo check -p event-checkin-worker --target wasm32-unknown-unknown
@@ -165,6 +195,18 @@ cargo clippy --all-targets
 - **Force QR regenerate** — Admin can regenerate codes per attendee
 - **CSP compliant** — Zero `eval()` calls, no `unsafe-eval` directive
 - **Edge deployment** — Cloudflare Workers with SubtleCrypto for JWT signing
+- **Multi-event support** — KV-based event registry with per-event config, staff, quiz
+- **Per-event access control** — 3-tier role system: super_admin → organizer → staff
+- **Quiz-gated claim** — Attendees complete quiz before claiming NFT badge
+
+## Roles & Access Control
+
+| Role | Can Do |
+|------|--------|
+| `super_admin` | Create/edit/delete events, manage all events, full dashboard |
+| `organizer` | Edit assigned event config, manage quiz, view dashboard |
+| `staff` | Check in attendees, view attendee list for assigned event |
+| _(unauthenticated)_ | Login, take quiz, claim NFT badge |
 
 ## Roadmap
 
@@ -172,12 +214,14 @@ See **[DISCUSSION.md](./DISCUSSION.md)** for the full architecture direction and
 
 | Phase | Feature | Status |
 |-------|---------|--------|
-| **1** | Claim token generation (column L + M) | Planned |
-| **2a** | Claim page (frontend) | Planned |
-| **2b** | Wallet connect UI (Phantom/Solflare/Backpack) | Planned |
-| **2c** | cNFT badge minting (Bubblegum) | Planned |
-| **3a** | SOL airdrop for gas | Planned |
-| **3b** | USDC refund transfer | Planned |
-| **3c** | On-chain check-in transaction | Planned |
+| **1** | Claim token generation (column L + M) | ✅ Done |
+| **2a** | Claim page (frontend) | ✅ Done |
+| **2b** | Wallet connect UI (Phantom/Solflare/Backpack) | ✅ Done |
+| **2c** | cNFT badge minting (Bubblegum) | ✅ Done |
+| **3a** | SOL airdrop for gas | ✅ Done |
+| **3b** | USDC refund transfer | ✅ Done |
+| **4** | Quiz-gated claim flow | ✅ Done |
+| **5** | Multi-event management | ✅ Done |
+| **6** | SOL + USDC refund on claim (on-chain) | Planned |
 
 Implementation details in [`.handovers/014_solana_integration_plan.md`](./.handovers/014_solana_integration_plan.md).

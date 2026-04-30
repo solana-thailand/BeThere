@@ -6,16 +6,24 @@
 
 use axum::{
     Extension,
-    extract::{Path, State},
+    extract::{Path, Query, State},
     response::Json,
 };
+use serde::Deserialize;
 use serde_json::json;
 
 use event_checkin_domain::models::api::{AttendeeResponse, RecentCheckIn, StatsResponse};
 use event_checkin_domain::models::auth::Claims;
 
+use crate::event_store;
 use crate::sheets;
 use crate::state::AppState;
+
+/// Optional event_id query parameter for event-scoped requests.
+#[derive(Debug, Deserialize)]
+pub struct EventIdQuery {
+    pub event_id: Option<String>,
+}
 
 /// GET /api/attendees
 /// List all attendees with optional filtering and statistics.
@@ -25,10 +33,38 @@ use crate::state::AppState;
 pub async fn list_attendees(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
+    Query(query): Query<EventIdQuery>,
 ) -> Json<serde_json::Value> {
     tracing::info!("listing attendees (requested by: {})", claims.email);
 
-    let attendees = match sheets::get_attendees(&state).await {
+    let event = match event_store::resolve_event_or_fallback(
+        state.events_kv.as_ref(),
+        query.event_id.as_deref(),
+        &state.config,
+    )
+    .await
+    {
+        Ok(e) => e,
+        Err(e) => {
+            return Json(json!({ "success": false, "error": e }));
+        }
+    };
+
+    // Per-event access guard: staff can only view attendees in their assigned events
+    if let Err(e) = crate::auth::check_event_access(&claims.email, &state, &event) {
+        tracing::warn!(
+            "attendee list denied: {} has no access to event '{}' ({})",
+            claims.email,
+            event.name,
+            event.id,
+        );
+        return Json(json!({
+            "success": false,
+            "error": e,
+        }));
+    }
+
+    let attendees = match sheets::get_attendees(&state, &event.sheet_id, &event.sheet_name).await {
         Ok(a) => a,
         Err(ref e) => {
             tracing::error!("failed to fetch attendees: {e}");
@@ -96,25 +132,54 @@ pub async fn get_attendee(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
     Path(id): Path<String>,
+    Query(query): Query<EventIdQuery>,
 ) -> Json<serde_json::Value> {
     tracing::info!("fetching attendee {id} (requested by: {})", claims.email);
 
-    let attendee = match sheets::get_attendee_by_id(&id, &state).await {
-        Ok(Some(a)) => a,
-        Ok(None) => {
-            return Json(json!({
-                "success": false,
-                "error": format!("attendee with id '{id}' not found"),
-            }));
-        }
-        Err(ref e) => {
-            tracing::error!("failed to fetch attendee {id}: {e}");
-            return Json(json!({
-                "success": false,
-                "error": format!("failed to fetch attendee: {e}"),
-            }));
+    let event = match event_store::resolve_event_or_fallback(
+        state.events_kv.as_ref(),
+        query.event_id.as_deref(),
+        &state.config,
+    )
+    .await
+    {
+        Ok(e) => e,
+        Err(e) => {
+            return Json(json!({ "success": false, "error": e }));
         }
     };
+
+    // Per-event access guard: staff can only view attendees in their assigned events
+    if let Err(e) = crate::auth::check_event_access(&claims.email, &state, &event) {
+        tracing::warn!(
+            "attendee lookup denied: {} has no access to event '{}' ({})",
+            claims.email,
+            event.name,
+            event.id,
+        );
+        return Json(json!({
+            "success": false,
+            "error": e,
+        }));
+    }
+
+    let attendee =
+        match sheets::get_attendee_by_id(&id, &state, &event.sheet_id, &event.sheet_name).await {
+            Ok(Some(a)) => a,
+            Ok(None) => {
+                return Json(json!({
+                    "success": false,
+                    "error": format!("attendee with id '{id}' not found"),
+                }));
+            }
+            Err(ref e) => {
+                tracing::error!("failed to fetch attendee {id}: {e}");
+                return Json(json!({
+                    "success": false,
+                    "error": format!("failed to fetch attendee: {e}"),
+                }));
+            }
+        };
 
     let response = AttendeeResponse::from_attendee(&attendee);
 

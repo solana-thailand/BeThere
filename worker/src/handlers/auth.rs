@@ -108,16 +108,30 @@ pub async fn auth_callback(
 /// Returns the current authenticated user's info from their JWT claims.
 /// Requires valid JWT in the Authorization header or cookie (enforced by middleware).
 ///
-/// Returns the user's role ("admin" or "staff") from the Google Sheets "staff" tab.
-/// Role determines access: "admin" sees scanner + admin dashboard, "staff" sees scanner only.
+/// Returns the user's role using the Phase 4 hierarchy:
+/// - "super_admin" — global admin (from SUPER_ADMIN_EMAILS env var)
+/// - "organizer"  — event manager (from Google Sheets staff tab role "admin")
+/// - "staff"      — scanner only (from Google Sheets staff tab or STAFF_EMAILS env var)
 #[worker::send]
 pub async fn auth_me(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
 ) -> Json<serde_json::Value> {
-    let role = auth::get_staff_role(&claims.email, &state)
-        .await
-        .unwrap_or_else(|| "staff".to_string());
+    let role = if state
+        .config
+        .super_admin_emails
+        .iter()
+        .any(|e| e.eq_ignore_ascii_case(&claims.email))
+    {
+        "super_admin".to_string()
+    } else {
+        match auth::get_staff_role(&claims.email, &state).await.as_deref() {
+            Some("admin") => "organizer".to_string(),
+            other => other
+                .map(str::to_string)
+                .unwrap_or_else(|| "staff".to_string()),
+        }
+    };
 
     Json(json!({
         "email": claims.email,

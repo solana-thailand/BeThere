@@ -79,3 +79,13 @@ EVENT_END_MS = "1777183200000"
 binding = "QUIZ"
 id = "faf9eebaa53d46f9a82c1f6db6dfbc05"
 preview_id = "ec705e432a5b47adae937878c1402174"
+
+# Phase 4: Events KV namespace (Issue 004 — multi-event / organizer management)
+# Enable multi-event support by creating the KV namespace and uncommenting below:
+#   npx wrangler kv namespace create EVENTS
+#   npx wrangler kv namespace create EVENTS --preview
+# Then paste the returned IDs here and uncomment:
+[[kv_namespaces]]
+binding = "EVENTS"
+id = "c8a6a87f9ed34ce0a3c8e48b84039214"
+preview_id = "7d74e1f62fb545be811eaefc8b059dee"

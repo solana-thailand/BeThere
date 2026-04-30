@@ -10,17 +10,25 @@
 
 use axum::{
     Extension,
-    extract::{Path, State},
+    extract::{Path, Query, State},
     response::Json,
 };
 
+use serde::Deserialize;
 use serde_json::json;
 
 use event_checkin_domain::models::api::{QuizConfig, QuizStatus, QuizSubmitRequest};
 use event_checkin_domain::models::auth::Claims;
 
+use crate::event_store;
 use crate::quiz;
 use crate::state::AppState;
+
+/// Optional event_id query parameter for event-scoped requests.
+#[derive(Debug, Deserialize)]
+pub struct EventIdQuery {
+    pub event_id: Option<String>,
+}
 
 /// GET /api/quiz
 /// Fetch quiz questions for the frontend.
@@ -28,9 +36,27 @@ use crate::state::AppState;
 /// Returns questions with options only (no correct answers).
 /// If no quiz is configured, returns an empty response with `configured: false`.
 #[worker::send]
-pub async fn get_quiz(State(state): State<AppState>) -> Json<serde_json::Value> {
-    let kv = match state.quiz_kv {
-        Some(ref kv) => kv,
+pub async fn get_quiz(
+    State(state): State<AppState>,
+    Query(query): Query<EventIdQuery>,
+) -> Json<serde_json::Value> {
+    // Resolve event (uses events_kv if available, falls back to global config)
+    let event = match event_store::resolve_event_or_fallback(
+        state.events_kv.as_ref(),
+        query.event_id.as_deref(),
+        &state.config,
+    )
+    .await
+    {
+        Ok(e) => e,
+        Err(e) => {
+            return Json(json!({ "success": false, "error": e }));
+        }
+    };
+
+    // Determine KV namespace for quiz data
+    let kv = match state.events_kv.as_ref().or(state.quiz_kv.as_ref()) {
+        Some(kv) => kv,
         None => {
             return Json(json!({
                 "success": true,
@@ -45,7 +71,9 @@ pub async fn get_quiz(State(state): State<AppState>) -> Json<serde_json::Value> 
         }
     };
 
-    match quiz::get_quiz_config(kv).await {
+    let eid = event.id.as_str();
+
+    match quiz::get_quiz_config(kv, eid).await {
         Ok(Some(config)) => {
             let public = quiz::to_public_questions(&config);
             Json(json!({
@@ -89,6 +117,7 @@ pub async fn get_quiz(State(state): State<AppState>) -> Json<serde_json::Value> 
 pub async fn submit_quiz(
     State(state): State<AppState>,
     Path(token): Path<String>,
+    Query(query): Query<EventIdQuery>,
     Json(body): Json<QuizSubmitRequest>,
 ) -> Json<serde_json::Value> {
     tracing::info!(
@@ -96,8 +125,23 @@ pub async fn submit_quiz(
         body.answers.len()
     );
 
-    let kv = match state.quiz_kv {
-        Some(ref kv) => kv,
+    // Resolve event (uses events_kv if available, falls back to global config)
+    let event = match event_store::resolve_event_or_fallback(
+        state.events_kv.as_ref(),
+        query.event_id.as_deref(),
+        &state.config,
+    )
+    .await
+    {
+        Ok(e) => e,
+        Err(e) => {
+            return Json(json!({ "success": false, "error": e }));
+        }
+    };
+
+    // Determine KV namespace for quiz data
+    let kv = match state.events_kv.as_ref().or(state.quiz_kv.as_ref()) {
+        Some(kv) => kv,
         None => {
             return Json(json!({
                 "success": false,
@@ -106,8 +150,17 @@ pub async fn submit_quiz(
         }
     };
 
+    let eid = event.id.as_str();
+
     // Verify claim token exists (attendee must be checked in)
-    match crate::sheets::get_attendee_by_claim_token(&token, &state).await {
+    match crate::sheets::get_attendee_by_claim_token(
+        &token,
+        &state,
+        &event.sheet_id,
+        &event.sheet_name,
+    )
+    .await
+    {
         Ok(Some(_)) => {}
         Ok(None) => {
             tracing::warn!("quiz submit: invalid claim token {token}");
@@ -126,7 +179,7 @@ pub async fn submit_quiz(
     }
 
     // Load quiz config
-    let config = match quiz::get_quiz_config(kv).await {
+    let config = match quiz::get_quiz_config(kv, eid).await {
         Ok(Some(c)) => c,
         Ok(None) => {
             return Json(json!({
@@ -179,7 +232,7 @@ pub async fn submit_quiz(
     }
 
     // Score and persist
-    match quiz::submit_quiz(kv, &config, &token, &body.answers).await {
+    match quiz::submit_quiz(kv, eid, &config, &token, &body.answers).await {
         Ok(result) => {
             tracing::info!(
                 "quiz scored: token={token} attempt={} score={}% passed={}",
@@ -210,11 +263,27 @@ pub async fn submit_quiz(
 pub async fn get_quiz_status(
     State(state): State<AppState>,
     Path(token): Path<String>,
+    Query(query): Query<EventIdQuery>,
 ) -> Json<serde_json::Value> {
     tracing::info!("quiz status for token: {token}");
 
-    let kv = match state.quiz_kv {
-        Some(ref kv) => kv,
+    // Resolve event (uses events_kv if available, falls back to global config)
+    let event = match event_store::resolve_event_or_fallback(
+        state.events_kv.as_ref(),
+        query.event_id.as_deref(),
+        &state.config,
+    )
+    .await
+    {
+        Ok(e) => e,
+        Err(e) => {
+            return Json(json!({ "success": false, "error": e }));
+        }
+    };
+
+    // Determine KV namespace for quiz data
+    let kv = match state.events_kv.as_ref().or(state.quiz_kv.as_ref()) {
+        Some(kv) => kv,
         None => {
             return Json(json!({
                 "success": true,
@@ -231,7 +300,9 @@ pub async fn get_quiz_status(
         }
     };
 
-    let config = match quiz::get_quiz_config(kv).await {
+    let eid = event.id.as_str();
+
+    let config = match quiz::get_quiz_config(kv, eid).await {
         Ok(Some(c)) => c,
         Ok(None) => {
             return Json(json!({
@@ -256,7 +327,7 @@ pub async fn get_quiz_status(
         }
     };
 
-    let status = match quiz::get_quiz_status(kv, &token).await {
+    let status = match quiz::get_quiz_status(kv, eid, &token).await {
         Ok(s) => s,
         Err(e) => {
             tracing::error!("quiz status failed for token {token}: {e}");
@@ -267,7 +338,9 @@ pub async fn get_quiz_status(
         }
     };
 
-    let progress = quiz::get_quiz_progress(kv, &token).await.unwrap_or(None);
+    let progress = quiz::get_quiz_progress(kv, eid, &token)
+        .await
+        .unwrap_or(None);
 
     let (attempts, best_score, passed) = match &progress {
         Some(p) => (p.attempts, p.best_score_percent, p.passed),
@@ -293,6 +366,83 @@ pub async fn get_quiz_status(
     }))
 }
 
+/// GET /api/admin/quiz
+/// Fetch full quiz config including correct answers (staff/admin only).
+///
+/// Returns the complete QuizConfig so the admin UI can load and edit it.
+/// Unlike the public GET /api/quiz, this includes `correct_index` fields.
+#[worker::send]
+pub async fn get_admin_quiz(
+    State(state): State<AppState>,
+    Extension(_claims): Extension<Claims>,
+    Query(query): Query<EventIdQuery>,
+) -> Json<serde_json::Value> {
+    tracing::info!("admin quiz read by {}", _claims.email);
+
+    // Resolve event (uses events_kv if available, falls back to global config)
+    let event = match event_store::resolve_event_or_fallback(
+        state.events_kv.as_ref(),
+        query.event_id.as_deref(),
+        &state.config,
+    )
+    .await
+    {
+        Ok(e) => e,
+        Err(e) => {
+            return Json(json!({ "success": false, "error": e }));
+        }
+    };
+
+    // Determine KV namespace for quiz data
+    let kv = match state.events_kv.as_ref().or(state.quiz_kv.as_ref()) {
+        Some(kv) => kv,
+        None => {
+            return Json(json!({
+                "success": true,
+                "data": {
+                    "configured": false,
+                    "questions": [],
+                    "passing_score_percent": 0,
+                    "max_attempts": 0,
+                    "time_limit_seconds": null,
+                },
+            }));
+        }
+    };
+
+    let eid = event.id.as_str();
+
+    match quiz::get_quiz_config(kv, eid).await {
+        Ok(Some(config)) => Json(json!({
+            "success": true,
+            "data": {
+                "configured": true,
+                "questions": config.questions,
+                "passing_score_percent": config.passing_score_percent,
+                "max_attempts": config.max_attempts,
+                "time_limit_seconds": config.time_limit_seconds,
+            },
+        })),
+        Ok(None) => Json(json!({
+            "success": true,
+            "data": {
+                "configured": false,
+                "questions": [],
+                "passing_score_percent": 0,
+                "max_attempts": 0,
+                "time_limit_seconds": null,
+            },
+        })),
+        Err(e) => {
+            tracing::error!("failed to read quiz config: {e}");
+            Json(json!({
+                "success": false,
+                "error": format!("failed to read quiz: {e}"),
+            }))
+        }
+    }
+}
+
 /// PUT /api/admin/quiz
 /// Create or update quiz questions (staff/admin only).
 ///
@@ -302,6 +452,7 @@ pub async fn get_quiz_status(
 pub async fn put_quiz(
     State(state): State<AppState>,
     Extension(_claims): Extension<Claims>,
+    Query(query): Query<EventIdQuery>,
     Json(body): Json<QuizConfig>,
 ) -> Json<serde_json::Value> {
     tracing::info!(
@@ -310,8 +461,23 @@ pub async fn put_quiz(
         body.questions.len()
     );
 
-    let kv = match state.quiz_kv {
-        Some(ref kv) => kv,
+    // Resolve event (uses events_kv if available, falls back to global config)
+    let event = match event_store::resolve_event_or_fallback(
+        state.events_kv.as_ref(),
+        query.event_id.as_deref(),
+        &state.config,
+    )
+    .await
+    {
+        Ok(e) => e,
+        Err(e) => {
+            return Json(json!({ "success": false, "error": e }));
+        }
+    };
+
+    // Determine KV namespace for quiz data
+    let kv = match state.events_kv.as_ref().or(state.quiz_kv.as_ref()) {
+        Some(kv) => kv,
         None => {
             return Json(json!({
                 "success": false,
@@ -319,6 +485,8 @@ pub async fn put_quiz(
             }));
         }
     };
+
+    let eid = event.id.as_str();
 
     // Validate: at least 1 question
     if body.questions.is_empty() {
@@ -374,7 +542,7 @@ pub async fn put_quiz(
         }
     }
 
-    match quiz::save_quiz_config(kv, &body).await {
+    match quiz::save_quiz_config(kv, eid, &body).await {
         Ok(()) => {
             tracing::info!(
                 "quiz saved: {} questions, {}% passing, {} max attempts",

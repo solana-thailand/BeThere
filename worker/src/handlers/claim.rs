@@ -5,7 +5,7 @@
 //! - Mint a compressed NFT to their wallet (POST /api/claim/{token})
 
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     response::Json,
 };
 use chrono::Utc;
@@ -15,7 +15,9 @@ use serde_json::json;
 use event_checkin_domain::models::api::{
     ClaimLookupResponse, ClaimResponse, EventConfig, QuizStatus,
 };
+use event_checkin_domain::models::event::EventConfig as DomainEventConfig;
 
+use crate::event_store;
 use crate::solana::{self, validate_wallet_address};
 use crate::state::AppState;
 
@@ -36,6 +38,12 @@ pub struct ClaimRequest {
     pub wallet_address: String,
 }
 
+/// Optional event_id query parameter for event-scoped requests.
+#[derive(Debug, Deserialize)]
+pub struct EventIdQuery {
+    pub event_id: Option<String>,
+}
+
 /// GET /api/claim/{token}
 /// Look up an attendee by their claim token.
 ///
@@ -45,10 +53,31 @@ pub struct ClaimRequest {
 pub async fn get_claim(
     State(state): State<AppState>,
     Path(token): Path<String>,
+    Query(query): Query<EventIdQuery>,
 ) -> Json<serde_json::Value> {
     tracing::info!("claim lookup for token: {token}");
 
-    let attendee = match crate::sheets::get_attendee_by_claim_token(&token, &state).await {
+    let event: DomainEventConfig = match event_store::resolve_event_or_fallback(
+        state.events_kv.as_ref(),
+        query.event_id.as_deref(),
+        &state.config,
+    )
+    .await
+    {
+        Ok(e) => e,
+        Err(e) => {
+            return Json(json!({ "success": false, "error": e }));
+        }
+    };
+
+    let attendee = match crate::sheets::get_attendee_by_claim_token(
+        &token,
+        &state,
+        &event.sheet_id,
+        &event.sheet_name,
+    )
+    .await
+    {
         Ok(Some(a)) => a,
         Ok(None) => {
             tracing::warn!("claim lookup: no attendee found for token {token}");
@@ -72,16 +101,16 @@ pub async fn get_claim(
     let claimed_at = attendee.claimed_at.clone();
 
     // Check if NFT minting is fully configured (all required secrets present)
-    let nft_available = !state.config.helius_api_key.is_empty()
-        && !state.config.nft_metadata_uri.is_empty()
-        && !state.config.nft_image_url.is_empty();
+    let nft_available = !event.nft_metadata_uri.is_empty()
+        && !event.nft_image_url.is_empty()
+        && !state.config.helius_api_key.is_empty();
 
-    let event = EventConfig {
-        event_name: state.config.event_name.clone(),
-        event_tagline: state.config.event_tagline.clone(),
-        event_link: state.config.event_link.clone(),
-        event_start_ms: state.config.event_start_ms,
-        event_end_ms: state.config.event_end_ms,
+    let api_event = EventConfig {
+        event_name: event.name.clone(),
+        event_tagline: event.tagline.clone(),
+        event_link: event.link.clone(),
+        event_start_ms: event.event_start_ms,
+        event_end_ms: event.event_end_ms,
     };
 
     // Pre-registered wallet from column P — locks claim to this address if present
@@ -92,11 +121,19 @@ pub async fn get_claim(
         .filter(|w| !w.is_empty());
 
     // Determine quiz status (Issue 002 — activity-gated claim)
-    let quiz_status = match &state.quiz_kv {
-        Some(kv) => crate::quiz::get_quiz_status(kv, &token)
-            .await
-            .unwrap_or(QuizStatus::NotRequired),
-        None => QuizStatus::NotRequired,
+    let quiz_status = match &state.events_kv {
+        Some(kv) => {
+            let eid = &event.id;
+            crate::quiz::get_quiz_status(kv, eid, &token)
+                .await
+                .unwrap_or(QuizStatus::NotRequired)
+        }
+        None => match &state.quiz_kv {
+            Some(kv) => crate::quiz::get_quiz_status(kv, "default", &token)
+                .await
+                .unwrap_or(QuizStatus::NotRequired),
+            None => QuizStatus::NotRequired,
+        },
     };
 
     let response = ClaimLookupResponse {
@@ -107,7 +144,7 @@ pub async fn get_claim(
         claimed_at,
         nft_available,
         locked_wallet,
-        event,
+        event: api_event,
         quiz_status,
     };
 
@@ -126,6 +163,7 @@ pub async fn get_claim(
 pub async fn post_claim(
     State(state): State<AppState>,
     Path(token): Path<String>,
+    Query(query): Query<EventIdQuery>,
     Json(body): Json<ClaimRequest>,
 ) -> Json<serde_json::Value> {
     tracing::info!("claim mint request for token: {token}");
@@ -139,8 +177,29 @@ pub async fn post_claim(
         }));
     }
 
+    // Resolve event context
+    let event: DomainEventConfig = match event_store::resolve_event_or_fallback(
+        state.events_kv.as_ref(),
+        query.event_id.as_deref(),
+        &state.config,
+    )
+    .await
+    {
+        Ok(e) => e,
+        Err(e) => {
+            return Json(json!({ "success": false, "error": e }));
+        }
+    };
+
     // Look up attendee by claim token
-    let attendee = match crate::sheets::get_attendee_by_claim_token(&token, &state).await {
+    let attendee = match crate::sheets::get_attendee_by_claim_token(
+        &token,
+        &state,
+        &event.sheet_id,
+        &event.sheet_name,
+    )
+    .await
+    {
         Ok(Some(a)) => a,
         Ok(None) => {
             tracing::warn!("claim mint: no attendee found for token {token}");
@@ -169,8 +228,14 @@ pub async fn post_claim(
     }
 
     // Quiz gate — must pass quiz before claiming (Issue 002)
-    if let Some(ref kv) = state.quiz_kv {
-        let quiz_status = match crate::quiz::get_quiz_status(kv, &token).await {
+    let quiz_check = if let Some(ref kv) = state.events_kv {
+        Some((kv, event.id.as_str()))
+    } else {
+        state.quiz_kv.as_ref().map(|kv| (kv, "default"))
+    };
+
+    if let Some((kv, eid)) = quiz_check {
+        let quiz_status = match crate::quiz::get_quiz_status(kv, eid, &token).await {
             Ok(s) => s,
             Err(e) => {
                 tracing::error!("claim mint: failed to check quiz status for token {token}: {e}");
@@ -243,11 +308,15 @@ pub async fn post_claim(
     let config = &state.config;
     let mint_result = match solana::mint_compressed_nft(
         &body.wallet_address,
-        &config.helius_rpc_url,
-        &config.helius_api_key,
-        &config.nft_collection_mint,
-        &config.nft_metadata_uri,
-        &config.nft_image_url,
+        &config.helius_rpc_url,     // global
+        &config.helius_api_key,     // global
+        &event.nft_collection_mint, // per-event
+        &event.nft_metadata_uri,    // per-event
+        &event.nft_image_url,       // per-event
+        &event.nft_name(),          // per-event (template resolved)
+        &event.nft_symbol,          // per-event
+        &event.nft_description(),   // per-event (template resolved)
+        &event.link,                // per-event (externalUrl)
     )
     .await
     {
@@ -268,6 +337,8 @@ pub async fn post_claim(
         &body.wallet_address,
         &claimed_at,
         &state,
+        &event.sheet_id,
+        &event.sheet_name,
     )
     .await
     {

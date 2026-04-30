@@ -1,10 +1,15 @@
 //! KV-based quiz storage for the activity-gated claim flow (Issue 002).
 //!
 //! Quiz questions and per-attendee progress are stored in a Cloudflare KV
-//! namespace bound as `QUIZ`. Key schema:
+//! namespace. Key schema depends on multi-event mode:
 //!
-//!   "questions"                → QuizConfig (JSON) — set by organizer
-//!   "progress:{claim_token}"   → QuizProgress (JSON) — per-attendee state
+//! **Legacy (event_id = "default"):**
+//!   "questions"                → QuizConfig (JSON)
+//!   "progress:{claim_token}"   → QuizProgress (JSON)
+//!
+//! **Multi-event (event_id = "solana-bangkok-2025"):**
+//!   "event:{id}:quiz:questions"                → QuizConfig (JSON)
+//!   "event:{id}:quiz:progress:{claim_token}"   → QuizProgress (JSON)
 
 use chrono::Utc;
 use worker::KvStore;
@@ -14,26 +19,40 @@ use event_checkin_domain::models::api::{
     QuizQuestionsResponse, QuizStatus, QuizSubmitResponse,
 };
 
+use crate::event_store::{quiz_progress_key, quiz_questions_key};
+
 // ---------------------------------------------------------------------------
 // Quiz config (questions)
 // ---------------------------------------------------------------------------
 
 /// Read quiz configuration from KV.
 /// Returns `None` if no quiz is configured (key doesn't exist).
-pub async fn get_quiz_config(kv: &KvStore) -> Result<Option<QuizConfig>, String> {
-    kv.get("questions")
-        .json::<QuizConfig>()
+pub async fn get_quiz_config(kv: &KvStore, event_id: &str) -> Result<Option<QuizConfig>, String> {
+    let key = quiz_questions_key(event_id);
+    let raw: Option<String> = kv
+        .get(&key)
+        .text()
         .await
-        .map_err(|e| format!("failed to read quiz config from KV: {e:?}"))
+        .map_err(|e| format!("failed to read quiz config from KV: {e:?}"))?;
+
+    match raw {
+        None => Ok(None),
+        Some(json_str) => serde_json::from_str(&json_str)
+            .map(Some)
+            .map_err(|e| format!("failed to parse quiz config: {e}")),
+    }
 }
 
 /// Write quiz configuration to KV (admin endpoint).
-pub async fn save_quiz_config(kv: &KvStore, config: &QuizConfig) -> Result<(), String> {
-    // Serialize to JSON string manually — kv.put() with a struct goes through
-    // serde_wasm_bindgen which corrupts booleans to {"props":{}}.
+pub async fn save_quiz_config(
+    kv: &KvStore,
+    event_id: &str,
+    config: &QuizConfig,
+) -> Result<(), String> {
+    let key = quiz_questions_key(event_id);
     let json_str = serde_json::to_string(config)
         .map_err(|e| format!("failed to serialize quiz config: {e:?}"))?;
-    kv.put("questions", &json_str)
+    kv.put(&key, &json_str)
         .map_err(|e| format!("failed to build quiz config put: {e:?}"))?
         .execute()
         .await
@@ -62,29 +81,35 @@ pub fn to_public_questions(config: &QuizConfig) -> QuizQuestionsResponse {
 // Quiz progress (per-attendee)
 // ---------------------------------------------------------------------------
 
-/// Build the KV key for an attendee's quiz progress.
-fn progress_key(claim_token: &str) -> String {
-    format!("progress:{claim_token}")
-}
-
 /// Read quiz progress for an attendee.
 /// Returns `None` if no progress exists yet (hasn't attempted).
 pub async fn get_quiz_progress(
     kv: &KvStore,
+    event_id: &str,
     claim_token: &str,
 ) -> Result<Option<QuizProgress>, String> {
-    let key = progress_key(claim_token);
-    kv.get(&key)
-        .json::<QuizProgress>()
+    let key = quiz_progress_key(event_id, claim_token);
+    let raw: Option<String> = kv
+        .get(&key)
+        .text()
         .await
-        .map_err(|e| format!("failed to read quiz progress from KV: {e:?}"))
+        .map_err(|e| format!("failed to read quiz progress from KV: {e:?}"))?;
+
+    match raw {
+        None => Ok(None),
+        Some(json_str) => serde_json::from_str(&json_str)
+            .map(Some)
+            .map_err(|e| format!("failed to parse quiz progress: {e}")),
+    }
 }
 
 /// Write quiz progress for an attendee.
-async fn save_quiz_progress(kv: &KvStore, progress: &QuizProgress) -> Result<(), String> {
-    let key = progress_key(&progress.claim_token);
-    // Serialize to JSON string manually — kv.put() with a struct goes through
-    // serde_wasm_bindgen which corrupts booleans to {"props":{}}.
+async fn save_quiz_progress(
+    kv: &KvStore,
+    event_id: &str,
+    progress: &QuizProgress,
+) -> Result<(), String> {
+    let key = quiz_progress_key(event_id, &progress.claim_token);
     let json_str = serde_json::to_string(progress)
         .map_err(|e| format!("failed to serialize quiz progress: {e:?}"))?;
     kv.put(&key, &json_str)
@@ -121,12 +146,13 @@ fn new_progress(claim_token: &str) -> QuizProgress {
 /// so frontend option shuffling doesn't break grading.
 pub async fn submit_quiz(
     kv: &KvStore,
+    event_id: &str,
     config: &QuizConfig,
     claim_token: &str,
     answers: &[QuizAnswer],
 ) -> Result<QuizSubmitResponse, String> {
     // Load existing progress (or start fresh)
-    let mut progress = get_quiz_progress(kv, claim_token)
+    let mut progress = get_quiz_progress(kv, event_id, claim_token)
         .await?
         .unwrap_or_else(|| new_progress(claim_token));
 
@@ -206,7 +232,7 @@ pub async fn submit_quiz(
         submitted_at: Utc::now().to_rfc3339(),
     });
 
-    save_quiz_progress(kv, &progress).await?;
+    save_quiz_progress(kv, event_id, &progress).await?;
 
     let remaining = config.max_attempts.saturating_sub(progress.attempts);
 
@@ -231,12 +257,16 @@ pub async fn submit_quiz(
 /// - `NotStarted`  — quiz exists, attendee hasn't attempted
 /// - `InProgress`  — quiz exists, attempted but not yet passed
 /// - `Passed`      — quiz passed, claim unlocked
-pub async fn get_quiz_status(kv: &KvStore, claim_token: &str) -> Result<QuizStatus, String> {
-    let config = get_quiz_config(kv).await?;
+pub async fn get_quiz_status(
+    kv: &KvStore,
+    event_id: &str,
+    claim_token: &str,
+) -> Result<QuizStatus, String> {
+    let config = get_quiz_config(kv, event_id).await?;
     match config {
         None => Ok(QuizStatus::NotRequired),
         Some(_) => {
-            let progress = get_quiz_progress(kv, claim_token).await?;
+            let progress = get_quiz_progress(kv, event_id, claim_token).await?;
             match progress {
                 None => Ok(QuizStatus::NotStarted),
                 Some(p) if p.passed => Ok(QuizStatus::Passed),

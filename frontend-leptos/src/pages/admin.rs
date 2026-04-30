@@ -22,7 +22,15 @@ use crate::utils;
 
 // ===== Tab Type =====
 
-/// Dashboard tab selection.
+/// Admin dashboard section selection.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum AdminSection {
+    Attendance,
+    Quiz,
+    Events,
+}
+
+/// Dashboard tab selection (within Attendance section).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum DashboardTab {
     InPerson,
@@ -202,6 +210,9 @@ pub fn Admin() -> impl IntoView {
     let (qr_result, set_qr_result) = signal(None::<GenerateQrData>);
     let (toast, set_toast) = signal(None::<components::ToastMessage>);
 
+    // Active section — Attendance by default
+    let (active_section, set_active_section) = signal(AdminSection::Attendance);
+
     // Active tab — In-Person by default
     let (active_tab, set_active_tab) = signal(DashboardTab::InPerson);
 
@@ -214,6 +225,35 @@ pub fn Admin() -> impl IntoView {
     // Bulk selection state
     let (selected_ids, set_selected_ids) = signal(HashSet::<String>::new());
     let (bulk_checking_in, set_bulk_checking_in) = signal(false);
+
+    // Event selector state
+    let (events_list, set_events_list) = signal(Vec::<api::EventMeta>::new());
+    let (active_event_id, set_active_event_id) = signal(None::<String>);
+    let (events_loading, set_events_loading) = signal(false);
+
+    // Load events list on mount
+    Effect::new(move |_| {
+        set_events_loading.set(true);
+        leptos::task::spawn_local(async move {
+            match api::list_events().await {
+                Ok(data) => {
+                    // Auto-select first active event
+                    let active = data.events.iter().find(|e| e.status == api::EventStatus::Active);
+                    if let Some(e) = active {
+                        set_active_event_id.set(Some(e.id.clone()));
+                    }
+                    set_events_list.set(data.events);
+                }
+                Err(e) => {
+                    log::warn!("[admin] failed to load events: {e}");
+                }
+            }
+            set_events_loading.set(false);
+        });
+    });
+
+    // Helper to get current event_id
+    let get_event_id = move || active_event_id.get();
 
     // Filtered attendees: tab-filtered + search query + filter pill + sort
     let filtered_attendees = Memo::new(move |_| {
@@ -259,10 +299,11 @@ pub fn Admin() -> impl IntoView {
     // Data loading effect — triggered by refresh_counter changes
     Effect::new(move |_| {
         let _ = refresh_counter.get(); // track refresh counter
+        let eid = get_event_id();
         set_is_loading.set(true);
 
         leptos::task::spawn_local(async move {
-            match api::get_attendees().await {
+            match api::get_attendees(eid.as_deref()).await {
                 Ok(data) => {
                     set_attendees.set(data.attendees);
                     set_stats.set(Some(data.stats));
@@ -333,13 +374,14 @@ pub fn Admin() -> impl IntoView {
         let set_selected = set_selected_ids;
         let set_refresh = set_refresh_counter;
         let set_busy = set_bulk_checking_in;
+        let eid = get_event_id();
 
         leptos::task::spawn_local(async move {
             let mut succeeded = 0u32;
             let mut failed = 0u32;
 
             for id in ids {
-                match api::check_in(&id).await {
+                match api::check_in(&id, eid.as_deref()).await {
                     Ok(_) => succeeded += 1,
                     Err(e) => {
                         failed += 1;
@@ -372,6 +414,7 @@ pub fn Admin() -> impl IntoView {
         }
         spawn_qr_generation(
             false,
+            get_event_id(),
             set_qr_generating,
             set_qr_result,
             set_toast,
@@ -386,6 +429,7 @@ pub fn Admin() -> impl IntoView {
         }
         spawn_qr_generation(
             true,
+            get_event_id(),
             set_qr_generating,
             set_qr_result,
             set_toast,
@@ -421,8 +465,11 @@ pub fn Admin() -> impl IntoView {
                         <div class="admin-sidebar-heading">"Attendance"</div>
                         <button
                             class="admin-sidebar-item"
-                            class:active=move || active_tab.get() == DashboardTab::InPerson
-                            on:click=move |_| set_active_tab.set(DashboardTab::InPerson)
+                            class:active=move || active_section.get() == AdminSection::Attendance && active_tab.get() == DashboardTab::InPerson
+                            on:click=move |_| {
+                                set_active_section.set(AdminSection::Attendance);
+                                set_active_tab.set(DashboardTab::InPerson);
+                            }
                         >
                             <span class="admin-sidebar-icon">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -436,8 +483,11 @@ pub fn Admin() -> impl IntoView {
                         </button>
                         <button
                             class="admin-sidebar-item"
-                            class:active=move || active_tab.get() == DashboardTab::Online
-                            on:click=move |_| set_active_tab.set(DashboardTab::Online)
+                            class:active=move || active_section.get() == AdminSection::Attendance && active_tab.get() == DashboardTab::Online
+                            on:click=move |_| {
+                                set_active_section.set(AdminSection::Attendance);
+                                set_active_tab.set(DashboardTab::Online);
+                            }
                         >
                             <span class="admin-sidebar-icon">
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -449,6 +499,73 @@ pub fn Admin() -> impl IntoView {
                             "Online"
                         </button>
                     </div>
+                    <div class="admin-sidebar-section">
+                        <div class="admin-sidebar-heading">"Quiz"</div>
+                        <button
+                            class="admin-sidebar-item"
+                            class:active=move || active_section.get() == AdminSection::Quiz
+                            on:click=move |_| set_active_section.set(AdminSection::Quiz)
+                        >
+                            <span class="admin-sidebar-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
+                                    <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
+                                </svg>
+                            </span>
+                            "Quiz Editor"
+                        </button>
+                    </div>
+                    <div class="admin-sidebar-section">
+                        <div class="admin-sidebar-heading">"Events"</div>
+                        <button
+                            class="admin-sidebar-item"
+                            class:active=move || active_section.get() == AdminSection::Events
+                            on:click=move |_| set_active_section.set(AdminSection::Events)
+                        >
+                            <span class="admin-sidebar-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                                    <line x1="16" y1="2" x2="16" y2="6"></line>
+                                    <line x1="8" y1="2" x2="8" y2="6"></line>
+                                    <line x1="3" y1="10" x2="21" y2="10"></line>
+                                </svg>
+                            </span>
+                            "Manage Events"
+                        </button>
+                    </div>
+
+                    // Event selector dropdown (always visible in sidebar)
+                    <Show when=move || !events_loading.get() && !events_list.get().is_empty() fallback=|| view! { <div></div> }>
+                        <div class="admin-sidebar-section">
+                            <div class="admin-sidebar-heading">"Active Event"</div>
+                            <div class="admin-event-selector">
+                                <select
+                                    class="admin-event-select"
+                                    on:change=move |ev| {
+                                        let val = event_target_value(&ev);
+                                        set_active_event_id.set(if val.is_empty() { None } else { Some(val) });
+                                        set_refresh_counter.update(|c| *c += 1);
+                                    }
+                                    prop:value=move || active_event_id.get().unwrap_or_default()
+                                >
+                                    <option value="">"— all events —"</option>
+                                    {move || events_list.get().iter().map(|e| {
+                                        let id = e.id.clone();
+                                        let name = e.name.clone();
+                                        let status = match e.status {
+                                            api::EventStatus::Active => "🟢",
+                                            api::EventStatus::Draft => "📝",
+                                            api::EventStatus::Completed => "✅",
+                                            api::EventStatus::Archived => "📦",
+                                        };
+                                        view! {
+                                            <option value=id>{format!("{status} {name}")}</option>
+                                        }
+                                    }).collect_view()}
+                                </select>
+                            </div>
+                        </div>
+                    </Show>
                     // Quick stats at bottom of sidebar
                     <div class="admin-sidebar-stats">
                         {move || {
@@ -479,6 +596,9 @@ pub fn Admin() -> impl IntoView {
 
                 // Content area
                 <main class="admin-content">
+
+                // Attendance section
+                <Show when=move || active_section.get() == AdminSection::Attendance fallback=|| view! { <div></div> }>
                 // Loading state
                 <Show when=show_loading fallback=|| view! { <div></div> }>
                     <div class="page-loading">
@@ -701,6 +821,17 @@ pub fn Admin() -> impl IntoView {
                         </div>
                     </div>
                 </Show>
+                </Show>
+
+                // Quiz section
+                <Show when=move || active_section.get() == AdminSection::Quiz fallback=|| view! { <div></div> }>
+                    <crate::pages::quiz_editor::QuizEditor set_toast=set_toast active_event_id=active_event_id />
+                </Show>
+
+                // Events section
+                <Show when=move || active_section.get() == AdminSection::Events fallback=|| view! { <div></div> }>
+                    <crate::pages::events_page::EventsPage set_toast=set_toast />
+                </Show>
                 </main>
             </div>
 
@@ -714,6 +845,7 @@ pub fn Admin() -> impl IntoView {
 /// Spawn QR code generation task.
 fn spawn_qr_generation(
     force: bool,
+    event_id: Option<String>,
     set_qr_generating: WriteSignal<bool>,
     set_qr_result: WriteSignal<Option<GenerateQrData>>,
     set_toast: WriteSignal<Option<components::ToastMessage>>,
@@ -721,7 +853,7 @@ fn spawn_qr_generation(
 ) {
     set_qr_generating.set(true);
     leptos::task::spawn_local(async move {
-        match api::generate_qrs(force).await {
+        match api::generate_qrs(force, event_id.as_deref()).await {
             Ok(data) => {
                 let count = data.generated;
                 let skipped = data.skipped;

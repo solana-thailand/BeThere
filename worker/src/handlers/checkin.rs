@@ -6,9 +6,10 @@
 
 use axum::{
     Extension,
-    extract::{Path, State},
+    extract::{Path, Query, State},
     response::Json,
 };
+use serde::Deserialize;
 use serde_json::json;
 use uuid::Uuid;
 
@@ -16,8 +17,15 @@ use event_checkin_domain::models::api::CheckInResponse;
 use event_checkin_domain::models::attendee::Attendee;
 use event_checkin_domain::models::auth::Claims;
 
+use crate::event_store;
 use crate::sheets;
 use crate::state::AppState;
+
+/// Optional event_id query parameter for event-scoped requests.
+#[derive(Debug, Deserialize)]
+pub struct EventIdQuery {
+    pub event_id: Option<String>,
+}
 
 /// POST /api/checkin/:id
 /// Check in an attendee by their api_id.
@@ -34,27 +42,56 @@ pub async fn check_in(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
     Path(id): Path<String>,
+    Query(query): Query<EventIdQuery>,
 ) -> Json<serde_json::Value> {
     tracing::info!("check-in request for {id} (by: {})", claims.email);
 
-    // Fetch the attendee
-    let attendee: Attendee = match sheets::get_attendee_by_id(&id, &state).await {
-        Ok(Some(a)) => a,
-        Ok(None) => {
-            tracing::warn!("check-in failed: attendee {id} not found");
-            return Json(json!({
-                "success": false,
-                "error": format!("attendee with id '{id}' not found"),
-            }));
-        }
-        Err(ref e) => {
-            tracing::error!("check-in failed: could not fetch attendee {id}: {e}");
-            return Json(json!({
-                "success": false,
-                "error": format!("failed to look up attendee: {e}"),
-            }));
+    let event = match event_store::resolve_event_or_fallback(
+        state.events_kv.as_ref(),
+        query.event_id.as_deref(),
+        &state.config,
+    )
+    .await
+    {
+        Ok(e) => e,
+        Err(e) => {
+            return Json(json!({ "success": false, "error": e }));
         }
     };
+
+    // Per-event access guard: staff can only check in their assigned events
+    if let Err(e) = crate::auth::check_event_access(&claims.email, &state, &event) {
+        tracing::warn!(
+            "check-in denied: {} has no access to event '{}' ({})",
+            claims.email,
+            event.name,
+            event.id,
+        );
+        return Json(json!({
+            "success": false,
+            "error": e,
+        }));
+    }
+
+    // Fetch the attendee
+    let attendee: Attendee =
+        match sheets::get_attendee_by_id(&id, &state, &event.sheet_id, &event.sheet_name).await {
+            Ok(Some(a)) => a,
+            Ok(None) => {
+                tracing::warn!("check-in failed: attendee {id} not found");
+                return Json(json!({
+                    "success": false,
+                    "error": format!("attendee with id '{id}' not found"),
+                }));
+            }
+            Err(ref e) => {
+                tracing::error!("check-in failed: could not fetch attendee {id}: {e}");
+                return Json(json!({
+                    "success": false,
+                    "error": format!("failed to look up attendee: {e}"),
+                }));
+            }
+        };
 
     // Check if attendee is approved
     if !attendee.is_approved() {
@@ -111,7 +148,16 @@ pub async fn check_in(
     let claim_token = Uuid::now_v7().to_string();
 
     // Update the Google Sheet (writes timestamp, staff email, and claim_token)
-    match sheets::mark_checked_in(attendee.row_index, &claims.email, &claim_token, &state).await {
+    match sheets::mark_checked_in(
+        attendee.row_index,
+        &claims.email,
+        &claim_token,
+        &state,
+        &event.sheet_id,
+        &event.sheet_name,
+    )
+    .await
+    {
         Ok(timestamp) => {
             tracing::info!(
                 "check-in successful: {} ({}) at {timestamp} by {} claim_token={claim_token}",

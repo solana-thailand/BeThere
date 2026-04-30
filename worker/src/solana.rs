@@ -54,7 +54,21 @@ struct HeliusRpcError {
 /// The Helius API uses query-param auth (`?api-key=KEY`), so the URL is built
 /// by appending the api key to the rpc url.
 ///
+/// # Parameters
+///
+/// - `wallet_address` — Owner's Solana wallet address (base58).
+/// - `rpc_url` — Helius RPC base URL (without query params).
+/// - `api_key` — Helius API key, appended as `?api-key=KEY`.
+/// - `collection_mint` — Collection mint address; ignored if empty.
+/// - `metadata_uri` — Off-chain metadata URI; ignored if empty.
+/// - `image_url` — NFT image URL; ignored if empty.
+/// - `nft_name` — NFT name (e.g. event-specific title).
+/// - `nft_symbol` — NFT symbol (e.g. event ticker).
+/// - `nft_description` — NFT description (e.g. proof of attendance text).
+/// - `nft_external_url` — External URL associated with the NFT.
+///
 /// Returns [`MintResult`] with the transaction signature and asset id on success.
+#[allow(clippy::too_many_arguments)]
 pub async fn mint_compressed_nft(
     wallet_address: &str,
     rpc_url: &str,
@@ -62,6 +76,10 @@ pub async fn mint_compressed_nft(
     collection_mint: &str,
     metadata_uri: &str,
     image_url: &str,
+    nft_name: &str,
+    nft_symbol: &str,
+    nft_description: &str,
+    nft_external_url: &str,
 ) -> Result<MintResult, String> {
     let url = format!("{rpc_url}/?api-key={api_key}");
 
@@ -69,11 +87,11 @@ pub async fn mint_compressed_nft(
     // Priority fee ensures the transaction lands in the leader's next block
     // for fastest confirmation (~400ms on a healthy network).
     let mut params = serde_json::json!({
-        "name": "BeThere - Road to Mainnet",
-        "symbol": "BETH",
-        "description": "Proof of attendance at Road to Mainnet 1 — Bangkok",
+        "name": nft_name,
+        "symbol": nft_symbol,
+        "description": nft_description,
         "owner": wallet_address,
-        "externalUrl": "https://solana-thailand.workers.dev",
+        "externalUrl": nft_external_url,
         "sellerFeeBasisPoints": 0,
         "confirmTransaction": true,
         "priorityFee": PRIORITY_FEE_MICROLAMPORTS

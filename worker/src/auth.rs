@@ -79,7 +79,13 @@ pub async fn is_staff(email: &str, state: &AppState) -> bool {
 /// Role values: "admin" (scanner + admin dashboard) or "staff" (scanner only).
 pub async fn get_staff_role(email: &str, state: &AppState) -> Option<String> {
     // Check the Google Sheets "staff" tab first (supports role column B)
-    match sheets::get_staff_members(state).await {
+    match sheets::get_staff_members(
+        state,
+        &state.config.sheets.sheet_id,
+        &state.config.sheets.staff_sheet_name,
+    )
+    .await
+    {
         Ok(members) => {
             if let Some(member) = members.iter().find(|m| m.email.eq_ignore_ascii_case(email)) {
                 return Some(member.role.clone());
@@ -230,6 +236,92 @@ fn is_public_route(path: &str) -> bool {
 }
 
 // ---------------------------------------------------------------------------
+// Role-based access control
+// ---------------------------------------------------------------------------
+
+/// User role levels for access control.
+/// Ordered by privilege: Staff < Organizer < SuperAdmin.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub enum UserRole {
+    /// Scanner only — can check in attendees.
+    Staff,
+    /// Event management — can CRUD events they organize.
+    Organizer,
+    /// Global admin — can create/manage all events.
+    SuperAdmin,
+}
+
+/// Resolve the highest role for a user across global config and event config.
+///
+/// Checks in order: super_admin → event organizer → event staff → global staff.
+/// Uses the existing `is_event_organizer` / `is_event_staff` helpers from event_store
+/// to avoid duplicating email-matching logic.
+pub async fn resolve_user_role(
+    email: &str,
+    state: &AppState,
+    event_config: Option<&event_checkin_domain::models::event::EventConfig>,
+) -> UserRole {
+    // 1. Super admin (global config)
+    if state
+        .config
+        .super_admin_emails
+        .iter()
+        .any(|e| e.eq_ignore_ascii_case(email))
+    {
+        return UserRole::SuperAdmin;
+    }
+
+    // 2. Per-event organizer / staff
+    if let Some(ec) = event_config {
+        if crate::event_store::is_event_organizer(ec, email) {
+            return UserRole::Organizer;
+        }
+        if crate::event_store::is_event_staff(ec, email) {
+            return UserRole::Staff;
+        }
+    }
+
+    // 3. Global staff (they already passed require_auth, so at least Staff)
+    UserRole::Staff
+}
+
+/// Check if a user has access to operate on a specific event.
+///
+/// Returns `Ok(())` if access is granted, `Err(reason)` if denied.
+/// Handlers should return the error string in a JSON response.
+///
+/// Access hierarchy:
+/// - **SuperAdmin** → always allowed (global admin)
+/// - **Organizer** assigned to this event → allowed
+/// - **Staff** assigned to this event → allowed (scanner only)
+/// - Any other authenticated staff → denied (not assigned to this event)
+pub fn check_event_access(
+    email: &str,
+    state: &AppState,
+    event_config: &event_checkin_domain::models::event::EventConfig,
+) -> Result<(), String> {
+    // 1. SuperAdmin → always allowed
+    if state
+        .config
+        .super_admin_emails
+        .iter()
+        .any(|e| e.eq_ignore_ascii_case(email))
+    {
+        return Ok(());
+    }
+
+    // 2. Per-event organizer or staff
+    if crate::event_store::has_event_access(event_config, email) {
+        return Ok(());
+    }
+
+    Err(format!(
+        "you are not assigned to event '{}' — contact the event organizer",
+        event_config.name
+    ))
+}
+
+// ---------------------------------------------------------------------------
 // Tests (pure logic only — no SubtleCrypto available in unit tests)
 // ---------------------------------------------------------------------------
 
@@ -274,6 +366,7 @@ mod tests {
             event_link: "https://example.com/event".to_string(),
             event_start_ms: 0,
             event_end_ms: 0,
+            super_admin_emails: vec!["admin@example.com".to_string()],
             host: "0.0.0.0".to_string(),
             port: 3000,
         };
@@ -281,6 +374,7 @@ mod tests {
         AppState {
             config: std::sync::Arc::new(config),
             quiz_kv: None,
+            events_kv: None,
         }
     }
 

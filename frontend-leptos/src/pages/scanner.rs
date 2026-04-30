@@ -269,7 +269,7 @@ pub fn Scanner() -> impl IntoView {
             let set_t = set_toast;
             let set_s_success = set_session_success;
             leptos::task::spawn_local(async move {
-                match api::check_in(&id).await {
+                match api::check_in(&id, None).await {
                     Ok(result) => {
                         log::info!("[scanner] check-in successful: {}", result.name);
                         set_state.set(CheckInState::Success(Box::new(result)));
@@ -508,7 +508,7 @@ fn process_attendee_id(
     let attendee_id = id.to_string();
     set_state.set(CheckInState::LookingUp);
     leptos::task::spawn_local(async move {
-        match api::get_attendee(&attendee_id).await {
+        match api::get_attendee(&attendee_id, None).await {
             Ok(data) => {
                 if data.is_checked_in {
                     set_state.set(CheckInState::AlreadyCheckedIn(Box::new(data)));

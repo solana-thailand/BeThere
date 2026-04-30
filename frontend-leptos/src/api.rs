@@ -45,7 +45,7 @@ pub struct AuthUrlResponse {
 pub struct MeResponse {
     pub email: String,
     pub sub: String,
-    /// Role from staff sheet: "admin" (scanner + admin) or "staff" (scanner only).
+    /// Role: "super_admin" (full access), "organizer" (event management), or "staff" (scanner only).
     #[serde(default)]
     pub role: String,
 }
@@ -250,6 +250,142 @@ async fn api_post(path: &str) -> Result<gloo::net::http::Response, ApiError> {
     Ok(response)
 }
 
+/// Make an authenticated POST request with JSON body to the API.
+async fn api_post_json<T: serde::de::DeserializeOwned + Default>(
+    path: &str,
+    body: &impl serde::Serialize,
+) -> Result<T, ApiError> {
+    let url = format!("{}{path}", api_base());
+    let token = get_token();
+
+    let json_body = serde_json::to_string(body).map_err(|e| ApiError {
+        message: format!("Failed to serialize request: {e}"),
+        status: 0,
+    })?;
+
+    let mut req = gloo::net::http::Request::post(&url);
+    if let Some(ref t) = token {
+        req = req.header("Authorization", &format!("Bearer {t}"));
+    }
+    req = req.header("Content-Type", "application/json");
+
+    let response = req
+        .body(&json_body)
+        .map_err(|e| ApiError {
+            message: format!("Failed to set request body: {e:?}"),
+            status: 0,
+        })?
+        .send()
+        .await?;
+
+    if response.status() == 401 {
+        clear_token();
+        return Err(ApiError {
+            message: "Session expired".to_string(),
+            status: 401,
+        });
+    }
+
+    if !response.ok() {
+        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
+            success: false,
+            data: None,
+            error: Some("Request failed".to_string()),
+        });
+        return Err(ApiError {
+            message: body
+                .error
+                .unwrap_or_else(|| format!("HTTP {}", response.status())),
+            status: response.status(),
+        });
+    }
+
+    let result: ApiResponse<T> = response.json().await.map_err(|e| ApiError {
+        message: format!("Failed to parse response: {e}"),
+        status: 0,
+    })?;
+
+    if !result.success {
+        return Err(ApiError {
+            message: result.error.unwrap_or("Unknown error".to_string()),
+            status: 0,
+        });
+    }
+
+    result.data.ok_or_else(|| ApiError {
+        message: "No data in response".to_string(),
+        status: 0,
+    })
+}
+
+/// Make an authenticated PUT request with JSON body to the API.
+async fn api_put_json<T: serde::de::DeserializeOwned + Default>(
+    path: &str,
+    body: &impl serde::Serialize,
+) -> Result<T, ApiError> {
+    let url = format!("{}{path}", api_base());
+    let token = get_token();
+
+    let json_body = serde_json::to_string(body).map_err(|e| ApiError {
+        message: format!("Failed to serialize request: {e}"),
+        status: 0,
+    })?;
+
+    let mut req = gloo::net::http::Request::put(&url);
+    if let Some(ref t) = token {
+        req = req.header("Authorization", &format!("Bearer {t}"));
+    }
+    req = req.header("Content-Type", "application/json");
+
+    let response = req
+        .body(&json_body)
+        .map_err(|e| ApiError {
+            message: format!("Failed to set request body: {e:?}"),
+            status: 0,
+        })?
+        .send()
+        .await?;
+
+    if response.status() == 401 {
+        clear_token();
+        return Err(ApiError {
+            message: "Session expired".to_string(),
+            status: 401,
+        });
+    }
+
+    if !response.ok() {
+        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
+            success: false,
+            data: None,
+            error: Some("Request failed".to_string()),
+        });
+        return Err(ApiError {
+            message: body
+                .error
+                .unwrap_or_else(|| format!("HTTP {}", response.status())),
+            status: response.status(),
+        });
+    }
+
+    let result: ApiResponse<T> = response.json().await.map_err(|e| ApiError {
+        message: format!("Failed to parse response: {e}"),
+        status: 0,
+    })?;
+
+    if !result.success {
+        return Err(ApiError {
+            message: result.error.unwrap_or("Unknown error".to_string()),
+            status: 0,
+        });
+    }
+
+    result.data.ok_or_else(|| ApiError {
+        message: "No data in response".to_string(),
+        status: 0,
+    })
+}
+
 // ===== Public API functions =====
 
 /// GET /api/auth/url
@@ -291,8 +427,12 @@ pub async fn get_me() -> Result<MeResponse, ApiError> {
 
 /// GET /api/attendees
 /// Returns all attendees with stats.
-pub async fn get_attendees() -> Result<AttendeesData, ApiError> {
-    let response = api_get("/attendees").await?;
+pub async fn get_attendees(event_id: Option<&str>) -> Result<AttendeesData, ApiError> {
+    let path = match event_id {
+        Some(id) if !id.is_empty() => format!("/attendees?event_id={id}"),
+        _ => "/attendees".to_string(),
+    };
+    let response = api_get(&path).await?;
 
     if !response.ok() {
         let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
@@ -319,8 +459,11 @@ pub async fn get_attendees() -> Result<AttendeesData, ApiError> {
 
 /// GET /api/attendee/:id
 /// Returns a single attendee by their api_id.
-pub async fn get_attendee(id: &str) -> Result<AttendeeData, ApiError> {
-    let path = format!("/attendee/{id}");
+pub async fn get_attendee(id: &str, event_id: Option<&str>) -> Result<AttendeeData, ApiError> {
+    let path = match event_id {
+        Some(eid) if !eid.is_empty() => format!("/attendee/{id}?event_id={eid}"),
+        _ => format!("/attendee/{id}"),
+    };
     let response = api_get(&path).await?;
 
     if !response.ok() {
@@ -348,8 +491,11 @@ pub async fn get_attendee(id: &str) -> Result<AttendeeData, ApiError> {
 
 /// POST /api/checkin/:id
 /// Check in an attendee by their api_id.
-pub async fn check_in(id: &str) -> Result<CheckInData, ApiError> {
-    let path = format!("/checkin/{id}");
+pub async fn check_in(id: &str, event_id: Option<&str>) -> Result<CheckInData, ApiError> {
+    let path = match event_id {
+        Some(eid) if !eid.is_empty() => format!("/checkin/{id}?event_id={eid}"),
+        _ => format!("/checkin/{id}"),
+    };
     let response = api_post(&path).await?;
 
     if !response.ok() {
@@ -380,13 +526,14 @@ pub async fn check_in(id: &str) -> Result<CheckInData, ApiError> {
 ///
 /// When `force` is true, regenerates QR URLs even for attendees
 /// that already have one (overwrites existing).
-pub async fn generate_qrs(force: bool) -> Result<GenerateQrData, ApiError> {
-    let path = if force {
-        "/generate-qrs?force=true"
-    } else {
-        "/generate-qrs"
+pub async fn generate_qrs(force: bool, event_id: Option<&str>) -> Result<GenerateQrData, ApiError> {
+    let path = match (force, event_id) {
+        (true, Some(eid)) if !eid.is_empty() => format!("/generate-qrs?force=true&event_id={eid}"),
+        (false, Some(eid)) if !eid.is_empty() => format!("/generate-qrs?event_id={eid}"),
+        (true, None) | (true, Some(_)) => "/generate-qrs?force=true".to_string(),
+        _ => "/generate-qrs".to_string(),
     };
-    let response = api_post(path).await?;
+    let response = api_post(&path).await?;
 
     if !response.ok() {
         let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
@@ -571,6 +718,256 @@ pub struct QuizStatusData {
     pub passing_threshold_percent: u8,
 }
 
+// ===== Admin Quiz Types =====
+
+/// A quiz question as stored in the admin config (includes correct answer).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QuizQuestionAdmin {
+    pub id: String,
+    pub text: String,
+    pub options: Vec<String>,
+    pub correct_index: u8,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub explanation: Option<String>,
+}
+
+/// Full quiz config for admin management.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QuizConfigAdmin {
+    pub questions: Vec<QuizQuestionAdmin>,
+    pub passing_score_percent: u8,
+    pub max_attempts: u8,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub time_limit_seconds: Option<u16>,
+}
+
+/// Response from GET /api/admin/quiz.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct AdminQuizData {
+    #[serde(default)]
+    pub configured: bool,
+    #[serde(default)]
+    pub questions: Vec<QuizQuestionAdmin>,
+    #[serde(default)]
+    pub passing_score_percent: u8,
+    #[serde(default)]
+    pub max_attempts: u8,
+    #[serde(default)]
+    pub time_limit_seconds: Option<u16>,
+}
+
+/// Response from POST /api/admin/quiz.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct AdminQuizSaveData {
+    pub questions_count: usize,
+    pub passing_score_percent: u8,
+    pub max_attempts: u8,
+}
+
+// ===== Event Management API Types =====
+
+/// Event status (mirrors backend EventStatus).
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum EventStatus {
+    #[default]
+    Draft,
+    Active,
+    Completed,
+    Archived,
+}
+
+/// Lightweight event metadata from the events list endpoint.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct EventMeta {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub slug: String,
+    #[serde(default)]
+    pub status: EventStatus,
+    #[serde(default)]
+    pub event_start_ms: i64,
+    #[serde(default)]
+    pub event_end_ms: i64,
+    #[serde(default)]
+    pub sheet_id: String,
+    #[serde(default)]
+    pub created_at: String,
+    #[serde(default)]
+    pub organizer_emails: Vec<String>,
+}
+
+/// Full event configuration (from GET /api/events/{id}).
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct EventDetail {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub slug: String,
+    #[serde(default)]
+    pub tagline: String,
+    #[serde(default)]
+    pub link: String,
+    #[serde(default)]
+    pub status: EventStatus,
+    #[serde(default)]
+    pub event_start_ms: i64,
+    #[serde(default)]
+    pub event_end_ms: i64,
+    #[serde(default)]
+    pub sheet_id: String,
+    #[serde(default)]
+    pub sheet_name: String,
+    #[serde(default)]
+    pub staff_sheet_name: String,
+    #[serde(default)]
+    pub quiz_enabled: bool,
+    #[serde(default)]
+    pub nft_collection_mint: String,
+    #[serde(default)]
+    pub nft_metadata_uri: String,
+    #[serde(default)]
+    pub nft_image_url: String,
+    #[serde(default)]
+    pub nft_name_template: String,
+    #[serde(default)]
+    pub nft_symbol: String,
+    #[serde(default)]
+    pub nft_description_template: String,
+    #[serde(default)]
+    pub organizer_emails: Vec<String>,
+    #[serde(default)]
+    pub staff_emails: Vec<String>,
+    #[serde(default)]
+    pub claim_base_url: String,
+    #[serde(default)]
+    pub created_at: String,
+    #[serde(default)]
+    pub updated_at: String,
+}
+
+/// Response for GET /api/events — list all events.
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct EventsListData {
+    #[serde(default)]
+    pub events: Vec<EventMeta>,
+}
+
+/// Response for GET /api/events/{id} — single event detail.
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct EventDetailData {
+    pub event: EventDetail,
+}
+
+/// Request body for POST /api/events — create event.
+#[derive(Debug, Clone, Serialize, Default)]
+pub struct CreateEventBody {
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub slug: String,
+    #[serde(default)]
+    pub tagline: String,
+    #[serde(default)]
+    pub link: String,
+    #[serde(default)]
+    pub event_start_ms: i64,
+    #[serde(default)]
+    pub event_end_ms: i64,
+    #[serde(default)]
+    pub sheet_id: String,
+    #[serde(default)]
+    pub sheet_name: String,
+    #[serde(default)]
+    pub staff_sheet_name: String,
+    #[serde(default)]
+    pub quiz_enabled: bool,
+    #[serde(default)]
+    pub nft_collection_mint: String,
+    #[serde(default)]
+    pub nft_metadata_uri: String,
+    #[serde(default)]
+    pub nft_image_url: String,
+    #[serde(default)]
+    pub nft_name_template: String,
+    #[serde(default)]
+    pub nft_symbol: String,
+    #[serde(default)]
+    pub nft_description_template: String,
+    #[serde(default)]
+    pub organizer_emails: Vec<String>,
+    #[serde(default)]
+    pub staff_emails: Vec<String>,
+    #[serde(default)]
+    pub claim_base_url: String,
+}
+
+/// Request body for PUT /api/events/{id} — update event.
+/// All fields optional for partial update.
+#[derive(Debug, Clone, Serialize, Default)]
+pub struct UpdateEventBody {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub slug: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tagline: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub link: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status: Option<EventStatus>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub event_start_ms: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub event_end_ms: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sheet_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sheet_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub staff_sheet_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub quiz_enabled: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub nft_collection_mint: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub nft_metadata_uri: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub nft_image_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub nft_name_template: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub nft_symbol: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub nft_description_template: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub organizer_emails: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub staff_emails: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub claim_base_url: Option<String>,
+}
+
+/// Response from event create/update (partial data).
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct EventMutationData {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub slug: String,
+    #[serde(default)]
+    pub status: String,
+    #[serde(default)]
+    pub updated_at: String,
+}
+
 // ===== Claim API functions (public — no auth) =====
 
 /// GET /api/claim/{token}
@@ -638,6 +1035,127 @@ pub async fn get_quiz() -> Result<QuizQuestionsData, ApiError> {
         message: wrapper.error.unwrap_or("No data".to_string()),
         status: 0,
     })
+}
+
+// ===== Event Management API functions (admin) =====
+
+/// GET /api/events — list all events.
+pub async fn list_events() -> Result<EventsListData, ApiError> {
+    let response = api_get("/events").await?;
+    let result: ApiResponse<EventsListData> = response.json().await.map_err(|e| ApiError {
+        message: format!("Failed to parse events response: {e}"),
+        status: 0,
+    })?;
+
+    if !result.success {
+        return Err(ApiError {
+            message: result.error.unwrap_or("Unknown error".to_string()),
+            status: 0,
+        });
+    }
+
+    result.data.ok_or_else(|| ApiError {
+        message: "No data in response".to_string(),
+        status: 0,
+    })
+}
+
+/// GET /api/events/{id} — get full event config.
+pub async fn get_event_detail(id: &str) -> Result<EventDetailData, ApiError> {
+    let path = format!("/events/{id}");
+    let response = api_get(&path).await?;
+    let result: ApiResponse<EventDetailData> = response.json().await.map_err(|e| ApiError {
+        message: format!("Failed to parse event detail response: {e}"),
+        status: 0,
+    })?;
+
+    if !result.success {
+        return Err(ApiError {
+            message: result.error.unwrap_or("Unknown error".to_string()),
+            status: 0,
+        });
+    }
+
+    result.data.ok_or_else(|| ApiError {
+        message: "No data in response".to_string(),
+        status: 0,
+    })
+}
+
+/// POST /api/events — create a new event.
+pub async fn create_event(body: &CreateEventBody) -> Result<EventMutationData, ApiError> {
+    api_post_json("/events", body).await
+}
+
+/// PUT /api/events/{id} — update an event.
+pub async fn update_event(id: &str, body: &UpdateEventBody) -> Result<EventMutationData, ApiError> {
+    let path = format!("/events/{id}");
+    api_put_json(&path, body).await
+}
+
+/// DELETE /api/events/{id} — archive an event.
+pub async fn archive_event(id: &str) -> Result<EventMutationData, ApiError> {
+    let path = format!("/events/{id}");
+    let response = api_post(&path).await?;
+
+    if !response.ok() {
+        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
+            success: false,
+            data: None,
+            error: Some("Archive failed".to_string()),
+        });
+        return Err(ApiError {
+            message: body.error.unwrap_or_default(),
+            status: 0,
+        });
+    }
+
+    let wrapper: ApiResponse<EventMutationData> =
+        response.json().await.map_err(|e| ApiError {
+            message: format!("Failed to parse archive response: {e}"),
+            status: 0,
+        })?;
+
+    wrapper.data.ok_or_else(|| ApiError {
+        message: wrapper.error.unwrap_or("No data".to_string()),
+        status: 0,
+    })
+}
+
+// ===== Admin Quiz Management =====
+
+/// Get the full quiz configuration (admin only, includes correct answers).
+pub async fn get_admin_quiz(event_id: Option<&str>) -> Result<AdminQuizData, ApiError> {
+    let path = match event_id {
+        Some(eid) if !eid.is_empty() => format!("/admin/quiz?event_id={eid}"),
+        _ => "/admin/quiz".to_string(),
+    };
+    let response = api_get(&path).await?;
+    let result: ApiResponse<AdminQuizData> = response.json().await.map_err(|e| ApiError {
+        message: format!("Failed to parse admin quiz response: {e}"),
+        status: 0,
+    })?;
+
+    if !result.success {
+        return Err(ApiError {
+            message: result.error.unwrap_or("Unknown error".to_string()),
+            status: 0,
+        });
+    }
+
+    result.data.ok_or_else(|| ApiError {
+        message: "No data in response".to_string(),
+        status: 0,
+    })
+}
+
+/// Save quiz configuration (admin only).
+pub async fn put_admin_quiz(config: &QuizConfigAdmin, event_id: Option<&str>) -> Result<AdminQuizSaveData, ApiError> {
+    let path = match event_id {
+        Some(eid) if !eid.is_empty() => format!("/admin/quiz?event_id={eid}"),
+        _ => "/admin/quiz".to_string(),
+    };
+    api_post_json(&path, config).await
 }
 
 /// POST /api/quiz/{token}/submit

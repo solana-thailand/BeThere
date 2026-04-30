@@ -51,6 +51,9 @@ pub struct AppConfig {
     pub event_start_ms: i64,
     /// Event end time as Unix epoch milliseconds
     pub event_end_ms: i64,
+    /// Global admin emails that can create/manage all events.
+    /// Set via SUPER_ADMIN_EMAILS env var (comma-separated).
+    pub super_admin_emails: Vec<String>,
     pub host: String,
     pub port: u16,
 }

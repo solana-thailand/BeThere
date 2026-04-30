@@ -2,6 +2,7 @@ pub mod attendee;
 pub mod auth;
 pub mod checkin;
 pub mod claim;
+pub mod events;
 pub mod health;
 pub mod qr;
 pub mod quiz;
@@ -40,7 +41,24 @@ pub fn routes(state: AppState) -> Router<()> {
         .route("/checkin/{id}", post(checkin::check_in))
         .route("/generate-qrs", post(qr::generate_qrs))
         // Admin quiz management (protected — organizer sets questions)
-        .route("/admin/quiz", post(quiz::put_quiz))
+        .route(
+            "/admin/quiz",
+            get(quiz::get_admin_quiz).post(quiz::put_quiz),
+        )
+        // Event management (protected — admin/organizer CRUD)
+        .route(
+            "/events",
+            get(events::list_events).post(events::create_event),
+        )
+        // Migrate and seed routes MUST come before /events/{id} to avoid path conflicts
+        .route("/events/migrate", post(events::migrate_quiz))
+        .route("/events/seed", post(events::seed_event))
+        .route(
+            "/events/{id}",
+            get(events::get_event)
+                .put(events::update_event)
+                .delete(events::archive_event),
+        )
         .layer(middleware::from_fn_with_state(
             state.clone(),
             crate::auth::require_auth,

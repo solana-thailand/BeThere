@@ -7,13 +7,22 @@ use leptos::prelude::*;
 use leptos_router::components::A;
 use leptos_router::hooks::use_navigate;
 
-/// Whether a user has admin privileges.
+/// Whether a user has admin (super_admin) privileges.
 ///
-/// Provided via context by `ProtectedRoute`. Child components can access
-/// it via `use_context::<ReadSignal<bool>>()` or by reading the `is_admin`
-/// prop passed down through page components.
+/// Returns true for "super_admin" role. Used to gate access to the Admin dashboard.
 pub fn is_admin_role(role: &str) -> bool {
-    role.eq_ignore_ascii_case("admin")
+    role.eq_ignore_ascii_case("super_admin")
+}
+
+/// Whether a user can create and edit events.
+///
+/// Returns true for "super_admin" and "organizer" roles, false for "staff".
+/// Staff users can only scan — they cannot create, edit, or archive events.
+pub fn can_manage_events(role: &str) -> bool {
+    matches!(
+        role.to_ascii_lowercase().as_str(),
+        "super_admin" | "organizer"
+    )
 }
 
 // ===== Toast Notification =====

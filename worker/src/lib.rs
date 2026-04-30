@@ -1,5 +1,6 @@
 mod auth;
 mod crypto;
+mod event_store;
 mod handlers;
 mod http;
 mod middleware;

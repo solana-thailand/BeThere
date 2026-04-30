@@ -16,6 +16,9 @@ pub struct AppState {
     /// KV namespace for quiz questions and progress (Issue 002).
     /// `None` if the `QUIZ` binding is not configured in `wrangler.toml`.
     pub quiz_kv: Option<KvStore>,
+    /// KV namespace for event registry and per-event config (Issue 004).
+    /// `None` if the `EVENTS` binding is not configured in `wrangler.toml`.
+    pub events_kv: Option<KvStore>,
 }
 
 impl AppState {
@@ -45,6 +48,15 @@ impl AppState {
 
         let staff_emails_str = get_secret(env, "STAFF_EMAILS")?;
         let staff_emails: Vec<String> = staff_emails_str
+            .split(',')
+            .map(|s| s.trim().to_lowercase())
+            .filter(|s| !s.is_empty())
+            .collect();
+
+        let super_admin_emails_str = get_secret(env, "SUPER_ADMIN_EMAILS")
+            .or_else(|_| get_var(env, "SUPER_ADMIN_EMAILS"))
+            .unwrap_or_else(|_| String::new());
+        let super_admin_emails: Vec<String> = super_admin_emails_str
             .split(',')
             .map(|s| s.trim().to_lowercase())
             .filter(|s| !s.is_empty())
@@ -105,6 +117,7 @@ impl AppState {
             event_link,
             event_start_ms,
             event_end_ms,
+            super_admin_emails,
             // host/port unused on Workers — placeholder values
             host: "0.0.0.0".to_string(),
             port: 0,
@@ -113,9 +126,13 @@ impl AppState {
         // Quiz KV namespace — optional, quiz feature disabled if not bound
         let quiz_kv = env.kv("QUIZ").ok();
 
+        // Events KV namespace — optional, multi-event disabled if not bound
+        let events_kv = env.kv("EVENTS").ok();
+
         Ok(Self {
             config: Arc::new(config),
             quiz_kv,
+            events_kv,
         })
     }
 
