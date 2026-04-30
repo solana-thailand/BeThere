@@ -61,13 +61,22 @@ pub async fn handle_callback(code: &str, state: &AppState) -> Result<GoogleUserI
     Ok(user_info)
 }
 
-/// Check if a given email is in the staff allowlist.
+/// Check if a given email is authorized to access the platform.
 ///
-/// Checks both the env var `STAFF_EMAILS` list (fast, static) and the
-/// Google Sheets "staff" tab (dynamic, with role column). Returns `true`
-/// if the email appears in either source.
+/// Checks in order:
+/// 1. Global `STAFF_EMAILS` env var list (fast, static)
+/// 2. Google Sheets "staff" tab (dynamic, with role column)
+/// 3. Per-event `organizer_emails` / `staff_emails` in event registry KV
+///
+/// Returns `true` if the email appears in any source.
 pub async fn is_staff(email: &str, state: &AppState) -> bool {
-    get_staff_role(email, state).await.is_some()
+    // Fast path: global sources (env var + Google Sheet)
+    if get_staff_role(email, state).await.is_some() {
+        return true;
+    }
+
+    // Fallback: check per-event assignments in KV
+    is_event_assigned(email, state).await
 }
 
 /// Get the role for a staff member by email.
@@ -104,6 +113,74 @@ pub async fn get_staff_role(email: &str, state: &AppState) -> Option<String> {
     }
 
     None
+}
+
+/// Check if a user is assigned as organizer or staff in **any** event config.
+///
+/// This is the fallback path in `is_staff()` for users not in global sources.
+/// Two-pass check:
+/// 1. Fast path: `EventMeta.organizer_emails` (no extra KV read)
+/// 2. Slow path: load full `EventConfig` to check `staff_emails`
+///
+/// Returns `true` if the email appears in any event's organizer or staff list.
+pub async fn is_event_assigned(email: &str, state: &AppState) -> bool {
+    let kv = match state.events_kv {
+        Some(ref kv) => kv,
+        None => return false,
+    };
+
+    let all_events = match crate::event_store::list_events(kv).await {
+        Ok(events) => events,
+        Err(e) => {
+            tracing::warn!("failed to list events for auth fallback: {e}");
+            return false;
+        }
+    };
+
+    // Fast path: check organizer_emails in EventMeta (already loaded)
+    for meta in &all_events {
+        if meta
+            .organizer_emails
+            .iter()
+            .any(|e| e.eq_ignore_ascii_case(email))
+        {
+            return true;
+        }
+    }
+
+    // Slow path: load full configs to check staff_emails
+    for meta in &all_events {
+        if let Ok(Some(config)) = crate::event_store::get_event_config(kv, &meta.id).await
+            && crate::event_store::is_event_staff(&config, email)
+        {
+            return true;
+        }
+    }
+
+    false
+}
+
+/// Check if a user is an **organizer** in any event (fast path only).
+///
+/// Only checks `EventMeta.organizer_emails` — no full config loading needed.
+/// Used by `auth_me` to report the correct role without expensive KV reads.
+pub async fn is_event_organizer_any(email: &str, state: &AppState) -> bool {
+    let kv = match state.events_kv {
+        Some(ref kv) => kv,
+        None => return false,
+    };
+
+    match crate::event_store::list_events(kv).await {
+        Ok(events) => events.iter().any(|meta| {
+            meta.organizer_emails
+                .iter()
+                .any(|e| e.eq_ignore_ascii_case(email))
+        }),
+        Err(e) => {
+            tracing::warn!("failed to list events for role check: {e}");
+            false
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -163,7 +240,9 @@ pub async fn require_auth(
         }
     };
 
-    // Verify staff status (checks both env var list and staff sheet)
+    // Verify staff status:
+    //   1. Global sources (env var list + Google Sheet staff tab)
+    //   2. Per-event assignments (organizer_emails / staff_emails in event registry)
     if !is_staff(&claims.email, &state).await {
         tracing::warn!("non-staff user attempted access: {}", claims.email);
         return (
@@ -273,22 +352,25 @@ pub async fn resolve_user_role(
 
     // 2. Per-event organizer (event config)
     if let Some(ec) = event_config
-        && crate::event_store::is_event_organizer(ec, email) {
-            return UserRole::Organizer;
-        }
+        && crate::event_store::is_event_organizer(ec, email)
+    {
+        return UserRole::Organizer;
+    }
 
     // 3. Google Sheet role (fallback — sheet is source of truth for global roles)
     if let Some(role) = get_staff_role(email, state).await.as_deref()
-        && matches!(role, "admin" | "organizer") {
-            return UserRole::Organizer;
-        }
-        // Sheet says "staff" — continue to check event staff
+        && matches!(role, "admin" | "organizer")
+    {
+        return UserRole::Organizer;
+    }
+    // Sheet says "staff" — continue to check event staff
 
     // 4. Per-event staff (event config)
     if let Some(ec) = event_config
-        && crate::event_store::is_event_staff(ec, email) {
-            return UserRole::Staff;
-        }
+        && crate::event_store::is_event_staff(ec, email)
+    {
+        return UserRole::Staff;
+    }
 
     // 5. Global staff (they already passed require_auth, so at least Staff)
     UserRole::Staff
@@ -328,9 +410,10 @@ pub async fn check_event_access(
 
     // 3. Google Sheet role (fallback — sheet is source of truth)
     if let Some(role) = get_staff_role(email, state).await.as_deref()
-        && matches!(role, "admin" | "organizer" | "staff") {
-            return Ok(());
-        }
+        && matches!(role, "admin" | "organizer" | "staff")
+    {
+        return Ok(());
+    }
 
     Err(format!(
         "you are not assigned to event '{}' — contact the event organizer",

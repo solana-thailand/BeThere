@@ -127,9 +127,13 @@ pub async fn auth_me(
     } else {
         match auth::get_staff_role(&claims.email, &state).await.as_deref() {
             Some("admin" | "organizer") => "organizer".to_string(),
-            other => other
-                .map(str::to_string)
-                .unwrap_or_else(|| "staff".to_string()),
+            Some("staff") => "staff".to_string(),
+            // Per-event organizer (not in global sources) → report as organizer
+            None if auth::is_event_organizer_any(&claims.email, &state).await => {
+                "organizer".to_string()
+            }
+            // Any other role (including per-event staff) → staff
+            Some(_) | None => "staff".to_string(),
         }
     };
 

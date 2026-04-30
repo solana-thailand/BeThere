@@ -91,10 +91,10 @@ pub async fn list_events(
         }
 
         // Slower check: load full config to check staff_emails
-        if let Ok(Some(config)) = crate::event_store::get_event_config(kv, &meta.id).await {
-            if crate::event_store::has_event_access(&config, &claims.email) {
-                visible.push(meta.clone());
-            }
+        if let Ok(Some(config)) = crate::event_store::get_event_config(kv, &meta.id).await
+            && crate::event_store::has_event_access(&config, &claims.email)
+        {
+            visible.push(meta.clone());
         }
     }
 
