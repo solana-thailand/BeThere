@@ -253,7 +253,7 @@ pub enum UserRole {
 
 /// Resolve the highest role for a user across global config and event config.
 ///
-/// Checks in order: super_admin → event organizer → event staff → global staff.
+/// Checks in order: super_admin → event organizer → Google Sheet organizer → event staff → Google Sheet staff.
 /// Uses the existing `is_event_organizer` / `is_event_staff` helpers from event_store
 /// to avoid duplicating email-matching logic.
 pub async fn resolve_user_role(
@@ -271,17 +271,26 @@ pub async fn resolve_user_role(
         return UserRole::SuperAdmin;
     }
 
-    // 2. Per-event organizer / staff
-    if let Some(ec) = event_config {
-        if crate::event_store::is_event_organizer(ec, email) {
+    // 2. Per-event organizer (event config)
+    if let Some(ec) = event_config
+        && crate::event_store::is_event_organizer(ec, email) {
             return UserRole::Organizer;
         }
-        if crate::event_store::is_event_staff(ec, email) {
+
+    // 3. Google Sheet role (fallback — sheet is source of truth for global roles)
+    if let Some(role) = get_staff_role(email, state).await.as_deref()
+        && matches!(role, "admin" | "organizer") {
+            return UserRole::Organizer;
+        }
+        // Sheet says "staff" — continue to check event staff
+
+    // 4. Per-event staff (event config)
+    if let Some(ec) = event_config
+        && crate::event_store::is_event_staff(ec, email) {
             return UserRole::Staff;
         }
-    }
 
-    // 3. Global staff (they already passed require_auth, so at least Staff)
+    // 5. Global staff (they already passed require_auth, so at least Staff)
     UserRole::Staff
 }
 
@@ -292,10 +301,12 @@ pub async fn resolve_user_role(
 ///
 /// Access hierarchy:
 /// - **SuperAdmin** → always allowed (global admin)
-/// - **Organizer** assigned to this event → allowed
-/// - **Staff** assigned to this event → allowed (scanner only)
+/// - **Organizer** in event config → allowed
+/// - **Organizer** in Google Sheet staff tab → allowed (fallback)
+/// - **Staff** in event config → allowed (scanner only)
+/// - **Staff** in Google Sheet staff tab → allowed (scanner only, fallback)
 /// - Any other authenticated staff → denied (not assigned to this event)
-pub fn check_event_access(
+pub async fn check_event_access(
     email: &str,
     state: &AppState,
     event_config: &event_checkin_domain::models::event::EventConfig,
@@ -310,10 +321,16 @@ pub fn check_event_access(
         return Ok(());
     }
 
-    // 2. Per-event organizer or staff
+    // 2. Per-event organizer or staff (event config)
     if crate::event_store::has_event_access(event_config, email) {
         return Ok(());
     }
+
+    // 3. Google Sheet role (fallback — sheet is source of truth)
+    if let Some(role) = get_staff_role(email, state).await.as_deref()
+        && matches!(role, "admin" | "organizer" | "staff") {
+            return Ok(());
+        }
 
     Err(format!(
         "you are not assigned to event '{}' — contact the event organizer",

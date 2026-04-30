@@ -92,7 +92,7 @@ pub async fn seed_event(
         }
     };
 
-    match crate::event_store::seed_from_config(kv, &state.config).await {
+    match crate::event_store::seed_from_config(kv, &state.config, &state).await {
         Ok(config) => {
             tracing::info!(
                 "event seeded: id={} name='{}' by {}",

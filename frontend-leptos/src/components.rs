@@ -7,11 +7,16 @@ use leptos::prelude::*;
 use leptos_router::components::A;
 use leptos_router::hooks::use_navigate;
 
-/// Whether a user has admin (super_admin) privileges.
+/// Whether a user has admin privileges.
 ///
-/// Returns true for "super_admin" role. Used to gate access to the Admin dashboard.
+/// Returns true for "super_admin" and "organizer" roles.
+/// - `super_admin`: global admin (from SUPER_ADMIN_EMAILS env var)
+/// - `organizer`: event admin (from Google Sheets staff tab role "admin")
 pub fn is_admin_role(role: &str) -> bool {
-    role.eq_ignore_ascii_case("super_admin")
+    matches!(
+        role.to_ascii_lowercase().as_str(),
+        "super_admin" | "organizer"
+    )
 }
 
 /// Whether a user can create and edit events.

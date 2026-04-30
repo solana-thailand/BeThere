@@ -347,6 +347,7 @@ pub async fn archive_event(kv: &KvStore, id: &str) -> Result<(), String> {
 pub async fn seed_from_config(
     kv: &KvStore,
     global: &event_checkin_domain::config::AppConfig,
+    state: &crate::state::AppState,
 ) -> Result<EventConfig, String> {
     // Idempotent: return existing active event if any
     let index = get_event_index(kv).await?;
@@ -381,8 +382,44 @@ pub async fn seed_from_config(
         nft_name_template: String::new(),
         nft_symbol: String::new(),
         nft_description_template: String::new(),
-        organizer_emails: global.super_admin_emails.clone(),
-        staff_emails: global.staff_emails.clone(),
+        organizer_emails: {
+            let mut emails = global.super_admin_emails.clone();
+            // Merge organizers from Google Sheet staff tab (role "admin" or "organizer")
+            if let Ok(members) = crate::sheets::get_staff_members(
+                state,
+                &global.sheets.sheet_id,
+                &global.sheets.staff_sheet_name,
+            )
+            .await
+            {
+                for m in &members {
+                    if matches!(m.role.as_str(), "admin" | "organizer")
+                        && !emails.iter().any(|e| e.eq_ignore_ascii_case(&m.email))
+                    {
+                        emails.push(m.email.clone());
+                    }
+                }
+            }
+            emails
+        },
+        staff_emails: {
+            let mut emails = global.staff_emails.clone();
+            // Merge staff from Google Sheet staff tab (all members)
+            if let Ok(members) = crate::sheets::get_staff_members(
+                state,
+                &global.sheets.sheet_id,
+                &global.sheets.staff_sheet_name,
+            )
+            .await
+            {
+                for m in &members {
+                    if !emails.iter().any(|e| e.eq_ignore_ascii_case(&m.email)) {
+                        emails.push(m.email.clone());
+                    }
+                }
+            }
+            emails
+        },
         claim_base_url: global.claim_base_url.clone(),
         created_at: now.clone(),
         updated_at: now,

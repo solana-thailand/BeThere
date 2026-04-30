@@ -60,7 +60,7 @@ pub async fn check_in(
     };
 
     // Per-event access guard: staff can only check in their assigned events
-    if let Err(e) = crate::auth::check_event_access(&claims.email, &state, &event) {
+    if let Err(e) = crate::auth::check_event_access(&claims.email, &state, &event).await {
         tracing::warn!(
             "check-in denied: {} has no access to event '{}' ({})",
             claims.email,

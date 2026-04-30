@@ -54,7 +54,7 @@ pub async fn auth_callback(
 
     // Extract authorization code
     let Some(code) = query.code else {
-        return Redirect::to("/?error=missing_code").into_response();
+        return Redirect::to("/login?error=missing_code").into_response();
     };
 
     // Exchange code for user info via Google APIs (uses worker::Fetch)
@@ -62,14 +62,14 @@ pub async fn auth_callback(
         Ok(info) => info,
         Err(ref e) => {
             tracing::error!("oauth callback failed: {e}");
-            return Redirect::to("/?error=auth_failed").into_response();
+            return Redirect::to("/login?error=auth_failed").into_response();
         }
     };
 
     // Verify user is in the staff allowlist
     if !auth::is_staff(&user_info.email, &state).await {
         tracing::warn!("non-staff user attempted login: {}", user_info.email);
-        return Redirect::to("/?error=not_authorized").into_response();
+        return Redirect::to("/login?error=not_authorized").into_response();
     }
 
     // Create JWT session token (async via SubtleCrypto HMAC-SHA256)
@@ -80,7 +80,7 @@ pub async fn auth_callback(
             Ok(token) => token,
             Err(ref e) => {
                 tracing::error!("jwt creation failed: {e}");
-                return Redirect::to("/?error=token_failed").into_response();
+                return Redirect::to("/login?error=token_failed").into_response();
             }
         };
 
@@ -126,7 +126,7 @@ pub async fn auth_me(
         "super_admin".to_string()
     } else {
         match auth::get_staff_role(&claims.email, &state).await.as_deref() {
-            Some("admin") => "organizer".to_string(),
+            Some("admin" | "organizer") => "organizer".to_string(),
             other => other
                 .map(str::to_string)
                 .unwrap_or_else(|| "staff".to_string()),

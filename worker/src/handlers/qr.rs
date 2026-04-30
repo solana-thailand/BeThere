@@ -65,7 +65,7 @@ pub async fn generate_qrs(
     };
 
     // Per-event access guard: staff can only generate QRs for their assigned events
-    if let Err(e) = crate::auth::check_event_access(&claims.email, &state, &event) {
+    if let Err(e) = crate::auth::check_event_access(&claims.email, &state, &event).await {
         tracing::warn!(
             "QR generation denied: {} has no access to event '{}' ({})",
             claims.email,
