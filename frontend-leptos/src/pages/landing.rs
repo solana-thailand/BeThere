@@ -143,7 +143,7 @@ pub fn Landing() -> impl IntoView {
                     <div class="landing-nav-links">
                         <a href="#features">"Features"</a>
                         <a href="#how-it-works">"How it works"</a>
-                        <a href="#organizers">"Organizers"</a>
+                        <a href="#faq">"FAQ"</a>
                     </div>
                     <div style="display:flex;align-items:center;gap:0.75rem;">
                         <A href="/login" attr:class="btn btn-outline btn-sm">
@@ -176,8 +176,11 @@ pub fn Landing() -> impl IntoView {
                     "Put down a small deposit to reserve your spot. Show up, prove you paid attention with a quick quiz, and get every cent back — plus a digital badge you own forever. Don't show up? The organizer keeps your deposit. Simple."
                 </p>
                 <div style="display:flex;flex-wrap:wrap;gap:0.75rem;justify-content:center;">
-                    <A href="/login" attr:class="btn btn-primary" attr:style="padding:0.85rem 2rem;font-size:1rem;">
-                        "Get Started"
+                    <A href="/demo" attr:class="btn btn-primary" attr:style="padding:0.85rem 2rem;font-size:1rem;">
+                        "Try Free Demo"
+                    </A>
+                    <A href="/login" attr:class="btn btn-outline" attr:style="padding:0.85rem 2rem;font-size:1rem;">
+                        "Sign In"
                     </A>
                     <a href="#how-it-works" class="btn btn-outline" style="padding:0.85rem 2rem;font-size:1rem;">
                         "How It Works"
@@ -385,6 +388,99 @@ pub fn Landing() -> impl IntoView {
                 </div>
             </section>
 
+            // ===== FAQ =====
+            <section id="faq" style="max-width:720px;margin:0 auto;padding:3rem 1.5rem 4rem;">
+                <div style="text-align:center;margin-bottom:2.5rem;">
+                    <h2 style="font-size:1.5rem;font-weight:700;color:#fff;margin-bottom:0.5rem;">
+                        "Frequently asked questions"
+                    </h2>
+                    <p style="color:var(--text-secondary);font-size:0.95rem;">
+                        "Everything you need to know about BeThere."
+                    </p>
+                </div>
+
+                <div style="display:flex;flex-direction:column;gap:0.75rem;">
+
+                    // FAQ 1
+                    <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:1.25rem 1.5rem;">
+                        <h3 style="font-size:0.95rem;font-weight:600;color:#fff;margin-bottom:0.4rem;">
+                            "What is BeThere?"
+                        </h3>
+                        <p style="font-size:0.85rem;color:var(--text-secondary);line-height:1.6;">
+                            "BeThere is a deposit-backed event check-in platform built on Solana. Attendees put down a small deposit when they register. If they show up and complete a short quiz, they get their deposit back automatically — plus a compressed NFT badge as proof of attendance. If they don't show up, the organizer keeps the deposit."
+                        </p>
+                    </div>
+
+                    // FAQ 2
+                    <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:1.25rem 1.5rem;">
+                        <h3 style="font-size:0.95rem;font-weight:600;color:#fff;margin-bottom:0.4rem;">
+                            "Do attendees need a crypto wallet?"
+                        </h3>
+                        <p style="font-size:0.85rem;color:var(--text-secondary);line-height:1.6;">
+                            "Not to check in! QR scanning works with any phone — no wallet required at the door. The wallet is only needed when claiming the NFT badge and deposit refund afterward. We support Phantom, Solflare, Backpack, or you can just paste your wallet address."
+                        </p>
+                    </div>
+
+                    // FAQ 3
+                    <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:1.25rem 1.5rem;">
+                        <h3 style="font-size:0.95rem;font-weight:600;color:#fff;margin-bottom:0.4rem;">
+                            "How does the deposit work?"
+                        </h3>
+                        <p style="font-size:0.85rem;color:var(--text-secondary);line-height:1.6;">
+                            "Organizers set a deposit amount (e.g., 500 THB / ~$15). Attendees pay it when registering. After check-in and completing the quiz, the deposit is refunded on-chain as SOL + USDC directly to the attendee's wallet. No-shows forfeit their deposit to the organizer."
+                        </p>
+                    </div>
+
+                    // FAQ 4
+                    <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:1.25rem 1.5rem;">
+                        <h3 style="font-size:0.95rem;font-weight:600;color:#fff;margin-bottom:0.4rem;">
+                            "What is a compressed NFT badge?"
+                        </h3>
+                        <p style="font-size:0.85rem;color:var(--text-secondary);line-height:1.6;">
+                            "It's a digital collectible on Solana that proves you attended an event. Unlike regular NFTs, compressed NFTs cost a fraction of a cent to mint (~$0.001) using Merkle trees. Each badge is unique to the event and lives in your wallet forever — think of it as a digital ticket stub that can't be faked."
+                        </p>
+                    </div>
+
+                    // FAQ 5
+                    <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:1.25rem 1.5rem;">
+                        <h3 style="font-size:0.95rem;font-weight:600;color:#fff;margin-bottom:0.4rem;">
+                            "What's the quiz?"
+                        </h3>
+                        <p style="font-size:0.85rem;color:var(--text-secondary);line-height:1.6;">
+                            "Organizers can set a short quiz (e.g., 3-5 questions) about the event content. Attendees answer after check-in. It proves they actually paid attention — not just physically showed up. The passing threshold is configurable by the organizer."
+                        </p>
+                    </div>
+
+                    // FAQ 6
+                    <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:1.25rem 1.5rem;">
+                        <h3 style="font-size:0.95rem;font-weight:600;color:#fff;margin-bottom:0.4rem;">
+                            "How much does it cost for organizers?"
+                        </h3>
+                        <p style="font-size:0.85rem;color:var(--text-secondary);line-height:1.6;">
+                            "BeThere is free during beta. We cover cNFT minting costs (fractions of a cent per badge). Future pricing will be per-event with a generous free tier. No per-attendee charge during beta."
+                        </p>
+                    </div>
+
+                    // FAQ 7
+                    <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:1.25rem 1.5rem;">
+                        <h3 style="font-size:0.95rem;font-weight:600;color:#fff;margin-bottom:0.4rem;">
+                            "Is BeThere only for crypto events?"
+                        </h3>
+                        <p style="font-size:0.85rem;color:var(--text-secondary);line-height:1.6;">
+                            "It works great for any event! The deposit + check-in flow solves no-shows for meetups, workshops, conferences, and hackathons. The Solana/NFT part happens behind the scenes — attendees don't need to know anything about crypto."
+                        </p>
+                    </div>
+
+                </div>
+
+                // CTA under FAQ
+                <div style="text-align:center;margin-top:2rem;">
+                    <A href="/demo" attr:class="btn btn-primary" attr:style="padding:0.75rem 1.5rem;">
+                        "Still curious? Try the demo →"
+                    </A>
+                </div>
+            </section>
+
             // ===== Footer =====
             <footer class="landing-footer">
                 <div class="landing-footer-grid">
@@ -409,7 +505,8 @@ pub fn Landing() -> impl IntoView {
                         <h4>"Product"</h4>
                         <a href="#features">"Features"</a>
                         <a href="#how-it-works">"How It Works"</a>
-                        <A href="/login">"Claim Badge"</A>
+                        <A href="/demo">"Try Demo"</A>
+                        <A href="/login">"Sign In"</A>
                     </div>
 
                     // Column 3 — Community
