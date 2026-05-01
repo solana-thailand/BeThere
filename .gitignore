@@ -48,3 +48,7 @@ worker/.dev.vars
 
 # Wrangler local state (root level)
 .wrangler/
+
+# cNFT scripts (standalone Rust project)
+scripts/cnft/target/
+scripts/cnft/Cargo.lock

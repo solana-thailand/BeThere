@@ -123,6 +123,11 @@ pub struct EventConfig {
     /// NFT description template.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub nft_description_template: String,
+    /// Solana Merkle tree address for compressed NFT minting.
+    /// When set, the worker mints to this tree via Helius RPC.
+    /// When empty, Helius uses its own default tree.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub merkle_tree: String,
 
     // ── Access control ────────────────────────────────────────────────
     /// Emails with organizer-level access (full event management).
@@ -201,6 +206,7 @@ impl EventConfig {
         organizer_emails: Vec<String>,
         staff_emails: Vec<String>,
         claim_base_url: &str,
+        merkle_tree: &str,
     ) -> Self {
         Self {
             id: "default".to_string(),
@@ -224,6 +230,7 @@ impl EventConfig {
             organizer_emails,
             staff_emails,
             claim_base_url: claim_base_url.to_string(),
+            merkle_tree: merkle_tree.to_string(),
             created_at: String::new(),
             updated_at: String::new(),
         }
@@ -281,6 +288,9 @@ pub struct CreateEventRequest {
     /// NFT description template (supports `{event_name}` placeholder).
     #[serde(default)]
     pub nft_description_template: String,
+    /// Merkle tree address for cNFT minting.
+    #[serde(default)]
+    pub merkle_tree: String,
     /// Organizer email addresses.
     #[serde(default)]
     pub organizer_emails: Vec<String>,
@@ -347,6 +357,9 @@ pub struct UpdateEventRequest {
     /// New NFT description template.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub nft_description_template: Option<String>,
+    /// New Merkle tree address.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub merkle_tree: Option<String>,
     /// Replace organizer emails.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub organizer_emails: Option<Vec<String>>,

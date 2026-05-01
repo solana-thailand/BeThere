@@ -1,0 +1,5 @@
+# Private keys — NEVER commit
+*.json
+
+# Keep the directory structure
+!.gitkeep
