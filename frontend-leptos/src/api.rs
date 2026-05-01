@@ -840,6 +840,8 @@ pub struct EventDetail {
     #[serde(default)]
     pub nft_description_template: String,
     #[serde(default)]
+    pub merkle_tree: String,
+    #[serde(default)]
     pub organizer_emails: Vec<String>,
     #[serde(default)]
     pub staff_emails: Vec<String>,
@@ -900,6 +902,8 @@ pub struct CreateEventBody {
     #[serde(default)]
     pub nft_description_template: String,
     #[serde(default)]
+    pub merkle_tree: String,
+    #[serde(default)]
     pub organizer_emails: Vec<String>,
     #[serde(default)]
     pub staff_emails: Vec<String>,
@@ -907,6 +911,7 @@ pub struct CreateEventBody {
     pub claim_base_url: String,
 }
 
+/// Request body for updating an existing event.
 /// Request body for PUT /api/events/{id} — update event.
 /// All fields optional for partial update.
 #[derive(Debug, Clone, Serialize, Default)]
@@ -945,6 +950,8 @@ pub struct UpdateEventBody {
     pub nft_symbol: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub nft_description_template: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub merkle_tree: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub organizer_emails: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]

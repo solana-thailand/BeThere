@@ -1,0 +1,48 @@
+[workspace]
+
+[package]
+name = "bethere-cnft"
+version = "0.2.0"
+edition = "2021"
+description = "BeThere cNFT tooling — Bubblegum V2 tree management & minting on Solana devnet"
+
+[[bin]]
+name = "bethere-cnft"
+path = "src/main.rs"
+
+[dependencies]
+# Solana core
+solana-sdk = "1.18"
+solana-client = "1.18"
+solana-transaction-status = "1.18"
+
+# Metaplex Bubblegum
+mpl-bubblegum = "1.4"
+
+# Account compression
+spl-account-compression = "0.3"
+
+# CLI
+clap = { version = "4", features = ["derive"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+borsh = "0.10"
+
+# Encoding
+bs58 = "0.5"
+base64 = "0.22"
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# Error handling
+anyhow = "1"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Time
+chrono = "0.4"

@@ -7,8 +7,9 @@ use serde::Deserialize;
 use worker::{Fetch, Headers, Method, Request, RequestInit};
 
 /// Priority fee in microLamports per compute unit for faster transaction inclusion.
-/// Set to 100_000 (0.1 SOL per 1M CU) to land in the leader's next block.
-/// Adjust based on network congestion — higher = faster confirmation.
+/// Reserved for future direct Bubblegum `mint_v2` calls (CLI already uses this).
+/// NOT sent to Helius `mintCompressedNft` — that API rejects unknown params.
+#[allow(dead_code)]
 const PRIORITY_FEE_MICROLAMPORTS: u64 = 100_000;
 
 // ---------------------------------------------------------------------------
@@ -66,6 +67,9 @@ struct HeliusRpcError {
 /// - `nft_symbol` — NFT symbol (e.g. event ticker).
 /// - `nft_description` — NFT description (e.g. proof of attendance text).
 /// - `nft_external_url` — External URL associated with the NFT.
+/// - `merkle_tree` — Reserved for future use. Helius `mintCompressedNft` does not
+///   support a custom tree parameter; it always mints to its own managed tree.
+///   Kept in the signature for future direct Bubblegum `mint_v2` integration.
 ///
 /// Returns [`MintResult`] with the transaction signature and asset id on success.
 #[allow(clippy::too_many_arguments)]
@@ -80,12 +84,14 @@ pub async fn mint_compressed_nft(
     nft_symbol: &str,
     nft_description: &str,
     nft_external_url: &str,
+    merkle_tree: &str,
 ) -> Result<MintResult, String> {
     let url = format!("{rpc_url}/?api-key={api_key}");
 
-    // Build params — include collection/uri/imageUrl only when non-empty
-    // Priority fee ensures the transaction lands in the leader's next block
-    // for fastest confirmation (~400ms on a healthy network).
+    // Build params — include collection/uri/imageUrl only when non-empty.
+    // NOTE: Helius mintCompressedNft only accepts documented params.
+    // "priorityFee" and "tree" cause Invalid request params errors.
+    // See: https://www.helius.dev/docs/api-reference/mint/mintcompressednft
     let mut params = serde_json::json!({
         "name": nft_name,
         "symbol": nft_symbol,
@@ -93,8 +99,7 @@ pub async fn mint_compressed_nft(
         "owner": wallet_address,
         "externalUrl": nft_external_url,
         "sellerFeeBasisPoints": 0,
-        "confirmTransaction": true,
-        "priorityFee": PRIORITY_FEE_MICROLAMPORTS
+        "confirmTransaction": true
     });
 
     if !collection_mint.is_empty() {
@@ -106,6 +111,13 @@ pub async fn mint_compressed_nft(
     if !image_url.is_empty() {
         params["imageUrl"] = serde_json::Value::String(image_url.to_string());
     }
+
+    // NOTE: Helius mintCompressedNft does NOT support a custom "tree" parameter.
+    // It always mints to Helius' own managed Merkle tree. The merkle_tree param
+    // is kept in the function signature for future use (direct Bubblegum calls
+    // or when Helius adds custom tree support).
+    // See: https://www.helius.dev/docs/api-reference/mint/mintcompressednft
+    let _ = merkle_tree; // suppress unused warning
 
     let body = serde_json::json!({
         "jsonrpc": "2.0",
@@ -166,10 +178,9 @@ pub async fn mint_compressed_nft(
     }
 
     tracing::info!(
-        "minted compressed nft: asset_id={} signature={} priority_fee={}",
+        "minted compressed nft: asset_id={} signature={}",
         result.asset_id,
-        result.signature,
-        PRIORITY_FEE_MICROLAMPORTS
+        result.signature
     );
 
     Ok(MintResult {

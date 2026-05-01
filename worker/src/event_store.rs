@@ -182,6 +182,7 @@ pub async fn create_event(kv: &KvStore, req: &CreateEventRequest) -> Result<Even
             .filter(|e| !e.is_empty())
             .collect(),
         claim_base_url: req.claim_base_url.trim().to_string(),
+        merkle_tree: req.merkle_tree.trim().to_string(),
         created_at: now.clone(),
         updated_at: now,
     };
@@ -294,6 +295,9 @@ pub async fn update_event(
     if let Some(ref url) = req.claim_base_url {
         config.claim_base_url = url.trim().to_string();
     }
+    if let Some(ref v) = req.merkle_tree {
+        config.merkle_tree = v.trim().to_string();
+    }
 
     config.updated_at = chrono::Utc::now().to_rfc3339();
 
@@ -379,9 +383,9 @@ pub async fn seed_from_config(
         nft_collection_mint: global.nft_collection_mint.clone(),
         nft_metadata_uri: global.nft_metadata_uri.clone(),
         nft_image_url: global.nft_image_url.clone(),
-        nft_name_template: String::new(),
-        nft_symbol: String::new(),
-        nft_description_template: String::new(),
+        nft_name_template: "BeThere - {event_name}".to_string(),
+        nft_symbol: "BETHERE".to_string(),
+        nft_description_template: "Proof of attendance at {event_name}".to_string(),
         organizer_emails: {
             let mut emails = global.super_admin_emails.clone();
             // Merge organizers from Google Sheet staff tab (role "admin" or "organizer")
@@ -421,6 +425,7 @@ pub async fn seed_from_config(
             emails
         },
         claim_base_url: global.claim_base_url.clone(),
+        merkle_tree: String::new(), // not in global config — per-event only
         created_at: now.clone(),
         updated_at: now,
     };
@@ -546,6 +551,7 @@ pub async fn resolve_event_or_fallback(
             global.staff_emails.clone(), // organizer_emails — use staff_emails for legacy
             Vec::new(),                  // staff_emails
             &global.claim_base_url,
+            "", // merkle_tree — not in global config
         )),
     }
 }

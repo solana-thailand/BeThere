@@ -39,6 +39,7 @@ struct EventForm {
     nft_name_template: String,
     nft_symbol: String,
     nft_description_template: String,
+    merkle_tree: String,
     claim_base_url: String,
     organizer_emails: String,
     staff_emails: String,
@@ -130,6 +131,7 @@ fn form_from_detail(detail: &api::EventDetail) -> EventForm {
         nft_name_template: detail.nft_name_template.clone(),
         nft_symbol: detail.nft_symbol.clone(),
         nft_description_template: detail.nft_description_template.clone(),
+        merkle_tree: detail.merkle_tree.clone(),
         claim_base_url: detail.claim_base_url.clone(),
         organizer_emails: detail.organizer_emails.join(", "),
         staff_emails: detail.staff_emails.join(", "),
@@ -304,6 +306,7 @@ pub fn EventsPage(
                 nft_name_template: current_form.nft_name_template.trim().to_string(),
                 nft_symbol: current_form.nft_symbol.trim().to_string(),
                 nft_description_template: current_form.nft_description_template.trim().to_string(),
+                merkle_tree: current_form.merkle_tree.trim().to_string(),
                 claim_base_url: current_form.claim_base_url.trim().to_string(),
                 organizer_emails: parse_emails(&current_form.organizer_emails),
                 staff_emails: parse_emails(&current_form.staff_emails),
@@ -351,6 +354,7 @@ pub fn EventsPage(
                 nft_name_template: Some(current_form.nft_name_template.trim().to_string()),
                 nft_symbol: Some(current_form.nft_symbol.trim().to_string()),
                 nft_description_template: Some(current_form.nft_description_template.trim().to_string()),
+                merkle_tree: Some(current_form.merkle_tree.trim().to_string()),
                 claim_base_url: Some(current_form.claim_base_url.trim().to_string()),
                 organizer_emails: Some(parse_emails(&current_form.organizer_emails)),
                 staff_emails: Some(parse_emails(&current_form.staff_emails)),
@@ -749,6 +753,17 @@ pub fn EventsPage(
                                             prop:value=move || form.get().nft_description_template
                                             on:input=move |ev| set_form.update(|f| f.nft_description_template = event_target_value(&ev))
                                         ></textarea>
+                                    </div>
+                                    <div class="quiz-setting-item">
+                                        <label class="quiz-field-label">"Merkle Tree"</label>
+                                        <input
+                                            type="text"
+                                            class="quiz-number-input"
+                                            placeholder="Leave empty for Helius managed tree"
+                                            prop:value=move || form.get().merkle_tree
+                                            on:input=move |ev| set_form.update(|f| f.merkle_tree = event_target_value(&ev))
+                                        />
+                                        <span class="quiz-setting-hint">"Custom tree address (optional, Helius default if empty)"</span>
                                     </div>
                                 </div>
                             </div>
