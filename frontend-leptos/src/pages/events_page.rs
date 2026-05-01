@@ -702,10 +702,21 @@ pub fn EventsPage(
                                             placeholder="NFT collection mint address"
                                             prop:value=move || form.get().nft_collection_mint
                                             on:input=move |ev| set_form.update(|f| f.nft_collection_mint = event_target_value(&ev))
-                                        />
-                                    </div>
-                                    <div class="quiz-setting-item">
-                                        <label class="quiz-field-label">"Metadata URI"</label>
+                                            />
+                                        </div>
+                                        <div class="quiz-setting-item">
+                                            <label class="quiz-field-label">"Merkle Tree"</label>
+                                            <input
+                                                type="text"
+                                                class="quiz-number-input"
+                                                placeholder="Tree address (base58) — leave empty for Helius default"
+                                                prop:value=move || form.get().merkle_tree
+                                                on:input=move |ev| set_form.update(|f| f.merkle_tree = event_target_value(&ev))
+                                            />
+                                            <span class="quiz-setting-hint">"Reserved for future use. Helius mints to its own managed tree."</span>
+                                        </div>
+                                        <div class="quiz-setting-item">
+                                            <label class="quiz-field-label">"Metadata URI"</label>
                                         <input
                                             type="text"
                                             class="quiz-number-input"

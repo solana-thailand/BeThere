@@ -25,6 +25,7 @@ use crate::quiz;
 use crate::state::AppState;
 
 /// Optional event_id query parameter for event-scoped requests.
+/// Reused by other handler modules (e.g. adventure).
 #[derive(Debug, Deserialize)]
 pub struct EventIdQuery {
     pub event_id: Option<String>,

@@ -227,10 +227,10 @@ impl EventConfig {
             nft_name_template: String::new(),
             nft_symbol: nft_symbol.to_string(),
             nft_description_template: String::new(),
+            merkle_tree: merkle_tree.to_string(),
             organizer_emails,
             staff_emails,
             claim_base_url: claim_base_url.to_string(),
-            merkle_tree: merkle_tree.to_string(),
             created_at: String::new(),
             updated_at: String::new(),
         }
