@@ -126,9 +126,291 @@ fn WaitlistForm() -> impl IntoView {
     }
 }
 
+// ── Swimlane Types ──────────────────────────────────────────────────────────
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum SwimlaneRole {
+    Organizer,
+    Staff,
+    Attendee,
+}
+
+impl SwimlaneRole {
+    fn label(self) -> &'static str {
+        match self {
+            Self::Organizer => "Organizer",
+            Self::Staff => "Staff",
+            Self::Attendee => "Attendee",
+        }
+    }
+
+    fn emoji(self) -> &'static str {
+        match self {
+            Self::Organizer => "\u{1f3af}",
+            Self::Staff => "\u{1f4f1}",
+            Self::Attendee => "\u{1f3ab}",
+        }
+    }
+
+    fn accent(self) -> &'static str {
+        match self {
+            Self::Organizer => "#6366f1",
+            Self::Staff => "#f59e0b",
+            Self::Attendee => "#22c55e",
+        }
+    }
+
+    fn accent_bg(self) -> &'static str {
+        match self {
+            Self::Organizer => "rgba(99,102,241,0.12)",
+            Self::Staff => "rgba(245,158,11,0.12)",
+            Self::Attendee => "rgba(34,197,94,0.12)",
+        }
+    }
+
+    fn accent_border(self) -> &'static str {
+        match self {
+            Self::Organizer => "rgba(99,102,241,0.35)",
+            Self::Staff => "rgba(245,158,11,0.35)",
+            Self::Attendee => "rgba(34,197,94,0.35)",
+        }
+    }
+
+    fn steps(self) -> &'static [SwimlaneStep] {
+        static ORG: &[SwimlaneStep] = &[
+            SwimlaneStep { icon: "\u{1f4cb}", title: "Create Event", desc: "Set name, capacity, and deposit" },
+            SwimlaneStep { icon: "\u{1f4b0}", title: "150 Registered", desc: "Deposits pool to 1.5 SOL + $1,950" },
+            SwimlaneStep { icon: "\u{1f4ca}", title: "Live Dashboard", desc: "Track check-ins & no-shows" },
+            SwimlaneStep { icon: "\u{1f4b8}", title: "Auto Payout", desc: "Refund attendees, keep no-shows" },
+        ];
+        static STAFF: &[SwimlaneStep] = &[
+            SwimlaneStep { icon: "\u{1f4f7}", title: "Open Scanner", desc: "Point camera at attendee QR" },
+            SwimlaneStep { icon: "\u{2705}", title: "Instant Confirm", desc: "Verified in < 2 seconds" },
+            SwimlaneStep { icon: "\u{1f389}", title: "Session Done", desc: "142 checked in, all smooth" },
+        ];
+        static ATT: &[SwimlaneStep] = &[
+            SwimlaneStep { icon: "\u{1f3ab}", title: "Register & Deposit", desc: "Lock 0.01 SOL + $13 USDC" },
+            SwimlaneStep { icon: "\u{1f4f1}", title: "Show QR Code", desc: "At venue, display check-in code" },
+            SwimlaneStep { icon: "\u{2705}", title: "Get Scanned", desc: "Staff scans — instant confirm" },
+            SwimlaneStep { icon: "\u{1f9e0}", title: "Quick Quiz", desc: "Prove you paid attention" },
+            SwimlaneStep { icon: "\u{1f4b0}", title: "Claim Refund + Badge", desc: "Deposit back + cNFT forever" },
+        ];
+        match self {
+            Self::Organizer => ORG,
+            Self::Staff => STAFF,
+            Self::Attendee => ATT,
+        }
+    }
+}
+
+struct SwimlaneStep {
+    icon: &'static str,
+    title: &'static str,
+    desc: &'static str,
+}
+
+/// Render the mockup card for a given role + step index.
+fn swimlane_mockup(role: SwimlaneRole, step: usize) -> impl IntoView {
+    match role {
+        SwimlaneRole::Organizer => match step {
+            // Create Event — form card
+            0 => view! {
+                <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:1.25rem;font-size:0.8rem;">
+                    <div style="font-weight:600;color:#fff;margin-bottom:0.75rem;">"New Event"</div>
+                    <div style="display:flex;flex-direction:column;gap:0.5rem;">
+                        <div style="background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:6px;padding:0.5rem 0.65rem;color:var(--text-secondary);">"Solana Bangkok Meetup 2025"</div>
+                        <div style="display:flex;gap:0.5rem;">
+                            <div style="flex:1;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:6px;padding:0.5rem 0.65rem;color:var(--text-secondary);">"\u{1f4cd} Bangkok"</div>
+                            <div style="flex:1;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:6px;padding:0.5rem 0.65rem;color:var(--text-secondary);">"Cap: 200"</div>
+                        </div>
+                        <div style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.25);border-radius:6px;padding:0.5rem 0.65rem;color:#818cf8;font-weight:500;">"Deposit: 0.01 SOL + $13 USDC"</div>
+                    </div>
+                    <div style="margin-top:0.75rem;background:#6366f1;color:#fff;border-radius:6px;padding:0.5rem;text-align:center;font-weight:600;">"Create Event"</div>
+                </div>
+            },
+            // Registrations — deposit pool
+            1 => view! {
+                <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:1.25rem;font-size:0.8rem;">
+                    <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.75rem;">
+                        <span style="font-size:1rem;">"\u{1f4b0}"</span>
+                        <span style="font-weight:600;color:#fff;">"Deposit Pool"</span>
+                    </div>
+                    <div style="display:flex;gap:1rem;margin-bottom:0.75rem;">
+                        <div>
+                            <div style="font-size:1.1rem;font-weight:700;color:#818cf8;">"1.5 SOL"</div>
+                            <div style="color:var(--text-secondary);font-size:0.7rem;">"+ $1,950 USDC"</div>
+                        </div>
+                        <div style="flex:1;"></div>
+                        <div style="text-align:right;">
+                            <div style="font-size:1.1rem;font-weight:700;color:#fff;">"150"</div>
+                            <div style="color:var(--text-secondary);font-size:0.7rem;">"attendees"</div>
+                        </div>
+                    </div>
+                    <div style="background:rgba(99,102,241,0.1);border-radius:9999px;height:6px;overflow:hidden;">
+                        <div style="width:75%;height:100%;background:linear-gradient(90deg,#6366f1,#818cf8);border-radius:9999px;"></div>
+                    </div>
+                    <div style="color:var(--text-secondary);font-size:0.7rem;margin-top:0.35rem;text-align:right;">"75% of capacity"</div>
+                </div>
+            },
+            // Dashboard — live stats
+            2 => view! {
+                <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:1.25rem;font-size:0.8rem;">
+                    <div style="font-weight:600;color:#fff;margin-bottom:0.75rem;">"\u{1f4ca} Live Dashboard"</div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.5rem;margin-bottom:0.75rem;">
+                        <div style="text-align:center;background:rgba(99,102,241,0.08);border-radius:8px;padding:0.5rem;">
+                            <div style="font-size:1.1rem;font-weight:700;color:#818cf8;">"150"</div>
+                            <div style="color:var(--text-secondary);font-size:0.65rem;">"registered"</div>
+                        </div>
+                        <div style="text-align:center;background:rgba(34,197,94,0.08);border-radius:8px;padding:0.5rem;">
+                            <div style="font-size:1.1rem;font-weight:700;color:#22c55e;">"142"</div>
+                            <div style="color:var(--text-secondary);font-size:0.65rem;">"checked in"</div>
+                        </div>
+                        <div style="text-align:center;background:rgba(239,68,68,0.08);border-radius:8px;padding:0.5rem;">
+                            <div style="font-size:1.1rem;font-weight:700;color:#ef4444;">"8"</div>
+                            <div style="color:var(--text-secondary);font-size:0.65rem;">"no-show"</div>
+                        </div>
+                    </div>
+                    <div style="background:rgba(34,197,94,0.1);border-radius:9999px;height:6px;overflow:hidden;">
+                        <div style="width:95%;height:100%;background:linear-gradient(90deg,#22c55e,#4ade80);border-radius:9999px;"></div>
+                    </div>
+                    <div style="color:var(--text-secondary);font-size:0.7rem;margin-top:0.35rem;">"95% attendance"</div>
+                </div>
+            },
+            // Payout — refund + received
+            _ => view! {
+                <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:1.25rem;font-size:0.8rem;">
+                    <div style="font-weight:600;color:#fff;margin-bottom:0.75rem;">"\u{1f4b8} Payout Summary"</div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;">
+                        <div style="background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.2);border-radius:8px;padding:0.65rem;">
+                            <div style="color:#22c55e;font-weight:600;font-size:0.7rem;margin-bottom:0.35rem;">"\u{2705} Refunded"</div>
+                            <div style="color:#fff;font-weight:700;">"142"</div>
+                            <div style="color:var(--text-secondary);font-size:0.7rem;">"1.42 SOL + $1,846"</div>
+                        </div>
+                        <div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);border-radius:8px;padding:0.65rem;">
+                            <div style="color:#f59e0b;font-weight:600;font-size:0.7rem;margin-bottom:0.35rem;">"\u{1f4b0} You Received"</div>
+                            <div style="color:#fff;font-weight:700;">"8"</div>
+                            <div style="color:var(--text-secondary);font-size:0.7rem;">"0.08 SOL + $104"</div>
+                        </div>
+                    </div>
+                </div>
+            },
+        },
+        SwimlaneRole::Staff => match step {
+            // Scan — camera frame
+            0 => view! {
+                <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:1.25rem;font-size:0.8rem;text-align:center;">
+                    <div style="background:#0a0a0a;border:2px solid var(--border);border-radius:12px;padding:1.5rem 1rem;margin-bottom:0.75rem;position:relative;">
+                        <div style="position:absolute;top:8px;left:8px;width:24px;height:24px;border-top:3px solid #f59e0b;border-left:3px solid #f59e0b;border-radius:4px 0 0 0;"></div>
+                        <div style="position:absolute;top:8px;right:8px;width:24px;height:24px;border-top:3px solid #f59e0b;border-right:3px solid #f59e0b;border-radius:0 4px 0 0;"></div>
+                        <div style="position:absolute;bottom:8px;left:8px;width:24px;height:24px;border-bottom:3px solid #f59e0b;border-left:3px solid #f59e0b;border-radius:0 0 0 4px;"></div>
+                        <div style="position:absolute;bottom:8px;right:8px;width:24px;height:24px;border-bottom:3px solid #f59e0b;border-right:3px solid #f59e0b;border-radius:0 0 4px 0;"></div>
+                        <div style="color:var(--text-secondary);font-size:0.75rem;">"\u{1f4f7} Point at attendee QR code"</div>
+                    </div>
+                    <div style="color:#f59e0b;font-size:0.75rem;font-weight:600;">"Scanning..."</div>
+                </div>
+            },
+            // Confirmed — success card
+            1 => view! {
+                <div style="background:var(--bg-secondary);border:1px solid rgba(34,197,94,0.3);border-radius:var(--radius);padding:1.25rem;font-size:0.8rem;text-align:center;">
+                    <div style="width:2.5rem;height:2.5rem;border-radius:50%;background:rgba(34,197,94,0.15);display:inline-flex;align-items:center;justify-content:center;font-size:1.25rem;margin-bottom:0.5rem;">"\u{2705}"</div>
+                    <div style="font-weight:700;color:#22c55e;margin-bottom:0.25rem;">"Checked In!"</div>
+                    <div style="color:#fff;font-weight:600;">"Alex Chen"</div>
+                    <div style="color:var(--text-secondary);font-size:0.7rem;">"Solana Bangkok 2025"</div>
+                    <div style="color:var(--text-secondary);font-size:0.7rem;margin-top:0.25rem;">"Jul 15 \u{00b7} 2:03 PM"</div>
+                </div>
+            },
+            // Done — summary
+            _ => view! {
+                <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:1.25rem;font-size:0.8rem;text-align:center;">
+                    <div style="font-size:1.25rem;margin-bottom:0.5rem;">"\u{1f389}"</div>
+                    <div style="font-weight:700;color:#fff;margin-bottom:0.25rem;">"Session Complete"</div>
+                    <div style="display:flex;justify-content:center;gap:1rem;margin-bottom:0.5rem;">
+                        <div>
+                            <div style="font-weight:700;color:#f59e0b;">"142"</div>
+                            <div style="color:var(--text-secondary);font-size:0.65rem;">"checked in"</div>
+                        </div>
+                        <div>
+                            <div style="font-weight:700;color:#fff;">"< 2s"</div>
+                            <div style="color:var(--text-secondary);font-size:0.65rem;">"avg time"</div>
+                        </div>
+                    </div>
+                    <div style="color:var(--text-secondary);font-size:0.7rem;">"Lost QR? Search by name \u{2192}"</div>
+                </div>
+            },
+        },
+        SwimlaneRole::Attendee => match step {
+            // Register & Deposit
+            0 => view! {
+                <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:1.25rem;font-size:0.8rem;">
+                    <div style="font-weight:600;color:#fff;margin-bottom:0.5rem;">"Solana Bangkok Meetup 2025"</div>
+                    <div style="color:var(--text-secondary);font-size:0.7rem;margin-bottom:0.75rem;">"Jul 15 \u{00b7} Bangkok, Thailand"</div>
+                    <div style="display:flex;align-items:center;gap:0.4rem;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:9999px;padding:0.3rem 0.65rem;margin-bottom:0.65rem;">
+                        <span style="color:#ab9ff2;">"\u{25cf}"</span>
+                        <span style="color:var(--text-secondary);font-size:0.7rem;">"Phantom \u{2014} 7xK9...f3Pz"</span>
+                    </div>
+                    <div style="background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.2);border-radius:8px;padding:0.5rem 0.65rem;">
+                        <div style="color:#22c55e;font-weight:600;font-size:0.7rem;">"Deposit to lock"</div>
+                        <div style="color:#fff;font-weight:700;">"0.01 SOL + $13 USDC"</div>
+                    </div>
+                    <div style="margin-top:0.65rem;background:#22c55e;color:#fff;border-radius:6px;padding:0.5rem;text-align:center;font-weight:600;font-size:0.75rem;">"Confirm Deposit"</div>
+                </div>
+            },
+            // Show QR
+            1 => view! {
+                <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:1.25rem;font-size:0.8rem;text-align:center;">
+                    <div style="display:inline-block;background:#fff;border-radius:12px;padding:0.75rem;margin-bottom:0.75rem;">
+                        <div style="width:80px;height:80px;display:grid;grid-template-columns:repeat(8,1fr);gap:1px;">
+                            {(0..64).map(|i| view! { <div style=format!("width:8px;height:8px;border-radius:1px;background:{};", if i % 3 == 0 { "#000" } else if i % 5 == 0 { "#333" } else { "#fff" })></div> }).collect_view()}
+                        </div>
+                    </div>
+                    <div style="color:#fff;font-weight:600;">"Alex Chen"</div>
+                    <div style="color:var(--text-secondary);font-size:0.7rem;">"Solana Bangkok 2025"</div>
+                </div>
+            },
+            // Get Scanned
+            2 => view! {
+                <div style="background:var(--bg-secondary);border:1px solid rgba(34,197,94,0.3);border-radius:var(--radius);padding:1.25rem;font-size:0.8rem;text-align:center;">
+                    <div style="width:2.5rem;height:2.5rem;border-radius:50%;background:rgba(34,197,94,0.15);display:inline-flex;align-items:center;justify-content:center;font-size:1.25rem;margin-bottom:0.5rem;">"\u{2705}"</div>
+                    <div style="font-weight:700;color:#22c55e;margin-bottom:0.25rem;">"Checked In!"</div>
+                    <div style="color:var(--text-secondary);font-size:0.7rem;">"Jul 15, 2025 \u{00b7} 2:03 PM"</div>
+                    <div style="color:var(--text-secondary);font-size:0.7rem;margin-top:0.15rem;">"Solana Bangkok Meetup"</div>
+                </div>
+            },
+            // Quiz
+            3 => view! {
+                <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:1.25rem;font-size:0.8rem;">
+                    <div style="font-weight:600;color:#fff;margin-bottom:0.5rem;">"\u{1f9e0} Event Quiz"</div>
+                    <div style="color:var(--text-secondary);font-size:0.75rem;margin-bottom:0.65rem;">"What does BeThere use to prove attendance?"</div>
+                    <div style="display:flex;flex-direction:column;gap:0.35rem;">
+                        <div style="background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:6px;padding:0.4rem 0.6rem;color:var(--text-secondary);font-size:0.7rem;">"\u{25cb} PDF certificate"</div>
+                        <div style="background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.3);border-radius:6px;padding:0.4rem 0.6rem;color:#22c55e;font-size:0.7rem;font-weight:600;">"\u{25cf} Compressed NFT badge"</div>
+                        <div style="background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:6px;padding:0.4rem 0.6rem;color:var(--text-secondary);font-size:0.7rem;">"\u{25cb} Email receipt"</div>
+                        <div style="background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:6px;padding:0.4rem 0.6rem;color:var(--text-secondary);font-size:0.7rem;">"\u{25cb} Paper ticket"</div>
+                    </div>
+                </div>
+            },
+            // Claim Refund + Badge
+            _ => view! {
+                <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:1.25rem;font-size:0.8rem;text-align:center;">
+                    <div style="display:inline-block;background:linear-gradient(135deg,#22c55e,#4ade80);border-radius:12px;padding:0.65rem 1rem;margin-bottom:0.65rem;">
+                        <div style="font-weight:700;color:#fff;font-size:0.9rem;">"\u{1f3ab} BeThere"</div>
+                        <div style="color:rgba(255,255,255,0.8);font-size:0.6rem;">"cNFT \u{00b7} Solana"</div>
+                    </div>
+                    <div style="color:#fff;font-weight:600;margin-bottom:0.25rem;">"\u{1f4b0} Refund Claimed!"</div>
+                    <div style="color:var(--text-secondary);font-size:0.7rem;">"0.01 SOL + $13 USDC returned"</div>
+                    <div style="margin-top:0.65rem;background:#22c55e;color:#fff;border-radius:6px;padding:0.5rem;font-weight:600;font-size:0.75rem;">"Claim to Wallet"</div>
+                </div>
+            },
+        },
+    }
+}
+
 /// Landing page component.
 #[component]
 pub fn Landing() -> impl IntoView {
+    let (active_role, set_active_role) = signal(SwimlaneRole::Attendee);
+    let (active_step, set_active_step) = signal(0usize);
+
     view! {
         <div style="min-height:100vh;width:100%;">
 
@@ -268,110 +550,162 @@ pub fn Landing() -> impl IntoView {
                 </div>
             </section>
 
-            // ===== How It Works =====
+            // ===== How It Works — Swimlane =====
             <section id="how-it-works" style="max-width:960px;margin:0 auto;padding:4rem 1.5rem;">
-                <div style="text-align:center;margin-bottom:3rem;">
+                <div style="text-align:center;margin-bottom:2rem;">
                     <h2 style="font-size:1.5rem;font-weight:700;color:#fff;margin-bottom:0.5rem;">
                         "How it works"
                     </h2>
                     <p style="color:var(--text-secondary);font-size:0.95rem;">
-                        "Four steps. Under a minute."
+                        "Three perspectives. One seamless event."
                     </p>
                 </div>
-                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1.25rem;">
 
-                    <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:1.75rem 1.25rem;text-align:center;">
-                        <div style="width:3.5rem;height:3.5rem;border-radius:50%;background:linear-gradient(135deg,rgba(99,102,241,0.2),rgba(129,140,248,0.1));display:inline-flex;align-items:center;justify-content:center;font-size:1.25rem;margin-bottom:1rem;border:1px solid rgba(99,102,241,0.3);">
-                            "1"
-                        </div>
-                        <h3 style="font-size:1rem;font-weight:600;color:#fff;margin-bottom:0.5rem;">
-                            "Put Down a Deposit"
-                        </h3>
-                        <p style="font-size:0.85rem;color:var(--text-secondary);line-height:1.5;">
-                            "Reserve your spot with a small deposit. It's safely held until the event is over."
-                        </p>
-                    </div>
-
-                    <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:1.75rem 1.25rem;text-align:center;">
-                        <div style="width:3.5rem;height:3.5rem;border-radius:50%;background:linear-gradient(135deg,rgba(34,197,94,0.2),rgba(34,197,94,0.1));display:inline-flex;align-items:center;justify-content:center;font-size:1.25rem;margin-bottom:1rem;border:1px solid rgba(34,197,94,0.3);">
-                            "2"
-                        </div>
-                        <h3 style="font-size:1rem;font-weight:600;color:#fff;margin-bottom:0.5rem;">
-                            "Show Up & Scan"
-                        </h3>
-                        <p style="font-size:0.85rem;color:var(--text-secondary);line-height:1.5;">
-                            "Get your QR scanned at the door. That's it — you're checked in and your deposit is marked for return."
-                        </p>
-                    </div>
-
-                    <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:1.75rem 1.25rem;text-align:center;">
-                        <div style="width:3.5rem;height:3.5rem;border-radius:50%;background:linear-gradient(135deg,rgba(245,158,11,0.2),rgba(245,158,11,0.1));display:inline-flex;align-items:center;justify-content:center;font-size:1.25rem;margin-bottom:1rem;border:1px solid rgba(245,158,11,0.3);">
-                            "3"
-                        </div>
-                        <h3 style="font-size:1rem;font-weight:600;color:#fff;margin-bottom:0.5rem;">
-                            "Complete the Quiz"
-                        </h3>
-                        <p style="font-size:0.85rem;color:var(--text-secondary);line-height:1.5;">
-                            "Answer a few questions about the event content. Prove you actually engaged — not just physically showed up."
-                        </p>
-                    </div>
-
-                    <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:1.75rem 1.25rem;text-align:center;">
-                        <div style="width:3.5rem;height:3.5rem;border-radius:50%;background:linear-gradient(135deg,rgba(167,139,250,0.2),rgba(167,139,250,0.1));display:inline-flex;align-items:center;justify-content:center;font-size:1.25rem;margin-bottom:1rem;border:1px solid rgba(167,139,250,0.3);">
-                            "4"
-                        </div>
-                        <h3 style="font-size:1rem;font-weight:600;color:#fff;margin-bottom:0.5rem;">
-                            "Get Your Money Back + A Badge"
-                        </h3>
-                        <p style="font-size:0.85rem;color:var(--text-secondary);line-height:1.5;">
-                            "Your deposit returns to your wallet automatically. You also get a digital badge — yours forever, proof you were there."
-                        </p>
-                    </div>
-
+                // Role tabs
+                <div style="display:flex;justify-content:center;gap:0.5rem;margin-bottom:2rem;">
+                    {move || {
+                        let active = active_role.get();
+                        [SwimlaneRole::Organizer, SwimlaneRole::Staff, SwimlaneRole::Attendee].into_iter().map(|r| {
+                            let is_active = r == active;
+                            let accent = r.accent();
+                            let bg = r.accent_bg();
+                            let border = r.accent_border();
+                            view! {
+                                <button
+                                    style=format!(
+                                        "display:flex;align-items:center;gap:0.4rem;padding:0.5rem 1rem;border-radius:9999px;font-size:0.8rem;font-weight:600;border:1px solid {};cursor:pointer;transition:all 0.15s;background:{};color:{};",
+                                        if is_active { border } else { "var(--border)" },
+                                        if is_active { bg } else { "transparent" },
+                                        if is_active { accent } else { "var(--text-secondary)" },
+                                    )
+                                    on:click=move |_| set_active_role.set(r)
+                                >
+                                    <span>{r.emoji()}</span>
+                                    <span>{r.label()}</span>
+                                </button>
+                            }
+                        }).collect_view()
+                    }}
                 </div>
-            </section>
 
-            // ===== For Organizers & Attendees =====
-            <section id="organizers" style="max-width:960px;margin:0 auto;padding:4rem 1.5rem;">
-                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1.5rem;">
+                // Step flow indicators
+                <div style="display:flex;align-items:center;justify-content:center;gap:0;margin-bottom:1.5rem;">
+                    {move || {
+                        let role = active_role.get();
+                        let step = active_step.get();
+                        let steps = role.steps();
+                        let accent = role.accent();
+                        steps.iter().enumerate().map(|(i, s)| {
+                            let is_active = i == step;
+                            let is_past = i < step;
+                            let steps_len = steps.len();
+                            view! {
+                                <button
+                                    style="display:flex;flex-direction:column;align-items:center;gap:0.35rem;background:none;border:none;cursor:pointer;padding:0;"
+                                    on:click=move |_| set_active_step.set(i)
+                                >
+                                    <div style=format!(
+                                        "width:2.5rem;height:2.5rem;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:0.85rem;transition:all 0.15s;border:2px solid {};background:{};",
+                                        if is_active { accent } else if is_past { accent } else { "var(--border)" },
+                                        if is_active || is_past { format!("{}", if is_active { role.accent_bg() } else { "rgba(255,255,255,0.04)" }) } else { "transparent" }.to_string(),
+                                    )>
+                                        <span style=format!("color:{};", if is_active || is_past { accent } else { "var(--text-secondary)" })>{s.icon}</span>
+                                    </div>
+                                    <span style=format!(
+                                        "font-size:0.65rem;font-weight:{};color:{};max-width:4.5rem;text-align:center;line-height:1.2;",
+                                        if is_active { "600" } else { "500" },
+                                        if is_active { "#fff" } else { "var(--text-secondary)" },
+                                    )>{s.title}</span>
+                                    {if i < steps_len - 1 {
+                                        let line_color = if is_past { accent } else { "var(--border)" }.to_string();
+                                        view! {
+                                            <div style=format!("position:absolute;margin-left:calc(50% + 1.5rem);top:1.25rem;width:2rem;height:2px;background:{};", line_color)></div>
+                                        }.into_any()
+                                    } else {
+                                        ().into_any()
+                                    }}
+                                </button>
+                                {if i < steps_len - 1 {
+                                    let line_color = if is_past { accent } else { "var(--border)" }.to_string();
+                                    view! {
+                                        <div style=format!("width:2rem;height:2px;background:{};flex-shrink:0;", line_color)></div>
+                                    }.into_any()
+                                } else {
+                                    ().into_any()
+                                }}
+                            }
+                        }).collect_view()
+                    }}
+                </div>
 
-                    // Organizers
-                    <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:2rem;">
-                        <div class="landing-svg-icon" style="width:36px;height:36px;margin-bottom:0.75rem;background:rgba(99,102,241,0.12);">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path>
-                                <line x1="4" y1="22" x2="4" y2="15"></line>
-                            </svg>
-                        </div>
-                        <h2 style="font-size:1.25rem;font-weight:700;color:#fff;margin-bottom:0.5rem;">
-                            "For Organizers"
-                        </h2>
-                        <p style="font-size:0.9rem;color:var(--text-secondary);line-height:1.6;margin-bottom:1.5rem;">
-                            "Require a deposit to register. No-shows lose theirs — covering your costs. Staff scan QR codes with any phone. Real-time dashboard shows who showed up."
-                        </p>
-                        <A href="/login" attr:class="btn btn-primary">
-                            "Start Your Event"
-                        </A>
-                    </div>
+                // Mockup card for active step
+                <div style="max-width:340px;margin:0 auto;">
+                    {move || swimlane_mockup(active_role.get(), active_step.get())}
+                </div>
 
-                    // Attendees
-                    <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:2rem;">
-                        <div class="landing-svg-icon" style="width:36px;height:36px;margin-bottom:0.75rem;background:rgba(167,139,250,0.12);">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
-                            </svg>
-                        </div>
-                        <h2 style="font-size:1.25rem;font-weight:700;color:#fff;margin-bottom:0.5rem;">
-                            "For Attendees"
-                        </h2>
-                        <p style="font-size:0.9rem;color:var(--text-secondary);line-height:1.6;margin-bottom:1.5rem;">
-                            "Put down a small deposit, show up, complete a quick quiz about the event, and get it all back. Keep the digital badge as proof. Collect badges from every event you attend. The only risk? Not showing up — or not paying attention."
-                        </p>
-                        <a href="#how-it-works" class="btn btn-outline">
-                            "Learn More"
-                        </a>
-                    </div>
+                // Mini swimlanes — all three roles compact
+                <div style="margin-top:2.5rem;display:flex;flex-direction:column;gap:0.75rem;">
+                    {move || {
+                        let active = active_role.get();
+                        [SwimlaneRole::Organizer, SwimlaneRole::Staff, SwimlaneRole::Attendee].into_iter().map(|r| {
+                            let is_active = r == active;
+                            let steps = r.steps();
+                            let accent = r.accent();
+                            let bg = r.accent_bg();
+                            let border = r.accent_border();
+                            view! {
+                                <button
+                                    style=format!(
+                                        "display:flex;align-items:center;gap:0.75rem;padding:0.65rem 0.85rem;border-radius:var(--radius);border:1px solid {};background:{};cursor:pointer;width:100%;text-align:left;transition:all 0.15s;",
+                                        if is_active { border } else { "var(--border)" },
+                                        if is_active { bg } else { "transparent" },
+                                    )
+                                    on:click=move |_| {
+                                        set_active_role.set(r);
+                                        set_active_step.set(0);
+                                    }
+                                >
+                                    <span style="font-size:0.75rem;font-weight:600;color:var(--text-secondary);min-width:5.5rem;">{format!("{} {}", r.emoji(), r.label())}</span>
+                                    <div style="display:flex;align-items:center;gap:0.25rem;">
+                                        {steps.iter().enumerate().map(|(i, s)| {
+                                            view! {
+                                                <>
+                                                    <div style=format!(
+                                                        "width:6px;height:6px;border-radius:50%;background:{};",
+                                                        if is_active { accent } else { "var(--border)" },
+                                                    ) title=s.title></div>
+                                                    {if i < steps.len() - 1 {
+                                                        view! {
+                                                            <div style=format!(
+                                                                "width:0.75rem;height:1px;background:{};",
+                                                                if is_active { "var(--border)" } else { "var(--border)" },
+                                                            )></div>
+                                                        }.into_any()
+                                                    } else {
+                                                        ().into_any()
+                                                    }}
+                                                </>
+                                            }
+                                        }).collect_view()}
+                                    </div>
+                                    {if is_active {
+                                        view! {
+                                            <span style=format!("font-size:0.6rem;color:{};margin-left:auto;font-weight:600;", accent)>"viewing"</span>
+                                        }.into_any()
+                                    } else {
+                                        ().into_any()
+                                    }}
+                                </button>
+                            }
+                        }).collect_view()
+                    }}
+                </div>
 
+                // CTA
+                <div style="text-align:center;margin-top:2rem;">
+                    <A href="/demo" attr:class="btn btn-primary" attr:style="padding:0.75rem 1.5rem;">
+                        "Try the full interactive demo \u{2192}"
+                    </A>
                 </div>
             </section>
 

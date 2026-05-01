@@ -317,6 +317,7 @@ pub async fn post_claim(
         &event.nft_symbol,          // per-event
         &event.nft_description(),   // per-event (template resolved)
         &event.link,                // per-event (externalUrl)
+        &event.merkle_tree,         // per-event (own tree or empty for Helius default)
     )
     .await
     {
