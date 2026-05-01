@@ -1,6 +1,6 @@
 pub mod admin;
+pub mod adventure;
 pub mod claim;
-pub mod demo;
 pub mod events_page;
 pub mod landing;
 pub mod login;

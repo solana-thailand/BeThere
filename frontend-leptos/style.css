@@ -3463,6 +3463,21 @@ nav a.active {
     color: #9945ff;
 }
 
+.swimlane-mockup {
+    animation: swimlane-fade-in 0.25s ease-out;
+}
+
+@keyframes swimlane-fade-in {
+    from {
+        opacity: 0;
+        transform: translateY(6px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
 @media (max-width: 480px) {
     .landing-footer-grid {
         grid-template-columns: repeat(2, 1fr);
@@ -4331,4 +4346,989 @@ nav a.active {
     .quiz-option-input {
         min-width: 0;
     }
+}
+
+/* ============================================================
+   Rust Adventures — Game Styles
+   ============================================================ */
+
+.adventure-page {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 0.75rem;
+    --tile-size: 36px;
+}
+
+.adventure-header {
+    width: 100%;
+    max-width: 600px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 0;
+    margin-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.adventure-brand {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.adventure-logo {
+    font-size: 1.5rem;
+}
+
+.adventure-title {
+    font-size: 1.2rem;
+    font-weight: 800;
+    background: linear-gradient(135deg, #818cf8, #6366f1, #a78bfa);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin: 0;
+}
+
+.adventure-header-right {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.adventure-moves {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
+}
+
+/* Keys bar */
+.adventure-keys-bar {
+    width: 100%;
+    max-width: 600px;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+    padding: 0.4rem 0;
+    margin-bottom: 0.5rem;
+    min-height: 2rem;
+}
+
+.keys-label {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    font-weight: 600;
+}
+
+.key-empty {
+    font-size: 0.8rem;
+    color: var(--text-muted, #666);
+    font-style: italic;
+}
+
+.key-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.15rem 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+    font-family: "SF Mono", "Fira Code", monospace;
+    background: rgba(99, 102, 241, 0.15);
+    color: #a78bfa;
+    border: 1px solid rgba(99, 102, 241, 0.3);
+    border-radius: 4px;
+}
+
+/* Notification toast */
+.adventure-notification {
+    position: fixed;
+    top: 1rem;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 0.6rem 1.2rem;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 0.85rem;
+    font-weight: 500;
+    z-index: 1000;
+    animation:
+        notifySlideIn 0.3s ease,
+        notifyFadeOut 0.5s ease 2.5s forwards;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+@keyframes notifySlideIn {
+    from {
+        opacity: 0;
+        transform: translateX(-50%) translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+    }
+}
+
+@keyframes notifyFadeOut {
+    from {
+        opacity: 1;
+    }
+    to {
+        opacity: 0;
+    }
+}
+
+/* Game grid */
+.adventure-grid-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 0.5rem;
+}
+
+.adventure-grid {
+    display: grid;
+    gap: 1px;
+    background: var(--bg-primary);
+    border: 2px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.tile {
+    width: var(--tile-size);
+    height: var(--tile-size);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: calc(var(--tile-size) * 0.45);
+    font-weight: 600;
+    user-select: none;
+    transition: background-color 0.15s ease;
+}
+
+.tile-floor {
+    background: var(--bg-secondary);
+    color: transparent;
+}
+
+.tile-wall {
+    background: #2d2d2d;
+    color: transparent;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+}
+
+.tile-player {
+    font-size: calc(var(--tile-size) * 0.65);
+    z-index: 10;
+    color: var(--text-primary, inherit);
+    filter: drop-shadow(0 0 4px rgba(99, 102, 241, 0.4));
+}
+
+.tile-exit {
+    background: rgba(34, 197, 94, 0.1);
+    color: var(--success);
+    font-size: calc(var(--tile-size) * 0.55);
+}
+
+.tile-key {
+    background: rgba(99, 102, 241, 0.1);
+    color: #a78bfa;
+    font-family: "SF Mono", "Fira Code", monospace;
+    font-size: calc(var(--tile-size) * 0.32);
+    font-weight: 700;
+    border: 1px dashed rgba(99, 102, 241, 0.3);
+}
+
+.tile-npc {
+    background: rgba(245, 158, 11, 0.08);
+    font-size: calc(var(--tile-size) * 0.6);
+}
+
+.tile-gate {
+    background: rgba(239, 68, 68, 0.12);
+    color: var(--danger, #ef4444);
+    font-size: calc(var(--tile-size) * 0.55);
+}
+
+.tile-gate-open {
+    background: var(--bg-secondary);
+    color: var(--success);
+    opacity: 0.5;
+}
+
+.tile-code {
+    background: rgba(59, 130, 246, 0.08);
+    color: var(--info);
+    font-size: calc(var(--tile-size) * 0.45);
+}
+
+.tile-water {
+    background: rgba(59, 130, 246, 0.15);
+    color: rgba(59, 130, 246, 0.3);
+}
+
+.tile-sign {
+    background: rgba(245, 158, 11, 0.05);
+    font-size: calc(var(--tile-size) * 0.5);
+}
+
+/* Overlays */
+.adventure-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.75);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    animation: overlayFadeIn 0.2s ease;
+}
+
+@keyframes overlayFadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+.adventure-overlay-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 2rem;
+    max-width: 400px;
+    width: 90%;
+    text-align: center;
+}
+
+.adventure-overlay-card h2 {
+    font-size: 1.3rem;
+    color: var(--text-primary);
+    margin: 0 0 0.75rem 0;
+}
+
+.adventure-overlay-card p {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    line-height: 1.5;
+    margin: 0.5rem 0;
+}
+
+.adventure-overlay-hint {
+    color: var(--text-muted, #666);
+    font-size: 0.8rem;
+    margin-top: 1rem;
+}
+
+.adventure-overlay-card-success {
+    border-color: rgba(34, 197, 94, 0.3);
+}
+
+.adventure-success-icon {
+    font-size: 3rem;
+    margin-bottom: 0.5rem;
+}
+
+.adventure-stars {
+    font-size: 1.8rem;
+    margin: 0.25rem 0 0.5rem 0;
+    letter-spacing: 0.25rem;
+}
+
+.adventure-save-status {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    margin: 0.5rem 0;
+    opacity: 0.85;
+}
+
+.adventure-moves-final {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    margin: 0.5rem 0 1rem 0;
+}
+
+/* Dialog card */
+.adventure-dialog-card {
+    background: var(--bg-card);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    border-radius: 12px;
+    padding: 1.5rem;
+    max-width: 400px;
+    width: 90%;
+    text-align: left;
+}
+
+.dialog-speaker {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--warning);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.5rem;
+}
+
+.dialog-text {
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    line-height: 1.6;
+}
+
+/* Puzzle card */
+.adventure-overlay-puzzle {
+    background: rgba(0, 0, 0, 0.85);
+}
+
+.adventure-puzzle-card {
+    background: var(--bg-card);
+    border: 1px solid rgba(99, 102, 241, 0.3);
+    border-radius: 12px;
+    padding: 1.5rem;
+    max-width: 480px;
+    width: 92%;
+    max-height: 85vh;
+    overflow-y: auto;
+}
+
+.adventure-puzzle-card h3 {
+    font-size: 1.1rem;
+    color: var(--text-primary);
+    margin: 0 0 1rem 0;
+}
+
+.puzzle-instruction {
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    margin-bottom: 0.75rem;
+}
+
+.puzzle-code {
+    background: #0d1117;
+    color: #c9d1d9;
+    padding: 0.75rem 1rem;
+    border-radius: 6px;
+    font-family: "SF Mono", "Fira Code", monospace;
+    font-size: 0.8rem;
+    line-height: 1.5;
+    margin: 0.5rem 0;
+    overflow-x: auto;
+    white-space: pre-wrap;
+}
+
+.puzzle-code-broken {
+    border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.puzzle-pieces {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    margin: 0.75rem 0;
+}
+
+.puzzle-piece {
+    background: #0d1117;
+    color: #c9d1d9;
+    padding: 0.5rem 0.75rem;
+    border-radius: 4px;
+    font-family: "SF Mono", "Fira Code", monospace;
+    font-size: 0.8rem;
+    border: 1px solid var(--border);
+}
+
+.puzzle-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin: 0.75rem 0;
+}
+
+.puzzle-opt {
+    padding: 0.4rem 0.75rem;
+    background: var(--bg-tertiary, #242424);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-family: "SF Mono", "Fira Code", monospace;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.puzzle-opt:hover {
+    border-color: var(--accent);
+}
+
+.puzzle-opt-selected {
+    background: rgba(99, 102, 241, 0.15);
+    border-color: var(--accent);
+    color: #a78bfa;
+}
+
+.puzzle-input {
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    background: #0d1117;
+    color: #c9d1d9;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-family: "SF Mono", "Fira Code", monospace;
+    font-size: 0.85rem;
+    outline: none;
+}
+
+.puzzle-input:focus {
+    border-color: var(--accent);
+}
+
+.puzzle-pairs {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.puzzle-pair {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-family: "SF Mono", "Fira Code", monospace;
+    font-size: 0.8rem;
+}
+
+.pair-left {
+    color: #c9d1d9;
+    background: #0d1117;
+    padding: 0.25rem 0.5rem;
+    border-radius: 3px;
+}
+
+.pair-arrow {
+    color: var(--text-muted, #666);
+}
+
+.pair-right {
+    color: #a78bfa;
+    background: rgba(99, 102, 241, 0.1);
+    padding: 0.25rem 0.5rem;
+    border-radius: 3px;
+}
+
+.puzzle-actions {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 1rem;
+}
+
+.puzzle-feedback {
+    padding: 0.5rem 0.75rem;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin: 0.5rem 0;
+}
+
+.puzzle-correct {
+    background: rgba(34, 197, 94, 0.1);
+    color: var(--success);
+    border: 1px solid rgba(34, 197, 94, 0.2);
+}
+
+.puzzle-wrong {
+    background: rgba(239, 68, 68, 0.1);
+    color: var(--danger, #ef4444);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.puzzle-hint {
+    color: var(--text-muted, #666);
+    font-size: 0.8rem;
+    margin-top: 0.75rem;
+    font-style: italic;
+}
+
+/* D-pad */
+.adventure-dpad {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    margin-top: 1rem;
+    padding: 0.5rem;
+}
+
+.dpad-row {
+    display: flex;
+    gap: 2px;
+    align-items: center;
+}
+
+.dpad-btn {
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 1rem;
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: manipulation;
+    transition: all 0.1s ease;
+}
+
+.dpad-btn:active {
+    background: var(--accent);
+    transform: scale(0.95);
+}
+
+.dpad-center {
+    width: 48px;
+    height: 48px;
+}
+
+/* Show D-pad on touch devices */
+@media (hover: none) and (pointer: coarse) {
+    .adventure-dpad {
+        display: flex;
+    }
+    .adventure-page {
+        --tile-size: 28px;
+    }
+}
+
+/* Controls hint */
+.adventure-controls-hint {
+    margin-top: 0.75rem;
+    font-size: 0.75rem;
+    color: var(--text-muted, #666);
+}
+
+/* Footer */
+.adventure-footer {
+    margin-top: auto;
+    padding: 1rem 0;
+}
+
+.adventure-back {
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    text-decoration: none;
+}
+
+.adventure-back:hover {
+    color: var(--accent);
+}
+
+/* Mobile adjustments */
+@media (max-width: 480px) {
+    .adventure-page {
+        --tile-size: 26px;
+        padding: 0.5rem;
+    }
+
+    .adventure-header {
+        padding: 0.25rem 0;
+    }
+
+    .adventure-title {
+        font-size: 1rem;
+    }
+
+    .adventure-overlay-card,
+    .adventure-dialog-card,
+    .adventure-puzzle-card {
+        padding: 1rem;
+        max-width: 95%;
+    }
+
+    .adventure-puzzle-card {
+        max-height: 80vh;
+    }
+}
+
+@media (max-width: 359px) {
+    .adventure-page {
+        --tile-size: 22px;
+    }
+
+    .adventure-header-right {
+        gap: 0.4rem;
+    }
+
+    .adventure-moves {
+        font-size: 0.75rem;
+    }
+}
+
+/* ============================================================
+   Rust Adventures — Phase 2 Styles
+   ============================================================ */
+
+/* Timer */
+.adventure-timer {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
+    font-family: "SF Mono", "Fira Code", monospace;
+    min-width: 3.5em;
+}
+
+/* Level name */
+.adventure-level-name {
+    width: 100%;
+    max-width: 600px;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    font-weight: 600;
+    text-align: center;
+    margin-bottom: 0.25rem;
+}
+
+/* Hint bar (missing keys) */
+.adventure-hint-bar {
+    width: 100%;
+    max-width: 600px;
+    font-size: 0.75rem;
+    color: var(--warning, #f59e0b);
+    padding: 0.2rem 0;
+    margin-bottom: 0.25rem;
+    font-weight: 500;
+}
+
+/* Exit tile glow when unlocked */
+.tile-exit-unlocked {
+    background: rgba(34, 197, 94, 0.2);
+    animation: exitPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes exitPulse {
+    0%,
+    100% {
+        box-shadow: inset 0 0 4px rgba(34, 197, 94, 0.3);
+    }
+    50% {
+        box-shadow: inset 0 0 10px rgba(34, 197, 94, 0.5);
+    }
+}
+
+/* Gate animation on solve */
+.tile-gate-animating {
+    animation: gateOpen 0.6s ease forwards;
+}
+
+@keyframes gateOpen {
+    0% {
+        background: rgba(239, 68, 68, 0.12);
+        transform: scale(1);
+    }
+    50% {
+        background: rgba(34, 197, 94, 0.2);
+        transform: scale(1.1);
+    }
+    100% {
+        background: var(--bg-secondary);
+        transform: scale(1);
+        opacity: 0.4;
+    }
+}
+
+/* === Level Select === */
+.adventure-level-select-card {
+    max-width: 420px;
+    text-align: center;
+}
+
+.level-select-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin: 1rem 0;
+}
+
+.level-select-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    background: var(--bg-tertiary, #242424);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    cursor: pointer;
+    text-align: left;
+    transition: all 0.15s ease;
+    color: var(--text-primary);
+}
+
+.level-select-item:hover {
+    border-color: var(--accent);
+    background: rgba(99, 102, 241, 0.05);
+}
+
+.level-select-active {
+    border-color: var(--accent);
+    background: rgba(99, 102, 241, 0.1);
+}
+
+.level-select-num {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: white;
+    font-size: 0.85rem;
+    font-weight: 700;
+    flex-shrink: 0;
+}
+
+.level-select-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+
+.level-select-name {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.level-select-concept {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+/* === Intro overlay enhanced === */
+.adventure-intro-card {
+    max-width: 420px;
+}
+
+.adventure-intro-level {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 0.25rem;
+}
+
+.adventure-intro-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    margin: 1rem 0;
+    padding: 0.75rem;
+    background: rgba(99, 102, 241, 0.05);
+    border-radius: 8px;
+}
+
+.control-key-pair {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.8rem;
+}
+
+.control-keys {
+    font-family: "SF Mono", "Fira Code", monospace;
+    color: var(--accent);
+    font-size: 0.75rem;
+}
+
+.control-desc {
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+}
+
+/* === Stats (level complete) === */
+.adventure-stats {
+    display: flex;
+    justify-content: center;
+    gap: 1.5rem;
+    margin: 1rem 0;
+    padding: 0.75rem;
+    background: rgba(34, 197, 94, 0.05);
+    border-radius: 8px;
+}
+
+.stat-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.2rem;
+}
+
+.stat-label {
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.stat-value {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+}
+
+.adventure-success-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+}
+
+.adventure-all-complete {
+    padding: 0.75rem 1rem;
+    background: rgba(245, 158, 11, 0.1);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    border-radius: 8px;
+    color: var(--warning, #f59e0b);
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+/* === Arrange puzzle interactive === */
+.puzzle-hint-small {
+    font-size: 0.75rem;
+    color: var(--text-muted, #666);
+    margin-bottom: 0.5rem;
+}
+
+.puzzle-pieces-interactive {
+    gap: 0.3rem;
+}
+
+.puzzle-piece-row {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.puzzle-move-btn {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-tertiary, #242424);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-secondary);
+    font-size: 0.7rem;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: all 0.1s ease;
+}
+
+.puzzle-move-btn:hover:not(:disabled) {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.puzzle-move-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+
+.puzzle-piece-num {
+    color: var(--text-muted, #666);
+    margin-right: 0.5rem;
+    font-size: 0.7rem;
+}
+
+/* === Match Pairs === */
+.puzzle-match-area {
+    display: flex;
+    gap: 0.5rem;
+    margin: 0.75rem 0;
+    justify-content: center;
+}
+
+.match-row {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    align-items: stretch;
+}
+
+.match-label {
+    font-size: 0.7rem;
+    color: var(--text-muted, #666);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    text-align: center;
+    margin-bottom: 0.2rem;
+}
+
+.match-arrows {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    align-items: center;
+    justify-content: center;
+    padding-top: 1.2rem;
+}
+
+.match-arrow {
+    font-size: 0.75rem;
+    color: var(--text-muted, #666);
+    height: 34px;
+    display: flex;
+    align-items: center;
+}
+
+.match-item {
+    padding: 0.4rem 0.75rem;
+    background: var(--bg-tertiary, #242424);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-family: "SF Mono", "Fira Code", monospace;
+    font-size: 0.75rem;
+    color: var(--text-primary);
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.15s ease;
+    min-width: 80px;
+}
+
+.match-item:hover:not(:disabled) {
+    border-color: var(--accent);
+}
+
+.match-item-selected {
+    border-color: var(--accent);
+    background: rgba(99, 102, 241, 0.15);
+    color: #a78bfa;
+}
+
+.match-item-matched {
+    border-color: rgba(34, 197, 94, 0.4);
+    background: rgba(34, 197, 94, 0.1);
+    color: var(--success);
+    cursor: default;
+}
+
+/* Puzzle option selected state */
+.puzzle-opt-selected {
+    background: rgba(99, 102, 241, 0.15);
+    border-color: var(--accent);
+    color: #a78bfa;
 }

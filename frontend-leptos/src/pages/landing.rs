@@ -206,7 +206,6 @@ impl SwimlaneRole {
 struct SwimlaneStep {
     icon: &'static str,
     title: &'static str,
-    #[allow(dead_code)]
     desc: &'static str,
 }
 
@@ -459,9 +458,9 @@ pub fn Landing() -> impl IntoView {
                     "Put down a small deposit to reserve your spot. Show up, prove you paid attention with a quick quiz, and get every cent back — plus a digital badge you own forever. Don't show up? The organizer keeps your deposit. Simple."
                 </p>
                 <div style="display:flex;flex-wrap:wrap;gap:0.75rem;justify-content:center;">
-                    <A href="/demo" attr:class="btn btn-primary" attr:style="padding:0.85rem 2rem;font-size:1rem;">
-                        "Try Free Demo"
-                    </A>
+                    <a href="#waitlist" class="btn btn-primary" style="padding:0.85rem 2rem;font-size:1rem;text-decoration:none;">
+                        "Join Waitlist"
+                    </a>
                     <A href="/login" attr:class="btn btn-outline" attr:style="padding:0.85rem 2rem;font-size:1rem;">
                         "Sign In"
                     </A>
@@ -632,8 +631,21 @@ pub fn Landing() -> impl IntoView {
                 </div>
 
                 // Mockup card for active step
-                <div style="max-width:340px;margin:0 auto;">
-                    {move || swimlane_mockup(active_role.get(), active_step.get())}
+                <div class="swimlane-mockup-wrapper" style="max-width:340px;margin:0 auto;">
+                    {move || {
+                        let role = active_role.get();
+                        let step_idx = active_step.get();
+                        let steps = role.steps();
+                        let step_data = steps.get(step_idx);
+                        view! {
+                            <div class="swimlane-mockup" style="transition:opacity 0.2s ease,transform 0.2s ease;">
+                                {swimlane_mockup(role, step_idx)}
+                                <div style="text-align:center;margin-top:0.75rem;font-size:0.75rem;color:var(--text-secondary);">
+                                    {step_data.map(|s| s.desc).unwrap_or("")}
+                                </div>
+                            </div>
+                        }
+                    }}
                 </div>
 
                 // Mini swimlanes — all three roles compact
@@ -696,9 +708,9 @@ pub fn Landing() -> impl IntoView {
 
                 // CTA
                 <div style="text-align:center;margin-top:2rem;">
-                    <A href="/demo" attr:class="btn btn-primary" attr:style="padding:0.75rem 1.5rem;">
-                        "Try the full interactive demo \u{2192}"
-                    </A>
+                    <a href="#waitlist" class="btn btn-primary" style="padding:0.75rem 1.5rem;text-decoration:none;">
+                        "Join the waitlist →"
+                    </a>
                 </div>
             </section>
 
@@ -802,9 +814,9 @@ pub fn Landing() -> impl IntoView {
 
                 // CTA under FAQ
                 <div style="text-align:center;margin-top:2rem;">
-                    <A href="/demo" attr:class="btn btn-primary" attr:style="padding:0.75rem 1.5rem;">
-                        "Still curious? Try the demo →"
-                    </A>
+                    <a href="#waitlist" class="btn btn-outline" style="padding:0.75rem 1.5rem;text-decoration:none;">
+                        "Ready to try? Join the waitlist →"
+                    </a>
                 </div>
             </section>
 
@@ -832,7 +844,7 @@ pub fn Landing() -> impl IntoView {
                         <h4>"Product"</h4>
                         <a href="#features">"Features"</a>
                         <a href="#how-it-works">"How It Works"</a>
-                        <A href="/demo">"Try Demo"</A>
+                        <a href="#faq">"FAQ"</a>
                         <A href="/login">"Sign In"</A>
                     </div>
 
