@@ -765,6 +765,17 @@ pub fn EventsPage(
                                             on:input=move |ev| set_form.update(|f| f.nft_description_template = event_target_value(&ev))
                                         ></textarea>
                                     </div>
+                                    <div class="quiz-setting-item">
+                                        <label class="quiz-field-label">"Merkle Tree"</label>
+                                        <input
+                                            type="text"
+                                            class="quiz-number-input"
+                                            placeholder="Leave empty for Helius managed tree"
+                                            prop:value=move || form.get().merkle_tree
+                                            on:input=move |ev| set_form.update(|f| f.merkle_tree = event_target_value(&ev))
+                                        />
+                                        <span class="quiz-setting-hint">"Custom tree address (optional, Helius default if empty)"</span>
+                                    </div>
                                 </div>
                             </div>
 

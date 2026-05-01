@@ -111,6 +111,7 @@ pub async fn mint_compressed_nft(
     if !image_url.is_empty() {
         params["imageUrl"] = serde_json::Value::String(image_url.to_string());
     }
+
     // NOTE: Helius mintCompressedNft does NOT support a custom "tree" parameter.
     // It always mints to Helius' own managed Merkle tree. The merkle_tree param
     // is kept in the function signature for future use (direct Bubblegum calls
@@ -179,7 +180,7 @@ pub async fn mint_compressed_nft(
     tracing::info!(
         "minted compressed nft: asset_id={} signature={}",
         result.asset_id,
-        result.signature,
+        result.signature
     );
 
     Ok(MintResult {

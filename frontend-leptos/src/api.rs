@@ -911,6 +911,7 @@ pub struct CreateEventBody {
     pub claim_base_url: String,
 }
 
+/// Request body for updating an existing event.
 /// Request body for PUT /api/events/{id} — update event.
 /// All fields optional for partial update.
 #[derive(Debug, Clone, Serialize, Default)]

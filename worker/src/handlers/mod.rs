@@ -4,6 +4,7 @@ pub mod checkin;
 pub mod claim;
 pub mod events;
 pub mod health;
+pub mod metadata;
 pub mod qr;
 pub mod quiz;
 pub mod waitlist;
@@ -18,6 +19,9 @@ pub fn routes(state: AppState) -> Router<()> {
     // Public routes — no auth middleware required
     let public = Router::new()
         .route("/health", get(health::health_check))
+        // NFT metadata (public — wallets/explorers fetch these)
+        .route("/metadata/{event_id}", get(metadata::get_metadata))
+        .route("/badge.svg", get(metadata::get_badge_svg))
         // Auth routes (public)
         .route("/auth/url", get(auth::auth_url))
         .route("/auth/callback", get(auth::auth_callback))
