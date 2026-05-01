@@ -133,13 +133,15 @@ The frontend is served from `frontend-leptos/dist/` via Workers Assets with SPA 
 
 ## Frontend Routes
 
-| Path | Page |
-|------|------|
-| `/` | Login (Google OAuth) |
-| `/staff` | Scanner — camera QR + manual lookup |
-| `/admin` | Dashboard — attendee list, stats, QR management |
-| `/admin/events` | Event management — create, edit, manage events |
-| `/claim/{token}` | Claim page — quiz + NFT badge + refund |
+| Path | Page | Auth |
+|------|------|------|
+| `/` | Landing — public marketing page, waitlist, how-it-works swimlane | Public |
+| `/login` | Login — Google OAuth sign-in | Public |
+| `/claim/{token}` | Claim — quiz + NFT badge + refund | Token-gated |
+| `/staff` | Scanner — camera QR + manual lookup | Staff |
+| `/admin` | Dashboard — attendee list, stats, QR management | Staff |
+| `/admin/events` | Events — create, edit, manage events | SuperAdmin |
+| `/adventure` | Rust Adventures — educational game | Public |
 
 ## Architecture
 
@@ -161,7 +163,7 @@ domain/src/             — Shared (compiles x86_64 + wasm32)
   qr/                   — QR URL generation + base64 image
 
 frontend-leptos/src/
-  pages/                — Scanner, Admin, Login, Events, Quiz Editor, Claim
+  pages/                — Landing, Login, Scanner, Admin, Claim, Quiz Editor, Adventure
   api.rs                — API client types and fetch wrappers
   components.rs         — Shared components + role helpers
   utils.rs              — Helpers (timestamps, badges, participation)
@@ -198,6 +200,8 @@ cargo clippy --all-targets
 - **Multi-event support** — KV-based event registry with per-event config, staff, quiz
 - **Per-event access control** — 3-tier role system: super_admin → organizer → staff
 - **Quiz-gated claim** — Attendees complete quiz before claiming NFT badge
+- **Landing page** — Public marketing page with interactive swimlane (3-role walkthrough), waitlist, FAQ, social proof
+- **Rust Adventures** — Educational tile-based game teaching Solana/Rust concepts
 
 ## Roles & Access Control
 
@@ -206,7 +210,7 @@ cargo clippy --all-targets
 | `super_admin` | Create/edit/delete events, manage all events, full dashboard |
 | `organizer` | Edit assigned event config, manage quiz, view dashboard |
 | `staff` | Check in attendees, view attendee list for assigned event |
-| _(unauthenticated)_ | Login, take quiz, claim NFT badge |
+| _(unauthenticated)_ | View landing page, play adventure, take quiz, claim NFT badge |
 
 ## Roadmap
 
