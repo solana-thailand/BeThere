@@ -206,6 +206,7 @@ impl SwimlaneRole {
 struct SwimlaneStep {
     icon: &'static str,
     title: &'static str,
+    #[allow(dead_code)]
     desc: &'static str,
 }
 
@@ -227,7 +228,7 @@ fn swimlane_mockup(role: SwimlaneRole, step: usize) -> impl IntoView {
                     </div>
                     <div style="margin-top:0.75rem;background:#6366f1;color:#fff;border-radius:6px;padding:0.5rem;text-align:center;font-weight:600;">"Create Event"</div>
                 </div>
-            },
+            }.into_any(),
             // Registrations — deposit pool
             1 => view! {
                 <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:1.25rem;font-size:0.8rem;">
@@ -251,7 +252,7 @@ fn swimlane_mockup(role: SwimlaneRole, step: usize) -> impl IntoView {
                     </div>
                     <div style="color:var(--text-secondary);font-size:0.7rem;margin-top:0.35rem;text-align:right;">"75% of capacity"</div>
                 </div>
-            },
+            }.into_any(),
             // Dashboard — live stats
             2 => view! {
                 <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:1.25rem;font-size:0.8rem;">
@@ -275,7 +276,7 @@ fn swimlane_mockup(role: SwimlaneRole, step: usize) -> impl IntoView {
                     </div>
                     <div style="color:var(--text-secondary);font-size:0.7rem;margin-top:0.35rem;">"95% attendance"</div>
                 </div>
-            },
+            }.into_any(),
             // Payout — refund + received
             _ => view! {
                 <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:1.25rem;font-size:0.8rem;">
@@ -293,7 +294,7 @@ fn swimlane_mockup(role: SwimlaneRole, step: usize) -> impl IntoView {
                         </div>
                     </div>
                 </div>
-            },
+            }.into_any(),
         },
         SwimlaneRole::Staff => match step {
             // Scan — camera frame
@@ -308,7 +309,7 @@ fn swimlane_mockup(role: SwimlaneRole, step: usize) -> impl IntoView {
                     </div>
                     <div style="color:#f59e0b;font-size:0.75rem;font-weight:600;">"Scanning..."</div>
                 </div>
-            },
+            }.into_any(),
             // Confirmed — success card
             1 => view! {
                 <div style="background:var(--bg-secondary);border:1px solid rgba(34,197,94,0.3);border-radius:var(--radius);padding:1.25rem;font-size:0.8rem;text-align:center;">
@@ -318,7 +319,7 @@ fn swimlane_mockup(role: SwimlaneRole, step: usize) -> impl IntoView {
                     <div style="color:var(--text-secondary);font-size:0.7rem;">"Solana Bangkok 2025"</div>
                     <div style="color:var(--text-secondary);font-size:0.7rem;margin-top:0.25rem;">"Jul 15 \u{00b7} 2:03 PM"</div>
                 </div>
-            },
+            }.into_any(),
             // Done — summary
             _ => view! {
                 <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:1.25rem;font-size:0.8rem;text-align:center;">
@@ -336,7 +337,7 @@ fn swimlane_mockup(role: SwimlaneRole, step: usize) -> impl IntoView {
                     </div>
                     <div style="color:var(--text-secondary);font-size:0.7rem;">"Lost QR? Search by name \u{2192}"</div>
                 </div>
-            },
+            }.into_any(),
         },
         SwimlaneRole::Attendee => match step {
             // Register & Deposit
@@ -354,7 +355,7 @@ fn swimlane_mockup(role: SwimlaneRole, step: usize) -> impl IntoView {
                     </div>
                     <div style="margin-top:0.65rem;background:#22c55e;color:#fff;border-radius:6px;padding:0.5rem;text-align:center;font-weight:600;font-size:0.75rem;">"Confirm Deposit"</div>
                 </div>
-            },
+            }.into_any(),
             // Show QR
             1 => view! {
                 <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:1.25rem;font-size:0.8rem;text-align:center;">
@@ -366,7 +367,7 @@ fn swimlane_mockup(role: SwimlaneRole, step: usize) -> impl IntoView {
                     <div style="color:#fff;font-weight:600;">"Alex Chen"</div>
                     <div style="color:var(--text-secondary);font-size:0.7rem;">"Solana Bangkok 2025"</div>
                 </div>
-            },
+            }.into_any(),
             // Get Scanned
             2 => view! {
                 <div style="background:var(--bg-secondary);border:1px solid rgba(34,197,94,0.3);border-radius:var(--radius);padding:1.25rem;font-size:0.8rem;text-align:center;">
@@ -375,7 +376,7 @@ fn swimlane_mockup(role: SwimlaneRole, step: usize) -> impl IntoView {
                     <div style="color:var(--text-secondary);font-size:0.7rem;">"Jul 15, 2025 \u{00b7} 2:03 PM"</div>
                     <div style="color:var(--text-secondary);font-size:0.7rem;margin-top:0.15rem;">"Solana Bangkok Meetup"</div>
                 </div>
-            },
+            }.into_any(),
             // Quiz
             3 => view! {
                 <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:1.25rem;font-size:0.8rem;">
@@ -388,7 +389,7 @@ fn swimlane_mockup(role: SwimlaneRole, step: usize) -> impl IntoView {
                         <div style="background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:6px;padding:0.4rem 0.6rem;color:var(--text-secondary);font-size:0.7rem;">"\u{25cb} Paper ticket"</div>
                     </div>
                 </div>
-            },
+            }.into_any(),
             // Claim Refund + Badge
             _ => view! {
                 <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:1.25rem;font-size:0.8rem;text-align:center;">
@@ -400,7 +401,7 @@ fn swimlane_mockup(role: SwimlaneRole, step: usize) -> impl IntoView {
                     <div style="color:var(--text-secondary);font-size:0.7rem;">"0.01 SOL + $13 USDC returned"</div>
                     <div style="margin-top:0.65rem;background:#22c55e;color:#fff;border-radius:6px;padding:0.5rem;font-weight:600;font-size:0.75rem;">"Claim to Wallet"</div>
                 </div>
-            },
+            }.into_any(),
         },
     }
 }
@@ -607,7 +608,7 @@ pub fn Landing() -> impl IntoView {
                                     <div style=format!(
                                         "width:2.5rem;height:2.5rem;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:0.85rem;transition:all 0.15s;border:2px solid {};background:{};",
                                         if is_active { accent } else if is_past { accent } else { "var(--border)" },
-                                        if is_active || is_past { format!("{}", if is_active { role.accent_bg() } else { "rgba(255,255,255,0.04)" }) } else { "transparent" }.to_string(),
+                                        if is_active { role.accent_bg().to_string() } else if is_past { "rgba(255,255,255,0.04)".to_string() } else { "transparent".to_string() }
                                     )>
                                         <span style=format!("color:{};", if is_active || is_past { accent } else { "var(--text-secondary)" })>{s.icon}</span>
                                     </div>
@@ -616,14 +617,6 @@ pub fn Landing() -> impl IntoView {
                                         if is_active { "600" } else { "500" },
                                         if is_active { "#fff" } else { "var(--text-secondary)" },
                                     )>{s.title}</span>
-                                    {if i < steps_len - 1 {
-                                        let line_color = if is_past { accent } else { "var(--border)" }.to_string();
-                                        view! {
-                                            <div style=format!("position:absolute;margin-left:calc(50% + 1.5rem);top:1.25rem;width:2rem;height:2px;background:{};", line_color)></div>
-                                        }.into_any()
-                                    } else {
-                                        ().into_any()
-                                    }}
                                 </button>
                                 {if i < steps_len - 1 {
                                     let line_color = if is_past { accent } else { "var(--border)" }.to_string();
