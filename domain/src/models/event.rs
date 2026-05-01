@@ -231,7 +231,6 @@ impl EventConfig {
             organizer_emails,
             staff_emails,
             claim_base_url: claim_base_url.to_string(),
-            merkle_tree: merkle_tree.to_string(),
             created_at: String::new(),
             updated_at: String::new(),
         }
