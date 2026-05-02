@@ -1,3 +1,4 @@
+mod adventure;
 mod auth;
 mod crypto;
 mod event_store;

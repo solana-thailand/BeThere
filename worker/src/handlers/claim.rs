@@ -12,6 +12,7 @@ use chrono::Utc;
 use serde::Deserialize;
 use serde_json::json;
 
+use event_checkin_domain::models::adventure::AdventureStatus;
 use event_checkin_domain::models::api::{
     ClaimLookupResponse, ClaimResponse, EventConfig, QuizStatus,
 };
@@ -262,6 +263,48 @@ pub async fn post_claim(
                     "success": false,
                     "error": "you must pass the quiz before claiming your badge",
                     "quiz_status": "in_progress",
+                }));
+            }
+        }
+    }
+
+    // Adventure gate — must complete adventure before claiming
+    let adv_kv = if let Some(ref kv) = state.events_kv {
+        Some(kv)
+    } else {
+        state.quiz_kv.as_ref()
+    };
+
+    if let Some(kv) = adv_kv {
+        let adv_status = match crate::adventure::get_adventure_status(kv, &event.id, &token).await {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::error!(
+                    "claim mint: failed to check adventure status for token {token}: {e}"
+                );
+                return Json(json!({
+                    "success": false,
+                    "error": format!("failed to verify adventure status: {e}"),
+                }));
+            }
+        };
+        match adv_status {
+            AdventureStatus::NotRequired => {} // no adventure configured, proceed
+            AdventureStatus::Passed => {}      // adventure passed, proceed
+            AdventureStatus::NotStarted => {
+                tracing::warn!("claim mint blocked: adventure not attempted for token {token}");
+                return Json(json!({
+                    "success": false,
+                    "error": "you must complete the Rust Adventure before claiming your badge",
+                    "adventure_status": "not_started",
+                }));
+            }
+            AdventureStatus::InProgress => {
+                tracing::warn!("claim mint blocked: adventure not passed for token {token}");
+                return Json(json!({
+                    "success": false,
+                    "error": "you must complete the Rust Adventure before claiming your badge",
+                    "adventure_status": "in_progress",
                 }));
             }
         }

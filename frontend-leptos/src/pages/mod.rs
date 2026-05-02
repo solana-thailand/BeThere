@@ -1,5 +1,6 @@
 pub mod admin;
 pub mod adventure;
+pub mod adventure_config;
 pub mod claim;
 pub mod events_page;
 pub mod landing;

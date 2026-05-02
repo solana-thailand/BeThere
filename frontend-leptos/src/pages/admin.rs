@@ -27,6 +27,7 @@ use crate::utils;
 enum AdminSection {
     Attendance,
     Quiz,
+    Adventure,
     Events,
 }
 
@@ -461,6 +462,40 @@ pub fn Admin() -> impl IntoView {
                     <div class="admin-sidebar-section">
                         <div class="admin-sidebar-heading">"Dashboard"</div>
                     </div>
+
+                    // Event selector dropdown (always visible at top of sidebar)
+                    <Show when=move || !events_loading.get() && !events_list.get().is_empty() fallback=|| view! { <div></div> }>
+                        <div class="admin-sidebar-section">
+                            <div class="admin-sidebar-heading">"Active Event"</div>
+                            <div class="admin-event-selector">
+                                <select
+                                    class="admin-event-select"
+                                    on:change=move |ev| {
+                                        let val = event_target_value(&ev);
+                                        set_active_event_id.set(if val.is_empty() { None } else { Some(val) });
+                                        set_refresh_counter.update(|c| *c += 1);
+                                    }
+                                    prop:value=move || active_event_id.get().unwrap_or_default()
+                                >
+                                    <option value="">"— all events —"</option>
+                                    {move || events_list.get().iter().map(|e| {
+                                        let id = e.id.clone();
+                                        let name = e.name.clone();
+                                        let status = match e.status {
+                                            api::EventStatus::Active => "🟢",
+                                            api::EventStatus::Draft => "📝",
+                                            api::EventStatus::Completed => "✅",
+                                            api::EventStatus::Archived => "📦",
+                                        };
+                                        view! {
+                                            <option value=id>{format!("{status} {name}")}</option>
+                                        }
+                                    }).collect_view()}
+                                </select>
+                            </div>
+                        </div>
+                    </Show>
+
                     <div class="admin-sidebar-section">
                         <div class="admin-sidebar-heading">"Attendance"</div>
                         <button
@@ -516,6 +551,19 @@ pub fn Admin() -> impl IntoView {
                         </button>
                     </div>
                     <div class="admin-sidebar-section">
+                        <div class="admin-sidebar-heading">"Adventure"</div>
+                        <button
+                            class="admin-sidebar-item"
+                            class:active=move || active_section.get() == AdminSection::Adventure
+                            on:click=move |_| set_active_section.set(AdminSection::Adventure)
+                        >
+                            <span class="admin-sidebar-icon">
+                                "🦀"
+                            </span>
+                            "Adventure Config"
+                        </button>
+                    </div>
+                    <div class="admin-sidebar-section">
                         <div class="admin-sidebar-heading">"Events"</div>
                         <button
                             class="admin-sidebar-item"
@@ -534,38 +582,6 @@ pub fn Admin() -> impl IntoView {
                         </button>
                     </div>
 
-                    // Event selector dropdown (always visible in sidebar)
-                    <Show when=move || !events_loading.get() && !events_list.get().is_empty() fallback=|| view! { <div></div> }>
-                        <div class="admin-sidebar-section">
-                            <div class="admin-sidebar-heading">"Active Event"</div>
-                            <div class="admin-event-selector">
-                                <select
-                                    class="admin-event-select"
-                                    on:change=move |ev| {
-                                        let val = event_target_value(&ev);
-                                        set_active_event_id.set(if val.is_empty() { None } else { Some(val) });
-                                        set_refresh_counter.update(|c| *c += 1);
-                                    }
-                                    prop:value=move || active_event_id.get().unwrap_or_default()
-                                >
-                                    <option value="">"— all events —"</option>
-                                    {move || events_list.get().iter().map(|e| {
-                                        let id = e.id.clone();
-                                        let name = e.name.clone();
-                                        let status = match e.status {
-                                            api::EventStatus::Active => "🟢",
-                                            api::EventStatus::Draft => "📝",
-                                            api::EventStatus::Completed => "✅",
-                                            api::EventStatus::Archived => "📦",
-                                        };
-                                        view! {
-                                            <option value=id>{format!("{status} {name}")}</option>
-                                        }
-                                    }).collect_view()}
-                                </select>
-                            </div>
-                        </div>
-                    </Show>
                     // Quick stats at bottom of sidebar
                     <div class="admin-sidebar-stats">
                         {move || {
@@ -826,6 +842,11 @@ pub fn Admin() -> impl IntoView {
                 // Quiz section
                 <Show when=move || active_section.get() == AdminSection::Quiz fallback=|| view! { <div></div> }>
                     <crate::pages::quiz_editor::QuizEditor set_toast=set_toast active_event_id=active_event_id />
+                </Show>
+
+                // Adventure section
+                <Show when=move || active_section.get() == AdminSection::Adventure fallback=|| view! { <div></div> }>
+                    <crate::pages::adventure_config::AdventureConfigEditor set_toast=set_toast active_event_id=active_event_id />
                 </Show>
 
                 // Events section

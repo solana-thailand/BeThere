@@ -13,7 +13,7 @@ use leptos_meta::Title;
 use leptos_router::hooks::use_params;
 use leptos_router::params::Params;
 
-use crate::api::{self, ClaimLookupData, ClaimMintData, QuizQuestionsData, QuizStatus, QuizSubmitData};
+use crate::api::{self, AdventureStatusType, ClaimLookupData, ClaimMintData, QuizQuestionsData, QuizStatus, QuizSubmitData};
 use crate::utils::{escape_html, format_timestamp};
 use wasm_bindgen::prelude::*;
 
@@ -69,6 +69,9 @@ enum ClaimState {
     Quiz(ClaimLookupData, QuizQuestionsData),
     /// Quiz submitted — showing results. If passed, transition to Ready.
     QuizSubmitted(ClaimLookupData, QuizQuestionsData, QuizSubmitData),
+    /// Adventure required — attendee must complete adventure before claiming.
+    /// Holds claim data + adventure status.
+    Adventure(ClaimLookupData, AdventureStatusType),
     /// Minting in progress (POST /api/claim/{token} sent).
     Minting(ClaimLookupData),
     /// NFT minted successfully.
@@ -455,11 +458,11 @@ fn build_quiz_action(
     claim_data_for_retry: ClaimLookupData,
     quiz_data_for_retry: crate::api::QuizQuestionsData,
     set_quiz_answers: WriteSignal<QuizAnswers>,
-    wallet_input: ReadSignal<String>,
+    _wallet_input: ReadSignal<String>,
     set_wallet_input: WriteSignal<String>,
     locked_wallet: Option<String>,
-    locked_wallet_hint: Option<String>,
-    handle_paste: impl Fn(leptos::ev::MouseEvent) + Clone + 'static,
+    _locked_wallet_hint: Option<String>,
+    _handle_paste: impl Fn(leptos::ev::MouseEvent) + Clone + 'static,
     claim_token: String,
     set_state: WriteSignal<ClaimState>,
 ) -> AnyView {
@@ -467,103 +470,67 @@ fn build_quiz_action(
         QuizAction::Passed => {
             let claim_data_c = claim_data_for_claim;
             let lw = locked_wallet;
-            let lw_hint = locked_wallet_hint;
-            let wi = wallet_input;
             let set_wi = set_wallet_input;
-            let hp = handle_paste;
             let token = claim_token;
             let ss = set_state;
+
+            // After quiz passes, check adventure gate before showing wallet input
+            let check_adventure_and_proceed = move || {
+                let claim_data_adv = claim_data_c.clone();
+                let token_adv = token.clone();
+                let set_wi_c = set_wi.clone();
+                let lw_c = lw.clone();
+                let ss_c = ss.clone();
+                leptos::task::spawn_local(async move {
+                    match api::get_adventure_status(&token_adv).await {
+                        Ok(status_data) => {
+                            match status_data.status {
+                                AdventureStatusType::NotRequired | AdventureStatusType::Passed => {
+                                    // Pre-fill locked wallet before going to Ready
+                                    if let Some(ref wallet) = lw_c
+                                        && !wallet.is_empty()
+                                    {
+                                        set_wi_c.set(wallet.clone());
+                                    }
+                                    ss_c.set(ClaimState::Ready(claim_data_adv));
+                                }
+                                AdventureStatusType::NotStarted | AdventureStatusType::InProgress => {
+                                    log::info!("[claim] quiz passed but adventure required, showing adventure gate");
+                                    ss_c.set(ClaimState::Adventure(
+                                        claim_data_adv,
+                                        status_data.status,
+                                    ));
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            log::warn!("[claim] failed to check adventure status after quiz: {e}, proceeding to Ready");
+                            if let Some(ref wallet) = lw_c
+                                && !wallet.is_empty()
+                            {
+                                set_wi_c.set(wallet.clone());
+                            }
+                            ss_c.set(ClaimState::Ready(claim_data_adv));
+                        }
+                    }
+                });
+            };
 
             view! {
                 // NFT badge preview
                 <NftBadgePreview />
 
-                // Wallet input
-                <div class="card">
-                    <label class="claim-wallet-label">"Solana Wallet Address"</label>
-                    {move || {
-                        match &lw {
-                            Some(w) if !w.is_empty() => {
-                                let truncated = if w.len() > 12 {
-                                    format!("{}...{}", &w[..4], &w[w.len()-4..])
-                                } else {
-                                    w.clone()
-                                };
-                                view! {
-                                    <div class="claim-wallet-locked">
-                                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                                            <rect x="3" y="7" width="10" height="7" rx="1.5"></rect>
-                                            <path d="M5 7V5a3 3 0 0 1 6 0v2"></path>
-                                        </svg>
-                                        <span class="locked-wallet-addr">{truncated}</span>
-                                    </div>
-                                }.into_any()
-                            }
-                            _ => view! { <div></div> }.into_any(),
-                        }
-                    }}
-                    <div class="claim-wallet-row">
-                        <input
-                            class="claim-wallet-input"
-                            type="text"
-                            placeholder="Enter your Solana wallet address"
-                            prop:value=move || wi.get()
-                            on:input=move |ev| {
-                                let val = event_target_value(&ev);
-                                set_wi.set(val);
-                            }
-                        />
-                        <button class="claim-paste-btn" on:click=hp.clone() type="button">"Paste"</button>
-                    </div>
-                    <p class="claim-wallet-hint">
-                        {move || {
-                            match &lw_hint {
-                                Some(w) if !w.is_empty() => "Use the pre-filled wallet address to claim.".into_any(),
-                                _ => "Tap Paste or type your Phantom, Solflare, or Backpack address.".into_any(),
-                            }
-                        }}
-                    </p>
+                <div class="card claim-quiz-adventure-check">
+                    <p class="claim-quiz-passed-msg">"✅ Quiz passed! Verifying adventure progress..."</p>
                 </div>
 
                 <button
                     class="claim-btn-mint"
                     on:click=move |_| {
-                        let wallet = wi.get().trim().to_string();
-                        let wallet_len = wallet.len();
-                        if wallet.is_empty() || !(32..=44).contains(&wallet_len) {
-                            return;
-                        }
-                        let current_data = claim_data_c.clone();
-                        ss.set(ClaimState::Minting(current_data.clone()));
-                        let t = token.clone();
-                        leptos::task::spawn_local(async move {
-                            let start = js_sys::Date::now();
-                            let result = api::post_claim(&t, &wallet).await;
-                            // Ensure spinner displays for at least 1.5s for smooth UX
-                            let elapsed = js_sys::Date::now() - start;
-                            if elapsed < 1500.0 {
-                                let wait = (1500.0 - elapsed) as u32;
-                                gloo::timers::future::TimeoutFuture::new(wait).await;
-                            }
-                            match result {
-                                Ok(mint_data) => {
-                                    log::info!("[claim] minted nft: asset_id={}", mint_data.asset_id);
-                                    ss.set(ClaimState::Success(mint_data));
-                                }
-                                Err(e) => {
-                                    log::error!("[claim] mint failed: {e}");
-                                    ss.set(ClaimState::MintError(current_data.clone(), format!("{e}")));
-                                }
-                            }
-                        });
-                    }
-                    disabled=move || {
-                        let w = wi.get();
-                        let w_trimmed = w.trim();
-                        w_trimmed.is_empty() || !(32..=44).contains(&w_trimmed.len())
+                        check_adventure_and_proceed();
                     }
                 >
-                    "Claim NFT Badge"
+                    "Continue to Claim"
                 </button>
             }.into_any()
         }
@@ -928,7 +895,35 @@ pub fn Claim() -> impl IntoView {
                         {
                             set_wallet_input.set(wallet.clone());
                         }
-                        set_state.set(ClaimState::Ready(data));
+                        // Check adventure status — if required and not passed, show adventure gate
+                        let claim_data_for_adventure = data.clone();
+                        let token_for_adventure = token.clone();
+                        leptos::task::spawn_local(async move {
+                            match api::get_adventure_status(&token_for_adventure).await {
+                                Ok(status_data) => {
+                                    match status_data.status {
+                                        AdventureStatusType::NotRequired => {
+                                            set_state.set(ClaimState::Ready(claim_data_for_adventure));
+                                        }
+                                        AdventureStatusType::Passed => {
+                                            set_state.set(ClaimState::Ready(claim_data_for_adventure));
+                                        }
+                                        AdventureStatusType::NotStarted | AdventureStatusType::InProgress => {
+                                            log::info!("[claim] adventure required but not passed, showing adventure gate");
+                                            set_state.set(ClaimState::Adventure(
+                                                claim_data_for_adventure,
+                                                status_data.status,
+                                            ));
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    log::warn!("[claim] failed to check adventure status: {e}, proceeding to Ready");
+                                    // Fallback to Ready so attendee isn't stuck
+                                    set_state.set(ClaimState::Ready(claim_data_for_adventure));
+                                }
+                            }
+                        });
                     }
                 }
                 Err(e) => {
@@ -1252,6 +1247,42 @@ pub fn Claim() -> impl IntoView {
                                     >
                                         "Claim NFT Badge"
                                     </button>
+                                </div>
+                            }
+                                .into_any()
+                        }
+
+                        // ---- Adventure gate — must complete before claiming ----
+                        ClaimState::Adventure(data, adv_status) => {
+                            let token_val = match params.get() {
+                                Ok(p) => p.token.unwrap_or_default(),
+                                Err(_) => String::new(),
+                            };
+                            let adventure_url = format!("/adventure?token={token_val}");
+                            let status_msg = match adv_status {
+                                AdventureStatusType::NotStarted => "You haven't started the Rust Adventure yet. Complete it to unlock your NFT!",
+                                AdventureStatusType::InProgress => "You're making progress! Keep going to complete the adventure.",
+                                _ => "Complete the Rust Adventure to unlock your NFT!",
+                            };
+                            view! {
+                                <div class="claim-adventure-gate">
+                                    <ParticipantAvatar name=data.name.clone() />
+                                    <h2>"🦀 Rust Adventure Required"</h2>
+                                    <p class="claim-adventure-status">{status_msg}</p>
+                                    <div class="claim-adventure-info">
+                                        <p>
+                                            <strong>{escape_html(&data.name)}</strong>", complete the Rust Adventures game to earn your NFT badge."
+                                        </p>
+                                        <p class="claim-adventure-hint">
+                                            "Learn Rust basics by solving coding puzzles in a fun tile-based game!"
+                                        </p>
+                                    </div>
+                                    <a
+                                        class="btn btn-primary claim-adventure-btn"
+                                        href={adventure_url}
+                                    >
+                                        "🎮 Start Adventure"
+                                    </a>
                                 </div>
                             }
                                 .into_any()

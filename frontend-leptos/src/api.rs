@@ -1285,3 +1285,248 @@ pub async fn post_claim(token: &str, wallet_address: &str) -> Result<ClaimMintDa
         status: 0,
     })
 }
+
+// ===== Adventure types =====
+
+/// Adventure status from GET /api/adventure/{token}/status
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum AdventureStatusType {
+    #[default]
+    NotRequired,
+    NotStarted,
+    InProgress,
+    Passed,
+}
+
+/// Level score from the adventure API.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct AdventureLevelScore {
+    #[serde(default)]
+    pub moves: u32,
+    #[serde(default)]
+    pub puzzles_solved: u32,
+    #[serde(default)]
+    pub time_seconds: u32,
+    #[serde(default)]
+    pub stars: u8,
+}
+
+/// Adventure progress data from the API.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct AdventureProgressData {
+    #[serde(default)]
+    pub claim_token: String,
+    #[serde(default)]
+    pub levels_completed: Vec<String>,
+    #[serde(default)]
+    pub scores: std::collections::HashMap<String, AdventureLevelScore>,
+    #[serde(default)]
+    pub total_moves: u32,
+    #[serde(default)]
+    pub total_time_seconds: u32,
+    #[serde(default)]
+    pub passed: bool,
+    #[serde(default)]
+    pub passed_at: Option<String>,
+    #[serde(default)]
+    pub last_played_at: Option<String>,
+}
+
+/// Response from GET /api/adventure/{token}/status
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AdventureStatusData {
+    #[serde(default)]
+    pub status: AdventureStatusType,
+    #[serde(default)]
+    pub progress: Option<AdventureProgressData>,
+}
+
+/// Request body for POST /api/adventure/{token}/save
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AdventureSaveBody {
+    pub claim_token: String,
+    pub level_id: String,
+    pub score: AdventureLevelScore,
+}
+
+/// GET /api/adventure/{token}/status
+/// Get adventure status and progress for a claim token.
+///
+/// Public endpoint — no authentication required.
+pub async fn get_adventure_status(token: &str) -> Result<AdventureStatusData, ApiError> {
+    let url = format!("{}/adventure/{token}/status", api_base());
+    let response = gloo::net::http::Request::get(&url).send().await?;
+
+    if !response.ok() {
+        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
+            success: false,
+            data: None,
+            error: Some("Adventure status fetch failed".to_string()),
+        });
+        return Err(ApiError {
+            message: body.error.unwrap_or_default(),
+            status: response.status(),
+        });
+    }
+
+    let wrapper: ApiResponse<AdventureStatusData> =
+        response.json().await.map_err(|e| ApiError {
+            message: format!("Failed to parse adventure status response: {e}"),
+            status: 0,
+        })?;
+
+    wrapper.data.ok_or_else(|| ApiError {
+        message: wrapper.error.unwrap_or("No data".to_string()),
+        status: 0,
+    })
+}
+
+/// POST /api/adventure/{token}/save
+/// Save level completion progress.
+///
+/// Public endpoint — no authentication required.
+pub async fn save_adventure_progress(
+    token: &str,
+    level_id: &str,
+    score: &AdventureLevelScore,
+) -> Result<AdventureProgressData, ApiError> {
+    let url = format!("{}/adventure/{token}/save", api_base());
+    let body = AdventureSaveBody {
+        claim_token: token.to_string(),
+        level_id: level_id.to_string(),
+        score: score.clone(),
+    };
+
+    let response = gloo::net::http::Request::post(&url)
+        .header("Content-Type", "application/json")
+        .body(serde_json::to_string(&body).unwrap_or_default())
+        .map_err(|e| ApiError {
+            message: format!("Failed to build request: {e}"),
+            status: 0,
+        })?
+        .send()
+        .await?;
+
+    if !response.ok() {
+        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
+            success: false,
+            data: None,
+            error: Some("Adventure save failed".to_string()),
+        });
+        return Err(ApiError {
+            message: body.error.unwrap_or_default(),
+            status: response.status(),
+        });
+    }
+
+    // Response is { success: true, data: { progress: ... } }
+    #[derive(Debug, Default, Deserialize)]
+    struct SaveResponse {
+        #[serde(default)]
+        progress: AdventureProgressData,
+    }
+    let wrapper: ApiResponse<SaveResponse> =
+        response.json().await.map_err(|e| ApiError {
+            message: format!("Failed to parse adventure save response: {e}"),
+            status: 0,
+        })?;
+
+    wrapper
+        .data
+        .map(|d| d.progress)
+        .ok_or_else(|| ApiError {
+            message: wrapper.error.unwrap_or("No data".to_string()),
+            status: 0,
+        })
+}
+
+// ===== Adventure Admin API =====
+
+/// Adventure config from GET /api/admin/adventure
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AdventureConfigData {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default)]
+    pub required_level: Option<usize>,
+}
+
+/// GET /api/admin/adventure
+/// Get adventure config for the active event.
+pub async fn get_admin_adventure_config(
+    event_id: Option<&str>,
+) -> Result<AdventureConfigData, ApiError> {
+    let mut url = format!("{}/admin/adventure", api_base());
+    if let Some(eid) = event_id {
+        url = format!("{url}?event_id={eid}");
+    }
+    let response = gloo::net::http::Request::get(&url).send().await?;
+
+    if !response.ok() {
+        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
+            success: false,
+            data: None,
+            error: Some("Failed to fetch adventure config".to_string()),
+        });
+        return Err(ApiError {
+            message: body.error.unwrap_or("Failed to fetch adventure config".to_string()),
+            status: response.status(),
+        });
+    }
+
+    #[derive(Default, Deserialize)]
+    struct ConfigResponse {
+        #[serde(default)]
+        config: Option<AdventureConfigData>,
+    }
+
+    let wrapper: ApiResponse<ConfigResponse> = response.json().await.map_err(|e| ApiError {
+        message: format!("Failed to parse adventure config: {e}"),
+        status: 0,
+    })?;
+
+    wrapper
+        .data
+        .and_then(|d| d.config)
+        .ok_or_else(|| ApiError {
+            message: "No config data".to_string(),
+            status: 0,
+        })
+}
+
+/// PUT /api/admin/adventure
+/// Update adventure config for the active event.
+pub async fn put_admin_adventure_config(
+    config: &AdventureConfigData,
+    event_id: Option<&str>,
+) -> Result<AdventureConfigData, ApiError> {
+    let mut url = format!("{}/admin/adventure", api_base());
+    if let Some(eid) = event_id {
+        url = format!("{url}?event_id={eid}");
+    }
+    let response = gloo::net::http::Request::put(&url)
+        .header("Content-Type", "application/json")
+        .body(serde_json::to_string(config).unwrap_or_default())
+        .map_err(|e| ApiError {
+            message: format!("Failed to build request: {e}"),
+            status: 0,
+        })?
+        .send()
+        .await?;
+
+    if !response.ok() {
+        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
+            success: false,
+            data: None,
+            error: Some("Failed to save adventure config".to_string()),
+        });
+        return Err(ApiError {
+            message: body.error.unwrap_or("Failed to save adventure config".to_string()),
+            status: response.status(),
+        });
+    }
+
+    // Return the config we sent (backend echoes it back)
+    Ok(config.clone())
+}

@@ -1451,6 +1451,57 @@ nav a.active {
     color: var(--text-muted);
 }
 
+/* Adventure gate — shown when adventure is required before claiming */
+.claim-adventure-gate {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    padding: 2rem 1.5rem;
+    background: linear-gradient(
+        135deg,
+        rgba(255, 107, 53, 0.08) 0%,
+        rgba(30, 30, 30, 0.95) 100%
+    );
+    border: 1px solid var(--warning-border);
+    border-radius: var(--radius);
+    text-align: center;
+    animation: claim-fade-in 0.3s ease-out;
+}
+
+.claim-adventure-gate h2 {
+    color: #ff6b35;
+    font-size: 1.25rem;
+    font-weight: 700;
+}
+
+.claim-adventure-status {
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+}
+
+.claim-adventure-info {
+    max-width: 400px;
+}
+
+.claim-adventure-info p {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    margin: 0.5rem 0;
+}
+
+.claim-adventure-hint {
+    color: var(--text-muted);
+    font-size: 0.85rem !important;
+}
+
+.claim-adventure-btn {
+    margin-top: 0.5rem;
+    font-size: 1.1rem;
+    padding: 0.75rem 2rem;
+}
+
 /* Share to X button */
 .claim-share-x {
     border-color: #1da1f2;
@@ -2476,6 +2527,18 @@ nav a.active {
 }
 .claim-quiz-failed .claim-quiz-score-num {
     color: var(--warning);
+}
+
+/* Quiz passed → adventure check transition */
+.claim-quiz-adventure-check {
+    text-align: center;
+    padding: 1rem 1.25rem;
+}
+.claim-quiz-passed-msg {
+    color: var(--success);
+    font-size: 1rem;
+    font-weight: 500;
+    margin: 0;
 }
 .claim-quiz-score-pct {
     font-size: 1.1rem;
@@ -4440,6 +4503,21 @@ nav a.active {
     color: #a78bfa;
     border: 1px solid rgba(99, 102, 241, 0.3);
     border-radius: 4px;
+    animation: keyBadgePop 0.3s ease;
+}
+
+@keyframes keyBadgePop {
+    0% {
+        transform: scale(0);
+        opacity: 0;
+    }
+    60% {
+        transform: scale(1.2);
+    }
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
 }
 
 /* Notification toast */
@@ -4486,14 +4564,21 @@ nav a.active {
 .adventure-grid-container {
     display: flex;
     justify-content: center;
-    align-items: center;
+    align-items: flex-start;
     padding: 0.5rem;
+    overflow: auto;
+    max-width: 100%;
+    max-height: 60vh;
+    scroll-behavior: smooth;
+    border-radius: 8px;
+    /* Subtle inner shadow for depth */
+    box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
 .adventure-grid {
     display: grid;
     gap: 1px;
-    background: var(--bg-primary);
+    background: rgba(0, 0, 0, 0.2);
     border: 2px solid var(--border);
     border-radius: 6px;
     overflow: hidden;
@@ -4508,7 +4593,9 @@ nav a.active {
     font-size: calc(var(--tile-size) * 0.45);
     font-weight: 600;
     user-select: none;
-    transition: background-color 0.15s ease;
+    transition:
+        background-color 0.15s ease,
+        box-shadow 0.15s ease;
 }
 
 .tile-floor {
@@ -4517,16 +4604,29 @@ nav a.active {
 }
 
 .tile-wall {
-    background: #2d2d2d;
+    background: linear-gradient(135deg, #2d2d3f, #1f1f2e);
     color: transparent;
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+    box-shadow:
+        inset 1px 1px 0 rgba(255, 255, 255, 0.05),
+        inset -1px -1px 0 rgba(0, 0, 0, 0.3);
 }
 
 .tile-player {
     font-size: calc(var(--tile-size) * 0.65);
     z-index: 10;
     color: var(--text-primary, inherit);
-    filter: drop-shadow(0 0 4px rgba(99, 102, 241, 0.4));
+    filter: drop-shadow(0 0 6px rgba(99, 102, 241, 0.6));
+    animation: playerFloat 2s ease-in-out infinite;
+}
+
+@keyframes playerFloat {
+    0%,
+    100% {
+        transform: translateY(0);
+    }
+    50% {
+        transform: translateY(-2px);
+    }
 }
 
 .tile-exit {
@@ -4536,17 +4636,29 @@ nav a.active {
 }
 
 .tile-key {
-    background: rgba(99, 102, 241, 0.1);
+    background: rgba(99, 102, 241, 0.12);
     color: #a78bfa;
     font-family: "SF Mono", "Fira Code", monospace;
     font-size: calc(var(--tile-size) * 0.32);
     font-weight: 700;
     border: 1px dashed rgba(99, 102, 241, 0.3);
+    animation: keyPulse 2s ease-in-out infinite;
+}
+
+@keyframes keyPulse {
+    0%,
+    100% {
+        box-shadow: 0 0 0 0 rgba(99, 102, 241, 0);
+    }
+    50% {
+        box-shadow: 0 0 8px 2px rgba(99, 102, 241, 0.3);
+    }
 }
 
 .tile-npc {
     background: rgba(245, 158, 11, 0.08);
     font-size: calc(var(--tile-size) * 0.6);
+    filter: drop-shadow(0 0 3px rgba(245, 158, 11, 0.3));
 }
 
 .tile-gate {
@@ -4562,14 +4674,26 @@ nav a.active {
 }
 
 .tile-code {
-    background: rgba(59, 130, 246, 0.08);
+    background: rgba(59, 130, 246, 0.1);
     color: var(--info);
     font-size: calc(var(--tile-size) * 0.45);
+    filter: drop-shadow(0 0 3px rgba(59, 130, 246, 0.3));
 }
 
 .tile-water {
     background: rgba(59, 130, 246, 0.15);
     color: rgba(59, 130, 246, 0.3);
+    animation: waterShimmer 3s ease-in-out infinite;
+}
+
+@keyframes waterShimmer {
+    0%,
+    100% {
+        background: rgba(59, 130, 246, 0.12);
+    }
+    50% {
+        background: rgba(59, 130, 246, 0.22);
+    }
 }
 
 .tile-sign {
@@ -4628,6 +4752,56 @@ nav a.active {
     color: var(--text-muted, #666);
     font-size: 0.8rem;
     margin-top: 1rem;
+}
+
+/* Toggle switch (used in adventure config) */
+.quiz-toggle-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    user-select: none;
+}
+
+.quiz-toggle-checkbox {
+    display: none;
+}
+
+.quiz-toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 44px;
+    height: 24px;
+    background: var(--bg-tertiary, #333);
+    border-radius: 12px;
+    transition: background 0.2s ease;
+    flex-shrink: 0;
+}
+
+.quiz-toggle-switch::after {
+    content: "";
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 18px;
+    height: 18px;
+    background: white;
+    border-radius: 50%;
+    transition: transform 0.2s ease;
+}
+
+.quiz-toggle-checkbox:checked + .quiz-toggle-switch {
+    background: var(--accent, #6366f1);
+}
+
+.quiz-toggle-checkbox:checked + .quiz-toggle-switch::after {
+    transform: translateX(20px);
+}
+
+.quiz-toggle-text {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--text-primary);
 }
 
 .adventure-overlay-card-success {
@@ -4841,12 +5015,47 @@ nav a.active {
     background: rgba(34, 197, 94, 0.1);
     color: var(--success);
     border: 1px solid rgba(34, 197, 94, 0.2);
+    animation: feedbackPop 0.4s ease;
 }
 
 .puzzle-wrong {
     background: rgba(239, 68, 68, 0.1);
     color: var(--danger, #ef4444);
     border: 1px solid rgba(239, 68, 68, 0.2);
+    animation: feedbackShake 0.4s ease;
+}
+
+@keyframes feedbackPop {
+    0% {
+        transform: scale(0.9);
+        opacity: 0;
+    }
+    60% {
+        transform: scale(1.05);
+    }
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+@keyframes feedbackShake {
+    0%,
+    100% {
+        transform: translateX(0);
+    }
+    20% {
+        transform: translateX(-4px);
+    }
+    40% {
+        transform: translateX(4px);
+    }
+    60% {
+        transform: translateX(-3px);
+    }
+    80% {
+        transform: translateX(3px);
+    }
 }
 
 .puzzle-hint {
@@ -4873,21 +5082,23 @@ nav a.active {
 }
 
 .dpad-btn {
-    width: 48px;
-    height: 48px;
+    width: 56px;
+    height: 56px;
     display: flex;
     align-items: center;
     justify-content: center;
     background: var(--bg-card);
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: 10px;
     color: var(--text-primary);
-    font-size: 1rem;
+    font-size: 1.2rem;
     cursor: pointer;
     user-select: none;
     -webkit-user-select: none;
     touch-action: manipulation;
     transition: all 0.1s ease;
+    /* Larger touch target */
+    padding: 4px;
 }
 
 .dpad-btn:active {
@@ -4896,8 +5107,8 @@ nav a.active {
 }
 
 .dpad-center {
-    width: 48px;
-    height: 48px;
+    width: 56px;
+    height: 56px;
 }
 
 /* Show D-pad on touch devices */
@@ -4907,6 +5118,15 @@ nav a.active {
     }
     .adventure-page {
         --tile-size: 28px;
+    }
+    .dpad-btn {
+        width: 64px;
+        height: 64px;
+        font-size: 1.4rem;
+    }
+    .dpad-center {
+        width: 64px;
+        height: 64px;
     }
 }
 
@@ -5046,6 +5266,63 @@ nav a.active {
     }
 }
 
+/* === Level Success Overlay === */
+.adventure-overlay-success {
+    background: rgba(0, 0, 0, 0.8);
+}
+
+/* === Info Banner (no-token demo mode) === */
+.adventure-banner {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.6rem 1rem;
+    font-size: 0.85rem;
+    border-bottom: 1px solid;
+}
+.adventure-banner-info {
+    background: #1e293b;
+    color: #94a3b8;
+    border-bottom-color: #334155;
+}
+.adventure-banner-icon {
+    font-size: 1.1rem;
+    flex-shrink: 0;
+}
+.adventure-banner b {
+    color: #f59e0b;
+}
+
+/* === Claim Button (golden) === */
+.adventure-claim-btn {
+    background: linear-gradient(135deg, #f59e0b, #d97706) !important;
+    border: none !important;
+    color: white !important;
+    font-weight: 700 !important;
+    font-size: 1rem !important;
+    padding: 0.65rem 1.5rem !important;
+    text-decoration: none;
+    display: inline-block;
+    border-radius: 8px;
+    box-shadow: 0 0 16px rgba(245, 158, 11, 0.3);
+    animation: claimGlow 2s ease-in-out infinite;
+}
+
+@keyframes claimGlow {
+    0%,
+    100% {
+        box-shadow: 0 0 12px rgba(245, 158, 11, 0.2);
+    }
+    50% {
+        box-shadow: 0 0 24px rgba(245, 158, 11, 0.5);
+    }
+}
+
+.adventure-claim-btn:hover {
+    background: linear-gradient(135deg, #fbbf24, #f59e0b) !important;
+    transform: translateY(-1px);
+}
+
 /* === Level Select === */
 .adventure-level-select-card {
     max-width: 420px;
@@ -5097,16 +5374,32 @@ nav a.active {
     flex-shrink: 0;
 }
 
+/* Completed level checkmark */
+.level-select-completed .level-select-num {
+    background: var(--success, #22c55e);
+}
+
+.level-select-check {
+    font-size: 0.7rem;
+    color: var(--success, #22c55e);
+    flex-shrink: 0;
+}
+
 .level-select-info {
     display: flex;
     flex-direction: column;
     gap: 0.15rem;
+    flex: 1;
+    min-width: 0;
 }
 
 .level-select-name {
     font-size: 0.9rem;
     font-weight: 600;
     color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .level-select-concept {
@@ -5324,11 +5617,4 @@ nav a.active {
     background: rgba(34, 197, 94, 0.1);
     color: var(--success);
     cursor: default;
-}
-
-/* Puzzle option selected state */
-.puzzle-opt-selected {
-    background: rgba(99, 102, 241, 0.15);
-    border-color: var(--accent);
-    color: #a78bfa;
 }

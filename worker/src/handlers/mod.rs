@@ -1,3 +1,4 @@
+pub mod adventure;
 pub mod attendee;
 pub mod auth;
 pub mod checkin;
@@ -33,6 +34,15 @@ pub fn routes(state: AppState) -> Router<()> {
         .route("/quiz", get(quiz::get_quiz))
         .route("/quiz/{token}/submit", post(quiz::submit_quiz))
         .route("/quiz/{token}/status", get(quiz::get_quiz_status))
+        // Adventure routes (public — attendees play adventure game)
+        .route(
+            "/adventure/{token}/status",
+            get(adventure::get_adventure_status),
+        )
+        .route(
+            "/adventure/{token}/save",
+            post(adventure::save_adventure_progress),
+        )
         // Waitlist signup (public)
         .route("/waitlist", post(waitlist::join_waitlist));
 
@@ -48,6 +58,11 @@ pub fn routes(state: AppState) -> Router<()> {
         .route(
             "/admin/quiz",
             get(quiz::get_admin_quiz).post(quiz::put_quiz),
+        )
+        // Admin adventure management (protected — organizer configures adventure)
+        .route(
+            "/admin/adventure",
+            get(adventure::get_admin_adventure).put(adventure::put_admin_adventure),
         )
         // Event management (protected — admin/organizer CRUD)
         .route(
