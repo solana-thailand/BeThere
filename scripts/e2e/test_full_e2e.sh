@@ -507,7 +507,8 @@ try:
     d = json.load(sys.stdin)['result']
     items = d.get('items', [])
     if items:
-        print(items[0][0])  # first signature
+        sig = items[0].get('signature', '') if isinstance(items[0], dict) else (items[0][0] if items[0] else '')
+        print(sig)
     else:
         print('')
 except:

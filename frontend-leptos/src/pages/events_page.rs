@@ -745,6 +745,22 @@ pub fn EventsPage(
                                             on:input=move |ev| set_form.update(|f| f.nft_name_template = event_target_value(&ev))
                                         />
                                         <span class="quiz-setting-hint">"Use {event_name} placeholder"</span>
+                                        <Show
+                                            when=move || {
+                                                let f = form.get();
+                                                let resolved = if f.nft_name_template.is_empty() {
+                                                    format!("BeThere - {}", f.name)
+                                                } else {
+                                                    f.nft_name_template.replace("{event_name}", &f.name)
+                                                };
+                                                resolved.len() > 32
+                                            }
+                                            fallback=|| view! { <div></div> }
+                                        >
+                                            <div style="color:var(--warning);font-size:0.75rem;margin-top:0.25rem">
+                                                "⚠ Resolved name exceeds 32-char limit (Bubblegum max). Name will be truncated."
+                                            </div>
+                                        </Show>
                                     </div>
                                     <div class="quiz-setting-item">
                                         <label class="quiz-field-label">"Symbol"</label>
