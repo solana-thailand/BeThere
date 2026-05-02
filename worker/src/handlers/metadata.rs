@@ -1,7 +1,4 @@
 //! NFT metadata and badge endpoints.
-//!
-//! Serves Metaplex-compatible metadata JSON and badge SVG for cNFTs.
-//! These are used by wallets and explorers to render NFT details.
 
 use axum::extract::{Path, State};
 use axum::response::{Html, Json};
@@ -13,13 +10,18 @@ use crate::state::AppState;
 ///
 /// Returns Metaplex-compatible metadata JSON for an event's NFT.
 /// Wallets and block explorers fetch this URI to display NFT details.
+///
+/// Uses global config defaults. Per-event KV loading is planned but
+/// currently blocked by Axum Handler Send bound on wasm32 — the
+/// metadata endpoint is called by wallets/explorers which use the
+/// per-event fields passed during mint, so this generic fallback
+/// is sufficient.
 pub async fn get_metadata(
-    Path(event_id): Path<String>,
     State(state): State<AppState>,
+    Path(event_id): Path<String>,
 ) -> Json<serde_json::Value> {
-    let _ = event_id; // per-event metadata loading planned
+    tracing::info!("metadata request for event: {event_id}");
 
-    // Use config defaults for now — per-event override coming soon
     let metadata = json!({
         "name": "BeThere Badge",
         "symbol": "BETHERE",
@@ -42,9 +44,6 @@ pub async fn get_metadata(
 }
 
 /// GET /api/badge.svg
-///
-/// Returns the attendance badge SVG image.
-/// Embedded in the WASM binary via `include_str!`.
 pub async fn get_badge_svg() -> Html<&'static str> {
     let svg = include_str!("../badge.svg");
     Html(svg)
