@@ -33,9 +33,12 @@ struct HeliusRpcResponse {
 /// Inner `result` object from Helius `mintCompressedNft`.
 #[derive(Debug, Deserialize)]
 struct HeliusMintResult {
-    #[serde(rename = "assetId")]
-    asset_id: String,
-    signature: String,
+    #[serde(rename = "assetId", default)]
+    asset_id: Option<String>,
+    /// Transaction signature. May be null if confirmation is pending.
+    #[serde(default)]
+    signature: Option<String>,
+    #[serde(default)]
     minted: bool,
 }
 
@@ -156,9 +159,13 @@ pub async fn mint_compressed_nft(
         return Err(format!("helius rpc returned HTTP {status}: {body_text}"));
     }
 
-    let rpc_response: HeliusRpcResponse = response
-        .json()
+    // Read raw body text, then parse
+    let body_text = response
+        .text()
         .await
+        .map_err(|e| format!("failed to read helius response body: {e:?}"))?;
+
+    let rpc_response: HeliusRpcResponse = serde_json::from_str(&body_text)
         .map_err(|e| format!("failed to parse helius rpc response: {e:?}"))?;
 
     if let Some(err) = rpc_response.error {
@@ -174,18 +181,25 @@ pub async fn mint_compressed_nft(
         .ok_or_else(|| "helius rpc returned no result and no error".to_string())?;
 
     if !result.minted {
-        return Err("helius rpc returned minted=false".to_string());
+        return Err(format!(
+            "helius rpc returned minted=false (asset_id={:?}, signature={:?})",
+            result.asset_id, result.signature
+        ));
     }
+
+    let asset_id = result
+        .asset_id
+        .ok_or_else(|| "helius rpc returned no assetId".to_string())?;
 
     tracing::info!(
         "minted compressed nft: asset_id={} signature={}",
-        result.asset_id,
-        result.signature
+        asset_id,
+        result.signature.as_deref().unwrap_or("pending")
     );
 
     Ok(MintResult {
-        signature: result.signature,
-        asset_id: result.asset_id,
+        signature: result.signature.unwrap_or_default(),
+        asset_id,
     })
 }
 

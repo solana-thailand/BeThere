@@ -166,12 +166,20 @@ impl EventConfig {
     }
 
     /// Resolve the NFT name, expanding `{event_name}` placeholder.
+    /// Truncates to 32 characters (Bubblegum/Metaplex `MetadataNameTooLong` limit).
     pub fn nft_name(&self) -> String {
-        if self.nft_name_template.is_empty() {
+        let resolved = if self.nft_name_template.is_empty() {
             format!("BeThere - {}", self.name)
         } else {
             self.nft_name_template.replace("{event_name}", &self.name)
+        };
+        if resolved.len() <= 32 {
+            return resolved;
         }
+        // Truncate to 29 chars + "..." (total 32)
+        let mut truncated: String = resolved.chars().take(29).collect();
+        truncated.push_str("...");
+        truncated
     }
 
     /// Resolve the NFT description, expanding `{event_name}` placeholder.
