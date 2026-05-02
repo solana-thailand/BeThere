@@ -18,9 +18,93 @@ use event_checkin_domain::models::api::{
 };
 use event_checkin_domain::models::event::EventConfig as DomainEventConfig;
 
+use worker::KvStore;
+
 use crate::event_store;
 use crate::solana::{self, validate_wallet_address};
 use crate::state::AppState;
+
+/// KV key for claim dedup lock
+fn claim_lock_key(event_id: &str, token: &str) -> String {
+    format!("event:{event_id}:claim_lock:{token}")
+}
+
+/// Try to acquire a claim lock. Returns Ok(()) if acquired, Err if already locked.
+/// Sets a 5-minute TTL as safety net.
+async fn acquire_claim_lock(
+    kv: &KvStore,
+    event_id: &str,
+    token: &str,
+    wallet: &str,
+) -> Result<(), String> {
+    let key = claim_lock_key(event_id, token);
+
+    // Check if lock already exists
+    let existing: Option<String> = kv
+        .get(&key)
+        .text()
+        .await
+        .map_err(|e| format!("claim lock read failed: {e:?}"))?;
+
+    if existing.is_some() {
+        tracing::warn!("claim lock already held for token {token}");
+        return Err("claim is already being processed or has been completed".to_string());
+    }
+
+    // Acquire lock with 5-minute TTL (safety net for failed mints)
+    let lock_value = serde_json::json!({
+        "wallet": wallet,
+        "started_at": chrono::Utc::now().to_rfc3339(),
+    })
+    .to_string();
+
+    kv.put(&key, &lock_value)
+        .map_err(|e| format!("claim lock put failed: {e:?}"))?
+        .expiration_ttl(300) // 5 minutes TTL
+        .execute()
+        .await
+        .map_err(|e| format!("claim lock write failed: {e:?}"))?;
+
+    tracing::info!("claim lock acquired for token {token}");
+    Ok(())
+}
+
+/// Finalize the claim lock after successful mint (removes TTL, sets final data).
+async fn finalize_claim_lock(
+    kv: &KvStore,
+    event_id: &str,
+    token: &str,
+    wallet: &str,
+    asset_id: &str,
+) -> Result<(), String> {
+    let key = claim_lock_key(event_id, token);
+
+    let lock_value = serde_json::json!({
+        "wallet": wallet,
+        "asset_id": asset_id,
+        "claimed_at": chrono::Utc::now().to_rfc3339(),
+    })
+    .to_string();
+
+    // Overwrite without TTL — permanent record of claim
+    kv.put(&key, &lock_value)
+        .map_err(|e| format!("claim lock finalize failed: {e:?}"))?
+        .execute()
+        .await
+        .map_err(|e| format!("claim lock finalize write failed: {e:?}"))?;
+
+    Ok(())
+}
+
+/// Release the claim lock on failure (delete the key so attendee can retry).
+async fn release_claim_lock(kv: &KvStore, event_id: &str, token: &str) -> Result<(), String> {
+    let key = claim_lock_key(event_id, token);
+    kv.delete(&key)
+        .await
+        .map_err(|e| format!("claim lock release failed: {e:?}"))?;
+    tracing::info!("claim lock released for token {token}");
+    Ok(())
+}
 
 /// Mask a wallet address for safe display in error messages.
 /// Shows first 4 and last 4 characters: "BxRW...3KjF".
@@ -347,6 +431,14 @@ pub async fn post_claim(
         }
     }
 
+    // Claim dedup lock — prevent concurrent double-claim (KV-based mutex)
+    let lock_kv: Option<&KvStore> = state.events_kv.as_ref().or(state.quiz_kv.as_ref());
+    if let Some(kv) = lock_kv
+        && let Err(e) = acquire_claim_lock(kv, &event.id, &token, &body.wallet_address).await
+    {
+        return Json(json!({ "success": false, "error": e }));
+    }
+
     // Mint compressed NFT via Helius
     let config = &state.config;
     let mint_result = match solana::mint_compressed_nft(
@@ -367,6 +459,10 @@ pub async fn post_claim(
         Ok(result) => result,
         Err(ref e) => {
             tracing::error!("mint failed for token {token}: {e}");
+            // Release lock so attendee can retry
+            if let Some(kv) = lock_kv {
+                let _ = release_claim_lock(kv, &event.id, &token).await;
+            }
             return Json(json!({
                 "success": false,
                 "error": format!("failed to mint NFT: {e}"),
@@ -387,6 +483,7 @@ pub async fn post_claim(
     .await
     {
         tracing::error!("mint succeeded but failed to mark claimed for token {token}: {e}");
+        // Lock will expire via TTL — don't release (mint already happened)
         return Json(json!({
             "success": false,
             "error": format!(
@@ -394,6 +491,20 @@ pub async fn post_claim(
                 mint_result.asset_id
             ),
         }));
+    }
+
+    // Finalize claim lock (permanent record, no TTL)
+    if let Some(kv) = lock_kv
+        && let Err(e) = finalize_claim_lock(
+            kv,
+            &event.id,
+            &token,
+            &body.wallet_address,
+            &mint_result.asset_id,
+        )
+        .await
+    {
+        tracing::warn!("claim lock finalize failed (non-blocking): {e}");
     }
 
     tracing::info!(
