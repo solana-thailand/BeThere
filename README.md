@@ -130,6 +130,10 @@ The frontend is served from `frontend-leptos/dist/` via Workers Assets with SPA 
 | PUT | `/api/admin/quiz` | Cookie + Staff | Create/update quiz config |
 | GET | `/api/claim/{token}` | No | Get claim info |
 | POST | `/api/claim/{token}` | No | Claim NFT badge + refund |
+| GET | `/api/adventure/{token}/status` | No | Get adventure progress |
+| POST | `/api/adventure/{token}/save` | No | Save adventure progress |
+| GET | `/api/admin/adventure` | Cookie + Staff | Get adventure config |
+| PUT | `/api/admin/adventure` | Cookie + Staff | Update adventure config |
 
 ## Frontend Routes
 
@@ -147,23 +151,26 @@ The frontend is served from `frontend-leptos/dist/` via Workers Assets with SPA 
 
 ```
 worker/src/             — Cloudflare Worker
-  handlers/             — API endpoints (auth, check-in, QR, attendee, events, quiz, claim, health)
+  handlers/             — API endpoints (auth, check-in, QR, attendee, events, quiz, claim, adventure, health)
+  adventure.rs          — Adventure business logic (save progress, check completion)
   auth.rs               — Google OAuth + JWT + role resolution (super_admin/organizer/staff)
   event_store.rs        — KV event registry CRUD, seed, migration
   quiz.rs               — Quiz business logic (scoring, KV interaction)
   sheets.rs             — Google Sheets read/write (worker::Fetch)
+  solana.rs             — Helius cNFT minting (mintCompressedNft RPC)
   crypto.rs             — SubtleCrypto bridge (RSA-SHA256, HMAC-SHA256)
   http.rs               — HTTP client wrapping worker::Fetch
   middleware.rs         — Security headers, auth guard
   state.rs              — AppState from Env bindings
 
 domain/src/             — Shared (compiles x86_64 + wasm32)
-  config/               — AppConfig, OAuthConfig, SheetsConfig
-  models/               — Attendee, Claims, EventConfig, API response types
+  config/               — AppConfig, OAuthConfig, SheetsConfig (secrets redacted in Debug)
+  models/               — Attendee, Claims, EventConfig, AdventureConfig, API response types
   qr/                   — QR URL generation + base64 image
 
 frontend-leptos/src/
   pages/                — Landing, Login, Scanner, Admin, Claim, Quiz Editor, Adventure
+  pages/adventure/      — Game engine, level definitions, types
   api.rs                — API client types and fetch wrappers
   components.rs         — Shared components + role helpers
   utils.rs              — Helpers (timestamps, badges, participation)
@@ -173,12 +180,18 @@ frontend-leptos/src/
 ## Tests
 
 ```bash
-# All tests (34 total)
+# All unit tests
 cargo test
 
 # Individual crates
-cargo test -p event-checkin-domain   # 14 tests — shared types, QR logic
-cargo test -p event-checkin-worker   # 20 tests — crypto, auth, sheets, events
+cargo test -p event-checkin-domain   # Shared types, QR logic
+cargo test -p event-checkin-worker   # Crypto, auth, sheets, events
+
+# E2E devnet test suite (requires worker/.dev.vars with HELIUS_API_KEY)
+./scripts/e2e/test_devnet.sh
+
+# E2E mint-only test
+./scripts/e2e/test_devnet.sh --mint-only
 
 # Worker WASM build check
 cargo check -p event-checkin-worker --target wasm32-unknown-unknown
@@ -202,6 +215,23 @@ cargo clippy --all-targets
 - **Quiz-gated claim** — Attendees complete quiz before claiming NFT badge
 - **Landing page** — Public marketing page with interactive swimlane (3-role walkthrough), waitlist, FAQ, social proof
 - **Rust Adventures** — Educational tile-based game teaching Solana/Rust concepts
+- **Security hardened** — Cookie Secure flag, secret redaction in Debug, attendee-validated adventure saves
+- **Automated E2E tests** — 7-test devnet suite in `scripts/e2e/test_devnet.sh`
+
+## Security
+
+| Area | Status | Notes |
+|------|--------|-------|
+| Auth | ✅ Secure | JWT HMAC-SHA256, constant-time comparison, 24h expiry |
+| Cookie | ✅ Secure | `HttpOnly; Secure; SameSite=Lax; Path=/api` |
+| Admin routes | ✅ Secure | `require_auth` middleware, staff email verification |
+| Claim gates | ✅ Secure | Sequential check-in → quiz → adventure → mint, no bypass |
+| Solana RPC | ✅ Secure | Hardcoded method, serde serialization, no user-controlled params |
+| Secrets | ✅ Secure | All via `env.secret()`, redacted from Debug output |
+| Double-claim | ⚠️ Deferred | KV dedup lock recommended before high-traffic events |
+| JWT revocation | ⚠️ Deferred | KV blacklist recommended for compromised tokens |
+
+See `.handovers/025_security_audit_e2e_nft_config.md` for full audit findings.
 
 ## Roles & Access Control
 
@@ -226,6 +256,20 @@ See **[DISCUSSION.md](./DISCUSSION.md)** for the full architecture direction and
 | **3b** | USDC refund transfer | ✅ Done |
 | **4** | Quiz-gated claim flow | ✅ Done |
 | **5** | Multi-event management | ✅ Done |
-| **6** | SOL + USDC refund on claim (on-chain) | Planned |
+| **5b** | Adventure-gated claim flow | ✅ Done |
+| **6** | Security audit + fixes | ✅ Done |
+| **7** | NFT config + production deployment | 🔴 In Progress |
+| **8** | SOL + USDC refund on claim (on-chain) | Planned |
+
+### NFT Config Setup (Phase 7)
+
+Before claim/mint works in production:
+
+1. **Upload badge image** → Arweave/IPFS → `nft_image_url`
+2. **Create metadata JSON** → upload → `nft_metadata_uri`
+3. **Set `HELIUS_API_KEY`** → `wrangler secret put HELIUS_API_KEY`
+4. **Configure event** via Admin UI → fill NFT fields
+
+See `.issues/008_nft_config_and_production_readiness.md` for full checklist.
 
 Implementation details in [`.handovers/014_solana_integration_plan.md`](./.handovers/014_solana_integration_plan.md).

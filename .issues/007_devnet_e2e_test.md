@@ -1,6 +1,6 @@
 # Issue 007: Devnet E2E Test + Helius API Bug Fix
 
-## Status: In Progress
+## Status: ✅ Automated Tests Pass — Manual Tests Pending
 
 ## Critical Bug Found & Fixed
 
@@ -48,9 +48,17 @@ The Helius `mintCompressedNft` RPC was **failing silently** in production becaus
 - [ ] **Check-in** — Staff scans QR code → attendee marked in Sheet
 - [ ] **Claim link** — Attendee receives `https://...claim/{token}`
 - [ ] **Quiz** — Attendee passes quiz
+- [ ] **Adventure** — Attendee completes required adventure levels
 - [ ] **Wallet connect** — Attendee enters Solana wallet address
 - [ ] **Mint** — Worker calls Helius `mintCompressedNft` → cNFT minted
 - [ ] **Verify** — Asset appears on [Solana Explorer (devnet)](https://explorer.solana.com?cluster=devnet)
+
+### Automated E2E Script (`scripts/e2e/test_devnet.sh`)
+All 7 automated tests pass as of `a0d7cba`. See handover 025 for details.
+
+## Related
+- Handover 025 — Security audit + E2E test script
+- Issue 008 — NFT config + production readiness
 
 ### Demo Script for CTO
 
