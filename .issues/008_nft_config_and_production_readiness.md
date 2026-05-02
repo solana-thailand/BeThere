@@ -114,7 +114,7 @@ The response should include `"nft_available": true` when all config is set.
 - [x] `required_levels` logic fix
 - [x] Cookie `Secure` flag
 - [x] Secret redaction in Debug output
-- [ ] KV-based claim dedup lock (prevent double-claim race condition)
+- [x] KV-based claim dedup lock (prevent double-claim race condition) — implemented in `worker/src/handlers/claim.rs`
 - [ ] JWT revocation mechanism (optional, phase 2)
 
 ### Infrastructure
@@ -178,9 +178,28 @@ The response should include `"nft_available": true` when all config is set.
 | `adventure_enabled` | Admin → Adventure Config | Toggle adventure gate |
 | `required_levels` | Admin → Adventure Config | Levels to complete for gate |
 
+## Future Consideration: `solana-keychain`
+
+[`solana-keychain`](https://github.com/solana-foundation/solana-keychain) is a unified Solana transaction signing library (Rust + TypeScript) with backends for AWS KMS, GCP KMS, Vault, Fireblocks, Turnkey, Privy, etc. **Audited by Accretion.**
+
+**Not needed today** — BeThere delegates all signing to Helius (`mintCompressedNft` JSON-RPC). BeThere never signs transactions itself.
+
+**When to consider adding it:**
+
+| Scenario | Needed? |
+|----------|----------|
+| Keep using Helius `mintCompressedNft` | ❌ No — Helius signs for you |
+| Platform-managed refund wallet (sign SOL/USDC transfers) | ✅ Yes — need to sign transfers |
+| Self-hosted Bubblegum `mint_v2` (cut Helius dependency) | ✅ Yes — you'd sign `mint_v2` yourself |
+| Organizer deposits held in platform vault | ✅ Yes — AWS KMS or Vault backend for treasury key |
+| Enterprise organizer key management | ✅ Yes — multiple KMS backends |
+
+Rust crate: `solana-keychain` (v1.0.1, feature-gated, async, `wasm32` compatible).
+
 ## Related
 
 - Handover 025 — Security audit + E2E test
+- Handover 026 — cNFT mint fix + E2E cost analysis
 - Issue 007 — Devnet E2E test
 - Issue 006 — Rust Adventures design
 - Handover 014 — Solana integration plan
