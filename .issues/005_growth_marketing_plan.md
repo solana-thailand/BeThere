@@ -120,7 +120,7 @@ The product is technically mature (multi-event, QR scanner, claim page, quiz-gat
 | 1.2 | Add Cloudflare Web Analytics snippet | Medium | Low | Code change |
 | 1.3 | Create a 30-60 second demo GIF/video of the full flow | High | Medium | Asset file |
 | 1.4 | Add demo GIF above the fold in hero section | High | Low | Code change |
-| 1.5 | Build `/demo` self-serve demo route (devnet) | **Highest** | Medium | New page |
+| ~~1.5~~ | ~~Build `/demo` self-serve demo route (devnet)~~ | ~~Highest~~ | ~~Medium~~ | ~~New page~~ won't-do: swimlane on landing page covers this |
 | 1.6 | Add "Try Demo" CTA button to hero | High | Low | Code change |
 | 1.7 | Add FAQ section to landing page | Medium | Low | Code change |
 
@@ -239,7 +239,7 @@ Showed up, proved I was there, got my deposit back. On-chain.
 ### Recommended CTA Changes
 | Current | Proposed | Reason |
 |---------|----------|--------|
-| "Get Started" → /login | "Try Free Demo" → /demo | Lower friction |
+| "Get Started" → /login | ~~"Try Free Demo" → /demo~~ | ~~Lower friction~~ won't-do: swimlane on landing page covers the demo experience |
 | "How It Works" → #how-it-works | Keep as-is | Good anchor |
 | — | Add "Watch 60s Demo" → video | Visual learners |
 
@@ -284,7 +284,7 @@ Code changes ranked by growth impact:
 
 | Priority | Item | Issue Ref |
 |----------|------|-----------|
-| 🔴 P0 | `/demo` self-serve demo route | New page |
+| ~~🔴 P0~~ | ~~`/demo` self-serve demo route~~ | ~~New page~~ won't-do: swimlane on landing page covers this |
 | 🔴 P0 | SEO meta tags (og:image, description) | Landing page edit |
 | 🔴 P0 | Demo GIF/video embedded in hero | Landing page edit |
 | 🔴 P0 | "Try Demo" CTA button in hero | Landing page edit |

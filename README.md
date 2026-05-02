@@ -187,10 +187,13 @@ cargo test
 cargo test -p event-checkin-domain   # Shared types, QR logic
 cargo test -p event-checkin-worker   # Crypto, auth, sheets, events
 
-# E2E devnet test suite (requires worker/.dev.vars with HELIUS_API_KEY)
+# Full 10-step E2E test (requires running worker + worker/.dev.vars with HELIUS_API_KEY)
+./scripts/e2e/test_full_e2e.sh
+
+# Devnet API test suite (7 tests, no browser needed)
 ./scripts/e2e/test_devnet.sh
 
-# E2E mint-only test
+# Mint-only test (single cNFT mint on devnet)
 ./scripts/e2e/test_devnet.sh --mint-only
 
 # Worker WASM build check
@@ -216,7 +219,7 @@ cargo clippy --all-targets
 - **Landing page** — Public marketing page with interactive swimlane (3-role walkthrough), waitlist, FAQ, social proof
 - **Rust Adventures** — Educational tile-based game teaching Solana/Rust concepts
 - **Security hardened** — Cookie Secure flag, secret redaction in Debug, attendee-validated adventure saves
-- **Automated E2E tests** — 7-test devnet suite in `scripts/e2e/test_devnet.sh`
+- **Automated E2E tests** — 10-step full E2E suite (`scripts/e2e/test_full_e2e.sh`) + 7-test devnet suite
 
 ## Security
 
@@ -226,7 +229,7 @@ cargo clippy --all-targets
 | Cookie | ✅ Secure | `HttpOnly; Secure; SameSite=Lax; Path=/api` |
 | Admin routes | ✅ Secure | `require_auth` middleware, staff email verification |
 | Claim gates | ✅ Secure | Sequential check-in → quiz → adventure → mint, no bypass |
-| Solana RPC | ✅ Secure | Hardcoded method, serde serialization, no user-controlled params |
+| Solana RPC | ✅ Secure | Hardcoded method, serde serialization, null-safe deserialization, no user-controlled params |
 | Secrets | ✅ Secure | All via `env.secret()`, redacted from Debug output |
 | Double-claim | ⚠️ Deferred | KV dedup lock recommended before high-traffic events |
 | JWT revocation | ⚠️ Deferred | KV blacklist recommended for compromised tokens |
@@ -258,7 +261,7 @@ See **[DISCUSSION.md](./DISCUSSION.md)** for the full architecture direction and
 | **5** | Multi-event management | ✅ Done |
 | **5b** | Adventure-gated claim flow | ✅ Done |
 | **6** | Security audit + fixes | ✅ Done |
-| **7** | NFT config + production deployment | 🔴 In Progress |
+| **7** | NFT config + production deployment | 🟡 In Progress (devnet cNFT working, mainnet deferred) |
 | **8** | SOL + USDC refund on claim (on-chain) | Planned |
 
 ### NFT Config Setup (Phase 7)

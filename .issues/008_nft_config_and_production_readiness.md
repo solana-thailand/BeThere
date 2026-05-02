@@ -2,6 +2,15 @@
 
 ## Status: In Progress
 
+## Production cNFT Strategy
+
+> **Decision:** The production system can mint cNFTs on **devnet** while the main check-in/refund system runs on mainnet. This means:
+> - Attendees get real Solana devnet cNFT badges (free, no real SOL cost)
+> - The platform itself is production-grade (real auth, real Sheets, real QR scanning)
+> - Mainnet cNFT minting is deferred to a future phase
+> - `HELIUS_API_KEY` should point to devnet RPC (`https://devnet.helius-rpc.com`) for now
+> - NFT image/metadata URLs must be publicly accessible (not localhost)
+
 ## Overview
 
 Before the BeThere event platform can go to production, the NFT config must be set up and the remaining security items from the audit (handover 025) must be addressed.
