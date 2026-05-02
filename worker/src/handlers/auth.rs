@@ -89,8 +89,9 @@ pub async fn auth_callback(
     // Set HttpOnly cookie for browser-based auth. The frontend calls GET /api/auth/me
     // which reads the JWT from this cookie (no localStorage or URL token passing needed).
     // Cookie is scoped to /api so it's only sent on API requests.
-    let http_only_cookie =
-        format!("event_checkin_token={token}; HttpOnly; SameSite=Lax; Path=/api; Max-Age=86400");
+    let http_only_cookie = format!(
+        "event_checkin_token={token}; HttpOnly; Secure; SameSite=Lax; Path=/api; Max-Age=86400"
+    );
 
     let redirect_url = "/staff".to_string();
     let mut response = Redirect::to(&redirect_url).into_response();
@@ -151,8 +152,8 @@ pub async fn auth_me(
 /// from earlier development iterations.
 #[worker::send]
 pub async fn auth_logout() -> Response {
-    let cookie_api = "event_checkin_token=; HttpOnly; SameSite=Lax; Path=/api; Max-Age=0";
-    let cookie_root = "event_checkin_token=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0";
+    let cookie_api = "event_checkin_token=; HttpOnly; Secure; SameSite=Lax; Path=/api; Max-Age=0";
+    let cookie_root = "event_checkin_token=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0";
 
     let mut headers = axum::http::HeaderMap::new();
     if let Ok(v) = HeaderValue::from_str(cookie_api) {

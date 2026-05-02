@@ -1,17 +1,39 @@
+use std::fmt;
+
 use serde::Deserialize;
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Clone, Deserialize)]
 pub struct GoogleOAuthConfig {
     pub client_id: String,
     pub client_secret: String,
     pub redirect_uri: String,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+impl fmt::Debug for GoogleOAuthConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("GoogleOAuthConfig")
+            .field("client_id", &self.client_id)
+            .field("client_secret", &"***REDACTED***")
+            .field("redirect_uri", &self.redirect_uri)
+            .finish()
+    }
+}
+
+#[derive(Clone, Deserialize)]
 pub struct GoogleServiceAccountConfig {
     pub client_email: String,
     pub private_key: String,
     pub token_uri: String,
+}
+
+impl fmt::Debug for GoogleServiceAccountConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("GoogleServiceAccountConfig")
+            .field("client_email", &self.client_email)
+            .field("private_key", &"***REDACTED***")
+            .field("token_uri", &self.token_uri)
+            .finish()
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -21,7 +43,7 @@ pub struct SheetsConfig {
     pub staff_sheet_name: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct AppConfig {
     pub google_oauth: GoogleOAuthConfig,
     pub service_account: GoogleServiceAccountConfig,
@@ -56,6 +78,33 @@ pub struct AppConfig {
     pub super_admin_emails: Vec<String>,
     pub host: String,
     pub port: u16,
+}
+
+impl fmt::Debug for AppConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("AppConfig")
+            .field("google_oauth", &self.google_oauth)
+            .field("service_account", &self.service_account)
+            .field("sheets", &self.sheets)
+            .field("jwt_secret", &"***REDACTED***")
+            .field("staff_emails", &self.staff_emails)
+            .field("server_url", &self.server_url)
+            .field("claim_base_url", &self.claim_base_url)
+            .field("helius_rpc_url", &self.helius_rpc_url)
+            .field("helius_api_key", &"***REDACTED***")
+            .field("nft_collection_mint", &self.nft_collection_mint)
+            .field("nft_metadata_uri", &self.nft_metadata_uri)
+            .field("nft_image_url", &self.nft_image_url)
+            .field("event_name", &self.event_name)
+            .field("event_tagline", &self.event_tagline)
+            .field("event_link", &self.event_link)
+            .field("event_start_ms", &self.event_start_ms)
+            .field("event_end_ms", &self.event_end_ms)
+            .field("super_admin_emails", &self.super_admin_emails)
+            .field("host", &self.host)
+            .field("port", &self.port)
+            .finish()
+    }
 }
 
 impl AppConfig {

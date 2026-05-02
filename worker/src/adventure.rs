@@ -133,7 +133,10 @@ pub async fn save_level_completion(
     progress.total_moves = progress.scores.values().map(|s| s.moves).sum();
     progress.total_time_seconds = progress.scores.values().map(|s| s.time_seconds).sum();
 
-    // Check if adventure is now passed
+    // Check if adventure is now passed.
+    // If required_levels is non-empty, the attendee must complete those specific levels.
+    // If empty (config exists but no required_level set), mark passed when any level is completed
+    // as a fallback — the get_adventure_status function re-validates against config.
     if !required_levels.is_empty() {
         let all_done = required_levels
             .iter()
@@ -142,6 +145,11 @@ pub async fn save_level_completion(
             progress.passed = true;
             progress.passed_at = Some(Utc::now().to_rfc3339());
         }
+    } else if !progress.levels_completed.is_empty() && !progress.passed {
+        // No specific required_levels list — mark passed when at least one level is done.
+        // This covers the case where adventure is enabled but required_level is None.
+        progress.passed = true;
+        progress.passed_at = Some(Utc::now().to_rfc3339());
     }
 
     progress.last_played_at = Some(Utc::now().to_rfc3339());

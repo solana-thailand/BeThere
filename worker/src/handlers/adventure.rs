@@ -75,6 +75,9 @@ pub async fn get_adventure_status(
 
 /// POST /api/adventure/{token}/save
 /// Save level completion progress.
+///
+/// Security: validates that the claim token belongs to a checked-in attendee
+/// before saving progress. Mirrors the quiz handler's validation pattern.
 #[worker::send]
 pub async fn save_adventure_progress(
     State(state): State<AppState>,
@@ -98,6 +101,32 @@ pub async fn save_adventure_progress(
         Err(e) => return Json(json!({ "success": false, "error": e })),
     };
 
+    // Verify claim token belongs to a checked-in attendee
+    match crate::sheets::get_attendee_by_claim_token(
+        &token,
+        &state,
+        &event.sheet_id,
+        &event.sheet_name,
+    )
+    .await
+    {
+        Ok(Some(_)) => {} // valid checked-in attendee
+        Ok(None) => {
+            tracing::warn!("adventure save: invalid claim token {token}");
+            return Json(json!({
+                "success": false,
+                "error": "invalid claim token — you must be checked in first",
+            }));
+        }
+        Err(ref e) => {
+            tracing::error!("adventure save: failed to look up claim token {token}: {e}");
+            return Json(json!({
+                "success": false,
+                "error": "failed to verify claim token",
+            }));
+        }
+    }
+
     let kv = match state.events_kv.as_ref().or(state.quiz_kv.as_ref()) {
         Some(kv) => kv,
         None => {
@@ -114,11 +143,15 @@ pub async fn save_adventure_progress(
         Err(e) => return Json(json!({ "success": false, "error": e })),
     };
 
-    // Determine required level IDs (for now, use configured required_level or empty)
+    // Determine required level IDs from config.
+    // If `required_level` is set (e.g., 1), the attendee must complete level_01 through that level.
+    // If not set, they must complete all levels.
     let required_levels: Vec<String> = match &config {
-        Some(_c) => {
-            // Will be populated by level data — for now empty means all must be done
-            vec![]
+        Some(c) if c.enabled => {
+            match c.required_level {
+                Some(n) => (1..=n).map(|i| format!("level_{i:02}")).collect(),
+                None => vec![], // empty = all levels required (handled in save_level_completion)
+            }
         }
         _ => vec![],
     };
