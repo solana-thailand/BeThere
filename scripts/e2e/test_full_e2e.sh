@@ -210,6 +210,20 @@ else:
 if [ -z "$FIRST_UNCHECKED_ID" ]; then
     info "No unchecked attendees found, will try with existing claim token"
     SKIP_CHECKIN=true
+
+    # Count checked-in attendees for a clearer message
+    TOTAL_CHECKED=$(echo "$ATTENDEES_RESPONSE" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)['data']['stats']
+print(d.get('total_checked_in', '?'))
+" 2>/dev/null || echo "?")
+    TOTAL_CLAIMED=$(echo "$ATTENDEES_RESPONSE" | python3 -c "
+import sys, json
+attendees = json.load(sys.stdin)['data']['attendees']
+claimed = sum(1 for a in attendees if a.get('claimed_at'))
+print(claimed)
+" 2>/dev/null || echo "?")
+    info "Checked in: $TOTAL_CHECKED, Already claimed: $TOTAL_CLAIMED"
 fi
 
 # ============================================================================
@@ -219,9 +233,21 @@ section "Step 4: Check-in Attendee"
 
 if [ "$SKIP_CHECKIN" = true ]; then
     if [ -z "${CLAIM_TOKEN:-}" ]; then
-        # Try to find an existing checked-in attendee with a claim token
-        # Prefer those without a locked wallet (solana_address column empty)
+        # Priority 1: Find checked-in but NOT yet claimed attendee
         CLAIM_TOKEN=$(echo "$ATTENDEES_RESPONSE" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)['data']['attendees']
+for a in d:
+    if a.get('checked_in_at') is not None and a.get('claim_token') and not a.get('claimed_at'):
+        print(a['claim_token'])
+        break
+else:
+    print('')
+" 2>/dev/null || echo "")
+
+        # Priority 2: Fall back to any checked-in attendee (even if claimed)
+        if [ -z "$CLAIM_TOKEN" ]; then
+            CLAIM_TOKEN=$(echo "$ATTENDEES_RESPONSE" | python3 -c "
 import sys, json
 d = json.load(sys.stdin)['data']['attendees']
 for a in d:
@@ -231,20 +257,30 @@ for a in d:
 else:
     print('')
 " 2>/dev/null || echo "")
+            if [ -n "$CLAIM_TOKEN" ]; then
+                info "⚠️  All checked-in attendees are already claimed — mint will show 'already claimed'"
+            fi
+        fi
     fi
 
     if [ -n "$CLAIM_TOKEN" ]; then
         # Check if this attendee has a locked wallet — if so, use that wallet
         CLAIM_CHECK=$(curl -s "$BASE_URL/api/claim/$CLAIM_TOKEN?event_id=$EVENT_ID")
         LOCKED_WALLET=$(echo "$CLAIM_CHECK" | python3 -c "import sys,json; d=json.load(sys.stdin).get('data',{}); print(d.get('locked_wallet',''))" 2>/dev/null || echo "")
+        ALREADY_CLAIMED=$(echo "$CLAIM_CHECK" | python3 -c "import sys,json; d=json.load(sys.stdin).get('data',{}); print(d.get('claimed', False))" 2>/dev/null || echo "False")
         if [ -n "$LOCKED_WALLET" ] && [ "$LOCKED_WALLET" != "None" ] && [ "$LOCKED_WALLET" != "" ]; then
             info "Attendee has locked wallet: $LOCKED_WALLET — using it"
             WALLET="$LOCKED_WALLET"
         fi
+        if [ "$ALREADY_CLAIMED" = "True" ]; then
+            info "⚠️  This attendee already claimed — test will verify double-claim protection"
+        fi
         skip "Check-in — reusing existing claim token: ${CLAIM_TOKEN:0:8}..."
     else
-        fail "No attendees to check in and no claim token provided"
-        echo "   Usage: CLAIM_TOKEN=xxx bash scripts/e2e/test_full_e2e.sh --skip-checkin"
+        fail "No attendees available — all need check-in first or add new attendees to sheet"
+        echo "   Options:"
+        echo "     1. Add new attendees to the Google Sheet and re-run"
+        echo "     2. Provide a claim token: CLAIM_TOKEN=xxx bash scripts/e2e/test_full_e2e.sh --skip-checkin"
         exit 1
     fi
 else
