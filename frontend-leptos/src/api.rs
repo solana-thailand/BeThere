@@ -614,6 +614,12 @@ pub struct ClaimLookupData {
     /// Quiz requirement status for this attendee's claim.
     #[serde(default)]
     pub quiz_status: QuizStatus,
+    /// Total number of attendees checked in for this event.
+    #[serde(default)]
+    pub total_checked_in: usize,
+    /// Total number of attendees who have claimed their NFT.
+    #[serde(default)]
+    pub total_claimed: usize,
 }
 
 /// Response data for POST /api/claim/{token} — NFT mint result.

@@ -118,6 +118,26 @@ pub async fn get_attendee_by_claim_token(
         .find(|a| a.claim_token.as_deref() == Some(claim_token)))
 }
 
+/// Look up an attendee by claim token and return claim counts in a single Sheets API call.
+/// Returns `(attendee, total_checked_in, total_claimed)`.
+pub async fn get_attendee_with_claim_counts(
+    claim_token: &str,
+    state: &AppState,
+    sheet_id: &str,
+    sheet_name: &str,
+) -> Result<(Option<Attendee>, usize, usize), String> {
+    let attendees: Vec<Attendee> = get_attendees(state, sheet_id, sheet_name).await?;
+    let total_checked_in = attendees
+        .iter()
+        .filter(|a| a.checked_in_at.is_some())
+        .count();
+    let total_claimed = attendees.iter().filter(|a| a.claimed_at.is_some()).count();
+    let attendee = attendees
+        .into_iter()
+        .find(|a| a.claim_token.as_deref() == Some(claim_token));
+    Ok((attendee, total_checked_in, total_claimed))
+}
+
 // ---------------------------------------------------------------------------
 // Staff queries
 // ---------------------------------------------------------------------------

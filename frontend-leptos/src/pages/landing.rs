@@ -458,15 +458,15 @@ pub fn Landing() -> impl IntoView {
                     "Put down a small deposit to reserve your spot. Show up, prove you paid attention with a quick quiz, and get every cent back — plus a digital badge you own forever. Don't show up? The organizer keeps your deposit. Simple."
                 </p>
                 <div style="display:flex;flex-wrap:wrap;gap:0.75rem;justify-content:center;">
-                    <a href="#waitlist" class="btn btn-primary" style="padding:0.85rem 2rem;font-size:1rem;text-decoration:none;">
+                    <A href="/adventure" attr:class="btn btn-primary" attr:style="padding:0.85rem 2rem;font-size:1rem;text-decoration:none;display:inline-flex;align-items:center;gap:0.5rem;">
+                        "Play Demo" "🎮"
+                    </A>
+                    <a href="#waitlist" class="btn btn-outline" style="padding:0.85rem 2rem;font-size:1rem;text-decoration:none;">
                         "Join Waitlist"
                     </a>
                     <A href="/login" attr:class="btn btn-outline" attr:style="padding:0.85rem 2rem;font-size:1rem;">
                         "Sign In"
                     </A>
-                    <a href="#how-it-works" class="btn btn-outline" style="padding:0.85rem 2rem;font-size:1rem;">
-                        "How It Works"
-                    </a>
                 </div>
             </section>
 

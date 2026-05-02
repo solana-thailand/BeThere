@@ -155,30 +155,31 @@ pub async fn get_claim(
         }
     };
 
-    let attendee = match crate::sheets::get_attendee_by_claim_token(
-        &token,
-        &state,
-        &event.sheet_id,
-        &event.sheet_name,
-    )
-    .await
-    {
-        Ok(Some(a)) => a,
-        Ok(None) => {
-            tracing::warn!("claim lookup: no attendee found for token {token}");
-            return Json(json!({
-                "success": false,
-                "error": "claim token not found",
-            }));
-        }
-        Err(ref e) => {
-            tracing::error!("claim lookup failed for token {token}: {e}");
-            return Json(json!({
-                "success": false,
-                "error": format!("failed to look up claim: {e}"),
-            }));
-        }
-    };
+    let (attendee, total_checked_in, total_claimed) =
+        match crate::sheets::get_attendee_with_claim_counts(
+            &token,
+            &state,
+            &event.sheet_id,
+            &event.sheet_name,
+        )
+        .await
+        {
+            Ok((Some(a), checked_in, claimed)) => (a, checked_in, claimed),
+            Ok((None, _, _)) => {
+                tracing::warn!("claim lookup: no attendee found for token {token}");
+                return Json(json!({
+                    "success": false,
+                    "error": "claim token not found",
+                }));
+            }
+            Err(ref e) => {
+                tracing::error!("claim lookup failed for token {token}: {e}");
+                return Json(json!({
+                    "success": false,
+                    "error": format!("failed to look up claim: {e}"),
+                }));
+            }
+        };
 
     let display_name = attendee.display_name().to_string();
     let checked_in_at = attendee.checked_in_at.clone().unwrap_or_default();
@@ -231,6 +232,8 @@ pub async fn get_claim(
         locked_wallet,
         event: api_event,
         quiz_status,
+        total_checked_in,
+        total_claimed,
     };
 
     Json(json!({

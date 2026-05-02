@@ -828,6 +828,10 @@ pub fn Claim() -> impl IntoView {
     // Share feedback
     let (share_copied, set_share_copied) = signal(false);
 
+    // Claim counter (fetched from backend on initial lookup)
+    let (total_checked_in, set_total_checked_in) = signal(0usize);
+    let (total_claimed, set_total_claimed) = signal(0usize);
+
     // Extract token from URL params and fetch claim info on mount
     Effect::new(move |_| {
         let token = match params.get() {
@@ -857,6 +861,8 @@ pub fn Claim() -> impl IntoView {
                     set_evt_link.set(data.event.event_link.clone());
                     set_evt_start.set(data.event.event_start_ms);
                     set_evt_end.set(data.event.event_end_ms);
+                    set_total_checked_in.set(data.total_checked_in);
+                    set_total_claimed.set(data.total_claimed);
 
                     if data.claimed {
                         set_state.set(ClaimState::AlreadyClaimed(data));
@@ -988,6 +994,8 @@ pub fn Claim() -> impl IntoView {
                         mint_data.signature
                     );
                     set_state.set(ClaimState::Success(mint_data));
+                    // Increment claim counter for display
+                    set_total_claimed.update(|n| *n += 1);
                     // Launch confetti celebration!
                     launch_confetti();
                 }
@@ -1436,6 +1444,27 @@ pub fn Claim() -> impl IntoView {
                                             "View NFT Asset"
                                         </a>
                                     </div>
+
+                                    // Claim counter — social proof
+                                    {move || {
+                                        let checked_in = total_checked_in.get();
+                                        let claimed = total_claimed.get();
+                                        if checked_in > 0 {
+                                            view! {
+                                                <div class="claim-counter">
+                                                    <span class="claim-counter-badge">"🏆"</span>
+                                                    <span class="claim-counter-text">
+                                                        <strong>{claimed}</strong>
+                                                        " of "
+                                                        <strong>{checked_in}</strong>
+                                                        " attendees claimed their NFT"
+                                                    </span>
+                                                </div>
+                                            }.into_any()
+                                        } else {
+                                            view! { <div></div> }.into_any()
+                                        }
+                                    }}
 
                                     // Share section with tweet preview
                                     <div class="claim-share-section">

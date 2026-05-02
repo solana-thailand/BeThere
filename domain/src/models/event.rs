@@ -167,6 +167,7 @@ impl EventConfig {
 
     /// Resolve the NFT name, expanding `{event_name}` placeholder.
     /// Truncates to 32 characters (Bubblegum/Metaplex `MetadataNameTooLong` limit).
+    /// Prefers keeping the prefix intact and truncating the event name portion.
     pub fn nft_name(&self) -> String {
         let resolved = if self.nft_name_template.is_empty() {
             format!("BeThere - {}", self.name)
@@ -176,10 +177,25 @@ impl EventConfig {
         if resolved.len() <= 32 {
             return resolved;
         }
-        // Truncate to 29 chars + "..." (total 32)
-        let mut truncated: String = resolved.chars().take(29).collect();
-        truncated.push_str("...");
-        truncated
+        // Smart truncation: keep prefix before {event_name}, truncate event name portion
+        let prefix = if self.nft_name_template.is_empty() {
+            "BeThere - "
+        } else {
+            match self.nft_name_template.find("{event_name}") {
+                Some(idx) => &self.nft_name_template[..idx],
+                None => "",
+            }
+        };
+        let budget = 32usize.saturating_sub(prefix.len()).saturating_sub(3); // 3 for "..."
+        if budget > 0 {
+            let truncated_name: String = self.name.chars().take(budget).collect();
+            format!("{prefix}{truncated_name}...")
+        } else {
+            // Prefix itself is too long — fall back to simple truncation
+            let mut truncated: String = resolved.chars().take(29).collect();
+            truncated.push_str("...");
+            truncated
+        }
     }
 
     /// Resolve the NFT description, expanding `{event_name}` placeholder.
