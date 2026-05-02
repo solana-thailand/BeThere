@@ -5618,3 +5618,156 @@ nav a.active {
     color: var(--success);
     cursor: default;
 }
+
+/* ===== Confetti Animation ===== */
+
+@keyframes confetti-fall {
+    0% {
+        transform: translateY(-10px) translateX(0) rotate(0deg);
+        opacity: 1;
+    }
+    75% {
+        opacity: 1;
+    }
+    100% {
+        transform: translateY(100vh) translateX(var(--drift))
+            rotate(var(--rotation));
+        opacity: 0;
+    }
+}
+
+@keyframes confetti-sway {
+    0%,
+    100% {
+        transform: translateX(0);
+    }
+    25% {
+        transform: translateX(calc(var(--sway) * -1));
+    }
+    75% {
+        transform: translateX(var(--sway));
+    }
+}
+
+.confetti-container {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 9999;
+    overflow: hidden;
+}
+
+.confetti-particle {
+    position: absolute;
+    top: -10px;
+    animation:
+        confetti-fall var(--duration) ease-in forwards,
+        confetti-sway 3s ease-in-out infinite;
+}
+
+/* ===== Claim Page: Share Section ===== */
+
+.claim-share-section {
+    margin-top: 1.5rem;
+    padding: 1.25rem;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    text-align: center;
+}
+
+.claim-share-heading {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 600;
+}
+
+.claim-share-preview {
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    margin-bottom: 1rem;
+    text-align: left;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    line-height: 1.5;
+}
+
+.claim-share-preview-name {
+    color: var(--text-primary);
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+}
+
+.claim-share-buttons {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.claim-share-x-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    flex: 1;
+    padding: 0.75rem 1rem;
+    background: #000;
+    color: #fff;
+    border: 1px solid #333;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-decoration: none;
+}
+
+.claim-share-x-btn:hover {
+    border-color: #1da1f2;
+    box-shadow: 0 0 20px rgba(29, 161, 242, 0.15);
+}
+
+.claim-share-x-btn svg {
+    width: 18px;
+    height: 18px;
+}
+
+.claim-share-copy-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.75rem;
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+    min-width: 44px;
+}
+
+.claim-share-copy-btn:hover {
+    border-color: var(--accent);
+    color: var(--text-primary);
+}
+
+.claim-share-copy-btn svg {
+    width: 18px;
+    height: 18px;
+}
+
+.claim-share-copied {
+    color: var(--success);
+    font-size: 0.75rem;
+    margin-top: 0.5rem;
+    opacity: 0;
+    transition: opacity 0.3s;
+}
+
+.claim-share-copied.visible {
+    opacity: 1;
+}

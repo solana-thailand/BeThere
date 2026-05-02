@@ -38,6 +38,13 @@ extern "C" {
     fn copy_to_clipboard_js(text: &str) -> bool;
 }
 
+#[wasm_bindgen(module = "/js/confetti.js")]
+extern "C" {
+    /// Launch a burst of festive confetti particles across the viewport.
+    #[wasm_bindgen(js_name = "launchConfetti")]
+    fn launch_confetti();
+}
+
 // ---------------------------------------------------------------------------
 // Route params
 // ---------------------------------------------------------------------------
@@ -818,6 +825,9 @@ pub fn Claim() -> impl IntoView {
     let (evt_start, set_evt_start) = signal(0i64);
     let (evt_end, set_evt_end) = signal(0i64);
 
+    // Share feedback
+    let (share_copied, set_share_copied) = signal(false);
+
     // Extract token from URL params and fetch claim info on mount
     Effect::new(move |_| {
         let token = match params.get() {
@@ -978,6 +988,8 @@ pub fn Claim() -> impl IntoView {
                         mint_data.signature
                     );
                     set_state.set(ClaimState::Success(mint_data));
+                    // Launch confetti celebration!
+                    launch_confetti();
                 }
                 Err(e) => {
                     log::error!("[claim] mint failed: {e}");
@@ -1333,19 +1345,29 @@ pub fn Claim() -> impl IntoView {
                                 }
                             };
                             let asset_id_full = data.asset_id.clone();
-                            // Build Share to X URL with pre-filled tweet
+
+                            // Build share text & URL
                             let tweet_text = {
                                 let event = evt_name.get();
                                 if event.is_empty() {
-                                    "I just claimed my POAP NFT! 🎫✨\n\n#BeThere #Solana".to_string()
+                                    "I just claimed my attendance NFT on BeThere! 🎫✨\n\nProof I showed up. On-chain.\n\n#BeThere #Solana".to_string()
                                 } else {
-                                    format!("I just claimed my POAP at {event}! 🎫✨\n\n#BeThere #Solana")
+                                    format!("I just earned my POAP at {event}! 🎫✨\n\nShowed up, proved I was there, got my NFT badge.\n\n#BeThere #Solana")
                                 }
                             };
                             let share_to_x_url = format!(
                                 "https://twitter.com/intent/tweet?text={}",
                                 js_sys::encode_uri_component(&tweet_text)
                             );
+                            let claim_page_url = format!(
+                                "https://bethere.solana-thailand.workers.dev/claim/{}",
+                                match params.get() {
+                                    Ok(p) => p.token.unwrap_or_default(),
+                                    Err(_) => String::new(),
+                                }
+                            );
+                            let tweet_preview_text = tweet_text.clone();
+
                             view! {
                                 <div class="claim-success">
                                     <div class="claim-success-rings">
@@ -1358,7 +1380,7 @@ pub fn Claim() -> impl IntoView {
                                             </svg>
                                         </div>
                                     </div>
-                                    <h2>"NFT Claimed"</h2>
+                                    <h2>"NFT Claimed!"</h2>
 
                                     // Asset ID card
                                     <div class="claim-asset-card">
@@ -1394,6 +1416,8 @@ pub fn Claim() -> impl IntoView {
                                         </p>
                                         <p><strong>"Claimed:"</strong>" "{format_timestamp(&data.claimed_at)}</p>
                                     </div>
+
+                                    // Explorer links
                                     <div class="success-actions">
                                         <a
                                             href=explorer_url
@@ -1411,17 +1435,55 @@ pub fn Claim() -> impl IntoView {
                                         >
                                             "View NFT Asset"
                                         </a>
-                                        <a
-                                            href=share_to_x_url
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            class="btn btn-outline btn-block claim-share-x"
-                                        >
-                                            <svg viewBox="0 0 24 24" fill="currentColor">
-                                                <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
-                                            </svg>
-                                            "Share to X"
-                                        </a>
+                                    </div>
+
+                                    // Share section with tweet preview
+                                    <div class="claim-share-section">
+                                        <div class="claim-share-heading">"Share your achievement"</div>
+                                        <div class="claim-share-preview">
+                                            <div class="claim-share-preview-name">"BeThere ✦ @BeThere"</div>
+                                            {tweet_preview_text}
+                                        </div>
+                                        <div class="claim-share-buttons">
+                                            <a
+                                                href=share_to_x_url
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                class="claim-share-x-btn"
+                                            >
+                                                <svg viewBox="0 0 24 24" fill="currentColor">
+                                                    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                                                </svg>
+                                                "Post to X"
+                                            </a>
+                                            <button
+                                                class="claim-share-copy-btn"
+                                                type="button"
+                                                title="Copy claim link"
+                                                on:click=move |_| {
+                                                    let _ = copy_to_clipboard_js(&claim_page_url);
+                                                    set_share_copied.set(true);
+                                                    leptos::task::spawn_local(async move {
+                                                        gloo::timers::future::TimeoutFuture::new(2000).await;
+                                                        set_share_copied.set(false);
+                                                    });
+                                                }
+                                            >
+                                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+                                                    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+                                                </svg>
+                                            </button>
+                                        </div>
+                                        <div class={move || {
+                                            if share_copied.get() {
+                                                "claim-share-copied visible".to_string()
+                                            } else {
+                                                "claim-share-copied".to_string()
+                                            }
+                                        }}>
+                                            "Link copied!"
+                                        </div>
                                     </div>
                                 </div>
                             }
