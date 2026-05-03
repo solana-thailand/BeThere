@@ -195,9 +195,9 @@ pub async fn mint_compressed_nft(req: &MintRequest<'_>) -> Result<MintResult, St
         .ok_or_else(|| "helius rpc returned no assetId".to_string())?;
 
     tracing::info!(
-        "minted compressed nft: asset_id={} signature={}",
-        asset_id,
-        result.signature.as_deref().unwrap_or("pending")
+        asset_id = %asset_id,
+        signature = %result.signature.as_deref().unwrap_or("pending"),
+        "minted compressed nft"
     );
 
     Ok(MintResult {

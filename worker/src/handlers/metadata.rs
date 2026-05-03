@@ -20,7 +20,7 @@ pub async fn get_metadata(
     State(state): State<AppState>,
     Path(event_id): Path<String>,
 ) -> Json<serde_json::Value> {
-    tracing::info!("metadata request for event: {event_id}");
+    tracing::info!(event_id = %event_id, "metadata requested");
 
     let metadata = json!({
         "name": "BeThere Badge",

@@ -196,9 +196,10 @@ pub async fn create_event(kv: &KvStore, req: &CreateEventRequest) -> Result<Even
     save_event_index(kv, &index).await?;
 
     tracing::info!(
-        "event created: id={id} name='{}' sheet_id='{}'",
-        config.name,
-        config.sheet_id,
+        event_id = %id,
+        name = %config.name,
+        sheet_id = %config.sheet_id,
+        "event created"
     );
 
     Ok(config)
@@ -311,7 +312,7 @@ pub async fn update_event(
     }
     save_event_index(kv, &index).await?;
 
-    tracing::info!("event updated: id={id}");
+    tracing::info!(event_id = %id, "event updated");
 
     Ok(config)
 }
@@ -334,7 +335,7 @@ pub async fn archive_event(kv: &KvStore, id: &str) -> Result<(), String> {
     }
     save_event_index(kv, &index).await?;
 
-    tracing::info!("event archived: id={id}");
+    tracing::info!(event_id = %id, "event archived");
 
     Ok(())
 }
@@ -361,7 +362,7 @@ pub async fn seed_from_config(
         .find(|e| e.status == EventStatus::Active)
         && let Some(config) = get_event_config(kv, &meta.id).await?
     {
-        tracing::info!("seed: already have active event id={}", config.id);
+        tracing::info!(event_id = %config.id, "seed: already have active event");
         return Ok(config);
     }
 
@@ -444,8 +445,8 @@ pub async fn seed_from_config(
     save_event_index(kv, &index).await?;
 
     tracing::info!(
-        "seed: created default event from config name='{}'",
-        config.name,
+        name = %config.name,
+        "seed: created default event from config"
     );
 
     Ok(config)
@@ -596,7 +597,7 @@ pub async fn migrate_quiz_to_event(
 
     match existing {
         Some(_) => {
-            tracing::info!("migrate: destination '{dest_key}' already exists, skipping");
+            tracing::info!(dest_key = %dest_key, "migrate: destination already exists, skipping");
             Ok(MigrationResult {
                 migrated: false,
                 event_id: event_id.to_string(),
@@ -626,7 +627,7 @@ pub async fn migrate_quiz_to_event(
                 .await
                 .map_err(|e| format!("failed to write quiz data to '{dest_key}': {e:?}"))?;
 
-            tracing::info!("migrate: copied quiz data to '{dest_key}'");
+            tracing::info!(dest_key = %dest_key, "migrate: copied quiz data");
             Ok(MigrationResult {
                 migrated: true,
                 event_id: event_id.to_string(),

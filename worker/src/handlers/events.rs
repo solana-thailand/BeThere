@@ -37,7 +37,7 @@ pub async fn list_events(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
 ) -> Result<Json<serde_json::Value>, crate::error::WorkerError> {
-    tracing::info!("list events requested by {}", claims.email);
+    tracing::info!(staff_email = %claims.email, "list events requested");
 
     let kv = state.events_kv.as_ref().ok_or_else(|| {
         AppError::Internal(
@@ -46,7 +46,7 @@ pub async fn list_events(
     })?;
 
     let all_events = crate::event_store::list_events(kv).await.map_err(|e| {
-        tracing::error!("failed to list events: {e}");
+        tracing::error!(error = %e, "failed to list events");
         AppError::Internal(format!("failed to list events: {e}"))
     })?;
 
@@ -107,7 +107,7 @@ pub async fn seed_event(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
 ) -> Result<Json<serde_json::Value>, crate::error::WorkerError> {
-    tracing::info!("seed event requested by {}", claims.email);
+    tracing::info!(staff_email = %claims.email, "seed event requested");
 
     // Role check: SuperAdmin only
     let role = crate::auth::resolve_user_role(&claims.email, &state, None).await;
@@ -124,15 +124,15 @@ pub async fn seed_event(
     let config = crate::event_store::seed_from_config(kv, &state.config, &state)
         .await
         .map_err(|e| {
-            tracing::error!("failed to seed event: {e}");
+            tracing::error!(error = %e, "failed to seed event");
             AppError::Internal(e.to_string())
         })?;
 
     tracing::info!(
-        "event seeded: id={} name='{}' by {}",
-        config.id,
-        config.name,
-        claims.email,
+        event_id = %config.id,
+        event_name = %config.name,
+        staff_email = %claims.email,
+        "event seeded",
     );
 
     Ok(Json(json!({
@@ -157,7 +157,7 @@ pub async fn migrate_quiz(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
 ) -> Result<Json<serde_json::Value>, crate::error::WorkerError> {
-    tracing::info!("quiz migration requested by {}", claims.email);
+    tracing::info!(staff_email = %claims.email, "quiz migration requested");
 
     // Role check: SuperAdmin only
     let role = crate::auth::resolve_user_role(&claims.email, &state, None).await;
@@ -180,15 +180,15 @@ pub async fn migrate_quiz(
     let result = crate::event_store::migrate_quiz_to_event(events_kv, quiz_kv, "default")
         .await
         .map_err(|e| {
-            tracing::error!("failed to migrate quiz data: {e}");
+            tracing::error!(error = %e, "failed to migrate quiz data");
             AppError::Internal(e.to_string())
         })?;
 
     tracing::info!(
-        "quiz migration: event_id={} migrated={} by {}",
-        result.event_id,
-        result.migrated,
-        claims.email,
+        event_id = %result.event_id,
+        migrated = %result.migrated,
+        staff_email = %claims.email,
+        "quiz migration completed",
     );
 
     Ok(Json(json!({
@@ -214,9 +214,9 @@ pub async fn create_event(
     Json(body): Json<CreateEventRequest>,
 ) -> Result<Json<serde_json::Value>, crate::error::WorkerError> {
     tracing::info!(
-        "create event requested by {} — name='{}'",
-        claims.email,
-        body.name,
+        staff_email = %claims.email,
+        event_name = %body.name,
+        "create event requested",
     );
 
     // Role check: SuperAdmin or Organizer required
@@ -237,15 +237,15 @@ pub async fn create_event(
     let config = crate::event_store::create_event(kv, &body)
         .await
         .map_err(|e| {
-            tracing::error!("failed to create event: {e}");
+            tracing::error!(error = %e, "failed to create event");
             AppError::Internal(e.to_string())
         })?;
 
     tracing::info!(
-        "event created: id={} name='{}' by {}",
-        config.id,
-        config.name,
-        claims.email,
+        event_id = %config.id,
+        event_name = %config.name,
+        staff_email = %claims.email,
+        "event created",
     );
 
     Ok(Json(json!({
@@ -271,7 +271,7 @@ pub async fn get_event(
     Extension(claims): Extension<Claims>,
     Path(id): Path<String>,
 ) -> Result<Json<serde_json::Value>, crate::error::WorkerError> {
-    tracing::info!("get event '{}' requested by {}", id, claims.email);
+    tracing::info!(event_id = %id, staff_email = %claims.email, "get event requested");
 
     let kv = state
         .events_kv
@@ -281,7 +281,7 @@ pub async fn get_event(
     let config = crate::event_store::get_event(kv, &id)
         .await
         .map_err(|e| {
-            tracing::error!("failed to get event '{id}': {e}");
+            tracing::error!(event_id = %id, error = %e, "failed to get event");
             AppError::Internal(format!("failed to read event: {e}"))
         })?
         .ok_or_else(|| AppError::NotFound(format!("event '{id}' not found")))?;
@@ -295,10 +295,10 @@ pub async fn get_event(
 
     if !is_super_admin && !crate::event_store::has_event_access(&config, &claims.email) {
         tracing::warn!(
-            "get event denied: {} has no access to event '{}' ({})",
-            claims.email,
-            config.name,
-            config.id,
+            staff_email = %claims.email,
+            event_id = %config.id,
+            event_name = %config.name,
+            "get event denied: no access",
         );
         return Err(AppError::Forbidden(format!("you do not have access to event '{id}'")).into());
     }
@@ -324,7 +324,7 @@ pub async fn update_event(
     Path(id): Path<String>,
     Json(body): Json<UpdateEventRequest>,
 ) -> Result<Json<serde_json::Value>, crate::error::WorkerError> {
-    tracing::info!("update event '{}' requested by {}", id, claims.email);
+    tracing::info!(event_id = %id, staff_email = %claims.email, "update event requested");
 
     let kv = state
         .events_kv
@@ -335,7 +335,7 @@ pub async fn update_event(
     let existing_event = crate::event_store::get_event(kv, &id)
         .await
         .map_err(|e| {
-            tracing::error!("failed to fetch event '{id}' for role check: {e}");
+            tracing::error!(event_id = %id, error = %e, "failed to fetch event for role check");
             AppError::Internal(format!("failed to read event: {e}"))
         })?
         .ok_or_else(|| AppError::NotFound(format!("event '{id}' not found")))?;
@@ -351,15 +351,15 @@ pub async fn update_event(
     let config = crate::event_store::update_event(kv, &id, &body)
         .await
         .map_err(|e| {
-            tracing::error!("failed to update event '{id}': {e}");
+            tracing::error!(event_id = %id, error = %e, "failed to update event");
             AppError::Internal(e.to_string())
         })?;
 
     tracing::info!(
-        "event updated: id={} status={} by {}",
-        config.id,
-        config.status.as_str(),
-        claims.email,
+        event_id = %config.id,
+        status = %config.status.as_str(),
+        staff_email = %claims.email,
+        "event updated",
     );
 
     Ok(Json(json!({
@@ -387,7 +387,7 @@ pub async fn archive_event(
     Extension(claims): Extension<Claims>,
     Path(id): Path<String>,
 ) -> Result<Json<serde_json::Value>, crate::error::WorkerError> {
-    tracing::info!("archive event '{}' requested by {}", id, claims.email);
+    tracing::info!(event_id = %id, staff_email = %claims.email, "archive event requested");
 
     let kv = state
         .events_kv
@@ -398,7 +398,7 @@ pub async fn archive_event(
     let existing_event = crate::event_store::get_event(kv, &id)
         .await
         .map_err(|e| {
-            tracing::error!("failed to fetch event '{id}' for role check: {e}");
+            tracing::error!(event_id = %id, error = %e, "failed to fetch event for role check");
             AppError::Internal(format!("failed to read event: {e}"))
         })?
         .ok_or_else(|| AppError::NotFound(format!("event '{id}' not found")))?;
@@ -414,11 +414,11 @@ pub async fn archive_event(
     crate::event_store::archive_event(kv, &id)
         .await
         .map_err(|e| {
-            tracing::error!("failed to archive event '{id}': {e}");
+            tracing::error!(event_id = %id, error = %e, "failed to archive event");
             AppError::Internal(e.to_string())
         })?;
 
-    tracing::info!("event archived: id={id} by {}", claims.email);
+    tracing::info!(event_id = %id, staff_email = %claims.email, "event archived");
 
     Ok(Json(json!({
         "success": true,

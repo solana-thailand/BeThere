@@ -71,7 +71,7 @@ pub async fn post_claim(
 ) -> Result<Json<serde_json::Value>, crate::error::WorkerError> {
     // Validate wallet address format
     if let Err(e) = validate_wallet_address(&body.wallet_address) {
-        tracing::warn!("invalid wallet address for claim {token}: {e}");
+        tracing::warn!(claim_token = %token, error = %e, "invalid wallet address for claim");
         return Err(AppError::Validation(e).into());
     }
 

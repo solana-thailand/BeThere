@@ -41,7 +41,7 @@ pub(crate) async fn acquire_claim_lock(
         .map_err(|e| format!("claim lock read failed: {e:?}"))?;
 
     if existing.is_some() {
-        tracing::warn!("claim lock already held for token {token}");
+        tracing::warn!(claim_token = %token, "claim lock already held");
         return Err("claim is already being processed or has been completed".to_string());
     }
 
@@ -59,7 +59,7 @@ pub(crate) async fn acquire_claim_lock(
         .await
         .map_err(|e| format!("claim lock write failed: {e:?}"))?;
 
-    tracing::info!("claim lock acquired for token {token}");
+    tracing::info!(claim_token = %token, "claim lock acquired");
     Ok(())
 }
 
@@ -100,7 +100,7 @@ pub(crate) async fn release_claim_lock(
     kv.delete(&key)
         .await
         .map_err(|e| format!("claim lock release failed: {e:?}"))?;
-    tracing::info!("claim lock released for token {token}");
+    tracing::info!(claim_token = %token, "claim lock released");
     Ok(())
 }
 
@@ -158,7 +158,7 @@ pub async fn lookup_claim(
     token: &str,
     event_id: Option<&str>,
 ) -> Result<ClaimLookup, AppError> {
-    tracing::info!("claim lookup for token: {token}");
+    tracing::info!(claim_token = %token, "claim lookup");
 
     let event = resolve_event(state, event_id).await?;
 
@@ -175,11 +175,11 @@ pub async fn lookup_claim(
         {
             Ok((Some(a), checked_in, claimed)) => (a, checked_in, claimed),
             Ok((None, _, _)) => {
-                tracing::warn!("claim lookup: no attendee found for token {token}");
+                tracing::warn!(claim_token = %token, "claim lookup: no attendee found");
                 return Err(AppError::NotFound("claim token not found".into()));
             }
             Err(ref e) => {
-                tracing::error!("claim lookup failed for token {token}: {e}");
+                tracing::error!(claim_token = %token, error = %e, "claim lookup failed");
                 return Err(AppError::Internal(format!("failed to look up claim: {e}")));
             }
         };
@@ -252,7 +252,7 @@ pub async fn execute_claim(
     wallet_address: &str,
     event_id: Option<&str>,
 ) -> Result<ClaimResult, AppError> {
-    tracing::info!("claim mint request for token: {token}");
+    tracing::info!(claim_token = %token, "claim mint request");
 
     // 1. Resolve event context
     let event = resolve_event(state, event_id).await?;
@@ -270,11 +270,11 @@ pub async fn execute_claim(
     {
         Ok(Some(a)) => a,
         Ok(None) => {
-            tracing::warn!("claim mint: no attendee found for token {token}");
+            tracing::warn!(claim_token = %token, "claim mint: no attendee found");
             return Err(AppError::NotFound("claim token not found".into()));
         }
         Err(ref e) => {
-            tracing::error!("claim mint lookup failed for token {token}: {e}");
+            tracing::error!(claim_token = %token, error = %e, "claim mint lookup failed");
             return Err(AppError::Internal(format!("failed to look up claim: {e}")));
         }
     };
@@ -299,7 +299,7 @@ pub async fn execute_claim(
         let quiz_status = match crate::quiz::get_quiz_status(kv, eid, token).await {
             Ok(s) => s,
             Err(e) => {
-                tracing::error!("claim mint: failed to check quiz status for token {token}: {e}");
+                tracing::error!(claim_token = %token, error = %e, "claim mint: failed to check quiz status");
                 return Err(AppError::Internal(format!(
                     "failed to verify quiz status: {e}"
                 )));
@@ -308,13 +308,13 @@ pub async fn execute_claim(
         match quiz_status {
             QuizStatus::NotRequired | QuizStatus::Passed => {}
             QuizStatus::NotStarted => {
-                tracing::warn!("claim mint blocked: quiz not attempted for token {token}");
+                tracing::warn!(claim_token = %token, "claim mint blocked: quiz not attempted");
                 return Err(AppError::Validation(
                     "you must complete the quiz before claiming your badge".into(),
                 ));
             }
             QuizStatus::InProgress => {
-                tracing::warn!("claim mint blocked: quiz not passed for token {token}");
+                tracing::warn!(claim_token = %token, "claim mint blocked: quiz not passed");
                 return Err(AppError::Validation(
                     "you must pass the quiz before claiming your badge".into(),
                 ));
@@ -334,7 +334,9 @@ pub async fn execute_claim(
             Ok(s) => s,
             Err(e) => {
                 tracing::error!(
-                    "claim mint: failed to check adventure status for token {token}: {e}"
+                    claim_token = %token,
+                    error = %e,
+                    "claim mint: failed to check adventure status"
                 );
                 return Err(AppError::Internal(format!(
                     "failed to verify adventure status: {e}"
@@ -344,13 +346,13 @@ pub async fn execute_claim(
         match adv_status {
             AdventureStatus::NotRequired | AdventureStatus::Passed => {}
             AdventureStatus::NotStarted => {
-                tracing::warn!("claim mint blocked: adventure not attempted for token {token}");
+                tracing::warn!(claim_token = %token, "claim mint blocked: adventure not attempted");
                 return Err(AppError::Validation(
                     "you must complete the Rust Adventure before claiming your badge".into(),
                 ));
             }
             AdventureStatus::InProgress => {
-                tracing::warn!("claim mint blocked: adventure not passed for token {token}");
+                tracing::warn!(claim_token = %token, "claim mint blocked: adventure not passed");
                 return Err(AppError::Validation(
                     "you must complete the Rust Adventure before claiming your badge".into(),
                 ));
@@ -361,7 +363,7 @@ pub async fn execute_claim(
     // 6. Must not be already claimed
     if attendee.claimed_at.is_some() {
         let claimed_at = attendee.claimed_at.as_deref().unwrap_or("unknown");
-        tracing::warn!("claim already fulfilled for token {token} at {claimed_at}");
+        tracing::warn!(claim_token = %token, claimed_at = %claimed_at, "claim already fulfilled");
         return Err(AppError::Validation("NFT has already been claimed".into()));
     }
 
@@ -373,9 +375,10 @@ pub async fn execute_claim(
             let claiming = wallet_address.trim();
             if registered != claiming {
                 tracing::warn!(
-                    "wallet mismatch for token {token}: registered={} claiming={}",
-                    mask_wallet(registered),
-                    mask_wallet(claiming)
+                    claim_token = %token,
+                    registered = %mask_wallet(registered),
+                    claiming = %mask_wallet(claiming),
+                    "wallet mismatch"
                 );
                 return Err(AppError::Validation(format!(
                     "This claim is locked to a pre-registered wallet ({})",
@@ -411,7 +414,7 @@ pub async fn execute_claim(
     let mint_result = match solana::mint_compressed_nft(&mint_req).await {
         Ok(result) => result,
         Err(ref e) => {
-            tracing::error!("mint failed for token {token}: {e}");
+            tracing::error!(claim_token = %token, error = %e, "mint failed");
             // Release lock so attendee can retry
             if let Some(kv) = lock_kv {
                 let _ = release_claim_lock(kv, &event.id, token).await;
@@ -437,7 +440,7 @@ pub async fn execute_claim(
     )
     .await
     {
-        tracing::error!("mint succeeded but failed to mark claimed for token {token}: {e}");
+        tracing::error!(claim_token = %token, error = %e, "mint succeeded but failed to mark claimed");
         // Lock will expire via TTL — don't release (mint already happened)
         return Err(AppError::Internal(format!(
             "NFT minted but failed to record claim. Asset ID: {}. Error: {e}",
@@ -450,13 +453,15 @@ pub async fn execute_claim(
         && let Err(e) =
             finalize_claim_lock(kv, &event.id, token, wallet_address, &mint_result.asset_id).await
     {
-        tracing::warn!("claim lock finalize failed (non-blocking): {e}");
+        tracing::warn!(error = %e, "claim lock finalize failed (non-blocking)");
     }
 
     tracing::info!(
-        "claim fulfilled: token={token} name={display_name} asset_id={} wallet={}",
-        mint_result.asset_id,
-        wallet_address
+        claim_token = %token,
+        name = %display_name,
+        asset_id = %mint_result.asset_id,
+        wallet_address = %wallet_address,
+        "claim fulfilled"
     );
 
     // 12. Return result

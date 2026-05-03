@@ -104,7 +104,8 @@ pub async fn get_staff_role(email: &str, state: &AppState) -> Option<String> {
         }
         Err(e) => {
             tracing::warn!(
-                "failed to fetch staff members from sheet, falling back to env var list: {e}"
+                error = %e,
+                "failed to fetch staff members from sheet, falling back to env var list"
             );
         }
     }
@@ -134,7 +135,7 @@ pub async fn is_event_assigned(email: &str, state: &AppState) -> bool {
     let all_events = match crate::event_store::list_events(kv).await {
         Ok(events) => events,
         Err(e) => {
-            tracing::warn!("failed to list events for auth fallback: {e}");
+            tracing::warn!(error = %e, "failed to list events for auth fallback");
             return false;
         }
     };
@@ -179,7 +180,7 @@ pub async fn is_event_organizer_any(email: &str, state: &AppState) -> bool {
                 .any(|e| e.eq_ignore_ascii_case(email))
         }),
         Err(e) => {
-            tracing::warn!("failed to list events for role check: {e}");
+            tracing::warn!(error = %e, "failed to list events for role check");
             false
         }
     }
@@ -230,7 +231,7 @@ pub async fn require_auth(
     let claims = match verify_token(&token, &state).await {
         Ok(claims) => claims,
         Err(e) => {
-            tracing::debug!("auth middleware rejected request on {path}: {e}");
+            tracing::debug!(path = %path, error = %e, "auth middleware rejected request");
             return (
                 axum::http::StatusCode::UNAUTHORIZED,
                 Json(json!({
@@ -246,7 +247,7 @@ pub async fn require_auth(
     //   1. Global sources (env var list + Google Sheet staff tab)
     //   2. Per-event assignments (organizer_emails / staff_emails in event registry)
     if !is_staff(&claims.email, &state).await {
-        tracing::warn!("non-staff user attempted access: {}", claims.email);
+        tracing::warn!(email = %claims.email, "non-staff user attempted access");
         return (
             axum::http::StatusCode::FORBIDDEN,
             Json(json!({

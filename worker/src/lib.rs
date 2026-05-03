@@ -8,6 +8,7 @@ mod handlers;
 mod http;
 mod middleware;
 mod quiz;
+
 mod sheets;
 mod solana;
 mod state;
@@ -19,15 +20,17 @@ use worker::*;
 use crate::state::AppState;
 
 /// Embedded `index.html` for SPA fallback — serves the Leptos WASM frontend
-/// for any non-API route (e.g. `/staff`, `/admin`).
+/// for any non-API route (e.g. `/staff`, `/admin`, `/claim/xxx`).
 ///
 /// Rebuild after frontend changes: `cd frontend-leptos && trunk build`
 const INDEX_HTML: &str = include_str!("../../frontend-leptos/dist/index.html");
 
 /// SPA fallback handler — returns the embedded `index.html` for non-API routes.
 ///
-/// The browser loads JS/WASM from the asset layer, then the Leptos router
-/// handles the actual path client-side after the WASM app loads.
+/// The `[assets]` binding in wrangler.toml serves static files (JS, CSS, WASM)
+/// from the edge. For HTML navigation routes that don't match a static file,
+/// this fallback serves `index.html` so the Leptos client-side router can
+/// handle the path.
 #[worker::send]
 async fn spa_fallback() -> axum::response::Html<&'static str> {
     axum::response::Html(INDEX_HTML)
@@ -39,7 +42,7 @@ fn app_router(state: AppState) -> Router {
     Router::new()
         .merge(api_routes)
         // Any path not matched by the API routes gets the SPA shell.
-        // Leptos router handles /staff, /admin, etc. client-side.
+        // Leptos router handles /staff, /admin, /claim/xxx client-side.
         .fallback(spa_fallback)
         .layer(axum::middleware::from_fn(
             middleware::security_headers_layer,

@@ -52,7 +52,7 @@ async fn invalidate_attendee_cache(kv: Option<&KvStore>, sheet_id: &str, sheet_n
     if let Some(kv) = kv {
         let key = attendee_cache_key(sheet_id, sheet_name);
         if let Err(e) = kv.delete(&key).await {
-            tracing::debug!("failed to invalidate attendee cache: {e:?}");
+            tracing::debug!(error = ?e, "failed to invalidate attendee cache");
         }
     }
 }
@@ -87,8 +87,8 @@ pub async fn get_access_token(state: &AppState) -> Result<String, String> {
         exchange_jwt_assertion(&sa.token_uri, &jwt_assertion).await?;
 
     tracing::debug!(
-        "obtained google api access token, expires in {}s",
-        token_response.expires_in
+        expires_in = token_response.expires_in,
+        "obtained google api access token"
     );
 
     Ok(token_response.access_token)
@@ -123,7 +123,7 @@ pub async fn get_cached_access_token(
                 tracing::info!("google access token not in KV, fetching new one");
             }
             Err(e) => {
-                tracing::warn!("KV read for google token failed, falling back to fresh token: {e}");
+                tracing::warn!(error = %e, "KV read for google token failed, falling back to fresh token");
             }
         }
     }
@@ -144,15 +144,16 @@ pub async fn get_cached_access_token(
             {
                 Ok(()) => {
                     tracing::info!(
-                        "cached google access token in KV (ttl={GOOGLE_TOKEN_TTL_SECS}s)"
+                        ttl = GOOGLE_TOKEN_TTL_SECS,
+                        "cached google access token in KV"
                     );
                 }
                 Err(e) => {
-                    tracing::warn!("failed to cache google token in KV: {e:?}");
+                    tracing::warn!(error = ?e, "failed to cache google token in KV");
                 }
             },
             Err(e) => {
-                tracing::warn!("failed to build google token KV put: {e}");
+                tracing::warn!(error = %e, "failed to build google token KV put");
             }
         }
     }
@@ -184,20 +185,21 @@ pub async fn get_attendees(
             Ok(Some(cached)) => match serde_json::from_str::<Vec<Attendee>>(&cached) {
                 Ok(attendees) => {
                     tracing::info!(
-                        "cache hit: {} attendees from KV key {cache_key}",
-                        attendees.len()
+                        count = attendees.len(),
+                        cache_key = %cache_key,
+                        "cache hit: attendees from KV"
                     );
                     return Ok(attendees);
                 }
                 Err(e) => {
-                    tracing::info!("cache deserialize error, fetching fresh: {e:?}");
+                    tracing::info!(error = ?e, "cache deserialize error, fetching fresh");
                 }
             },
             Ok(None) => {
-                tracing::info!("cache miss: KV key {cache_key}");
+                tracing::info!(cache_key = %cache_key, "cache miss: KV key");
             }
             Err(e) => {
-                tracing::info!("cache read error, fetching fresh: {e:?}");
+                tracing::info!(error = ?e, "cache read error, fetching fresh");
             }
         }
     }
@@ -226,7 +228,10 @@ pub async fn get_attendees(
         .map(|row| row.to_attendee())
         .collect();
 
-    tracing::info!("fetched {} attendees from google sheets", attendees.len());
+    tracing::info!(
+        count = attendees.len(),
+        "fetched attendees from google sheets"
+    );
 
     // Write to KV cache
     if let Some(kv) = kv {
@@ -242,20 +247,22 @@ pub async fn get_attendees(
                 {
                     Ok(()) => {
                         tracing::info!(
-                            "cached {} attendees in KV key {cache_key} (ttl={ATTENDEE_CACHE_TTL_SECS}s)",
-                            attendees.len()
+                            count = attendees.len(),
+                            cache_key = %cache_key,
+                            ttl = ATTENDEE_CACHE_TTL_SECS,
+                            "cached attendees in KV"
                         );
                     }
                     Err(e) => {
-                        tracing::info!("failed to cache attendees in KV: {e:?}");
+                        tracing::info!(error = ?e, "failed to cache attendees in KV");
                     }
                 },
                 Err(e) => {
-                    tracing::info!("failed to build attendee cache KV put: {e}");
+                    tracing::info!(error = %e, "failed to build attendee cache KV put");
                 }
             },
             Err(e) => {
-                tracing::info!("failed to serialize attendees for cache: {e:?}");
+                tracing::info!(error = ?e, "failed to serialize attendees for cache");
             }
         }
     }
@@ -351,18 +358,18 @@ pub async fn get_staff_members(
         match kv.get(STAFF_CACHE_KEY).text().await {
             Ok(Some(cached)) => match serde_json::from_str::<Vec<StaffMember>>(&cached) {
                 Ok(members) => {
-                    tracing::info!("cache hit: {} staff members from KV", members.len());
+                    tracing::info!(count = members.len(), "cache hit: staff members from KV");
                     return Ok(members);
                 }
                 Err(e) => {
-                    tracing::info!("staff cache deserialize error, fetching fresh: {e:?}");
+                    tracing::info!(error = ?e, "staff cache deserialize error, fetching fresh");
                 }
             },
             Ok(None) => {
                 tracing::info!("cache miss: staff members not in KV");
             }
             Err(e) => {
-                tracing::info!("staff cache read error, fetching fresh: {e:?}");
+                tracing::info!(error = ?e, "staff cache read error, fetching fresh");
             }
         }
     }
@@ -397,7 +404,10 @@ pub async fn get_staff_members(
         })
         .collect();
 
-    tracing::info!("fetched {} staff members from google sheets", members.len());
+    tracing::info!(
+        count = members.len(),
+        "fetched staff members from google sheets"
+    );
 
     // Write to KV cache
     if let (Some(kv), Ok(json)) = (kv, serde_json::to_string(&members)) {
@@ -407,16 +417,17 @@ pub async fn get_staff_members(
         {
             Ok(builder) => {
                 if let Err(e) = builder.expiration_ttl(STAFF_CACHE_TTL_SECS).execute().await {
-                    tracing::info!("failed to cache staff members in KV: {e:?}");
+                    tracing::info!(error = ?e, "failed to cache staff members in KV");
                 } else {
                     tracing::info!(
-                        "cached {} staff members in KV (ttl={STAFF_CACHE_TTL_SECS}s)",
-                        members.len()
+                        count = members.len(),
+                        ttl = STAFF_CACHE_TTL_SECS,
+                        "cached staff members in KV"
                     );
                 }
             }
             Err(e) => {
-                tracing::info!("failed to build staff cache KV put: {e}");
+                tracing::info!(error = %e, "failed to build staff cache KV put");
             }
         }
     }
@@ -472,7 +483,10 @@ pub async fn mark_checked_in(
     batch_update_sheet(&url, &body, &access_token).await?;
 
     tracing::info!(
-        "marked row {row_index} as checked in at {timestamp} by {staff_email} claim_token={claim_token}"
+        row_index = row_index,
+        staff_email = %staff_email,
+        claim_token = %claim_token,
+        "marked row as checked in"
     );
 
     invalidate_attendee_cache(kv, sheet_id, sheet_name).await;
@@ -513,7 +527,7 @@ pub async fn mark_claimed(
 
     batch_update_sheet(&url, &body, &access_token).await?;
 
-    tracing::info!("marked row {row_index} as claimed at {claimed_at} wallet={wallet_address}");
+    tracing::info!(row_index = row_index, wallet_address = %wallet_address, "marked row as claimed");
 
     invalidate_attendee_cache(kv, sheet_id, sheet_name).await;
     Ok(claimed_at.to_string())
@@ -554,7 +568,7 @@ pub async fn update_qr_urls(
     batch_update_sheet(&url, &body, &access_token).await?;
 
     let updated = updates.len();
-    tracing::info!("updated {updated} qr code urls in google sheets");
+    tracing::info!(count = updated, "updated qr code urls in google sheets");
 
     invalidate_attendee_cache(kv, sheet_id, sheet_name).await;
     Ok(updated)

@@ -18,7 +18,8 @@ use axum::{
 };
 
 pub fn routes(state: AppState) -> Router<()> {
-    // Public routes — no auth middleware required
+    // Public routes — no auth middleware required.
+    // Rate limiting is handled by Cloudflare Rate Limiting Rules (dashboard config).
     let public = Router::new()
         .route("/health", get(health::health_check))
         // NFT metadata (public — wallets/explorers fetch these)

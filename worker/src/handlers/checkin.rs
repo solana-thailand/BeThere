@@ -38,30 +38,35 @@ pub async fn check_in(
     Path(id): Path<String>,
     Query(query): Query<EventIdQuery>,
 ) -> Result<Json<serde_json::Value>, crate::error::WorkerError> {
-    tracing::info!("check-in request for {id} (by: {})", claims.email);
+    tracing::info!(attendee_id = %id, staff_email = %claims.email, "check-in request");
 
     let event = resolve_event_with_access(&state, &claims, query.event_id.as_deref()).await?;
 
     // Fetch the attendee
     let kv = resolve_kv(&state);
-    let attendee: Attendee =
-        sheets::get_attendee_by_id(&id, &state, &event.sheet_id, &event.sheet_name, kv)
-            .await
-            .map_err(|e| {
-                tracing::error!("check-in failed: could not fetch attendee {id}: {e}");
-                AppError::Internal(format!("failed to look up attendee: {e}"))
-            })?
-            .ok_or_else(|| {
-                tracing::warn!("check-in failed: attendee {id} not found");
-                AppError::NotFound(format!("attendee with id '{id}' not found"))
-            })?;
+    let attendee: Attendee = sheets::get_attendee_by_id(
+        &id,
+        &state,
+        &event.sheet_id,
+        &event.sheet_name,
+        kv,
+    )
+    .await
+    .map_err(|e| {
+        tracing::error!(attendee_id = %id, error = %e, "check-in failed: could not fetch attendee");
+        AppError::Internal(format!("failed to look up attendee: {e}"))
+    })?
+    .ok_or_else(|| {
+        tracing::warn!(attendee_id = %id, "check-in failed: attendee not found");
+        AppError::NotFound(format!("attendee with id '{id}' not found"))
+    })?;
 
     // Check if attendee is approved
     if !attendee.is_approved() {
         tracing::warn!(
-            "check-in denied: attendee {} has status '{}'",
-            attendee.api_id,
-            attendee.approval_status
+            attendee_id = %attendee.api_id,
+            status = %attendee.approval_status,
+            "check-in denied: attendee not approved",
         );
         return Err(AppError::Validation(format!(
             "attendee is not approved (status: {})",
@@ -73,9 +78,9 @@ pub async fn check_in(
     // Check if attendee is In-Person (not Online)
     if !attendee.is_in_person() {
         tracing::warn!(
-            "check-in denied: attendee {} is not In-Person (participation: '{}')",
-            attendee.api_id,
-            attendee.participation_type
+            attendee_id = %attendee.api_id,
+            participation_type = %attendee.participation_type,
+            "check-in denied: attendee not In-Person",
         );
         return Err(AppError::Validation(format!(
             "attendee is not In-Person (participation type: {})",
@@ -88,8 +93,9 @@ pub async fn check_in(
     if attendee.is_checked_in() {
         let checked_in_at = attendee.checked_in_at.as_deref().unwrap_or("unknown time");
         tracing::info!(
-            "check-in skipped: attendee {} already checked in at {checked_in_at}",
-            attendee.api_id
+            attendee_id = %attendee.api_id,
+            checked_in_at = %checked_in_at,
+            "check-in skipped: already checked in",
         );
         return Err(AppError::Validation("attendee is already checked in".to_string()).into());
     }
@@ -111,17 +117,20 @@ pub async fn check_in(
     .await
     .map_err(|e| {
         tracing::error!(
-            "check-in failed: could not update sheet for {}: {e}",
-            attendee.api_id
+            attendee_id = %attendee.api_id,
+            error = %e,
+            "check-in failed: could not update sheet",
         );
         AppError::Internal(format!("failed to record check-in: {e}"))
     })?;
 
     tracing::info!(
-        "check-in successful: {} ({}) at {timestamp} by {} claim_token={claim_token}",
-        attendee.display_name(),
-        attendee.api_id,
-        claims.email
+        attendee_id = %attendee.api_id,
+        name = %attendee.display_name(),
+        staff_email = %claims.email,
+        claim_token = %claim_token,
+        checked_in_at = %timestamp,
+        "check-in successful",
     );
 
     let response = CheckInResponse {

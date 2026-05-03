@@ -56,8 +56,9 @@ pub async fn generate_qrs(
     let event = resolve_event_with_access(&state, &claims, query.event_id.as_deref()).await?;
 
     tracing::info!(
-        "QR generation requested by {} (force={force})",
-        claims.email
+        staff_email = %claims.email,
+        force = force,
+        "QR generation requested"
     );
 
     // Fetch all attendees
@@ -65,7 +66,7 @@ pub async fn generate_qrs(
     let attendees = sheets::get_attendees(&state, &event.sheet_id, &event.sheet_name, kv)
         .await
         .map_err(|e| {
-            tracing::error!("failed to fetch attendees for QR generation: {e}");
+            tracing::error!(error = ?e, "failed to fetch attendees for QR generation");
             AppError::Internal(format!("failed to fetch attendees: {e}"))
         })?;
 
@@ -90,24 +91,27 @@ pub async fn generate_qrs(
     let approved_without_qr: usize = total_approved.saturating_sub(approved_with_qr.len());
 
     tracing::info!(
-        "QR diagnostics: total_fetched={total_fetched}, total_approved={total_approved}, \
-         with_existing_qr={}, without_qr={approved_without_qr}, statuses={status_counts:?}",
-        approved_with_qr.len()
+        total_fetched = total_fetched,
+        total_approved = total_approved,
+        with_existing_qr = approved_with_qr.len(),
+        without_qr = approved_without_qr,
+        statuses = ?status_counts,
+        "QR diagnostics"
     );
 
     // Log sample QR URL values for the first few approved attendees with existing URLs
     for a in approved_with_qr.iter().take(3) {
         match &a.qr_code_url {
             Some(url) => tracing::info!(
-                "sample existing QR: api_id={}, row={}, url_len={}, url_preview=\"{}\"",
-                a.api_id,
-                a.row_index,
-                url.len(),
-                if url.len() > 80 {
+                attendee_id = %a.api_id,
+                row_index = a.row_index,
+                url_len = url.len(),
+                url_preview = %if url.len() > 80 {
                     format!("{}...", &url[..80])
                 } else {
                     url.clone()
-                }
+                },
+                "sample existing QR"
             ),
             None => unreachable!(),
         }
@@ -120,10 +124,10 @@ pub async fn generate_qrs(
         .take(3)
     {
         tracing::info!(
-            "sample without QR: api_id={}, row={}, participation_type=\"{}\"",
-            a.api_id,
-            a.row_index,
-            a.participation_type
+            attendee_id = %a.api_id,
+            row_index = a.row_index,
+            participation_type = %a.participation_type,
+            "sample without QR"
         );
     }
 
@@ -131,8 +135,9 @@ pub async fn generate_qrs(
     let updates = qr::generate_qr_urls(&attendees, &state.config.server.url, force);
 
     tracing::info!(
-        "generate_qr_urls: {} updates to write (force={force})",
-        updates.len()
+        total_updates = updates.len(),
+        force = force,
+        "generate_qr_urls: updates to write"
     );
 
     if updates.is_empty() {
@@ -151,9 +156,10 @@ pub async fn generate_qrs(
                     None => "unknown skip reason".to_string(),
                 };
                 tracing::debug!(
-                    "skipped attendee {} (row={}): {skip_reason}",
-                    a.api_id,
-                    a.row_index
+                    attendee_id = %a.api_id,
+                    row_index = a.row_index,
+                    skip_reason = %skip_reason,
+                    "skipped attendee"
                 );
                 QrGenerationDetail {
                     api_id: a.api_id.clone(),
@@ -195,13 +201,14 @@ pub async fn generate_qrs(
     let updated = sheets::update_qr_urls(&updates, &state, &event.sheet_id, &event.sheet_name, kv)
         .await
         .map_err(|e| {
-            tracing::error!("failed to update QR URLs in sheet: {e}");
+            tracing::error!(error = ?e, "failed to update QR URLs in sheet");
             AppError::Internal(format!("failed to write QR URLs to sheet: {e}"))
         })?;
 
     tracing::info!(
-        "QR generation complete: {updated} URLs written to sheet (requested by: {})",
-        claims.email
+        total_updated = updated,
+        staff_email = %claims.email,
+        "QR generation complete"
     );
 
     let updated_rows: Vec<usize> = updates.iter().map(|(row, _)| *row).collect();

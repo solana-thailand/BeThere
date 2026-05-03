@@ -46,16 +46,16 @@ Structural and performance improvements identified during full codebase review (
 | 1 | KV attendee cache | ✅ Done |
 | 2 | Cache Google access token in KV | ✅ Done |
 | 3 | Typed error enum (`AppError`) | ✅ Done |
-| 4 | Typed API responses (replace `json!({})`) | ❌ Deferred (150+ call sites) |
+| 4 | Typed API responses (replace `json!({})`) | ❌ Deferred (44 call sites, mechanical) |
 | 5 | Extract shared event resolution (`ext.rs`) | ✅ Done |
 | 6 | Split `AppConfig` into sub-configs | ✅ Done |
 | 7 | `MintRequest` struct | ✅ Done |
 | 8 | Migrate handlers to `Result<Json<T>, WorkerError>` | ✅ Done |
-| 9 | Rate limiting on public endpoints | ❌ Deferred |
+| 9 | Rate limiting on public endpoints | ⏭️ Skipped — use Cloudflare Rate Limiting Rules (dashboard) |
 | 10 | Claim flow service extraction | ✅ Done |
-| 11 | Workers Assets binding | ❌ Deferred |
-| 12 | Structured tracing fields | ❌ Deferred |
+| 11 | Workers Assets binding | ⏭️ Skipped — `include_str!` fallback still needed for SPA routes |
+| 12 | Structured tracing fields | ✅ Done — 72 call sites converted to structured fields |
 
 ## Status
 
-🟡 In Progress (9/12 done, 3 deferred)
+🟡 In Progress (10/12 done, 1 deferred, 2 skipped)

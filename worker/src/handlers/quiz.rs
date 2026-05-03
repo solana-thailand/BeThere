@@ -102,8 +102,9 @@ pub async fn submit_quiz(
     Json(body): Json<QuizSubmitRequest>,
 ) -> Result<Json<serde_json::Value>, WorkerError> {
     tracing::info!(
-        "quiz submit for token: {token} ({} answers)",
-        body.answers.len()
+        claim_token = %token,
+        answer_count = body.answers.len(),
+        "quiz submit requested"
     );
 
     // Resolve event (uses events_kv if available, falls back to global config)
@@ -131,14 +132,14 @@ pub async fn submit_quiz(
     {
         Ok(Some(_)) => {}
         Ok(None) => {
-            tracing::warn!("quiz submit: invalid claim token {token}");
+            tracing::warn!(claim_token = %token, "quiz submit: invalid claim token");
             return Err(AppError::NotFound(
                 "invalid claim token — you must be checked in first".to_string(),
             )
             .into());
         }
         Err(ref e) => {
-            tracing::error!("quiz submit: failed to look up claim token {token}: {e}");
+            tracing::error!(claim_token = %token, error = ?e, "quiz submit: failed to look up claim token");
             return Err(AppError::Internal(format!("failed to verify claim: {e}")).into());
         }
     }
@@ -150,7 +151,7 @@ pub async fn submit_quiz(
             return Err(AppError::NotFound("no quiz configured for this event".to_string()).into());
         }
         Err(e) => {
-            tracing::error!("quiz submit: failed to read config: {e}");
+            tracing::error!(error = ?e, "quiz submit: failed to read quiz config");
             return Err(AppError::Internal(format!("failed to read quiz: {e}")).into());
         }
     };
@@ -159,8 +160,8 @@ pub async fn submit_quiz(
     for answer in &body.answers {
         if !config.questions.iter().any(|q| q.id == answer.question_id) {
             tracing::warn!(
-                "quiz submit: unknown question_id '{}' in answers",
-                answer.question_id
+                question_id = %answer.question_id,
+                "quiz submit: unknown question_id in answers"
             );
             return Err(AppError::Validation(format!(
                 "unknown question id: {}",
@@ -183,9 +184,9 @@ pub async fn submit_quiz(
                 .any(|opt| opt.trim().eq_ignore_ascii_case(selected))
         {
             tracing::warn!(
-                "quiz submit: selected_text '{}' not in options for question '{}'",
-                answer.selected_text,
-                answer.question_id
+                selected_text = %answer.selected_text,
+                question_id = %answer.question_id,
+                "quiz submit: selected_text not in options for question"
             );
             // Don't reveal options — just mark as wrong answer (don't reject)
         }
@@ -195,15 +196,16 @@ pub async fn submit_quiz(
     let result = quiz::submit_quiz(kv, eid, &config, &token, &body.answers)
         .await
         .map_err(|e| {
-            tracing::error!("quiz submit failed for token {token}: {e}");
+            tracing::error!(claim_token = %token, error = ?e, "quiz submit failed");
             AppError::Internal(e.to_string())
         })?;
 
     tracing::info!(
-        "quiz scored: token={token} attempt={} score={}% passed={}",
-        result.attempt_number,
-        result.score_percent,
-        result.passed,
+        claim_token = %token,
+        attempt = result.attempt_number,
+        score_percent = result.score_percent,
+        passed = result.passed,
+        "quiz scored"
     );
 
     Ok(Json(json!({
@@ -222,7 +224,7 @@ pub async fn get_quiz_status(
     Path(token): Path<String>,
     Query(query): Query<EventIdQuery>,
 ) -> Result<Json<serde_json::Value>, WorkerError> {
-    tracing::info!("quiz status for token: {token}");
+    tracing::info!(claim_token = %token, "quiz status requested");
 
     // Resolve event (uses events_kv if available, falls back to global config)
     let event = resolve_event(&state, query.event_id.as_deref()).await?;
@@ -265,13 +267,13 @@ pub async fn get_quiz_status(
             })));
         }
         Err(e) => {
-            tracing::error!("quiz status: failed to read config: {e}");
+            tracing::error!(error = ?e, "quiz status: failed to read config");
             return Err(AppError::Internal(format!("failed to read quiz: {e}")).into());
         }
     };
 
     let status = quiz::get_quiz_status(kv, eid, &token).await.map_err(|e| {
-        tracing::error!("quiz status failed for token {token}: {e}");
+        tracing::error!(claim_token = %token, error = ?e, "quiz status failed");
         AppError::Internal(e.to_string())
     })?;
 
@@ -314,7 +316,7 @@ pub async fn get_admin_quiz(
     Extension(_claims): Extension<Claims>,
     Query(query): Query<EventIdQuery>,
 ) -> Result<Json<serde_json::Value>, WorkerError> {
-    tracing::info!("admin quiz read by {}", _claims.email);
+    tracing::info!(staff_email = %_claims.email, "admin quiz read");
 
     // Resolve event (uses events_kv if available, falls back to global config)
     let event = resolve_event(&state, query.event_id.as_deref()).await?;
@@ -339,7 +341,7 @@ pub async fn get_admin_quiz(
     let eid = event.id.as_str();
 
     let config = quiz::get_quiz_config(kv, eid).await.map_err(|e| {
-        tracing::error!("failed to read quiz config: {e}");
+        tracing::error!(error = ?e, "failed to read quiz config");
         AppError::Internal(format!("failed to read quiz: {e}"))
     })?;
 
@@ -380,9 +382,9 @@ pub async fn put_quiz(
     Json(body): Json<QuizConfig>,
 ) -> Result<Json<serde_json::Value>, WorkerError> {
     tracing::info!(
-        "admin quiz update by {} ({} questions)",
-        _claims.email,
-        body.questions.len()
+        staff_email = %_claims.email,
+        question_count = body.questions.len(),
+        "admin quiz update"
     );
 
     // Resolve event (uses events_kv if available, falls back to global config)
@@ -448,15 +450,15 @@ pub async fn put_quiz(
     }
 
     quiz::save_quiz_config(kv, eid, &body).await.map_err(|e| {
-        tracing::error!("failed to save quiz: {e}");
+        tracing::error!(error = ?e, "failed to save quiz");
         AppError::Internal(format!("failed to save quiz: {e}"))
     })?;
 
     tracing::info!(
-        "quiz saved: {} questions, {}% passing, {} max attempts",
-        body.questions.len(),
-        body.passing_score_percent,
-        body.max_attempts,
+        question_count = body.questions.len(),
+        passing_score_percent = body.passing_score_percent,
+        max_attempts = body.max_attempts,
+        "quiz saved"
     );
 
     Ok(Json(json!({

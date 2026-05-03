@@ -46,7 +46,7 @@ pub async fn join_waitlist(
     match get_existing_waitlist_emails(&state).await {
         Ok(existing) => {
             if existing.contains(&email) {
-                tracing::info!("waitlist duplicate: {email}");
+                tracing::info!(staff_email = %email, "waitlist duplicate");
                 return Err(
                     AppError::Validation("This email is already on the waitlist".into()).into(),
                 );
@@ -54,15 +54,15 @@ pub async fn join_waitlist(
         }
         Err(e) => {
             // Log but don't block — if we can't read, still allow signup
-            tracing::warn!("could not fetch existing waitlist emails for dedup: {e}");
+            tracing::warn!(error = ?e, "could not fetch existing waitlist emails for dedup");
         }
     }
 
-    tracing::info!("waitlist signup: {email}");
+    tracing::info!(staff_email = %email, "waitlist signup");
 
     // Append to Google Sheet
     append_to_waitlist(&email, &state).await.map_err(|e| {
-        tracing::error!("waitlist signup failed for {email}: {e}");
+        tracing::error!(staff_email = %email, error = ?e, "waitlist signup failed");
         AppError::Internal(format!("Failed to join waitlist: {e}"))
     })?;
 
@@ -97,8 +97,8 @@ async fn get_existing_waitlist_emails(state: &AppState) -> Result<Vec<String>, S
         .collect();
 
     tracing::debug!(
-        "fetched {} existing waitlist emails for dedup",
-        emails.len()
+        total_fetched = emails.len(),
+        "fetched existing waitlist emails for dedup"
     );
     Ok(emails)
 }
