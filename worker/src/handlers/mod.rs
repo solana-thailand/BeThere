@@ -3,6 +3,7 @@ pub mod attendee;
 pub mod auth;
 pub mod checkin;
 pub mod claim;
+pub mod deposit;
 pub mod events;
 pub mod ext;
 pub mod health;
@@ -46,7 +47,17 @@ pub fn routes(state: AppState) -> Router<()> {
             post(adventure::save_adventure_progress),
         )
         // Waitlist signup (public)
-        .route("/waitlist", post(waitlist::join_waitlist));
+        .route("/waitlist", post(waitlist::join_waitlist))
+        // Deposit routes (public — attendee checks/initiates deposit)
+        .route(
+            "/deposit/status/{attendee_id}",
+            get(deposit::get_deposit_status_handler),
+        )
+        .route("/deposit/usdc", post(deposit::deposit_usdc_handler))
+        .route(
+            "/deposit/thb/upload",
+            post(deposit::upload_thb_slip_handler),
+        );
 
     // Protected routes — require staff auth
     let protected = Router::new()
@@ -79,6 +90,20 @@ pub fn routes(state: AppState) -> Router<()> {
             get(events::get_event)
                 .put(events::update_event)
                 .delete(events::archive_event),
+        )
+        // Admin deposit management (protected — organizer verifies slips, manages refunds)
+        .route(
+            "/deposit/thb/verify",
+            post(deposit::verify_thb_slip_handler),
+        )
+        .route(
+            "/deposit/thb/pending",
+            get(deposit::pending_thb_slips_handler),
+        )
+        .route("/refund/queue", get(deposit::refund_queue_handler))
+        .route(
+            "/refund/mark/{attendee_id}",
+            post(deposit::mark_refund_handler),
         )
         .layer(middleware::from_fn_with_state(
             state.clone(),

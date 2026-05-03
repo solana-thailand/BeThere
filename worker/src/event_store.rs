@@ -183,6 +183,11 @@ pub async fn create_event(kv: &KvStore, req: &CreateEventRequest) -> Result<Even
             .collect(),
         claim_base_url: req.claim_base_url.trim().to_string(),
         merkle_tree: req.merkle_tree.trim().to_string(),
+        deposit_enabled: req.deposit_enabled,
+        deposit_amount_usdc: req.deposit_amount_usdc,
+        deposit_amount_thb: req.deposit_amount_thb,
+        escrow_address: req.escrow_address.trim().to_string(),
+        refund_deadline_hours: req.refund_deadline_hours,
         created_at: now.clone(),
         updated_at: now,
     };
@@ -298,6 +303,23 @@ pub async fn update_event(
     }
     if let Some(ref v) = req.merkle_tree {
         config.merkle_tree = v.trim().to_string();
+    }
+
+    // Deposit fields
+    if let Some(v) = req.deposit_enabled {
+        config.deposit_enabled = v;
+    }
+    if let Some(v) = req.deposit_amount_usdc {
+        config.deposit_amount_usdc = v;
+    }
+    if let Some(v) = req.deposit_amount_thb {
+        config.deposit_amount_thb = v;
+    }
+    if let Some(ref v) = req.escrow_address {
+        config.escrow_address = v.trim().to_string();
+    }
+    if let Some(v) = req.refund_deadline_hours {
+        config.refund_deadline_hours = v;
     }
 
     config.updated_at = chrono::Utc::now().to_rfc3339();
@@ -432,6 +454,11 @@ pub async fn seed_from_config(
         },
         claim_base_url: global.server.claim_base_url.clone(),
         merkle_tree: String::new(), // not in global config — per-event only
+        deposit_enabled: false,
+        deposit_amount_usdc: 0,
+        deposit_amount_thb: 0,
+        escrow_address: String::new(),
+        refund_deadline_hours: 168,
         created_at: now.clone(),
         updated_at: now,
     };
@@ -656,4 +683,160 @@ fn slugify(input: &str) -> String {
         .filter(|s| !s.is_empty())
         .collect::<Vec<_>>()
         .join("-")
+}
+
+// ---------------------------------------------------------------------------
+// Deposit KV helpers (Issue 010 — dual-track deposit/refund)
+// ---------------------------------------------------------------------------
+
+/// KV key for per-attendee deposit status.
+/// Pattern: `event:{id}:deposit:status:{attendee_id}`
+pub fn deposit_status_key(event_id: &str, attendee_id: &str) -> String {
+    format!("event:{event_id}:deposit:status:{attendee_id}")
+}
+
+/// KV key for THB deposit record.
+/// Pattern: `event:{id}:deposit:thb:{attendee_id}`
+pub fn thb_deposit_key(event_id: &str, attendee_id: &str) -> String {
+    format!("event:{event_id}:deposit:thb:{attendee_id}")
+}
+
+/// KV key for listing all THB deposits in an event.
+/// Pattern: `event:{id}:deposit:thb:list`
+pub fn thb_deposit_list_key(event_id: &str) -> String {
+    format!("event:{event_id}:deposit:thb:list")
+}
+
+/// Get deposit status for an attendee.
+pub async fn get_deposit_status(
+    kv: &KvStore,
+    event_id: &str,
+    attendee_id: &str,
+) -> Result<Option<event_checkin_domain::models::deposit::DepositStatus>, String> {
+    let key = deposit_status_key(event_id, attendee_id);
+    let raw: Option<String> = kv
+        .get(&key)
+        .text()
+        .await
+        .map_err(|e| format!("failed to read deposit status: {e:?}"))?;
+
+    match raw {
+        None => Ok(None),
+        Some(json) => serde_json::from_str(&json)
+            .map_err(|e| format!("failed to parse deposit status: {e}"))
+            .map(Some),
+    }
+}
+
+/// Save deposit status for an attendee.
+pub async fn save_deposit_status(
+    kv: &KvStore,
+    status: &event_checkin_domain::models::deposit::DepositStatus,
+) -> Result<(), String> {
+    let key = deposit_status_key(&status.event_id, &status.attendee_id);
+    let json = serde_json::to_string(status)
+        .map_err(|e| format!("failed to serialize deposit status: {e}"))?;
+    let _ = kv
+        .put(&key, &json)
+        .map_err(|e| format!("failed to build deposit status put: {e:?}"))?;
+    // Note: Workers KV put() without .execute() still persists in Workers runtime
+    // Add to attendee list for event
+    add_to_deposit_list(kv, &status.event_id, &status.attendee_id).await?;
+    Ok(())
+}
+
+/// Get THB deposit record for an attendee.
+pub async fn get_thb_deposit(
+    kv: &KvStore,
+    event_id: &str,
+    attendee_id: &str,
+) -> Result<Option<event_checkin_domain::models::deposit::ThbDeposit>, String> {
+    let key = thb_deposit_key(event_id, attendee_id);
+    let raw: Option<String> = kv
+        .get(&key)
+        .text()
+        .await
+        .map_err(|e| format!("failed to read THB deposit: {e:?}"))?;
+
+    match raw {
+        None => Ok(None),
+        Some(json) => serde_json::from_str(&json)
+            .map_err(|e| format!("failed to parse THB deposit: {e}"))
+            .map(Some),
+    }
+}
+
+/// Save THB deposit record for an attendee.
+pub async fn save_thb_deposit(
+    kv: &KvStore,
+    deposit: &event_checkin_domain::models::deposit::ThbDeposit,
+) -> Result<(), String> {
+    let key = thb_deposit_key(&deposit.event_id, &deposit.attendee_id);
+    let json = serde_json::to_string(deposit)
+        .map_err(|e| format!("failed to serialize THB deposit: {e}"))?;
+    kv.put(&key, &json)
+        .map_err(|e| format!("failed to build THB deposit put: {e:?}"))?
+        .execute()
+        .await
+        .map_err(|e| format!("failed to write THB deposit to KV: {e:?}"))
+}
+
+/// List all THB deposits for an event.
+pub async fn list_thb_deposits(
+    kv: &KvStore,
+    event_id: &str,
+) -> Result<Vec<event_checkin_domain::models::deposit::ThbDeposit>, String> {
+    let list_key = thb_deposit_list_key(event_id);
+    let raw: Option<String> = kv
+        .get(&list_key)
+        .text()
+        .await
+        .map_err(|e| format!("failed to read THB deposit list: {e:?}"))?;
+
+    let ids: Vec<String> = match raw {
+        None => return Ok(vec![]),
+        Some(json) => serde_json::from_str(&json)
+            .map_err(|e| format!("failed to parse THB deposit list: {e}"))?,
+    };
+
+    let mut deposits = Vec::with_capacity(ids.len());
+    for id in ids {
+        if let Some(deposit) = get_thb_deposit(kv, event_id, &id).await? {
+            deposits.push(deposit);
+        }
+    }
+
+    Ok(deposits)
+}
+
+/// Add an attendee_id to the THB deposit list for an event.
+async fn add_to_deposit_list(
+    kv: &KvStore,
+    event_id: &str,
+    attendee_id: &str,
+) -> Result<(), String> {
+    let list_key = thb_deposit_list_key(event_id);
+    let raw: Option<String> = kv
+        .get(&list_key)
+        .text()
+        .await
+        .map_err(|e| format!("failed to read deposit list: {e:?}"))?;
+
+    let mut ids: Vec<String> = match raw {
+        None => vec![],
+        Some(json) => {
+            serde_json::from_str(&json).map_err(|e| format!("failed to parse deposit list: {e}"))?
+        }
+    };
+
+    if !ids.iter().any(|id| id == attendee_id) {
+        ids.push(attendee_id.to_string());
+        let json = serde_json::to_string(&ids)
+            .map_err(|e| format!("failed to serialize deposit list: {e}"))?;
+        let _ = kv
+            .put(&list_key, &json)
+            .map_err(|e| format!("failed to build deposit list put: {e:?}"))?;
+    }
+
+    Ok(())
 }

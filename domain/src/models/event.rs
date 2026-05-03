@@ -142,6 +142,23 @@ pub struct EventConfig {
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub claim_base_url: String,
 
+    // ── Deposit settings ──────────────────────────────────────────────
+    /// Whether deposit is required for this event.
+    #[serde(default)]
+    pub deposit_enabled: bool,
+    /// Deposit amount in USDC smallest unit (6 decimals). e.g., 15_000_000 = $15.
+    #[serde(default)]
+    pub deposit_amount_usdc: u64,
+    /// Deposit amount in Thai Baht (for PromptPay track). e.g., 500.
+    #[serde(default)]
+    pub deposit_amount_thb: u64,
+    /// EventEscrow PDA address (set after on-chain create_event). Empty if not yet created.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub escrow_address: String,
+    /// Hours after event_end for refund deadline (default: 168 = 7 days).
+    #[serde(default)]
+    pub refund_deadline_hours: u32,
+
     // ── Timestamps ────────────────────────────────────────────────────
     /// ISO 8601 creation timestamp.
     pub created_at: String,
@@ -255,6 +272,11 @@ impl EventConfig {
             organizer_emails,
             staff_emails,
             claim_base_url: claim_base_url.to_string(),
+            deposit_enabled: false,
+            deposit_amount_usdc: 0,
+            deposit_amount_thb: 0,
+            escrow_address: String::new(),
+            refund_deadline_hours: 168,
             created_at: String::new(),
             updated_at: String::new(),
         }
@@ -324,6 +346,23 @@ pub struct CreateEventRequest {
     /// Base URL for claim links.
     #[serde(default)]
     pub claim_base_url: String,
+
+    // ── Deposit settings ──────────────────────────────────────────────
+    /// Whether deposit is required for this event.
+    #[serde(default)]
+    pub deposit_enabled: bool,
+    /// Deposit amount in USDC smallest unit (6 decimals).
+    #[serde(default)]
+    pub deposit_amount_usdc: u64,
+    /// Deposit amount in Thai Baht (for PromptPay track).
+    #[serde(default)]
+    pub deposit_amount_thb: u64,
+    /// EventEscrow PDA address.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub escrow_address: String,
+    /// Hours after event_end for refund deadline (default: 168 = 7 days).
+    #[serde(default)]
+    pub refund_deadline_hours: u32,
 }
 
 /// Request body for PUT /api/events/{id} — update an existing event.
@@ -393,6 +432,23 @@ pub struct UpdateEventRequest {
     /// New claim base URL.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub claim_base_url: Option<String>,
+
+    // ── Deposit settings ──────────────────────────────────────────────
+    /// Whether deposit is required for this event.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deposit_enabled: Option<bool>,
+    /// Deposit amount in USDC smallest unit (6 decimals).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deposit_amount_usdc: Option<u64>,
+    /// Deposit amount in Thai Baht (for PromptPay track).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deposit_amount_thb: Option<u64>,
+    /// EventEscrow PDA address.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub escrow_address: Option<String>,
+    /// Hours after event_end for refund deadline.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub refund_deadline_hours: Option<u32>,
 }
 
 /// Response for GET /api/events — list all events.
