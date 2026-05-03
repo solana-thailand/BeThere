@@ -52,10 +52,10 @@ Structural and performance improvements identified during full codebase review (
 | 7 | `MintRequest` struct | ✅ Done |
 | 8 | Migrate handlers to `Result<Json<T>, WorkerError>` | ✅ Done |
 | 9 | Rate limiting on public endpoints | ❌ Deferred |
-| 10 | Claim flow service extraction | ❌ Deferred |
+| 10 | Claim flow service extraction | ✅ Done |
 | 11 | Workers Assets binding | ❌ Deferred |
 | 12 | Structured tracing fields | ❌ Deferred |
 
 ## Status
 
-🟡 In Progress (8/12 done, 4 deferred)
+🟡 In Progress (9/12 done, 3 deferred)
