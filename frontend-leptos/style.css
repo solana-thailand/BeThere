@@ -5859,3 +5859,230 @@ nav a.active {
 .claim-share-copied.visible {
     opacity: 1;
 }
+
+/* ===== Deposit Page & Admin Deposit Section ===== */
+
+.admin-deposits {
+    padding: 0;
+}
+
+.admin-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+}
+
+.admin-section-header h3 {
+    font-size: 1rem;
+    font-weight: 600;
+    margin: 0;
+    color: var(--text-primary, #fff);
+}
+
+/* Deposit page inputs */
+.deposit-page {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 2rem 1rem;
+}
+
+.deposit-amount-display {
+    font-size: 1.5rem;
+    font-weight: 700;
+    text-align: center;
+    margin: 0.5rem 0;
+}
+
+.deposit-method-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+    width: 100%;
+    max-width: 480px;
+}
+
+.deposit-method-card {
+    background: var(--card-bg, rgba(255, 255, 255, 0.03));
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+    border-radius: 12px;
+    padding: 1.25rem;
+    transition:
+        border-color 0.2s ease,
+        box-shadow 0.2s ease;
+}
+
+.deposit-method-card:hover {
+    border-color: var(--border-hover, rgba(255, 255, 255, 0.15));
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2);
+}
+
+.deposit-method-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.75rem;
+}
+
+.deposit-method-title {
+    font-size: 1.05rem;
+    font-weight: 600;
+    margin: 0;
+}
+
+.deposit-method-desc {
+    font-size: 0.85rem;
+    color: var(--text-secondary, rgba(255, 255, 255, 0.6));
+    margin-bottom: 0.75rem;
+    line-height: 1.4;
+}
+
+.deposit-pay-url-box {
+    background: var(--bg-secondary, #1a1a2e);
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.12));
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    margin: 0.75rem 0;
+    word-break: break-all;
+    font-size: 0.8rem;
+    color: var(--text-secondary, rgba(255, 255, 255, 0.6));
+    font-family: monospace;
+    text-align: left;
+    line-height: 1.5;
+}
+
+.deposit-actions {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: center;
+    margin-top: 0.75rem;
+}
+
+.deposit-status-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.6rem 0;
+    border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+}
+
+.deposit-status-row:last-child {
+    border-bottom: none;
+}
+
+.deposit-status-label {
+    color: var(--text-secondary, rgba(255, 255, 255, 0.6));
+    font-size: 0.9rem;
+}
+
+.deposit-status-value {
+    font-weight: 500;
+    font-size: 0.9rem;
+}
+
+/* Admin deposit slip card */
+.admin-slip-card {
+    background: var(--card-bg, rgba(255, 255, 255, 0.03));
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+    border-radius: 12px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 0.75rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    transition: border-color 0.2s ease;
+}
+
+.admin-slip-card:hover {
+    border-color: var(--border-hover, rgba(255, 255, 255, 0.15));
+}
+
+.admin-slip-info {
+    flex: 1;
+    min-width: 200px;
+}
+
+.admin-slip-attendee {
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+    font-size: 0.95rem;
+}
+
+.admin-slip-amount {
+    font-size: 0.9rem;
+    margin-bottom: 0.25rem;
+}
+
+.admin-slip-meta {
+    color: var(--text-muted, rgba(255, 255, 255, 0.5));
+    font-size: 0.8rem;
+}
+
+.admin-slip-link {
+    color: var(--accent, #9945ff);
+    font-size: 0.85rem;
+    text-decoration: none;
+}
+
+.admin-slip-link:hover {
+    text-decoration: underline;
+}
+
+.admin-slip-actions {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+/* Deposit QR hint text */
+.deposit-qr-hint {
+    font-size: 0.8rem;
+    color: var(--text-secondary, rgba(255, 255, 255, 0.5));
+    text-align: center;
+    margin-top: 0.75rem;
+}
+
+/* Form input for deposit page */
+.form-input {
+    width: 100%;
+    padding: 0.6rem 0.8rem;
+    border-radius: 6px;
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.15));
+    background: var(--bg-secondary, #1a1a2e);
+    color: var(--text-primary, #fff);
+    font-size: 0.9rem;
+    font-family: inherit;
+    transition:
+        border-color 0.2s ease,
+        box-shadow 0.2s ease;
+    outline: none;
+    box-sizing: border-box;
+}
+
+.form-input:focus {
+    border-color: var(--accent, #9945ff);
+    box-shadow: 0 0 0 2px rgba(153, 69, 255, 0.15);
+}
+
+.form-input::placeholder {
+    color: var(--text-muted, rgba(255, 255, 255, 0.35));
+}
+
+/* Responsive */
+@media (max-width: 480px) {
+    .deposit-method-cards {
+        max-width: 100%;
+    }
+    .admin-slip-card {
+        flex-direction: column;
+    }
+    .admin-slip-actions {
+        width: 100%;
+        justify-content: flex-end;
+    }
+}

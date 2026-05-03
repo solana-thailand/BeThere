@@ -26,6 +26,7 @@ use crate::utils;
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum AdminSection {
     Attendance,
+    Deposits,
     Quiz,
     Adventure,
     Events,
@@ -544,6 +545,22 @@ pub fn Admin() -> impl IntoView {
                         </button>
                     </div>
                     <div class="admin-sidebar-section">
+                        <div class="admin-sidebar-heading">"Deposits"</div>
+                        <button
+                            class="admin-sidebar-item"
+                            class:active=move || active_section.get() == AdminSection::Deposits
+                            on:click=move |_| set_active_section.set(AdminSection::Deposits)
+                        >
+                            <span class="admin-sidebar-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <line x1="12" y1="1" x2="12" y2="23"></line>
+                                    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                                </svg>
+                            </span>
+                            "Deposits & Refunds"
+                        </button>
+                    </div>
+                    <div class="admin-sidebar-section">
                         <div class="admin-sidebar-heading">"Quiz"</div>
                         <button
                             class="admin-sidebar-item"
@@ -846,6 +863,11 @@ pub fn Admin() -> impl IntoView {
                         </div>
                     </div>
                 </Show>
+                </Show>
+
+                // Deposits section
+                <Show when=move || active_section.get() == AdminSection::Deposits fallback=|| view! { <div></div> }>
+                    <crate::pages::admin_deposit::AdminDeposits set_toast=set_toast active_event_id=active_event_id />
                 </Show>
 
                 // Quiz section

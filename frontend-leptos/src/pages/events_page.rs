@@ -44,6 +44,11 @@ struct EventForm {
     organizer_emails: String,
     staff_emails: String,
     status: api::EventStatus,
+    deposit_enabled: bool,
+    deposit_amount_usdc: String,
+    deposit_amount_thb: String,
+    escrow_address: String,
+    refund_deadline_hours: String,
 }
 
 // ===== Helpers =====
@@ -92,6 +97,11 @@ fn default_form() -> EventForm {
     EventForm {
         sheet_name: "checkin".to_string(),
         staff_sheet_name: "staff".to_string(),
+        deposit_enabled: false,
+        deposit_amount_usdc: String::new(),
+        deposit_amount_thb: String::new(),
+        escrow_address: String::new(),
+        refund_deadline_hours: String::new(),
         ..Default::default()
     }
 }
@@ -136,6 +146,11 @@ fn form_from_detail(detail: &api::EventDetail) -> EventForm {
         organizer_emails: detail.organizer_emails.join(", "),
         staff_emails: detail.staff_emails.join(", "),
         status: detail.status.clone(),
+        deposit_enabled: detail.deposit_enabled,
+        deposit_amount_usdc: if detail.deposit_amount_usdc > 0 { detail.deposit_amount_usdc.to_string() } else { String::new() },
+        deposit_amount_thb: if detail.deposit_amount_thb > 0 { detail.deposit_amount_thb.to_string() } else { String::new() },
+        escrow_address: detail.escrow_address.clone(),
+        refund_deadline_hours: if detail.refund_deadline_hours > 0 { detail.refund_deadline_hours.to_string() } else { String::new() },
     }
 }
 
@@ -310,6 +325,11 @@ pub fn EventsPage(
                 claim_base_url: current_form.claim_base_url.trim().to_string(),
                 organizer_emails: parse_emails(&current_form.organizer_emails),
                 staff_emails: parse_emails(&current_form.staff_emails),
+                deposit_enabled: current_form.deposit_enabled,
+                deposit_amount_usdc: current_form.deposit_amount_usdc.parse::<u64>().unwrap_or(0),
+                deposit_amount_thb: current_form.deposit_amount_thb.parse::<u64>().unwrap_or(0),
+                escrow_address: current_form.escrow_address.trim().to_string(),
+                refund_deadline_hours: current_form.refund_deadline_hours.parse::<u32>().unwrap_or(0),
             };
 
             leptos::task::spawn_local(async move {
@@ -358,6 +378,11 @@ pub fn EventsPage(
                 claim_base_url: Some(current_form.claim_base_url.trim().to_string()),
                 organizer_emails: Some(parse_emails(&current_form.organizer_emails)),
                 staff_emails: Some(parse_emails(&current_form.staff_emails)),
+                deposit_enabled: Some(current_form.deposit_enabled),
+                deposit_amount_usdc: Some(current_form.deposit_amount_usdc.parse::<u64>().unwrap_or(0)),
+                deposit_amount_thb: Some(current_form.deposit_amount_thb.parse::<u64>().unwrap_or(0)),
+                escrow_address: Some(current_form.escrow_address.trim().to_string()),
+                refund_deadline_hours: Some(current_form.refund_deadline_hours.parse::<u32>().unwrap_or(0)),
             };
 
             leptos::task::spawn_local(async move {
@@ -861,6 +886,75 @@ pub fn EventsPage(
                                     } else {
                                         view! { <div></div> }.into_any()
                                     }}
+                                </div>
+                            </div>
+
+                            // ── Deposit Configuration ──
+                            <div style="margin-bottom:1.5rem">
+                                <h3 style="font-size:0.95rem;font-weight:600;margin-bottom:0.75rem;color:var(--text-secondary)">
+                                    "💰 Deposit Configuration"
+                                </h3>
+                                <div class="quiz-settings-grid">
+                                    <div class="quiz-setting-item">
+                                        <label class="quiz-field-label">"Deposit Enabled"</label>
+                                        <div style="display:flex;align-items:center;gap:0.5rem;padding-top:0.3rem">
+                                            <input
+                                                type="checkbox"
+                                                prop:checked=move || form.get().deposit_enabled
+                                                on:change=move |ev| {
+                                                    let checked = event_target_checked(&ev);
+                                                    set_form.update(|f| f.deposit_enabled = checked);
+                                                }
+                                            />
+                                            <span style="font-size:0.85rem;color:var(--text-secondary)">
+                                                {move || if form.get().deposit_enabled { "Yes" } else { "No" }}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div class="quiz-setting-item">
+                                        <label class="quiz-field-label">"USDC Amount"</label>
+                                        <input
+                                            type="text"
+                                            class="quiz-number-input"
+                                            placeholder="e.g. 10 (whole USDC)"
+                                            prop:value=move || form.get().deposit_amount_usdc
+                                            on:input=move |ev| set_form.update(|f| f.deposit_amount_usdc = event_target_value(&ev))
+                                        />
+                                        <span class="quiz-setting-hint">"Amount in whole USDC (e.g. 10 = 10 USDC)"</span>
+                                    </div>
+                                    <div class="quiz-setting-item">
+                                        <label class="quiz-field-label">"THB Amount"</label>
+                                        <input
+                                            type="text"
+                                            class="quiz-number-input"
+                                            placeholder="e.g. 500"
+                                            prop:value=move || form.get().deposit_amount_thb
+                                            on:input=move |ev| set_form.update(|f| f.deposit_amount_thb = event_target_value(&ev))
+                                        />
+                                        <span class="quiz-setting-hint">"Amount in Thai Baht"</span>
+                                    </div>
+                                    <div class="quiz-setting-item">
+                                        <label class="quiz-field-label">"Escrow Address"</label>
+                                        <input
+                                            type="text"
+                                            class="quiz-number-input"
+                                            placeholder="Solana escrow PDA address (base58)"
+                                            prop:value=move || form.get().escrow_address
+                                            on:input=move |ev| set_form.update(|f| f.escrow_address = event_target_value(&ev))
+                                        />
+                                        <span class="quiz-setting-hint">"On-chain escrow PDA for this event"</span>
+                                    </div>
+                                    <div class="quiz-setting-item">
+                                        <label class="quiz-field-label">"Refund Deadline (hours)"</label>
+                                        <input
+                                            type="text"
+                                            class="quiz-number-input"
+                                            placeholder="e.g. 48"
+                                            prop:value=move || form.get().refund_deadline_hours
+                                            on:input=move |ev| set_form.update(|f| f.refund_deadline_hours = event_target_value(&ev))
+                                        />
+                                        <span class="quiz-setting-hint">"Hours before event start when refunds close"</span>
+                                    </div>
                                 </div>
                             </div>
 
