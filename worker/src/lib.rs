@@ -1,6 +1,7 @@
 mod adventure;
 mod auth;
 mod crypto;
+mod error;
 mod event_store;
 mod handlers;
 mod http;

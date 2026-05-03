@@ -367,32 +367,35 @@ pub async fn seed_from_config(
 
     let now = chrono::Utc::now().to_rfc3339();
 
+    let defaults = &global.event_defaults;
     let config = EventConfig {
         id: "default".to_string(),
-        name: global.event_name.clone(),
+        name: defaults.name.clone(),
         slug: "default".to_string(),
-        tagline: global.event_tagline.clone(),
-        link: global.event_link.clone(),
+        tagline: defaults.tagline.clone(),
+        link: defaults.link.clone(),
         status: EventStatus::Active,
-        event_start_ms: global.event_start_ms,
-        event_end_ms: global.event_end_ms,
+        event_start_ms: defaults.start_ms,
+        event_end_ms: defaults.end_ms,
         sheet_id: global.sheets.sheet_id.clone(),
         sheet_name: global.sheets.sheet_name.clone(),
         staff_sheet_name: global.sheets.staff_sheet_name.clone(),
         quiz_enabled: true,
-        nft_collection_mint: global.nft_collection_mint.clone(),
-        nft_metadata_uri: global.nft_metadata_uri.clone(),
-        nft_image_url: global.nft_image_url.clone(),
+        nft_collection_mint: global.nft.collection_mint.clone(),
+        nft_metadata_uri: global.nft.metadata_uri.clone(),
+        nft_image_url: global.nft.image_url.clone(),
         nft_name_template: "BeThere - {event_name}".to_string(),
         nft_symbol: "BETHERE".to_string(),
         nft_description_template: "Proof of attendance at {event_name}".to_string(),
         organizer_emails: {
             let mut emails = global.super_admin_emails.clone();
             // Merge organizers from Google Sheet staff tab (role "admin" or "organizer")
+            let kv = state.events_kv.as_ref().or(state.quiz_kv.as_ref());
             if let Ok(members) = crate::sheets::get_staff_members(
                 state,
                 &global.sheets.sheet_id,
                 &global.sheets.staff_sheet_name,
+                kv,
             )
             .await
             {
@@ -409,10 +412,12 @@ pub async fn seed_from_config(
         staff_emails: {
             let mut emails = global.staff_emails.clone();
             // Merge staff from Google Sheet staff tab (all members)
+            let kv = state.events_kv.as_ref().or(state.quiz_kv.as_ref());
             if let Ok(members) = crate::sheets::get_staff_members(
                 state,
                 &global.sheets.sheet_id,
                 &global.sheets.staff_sheet_name,
+                kv,
             )
             .await
             {
@@ -424,7 +429,7 @@ pub async fn seed_from_config(
             }
             emails
         },
-        claim_base_url: global.claim_base_url.clone(),
+        claim_base_url: global.server.claim_base_url.clone(),
         merkle_tree: String::new(), // not in global config — per-event only
         created_at: now.clone(),
         updated_at: now,
@@ -535,24 +540,27 @@ pub async fn resolve_event_or_fallback(
 ) -> Result<EventConfig, String> {
     match events_kv {
         Some(kv) => resolve_event(kv, event_id).await,
-        None => Ok(EventConfig::from_global_config(
-            &global.event_name,
-            &global.event_tagline,
-            &global.event_link,
-            global.event_start_ms,
-            global.event_end_ms,
-            &global.sheets.sheet_id,
-            &global.sheets.sheet_name,
-            &global.sheets.staff_sheet_name,
-            &global.nft_collection_mint,
-            &global.nft_metadata_uri,
-            &global.nft_image_url,
-            "",                          // nft_symbol — not in global config
-            global.staff_emails.clone(), // organizer_emails — use staff_emails for legacy
-            Vec::new(),                  // staff_emails
-            &global.claim_base_url,
-            "", // merkle_tree — not in global config
-        )),
+        None => {
+            let d = &global.event_defaults;
+            Ok(EventConfig::from_global_config(
+                &d.name,
+                &d.tagline,
+                &d.link,
+                d.start_ms,
+                d.end_ms,
+                &global.sheets.sheet_id,
+                &global.sheets.sheet_name,
+                &global.sheets.staff_sheet_name,
+                &global.nft.collection_mint,
+                &global.nft.metadata_uri,
+                &global.nft.image_url,
+                "",                          // nft_symbol — not in global config
+                global.staff_emails.clone(), // organizer_emails — use staff_emails for legacy
+                Vec::new(),                  // staff_emails
+                &global.server.claim_base_url,
+                "", // merkle_tree — not in global config
+            ))
+        }
     }
 }
 

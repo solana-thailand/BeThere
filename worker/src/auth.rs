@@ -88,10 +88,12 @@ pub async fn is_staff(email: &str, state: &AppState) -> bool {
 /// Role values: "admin" (scanner + admin dashboard) or "staff" (scanner only).
 pub async fn get_staff_role(email: &str, state: &AppState) -> Option<String> {
     // Check the Google Sheets "staff" tab first (supports role column B)
+    let kv = state.events_kv.as_ref().or(state.quiz_kv.as_ref());
     match sheets::get_staff_members(
         state,
         &state.config.sheets.sheet_id,
         &state.config.sheets.staff_sheet_name,
+        kv,
     )
     .await
     {
@@ -429,7 +431,8 @@ pub async fn check_event_access(
 mod tests {
     use super::*;
     use event_checkin_domain::config::{
-        AppConfig, GoogleOAuthConfig, GoogleServiceAccountConfig, SheetsConfig,
+        AppConfig, EventDefaults, GoogleOAuthConfig, GoogleServiceAccountConfig, NftConfig,
+        ServerConfig, SheetsConfig, SolanaConfig,
     };
 
     fn test_state() -> AppState {
@@ -454,21 +457,29 @@ mod tests {
                 "admin@example.com".to_string(),
                 "staff@example.com".to_string(),
             ],
-            server_url: "http://localhost:3000".to_string(),
-            claim_base_url: "http://localhost:3000/claim".to_string(),
-            helius_rpc_url: "https://devnet.helius-rpc.com".to_string(),
-            helius_api_key: "test-helius-key".to_string(),
-            nft_collection_mint: "test-collection-mint".to_string(),
-            nft_metadata_uri: "https://arweave.net/test-metadata".to_string(),
-            nft_image_url: "https://arweave.net/test-image".to_string(),
-            event_name: "Test Event".to_string(),
-            event_tagline: "Test Tagline".to_string(),
-            event_link: "https://example.com/event".to_string(),
-            event_start_ms: 0,
-            event_end_ms: 0,
             super_admin_emails: vec!["admin@example.com".to_string()],
-            host: "0.0.0.0".to_string(),
-            port: 3000,
+            server: ServerConfig {
+                host: "0.0.0.0".to_string(),
+                port: 3000,
+                url: "http://localhost:3000".to_string(),
+                claim_base_url: "http://localhost:3000/claim".to_string(),
+            },
+            solana: SolanaConfig {
+                rpc_url: "https://devnet.helius-rpc.com".to_string(),
+                api_key: "test-helius-key".to_string(),
+            },
+            nft: NftConfig {
+                collection_mint: "test-collection-mint".to_string(),
+                metadata_uri: "https://arweave.net/test-metadata".to_string(),
+                image_url: "https://arweave.net/test-image".to_string(),
+            },
+            event_defaults: EventDefaults {
+                name: "Test Event".to_string(),
+                tagline: "Test Tagline".to_string(),
+                link: "https://example.com/event".to_string(),
+                start_ms: 0,
+                end_ms: 0,
+            },
         };
 
         AppState {

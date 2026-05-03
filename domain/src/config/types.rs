@@ -43,6 +43,97 @@ pub struct SheetsConfig {
     pub staff_sheet_name: String,
 }
 
+/// Solana/Helius RPC configuration.
+#[derive(Clone)]
+pub struct SolanaConfig {
+    /// Helius RPC URL for Solana JSON-RPC calls.
+    pub rpc_url: String,
+    /// Helius API key for RPC authentication.
+    pub api_key: String,
+}
+
+impl fmt::Debug for SolanaConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SolanaConfig")
+            .field("rpc_url", &self.rpc_url)
+            .field("api_key", &"***REDACTED***")
+            .finish()
+    }
+}
+
+/// NFT configuration (global defaults, per-event overrides via EventConfig).
+#[derive(Clone)]
+pub struct NftConfig {
+    /// Collection mint address for compressed NFTs.
+    pub collection_mint: String,
+    /// URI to metadata JSON on Arweave/IPFS.
+    pub metadata_uri: String,
+    /// NFT badge image URL.
+    pub image_url: String,
+}
+
+impl fmt::Debug for NftConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("NftConfig")
+            .field("collection_mint", &self.collection_mint)
+            .field("metadata_uri", &self.metadata_uri)
+            .field("image_url", &self.image_url)
+            .finish()
+    }
+}
+
+/// Server configuration.
+#[derive(Clone)]
+pub struct ServerConfig {
+    pub host: String,
+    pub port: u16,
+    pub url: String,
+    /// Base URL for claim links.
+    pub claim_base_url: String,
+}
+
+impl fmt::Debug for ServerConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ServerConfig")
+            .field("host", &self.host)
+            .field("port", &self.port)
+            .field("url", &self.url)
+            .field("claim_base_url", &self.claim_base_url)
+            .finish()
+    }
+}
+
+impl ServerConfig {
+    pub fn listen_addr(&self) -> String {
+        format!("{}:{}", self.host, self.port)
+    }
+}
+
+/// Legacy event defaults read from env vars.
+///
+/// Used by `seed_from_config` and `from_global_config` to create the initial
+/// default event when the EVENTS KV namespace is not yet populated.
+#[derive(Clone)]
+pub struct EventDefaults {
+    pub name: String,
+    pub tagline: String,
+    pub link: String,
+    pub start_ms: i64,
+    pub end_ms: i64,
+}
+
+impl fmt::Debug for EventDefaults {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("EventDefaults")
+            .field("name", &self.name)
+            .field("tagline", &self.tagline)
+            .field("link", &self.link)
+            .field("start_ms", &self.start_ms)
+            .field("end_ms", &self.end_ms)
+            .finish()
+    }
+}
+
 #[derive(Clone)]
 pub struct AppConfig {
     pub google_oauth: GoogleOAuthConfig,
@@ -50,34 +141,11 @@ pub struct AppConfig {
     pub sheets: SheetsConfig,
     pub jwt_secret: String,
     pub staff_emails: Vec<String>,
-    pub server_url: String,
-    /// Base URL for claim links (e.g. https://bethere.solana-thailand.workers.dev/claim)
-    pub claim_base_url: String,
-    /// Helius RPC URL for Solana JSON-RPC calls (e.g. https://devnet.helius-rpc.com)
-    pub helius_rpc_url: String,
-    /// Helius API key for RPC authentication
-    pub helius_api_key: String,
-    /// NFT collection mint address for compressed NFTs
-    pub nft_collection_mint: String,
-    /// URI to metadata JSON on Arweave/IPFS for the NFT
-    pub nft_metadata_uri: String,
-    /// NFT badge image URL
-    pub nft_image_url: String,
-    /// Full event name (e.g. "Solana x AI Builders: The Road to Mainnet #1 (Bangkok)")
-    pub event_name: String,
-    /// Event tagline / subtitle
-    pub event_tagline: String,
-    /// External event page URL
-    pub event_link: String,
-    /// Event start time as Unix epoch milliseconds
-    pub event_start_ms: i64,
-    /// Event end time as Unix epoch milliseconds
-    pub event_end_ms: i64,
-    /// Global admin emails that can create/manage all events.
-    /// Set via SUPER_ADMIN_EMAILS env var (comma-separated).
     pub super_admin_emails: Vec<String>,
-    pub host: String,
-    pub port: u16,
+    pub server: ServerConfig,
+    pub solana: SolanaConfig,
+    pub nft: NftConfig,
+    pub event_defaults: EventDefaults,
 }
 
 impl fmt::Debug for AppConfig {
@@ -88,27 +156,11 @@ impl fmt::Debug for AppConfig {
             .field("sheets", &self.sheets)
             .field("jwt_secret", &"***REDACTED***")
             .field("staff_emails", &self.staff_emails)
-            .field("server_url", &self.server_url)
-            .field("claim_base_url", &self.claim_base_url)
-            .field("helius_rpc_url", &self.helius_rpc_url)
-            .field("helius_api_key", &"***REDACTED***")
-            .field("nft_collection_mint", &self.nft_collection_mint)
-            .field("nft_metadata_uri", &self.nft_metadata_uri)
-            .field("nft_image_url", &self.nft_image_url)
-            .field("event_name", &self.event_name)
-            .field("event_tagline", &self.event_tagline)
-            .field("event_link", &self.event_link)
-            .field("event_start_ms", &self.event_start_ms)
-            .field("event_end_ms", &self.event_end_ms)
             .field("super_admin_emails", &self.super_admin_emails)
-            .field("host", &self.host)
-            .field("port", &self.port)
+            .field("server", &self.server)
+            .field("solana", &self.solana)
+            .field("nft", &self.nft)
+            .field("event_defaults", &self.event_defaults)
             .finish()
-    }
-}
-
-impl AppConfig {
-    pub fn listen_addr(&self) -> String {
-        format!("{}:{}", self.host, self.port)
     }
 }

@@ -14,22 +14,14 @@ use axum::{
     response::Json,
 };
 
-use serde::Deserialize;
 use serde_json::json;
 
 use event_checkin_domain::models::api::{QuizConfig, QuizStatus, QuizSubmitRequest};
 use event_checkin_domain::models::auth::Claims;
 
-use crate::event_store;
+use super::ext::{EventIdQuery, resolve_event};
 use crate::quiz;
 use crate::state::AppState;
-
-/// Optional event_id query parameter for event-scoped requests.
-/// Reused by other handler modules (e.g. adventure).
-#[derive(Debug, Deserialize)]
-pub struct EventIdQuery {
-    pub event_id: Option<String>,
-}
 
 /// GET /api/quiz
 /// Fetch quiz questions for the frontend.
@@ -42,17 +34,9 @@ pub async fn get_quiz(
     Query(query): Query<EventIdQuery>,
 ) -> Json<serde_json::Value> {
     // Resolve event (uses events_kv if available, falls back to global config)
-    let event = match event_store::resolve_event_or_fallback(
-        state.events_kv.as_ref(),
-        query.event_id.as_deref(),
-        &state.config,
-    )
-    .await
-    {
+    let event = match resolve_event(&state, query.event_id.as_deref()).await {
         Ok(e) => e,
-        Err(e) => {
-            return Json(json!({ "success": false, "error": e }));
-        }
+        Err(e) => return e,
     };
 
     // Determine KV namespace for quiz data
@@ -127,17 +111,9 @@ pub async fn submit_quiz(
     );
 
     // Resolve event (uses events_kv if available, falls back to global config)
-    let event = match event_store::resolve_event_or_fallback(
-        state.events_kv.as_ref(),
-        query.event_id.as_deref(),
-        &state.config,
-    )
-    .await
-    {
+    let event = match resolve_event(&state, query.event_id.as_deref()).await {
         Ok(e) => e,
-        Err(e) => {
-            return Json(json!({ "success": false, "error": e }));
-        }
+        Err(e) => return e,
     };
 
     // Determine KV namespace for quiz data
@@ -154,11 +130,13 @@ pub async fn submit_quiz(
     let eid = event.id.as_str();
 
     // Verify claim token exists (attendee must be checked in)
+    let sheets_kv = state.events_kv.as_ref().or(state.quiz_kv.as_ref());
     match crate::sheets::get_attendee_by_claim_token(
         &token,
         &state,
         &event.sheet_id,
         &event.sheet_name,
+        sheets_kv,
     )
     .await
     {
@@ -269,17 +247,9 @@ pub async fn get_quiz_status(
     tracing::info!("quiz status for token: {token}");
 
     // Resolve event (uses events_kv if available, falls back to global config)
-    let event = match event_store::resolve_event_or_fallback(
-        state.events_kv.as_ref(),
-        query.event_id.as_deref(),
-        &state.config,
-    )
-    .await
-    {
+    let event = match resolve_event(&state, query.event_id.as_deref()).await {
         Ok(e) => e,
-        Err(e) => {
-            return Json(json!({ "success": false, "error": e }));
-        }
+        Err(e) => return e,
     };
 
     // Determine KV namespace for quiz data
@@ -381,17 +351,9 @@ pub async fn get_admin_quiz(
     tracing::info!("admin quiz read by {}", _claims.email);
 
     // Resolve event (uses events_kv if available, falls back to global config)
-    let event = match event_store::resolve_event_or_fallback(
-        state.events_kv.as_ref(),
-        query.event_id.as_deref(),
-        &state.config,
-    )
-    .await
-    {
+    let event = match resolve_event(&state, query.event_id.as_deref()).await {
         Ok(e) => e,
-        Err(e) => {
-            return Json(json!({ "success": false, "error": e }));
-        }
+        Err(e) => return e,
     };
 
     // Determine KV namespace for quiz data
@@ -463,17 +425,9 @@ pub async fn put_quiz(
     );
 
     // Resolve event (uses events_kv if available, falls back to global config)
-    let event = match event_store::resolve_event_or_fallback(
-        state.events_kv.as_ref(),
-        query.event_id.as_deref(),
-        &state.config,
-    )
-    .await
-    {
+    let event = match resolve_event(&state, query.event_id.as_deref()).await {
         Ok(e) => e,
-        Err(e) => {
-            return Json(json!({ "success": false, "error": e }));
-        }
+        Err(e) => return e,
     };
 
     // Determine KV namespace for quiz data

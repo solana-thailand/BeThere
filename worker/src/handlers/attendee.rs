@@ -9,21 +9,14 @@ use axum::{
     extract::{Path, Query, State},
     response::Json,
 };
-use serde::Deserialize;
 use serde_json::json;
 
 use event_checkin_domain::models::api::{AttendeeResponse, RecentCheckIn, StatsResponse};
 use event_checkin_domain::models::auth::Claims;
 
-use crate::event_store;
+use super::ext::{EventIdQuery, resolve_event_with_access, resolve_kv};
 use crate::sheets;
 use crate::state::AppState;
-
-/// Optional event_id query parameter for event-scoped requests.
-#[derive(Debug, Deserialize)]
-pub struct EventIdQuery {
-    pub event_id: Option<String>,
-}
 
 /// GET /api/attendees
 /// List all attendees with optional filtering and statistics.
@@ -37,43 +30,23 @@ pub async fn list_attendees(
 ) -> Json<serde_json::Value> {
     tracing::info!("listing attendees (requested by: {})", claims.email);
 
-    let event = match event_store::resolve_event_or_fallback(
-        state.events_kv.as_ref(),
-        query.event_id.as_deref(),
-        &state.config,
-    )
-    .await
-    {
+    let event = match resolve_event_with_access(&state, &claims, query.event_id.as_deref()).await {
         Ok(e) => e,
-        Err(e) => {
-            return Json(json!({ "success": false, "error": e }));
-        }
+        Err(e) => return e,
     };
 
-    // Per-event access guard: staff can only view attendees in their assigned events
-    if let Err(e) = crate::auth::check_event_access(&claims.email, &state, &event).await {
-        tracing::warn!(
-            "attendee list denied: {} has no access to event '{}' ({})",
-            claims.email,
-            event.name,
-            event.id,
-        );
-        return Json(json!({
-            "success": false,
-            "error": e,
-        }));
-    }
-
-    let attendees = match sheets::get_attendees(&state, &event.sheet_id, &event.sheet_name).await {
-        Ok(a) => a,
-        Err(ref e) => {
-            tracing::error!("failed to fetch attendees: {e}");
-            return Json(json!({
-                "success": false,
-                "error": format!("failed to fetch attendees: {e}"),
-            }));
-        }
-    };
+    let kv = resolve_kv(&state);
+    let attendees =
+        match sheets::get_attendees(&state, &event.sheet_id, &event.sheet_name, kv).await {
+            Ok(a) => a,
+            Err(ref e) => {
+                tracing::error!("failed to fetch attendees: {e}");
+                return Json(json!({
+                    "success": false,
+                    "error": format!("failed to fetch attendees: {e}"),
+                }));
+            }
+        };
 
     // Compute statistics
     let total_approved: usize = attendees.iter().filter(|a| a.is_approved()).count();
@@ -136,35 +109,15 @@ pub async fn get_attendee(
 ) -> Json<serde_json::Value> {
     tracing::info!("fetching attendee {id} (requested by: {})", claims.email);
 
-    let event = match event_store::resolve_event_or_fallback(
-        state.events_kv.as_ref(),
-        query.event_id.as_deref(),
-        &state.config,
-    )
-    .await
-    {
+    let event = match resolve_event_with_access(&state, &claims, query.event_id.as_deref()).await {
         Ok(e) => e,
-        Err(e) => {
-            return Json(json!({ "success": false, "error": e }));
-        }
+        Err(e) => return e,
     };
 
-    // Per-event access guard: staff can only view attendees in their assigned events
-    if let Err(e) = crate::auth::check_event_access(&claims.email, &state, &event).await {
-        tracing::warn!(
-            "attendee lookup denied: {} has no access to event '{}' ({})",
-            claims.email,
-            event.name,
-            event.id,
-        );
-        return Json(json!({
-            "success": false,
-            "error": e,
-        }));
-    }
-
+    let kv = resolve_kv(&state);
     let attendee =
-        match sheets::get_attendee_by_id(&id, &state, &event.sheet_id, &event.sheet_name).await {
+        match sheets::get_attendee_by_id(&id, &state, &event.sheet_id, &event.sheet_name, kv).await
+        {
             Ok(Some(a)) => a,
             Ok(None) => {
                 return Json(json!({

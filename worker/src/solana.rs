@@ -6,6 +6,36 @@
 use serde::Deserialize;
 use worker::{Fetch, Headers, Method, Request, RequestInit};
 
+// ---------------------------------------------------------------------------
+// Request struct
+// ---------------------------------------------------------------------------
+
+/// Parameters for minting a compressed NFT.
+pub struct MintRequest<'a> {
+    /// Owner's Solana wallet address (base58).
+    pub wallet_address: &'a str,
+    /// Helius RPC base URL (without query params).
+    pub rpc_url: &'a str,
+    /// Helius API key, appended as `?api-key=KEY`.
+    pub api_key: &'a str,
+    /// Collection mint address; ignored if empty.
+    pub collection_mint: &'a str,
+    /// Off-chain metadata URI; ignored if empty.
+    pub metadata_uri: &'a str,
+    /// NFT image URL; ignored if empty.
+    pub image_url: &'a str,
+    /// NFT name (e.g. event-specific title).
+    pub nft_name: &'a str,
+    /// NFT symbol (e.g. event ticker).
+    pub nft_symbol: &'a str,
+    /// NFT description (e.g. proof of attendance text).
+    pub nft_description: &'a str,
+    /// External URL associated with the NFT.
+    pub nft_external_url: &'a str,
+    /// Merkle tree address. Reserved for future use.
+    pub merkle_tree: &'a str,
+}
+
 /// Priority fee in microLamports per compute unit for faster transaction inclusion.
 /// Reserved for future direct Bubblegum `mint_v2` calls (CLI already uses this).
 /// NOT sent to Helius `mintCompressedNft` — that API rejects unknown params.
@@ -58,69 +88,42 @@ struct HeliusRpcError {
 /// The Helius API uses query-param auth (`?api-key=KEY`), so the URL is built
 /// by appending the api key to the rpc url.
 ///
-/// # Parameters
-///
-/// - `wallet_address` — Owner's Solana wallet address (base58).
-/// - `rpc_url` — Helius RPC base URL (without query params).
-/// - `api_key` — Helius API key, appended as `?api-key=KEY`.
-/// - `collection_mint` — Collection mint address; ignored if empty.
-/// - `metadata_uri` — Off-chain metadata URI; ignored if empty.
-/// - `image_url` — NFT image URL; ignored if empty.
-/// - `nft_name` — NFT name (e.g. event-specific title).
-/// - `nft_symbol` — NFT symbol (e.g. event ticker).
-/// - `nft_description` — NFT description (e.g. proof of attendance text).
-/// - `nft_external_url` — External URL associated with the NFT.
-/// - `merkle_tree` — Reserved for future use. Helius `mintCompressedNft` does not
-///   support a custom tree parameter; it always mints to its own managed tree.
-///   Kept in the signature for future direct Bubblegum `mint_v2` integration.
+/// See [`MintRequest`] for field documentation.
 ///
 /// Returns [`MintResult`] with the transaction signature and asset id on success.
-#[allow(clippy::too_many_arguments)]
-pub async fn mint_compressed_nft(
-    wallet_address: &str,
-    rpc_url: &str,
-    api_key: &str,
-    collection_mint: &str,
-    metadata_uri: &str,
-    image_url: &str,
-    nft_name: &str,
-    nft_symbol: &str,
-    nft_description: &str,
-    nft_external_url: &str,
-    merkle_tree: &str,
-) -> Result<MintResult, String> {
-    let url = format!("{rpc_url}/?api-key={api_key}");
+pub async fn mint_compressed_nft(req: &MintRequest<'_>) -> Result<MintResult, String> {
+    let url = format!("{}/?api-key={}", req.rpc_url, req.api_key);
 
     // Build params — include collection/uri/imageUrl only when non-empty.
     // NOTE: Helius mintCompressedNft only accepts documented params.
     // "priorityFee" and "tree" cause Invalid request params errors.
     // See: https://www.helius.dev/docs/api-reference/mint/mintcompressednft
     let mut params = serde_json::json!({
-        "name": nft_name,
-        "symbol": nft_symbol,
-        "description": nft_description,
-        "owner": wallet_address,
-        "externalUrl": nft_external_url,
+        "name": req.nft_name,
+        "symbol": req.nft_symbol,
+        "description": req.nft_description,
+        "owner": req.wallet_address,
+        "externalUrl": req.nft_external_url,
         "sellerFeeBasisPoints": 0,
         "confirmTransaction": true
     });
 
-    if !collection_mint.is_empty() {
-        params["collection"] = serde_json::Value::String(collection_mint.to_string());
+    if !req.collection_mint.is_empty() {
+        params["collection"] = serde_json::Value::String(req.collection_mint.to_string());
     }
-    if !metadata_uri.is_empty() {
-        params["uri"] = serde_json::Value::String(metadata_uri.to_string());
+    if !req.metadata_uri.is_empty() {
+        params["uri"] = serde_json::Value::String(req.metadata_uri.to_string());
     }
-    if !image_url.is_empty() {
-        params["imageUrl"] = serde_json::Value::String(image_url.to_string());
+    if !req.image_url.is_empty() {
+        params["imageUrl"] = serde_json::Value::String(req.image_url.to_string());
     }
 
     // NOTE: Helius mintCompressedNft does NOT support a custom "tree" parameter.
-    // It always mints to Helius' own managed Merkle tree. The merkle_tree param
-    // is kept in the function signature for future use (direct Bubblegum calls
-    // or when Helius adds custom tree support).
+    // It always mints to Helius' own managed Merkle tree. The merkle_tree field
+    // is kept in MintRequest for future use (direct Bubblegum calls or when
+    // Helius adds custom tree support).
     // See: https://www.helius.dev/docs/api-reference/mint/mintcompressednft
-    let _ = merkle_tree; // suppress unused warning
+    let _ = req.merkle_tree; // suppress unused warning
 
     let body = serde_json::json!({
         "jsonrpc": "2.0",

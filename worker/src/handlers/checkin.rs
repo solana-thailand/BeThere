@@ -9,7 +9,6 @@ use axum::{
     extract::{Path, Query, State},
     response::Json,
 };
-use serde::Deserialize;
 use serde_json::json;
 use uuid::Uuid;
 
@@ -17,15 +16,9 @@ use event_checkin_domain::models::api::CheckInResponse;
 use event_checkin_domain::models::attendee::Attendee;
 use event_checkin_domain::models::auth::Claims;
 
-use crate::event_store;
+use super::ext::{EventIdQuery, resolve_event_with_access, resolve_kv};
 use crate::sheets;
 use crate::state::AppState;
-
-/// Optional event_id query parameter for event-scoped requests.
-#[derive(Debug, Deserialize)]
-pub struct EventIdQuery {
-    pub event_id: Option<String>,
-}
 
 /// POST /api/checkin/:id
 /// Check in an attendee by their api_id.
@@ -46,36 +39,16 @@ pub async fn check_in(
 ) -> Json<serde_json::Value> {
     tracing::info!("check-in request for {id} (by: {})", claims.email);
 
-    let event = match event_store::resolve_event_or_fallback(
-        state.events_kv.as_ref(),
-        query.event_id.as_deref(),
-        &state.config,
-    )
-    .await
-    {
+    let event = match resolve_event_with_access(&state, &claims, query.event_id.as_deref()).await {
         Ok(e) => e,
-        Err(e) => {
-            return Json(json!({ "success": false, "error": e }));
-        }
+        Err(e) => return e,
     };
 
-    // Per-event access guard: staff can only check in their assigned events
-    if let Err(e) = crate::auth::check_event_access(&claims.email, &state, &event).await {
-        tracing::warn!(
-            "check-in denied: {} has no access to event '{}' ({})",
-            claims.email,
-            event.name,
-            event.id,
-        );
-        return Json(json!({
-            "success": false,
-            "error": e,
-        }));
-    }
-
     // Fetch the attendee
+    let kv = resolve_kv(&state);
     let attendee: Attendee =
-        match sheets::get_attendee_by_id(&id, &state, &event.sheet_id, &event.sheet_name).await {
+        match sheets::get_attendee_by_id(&id, &state, &event.sheet_id, &event.sheet_name, kv).await
+        {
             Ok(Some(a)) => a,
             Ok(None) => {
                 tracing::warn!("check-in failed: attendee {id} not found");
@@ -155,6 +128,7 @@ pub async fn check_in(
         &state,
         &event.sheet_id,
         &event.sheet_name,
+        kv,
     )
     .await
     {

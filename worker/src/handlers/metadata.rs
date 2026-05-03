@@ -26,8 +26,8 @@ pub async fn get_metadata(
         "name": "BeThere Badge",
         "symbol": "BETHERE",
         "description": "Proof of attendance",
-        "image": &state.config.nft_image_url,
-        "external_url": &state.config.claim_base_url,
+        "image": &state.config.nft.image_url,
+        "external_url": &state.config.server.claim_base_url,
         "attributes": [
             { "trait_type": "Type", "value": "Attendance Badge" },
             { "trait_type": "Platform", "value": "BeThere" },
@@ -35,7 +35,7 @@ pub async fn get_metadata(
         "properties": {
             "category": "image",
             "files": [
-                { "uri": &state.config.nft_image_url, "type": "image/svg+xml" }
+                { "uri": &state.config.nft.image_url, "type": "image/svg+xml" }
             ]
         }
     });

@@ -18,7 +18,7 @@ use event_checkin_domain::models::api::{
 use event_checkin_domain::models::auth::Claims;
 use event_checkin_domain::qr;
 
-use crate::event_store;
+use super::ext::{resolve_event_with_access, resolve_kv};
 use crate::sheets;
 use crate::state::AppState;
 
@@ -51,32 +51,10 @@ pub async fn generate_qrs(
 ) -> Json<serde_json::Value> {
     let force = query.force;
 
-    let event = match event_store::resolve_event_or_fallback(
-        state.events_kv.as_ref(),
-        query.event_id.as_deref(),
-        &state.config,
-    )
-    .await
-    {
+    let event = match resolve_event_with_access(&state, &claims, query.event_id.as_deref()).await {
         Ok(e) => e,
-        Err(e) => {
-            return Json(json!({ "success": false, "error": e }));
-        }
+        Err(e) => return e,
     };
-
-    // Per-event access guard: staff can only generate QRs for their assigned events
-    if let Err(e) = crate::auth::check_event_access(&claims.email, &state, &event).await {
-        tracing::warn!(
-            "QR generation denied: {} has no access to event '{}' ({})",
-            claims.email,
-            event.name,
-            event.id,
-        );
-        return Json(json!({
-            "success": false,
-            "error": e,
-        }));
-    }
 
     tracing::info!(
         "QR generation requested by {} (force={force})",
@@ -84,16 +62,18 @@ pub async fn generate_qrs(
     );
 
     // Fetch all attendees
-    let attendees = match sheets::get_attendees(&state, &event.sheet_id, &event.sheet_name).await {
-        Ok(a) => a,
-        Err(ref e) => {
-            tracing::error!("failed to fetch attendees for QR generation: {e}");
-            return Json(json!({
-                "success": false,
-                "error": format!("failed to fetch attendees: {e}"),
-            }));
-        }
-    };
+    let kv = resolve_kv(&state);
+    let attendees =
+        match sheets::get_attendees(&state, &event.sheet_id, &event.sheet_name, kv).await {
+            Ok(a) => a,
+            Err(ref e) => {
+                tracing::error!("failed to fetch attendees for QR generation: {e}");
+                return Json(json!({
+                    "success": false,
+                    "error": format!("failed to fetch attendees: {e}"),
+                }));
+            }
+        };
 
     let total_fetched = attendees.len();
 
@@ -154,7 +134,7 @@ pub async fn generate_qrs(
     }
 
     // Generate QR URLs using the filter logic
-    let updates = qr::generate_qr_urls(&attendees, &state.config.server_url, force);
+    let updates = qr::generate_qr_urls(&attendees, &state.config.server.url, force);
 
     tracing::info!(
         "generate_qr_urls: {} updates to write (force={force})",
@@ -218,7 +198,7 @@ pub async fn generate_qrs(
         .collect();
 
     // Batch update the Google Sheet
-    match sheets::update_qr_urls(&updates, &state, &event.sheet_id, &event.sheet_name).await {
+    match sheets::update_qr_urls(&updates, &state, &event.sheet_id, &event.sheet_name, kv).await {
         Ok(updated) => {
             tracing::info!(
                 "QR generation complete: {updated} URLs written to sheet (requested by: {})",

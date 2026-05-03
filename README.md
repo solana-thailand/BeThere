@@ -152,20 +152,22 @@ The frontend is served from `frontend-leptos/dist/` via Workers Assets with SPA 
 ```
 worker/src/             — Cloudflare Worker
   handlers/             — API endpoints (auth, check-in, QR, attendee, events, quiz, claim, adventure, health)
+    ext.rs              — Shared utilities (EventIdQuery, resolve_event_with_access, resolve_kv)
   adventure.rs          — Adventure business logic (save progress, check completion)
   auth.rs               — Google OAuth + JWT + role resolution (super_admin/organizer/staff)
+  error.rs              — Typed AppError → Axum IntoResponse integration
   event_store.rs        — KV event registry CRUD, seed, migration
   quiz.rs               — Quiz business logic (scoring, KV interaction)
-  sheets.rs             — Google Sheets read/write (worker::Fetch)
-  solana.rs             — Helius cNFT minting (mintCompressedNft RPC)
+  sheets.rs             — Google Sheets read/write (worker::Fetch) + KV attendee cache + token cache
+  solana.rs             — Helius cNFT minting (mintCompressedNft RPC, MintRequest struct)
   crypto.rs             — SubtleCrypto bridge (RSA-SHA256, HMAC-SHA256)
   http.rs               — HTTP client wrapping worker::Fetch
   middleware.rs         — Security headers, auth guard
   state.rs              — AppState from Env bindings
 
 domain/src/             — Shared (compiles x86_64 + wasm32)
-  config/               — AppConfig, OAuthConfig, SheetsConfig (secrets redacted in Debug)
-  models/               — Attendee, Claims, EventConfig, AdventureConfig, API response types
+  config/               — AppConfig (grouped: OAuth, Sheets, Solana, Nft, Server, EventDefaults)
+  models/               — Attendee, Claims, EventConfig, AdventureConfig, AppError, API response types
   qr/                   — QR URL generation + base64 image
 
 frontend-leptos/src/
@@ -176,6 +178,14 @@ frontend-leptos/src/
   utils.rs              — Helpers (timestamps, badges, participation)
   js/                   — Camera + QR detection module
 ```
+
+### Performance Layers
+
+| Layer | Mechanism | TTL | Benefit |
+|-------|-----------|-----|--------|
+| Google access token | KV cache | 3500s | Eliminates RSA-JWT signing per request (~100ms saved) |
+| Attendee data | KV cache | 30s | Eliminates Google Sheets full-scan per request (~200-800ms saved) |
+| Cache invalidation | On write-through | Immediate | Mutations (check-in, claim) invalidate cache instantly |
 
 ## Tests
 

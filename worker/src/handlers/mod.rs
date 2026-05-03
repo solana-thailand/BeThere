@@ -4,6 +4,7 @@ pub mod auth;
 pub mod checkin;
 pub mod claim;
 pub mod events;
+pub mod ext;
 pub mod health;
 pub mod metadata;
 pub mod qr;

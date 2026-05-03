@@ -20,7 +20,7 @@ use event_checkin_domain::models::event::EventConfig as DomainEventConfig;
 
 use worker::KvStore;
 
-use crate::event_store;
+use super::ext::{EventIdQuery, resolve_event, resolve_kv};
 use crate::solana::{self, validate_wallet_address};
 use crate::state::AppState;
 
@@ -123,12 +123,6 @@ pub struct ClaimRequest {
     pub wallet_address: String,
 }
 
-/// Optional event_id query parameter for event-scoped requests.
-#[derive(Debug, Deserialize)]
-pub struct EventIdQuery {
-    pub event_id: Option<String>,
-}
-
 /// GET /api/claim/{token}
 /// Look up an attendee by their claim token.
 ///
@@ -142,25 +136,19 @@ pub async fn get_claim(
 ) -> Json<serde_json::Value> {
     tracing::info!("claim lookup for token: {token}");
 
-    let event: DomainEventConfig = match event_store::resolve_event_or_fallback(
-        state.events_kv.as_ref(),
-        query.event_id.as_deref(),
-        &state.config,
-    )
-    .await
-    {
+    let event: DomainEventConfig = match resolve_event(&state, query.event_id.as_deref()).await {
         Ok(e) => e,
-        Err(e) => {
-            return Json(json!({ "success": false, "error": e }));
-        }
+        Err(e) => return e,
     };
 
+    let kv = resolve_kv(&state);
     let (attendee, total_checked_in, total_claimed) =
         match crate::sheets::get_attendee_with_claim_counts(
             &token,
             &state,
             &event.sheet_id,
             &event.sheet_name,
+            kv,
         )
         .await
         {
@@ -189,7 +177,7 @@ pub async fn get_claim(
     // Check if NFT minting is fully configured (all required secrets present)
     let nft_available = !event.nft_metadata_uri.is_empty()
         && !event.nft_image_url.is_empty()
-        && !state.config.helius_api_key.is_empty();
+        && !state.config.solana.api_key.is_empty();
 
     let api_event = EventConfig {
         event_name: event.name.clone(),
@@ -266,25 +254,19 @@ pub async fn post_claim(
     }
 
     // Resolve event context
-    let event: DomainEventConfig = match event_store::resolve_event_or_fallback(
-        state.events_kv.as_ref(),
-        query.event_id.as_deref(),
-        &state.config,
-    )
-    .await
-    {
+    let event: DomainEventConfig = match resolve_event(&state, query.event_id.as_deref()).await {
         Ok(e) => e,
-        Err(e) => {
-            return Json(json!({ "success": false, "error": e }));
-        }
+        Err(e) => return e,
     };
 
     // Look up attendee by claim token
+    let kv = resolve_kv(&state);
     let attendee = match crate::sheets::get_attendee_by_claim_token(
         &token,
         &state,
         &event.sheet_id,
         &event.sheet_name,
+        kv,
     )
     .await
     {
@@ -435,7 +417,7 @@ pub async fn post_claim(
     }
 
     // Claim dedup lock — prevent concurrent double-claim (KV-based mutex)
-    let lock_kv: Option<&KvStore> = state.events_kv.as_ref().or(state.quiz_kv.as_ref());
+    let lock_kv: Option<&KvStore> = resolve_kv(&state);
     if let Some(kv) = lock_kv
         && let Err(e) = acquire_claim_lock(kv, &event.id, &token, &body.wallet_address).await
     {
@@ -444,21 +426,20 @@ pub async fn post_claim(
 
     // Mint compressed NFT via Helius
     let config = &state.config;
-    let mint_result = match solana::mint_compressed_nft(
-        &body.wallet_address,
-        &config.helius_rpc_url,     // global
-        &config.helius_api_key,     // global
-        &event.nft_collection_mint, // per-event
-        &event.nft_metadata_uri,    // per-event
-        &event.nft_image_url,       // per-event
-        &event.nft_name(),          // per-event (template resolved)
-        &event.nft_symbol,          // per-event
-        &event.nft_description(),   // per-event (template resolved)
-        &event.link,                // per-event (externalUrl)
-        &event.merkle_tree,         // per-event (own tree or empty for Helius default)
-    )
-    .await
-    {
+    let mint_req = solana::MintRequest {
+        wallet_address: &body.wallet_address,
+        rpc_url: &config.solana.rpc_url,
+        api_key: &config.solana.api_key,
+        collection_mint: &event.nft_collection_mint,
+        metadata_uri: &event.nft_metadata_uri,
+        image_url: &event.nft_image_url,
+        nft_name: &event.nft_name(),
+        nft_symbol: &event.nft_symbol,
+        nft_description: &event.nft_description(),
+        nft_external_url: &event.link,
+        merkle_tree: &event.merkle_tree,
+    };
+    let mint_result = match solana::mint_compressed_nft(&mint_req).await {
         Ok(result) => result,
         Err(ref e) => {
             tracing::error!("mint failed for token {token}: {e}");
@@ -482,6 +463,7 @@ pub async fn post_claim(
         &state,
         &event.sheet_id,
         &event.sheet_name,
+        kv,
     )
     .await
     {
@@ -516,7 +498,7 @@ pub async fn post_claim(
         body.wallet_address
     );
 
-    let cluster = if config.helius_rpc_url.contains("mainnet") {
+    let cluster = if config.solana.rpc_url.contains("mainnet") {
         "mainnet-beta"
     } else {
         "devnet"

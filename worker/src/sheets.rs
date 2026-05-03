@@ -10,12 +10,46 @@ use chrono::Utc;
 use event_checkin_domain::models::attendee::{Attendee, AttendeeRow};
 use event_checkin_domain::models::auth::ServiceAccountClaim;
 
+use worker::KvStore;
+
 use crate::crypto;
 use crate::http::{
     AccessTokenResponse, BatchUpdateRequest, ValueRange, batch_update_sheet,
     exchange_jwt_assertion, fetch_sheet_range,
 };
 use crate::state::AppState;
+
+/// KV key for caching the Google API access token.
+const GOOGLE_TOKEN_KV_KEY: &str = "google_access_token";
+
+/// TTL for the cached Google access token (3500s = ~58 min, 100s buffer before 3600s expiry).
+const GOOGLE_TOKEN_TTL_SECS: u64 = 3500;
+
+/// KV key prefix for caching attendee lists.
+const ATTENDEE_CACHE_KEY_PREFIX: &str = "cache:attendees";
+
+/// TTL for the cached attendee list (30 seconds).
+const ATTENDEE_CACHE_TTL_SECS: u64 = 30;
+
+// ---------------------------------------------------------------------------
+// Cache helpers
+// ---------------------------------------------------------------------------
+
+/// Build the KV cache key for a given (sheet_id, sheet_name) combination.
+fn attendee_cache_key(sheet_id: &str, sheet_name: &str) -> String {
+    format!("{ATTENDEE_CACHE_KEY_PREFIX}:{sheet_id}:{sheet_name}")
+}
+
+/// Invalidate the attendee cache for the given sheet after a mutation.
+/// Errors are non-fatal — logged and ignored.
+async fn invalidate_attendee_cache(kv: Option<&KvStore>, sheet_id: &str, sheet_name: &str) {
+    if let Some(kv) = kv {
+        let key = attendee_cache_key(sheet_id, sheet_name);
+        if let Err(e) = kv.delete(&key).await {
+            tracing::debug!("failed to invalidate attendee cache: {e:?}");
+        }
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Access token
@@ -55,17 +89,115 @@ pub async fn get_access_token(state: &AppState) -> Result<String, String> {
 }
 
 // ---------------------------------------------------------------------------
+// Access token (cached)
+// ---------------------------------------------------------------------------
+
+/// Get a Google API access token, using KV cache when available.
+///
+/// If `kv` is provided, reads the cached token from KV. On cache miss,
+/// calls `get_access_token` to obtain a fresh token and caches it with
+/// a TTL of 3500 seconds (100s buffer before the 3600s Google expiry).
+pub async fn get_cached_access_token(
+    state: &AppState,
+    kv: Option<&KvStore>,
+) -> Result<String, String> {
+    // Try KV cache first
+    if let Some(kv) = kv {
+        match kv
+            .get(GOOGLE_TOKEN_KV_KEY)
+            .text()
+            .await
+            .map_err(|e| format!("failed to read google token from KV: {e:?}"))
+        {
+            Ok(Some(token)) => {
+                tracing::debug!("reused cached google access token from KV");
+                return Ok(token);
+            }
+            Ok(None) => {
+                tracing::debug!("google access token not in KV, fetching new one");
+            }
+            Err(e) => {
+                tracing::warn!("KV read for google token failed, falling back to fresh token: {e}");
+            }
+        }
+    }
+
+    // Cache miss or no KV — obtain a fresh token
+    let token = get_access_token(state).await?;
+
+    // Cache the new token in KV
+    if let Some(kv) = kv {
+        match kv
+            .put(GOOGLE_TOKEN_KV_KEY, &token)
+            .map_err(|e| format!("failed to build google token KV put: {e:?}"))
+        {
+            Ok(builder) => match builder
+                .expiration_ttl(GOOGLE_TOKEN_TTL_SECS)
+                .execute()
+                .await
+            {
+                Ok(()) => {
+                    tracing::debug!(
+                        "cached google access token in KV (ttl={GOOGLE_TOKEN_TTL_SECS}s)"
+                    );
+                }
+                Err(e) => {
+                    tracing::warn!("failed to cache google token in KV: {e:?}");
+                }
+            },
+            Err(e) => {
+                tracing::warn!("failed to build google token KV put: {e}");
+            }
+        }
+    }
+
+    Ok(token)
+}
+
+// ---------------------------------------------------------------------------
 // Attendee queries
 // ---------------------------------------------------------------------------
 
 /// Fetch all attendees from the Google Sheet.
 /// Returns a list of typed Attendee structs parsed from sheet rows.
+///
+/// Uses KV cache when available: returns cached attendees on cache hit,
+/// fetches from Google Sheets on cache miss and stores the result with
+/// a 30-second TTL.
 pub async fn get_attendees(
     state: &AppState,
     sheet_id: &str,
     sheet_name: &str,
+    kv: Option<&KvStore>,
 ) -> Result<Vec<Attendee>, String> {
-    let access_token = get_access_token(state).await?;
+    let cache_key = attendee_cache_key(sheet_id, sheet_name);
+
+    // Try KV cache first
+    if let Some(kv) = kv {
+        match kv.get(&cache_key).text().await {
+            Ok(Some(cached)) => match serde_json::from_str::<Vec<Attendee>>(&cached) {
+                Ok(attendees) => {
+                    tracing::debug!(
+                        "cache hit: {} attendees from KV key {cache_key}",
+                        attendees.len()
+                    );
+                    return Ok(attendees);
+                }
+                Err(e) => {
+                    tracing::debug!("cache deserialize error, fetching fresh: {e:?}");
+                }
+            },
+            Ok(None) => {
+                tracing::debug!("cache miss: KV key {cache_key}");
+            }
+            Err(e) => {
+                tracing::debug!("cache read error, fetching fresh: {e:?}");
+            }
+        }
+    }
+
+    // Cache miss or no KV — fetch from Google Sheets
+    let access_token = get_cached_access_token(state, kv).await?;
     let range = format!("{sheet_name}!A2:Z");
     let url = format!(
         "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{}",
@@ -89,6 +221,39 @@ pub async fn get_attendees(
         .collect();
 
     tracing::info!("fetched {} attendees from google sheets", attendees.len());
+
+    // Write to KV cache
+    if let Some(kv) = kv {
+        match serde_json::to_string(&attendees) {
+            Ok(json) => match kv
+                .put(&cache_key, &json)
+                .map_err(|e| format!("failed to build attendee cache KV put: {e:?}"))
+            {
+                Ok(builder) => match builder
+                    .expiration_ttl(ATTENDEE_CACHE_TTL_SECS)
+                    .execute()
+                    .await
+                {
+                    Ok(()) => {
+                        tracing::debug!(
+                            "cached {} attendees in KV key {cache_key} (ttl={ATTENDEE_CACHE_TTL_SECS}s)",
+                            attendees.len()
+                        );
+                    }
+                    Err(e) => {
+                        tracing::debug!("failed to cache attendees in KV: {e:?}");
+                    }
+                },
+                Err(e) => {
+                    tracing::debug!("failed to build attendee cache KV put: {e}");
+                }
+            },
+            Err(e) => {
+                tracing::debug!("failed to serialize attendees for cache: {e:?}");
+            }
+        }
+    }
+
     Ok(attendees)
 }
 
@@ -98,8 +263,9 @@ pub async fn get_attendee_by_id(
     state: &AppState,
     sheet_id: &str,
     sheet_name: &str,
+    kv: Option<&KvStore>,
 ) -> Result<Option<Attendee>, String> {
-    let attendees: Vec<Attendee> = get_attendees(state, sheet_id, sheet_name).await?;
+    let attendees: Vec<Attendee> = get_attendees(state, sheet_id, sheet_name, kv).await?;
     Ok(attendees.into_iter().find(|a| a.api_id == api_id))
 }
 
@@ -111,8 +277,9 @@ pub async fn get_attendee_by_claim_token(
     state: &AppState,
     sheet_id: &str,
     sheet_name: &str,
+    kv: Option<&KvStore>,
 ) -> Result<Option<Attendee>, String> {
-    let attendees: Vec<Attendee> = get_attendees(state, sheet_id, sheet_name).await?;
+    let attendees: Vec<Attendee> = get_attendees(state, sheet_id, sheet_name, kv).await?;
     Ok(attendees
         .into_iter()
         .find(|a| a.claim_token.as_deref() == Some(claim_token)))
@@ -125,8 +292,9 @@ pub async fn get_attendee_with_claim_counts(
     state: &AppState,
     sheet_id: &str,
     sheet_name: &str,
+    kv: Option<&KvStore>,
 ) -> Result<(Option<Attendee>, usize, usize), String> {
-    let attendees: Vec<Attendee> = get_attendees(state, sheet_id, sheet_name).await?;
+    let attendees: Vec<Attendee> = get_attendees(state, sheet_id, sheet_name, kv).await?;
     let total_checked_in = attendees
         .iter()
         .filter(|a| a.checked_in_at.is_some())
@@ -167,8 +335,9 @@ pub async fn get_staff_members(
     state: &AppState,
     sheet_id: &str,
     staff_sheet_name: &str,
+    kv: Option<&KvStore>,
 ) -> Result<Vec<StaffMember>, String> {
-    let access_token = get_access_token(state).await?;
+    let access_token = get_cached_access_token(state, kv).await?;
     let range = format!("{staff_sheet_name}!A2:B");
     let url = format!(
         "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{}",
@@ -218,8 +387,9 @@ pub async fn mark_checked_in(
     state: &AppState,
     sheet_id: &str,
     sheet_name: &str,
+    kv: Option<&KvStore>,
 ) -> Result<String, String> {
-    let access_token = get_access_token(state).await?;
+    let access_token = get_cached_access_token(state, kv).await?;
     let timestamp = Utc::now().to_rfc3339();
 
     let data = vec![
@@ -250,6 +420,8 @@ pub async fn mark_checked_in(
     tracing::info!(
         "marked row {row_index} as checked in at {timestamp} by {staff_email} claim_token={claim_token}"
     );
+
+    invalidate_attendee_cache(kv, sheet_id, sheet_name).await;
     Ok(timestamp)
 }
 
@@ -262,8 +434,9 @@ pub async fn mark_claimed(
     state: &AppState,
     sheet_id: &str,
     sheet_name: &str,
+    kv: Option<&KvStore>,
 ) -> Result<String, String> {
-    let access_token = get_access_token(state).await?;
+    let access_token = get_cached_access_token(state, kv).await?;
 
     let data = vec![
         ValueRange {
@@ -287,6 +460,8 @@ pub async fn mark_claimed(
     batch_update_sheet(&url, &body, &access_token).await?;
 
     tracing::info!("marked row {row_index} as claimed at {claimed_at} wallet={wallet_address}");
+
+    invalidate_attendee_cache(kv, sheet_id, sheet_name).await;
     Ok(claimed_at.to_string())
 }
 
@@ -297,12 +472,13 @@ pub async fn update_qr_urls(
     state: &AppState,
     sheet_id: &str,
     sheet_name: &str,
+    kv: Option<&KvStore>,
 ) -> Result<usize, String> {
     if updates.is_empty() {
         return Ok(0);
     }
 
-    let access_token = get_access_token(state).await?;
+    let access_token = get_cached_access_token(state, kv).await?;
 
     // Build batch update with individual value ranges
     let data: Vec<ValueRange> = updates
@@ -325,6 +501,8 @@ pub async fn update_qr_urls(
 
     let updated = updates.len();
     tracing::info!("updated {updated} qr code urls in google sheets");
+
+    invalidate_attendee_cache(kv, sheet_id, sheet_name).await;
     Ok(updated)
 }
 

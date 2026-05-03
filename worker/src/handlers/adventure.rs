@@ -19,11 +19,9 @@ use serde_json::json;
 use event_checkin_domain::models::adventure::{AdventureConfig, AdventureSaveRequest};
 use event_checkin_domain::models::auth::Claims;
 
+use super::ext::{EventIdQuery, resolve_event};
 use crate::adventure;
-use crate::event_store;
 use crate::state::AppState;
-
-use super::quiz::EventIdQuery;
 
 /// GET /api/adventure/{token}/status
 /// Get adventure status for a claim token.
@@ -33,15 +31,9 @@ pub async fn get_adventure_status(
     Path(token): Path<String>,
     Query(query): Query<EventIdQuery>,
 ) -> Json<serde_json::Value> {
-    let event = match event_store::resolve_event_or_fallback(
-        state.events_kv.as_ref(),
-        query.event_id.as_deref(),
-        &state.config,
-    )
-    .await
-    {
+    let event = match resolve_event(&state, query.event_id.as_deref()).await {
         Ok(e) => e,
-        Err(e) => return Json(json!({ "success": false, "error": e })),
+        Err(e) => return e,
     };
 
     let kv = match state.events_kv.as_ref().or(state.quiz_kv.as_ref()) {
@@ -90,23 +82,19 @@ pub async fn save_adventure_progress(
         return Json(json!({ "success": false, "error": "token mismatch" }));
     }
 
-    let event = match event_store::resolve_event_or_fallback(
-        state.events_kv.as_ref(),
-        query.event_id.as_deref(),
-        &state.config,
-    )
-    .await
-    {
+    let event = match resolve_event(&state, query.event_id.as_deref()).await {
         Ok(e) => e,
-        Err(e) => return Json(json!({ "success": false, "error": e })),
+        Err(e) => return e,
     };
 
     // Verify claim token belongs to a checked-in attendee
+    let sheets_kv = state.events_kv.as_ref().or(state.quiz_kv.as_ref());
     match crate::sheets::get_attendee_by_claim_token(
         &token,
         &state,
         &event.sheet_id,
         &event.sheet_name,
+        sheets_kv,
     )
     .await
     {
@@ -188,15 +176,9 @@ pub async fn get_admin_adventure(
 ) -> Json<serde_json::Value> {
     tracing::info!("admin adventure config read by {}", _claims.email);
 
-    let event = match event_store::resolve_event_or_fallback(
-        state.events_kv.as_ref(),
-        query.event_id.as_deref(),
-        &state.config,
-    )
-    .await
-    {
+    let event = match resolve_event(&state, query.event_id.as_deref()).await {
         Ok(e) => e,
-        Err(e) => return Json(json!({ "success": false, "error": e })),
+        Err(e) => return e,
     };
 
     let kv = match state.events_kv.as_ref().or(state.quiz_kv.as_ref()) {
@@ -238,15 +220,9 @@ pub async fn put_admin_adventure(
         body.enabled
     );
 
-    let event = match event_store::resolve_event_or_fallback(
-        state.events_kv.as_ref(),
-        query.event_id.as_deref(),
-        &state.config,
-    )
-    .await
-    {
+    let event = match resolve_event(&state, query.event_id.as_deref()).await {
         Ok(e) => e,
-        Err(e) => return Json(json!({ "success": false, "error": e })),
+        Err(e) => return e,
     };
 
     let kv = match state.events_kv.as_ref().or(state.quiz_kv.as_ref()) {
