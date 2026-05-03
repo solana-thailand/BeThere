@@ -324,6 +324,12 @@ h3 {
     font-size: 0.8rem;
 }
 
+.btn-xs {
+    padding: 0.15rem 0.4rem;
+    font-size: 0.7rem;
+    line-height: 1;
+}
+
 .btn-block {
     width: 100%;
 }

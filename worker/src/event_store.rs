@@ -738,8 +738,10 @@ pub async fn save_deposit_status(
         .map_err(|e| format!("failed to serialize deposit status: {e}"))?;
     let _ = kv
         .put(&key, &json)
-        .map_err(|e| format!("failed to build deposit status put: {e:?}"))?;
-    // Note: Workers KV put() without .execute() still persists in Workers runtime
+        .map_err(|e| format!("failed to build deposit status put: {e:?}"))?
+        .execute()
+        .await
+        .map_err(|e| format!("failed to write deposit status to KV: {e:?}"))?;
     // Add to attendee list for event
     add_to_deposit_list(kv, &status.event_id, &status.attendee_id).await?;
     Ok(())
@@ -835,7 +837,10 @@ async fn add_to_deposit_list(
             .map_err(|e| format!("failed to serialize deposit list: {e}"))?;
         let _ = kv
             .put(&list_key, &json)
-            .map_err(|e| format!("failed to build deposit list put: {e:?}"))?;
+            .map_err(|e| format!("failed to build deposit list put: {e:?}"))?
+            .execute()
+            .await
+            .map_err(|e| format!("failed to write deposit list to KV: {e:?}"))?;
     }
 
     Ok(())

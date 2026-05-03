@@ -31,6 +31,10 @@ extern "C" {
     /// Copy text to the system clipboard.
     #[wasm_bindgen(js_name = "copyToClipboard")]
     fn copy_to_clipboard_js(text: &str) -> bool;
+
+    /// Generate a QR code as a base64 PNG data URL.
+    #[wasm_bindgen(js_name = "generateQrDataUrl")]
+    fn generate_qr_data_url_js(text: &str, size: u32) -> Option<String>;
 }
 
 // ---------------------------------------------------------------------------
@@ -63,6 +67,7 @@ enum DepositPageState {
     /// USDC QR URL generated and ready to display.
     UsdcQrReady(DepositStatusResponse, String),
     /// THB slip is being uploaded.
+    #[allow(dead_code)]
     ThbUploading(DepositStatusResponse),
     /// THB slip uploaded successfully.
     ThbUploaded,
@@ -504,6 +509,8 @@ pub fn Deposit() -> impl IntoView {
                         DepositPageState::UsdcQrReady(data, pay_url) => {
                             let pay_url_display = pay_url.clone();
                             let pay_url_copy = pay_url.clone();
+                            let pay_url_qr = pay_url.clone();
+                            let qr_data_url = generate_qr_data_url_js(&pay_url_qr, 256);
                             let copied = pay_url_copied.get();
                             let copy_btn_text = if copied { "✅ Copied!" } else { "📋 Copy Link" };
                             let copy_btn_class = if copied { "btn btn-success btn-sm" } else { "btn btn-outline btn-sm" };
@@ -516,8 +523,16 @@ pub fn Deposit() -> impl IntoView {
                                         </span>
                                     </div>
                                     <p style="color:var(--text-secondary);font-size:0.9rem;margin-bottom:1rem;">
-                                        "Open this link in a Solana-compatible wallet to complete payment:"
+                                        "Scan this QR code with a Solana wallet, or copy the link below:"
                                     </p>
+                                    {match qr_data_url {
+                                        Some(url) => view! {
+                                            <div style="background:white;border-radius:12px;padding:1rem;display:inline-block;margin-bottom:1rem;">
+                                                <img src=url alt="Solana Pay QR" style="width:256px;height:256px;" />
+                                            </div>
+                                        }.into_any(),
+                                        None => view! { <div></div> }.into_any(),
+                                    }}
                                     <div style="background:var(--bg-secondary,#1a1a2e);border:1px solid var(--border-color,rgba(255,255,255,0.15));border-radius:8px;padding:1rem;margin-bottom:1rem;word-break:break-all;font-size:0.8rem;color:var(--text-secondary);text-align:left;">
                                         {pay_url_display}
                                     </div>

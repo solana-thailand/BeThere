@@ -1591,7 +1591,7 @@ pub struct DepositStatusInfo {
     pub deposited_at: String,
 }
 
-#[derive(Debug, Clone, serde::Deserialize)]
+#[derive(Debug, Clone, Default, serde::Deserialize)]
 pub struct DepositStatusResponse {
     pub deposit_enabled: bool,
     pub deposit_amount_usdc: u64,
@@ -1606,7 +1606,7 @@ pub struct UsdcDepositRequest {
     pub wallet_address: String,
 }
 
-#[derive(Debug, Clone, serde::Deserialize)]
+#[derive(Debug, Clone, Default, serde::Deserialize)]
 pub struct UsdcDepositResponse {
     pub transaction: String,
     pub solana_pay_url: String,
@@ -1640,12 +1640,12 @@ pub struct ThbDepositInfo {
     pub refunded_at: Option<String>,
 }
 
-#[derive(Debug, Clone, serde::Deserialize)]
+#[derive(Debug, Clone, Default, serde::Deserialize)]
 pub struct PendingSlipResponse {
     pub slips: Vec<ThbDepositInfo>,
 }
 
-#[derive(Debug, Clone, serde::Deserialize)]
+#[derive(Debug, Clone, Default, serde::Deserialize)]
 pub struct RefundQueueResponse {
     pub pending: Vec<ThbDepositInfo>,
 }

@@ -103,7 +103,6 @@ pub fn AdminDeposits(
         let event_id = slip.event_id.clone();
         let key = format!("approve-{attendee_id}");
         set_action_pending.set(Some(key));
-        set_toast;
 
         leptos::task::spawn_local(async move {
             let body = VerifySlipRequest {
@@ -138,7 +137,6 @@ pub fn AdminDeposits(
         let event_id = slip.event_id.clone();
         let key = format!("reject-{attendee_id}");
         set_action_pending.set(Some(key));
-        set_toast;
 
         leptos::task::spawn_local(async move {
             let body = VerifySlipRequest {
@@ -173,7 +171,6 @@ pub fn AdminDeposits(
         let event_id = item.event_id.clone();
         let key = format!("refund-{attendee_id}");
         set_action_pending.set(Some(key));
-        set_toast;
 
         leptos::task::spawn_local(async move {
             let body = MarkRefundRequest { event_id };
@@ -212,7 +209,7 @@ pub fn AdminDeposits(
                     on:click=move |_| set_active_tab.set(AdminDepositTab::Deposits)
                 >
                     "📋 Deposits"
-                    <Show when=move || pending_count.get() > 0 fallback=|| view! { <span></span> }>
+                    <Show when=move || pending_count.get() != 0 fallback=|| view! { <span></span> }>
                         <span class="badge badge-warning" style="margin-left:0.5rem">
                             {move || pending_count.get()}
                         </span>
@@ -224,7 +221,7 @@ pub fn AdminDeposits(
                     on:click=move |_| set_active_tab.set(AdminDepositTab::RefundQueue)
                 >
                     "💸 Refund Queue"
-                    <Show when=move || refund_count.get() > 0 fallback=|| view! { <span></span> }>
+                    <Show when=move || refund_count.get() != 0 fallback=|| view! { <span></span> }>
                         <span class="badge badge-warning" style="margin-left:0.5rem">
                             {move || refund_count.get()}
                         </span>
@@ -298,7 +295,7 @@ pub fn AdminDeposits(
                                             <Show when=move || has_slip_url fallback=|| view! { <span></span> }>
                                                 <div style="margin-top:0.25rem">
                                                     <a
-                                                        href=slip_url.unwrap_or_default()
+                                                        href=slip_url.clone().unwrap_or_default()
                                                         target="_blank"
                                                         rel="noopener noreferrer"
                                                         style="color:var(--accent)"

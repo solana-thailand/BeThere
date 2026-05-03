@@ -806,6 +806,10 @@ pub fn Admin() -> impl IntoView {
                                     let checked_in_by_suffix = attendee.checked_in_by.as_ref().map_or(String::new(), |by| {
                                         if by.is_empty() { String::new() } else { format!(" by {}", utils::escape_html(by)) }
                                     });
+                                    let deposit_link = match active_event_id.get() {
+                                        Some(ref eid) => format!("/deposit/{api_id}?event_id={eid}"),
+                                        None => format!("/deposit/{api_id}"),
+                                    };
 
                                     view! {
                                         <div class="attendee-item" class:vip=is_vip class:selected=is_selected>
@@ -836,6 +840,14 @@ pub fn Admin() -> impl IntoView {
                                             <div class="attendee-status">
                                                 <span class=p_class.clone()>{p_label.clone()}</span>
                                                 <span class=badge_class>{badge_text}</span>
+                                                <a
+                                                    href=deposit_link
+                                                    class="btn btn-outline btn-xs"
+                                                    style="margin-left:0.5rem;padding:0.15rem 0.4rem;font-size:0.7rem;"
+                                                    title="Deposit page"
+                                                >
+                                                    "💰"
+                                                </a>
                                                 <Show
                                                     when=move || has_time_ago
                                                     fallback=|| view! { <div></div> }
