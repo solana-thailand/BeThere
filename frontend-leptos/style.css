@@ -3946,6 +3946,66 @@ nav a.active {
     }
 }
 
+/* ===== Landing Nav — Hamburger Menu (Mobile) ===== */
+.landing-nav-hamburger {
+    display: none;
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text-secondary);
+    padding: 0.4rem;
+    cursor: pointer;
+    transition:
+        color 0.2s,
+        border-color 0.2s;
+    align-items: center;
+    justify-content: center;
+}
+
+.landing-nav-hamburger:hover {
+    color: #fff;
+    border-color: var(--text-secondary);
+}
+
+.landing-nav-mobile-menu {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    padding: 0.5rem 1.5rem 1rem;
+    border-top: 1px solid var(--border);
+    background: rgba(15, 15, 15, 0.95);
+}
+
+.landing-nav-mobile-menu a {
+    display: block;
+    padding: 0.65rem 0;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    text-decoration: none;
+    border-bottom: 1px solid var(--border);
+    transition: color 0.2s;
+}
+
+.landing-nav-mobile-menu a:last-child {
+    border-bottom: none;
+}
+
+.landing-nav-mobile-menu a:hover {
+    color: #fff;
+}
+
+@media (max-width: 640px) {
+    .landing-nav-links {
+        display: none;
+    }
+    .landing-nav-actions {
+        display: none;
+    }
+    .landing-nav-hamburger {
+        display: flex;
+    }
+}
+
 /* ===== Quiz Editor (Admin) ===== */
 .quiz-editor {
     max-width: 800px;

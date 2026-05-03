@@ -410,6 +410,7 @@ fn swimlane_mockup(role: SwimlaneRole, step: usize) -> impl IntoView {
 pub fn Landing() -> impl IntoView {
     let (active_role, set_active_role) = signal(SwimlaneRole::Attendee);
     let (active_step, set_active_step) = signal(0usize);
+    let (mobile_menu_open, set_mobile_menu_open) = signal(false);
 
     view! {
         <div style="min-height:100vh;width:100%;">
@@ -427,12 +428,54 @@ pub fn Landing() -> impl IntoView {
                         <a href="#how-it-works">"How it works"</a>
                         <a href="#faq">"FAQ"</a>
                     </div>
-                    <div style="display:flex;align-items:center;gap:0.75rem;">
+                    // Hamburger button — visible only on mobile
+                    <button
+                        class="landing-nav-hamburger"
+                        on:click=move |_| set_mobile_menu_open.update(|v| *v = !*v)
+                    >
+                        {move || {
+                            let open = mobile_menu_open.get();
+                            if open {
+                                view! {
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                                    </svg>
+                                }.into_any()
+                            } else {
+                                view! {
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                                        <line x1="3" y1="6" x2="21" y2="6"></line>
+                                        <line x1="3" y1="12" x2="21" y2="12"></line>
+                                        <line x1="3" y1="18" x2="21" y2="18"></line>
+                                    </svg>
+                                }.into_any()
+                            }
+                        }}
+                    </button>
+                    <div style="display:flex;align-items:center;gap:0.75rem;" class="landing-nav-actions">
                         <A href="/login" attr:class="btn btn-outline btn-sm">
                             "Sign In"
                         </A>
                     </div>
                 </div>
+                // Mobile dropdown menu
+                {move || {
+                    let open = mobile_menu_open.get();
+                    if open {
+                        view! {
+                            <div class="landing-nav-mobile-menu">
+                                <a href="#features" on:click=move |_| set_mobile_menu_open.set(false)>"Features"</a>
+                                <a href="#how-it-works" on:click=move |_| set_mobile_menu_open.set(false)>"How it works"</a>
+                                <a href="#faq" on:click=move |_| set_mobile_menu_open.set(false)>"FAQ"</a>
+                                <a href="#waitlist" on:click=move |_| set_mobile_menu_open.set(false)>"Join Waitlist"</a>
+                                <A href="/login" on:click=move |_| set_mobile_menu_open.set(false)>"Sign In"</A>
+                            </div>
+                        }.into_any()
+                    } else {
+                        ().into_any()
+                    }
+                }}
             </nav>
 
             // ===== Hero =====
@@ -444,7 +487,7 @@ pub fn Landing() -> impl IntoView {
                         <path d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z" fill="currentColor"/>
                         <path d="M333.1 120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1l62.7 62.7c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z" fill="currentColor"/>
                     </svg>
-                    "Powered by Solana"
+                    "Built on Solana"
                 </div>
 
                 <h1 style="font-size:clamp(1.75rem,5vw,2.75rem);font-weight:800;line-height:1.15;margin-bottom:1.25rem;color:#fff;">
@@ -458,12 +501,12 @@ pub fn Landing() -> impl IntoView {
                     "Put down a small deposit to reserve your spot. Show up, prove you paid attention with a quick quiz, and get every cent back — plus a digital badge you own forever. Don't show up? The organizer keeps your deposit. Simple."
                 </p>
                 <div style="display:flex;flex-wrap:wrap;gap:0.75rem;justify-content:center;">
-                    <A href="/adventure" attr:class="btn btn-primary" attr:style="padding:0.85rem 2rem;font-size:1rem;text-decoration:none;display:inline-flex;align-items:center;gap:0.5rem;">
+                    <a href="#waitlist" class="btn btn-primary" style="padding:0.85rem 2rem;font-size:1rem;text-decoration:none;">
+                        "Join Waitlist →"
+                    </a>
+                    <A href="/adventure" attr:class="btn btn-outline" attr:style="padding:0.85rem 2rem;font-size:1rem;text-decoration:none;display:inline-flex;align-items:center;gap:0.5rem;">
                         "Play Demo" "🎮"
                     </A>
-                    <a href="#waitlist" class="btn btn-outline" style="padding:0.85rem 2rem;font-size:1rem;text-decoration:none;">
-                        "Join Waitlist"
-                    </a>
                     <A href="/login" attr:class="btn btn-outline" attr:style="padding:0.85rem 2rem;font-size:1rem;">
                         "Sign In"
                     </A>
@@ -867,7 +910,7 @@ pub fn Landing() -> impl IntoView {
                             <path d="M64.6 3.8C67.1 1.4 70.4 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z" fill="currentColor"/>
                             <path d="M333.1 120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1l62.7 62.7c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z" fill="currentColor"/>
                         </svg>
-                        "Powered by Solana"
+                        "Built on Solana"
                     </span>
                 </div>
             </footer>
