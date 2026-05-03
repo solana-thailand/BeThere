@@ -309,13 +309,13 @@ Image storage: Cloudflare R2 (free tier: 10 GB storage, 10M reads/month).
 
 ### Phase 2 — Worker Deposit/Refund API (~3 days)
 
-- [ ] Add deposit config fields to `EventConfig`
-- [ ] `GET /api/deposit/status/{attendee_id}` — check deposit status
-- [ ] `POST /api/deposit/usdc` — build Solana Pay deposit TX
-- [ ] Slip upload endpoint (R2 storage)
-- [ ] Slip verify/reject endpoint (admin only)
-- [ ] Refund queue endpoints
-- [ ] KV schema for THB deposit tracking
+- [x] Add deposit config fields to `EventConfig`
+- [x] `GET /api/deposit/status/{attendee_id}` — check deposit status
+- [x] `POST /api/deposit/usdc` — build Solana Pay deposit TX
+- [x] Slip upload endpoint (KV storage)
+- [x] Slip verify/reject endpoint (admin only)
+- [x] Refund queue endpoints
+- [x] KV schema for THB deposit tracking
 
 ### Phase 3 — Frontend Deposit/Refund Flow (~3 days)
 
