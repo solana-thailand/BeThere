@@ -16,7 +16,7 @@ use event_checkin_domain::models::adventure::AdventureStatus;
 use event_checkin_domain::models::api::{
     ClaimLookupResponse, ClaimResponse, EventConfig, QuizStatus,
 };
-use event_checkin_domain::models::event::EventConfig as DomainEventConfig;
+use event_checkin_domain::models::error::AppError;
 
 use worker::KvStore;
 
@@ -133,13 +133,10 @@ pub async fn get_claim(
     State(state): State<AppState>,
     Path(token): Path<String>,
     Query(query): Query<EventIdQuery>,
-) -> Json<serde_json::Value> {
+) -> Result<Json<serde_json::Value>, crate::error::WorkerError> {
     tracing::info!("claim lookup for token: {token}");
 
-    let event: DomainEventConfig = match resolve_event(&state, query.event_id.as_deref()).await {
-        Ok(e) => e,
-        Err(e) => return e,
-    };
+    let event = resolve_event(&state, query.event_id.as_deref()).await?;
 
     let kv = resolve_kv(&state);
     let (attendee, total_checked_in, total_claimed) =
@@ -155,17 +152,11 @@ pub async fn get_claim(
             Ok((Some(a), checked_in, claimed)) => (a, checked_in, claimed),
             Ok((None, _, _)) => {
                 tracing::warn!("claim lookup: no attendee found for token {token}");
-                return Json(json!({
-                    "success": false,
-                    "error": "claim token not found",
-                }));
+                return Err(AppError::NotFound("claim token not found".into()).into());
             }
             Err(ref e) => {
                 tracing::error!("claim lookup failed for token {token}: {e}");
-                return Json(json!({
-                    "success": false,
-                    "error": format!("failed to look up claim: {e}"),
-                }));
+                return Err(AppError::Internal(format!("failed to look up claim: {e}")).into());
             }
         };
 
@@ -224,10 +215,10 @@ pub async fn get_claim(
         total_claimed,
     };
 
-    Json(json!({
+    Ok(Json(json!({
         "success": true,
         "data": response,
-    }))
+    })))
 }
 
 /// POST /api/claim/{token}
@@ -241,23 +232,17 @@ pub async fn post_claim(
     Path(token): Path<String>,
     Query(query): Query<EventIdQuery>,
     Json(body): Json<ClaimRequest>,
-) -> Json<serde_json::Value> {
+) -> Result<Json<serde_json::Value>, crate::error::WorkerError> {
     tracing::info!("claim mint request for token: {token}");
 
     // Validate wallet address format
     if let Err(e) = validate_wallet_address(&body.wallet_address) {
         tracing::warn!("invalid wallet address for claim {token}: {e}");
-        return Json(json!({
-            "success": false,
-            "error": e,
-        }));
+        return Err(AppError::Validation(e).into());
     }
 
     // Resolve event context
-    let event: DomainEventConfig = match resolve_event(&state, query.event_id.as_deref()).await {
-        Ok(e) => e,
-        Err(e) => return e,
-    };
+    let event = resolve_event(&state, query.event_id.as_deref()).await?;
 
     // Look up attendee by claim token
     let kv = resolve_kv(&state);
@@ -273,17 +258,11 @@ pub async fn post_claim(
         Ok(Some(a)) => a,
         Ok(None) => {
             tracing::warn!("claim mint: no attendee found for token {token}");
-            return Json(json!({
-                "success": false,
-                "error": "claim token not found",
-            }));
+            return Err(AppError::NotFound("claim token not found".into()).into());
         }
         Err(ref e) => {
             tracing::error!("claim mint lookup failed for token {token}: {e}");
-            return Json(json!({
-                "success": false,
-                "error": format!("failed to look up claim: {e}"),
-            }));
+            return Err(AppError::Internal(format!("failed to look up claim: {e}")).into());
         }
     };
 
@@ -291,10 +270,7 @@ pub async fn post_claim(
 
     // Must be checked in
     if attendee.checked_in_at.is_none() {
-        return Json(json!({
-            "success": false,
-            "error": "attendee has not been checked in yet",
-        }));
+        return Err(AppError::Validation("attendee has not been checked in yet".into()).into());
     }
 
     // Quiz gate — must pass quiz before claiming (Issue 002)
@@ -309,30 +285,26 @@ pub async fn post_claim(
             Ok(s) => s,
             Err(e) => {
                 tracing::error!("claim mint: failed to check quiz status for token {token}: {e}");
-                return Json(json!({
-                    "success": false,
-                    "error": format!("failed to verify quiz status: {e}"),
-                }));
+                return Err(
+                    AppError::Internal(format!("failed to verify quiz status: {e}")).into(),
+                );
             }
         };
         match quiz_status {
-            QuizStatus::NotRequired => {} // no quiz configured, proceed
-            QuizStatus::Passed => {}      // quiz passed, proceed
+            QuizStatus::NotRequired | QuizStatus::Passed => {}
             QuizStatus::NotStarted => {
                 tracing::warn!("claim mint blocked: quiz not attempted for token {token}");
-                return Json(json!({
-                    "success": false,
-                    "error": "you must complete the quiz before claiming your badge",
-                    "quiz_status": "not_started",
-                }));
+                return Err(AppError::Validation(
+                    "you must complete the quiz before claiming your badge".into(),
+                )
+                .into());
             }
             QuizStatus::InProgress => {
                 tracing::warn!("claim mint blocked: quiz not passed for token {token}");
-                return Json(json!({
-                    "success": false,
-                    "error": "you must pass the quiz before claiming your badge",
-                    "quiz_status": "in_progress",
-                }));
+                return Err(AppError::Validation(
+                    "you must pass the quiz before claiming your badge".into(),
+                )
+                .into());
             }
         }
     }
@@ -351,30 +323,26 @@ pub async fn post_claim(
                 tracing::error!(
                     "claim mint: failed to check adventure status for token {token}: {e}"
                 );
-                return Json(json!({
-                    "success": false,
-                    "error": format!("failed to verify adventure status: {e}"),
-                }));
+                return Err(
+                    AppError::Internal(format!("failed to verify adventure status: {e}")).into(),
+                );
             }
         };
         match adv_status {
-            AdventureStatus::NotRequired => {} // no adventure configured, proceed
-            AdventureStatus::Passed => {}      // adventure passed, proceed
+            AdventureStatus::NotRequired | AdventureStatus::Passed => {}
             AdventureStatus::NotStarted => {
                 tracing::warn!("claim mint blocked: adventure not attempted for token {token}");
-                return Json(json!({
-                    "success": false,
-                    "error": "you must complete the Rust Adventure before claiming your badge",
-                    "adventure_status": "not_started",
-                }));
+                return Err(AppError::Validation(
+                    "you must complete the Rust Adventure before claiming your badge".into(),
+                )
+                .into());
             }
             AdventureStatus::InProgress => {
                 tracing::warn!("claim mint blocked: adventure not passed for token {token}");
-                return Json(json!({
-                    "success": false,
-                    "error": "you must complete the Rust Adventure before claiming your badge",
-                    "adventure_status": "in_progress",
-                }));
+                return Err(AppError::Validation(
+                    "you must complete the Rust Adventure before claiming your badge".into(),
+                )
+                .into());
             }
         }
     }
@@ -383,14 +351,7 @@ pub async fn post_claim(
     if attendee.claimed_at.is_some() {
         let claimed_at = attendee.claimed_at.as_deref().unwrap_or("unknown");
         tracing::warn!("claim already fulfilled for token {token} at {claimed_at}");
-        return Json(json!({
-            "success": false,
-            "error": "NFT has already been claimed",
-            "data": {
-                "name": display_name,
-                "claimed_at": claimed_at,
-            },
-        }));
+        return Err(AppError::Validation("NFT has already been claimed".into()).into());
     }
 
     // Wallet match guard: if attendee pre-registered a Solana address (column P),
@@ -405,13 +366,11 @@ pub async fn post_claim(
                     mask_wallet(registered),
                     mask_wallet(claiming)
                 );
-                return Json(json!({
-                    "success": false,
-                    "error": format!(
-                        "This claim is locked to a pre-registered wallet ({})",
-                        mask_wallet(registered)
-                    ),
-                }));
+                return Err(AppError::Validation(format!(
+                    "This claim is locked to a pre-registered wallet ({})",
+                    mask_wallet(registered)
+                ))
+                .into());
             }
         }
     }
@@ -421,7 +380,7 @@ pub async fn post_claim(
     if let Some(kv) = lock_kv
         && let Err(e) = acquire_claim_lock(kv, &event.id, &token, &body.wallet_address).await
     {
-        return Json(json!({ "success": false, "error": e }));
+        return Err(AppError::RateLimited(e).into());
     }
 
     // Mint compressed NFT via Helius
@@ -447,10 +406,12 @@ pub async fn post_claim(
             if let Some(kv) = lock_kv {
                 let _ = release_claim_lock(kv, &event.id, &token).await;
             }
-            return Json(json!({
-                "success": false,
-                "error": format!("failed to mint NFT: {e}"),
-            }));
+            return Err(AppError::External {
+                service: "helius".into(),
+                status: 502,
+                body: e.to_string(),
+            }
+            .into());
         }
     };
 
@@ -469,13 +430,11 @@ pub async fn post_claim(
     {
         tracing::error!("mint succeeded but failed to mark claimed for token {token}: {e}");
         // Lock will expire via TTL — don't release (mint already happened)
-        return Json(json!({
-            "success": false,
-            "error": format!(
-                "NFT minted but failed to record claim. Asset ID: {}. Error: {e}",
-                mint_result.asset_id
-            ),
-        }));
+        return Err(AppError::Internal(format!(
+            "NFT minted but failed to record claim. Asset ID: {}. Error: {e}",
+            mint_result.asset_id
+        ))
+        .into());
     }
 
     // Finalize claim lock (permanent record, no TTL)
@@ -513,8 +472,8 @@ pub async fn post_claim(
         cluster: cluster.to_string(),
     };
 
-    Json(json!({
+    Ok(Json(json!({
         "success": true,
         "data": response,
-    }))
+    })))
 }

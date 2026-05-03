@@ -15,6 +15,7 @@ use uuid::Uuid;
 use event_checkin_domain::models::api::CheckInResponse;
 use event_checkin_domain::models::attendee::Attendee;
 use event_checkin_domain::models::auth::Claims;
+use event_checkin_domain::models::error::AppError;
 
 use super::ext::{EventIdQuery, resolve_event_with_access, resolve_kv};
 use crate::sheets;
@@ -36,35 +37,24 @@ pub async fn check_in(
     Extension(claims): Extension<Claims>,
     Path(id): Path<String>,
     Query(query): Query<EventIdQuery>,
-) -> Json<serde_json::Value> {
+) -> Result<Json<serde_json::Value>, crate::error::WorkerError> {
     tracing::info!("check-in request for {id} (by: {})", claims.email);
 
-    let event = match resolve_event_with_access(&state, &claims, query.event_id.as_deref()).await {
-        Ok(e) => e,
-        Err(e) => return e,
-    };
+    let event = resolve_event_with_access(&state, &claims, query.event_id.as_deref()).await?;
 
     // Fetch the attendee
     let kv = resolve_kv(&state);
     let attendee: Attendee =
-        match sheets::get_attendee_by_id(&id, &state, &event.sheet_id, &event.sheet_name, kv).await
-        {
-            Ok(Some(a)) => a,
-            Ok(None) => {
-                tracing::warn!("check-in failed: attendee {id} not found");
-                return Json(json!({
-                    "success": false,
-                    "error": format!("attendee with id '{id}' not found"),
-                }));
-            }
-            Err(ref e) => {
+        sheets::get_attendee_by_id(&id, &state, &event.sheet_id, &event.sheet_name, kv)
+            .await
+            .map_err(|e| {
                 tracing::error!("check-in failed: could not fetch attendee {id}: {e}");
-                return Json(json!({
-                    "success": false,
-                    "error": format!("failed to look up attendee: {e}"),
-                }));
-            }
-        };
+                AppError::Internal(format!("failed to look up attendee: {e}"))
+            })?
+            .ok_or_else(|| {
+                tracing::warn!("check-in failed: attendee {id} not found");
+                AppError::NotFound(format!("attendee with id '{id}' not found"))
+            })?;
 
     // Check if attendee is approved
     if !attendee.is_approved() {
@@ -73,13 +63,11 @@ pub async fn check_in(
             attendee.api_id,
             attendee.approval_status
         );
-        return Json(json!({
-            "success": false,
-            "error": format!(
-                "attendee is not approved (status: {})",
-                attendee.approval_status
-            ),
-        }));
+        return Err(AppError::Validation(format!(
+            "attendee is not approved (status: {})",
+            attendee.approval_status
+        ))
+        .into());
     }
 
     // Check if attendee is In-Person (not Online)
@@ -89,13 +77,11 @@ pub async fn check_in(
             attendee.api_id,
             attendee.participation_type
         );
-        return Json(json!({
-            "success": false,
-            "error": format!(
-                "attendee is not In-Person (participation type: {})",
-                attendee.participation_type
-            ),
-        }));
+        return Err(AppError::Validation(format!(
+            "attendee is not In-Person (participation type: {})",
+            attendee.participation_type
+        ))
+        .into());
     }
 
     // Check if already checked in
@@ -105,15 +91,7 @@ pub async fn check_in(
             "check-in skipped: attendee {} already checked in at {checked_in_at}",
             attendee.api_id
         );
-        return Json(json!({
-            "success": false,
-            "error": "attendee is already checked in",
-            "data": {
-                "api_id": attendee.api_id,
-                "name": attendee.display_name(),
-                "checked_in_at": checked_in_at,
-            },
-        }));
+        return Err(AppError::Validation("attendee is already checked in".to_string()).into());
     }
 
     // Generate claim token (UUID v7) for NFT/refund claim link.
@@ -121,7 +99,7 @@ pub async fn check_in(
     let claim_token = Uuid::now_v7().to_string();
 
     // Update the Google Sheet (writes timestamp, staff email, and claim_token)
-    match sheets::mark_checked_in(
+    let timestamp = sheets::mark_checked_in(
         attendee.row_index,
         &claims.email,
         &claim_token,
@@ -131,38 +109,32 @@ pub async fn check_in(
         kv,
     )
     .await
-    {
-        Ok(timestamp) => {
-            tracing::info!(
-                "check-in successful: {} ({}) at {timestamp} by {} claim_token={claim_token}",
-                attendee.display_name(),
-                attendee.api_id,
-                claims.email
-            );
+    .map_err(|e| {
+        tracing::error!(
+            "check-in failed: could not update sheet for {}: {e}",
+            attendee.api_id
+        );
+        AppError::Internal(format!("failed to record check-in: {e}"))
+    })?;
 
-            let response = CheckInResponse {
-                api_id: attendee.api_id.clone(),
-                name: attendee.display_name().to_string(),
-                checked_in_at: timestamp,
-                checked_in_by: claims.email.clone(),
-                claim_token: Some(claim_token),
-                message: format!("Successfully checked in {}", attendee.display_name()),
-            };
+    tracing::info!(
+        "check-in successful: {} ({}) at {timestamp} by {} claim_token={claim_token}",
+        attendee.display_name(),
+        attendee.api_id,
+        claims.email
+    );
 
-            Json(json!({
-                "success": true,
-                "data": response,
-            }))
-        }
-        Err(ref e) => {
-            tracing::error!(
-                "check-in failed: could not update sheet for {}: {e}",
-                attendee.api_id
-            );
-            Json(json!({
-                "success": false,
-                "error": format!("failed to record check-in: {e}"),
-            }))
-        }
-    }
+    let response = CheckInResponse {
+        api_id: attendee.api_id.clone(),
+        name: attendee.display_name().to_string(),
+        checked_in_at: timestamp,
+        checked_in_by: claims.email.clone(),
+        claim_token: Some(claim_token),
+        message: format!("Successfully checked in {}", attendee.display_name()),
+    };
+
+    Ok(Json(json!({
+        "success": true,
+        "data": response,
+    })))
 }

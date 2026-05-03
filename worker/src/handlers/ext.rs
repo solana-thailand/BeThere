@@ -1,10 +1,9 @@
 //! Shared handler utilities: extractors, event resolution, and access guards.
 
-use axum::response::Json;
 use serde::Deserialize;
-use serde_json::json;
 
 use event_checkin_domain::models::auth::Claims;
+use event_checkin_domain::models::error::AppError;
 use event_checkin_domain::models::event::EventConfig;
 
 use crate::event_store;
@@ -19,20 +18,17 @@ pub struct EventIdQuery {
 
 /// Resolve an event from query params and verify access.
 ///
-/// This replaces the repeated pattern in handlers:
-/// ```ignore
-/// let event = event_store::resolve_event_or_fallback(...).await?;
-/// crate::auth::check_event_access(&claims.email, &state, &event).await?;
-/// ```
+/// Returns `AppError::Unauthorized` if the user has no access to the event,
+/// `AppError::Internal` if event resolution fails.
 pub async fn resolve_event_with_access(
     state: &AppState,
     claims: &Claims,
     event_id: Option<&str>,
-) -> Result<EventConfig, Json<serde_json::Value>> {
+) -> Result<EventConfig, AppError> {
     let event =
         event_store::resolve_event_or_fallback(state.events_kv.as_ref(), event_id, &state.config)
             .await
-            .map_err(|e| Json(json!({ "success": false, "error": e })))?;
+            .map_err(AppError::Internal)?;
 
     if let Err(e) = crate::auth::check_event_access(&claims.email, state, &event).await {
         tracing::warn!(
@@ -41,7 +37,7 @@ pub async fn resolve_event_with_access(
             event.name,
             event.id,
         );
-        return Err(Json(json!({ "success": false, "error": e })));
+        return Err(AppError::Forbidden(e));
     }
 
     Ok(event)
@@ -51,10 +47,10 @@ pub async fn resolve_event_with_access(
 pub async fn resolve_event(
     state: &AppState,
     event_id: Option<&str>,
-) -> Result<EventConfig, Json<serde_json::Value>> {
+) -> Result<EventConfig, AppError> {
     event_store::resolve_event_or_fallback(state.events_kv.as_ref(), event_id, &state.config)
         .await
-        .map_err(|e| Json(json!({ "success": false, "error": e })))
+        .map_err(AppError::Internal)
 }
 
 /// Helper to get the KV store from state (events_kv or quiz_kv fallback).

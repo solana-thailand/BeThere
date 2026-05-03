@@ -8,6 +8,8 @@ use axum::{extract::State, response::Json};
 use serde::Deserialize;
 use serde_json::json;
 
+use event_checkin_domain::models::error::AppError;
+
 use crate::http::{ValueRange, fetch_sheet_range, post_json};
 use crate::sheets::get_access_token;
 use crate::state::AppState;
@@ -27,23 +29,17 @@ pub struct WaitlistRequest {
 pub async fn join_waitlist(
     State(state): State<AppState>,
     Json(body): Json<WaitlistRequest>,
-) -> Json<serde_json::Value> {
+) -> Result<Json<serde_json::Value>, crate::error::WorkerError> {
     let email = body.email.trim().to_lowercase();
 
     // Basic email validation
     if email.is_empty() || !email.contains('@') || !email.contains('.') {
-        return Json(json!({
-            "success": false,
-            "error": "Invalid email address",
-        }));
+        return Err(AppError::Validation("Invalid email address".into()).into());
     }
 
     // Check email length
     if email.len() > 254 {
-        return Json(json!({
-            "success": false,
-            "error": "Email too long",
-        }));
+        return Err(AppError::Validation("Email too long".into()).into());
     }
 
     // Duplicate check — fetch existing emails from the sheet
@@ -51,11 +47,9 @@ pub async fn join_waitlist(
         Ok(existing) => {
             if existing.contains(&email) {
                 tracing::info!("waitlist duplicate: {email}");
-                return Json(json!({
-                    "success": false,
-                    "error": "This email is already on the waitlist",
-                    "code": "duplicate",
-                }));
+                return Err(
+                    AppError::Validation("This email is already on the waitlist".into()).into(),
+                );
             }
         }
         Err(e) => {
@@ -67,19 +61,15 @@ pub async fn join_waitlist(
     tracing::info!("waitlist signup: {email}");
 
     // Append to Google Sheet
-    match append_to_waitlist(&email, &state).await {
-        Ok(()) => Json(json!({
-            "success": true,
-            "data": { "email": email },
-        })),
-        Err(e) => {
-            tracing::error!("waitlist signup failed for {email}: {e}");
-            Json(json!({
-                "success": false,
-                "error": format!("Failed to join waitlist: {e}"),
-            }))
-        }
-    }
+    append_to_waitlist(&email, &state).await.map_err(|e| {
+        tracing::error!("waitlist signup failed for {email}: {e}");
+        AppError::Internal(format!("Failed to join waitlist: {e}"))
+    })?;
+
+    Ok(Json(json!({
+        "success": true,
+        "data": { "email": email },
+    })))
 }
 
 /// Fetch all existing emails from the "waitlist" sheet tab (column A).

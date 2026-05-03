@@ -13,6 +13,7 @@ use serde_json::json;
 
 use event_checkin_domain::models::api::{AttendeeResponse, RecentCheckIn, StatsResponse};
 use event_checkin_domain::models::auth::Claims;
+use event_checkin_domain::models::error::AppError;
 
 use super::ext::{EventIdQuery, resolve_event_with_access, resolve_kv};
 use crate::sheets;
@@ -27,26 +28,18 @@ pub async fn list_attendees(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
     Query(query): Query<EventIdQuery>,
-) -> Json<serde_json::Value> {
+) -> Result<Json<serde_json::Value>, crate::error::WorkerError> {
     tracing::info!("listing attendees (requested by: {})", claims.email);
 
-    let event = match resolve_event_with_access(&state, &claims, query.event_id.as_deref()).await {
-        Ok(e) => e,
-        Err(e) => return e,
-    };
+    let event = resolve_event_with_access(&state, &claims, query.event_id.as_deref()).await?;
 
     let kv = resolve_kv(&state);
-    let attendees =
-        match sheets::get_attendees(&state, &event.sheet_id, &event.sheet_name, kv).await {
-            Ok(a) => a,
-            Err(ref e) => {
-                tracing::error!("failed to fetch attendees: {e}");
-                return Json(json!({
-                    "success": false,
-                    "error": format!("failed to fetch attendees: {e}"),
-                }));
-            }
-        };
+    let attendees = sheets::get_attendees(&state, &event.sheet_id, &event.sheet_name, kv)
+        .await
+        .map_err(|e| {
+            tracing::error!("failed to fetch attendees: {e}");
+            AppError::Internal(format!("failed to fetch attendees: {e}"))
+        })?;
 
     // Compute statistics
     let total_approved: usize = attendees.iter().filter(|a| a.is_approved()).count();
@@ -88,13 +81,13 @@ pub async fn list_attendees(
         recent_check_ins,
     };
 
-    Json(json!({
+    Ok(Json(json!({
         "success": true,
         "data": {
             "attendees": attendee_responses,
             "stats": stats,
         },
-    }))
+    })))
 }
 
 /// GET /api/attendee/:id
@@ -106,33 +99,19 @@ pub async fn get_attendee(
     Extension(claims): Extension<Claims>,
     Path(id): Path<String>,
     Query(query): Query<EventIdQuery>,
-) -> Json<serde_json::Value> {
+) -> Result<Json<serde_json::Value>, crate::error::WorkerError> {
     tracing::info!("fetching attendee {id} (requested by: {})", claims.email);
 
-    let event = match resolve_event_with_access(&state, &claims, query.event_id.as_deref()).await {
-        Ok(e) => e,
-        Err(e) => return e,
-    };
+    let event = resolve_event_with_access(&state, &claims, query.event_id.as_deref()).await?;
 
     let kv = resolve_kv(&state);
-    let attendee =
-        match sheets::get_attendee_by_id(&id, &state, &event.sheet_id, &event.sheet_name, kv).await
-        {
-            Ok(Some(a)) => a,
-            Ok(None) => {
-                return Json(json!({
-                    "success": false,
-                    "error": format!("attendee with id '{id}' not found"),
-                }));
-            }
-            Err(ref e) => {
-                tracing::error!("failed to fetch attendee {id}: {e}");
-                return Json(json!({
-                    "success": false,
-                    "error": format!("failed to fetch attendee: {e}"),
-                }));
-            }
-        };
+    let attendee = sheets::get_attendee_by_id(&id, &state, &event.sheet_id, &event.sheet_name, kv)
+        .await
+        .map_err(|e| {
+            tracing::error!("failed to fetch attendee {id}: {e}");
+            AppError::Internal(format!("failed to fetch attendee: {e}"))
+        })?
+        .ok_or_else(|| AppError::NotFound(format!("attendee with id '{id}' not found")))?;
 
     let response = AttendeeResponse::from_attendee(&attendee);
 
@@ -142,7 +121,7 @@ pub async fn get_attendee(
         .as_ref()
         .and_then(|url| event_checkin_domain::qr::generate_qr_base64(url).ok());
 
-    Json(json!({
+    Ok(Json(json!({
         "success": true,
         "data": {
             "attendee": response,
@@ -152,5 +131,5 @@ pub async fn get_attendee(
             "is_in_person": attendee.is_in_person(),
             "participation_type": attendee.participation_type,
         },
-    }))
+    })))
 }

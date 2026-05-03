@@ -16,9 +16,11 @@ use event_checkin_domain::models::api::{
     GenerateQrResponse, QrGenerationDetail, QrGenerationStatus,
 };
 use event_checkin_domain::models::auth::Claims;
+use event_checkin_domain::models::error::AppError;
 use event_checkin_domain::qr;
 
 use super::ext::{resolve_event_with_access, resolve_kv};
+use crate::error::WorkerError;
 use crate::sheets;
 use crate::state::AppState;
 
@@ -48,13 +50,10 @@ pub async fn generate_qrs(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
     Query(query): Query<GenerateQrQuery>,
-) -> Json<serde_json::Value> {
+) -> Result<Json<serde_json::Value>, WorkerError> {
     let force = query.force;
 
-    let event = match resolve_event_with_access(&state, &claims, query.event_id.as_deref()).await {
-        Ok(e) => e,
-        Err(e) => return e,
-    };
+    let event = resolve_event_with_access(&state, &claims, query.event_id.as_deref()).await?;
 
     tracing::info!(
         "QR generation requested by {} (force={force})",
@@ -63,17 +62,12 @@ pub async fn generate_qrs(
 
     // Fetch all attendees
     let kv = resolve_kv(&state);
-    let attendees =
-        match sheets::get_attendees(&state, &event.sheet_id, &event.sheet_name, kv).await {
-            Ok(a) => a,
-            Err(ref e) => {
-                tracing::error!("failed to fetch attendees for QR generation: {e}");
-                return Json(json!({
-                    "success": false,
-                    "error": format!("failed to fetch attendees: {e}"),
-                }));
-            }
-        };
+    let attendees = sheets::get_attendees(&state, &event.sheet_id, &event.sheet_name, kv)
+        .await
+        .map_err(|e| {
+            tracing::error!("failed to fetch attendees for QR generation: {e}");
+            AppError::Internal(format!("failed to fetch attendees: {e}"))
+        })?;
 
     let total_fetched = attendees.len();
 
@@ -170,7 +164,7 @@ pub async fn generate_qrs(
             })
             .collect();
 
-        return Json(json!({
+        return Ok(Json(json!({
             "success": true,
             "data": GenerateQrResponse {
                 total: total_approved,
@@ -178,7 +172,7 @@ pub async fn generate_qrs(
                 skipped: total_approved,
                 details,
             },
-        }));
+        })));
     }
 
     // Build details for attendees that will be generated
@@ -198,48 +192,44 @@ pub async fn generate_qrs(
         .collect();
 
     // Batch update the Google Sheet
-    match sheets::update_qr_urls(&updates, &state, &event.sheet_id, &event.sheet_name, kv).await {
-        Ok(updated) => {
-            tracing::info!(
-                "QR generation complete: {updated} URLs written to sheet (requested by: {})",
-                claims.email
-            );
-
-            let updated_rows: Vec<usize> = updates.iter().map(|(row, _)| *row).collect();
-
-            // Build skipped details for approved attendees not in the update set
-            let skipped_details: Vec<QrGenerationDetail> = attendees
-                .iter()
-                .filter(|a| a.is_approved() && !updated_rows.contains(&a.row_index))
-                .map(|a| QrGenerationDetail {
-                    api_id: a.api_id.clone(),
-                    name: a.display_name().to_string(),
-                    qr_code_url: a.qr_code_url.clone().unwrap_or_default(),
-                    status: QrGenerationStatus::Skipped,
-                })
-                .collect();
-
-            let mut all_details = generated_details;
-            all_details.extend(skipped_details);
-
-            let skipped: usize = total_approved.saturating_sub(updated);
-
-            Json(json!({
-                "success": true,
-                "data": GenerateQrResponse {
-                    total: total_approved,
-                    generated: updated,
-                    skipped,
-                    details: all_details,
-                },
-            }))
-        }
-        Err(ref e) => {
+    let updated = sheets::update_qr_urls(&updates, &state, &event.sheet_id, &event.sheet_name, kv)
+        .await
+        .map_err(|e| {
             tracing::error!("failed to update QR URLs in sheet: {e}");
-            Json(json!({
-                "success": false,
-                "error": format!("failed to write QR URLs to sheet: {e}"),
-            }))
-        }
-    }
+            AppError::Internal(format!("failed to write QR URLs to sheet: {e}"))
+        })?;
+
+    tracing::info!(
+        "QR generation complete: {updated} URLs written to sheet (requested by: {})",
+        claims.email
+    );
+
+    let updated_rows: Vec<usize> = updates.iter().map(|(row, _)| *row).collect();
+
+    // Build skipped details for approved attendees not in the update set
+    let skipped_details: Vec<QrGenerationDetail> = attendees
+        .iter()
+        .filter(|a| a.is_approved() && !updated_rows.contains(&a.row_index))
+        .map(|a| QrGenerationDetail {
+            api_id: a.api_id.clone(),
+            name: a.display_name().to_string(),
+            qr_code_url: a.qr_code_url.clone().unwrap_or_default(),
+            status: QrGenerationStatus::Skipped,
+        })
+        .collect();
+
+    let mut all_details = generated_details;
+    all_details.extend(skipped_details);
+
+    let skipped: usize = total_approved.saturating_sub(updated);
+
+    Ok(Json(json!({
+        "success": true,
+        "data": GenerateQrResponse {
+            total: total_approved,
+            generated: updated,
+            skipped,
+            details: all_details,
+        },
+    })))
 }

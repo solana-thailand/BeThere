@@ -18,9 +18,11 @@ use serde_json::json;
 
 use event_checkin_domain::models::adventure::{AdventureConfig, AdventureSaveRequest};
 use event_checkin_domain::models::auth::Claims;
+use event_checkin_domain::models::error::AppError;
 
 use super::ext::{EventIdQuery, resolve_event};
 use crate::adventure;
+use crate::error::WorkerError;
 use crate::state::AppState;
 
 /// GET /api/adventure/{token}/status
@@ -30,39 +32,30 @@ pub async fn get_adventure_status(
     State(state): State<AppState>,
     Path(token): Path<String>,
     Query(query): Query<EventIdQuery>,
-) -> Json<serde_json::Value> {
-    let event = match resolve_event(&state, query.event_id.as_deref()).await {
-        Ok(e) => e,
-        Err(e) => return e,
-    };
+) -> Result<Json<serde_json::Value>, WorkerError> {
+    let event = resolve_event(&state, query.event_id.as_deref()).await?;
 
-    let kv = match state.events_kv.as_ref().or(state.quiz_kv.as_ref()) {
-        Some(kv) => kv,
-        None => {
-            return Json(json!({
-                "success": false,
-                "error": "KV storage not available",
-            }));
-        }
-    };
+    let kv = state
+        .events_kv
+        .as_ref()
+        .or(state.quiz_kv.as_ref())
+        .ok_or_else(|| AppError::Internal("KV storage not available".to_string()))?;
 
-    let status = match adventure::get_adventure_status(kv, &event.id, &token).await {
-        Ok(s) => s,
-        Err(e) => return Json(json!({ "success": false, "error": e })),
-    };
+    let status = adventure::get_adventure_status(kv, &event.id, &token)
+        .await
+        .map_err(AppError::Internal)?;
 
-    let progress = match adventure::get_adventure_progress(kv, &event.id, &token).await {
-        Ok(p) => p,
-        Err(e) => return Json(json!({ "success": false, "error": e })),
-    };
+    let progress = adventure::get_adventure_progress(kv, &event.id, &token)
+        .await
+        .map_err(AppError::Internal)?;
 
-    Json(json!({
+    Ok(Json(json!({
         "success": true,
         "data": {
             "status": status,
             "progress": progress,
         }
-    }))
+    })))
 }
 
 /// POST /api/adventure/{token}/save
@@ -76,16 +69,13 @@ pub async fn save_adventure_progress(
     Path(token): Path<String>,
     Query(query): Query<EventIdQuery>,
     Json(body): Json<AdventureSaveRequest>,
-) -> Json<serde_json::Value> {
+) -> Result<Json<serde_json::Value>, WorkerError> {
     // Validate token matches body
     if body.claim_token != token {
-        return Json(json!({ "success": false, "error": "token mismatch" }));
+        return Err(AppError::Validation("token mismatch".to_string()).into());
     }
 
-    let event = match resolve_event(&state, query.event_id.as_deref()).await {
-        Ok(e) => e,
-        Err(e) => return e,
-    };
+    let event = resolve_event(&state, query.event_id.as_deref()).await?;
 
     // Verify claim token belongs to a checked-in attendee
     let sheets_kv = state.events_kv.as_ref().or(state.quiz_kv.as_ref());
@@ -101,35 +91,27 @@ pub async fn save_adventure_progress(
         Ok(Some(_)) => {} // valid checked-in attendee
         Ok(None) => {
             tracing::warn!("adventure save: invalid claim token {token}");
-            return Json(json!({
-                "success": false,
-                "error": "invalid claim token — you must be checked in first",
-            }));
+            return Err(AppError::NotFound(
+                "invalid claim token — you must be checked in first".to_string(),
+            )
+            .into());
         }
         Err(ref e) => {
             tracing::error!("adventure save: failed to look up claim token {token}: {e}");
-            return Json(json!({
-                "success": false,
-                "error": "failed to verify claim token",
-            }));
+            return Err(AppError::Internal("failed to verify claim token".to_string()).into());
         }
     }
 
-    let kv = match state.events_kv.as_ref().or(state.quiz_kv.as_ref()) {
-        Some(kv) => kv,
-        None => {
-            return Json(json!({
-                "success": false,
-                "error": "KV storage not available",
-            }));
-        }
-    };
+    let kv = state
+        .events_kv
+        .as_ref()
+        .or(state.quiz_kv.as_ref())
+        .ok_or_else(|| AppError::Internal("KV storage not available".to_string()))?;
 
     // Get config to determine required levels
-    let config = match adventure::get_adventure_config(kv, &event.id).await {
-        Ok(c) => c,
-        Err(e) => return Json(json!({ "success": false, "error": e })),
-    };
+    let config = adventure::get_adventure_config(kv, &event.id)
+        .await
+        .map_err(AppError::Internal)?;
 
     // Determine required level IDs from config.
     // If `required_level` is set (e.g., 1), the attendee must complete level_01 through that level.
@@ -144,7 +126,7 @@ pub async fn save_adventure_progress(
         _ => vec![],
     };
 
-    let progress = match adventure::save_level_completion(
+    let progress = adventure::save_level_completion(
         kv,
         &event.id,
         &token,
@@ -153,17 +135,14 @@ pub async fn save_adventure_progress(
         &required_levels,
     )
     .await
-    {
-        Ok(p) => p,
-        Err(e) => return Json(json!({ "success": false, "error": e })),
-    };
+    .map_err(AppError::Internal)?;
 
-    Json(json!({
+    Ok(Json(json!({
         "success": true,
         "data": {
             "progress": progress,
         }
-    }))
+    })))
 }
 
 /// GET /api/admin/adventure
@@ -173,36 +152,28 @@ pub async fn get_admin_adventure(
     State(state): State<AppState>,
     Extension(_claims): Extension<Claims>,
     Query(query): Query<EventIdQuery>,
-) -> Json<serde_json::Value> {
+) -> Result<Json<serde_json::Value>, WorkerError> {
     tracing::info!("admin adventure config read by {}", _claims.email);
 
-    let event = match resolve_event(&state, query.event_id.as_deref()).await {
-        Ok(e) => e,
-        Err(e) => return e,
-    };
+    let event = resolve_event(&state, query.event_id.as_deref()).await?;
 
-    let kv = match state.events_kv.as_ref().or(state.quiz_kv.as_ref()) {
-        Some(kv) => kv,
-        None => {
-            return Json(json!({
-                "success": false,
-                "error": "KV storage not available",
-            }));
-        }
-    };
+    let kv = state
+        .events_kv
+        .as_ref()
+        .or(state.quiz_kv.as_ref())
+        .ok_or_else(|| AppError::Internal("KV storage not available".to_string()))?;
 
-    let config = match adventure::get_adventure_config(kv, &event.id).await {
-        Ok(c) => c,
-        Err(e) => return Json(json!({ "success": false, "error": e })),
-    };
+    let config = adventure::get_adventure_config(kv, &event.id)
+        .await
+        .map_err(AppError::Internal)?;
 
-    Json(json!({
+    Ok(Json(json!({
         "success": true,
         "data": {
             "event_id": event.id,
             "config": config,
         }
-    }))
+    })))
 }
 
 /// PUT /api/admin/adventure
@@ -213,38 +184,31 @@ pub async fn put_admin_adventure(
     Extension(_claims): Extension<Claims>,
     Query(query): Query<EventIdQuery>,
     Json(body): Json<AdventureConfig>,
-) -> Json<serde_json::Value> {
+) -> Result<Json<serde_json::Value>, WorkerError> {
     tracing::info!(
         "admin adventure config update by {} (enabled={})",
         _claims.email,
         body.enabled
     );
 
-    let event = match resolve_event(&state, query.event_id.as_deref()).await {
-        Ok(e) => e,
-        Err(e) => return e,
-    };
+    let event = resolve_event(&state, query.event_id.as_deref()).await?;
 
-    let kv = match state.events_kv.as_ref().or(state.quiz_kv.as_ref()) {
-        Some(kv) => kv,
-        None => {
-            return Json(json!({
-                "success": false,
-                "error": "KV storage not available",
-            }));
-        }
-    };
+    let kv = state
+        .events_kv
+        .as_ref()
+        .or(state.quiz_kv.as_ref())
+        .ok_or_else(|| AppError::Internal("KV storage not available".to_string()))?;
 
-    if let Err(e) = adventure::save_adventure_config(kv, &event.id, &body).await {
-        return Json(json!({ "success": false, "error": e }));
-    }
+    adventure::save_adventure_config(kv, &event.id, &body)
+        .await
+        .map_err(AppError::Internal)?;
 
-    Json(json!({
+    Ok(Json(json!({
         "success": true,
         "data": {
             "event_id": event.id,
             "enabled": body.enabled,
             "required_level": body.required_level,
         }
-    }))
+    })))
 }

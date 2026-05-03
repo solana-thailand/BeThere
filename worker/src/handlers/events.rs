@@ -18,6 +18,7 @@ use axum::{
 use serde_json::json;
 
 use event_checkin_domain::models::auth::Claims;
+use event_checkin_domain::models::error::AppError;
 use event_checkin_domain::models::event::{CreateEventRequest, UpdateEventRequest};
 
 use crate::state::AppState;
@@ -35,29 +36,19 @@ use crate::state::AppState;
 pub async fn list_events(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
-) -> Json<serde_json::Value> {
+) -> Result<Json<serde_json::Value>, crate::error::WorkerError> {
     tracing::info!("list events requested by {}", claims.email);
 
-    let kv = match state.events_kv {
-        Some(ref kv) => kv,
-        None => {
-            return Json(json!({
-                "success": false,
-                "error": "events KV namespace not configured — add EVENTS binding in wrangler.toml",
-            }));
-        }
-    };
+    let kv = state.events_kv.as_ref().ok_or_else(|| {
+        AppError::Internal(
+            "events KV namespace not configured — add EVENTS binding in wrangler.toml".into(),
+        )
+    })?;
 
-    let all_events = match crate::event_store::list_events(kv).await {
-        Ok(events) => events,
-        Err(e) => {
-            tracing::error!("failed to list events: {e}");
-            return Json(json!({
-                "success": false,
-                "error": format!("failed to list events: {e}"),
-            }));
-        }
-    };
+    let all_events = crate::event_store::list_events(kv).await.map_err(|e| {
+        tracing::error!("failed to list events: {e}");
+        AppError::Internal(format!("failed to list events: {e}"))
+    })?;
 
     // SuperAdmin sees everything
     if state
@@ -66,12 +57,12 @@ pub async fn list_events(
         .iter()
         .any(|e| e.eq_ignore_ascii_case(&claims.email))
     {
-        return Json(json!({
+        return Ok(Json(json!({
             "success": true,
             "data": {
                 "events": all_events,
             },
-        }));
+        })));
     }
 
     // Organizer/Staff: only see events they are assigned to.
@@ -98,12 +89,12 @@ pub async fn list_events(
         }
     }
 
-    Json(json!({
+    Ok(Json(json!({
         "success": true,
         "data": {
             "events": visible,
         },
-    }))
+    })))
 }
 
 /// POST /api/events/seed
@@ -115,54 +106,44 @@ pub async fn list_events(
 pub async fn seed_event(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
-) -> Json<serde_json::Value> {
+) -> Result<Json<serde_json::Value>, crate::error::WorkerError> {
     tracing::info!("seed event requested by {}", claims.email);
 
     // Role check: SuperAdmin only
     let role = crate::auth::resolve_user_role(&claims.email, &state, None).await;
     if role != crate::auth::UserRole::SuperAdmin {
-        return Json(json!({
-            "success": false,
-            "error": "only super admins can seed events",
-        }));
+        return Err(AppError::Forbidden("only super admins can seed events".into()).into());
     }
 
-    let kv = match state.events_kv {
-        Some(ref kv) => kv,
-        None => {
-            return Json(json!({
-                "success": false,
-                "error": "events KV namespace not configured — add EVENTS binding in wrangler.toml",
-            }));
-        }
-    };
+    let kv = state.events_kv.as_ref().ok_or_else(|| {
+        AppError::Internal(
+            "events KV namespace not configured — add EVENTS binding in wrangler.toml".into(),
+        )
+    })?;
 
-    match crate::event_store::seed_from_config(kv, &state.config, &state).await {
-        Ok(config) => {
-            tracing::info!(
-                "event seeded: id={} name='{}' by {}",
-                config.id,
-                config.name,
-                claims.email,
-            );
-            Json(json!({
-                "success": true,
-                "data": {
-                    "id": config.id,
-                    "name": config.name,
-                    "slug": config.slug,
-                    "status": config.status.as_str(),
-                },
-            }))
-        }
-        Err(e) => {
+    let config = crate::event_store::seed_from_config(kv, &state.config, &state)
+        .await
+        .map_err(|e| {
             tracing::error!("failed to seed event: {e}");
-            Json(json!({
-                "success": false,
-                "error": format!("{e}"),
-            }))
-        }
-    }
+            AppError::Internal(e.to_string())
+        })?;
+
+    tracing::info!(
+        "event seeded: id={} name='{}' by {}",
+        config.id,
+        config.name,
+        claims.email,
+    );
+
+    Ok(Json(json!({
+        "success": true,
+        "data": {
+            "id": config.id,
+            "name": config.name,
+            "slug": config.slug,
+            "status": config.status.as_str(),
+        },
+    })))
 }
 
 /// POST /api/events/migrate
@@ -175,63 +156,49 @@ pub async fn seed_event(
 pub async fn migrate_quiz(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
-) -> Json<serde_json::Value> {
+) -> Result<Json<serde_json::Value>, crate::error::WorkerError> {
     tracing::info!("quiz migration requested by {}", claims.email);
 
     // Role check: SuperAdmin only
     let role = crate::auth::resolve_user_role(&claims.email, &state, None).await;
     if role != crate::auth::UserRole::SuperAdmin {
-        return Json(json!({
-            "success": false,
-            "error": "only super admins can migrate quiz data",
-        }));
+        return Err(AppError::Forbidden("only super admins can migrate quiz data".into()).into());
     }
 
-    let events_kv = match state.events_kv {
-        Some(ref kv) => kv,
-        None => {
-            return Json(json!({
-                "success": false,
-                "error": "events KV namespace not configured — add EVENTS binding in wrangler.toml",
-            }));
-        }
-    };
+    let events_kv = state.events_kv.as_ref().ok_or_else(|| {
+        AppError::Internal(
+            "events KV namespace not configured — add EVENTS binding in wrangler.toml".into(),
+        )
+    })?;
 
-    let quiz_kv = match state.quiz_kv {
-        Some(ref kv) => kv,
-        None => {
-            return Json(json!({
-                "success": false,
-                "error": "quiz KV namespace not configured — add QUIZ binding in wrangler.toml",
-            }));
-        }
-    };
+    let quiz_kv = state.quiz_kv.as_ref().ok_or_else(|| {
+        AppError::Internal(
+            "quiz KV namespace not configured — add QUIZ binding in wrangler.toml".into(),
+        )
+    })?;
 
-    match crate::event_store::migrate_quiz_to_event(events_kv, quiz_kv, "default").await {
-        Ok(result) => {
-            tracing::info!(
-                "quiz migration: event_id={} migrated={} by {}",
-                result.event_id,
-                result.migrated,
-                claims.email,
-            );
-            Json(json!({
-                "success": true,
-                "data": {
-                    "migrated": result.migrated,
-                    "event_id": result.event_id,
-                    "message": result.message,
-                },
-            }))
-        }
-        Err(e) => {
+    let result = crate::event_store::migrate_quiz_to_event(events_kv, quiz_kv, "default")
+        .await
+        .map_err(|e| {
             tracing::error!("failed to migrate quiz data: {e}");
-            Json(json!({
-                "success": false,
-                "error": format!("{e}"),
-            }))
-        }
-    }
+            AppError::Internal(e.to_string())
+        })?;
+
+    tracing::info!(
+        "quiz migration: event_id={} migrated={} by {}",
+        result.event_id,
+        result.migrated,
+        claims.email,
+    );
+
+    Ok(Json(json!({
+        "success": true,
+        "data": {
+            "migrated": result.migrated,
+            "event_id": result.event_id,
+            "message": result.message,
+        },
+    })))
 }
 
 /// POST /api/events
@@ -245,7 +212,7 @@ pub async fn create_event(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
     Json(body): Json<CreateEventRequest>,
-) -> Json<serde_json::Value> {
+) -> Result<Json<serde_json::Value>, crate::error::WorkerError> {
     tracing::info!(
         "create event requested by {} — name='{}'",
         claims.email,
@@ -255,48 +222,41 @@ pub async fn create_event(
     // Role check: SuperAdmin or Organizer required
     let role = crate::auth::resolve_user_role(&claims.email, &state, None).await;
     if role < crate::auth::UserRole::Organizer {
-        return Json(json!({
-            "success": false,
-            "error": "only super admins or organizers can create events",
-        }));
+        return Err(AppError::Forbidden(
+            "only super admins or organizers can create events".into(),
+        )
+        .into());
     }
 
-    let kv = match state.events_kv {
-        Some(ref kv) => kv,
-        None => {
-            return Json(json!({
-                "success": false,
-                "error": "events KV namespace not configured — add EVENTS binding in wrangler.toml",
-            }));
-        }
-    };
+    let kv = state.events_kv.as_ref().ok_or_else(|| {
+        AppError::Internal(
+            "events KV namespace not configured — add EVENTS binding in wrangler.toml".into(),
+        )
+    })?;
 
-    match crate::event_store::create_event(kv, &body).await {
-        Ok(config) => {
-            tracing::info!(
-                "event created: id={} name='{}' by {}",
-                config.id,
-                config.name,
-                claims.email,
-            );
-            Json(json!({
-                "success": true,
-                "data": {
-                    "id": config.id,
-                    "name": config.name,
-                    "slug": config.slug,
-                    "status": config.status.as_str(),
-                },
-            }))
-        }
-        Err(e) => {
+    let config = crate::event_store::create_event(kv, &body)
+        .await
+        .map_err(|e| {
             tracing::error!("failed to create event: {e}");
-            Json(json!({
-                "success": false,
-                "error": format!("{e}"),
-            }))
-        }
-    }
+            AppError::Internal(e.to_string())
+        })?;
+
+    tracing::info!(
+        "event created: id={} name='{}' by {}",
+        config.id,
+        config.name,
+        claims.email,
+    );
+
+    Ok(Json(json!({
+        "success": true,
+        "data": {
+            "id": config.id,
+            "name": config.name,
+            "slug": config.slug,
+            "status": config.status.as_str(),
+        },
+    })))
 }
 
 /// GET /api/events/{id}
@@ -310,35 +270,21 @@ pub async fn get_event(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
     Path(id): Path<String>,
-) -> Json<serde_json::Value> {
+) -> Result<Json<serde_json::Value>, crate::error::WorkerError> {
     tracing::info!("get event '{}' requested by {}", id, claims.email);
 
-    let kv = match state.events_kv {
-        Some(ref kv) => kv,
-        None => {
-            return Json(json!({
-                "success": false,
-                "error": "events KV namespace not configured",
-            }));
-        }
-    };
+    let kv = state
+        .events_kv
+        .as_ref()
+        .ok_or_else(|| AppError::Internal("events KV namespace not configured".into()))?;
 
-    let config = match crate::event_store::get_event(kv, &id).await {
-        Ok(Some(config)) => config,
-        Ok(None) => {
-            return Json(json!({
-                "success": false,
-                "error": format!("event '{id}' not found"),
-            }));
-        }
-        Err(e) => {
+    let config = crate::event_store::get_event(kv, &id)
+        .await
+        .map_err(|e| {
             tracing::error!("failed to get event '{id}': {e}");
-            return Json(json!({
-                "success": false,
-                "error": format!("failed to read event: {e}"),
-            }));
-        }
-    };
+            AppError::Internal(format!("failed to read event: {e}"))
+        })?
+        .ok_or_else(|| AppError::NotFound(format!("event '{id}' not found")))?;
 
     // Access check: non-super_admin must be assigned to this event
     let is_super_admin = state
@@ -354,18 +300,15 @@ pub async fn get_event(
             config.name,
             config.id,
         );
-        return Json(json!({
-            "success": false,
-            "error": format!("you do not have access to event '{id}'"),
-        }));
+        return Err(AppError::Forbidden(format!("you do not have access to event '{id}'")).into());
     }
 
-    Json(json!({
+    Ok(Json(json!({
         "success": true,
         "data": {
             "event": config,
         },
-    }))
+    })))
 }
 
 /// PUT /api/events/{id}
@@ -380,72 +323,55 @@ pub async fn update_event(
     Extension(claims): Extension<Claims>,
     Path(id): Path<String>,
     Json(body): Json<UpdateEventRequest>,
-) -> Json<serde_json::Value> {
+) -> Result<Json<serde_json::Value>, crate::error::WorkerError> {
     tracing::info!("update event '{}' requested by {}", id, claims.email);
 
-    let kv = match state.events_kv {
-        Some(ref kv) => kv,
-        None => {
-            return Json(json!({
-                "success": false,
-                "error": "events KV namespace not configured",
-            }));
-        }
-    };
+    let kv = state
+        .events_kv
+        .as_ref()
+        .ok_or_else(|| AppError::Internal("events KV namespace not configured".into()))?;
 
     // Role check: fetch existing event to resolve per-event role
-    let existing_event = match crate::event_store::get_event(kv, &id).await {
-        Ok(Some(config)) => config,
-        Ok(None) => {
-            return Json(json!({
-                "success": false,
-                "error": format!("event '{id}' not found"),
-            }));
-        }
-        Err(e) => {
+    let existing_event = crate::event_store::get_event(kv, &id)
+        .await
+        .map_err(|e| {
             tracing::error!("failed to fetch event '{id}' for role check: {e}");
-            return Json(json!({
-                "success": false,
-                "error": format!("failed to read event: {e}"),
-            }));
-        }
-    };
+            AppError::Internal(format!("failed to read event: {e}"))
+        })?
+        .ok_or_else(|| AppError::NotFound(format!("event '{id}' not found")))?;
 
     let role = crate::auth::resolve_user_role(&claims.email, &state, Some(&existing_event)).await;
     if role < crate::auth::UserRole::Organizer {
-        return Json(json!({
-            "success": false,
-            "error": "only super admins or organizers can modify events",
-        }));
+        return Err(AppError::Forbidden(
+            "only super admins or organizers can modify events".into(),
+        )
+        .into());
     }
 
-    match crate::event_store::update_event(kv, &id, &body).await {
-        Ok(config) => {
-            tracing::info!(
-                "event updated: id={} status={} by {}",
-                config.id,
-                config.status.as_str(),
-                claims.email,
-            );
-            Json(json!({
-                "success": true,
-                "data": {
-                    "id": config.id,
-                    "name": config.name,
-                    "slug": config.slug,
-                    "status": config.status.as_str(),
-                    "updated_at": config.updated_at,
-                },
-            }))
-        }
-        Err(e) => {
+    let config = crate::event_store::update_event(kv, &id, &body)
+        .await
+        .map_err(|e| {
             tracing::error!("failed to update event '{id}': {e}");
-            Json(json!({
-                "success": false,
-                "error": format!("{e}"),
-            }))
-        }
-    }
+            AppError::Internal(e.to_string())
+        })?;
+
+    tracing::info!(
+        "event updated: id={} status={} by {}",
+        config.id,
+        config.status.as_str(),
+        claims.email,
+    );
+
+    Ok(Json(json!({
+        "success": true,
+        "data": {
+            "id": config.id,
+            "name": config.name,
+            "slug": config.slug,
+            "status": config.status.as_str(),
+            "updated_at": config.updated_at,
+        },
+    })))
 }
 
 /// DELETE /api/events/{id}
@@ -460,62 +386,45 @@ pub async fn archive_event(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
     Path(id): Path<String>,
-) -> Json<serde_json::Value> {
+) -> Result<Json<serde_json::Value>, crate::error::WorkerError> {
     tracing::info!("archive event '{}' requested by {}", id, claims.email);
 
-    let kv = match state.events_kv {
-        Some(ref kv) => kv,
-        None => {
-            return Json(json!({
-                "success": false,
-                "error": "events KV namespace not configured",
-            }));
-        }
-    };
+    let kv = state
+        .events_kv
+        .as_ref()
+        .ok_or_else(|| AppError::Internal("events KV namespace not configured".into()))?;
 
     // Role check: fetch existing event to resolve per-event role
-    let existing_event = match crate::event_store::get_event(kv, &id).await {
-        Ok(Some(config)) => config,
-        Ok(None) => {
-            return Json(json!({
-                "success": false,
-                "error": format!("event '{id}' not found"),
-            }));
-        }
-        Err(e) => {
+    let existing_event = crate::event_store::get_event(kv, &id)
+        .await
+        .map_err(|e| {
             tracing::error!("failed to fetch event '{id}' for role check: {e}");
-            return Json(json!({
-                "success": false,
-                "error": format!("failed to read event: {e}"),
-            }));
-        }
-    };
+            AppError::Internal(format!("failed to read event: {e}"))
+        })?
+        .ok_or_else(|| AppError::NotFound(format!("event '{id}' not found")))?;
 
     let role = crate::auth::resolve_user_role(&claims.email, &state, Some(&existing_event)).await;
     if role < crate::auth::UserRole::Organizer {
-        return Json(json!({
-            "success": false,
-            "error": "only super admins or organizers can archive events",
-        }));
+        return Err(AppError::Forbidden(
+            "only super admins or organizers can archive events".into(),
+        )
+        .into());
     }
 
-    match crate::event_store::archive_event(kv, &id).await {
-        Ok(()) => {
-            tracing::info!("event archived: id={id} by {}", claims.email);
-            Json(json!({
-                "success": true,
-                "data": {
-                    "id": id,
-                    "status": "archived",
-                },
-            }))
-        }
-        Err(e) => {
+    crate::event_store::archive_event(kv, &id)
+        .await
+        .map_err(|e| {
             tracing::error!("failed to archive event '{id}': {e}");
-            Json(json!({
-                "success": false,
-                "error": format!("{e}"),
-            }))
-        }
-    }
+            AppError::Internal(e.to_string())
+        })?;
+
+    tracing::info!("event archived: id={id} by {}", claims.email);
+
+    Ok(Json(json!({
+        "success": true,
+        "data": {
+            "id": id,
+            "status": "archived",
+        },
+    })))
 }
