@@ -303,8 +303,8 @@ Image storage: Cloudflare R2 (free tier: 10 GB storage, 10M reads/month).
 - [x] `refund` instruction — attendee claims USDC after event_end + checked_in (PDA-signed CPI)
 - [x] `claim_forfeited` instruction — organizer claims unclaimed USDC after refund_deadline
 - [x] `close_event` instruction — close escrow + vault, reclaim rent
-- [ ] Unit tests with QuasarSVM (no validator needed, pure Rust)
-- [ ] Deploy to devnet: `quasar deploy --url devnet`
+- [x] Unit tests with QuasarSVM (no validator needed, pure Rust) — 16/16 passing
+- [ ] Deploy to devnet: `quasar deploy --url devnet` — deployed to `2TGfNNXNez2NgopffDnYYhLNYmndUBBwg5SvpD5XQeLo`
 - [x] Note: fallback to Anchor is mechanical if Quasar beta blocks us — Quasar compiles clean (58KB .so)
 
 ### Phase 2 — Worker Deposit/Refund API (~3 days)
@@ -380,4 +380,4 @@ Image storage: Cloudflare R2 (free tier: 10 GB storage, 10M reads/month).
 
 ## Status
 
-🟡 Phase 1 in progress — 9/11 items done, remaining: QuasarSVM tests + devnet deploy
+🟢 Phase 1 complete — escrow program deployed to devnet. Ready for Phase 2 (Worker API).
