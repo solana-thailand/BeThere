@@ -10,7 +10,7 @@ level = "warn"
 check-cfg = ['cfg(target_os, values("solana"))']
 
 [lib]
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "lib"]
 
 [features]
 alloc = []
@@ -23,9 +23,8 @@ quasar-spl = { git = "https://github.com/blueshift-gg/quasar" }
 solana-instruction = { version = "3.2.0" }
 
 [dev-dependencies]
-# bethere-escrow-client = { path = "target/client/rust/bethere-escrow-client" }
-# quasar-svm = { git = "https://github.com/blueshift-gg/quasar-svm" }
-# solana-account = { version = "3.4.0" }
-# solana-address = { version = "2.2.0", features = ["decode"] }
-# solana-instruction = { version = "3.2.0", features = ["bincode"] }
-# solana-pubkey = { version = "4.1.0" }
+bethere-escrow-client = { path = "target/client/rust/bethere-escrow-client" }
+quasar-svm = { git = "https://github.com/blueshift-gg/quasar-svm" }
+spl-token-interface = { version = "2.0.0" }
+solana-program-pack = { version = "3.1.0" }
+wincode = { version = "0.4", features = ["derive"] }
