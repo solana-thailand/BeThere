@@ -66,20 +66,28 @@ Registration                Event Day              After Event
 - **Attendee trust**: "I put in $15, I get back $15." SOL could be worth $12 or $18 at refund time.
 - **cNFT gas is already free**: Bubblegum V2 minting is paid by the organizer via Helius. No need for attendees to hold SOL.
 
-## On-Chain Program: Escrow (Anchor)
+## On-Chain Program: Escrow (Quasar)
+
+> **Framework choice**: Quasar over Anchor for CU efficiency (zero-copy, no Borsh deserialization),
+> cleaner SPL token CPI (method-style `.transfer().invoke_signed()`), and built-in Mollusk testing.
+> Quasar's [Build an Escrow](https://quasar-lang.com/docs/guides/build-an-escrow) guide maps 1:1 to our design.
+> Fallback: if Quasar blocks us (beta risk), port to Anchor is mechanical — same `#[derive(Accounts)]`, same constraints.
 
 ### Accounts
 
 ```rust
+use quasar_lang::prelude::*;
+
 /// PDA — one per event, holds all USDC deposits in a token account.
-#[account]
+/// Space: 1 (discriminator) + 32 + 32 + 32 + 8 + 8 + 8 + 8 + 8 + 8 + 1 + 1 = 147 bytes
+#[account(discriminator = 1)]
 pub struct EventEscrow {
     /// Event organizer (can claim forfeited deposits).
-    pub organizer: Pubkey,
-    /// USDC mint address (e.g., EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1m on mainnet).
-    pub usdc_mint: Pubkey,
+    pub organizer: Address,
+    /// USDC mint address.
+    pub usdc_mint: Address,
     /// Token account owned by this PDA — holds deposited USDC.
-    pub vault: Pubkey,
+    pub vault: Address,
     /// Fixed deposit amount in USDC smallest unit (6 decimals → $15 = 15_000_000).
     pub deposit_amount: u64,
     /// Event end timestamp (unix seconds). Refunds allowed after this.
@@ -99,12 +107,13 @@ pub struct EventEscrow {
 }
 
 /// PDA — one per attendee per event.
-#[account]
+/// Space: 1 (discriminator) + 32 + 32 + 8 + 8 + 1 + 1 + 1 = 84 bytes
+#[account(discriminator = 2)]
 pub struct AttendeeDeposit {
     /// Attendee's wallet address.
-    pub attendee: Pubkey,
+    pub attendee: Address,
     /// Reference to EventEscrow.
-    pub event: Pubkey,
+    pub event: Address,
     /// Amount deposited (USDC smallest unit).
     pub amount: u64,
     /// Deposit timestamp.
@@ -133,12 +142,58 @@ pub struct AttendeeDeposit {
 
 ```
 EventEscrow:     ["escrow", event_id.as_bytes()]
-AttendeeDeposit: ["deposit", event_escrow.key().as_bytes(), attendee.key().as_bytes()]
+AttendeeDeposit: ["deposit", event_escrow, attendee]
+```
+
+Quasar uses field names directly in `seeds` (no `.key().as_ref()` needed).
+
+### Key Quasar Patterns for This Program
+
+**Token CPI — deposit (attendee → vault):**
+```rust
+self.token_program
+    .transfer(self.attendee_ta, self.vault_ta, self.attendee, amount)
+    .invoke()
+```
+
+**Token CPI — refund (vault → attendee, PDA-signed):**
+```rust
+let seeds = bumps.event_escrow_seeds();
+
+self.token_program
+    .transfer(self.vault_ta, self.attendee_ta, self.event_escrow, amount)
+    .invoke_signed(&seeds)?;
+```
+
+**Token CPI — claim forfeited (vault → organizer, PDA-signed):**
+```rust
+let seeds = bumps.event_escrow_seeds();
+
+self.token_program
+    .transfer(self.vault_ta, self.organizer_ta, self.event_escrow, self.vault_ta.amount())
+    .invoke_signed(&seeds)?;
+
+self.vault_ta
+    .close(self.token_program, self.organizer, self.event_escrow)
+    .invoke_signed(&seeds)?;
+```
+
+**Account constraints:**
+```rust
+#[account(
+    has_one = organizer,
+    constraint = event_escrow.is_active,
+    constraint = !attendee_deposit.checked_in,
+    close = attendee,  // reclaim rent on refund
+    seeds = [b"deposit", event_escrow, attendee],
+    bump = attendee_deposit.bump
+)]
+pub attendee_deposit: &'info mut Account<AttendeeDeposit>,
 ```
 
 ### Access Control
 
-- `deposit`: anyone (attends open event)
+- `deposit`: anyone (open event)
 - `mark_checked_in`: organizer only (verified via scanner auth)
 - `refund`: the attendee themselves (signed by their wallet)
 - `claim_forfeited`: organizer only, only after `refund_deadline`
@@ -237,17 +292,20 @@ Image storage: Cloudflare R2 (free tier: 10 GB storage, 10M reads/month).
 
 ## Implementation Phases
 
-### Phase 1 — Anchor Escrow Program (~4 days)
+### Phase 1 — Quasar Escrow Program (~3 days)
 
-- [ ] Initialize Anchor project in `program/` directory
-- [ ] `EventEscrow` + `AttendeeDeposit` account structs
-- [ ] `create_event` instruction
-- [ ] `deposit` instruction (USDC SPL token transfer to vault)
-- [ ] `mark_checked_in` instruction (organizer authority)
-- [ ] `refund` instruction (attendee claims after event_end + checked_in)
-- [ ] `claim_forfeited` instruction (organizer claims after refund_deadline)
-- [ ] Unit tests with `liteSVM` or `mollusk`
-- [ ] Deploy to devnet + verify
+- [ ] Install Quasar CLI: `cargo install quasar-cli`
+- [ ] `quasar init bethere-escrow --toolchain solana --framework quasarsvm-rust --template full`
+- [ ] `EventEscrow` + `AttendeeDeposit` account structs (zero-copy, `#[account(discriminator = N)]`)
+- [ ] `create_event` instruction — init escrow PDA + vault token account
+- [ ] `deposit` instruction — USDC SPL token transfer to vault via `quasar-spl`
+- [ ] `mark_checked_in` instruction — organizer authority, set `checked_in = true`
+- [ ] `refund` instruction — attendee claims USDC after event_end + checked_in (PDA-signed CPI)
+- [ ] `claim_forfeited` instruction — organizer claims unclaimed USDC after refund_deadline
+- [ ] `close_event` instruction — close escrow + vault, reclaim rent
+- [ ] Unit tests with Mollusk (no validator needed, pure Rust)
+- [ ] Deploy to devnet: `quasar deploy --url devnet`
+- [ ] Note: fallback to Anchor is mechanical if Quasar beta blocks us
 
 ### Phase 2 — Worker Deposit/Refund API (~3 days)
 
@@ -288,18 +346,19 @@ Image storage: Cloudflare R2 (free tier: 10 GB storage, 10M reads/month).
 
 | Phase | Days | Notes |
 |-------|------|-------|
-| Phase 1 — Anchor program | 4 | Greenfield, new Anchor project |
+| Phase 1 — Quasar program | 3 | Greenfield, Quasar escrow (zero-copy, Mollusk tests) |
 | Phase 2 — Worker API | 3 | Extends existing worker |
 | Phase 3 — Frontend | 3 | Extends existing Leptos app |
 | Phase 4 — E2E testing | 2 | Devnet integration |
 | Phase 5 — Mainnet | 2 | Deploy + security review |
-| **Total** | **14 days** | ~3 weeks part-time |
+| **Total** | **13 days** | ~2.5 weeks part-time |
 
 ## Risks
 
 | Risk | Likelihood | Mitigation |
 |------|-----------|------------|
 | USDC vault drained by smart contract bug | Low | Devnet testing, max deposit cap per event, timelock on `claim_forfeited` |
+| Quasar beta breaks API / missing feature | Medium | Fallback: mechanical port to Anchor (same `#[derive(Accounts)]`, same constraints, 2 days). Off-chain code is framework-agnostic |
 | Attendee can't figure out Solana Pay | Medium | Fallback to PromptPay THB path (no wallet needed at registration) |
 | PromptPay slip fraud (photoshopped) | Low | Organizer recognizes name + amount; for larger events, add OCR auto-verify later |
 | FX rate changes between deposit and refund | None | USDC deposits refund exact USDC. THB deposits refund exact THB. No cross-currency. |
@@ -313,6 +372,11 @@ Image storage: Cloudflare R2 (free tier: 10 GB storage, 10M reads/month).
 - cNFT minting scripts: `scripts/cnft/`
 - USDC mint (mainnet): `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1m`
 - USDC mint (devnet): `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU`
+- [Quasar docs](https://quasar-lang.com/docs) — framework reference
+- [Quasar: Build an Escrow](https://quasar-lang.com/docs/guides/build-an-escrow) — step-by-step guide
+- [Quasar: SPL Token](https://quasar-lang.com/docs/spl-tokens/token-program) — token CPI reference
+- [Quasar: Migrating from Anchor](https://quasar-lang.com/docs/getting-started/migrating-from-anchor) — concept mapping
+- [Quasar GitHub](https://github.com/blueshift-gg/quasar) — source (beta, no crates.io release yet)
 
 ## Status
 
