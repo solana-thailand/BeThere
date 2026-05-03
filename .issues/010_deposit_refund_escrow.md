@@ -294,18 +294,18 @@ Image storage: Cloudflare R2 (free tier: 10 GB storage, 10M reads/month).
 
 ### Phase 1 — Quasar Escrow Program (~3 days)
 
-- [ ] Install Quasar CLI: `cargo install quasar-cli`
-- [ ] `quasar init bethere-escrow --toolchain solana --framework quasarsvm-rust --template full`
-- [ ] `EventEscrow` + `AttendeeDeposit` account structs (zero-copy, `#[account(discriminator = N)]`)
-- [ ] `create_event` instruction — init escrow PDA + vault token account
-- [ ] `deposit` instruction — USDC SPL token transfer to vault via `quasar-spl`
-- [ ] `mark_checked_in` instruction — organizer authority, set `checked_in = true`
-- [ ] `refund` instruction — attendee claims USDC after event_end + checked_in (PDA-signed CPI)
-- [ ] `claim_forfeited` instruction — organizer claims unclaimed USDC after refund_deadline
-- [ ] `close_event` instruction — close escrow + vault, reclaim rent
-- [ ] Unit tests with Mollusk (no validator needed, pure Rust)
+- [x] Install Quasar CLI: `cargo install --path cli` (from source)
+- [x] `quasar init bethere-escrow --toolchain solana --framework quasarsvm-rust --template full`
+- [x] `EventEscrow` + `AttendeeDeposit` account structs (zero-copy, `#[account(discriminator = N, set_inner)]`, `#[seeds(...)]`)
+- [x] `create_event` instruction — init escrow PDA + vault token account
+- [x] `deposit` instruction — USDC SPL token transfer to vault via `quasar-spl`
+- [x] `mark_checked_in` instruction — organizer authority, set `checked_in = true`
+- [x] `refund` instruction — attendee claims USDC after event_end + checked_in (PDA-signed CPI)
+- [x] `claim_forfeited` instruction — organizer claims unclaimed USDC after refund_deadline
+- [x] `close_event` instruction — close escrow + vault, reclaim rent
+- [ ] Unit tests with QuasarSVM (no validator needed, pure Rust)
 - [ ] Deploy to devnet: `quasar deploy --url devnet`
-- [ ] Note: fallback to Anchor is mechanical if Quasar beta blocks us
+- [x] Note: fallback to Anchor is mechanical if Quasar beta blocks us — Quasar compiles clean (58KB .so)
 
 ### Phase 2 — Worker Deposit/Refund API (~3 days)
 
@@ -380,4 +380,4 @@ Image storage: Cloudflare R2 (free tier: 10 GB storage, 10M reads/month).
 
 ## Status
 
-🔵 Not started
+🟡 Phase 1 in progress — 9/11 items done, remaining: QuasarSVM tests + devnet deploy
