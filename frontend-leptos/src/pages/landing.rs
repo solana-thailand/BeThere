@@ -49,26 +49,32 @@ fn WaitlistForm() -> impl IntoView {
 
             match request.send().await {
                 Ok(response) => {
-                    if response.ok() {
-                        // Parse JSON to check for duplicate
-                        match response.json::<serde_json::Value>().await {
-                            Ok(body) => {
-                                if body.get("code").and_then(|v| v.as_str()) == Some("duplicate") {
+                    // Parse JSON body regardless of HTTP status
+                    let status = response.status();
+                    match response.json::<serde_json::Value>().await {
+                        Ok(body) => {
+                            if body.get("success").and_then(|v| v.as_bool()) == Some(true) {
+                                set_submitted.set(true);
+                            } else {
+                                let error_msg = body
+                                    .get("error")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("Something went wrong");
+                                // Duplicate email — backend returns 400 with "already on the waitlist"
+                                if error_msg.contains("already on the waitlist") {
                                     set_already_registered.set(true);
-                                } else if body.get("success").and_then(|v| v.as_bool()) == Some(true) {
-                                    set_submitted.set(true);
                                 } else {
-                                    let msg = body.get("error").and_then(|v| v.as_str()).unwrap_or("Something went wrong");
-                                    set_error.set(Some(msg.to_string()));
+                                    set_error.set(Some(error_msg.to_string()));
                                 }
                             }
-                            Err(_) => {
-                                // Can't parse JSON — treat as success
+                        }
+                        Err(_) => {
+                            if (200..300).contains(&status) {
                                 set_submitted.set(true);
+                            } else {
+                                set_error.set(Some("Something went wrong. Please try again.".to_string()));
                             }
                         }
-                    } else {
-                        set_error.set(Some("Something went wrong. Please try again.".to_string()));
                     }
                 }
                 Err(e) => {
@@ -504,9 +510,6 @@ pub fn Landing() -> impl IntoView {
                     <a href="#waitlist" class="btn btn-primary" style="padding:0.85rem 2rem;font-size:1rem;text-decoration:none;">
                         "Join Waitlist →"
                     </a>
-                    <A href="/adventure" attr:class="btn btn-outline" attr:style="padding:0.85rem 2rem;font-size:1rem;text-decoration:none;display:inline-flex;align-items:center;gap:0.5rem;">
-                        "Play Demo" "🎮"
-                    </A>
                     <A href="/login" attr:class="btn btn-outline" attr:style="padding:0.85rem 2rem;font-size:1rem;">
                         "Sign In"
                     </A>
@@ -749,12 +752,6 @@ pub fn Landing() -> impl IntoView {
                     }}
                 </div>
 
-                // CTA
-                <div style="text-align:center;margin-top:2rem;">
-                    <a href="#waitlist" class="btn btn-primary" style="padding:0.75rem 1.5rem;text-decoration:none;">
-                        "Join the waitlist →"
-                    </a>
-                </div>
             </section>
 
             // ===== Waitlist =====

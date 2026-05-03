@@ -297,10 +297,19 @@ pub fn Admin() -> impl IntoView {
         filtered
     });
 
-    // Data loading effect — triggered by refresh_counter changes
+    // Data loading effect — triggered by refresh_counter or active_event_id changes.
+    // Skips the initial mount when active_event_id is still None (events not loaded yet),
+    // avoiding a duplicate call that would resolve to the same default event.
     Effect::new(move |_| {
         let _ = refresh_counter.get(); // track refresh counter
         let eid = get_event_id();
+
+        // Skip if events haven't loaded yet — the Effect will re-fire when
+        // active_event_id transitions from None → Some after events load.
+        if eid.is_none() {
+            return;
+        }
+
         set_is_loading.set(true);
 
         leptos::task::spawn_local(async move {

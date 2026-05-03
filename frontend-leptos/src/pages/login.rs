@@ -98,16 +98,6 @@ pub fn Login() -> impl IntoView {
                     "Sign in with Google to access the staff check-in portal."
                 </p>
 
-                // Event link
-                <a
-                    href="https://solana-thailand.github.io/genesis/events/road-to-mainnet-1-bangkok/"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style="color:var(--primary);font-size:0.9rem;margin-bottom:0.5rem;"
-                >
-                    "Road to Mainnet 1 — Bangkok"
-                </a>
-
                 // Powered by Solana badge
                 <div class="powered-badge">
                     <span class="sol-dot"></span>
@@ -142,11 +132,16 @@ pub fn Login() -> impl IntoView {
                     </div>
                 </Show>
 
+                // Back to landing
+                <a href="/" style="color:var(--text-secondary);font-size:0.85rem;margin-top:1rem;text-decoration:none;">
+                    "← Back to home"
+                </a>
+
                 // Footer
                 <div class="claim-footer">
                     <div class="brand-line">
                         <span class="accent">"BeThere"</span>
-                        " x Solana Thailand"
+                        " — Proof of Attendance"
                     </div>
                 </div>
             </div>

@@ -28,8 +28,14 @@ const GOOGLE_TOKEN_TTL_SECS: u64 = 3500;
 /// KV key prefix for caching attendee lists.
 const ATTENDEE_CACHE_KEY_PREFIX: &str = "cache:attendees";
 
-/// TTL for the cached attendee list (30 seconds).
-const ATTENDEE_CACHE_TTL_SECS: u64 = 30;
+/// TTL for the cached attendee list (5 minutes).
+const ATTENDEE_CACHE_TTL_SECS: u64 = 300;
+
+/// KV key for caching the staff members list.
+const STAFF_CACHE_KEY: &str = "cache:staff_members";
+
+/// TTL for the cached staff members list (60 seconds).
+const STAFF_CACHE_TTL_SECS: u64 = 60;
 
 // ---------------------------------------------------------------------------
 // Cache helpers
@@ -110,11 +116,11 @@ pub async fn get_cached_access_token(
             .map_err(|e| format!("failed to read google token from KV: {e:?}"))
         {
             Ok(Some(token)) => {
-                tracing::debug!("reused cached google access token from KV");
+                tracing::info!("reused cached google access token from KV");
                 return Ok(token);
             }
             Ok(None) => {
-                tracing::debug!("google access token not in KV, fetching new one");
+                tracing::info!("google access token not in KV, fetching new one");
             }
             Err(e) => {
                 tracing::warn!("KV read for google token failed, falling back to fresh token: {e}");
@@ -137,7 +143,7 @@ pub async fn get_cached_access_token(
                 .await
             {
                 Ok(()) => {
-                    tracing::debug!(
+                    tracing::info!(
                         "cached google access token in KV (ttl={GOOGLE_TOKEN_TTL_SECS}s)"
                     );
                 }
@@ -177,21 +183,21 @@ pub async fn get_attendees(
         match kv.get(&cache_key).text().await {
             Ok(Some(cached)) => match serde_json::from_str::<Vec<Attendee>>(&cached) {
                 Ok(attendees) => {
-                    tracing::debug!(
+                    tracing::info!(
                         "cache hit: {} attendees from KV key {cache_key}",
                         attendees.len()
                     );
                     return Ok(attendees);
                 }
                 Err(e) => {
-                    tracing::debug!("cache deserialize error, fetching fresh: {e:?}");
+                    tracing::info!("cache deserialize error, fetching fresh: {e:?}");
                 }
             },
             Ok(None) => {
-                tracing::debug!("cache miss: KV key {cache_key}");
+                tracing::info!("cache miss: KV key {cache_key}");
             }
             Err(e) => {
-                tracing::debug!("cache read error, fetching fresh: {e:?}");
+                tracing::info!("cache read error, fetching fresh: {e:?}");
             }
         }
     }
@@ -235,21 +241,21 @@ pub async fn get_attendees(
                     .await
                 {
                     Ok(()) => {
-                        tracing::debug!(
+                        tracing::info!(
                             "cached {} attendees in KV key {cache_key} (ttl={ATTENDEE_CACHE_TTL_SECS}s)",
                             attendees.len()
                         );
                     }
                     Err(e) => {
-                        tracing::debug!("failed to cache attendees in KV: {e:?}");
+                        tracing::info!("failed to cache attendees in KV: {e:?}");
                     }
                 },
                 Err(e) => {
-                    tracing::debug!("failed to build attendee cache KV put: {e}");
+                    tracing::info!("failed to build attendee cache KV put: {e}");
                 }
             },
             Err(e) => {
-                tracing::debug!("failed to serialize attendees for cache: {e:?}");
+                tracing::info!("failed to serialize attendees for cache: {e:?}");
             }
         }
     }
@@ -315,7 +321,7 @@ pub async fn get_attendee_with_claim_counts(
 /// Column mapping:
 ///   A[0] = email
 ///   B[1] = role ("admin" or "staff")
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct StaffMember {
     /// Staff email address (lowercased).
     pub email: String,
@@ -325,6 +331,9 @@ pub struct StaffMember {
 }
 
 /// Fetch staff members from the dedicated "staff" sheet tab.
+///
+/// Uses KV cache when available: returns cached staff on cache hit,
+/// fetches from Google Sheets on cache miss and stores with 60-second TTL.
 ///
 /// Reads columns A (email) and B (role) starting from row 2 (row 1 is header).
 /// Returns a list of `StaffMember` with lowercased emails and role.
@@ -337,6 +346,28 @@ pub async fn get_staff_members(
     staff_sheet_name: &str,
     kv: Option<&KvStore>,
 ) -> Result<Vec<StaffMember>, String> {
+    // Try KV cache first
+    if let Some(kv) = kv {
+        match kv.get(STAFF_CACHE_KEY).text().await {
+            Ok(Some(cached)) => match serde_json::from_str::<Vec<StaffMember>>(&cached) {
+                Ok(members) => {
+                    tracing::info!("cache hit: {} staff members from KV", members.len());
+                    return Ok(members);
+                }
+                Err(e) => {
+                    tracing::info!("staff cache deserialize error, fetching fresh: {e:?}");
+                }
+            },
+            Ok(None) => {
+                tracing::info!("cache miss: staff members not in KV");
+            }
+            Err(e) => {
+                tracing::info!("staff cache read error, fetching fresh: {e:?}");
+            }
+        }
+    }
+
+    // Cache miss or no KV — fetch from Google Sheets
     let access_token = get_cached_access_token(state, kv).await?;
     let range = format!("{staff_sheet_name}!A2:B");
     let url = format!(
@@ -366,7 +397,30 @@ pub async fn get_staff_members(
         })
         .collect();
 
-    tracing::debug!("fetched {} staff members from sheet", members.len());
+    tracing::info!("fetched {} staff members from google sheets", members.len());
+
+    // Write to KV cache
+    if let (Some(kv), Ok(json)) = (kv, serde_json::to_string(&members)) {
+        match kv
+            .put(STAFF_CACHE_KEY, &json)
+            .map_err(|e| format!("failed to build staff cache KV put: {e:?}"))
+        {
+            Ok(builder) => {
+                if let Err(e) = builder.expiration_ttl(STAFF_CACHE_TTL_SECS).execute().await {
+                    tracing::info!("failed to cache staff members in KV: {e:?}");
+                } else {
+                    tracing::info!(
+                        "cached {} staff members in KV (ttl={STAFF_CACHE_TTL_SECS}s)",
+                        members.len()
+                    );
+                }
+            }
+            Err(e) => {
+                tracing::info!("failed to build staff cache KV put: {e}");
+            }
+        }
+    }
+
     Ok(members)
 }
 
