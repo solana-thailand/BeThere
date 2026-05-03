@@ -164,30 +164,23 @@ pub fn apply_move(mut game: GameState, direction: Direction) -> (GameState, Move
 /// 2. All required keys are collected
 /// 3. All gates have been opened (puzzles solved)
 pub fn check_level_complete(game: &GameState, level: &LevelData) -> bool {
-    // Must be on exit
+    // Must be on exit tile
     let (col, row) = game.player_pos;
-    if !matches!(
+    let on_exit = matches!(
         game.tile_grid.get(row).and_then(|r| r.get(col)),
         Some(Tile::Exit)
-    ) {
-        return false;
-    }
+    );
 
-    // Must have all required keys
-    for key_name in &level.required_keys {
-        if !game.collected_keys.contains(key_name) {
-            return false;
-        }
-    }
+    let has_all_keys = level
+        .required_keys
+        .iter()
+        .all(|k| game.collected_keys.contains(k));
+    let all_gates_open = level
+        .gates
+        .iter()
+        .all(|g| game.solved_puzzles.contains(&g.puzzle_id));
 
-    // Must have solved all gate puzzles
-    for gate in &level.gates {
-        if !game.solved_puzzles.contains(&gate.puzzle_id) {
-            return false;
-        }
-    }
-
-    true
+    on_exit && has_all_keys && all_gates_open
 }
 
 /// Initialize game state for a level.
