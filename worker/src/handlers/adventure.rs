@@ -9,12 +9,12 @@
 //!   PUT  /api/admin/adventure              — create/update adventure config
 
 use axum::{
-    Extension,
+    Extension, Json,
     extract::{Path, Query, State},
-    response::Json,
 };
-
 use serde_json::json;
+
+use crate::error::ApiOk;
 
 use event_checkin_domain::models::adventure::{AdventureConfig, AdventureSaveRequest};
 use event_checkin_domain::models::auth::Claims;
@@ -32,7 +32,7 @@ pub async fn get_adventure_status(
     State(state): State<AppState>,
     Path(token): Path<String>,
     Query(query): Query<EventIdQuery>,
-) -> Result<Json<serde_json::Value>, WorkerError> {
+) -> Result<ApiOk<serde_json::Value>, WorkerError> {
     let event = resolve_event(&state, query.event_id.as_deref()).await?;
 
     let kv = state
@@ -49,12 +49,9 @@ pub async fn get_adventure_status(
         .await
         .map_err(AppError::Internal)?;
 
-    Ok(Json(json!({
-        "success": true,
-        "data": {
-            "status": status,
-            "progress": progress,
-        }
+    Ok(ApiOk::new(json!({
+        "status": status,
+        "progress": progress,
     })))
 }
 
@@ -69,7 +66,7 @@ pub async fn save_adventure_progress(
     Path(token): Path<String>,
     Query(query): Query<EventIdQuery>,
     Json(body): Json<AdventureSaveRequest>,
-) -> Result<Json<serde_json::Value>, WorkerError> {
+) -> Result<ApiOk<serde_json::Value>, WorkerError> {
     // Validate token matches body
     if body.claim_token != token {
         return Err(AppError::Validation("token mismatch".to_string()).into());
@@ -137,11 +134,8 @@ pub async fn save_adventure_progress(
     .await
     .map_err(AppError::Internal)?;
 
-    Ok(Json(json!({
-        "success": true,
-        "data": {
-            "progress": progress,
-        }
+    Ok(ApiOk::new(json!({
+        "progress": progress,
     })))
 }
 
@@ -152,7 +146,7 @@ pub async fn get_admin_adventure(
     State(state): State<AppState>,
     Extension(_claims): Extension<Claims>,
     Query(query): Query<EventIdQuery>,
-) -> Result<Json<serde_json::Value>, WorkerError> {
+) -> Result<ApiOk<serde_json::Value>, WorkerError> {
     tracing::info!("admin adventure config read by {}", _claims.email);
 
     let event = resolve_event(&state, query.event_id.as_deref()).await?;
@@ -167,12 +161,9 @@ pub async fn get_admin_adventure(
         .await
         .map_err(AppError::Internal)?;
 
-    Ok(Json(json!({
-        "success": true,
-        "data": {
-            "event_id": event.id,
-            "config": config,
-        }
+    Ok(ApiOk::new(json!({
+        "event_id": event.id,
+        "config": config,
     })))
 }
 
@@ -184,7 +175,7 @@ pub async fn put_admin_adventure(
     Extension(_claims): Extension<Claims>,
     Query(query): Query<EventIdQuery>,
     Json(body): Json<AdventureConfig>,
-) -> Result<Json<serde_json::Value>, WorkerError> {
+) -> Result<ApiOk<serde_json::Value>, WorkerError> {
     tracing::info!(
         "admin adventure config update by {} (enabled={})",
         _claims.email,
@@ -203,12 +194,9 @@ pub async fn put_admin_adventure(
         .await
         .map_err(AppError::Internal)?;
 
-    Ok(Json(json!({
-        "success": true,
-        "data": {
-            "event_id": event.id,
-            "enabled": body.enabled,
-            "required_level": body.required_level,
-        }
+    Ok(ApiOk::new(json!({
+        "event_id": event.id,
+        "enabled": body.enabled,
+        "required_level": body.required_level,
     })))
 }

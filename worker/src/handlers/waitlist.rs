@@ -4,9 +4,11 @@
 //! Saves email + timestamp to a dedicated Google Sheets tab.
 //! Deduplicates by checking existing emails before appending.
 
-use axum::{extract::State, response::Json};
+use axum::{Json, extract::State};
 use serde::Deserialize;
 use serde_json::json;
+
+use crate::error::ApiOk;
 
 use event_checkin_domain::models::error::AppError;
 
@@ -29,7 +31,7 @@ pub struct WaitlistRequest {
 pub async fn join_waitlist(
     State(state): State<AppState>,
     Json(body): Json<WaitlistRequest>,
-) -> Result<Json<serde_json::Value>, crate::error::WorkerError> {
+) -> Result<ApiOk<serde_json::Value>, crate::error::WorkerError> {
     let email = body.email.trim().to_lowercase();
 
     // Basic email validation
@@ -66,10 +68,8 @@ pub async fn join_waitlist(
         AppError::Internal(format!("Failed to join waitlist: {e}"))
     })?;
 
-    Ok(Json(json!({
-        "success": true,
-        "data": { "email": email },
-    })))
+    let data = json!({ "email": email });
+    Ok(ApiOk::new(data))
 }
 
 /// Fetch all existing emails from the "waitlist" sheet tab (column A).

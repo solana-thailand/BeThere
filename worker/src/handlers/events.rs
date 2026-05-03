@@ -17,6 +17,8 @@ use axum::{
 
 use serde_json::json;
 
+use crate::error::ApiOk;
+
 use event_checkin_domain::models::auth::Claims;
 use event_checkin_domain::models::error::AppError;
 use event_checkin_domain::models::event::{CreateEventRequest, UpdateEventRequest};
@@ -36,7 +38,7 @@ use crate::state::AppState;
 pub async fn list_events(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
-) -> Result<Json<serde_json::Value>, crate::error::WorkerError> {
+) -> Result<ApiOk<serde_json::Value>, crate::error::WorkerError> {
     tracing::info!(staff_email = %claims.email, "list events requested");
 
     let kv = state.events_kv.as_ref().ok_or_else(|| {
@@ -57,11 +59,8 @@ pub async fn list_events(
         .iter()
         .any(|e| e.eq_ignore_ascii_case(&claims.email))
     {
-        return Ok(Json(json!({
-            "success": true,
-            "data": {
-                "events": all_events,
-            },
+        return Ok(ApiOk::new(json!({
+            "events": all_events,
         })));
     }
 
@@ -89,11 +88,8 @@ pub async fn list_events(
         }
     }
 
-    Ok(Json(json!({
-        "success": true,
-        "data": {
-            "events": visible,
-        },
+    Ok(ApiOk::new(json!({
+        "events": visible,
     })))
 }
 
@@ -106,7 +102,7 @@ pub async fn list_events(
 pub async fn seed_event(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
-) -> Result<Json<serde_json::Value>, crate::error::WorkerError> {
+) -> Result<ApiOk<serde_json::Value>, crate::error::WorkerError> {
     tracing::info!(staff_email = %claims.email, "seed event requested");
 
     // Role check: SuperAdmin only
@@ -135,14 +131,11 @@ pub async fn seed_event(
         "event seeded",
     );
 
-    Ok(Json(json!({
-        "success": true,
-        "data": {
-            "id": config.id,
-            "name": config.name,
-            "slug": config.slug,
-            "status": config.status.as_str(),
-        },
+    Ok(ApiOk::new(json!({
+        "id": config.id,
+        "name": config.name,
+        "slug": config.slug,
+        "status": config.status.as_str(),
     })))
 }
 
@@ -156,7 +149,7 @@ pub async fn seed_event(
 pub async fn migrate_quiz(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
-) -> Result<Json<serde_json::Value>, crate::error::WorkerError> {
+) -> Result<ApiOk<serde_json::Value>, crate::error::WorkerError> {
     tracing::info!(staff_email = %claims.email, "quiz migration requested");
 
     // Role check: SuperAdmin only
@@ -191,13 +184,10 @@ pub async fn migrate_quiz(
         "quiz migration completed",
     );
 
-    Ok(Json(json!({
-        "success": true,
-        "data": {
-            "migrated": result.migrated,
-            "event_id": result.event_id,
-            "message": result.message,
-        },
+    Ok(ApiOk::new(json!({
+        "migrated": result.migrated,
+        "event_id": result.event_id,
+        "message": result.message,
     })))
 }
 
@@ -212,7 +202,7 @@ pub async fn create_event(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
     Json(body): Json<CreateEventRequest>,
-) -> Result<Json<serde_json::Value>, crate::error::WorkerError> {
+) -> Result<ApiOk<serde_json::Value>, crate::error::WorkerError> {
     tracing::info!(
         staff_email = %claims.email,
         event_name = %body.name,
@@ -248,14 +238,11 @@ pub async fn create_event(
         "event created",
     );
 
-    Ok(Json(json!({
-        "success": true,
-        "data": {
-            "id": config.id,
-            "name": config.name,
-            "slug": config.slug,
-            "status": config.status.as_str(),
-        },
+    Ok(ApiOk::new(json!({
+        "id": config.id,
+        "name": config.name,
+        "slug": config.slug,
+        "status": config.status.as_str(),
     })))
 }
 
@@ -270,7 +257,7 @@ pub async fn get_event(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
     Path(id): Path<String>,
-) -> Result<Json<serde_json::Value>, crate::error::WorkerError> {
+) -> Result<ApiOk<serde_json::Value>, crate::error::WorkerError> {
     tracing::info!(event_id = %id, staff_email = %claims.email, "get event requested");
 
     let kv = state
@@ -303,11 +290,8 @@ pub async fn get_event(
         return Err(AppError::Forbidden(format!("you do not have access to event '{id}'")).into());
     }
 
-    Ok(Json(json!({
-        "success": true,
-        "data": {
-            "event": config,
-        },
+    Ok(ApiOk::new(json!({
+        "event": config,
     })))
 }
 
@@ -323,7 +307,7 @@ pub async fn update_event(
     Extension(claims): Extension<Claims>,
     Path(id): Path<String>,
     Json(body): Json<UpdateEventRequest>,
-) -> Result<Json<serde_json::Value>, crate::error::WorkerError> {
+) -> Result<ApiOk<serde_json::Value>, crate::error::WorkerError> {
     tracing::info!(event_id = %id, staff_email = %claims.email, "update event requested");
 
     let kv = state
@@ -362,15 +346,12 @@ pub async fn update_event(
         "event updated",
     );
 
-    Ok(Json(json!({
-        "success": true,
-        "data": {
-            "id": config.id,
-            "name": config.name,
-            "slug": config.slug,
-            "status": config.status.as_str(),
-            "updated_at": config.updated_at,
-        },
+    Ok(ApiOk::new(json!({
+        "id": config.id,
+        "name": config.name,
+        "slug": config.slug,
+        "status": config.status.as_str(),
+        "updated_at": config.updated_at,
     })))
 }
 
@@ -386,7 +367,7 @@ pub async fn archive_event(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
     Path(id): Path<String>,
-) -> Result<Json<serde_json::Value>, crate::error::WorkerError> {
+) -> Result<ApiOk<serde_json::Value>, crate::error::WorkerError> {
     tracing::info!(event_id = %id, staff_email = %claims.email, "archive event requested");
 
     let kv = state
@@ -420,11 +401,8 @@ pub async fn archive_event(
 
     tracing::info!(event_id = %id, staff_email = %claims.email, "event archived");
 
-    Ok(Json(json!({
-        "success": true,
-        "data": {
-            "id": id,
-            "status": "archived",
-        },
+    Ok(ApiOk::new(json!({
+        "id": id,
+        "status": "archived",
     })))
 }

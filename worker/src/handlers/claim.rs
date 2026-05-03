@@ -5,11 +5,12 @@
 //! - Mint a compressed NFT to their wallet (POST /api/claim/{token})
 
 use axum::{
+    Json,
     extract::{Path, Query, State},
-    response::Json,
 };
 use serde::Deserialize;
-use serde_json::json;
+
+use crate::error::ApiOk;
 
 use event_checkin_domain::models::api::{ClaimLookupResponse, ClaimResponse};
 use event_checkin_domain::models::error::AppError;
@@ -34,7 +35,7 @@ pub async fn get_claim(
     State(state): State<AppState>,
     Path(token): Path<String>,
     Query(query): Query<EventIdQuery>,
-) -> Result<Json<serde_json::Value>, crate::error::WorkerError> {
+) -> Result<ApiOk<ClaimLookupResponse>, crate::error::WorkerError> {
     let lookup = crate::claim::lookup_claim(&state, &token, query.event_id.as_deref()).await?;
 
     let response = ClaimLookupResponse {
@@ -51,10 +52,7 @@ pub async fn get_claim(
         total_claimed: lookup.total_claimed,
     };
 
-    Ok(Json(json!({
-        "success": true,
-        "data": response,
-    })))
+    Ok(ApiOk::new(response))
 }
 
 /// POST /api/claim/{token}
@@ -68,7 +66,7 @@ pub async fn post_claim(
     Path(token): Path<String>,
     Query(query): Query<EventIdQuery>,
     Json(body): Json<ClaimRequest>,
-) -> Result<Json<serde_json::Value>, crate::error::WorkerError> {
+) -> Result<ApiOk<ClaimResponse>, crate::error::WorkerError> {
     // Validate wallet address format
     if let Err(e) = validate_wallet_address(&body.wallet_address) {
         tracing::warn!(claim_token = %token, error = %e, "invalid wallet address for claim");
@@ -92,8 +90,5 @@ pub async fn post_claim(
         cluster: result.cluster,
     };
 
-    Ok(Json(json!({
-        "success": true,
-        "data": response,
-    })))
+    Ok(ApiOk::new(response))
 }

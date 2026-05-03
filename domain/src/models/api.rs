@@ -1,5 +1,54 @@
 use serde::{Deserialize, Serialize};
 
+// ---------------------------------------------------------------------------
+// ApiResponse<T> — standard JSON API envelope
+// ---------------------------------------------------------------------------
+
+/// Standard JSON API envelope for all handler responses.
+///
+/// Every API endpoint returns this shape. The frontend's `ApiResponse<T>`
+/// deserializes using `data: Option<T>` and `error: Option<String>`.
+///
+/// # Success
+/// ```json
+/// { "success": true, "data": { ... } }
+/// ```
+///
+/// # Error (returned via `WorkerError`, not this type)
+/// ```json
+/// { "success": false, "error": "message" }
+/// ```
+#[derive(Debug, Clone, Serialize)]
+pub struct ApiResponse<T: Serialize> {
+    pub success: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub data: Option<T>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+impl<T: Serialize> ApiResponse<T> {
+    /// Create a success response wrapping data.
+    pub fn data(data: T) -> Self {
+        Self {
+            success: true,
+            data: Some(data),
+            error: None,
+        }
+    }
+}
+
+impl ApiResponse<()> {
+    /// Create a success response with a message and no data payload.
+    pub fn message(msg: &str) -> ApiResponse<serde_json::Value> {
+        ApiResponse {
+            success: true,
+            data: Some(serde_json::json!({ "message": msg })),
+            error: None,
+        }
+    }
+}
+
 /// Response for a single attendee or attendee in a list.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AttendeeResponse {

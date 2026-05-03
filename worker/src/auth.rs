@@ -9,8 +9,8 @@ use axum::{
     middleware::Next,
     response::{IntoResponse, Json},
 };
-use serde_json::json;
 
+use event_checkin_domain::models::api::ApiResponse;
 use event_checkin_domain::models::auth::{Claims, GoogleUserInfo, TokenRequest};
 
 use crate::crypto;
@@ -234,10 +234,11 @@ pub async fn require_auth(
             tracing::debug!(path = %path, error = %e, "auth middleware rejected request");
             return (
                 axum::http::StatusCode::UNAUTHORIZED,
-                Json(json!({
-                    "success": false,
-                    "error": e,
-                })),
+                Json(ApiResponse::<()> {
+                    success: false,
+                    data: None,
+                    error: Some(e),
+                }),
             )
                 .into_response();
         }
@@ -250,10 +251,11 @@ pub async fn require_auth(
         tracing::warn!(email = %claims.email, "non-staff user attempted access");
         return (
             axum::http::StatusCode::FORBIDDEN,
-            Json(json!({
-                "success": false,
-                "error": "user is not in staff allowlist",
-            })),
+            Json(ApiResponse::<()> {
+                success: false,
+                data: None,
+                error: Some("user is not in staff allowlist".to_string()),
+            }),
         )
             .into_response();
     }

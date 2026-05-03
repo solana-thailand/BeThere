@@ -36,12 +36,12 @@ impl From<gloo::net::Error> for ApiError {
 
 // ===== Response types matching server API =====
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AuthUrlResponse {
     pub auth_url: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct MeResponse {
     pub email: String,
     pub sub: String,
@@ -401,8 +401,13 @@ pub async fn get_auth_url() -> Result<AuthUrlResponse, ApiError> {
         });
     }
 
-    response.json().await.map_err(|e| ApiError {
+    let result: ApiResponse<AuthUrlResponse> = response.json().await.map_err(|e| ApiError {
         message: format!("Failed to parse auth URL response: {e}"),
+        status: 0,
+    })?;
+
+    result.data.ok_or_else(|| ApiError {
+        message: "No data in auth URL response".to_string(),
         status: 0,
     })
 }
@@ -419,8 +424,13 @@ pub async fn get_me() -> Result<MeResponse, ApiError> {
         });
     }
 
-    response.json().await.map_err(|e| ApiError {
+    let result: ApiResponse<MeResponse> = response.json().await.map_err(|e| ApiError {
         message: format!("Failed to parse user info: {e}"),
+        status: 0,
+    })?;
+
+    result.data.ok_or_else(|| ApiError {
+        message: "No data in user info response".to_string(),
         status: 0,
     })
 }

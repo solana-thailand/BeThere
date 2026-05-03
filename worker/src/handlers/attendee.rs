@@ -7,9 +7,10 @@
 use axum::{
     Extension,
     extract::{Path, Query, State},
-    response::Json,
 };
 use serde_json::json;
+
+use crate::error::ApiOk;
 
 use event_checkin_domain::models::api::{AttendeeResponse, RecentCheckIn, StatsResponse};
 use event_checkin_domain::models::auth::Claims;
@@ -28,7 +29,7 @@ pub async fn list_attendees(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
     Query(query): Query<EventIdQuery>,
-) -> Result<Json<serde_json::Value>, crate::error::WorkerError> {
+) -> Result<ApiOk<serde_json::Value>, crate::error::WorkerError> {
     tracing::info!("listing attendees (requested by: {})", claims.email);
 
     let event = resolve_event_with_access(&state, &claims, query.event_id.as_deref()).await?;
@@ -81,13 +82,11 @@ pub async fn list_attendees(
         recent_check_ins,
     };
 
-    Ok(Json(json!({
-        "success": true,
-        "data": {
-            "attendees": attendee_responses,
-            "stats": stats,
-        },
-    })))
+    let data = json!({
+        "attendees": attendee_responses,
+        "stats": stats,
+    });
+    Ok(ApiOk::new(data))
 }
 
 /// GET /api/attendee/:id
@@ -99,7 +98,7 @@ pub async fn get_attendee(
     Extension(claims): Extension<Claims>,
     Path(id): Path<String>,
     Query(query): Query<EventIdQuery>,
-) -> Result<Json<serde_json::Value>, crate::error::WorkerError> {
+) -> Result<ApiOk<serde_json::Value>, crate::error::WorkerError> {
     tracing::info!("fetching attendee {id} (requested by: {})", claims.email);
 
     let event = resolve_event_with_access(&state, &claims, query.event_id.as_deref()).await?;
@@ -121,15 +120,13 @@ pub async fn get_attendee(
         .as_ref()
         .and_then(|url| event_checkin_domain::qr::generate_qr_base64(url).ok());
 
-    Ok(Json(json!({
-        "success": true,
-        "data": {
-            "attendee": response,
-            "qr_image": qr_image,
-            "is_checked_in": attendee.is_checked_in(),
-            "is_approved": attendee.is_approved(),
-            "is_in_person": attendee.is_in_person(),
-            "participation_type": attendee.participation_type,
-        },
-    })))
+    let data = json!({
+        "attendee": response,
+        "qr_image": qr_image,
+        "is_checked_in": attendee.is_checked_in(),
+        "is_approved": attendee.is_approved(),
+        "is_in_person": attendee.is_in_person(),
+        "participation_type": attendee.participation_type,
+    });
+    Ok(ApiOk::new(data))
 }

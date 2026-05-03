@@ -7,10 +7,10 @@
 use axum::{
     Extension,
     extract::{Query, State},
-    response::Json,
 };
 use serde::Deserialize;
-use serde_json::json;
+
+use crate::error::ApiOk;
 
 use event_checkin_domain::models::api::{
     GenerateQrResponse, QrGenerationDetail, QrGenerationStatus,
@@ -50,7 +50,7 @@ pub async fn generate_qrs(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
     Query(query): Query<GenerateQrQuery>,
-) -> Result<Json<serde_json::Value>, WorkerError> {
+) -> Result<ApiOk<GenerateQrResponse>, WorkerError> {
     let force = query.force;
 
     let event = resolve_event_with_access(&state, &claims, query.event_id.as_deref()).await?;
@@ -170,15 +170,12 @@ pub async fn generate_qrs(
             })
             .collect();
 
-        return Ok(Json(json!({
-            "success": true,
-            "data": GenerateQrResponse {
-                total: total_approved,
-                generated: 0,
-                skipped: total_approved,
-                details,
-            },
-        })));
+        return Ok(ApiOk::new(GenerateQrResponse {
+            total: total_approved,
+            generated: 0,
+            skipped: total_approved,
+            details,
+        }));
     }
 
     // Build details for attendees that will be generated
@@ -230,13 +227,10 @@ pub async fn generate_qrs(
 
     let skipped: usize = total_approved.saturating_sub(updated);
 
-    Ok(Json(json!({
-        "success": true,
-        "data": GenerateQrResponse {
-            total: total_approved,
-            generated: updated,
-            skipped,
-            details: all_details,
-        },
-    })))
+    Ok(ApiOk::new(GenerateQrResponse {
+        total: total_approved,
+        generated: updated,
+        skipped,
+        details: all_details,
+    }))
 }

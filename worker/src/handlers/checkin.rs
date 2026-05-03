@@ -7,9 +7,9 @@
 use axum::{
     Extension,
     extract::{Path, Query, State},
-    response::Json,
 };
-use serde_json::json;
+
+use crate::error::ApiOk;
 use uuid::Uuid;
 
 use event_checkin_domain::models::api::CheckInResponse;
@@ -37,7 +37,7 @@ pub async fn check_in(
     Extension(claims): Extension<Claims>,
     Path(id): Path<String>,
     Query(query): Query<EventIdQuery>,
-) -> Result<Json<serde_json::Value>, crate::error::WorkerError> {
+) -> Result<ApiOk<CheckInResponse>, crate::error::WorkerError> {
     tracing::info!(attendee_id = %id, staff_email = %claims.email, "check-in request");
 
     let event = resolve_event_with_access(&state, &claims, query.event_id.as_deref()).await?;
@@ -142,8 +142,5 @@ pub async fn check_in(
         message: format!("Successfully checked in {}", attendee.display_name()),
     };
 
-    Ok(Json(json!({
-        "success": true,
-        "data": response,
-    })))
+    Ok(ApiOk::new(response))
 }

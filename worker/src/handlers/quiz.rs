@@ -16,12 +16,14 @@ use axum::{
 
 use serde_json::json;
 
-use event_checkin_domain::models::api::{QuizConfig, QuizStatus, QuizSubmitRequest};
+use event_checkin_domain::models::api::{
+    QuizConfig, QuizStatus, QuizSubmitRequest, QuizSubmitResponse,
+};
 use event_checkin_domain::models::auth::Claims;
 use event_checkin_domain::models::error::AppError;
 
 use super::ext::{EventIdQuery, resolve_event};
-use crate::error::WorkerError;
+use crate::error::{ApiOk, WorkerError};
 use crate::quiz;
 use crate::state::AppState;
 
@@ -34,7 +36,7 @@ use crate::state::AppState;
 pub async fn get_quiz(
     State(state): State<AppState>,
     Query(query): Query<EventIdQuery>,
-) -> Result<Json<serde_json::Value>, WorkerError> {
+) -> Result<ApiOk<serde_json::Value>, WorkerError> {
     // Resolve event (uses events_kv if available, falls back to global config)
     let event = resolve_event(&state, query.event_id.as_deref()).await?;
 
@@ -42,15 +44,12 @@ pub async fn get_quiz(
     let kv = match state.events_kv.as_ref().or(state.quiz_kv.as_ref()) {
         Some(kv) => kv,
         None => {
-            return Ok(Json(json!({
-                "success": true,
-                "data": {
-                    "configured": false,
-                    "questions": [],
-                    "passing_score_percent": 0,
-                    "max_attempts": 0,
-                    "time_limit_seconds": null,
-                },
+            return Ok(ApiOk::new(json!({
+                "configured": false,
+                "questions": [],
+                "passing_score_percent": 0,
+                "max_attempts": 0,
+                "time_limit_seconds": null,
             })));
         }
     };
@@ -64,26 +63,20 @@ pub async fn get_quiz(
     match config {
         Some(config) => {
             let public = quiz::to_public_questions(&config);
-            Ok(Json(json!({
-                "success": true,
-                "data": {
-                    "configured": true,
-                    "questions": public.questions,
-                    "passing_score_percent": public.passing_score_percent,
-                    "max_attempts": public.max_attempts,
-                    "time_limit_seconds": public.time_limit_seconds,
-                },
+            Ok(ApiOk::new(json!({
+                "configured": true,
+                "questions": public.questions,
+                "passing_score_percent": public.passing_score_percent,
+                "max_attempts": public.max_attempts,
+                "time_limit_seconds": public.time_limit_seconds,
             })))
         }
-        None => Ok(Json(json!({
-            "success": true,
-            "data": {
-                "configured": false,
-                "questions": [],
-                "passing_score_percent": 0,
-                "max_attempts": 0,
-                "time_limit_seconds": null,
-            },
+        None => Ok(ApiOk::new(json!({
+            "configured": false,
+            "questions": [],
+            "passing_score_percent": 0,
+            "max_attempts": 0,
+            "time_limit_seconds": null,
         }))),
     }
 }
@@ -100,7 +93,7 @@ pub async fn submit_quiz(
     Path(token): Path<String>,
     Query(query): Query<EventIdQuery>,
     Json(body): Json<QuizSubmitRequest>,
-) -> Result<Json<serde_json::Value>, WorkerError> {
+) -> Result<ApiOk<QuizSubmitResponse>, WorkerError> {
     tracing::info!(
         claim_token = %token,
         answer_count = body.answers.len(),
@@ -208,10 +201,7 @@ pub async fn submit_quiz(
         "quiz scored"
     );
 
-    Ok(Json(json!({
-        "success": true,
-        "data": result,
-    })))
+    Ok(ApiOk::new(result))
 }
 
 /// GET /api/quiz/{token}/status
@@ -223,7 +213,7 @@ pub async fn get_quiz_status(
     State(state): State<AppState>,
     Path(token): Path<String>,
     Query(query): Query<EventIdQuery>,
-) -> Result<Json<serde_json::Value>, WorkerError> {
+) -> Result<ApiOk<serde_json::Value>, WorkerError> {
     tracing::info!(claim_token = %token, "quiz status requested");
 
     // Resolve event (uses events_kv if available, falls back to global config)
@@ -233,17 +223,14 @@ pub async fn get_quiz_status(
     let kv = match state.events_kv.as_ref().or(state.quiz_kv.as_ref()) {
         Some(kv) => kv,
         None => {
-            return Ok(Json(json!({
-                "success": true,
-                "data": {
-                    "configured": false,
-                    "quiz_status": "not_required",
-                    "attempts": 0,
-                    "max_attempts": 0,
-                    "best_score_percent": 0,
-                    "passed": false,
-                    "passing_threshold_percent": 0,
-                },
+            return Ok(ApiOk::new(json!({
+                "configured": false,
+                "quiz_status": "not_required",
+                "attempts": 0,
+                "max_attempts": 0,
+                "best_score_percent": 0,
+                "passed": false,
+                "passing_threshold_percent": 0,
             })));
         }
     };
@@ -253,17 +240,14 @@ pub async fn get_quiz_status(
     let config = match quiz::get_quiz_config(kv, eid).await {
         Ok(Some(c)) => c,
         Ok(None) => {
-            return Ok(Json(json!({
-                "success": true,
-                "data": {
-                    "configured": false,
-                    "quiz_status": "not_required",
-                    "attempts": 0,
-                    "max_attempts": 0,
-                    "best_score_percent": 0,
-                    "passed": false,
-                    "passing_threshold_percent": 0,
-                },
+            return Ok(ApiOk::new(json!({
+                "configured": false,
+                "quiz_status": "not_required",
+                "attempts": 0,
+                "max_attempts": 0,
+                "best_score_percent": 0,
+                "passed": false,
+                "passing_threshold_percent": 0,
             })));
         }
         Err(e) => {
@@ -286,22 +270,19 @@ pub async fn get_quiz_status(
         None => (0u8, 0u8, false),
     };
 
-    Ok(Json(json!({
-        "success": true,
-        "data": {
-            "configured": true,
-            "quiz_status": match status {
-                QuizStatus::NotRequired => "not_required",
-                QuizStatus::NotStarted => "not_started",
-                QuizStatus::InProgress => "in_progress",
-                QuizStatus::Passed => "passed",
-            },
-            "attempts": attempts,
-            "max_attempts": config.max_attempts,
-            "best_score_percent": best_score,
-            "passed": passed,
-            "passing_threshold_percent": config.passing_score_percent,
+    Ok(ApiOk::new(json!({
+        "configured": true,
+        "quiz_status": match status {
+            QuizStatus::NotRequired => "not_required",
+            QuizStatus::NotStarted => "not_started",
+            QuizStatus::InProgress => "in_progress",
+            QuizStatus::Passed => "passed",
         },
+        "attempts": attempts,
+        "max_attempts": config.max_attempts,
+        "best_score_percent": best_score,
+        "passed": passed,
+        "passing_threshold_percent": config.passing_score_percent,
     })))
 }
 
@@ -315,7 +296,7 @@ pub async fn get_admin_quiz(
     State(state): State<AppState>,
     Extension(_claims): Extension<Claims>,
     Query(query): Query<EventIdQuery>,
-) -> Result<Json<serde_json::Value>, WorkerError> {
+) -> Result<ApiOk<serde_json::Value>, WorkerError> {
     tracing::info!(staff_email = %_claims.email, "admin quiz read");
 
     // Resolve event (uses events_kv if available, falls back to global config)
@@ -325,15 +306,12 @@ pub async fn get_admin_quiz(
     let kv = match state.events_kv.as_ref().or(state.quiz_kv.as_ref()) {
         Some(kv) => kv,
         None => {
-            return Ok(Json(json!({
-                "success": true,
-                "data": {
-                    "configured": false,
-                    "questions": [],
-                    "passing_score_percent": 0,
-                    "max_attempts": 0,
-                    "time_limit_seconds": null,
-                },
+            return Ok(ApiOk::new(json!({
+                "configured": false,
+                "questions": [],
+                "passing_score_percent": 0,
+                "max_attempts": 0,
+                "time_limit_seconds": null,
             })));
         }
     };
@@ -346,25 +324,19 @@ pub async fn get_admin_quiz(
     })?;
 
     match config {
-        Some(config) => Ok(Json(json!({
-            "success": true,
-            "data": {
-                "configured": true,
-                "questions": config.questions,
-                "passing_score_percent": config.passing_score_percent,
-                "max_attempts": config.max_attempts,
-                "time_limit_seconds": config.time_limit_seconds,
-            },
+        Some(config) => Ok(ApiOk::new(json!({
+            "configured": true,
+            "questions": config.questions,
+            "passing_score_percent": config.passing_score_percent,
+            "max_attempts": config.max_attempts,
+            "time_limit_seconds": config.time_limit_seconds,
         }))),
-        None => Ok(Json(json!({
-            "success": true,
-            "data": {
-                "configured": false,
-                "questions": [],
-                "passing_score_percent": 0,
-                "max_attempts": 0,
-                "time_limit_seconds": null,
-            },
+        None => Ok(ApiOk::new(json!({
+            "configured": false,
+            "questions": [],
+            "passing_score_percent": 0,
+            "max_attempts": 0,
+            "time_limit_seconds": null,
         }))),
     }
 }
@@ -380,7 +352,7 @@ pub async fn put_quiz(
     Extension(_claims): Extension<Claims>,
     Query(query): Query<EventIdQuery>,
     Json(body): Json<QuizConfig>,
-) -> Result<Json<serde_json::Value>, WorkerError> {
+) -> Result<ApiOk<serde_json::Value>, WorkerError> {
     tracing::info!(
         staff_email = %_claims.email,
         question_count = body.questions.len(),
@@ -461,12 +433,9 @@ pub async fn put_quiz(
         "quiz saved"
     );
 
-    Ok(Json(json!({
-        "success": true,
-        "data": {
-            "questions_count": body.questions.len(),
-            "passing_score_percent": body.passing_score_percent,
-            "max_attempts": body.max_attempts,
-        },
+    Ok(ApiOk::new(json!({
+        "questions_count": body.questions.len(),
+        "passing_score_percent": body.passing_score_percent,
+        "max_attempts": body.max_attempts,
     })))
 }

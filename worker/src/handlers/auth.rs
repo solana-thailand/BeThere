@@ -8,7 +8,7 @@ use axum::{
     Extension,
     extract::{Query, State},
     http::{HeaderValue, header},
-    response::{IntoResponse, Json, Redirect, Response},
+    response::{IntoResponse, Redirect, Response},
 };
 use serde::Deserialize;
 use serde_json::json;
@@ -16,7 +16,9 @@ use serde_json::json;
 use event_checkin_domain::models::auth::Claims;
 
 use crate::auth;
+use crate::error::ApiOk;
 use crate::state::AppState;
+use event_checkin_domain::models::api::ApiResponse;
 
 #[derive(Debug, Deserialize)]
 pub struct CallbackQuery {
@@ -27,9 +29,9 @@ pub struct CallbackQuery {
 /// GET /api/auth/url
 /// Returns the Google OAuth 2.0 authorization URL for staff login.
 #[worker::send]
-pub async fn auth_url(State(state): State<AppState>) -> Json<serde_json::Value> {
+pub async fn auth_url(State(state): State<AppState>) -> ApiOk<serde_json::Value> {
     let url = auth::get_auth_url(&state);
-    Json(json!({
+    ApiOk::new(json!({
         "auth_url": url,
     }))
 }
@@ -117,7 +119,7 @@ pub async fn auth_callback(
 pub async fn auth_me(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
-) -> Json<serde_json::Value> {
+) -> ApiOk<serde_json::Value> {
     let role = if state
         .config
         .super_admin_emails
@@ -138,7 +140,7 @@ pub async fn auth_me(
         }
     };
 
-    Json(json!({
+    ApiOk::new(json!({
         "email": claims.email,
         "sub": claims.sub,
         "role": role,
@@ -163,12 +165,5 @@ pub async fn auth_logout() -> Response {
         headers.append(header::SET_COOKIE, v);
     }
 
-    (
-        headers,
-        Json(json!({
-            "success": true,
-            "message": "logged out",
-        })),
-    )
-        .into_response()
+    (headers, axum::Json(ApiResponse::message("logged out"))).into_response()
 }
