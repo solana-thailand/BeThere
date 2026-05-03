@@ -110,9 +110,10 @@ pub async fn deposit_usdc_handler(
     }
 
     // Build Solana Pay URL for the deposit.
-    // The escrow program ID on devnet.
+    // Escrow program ID deployed on devnet.
     let program_id = "2TGfNNXNez2NgopffDnYYhLNYmndUBBwg5SvpD5XQeLo";
-    let usdc_mint = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1m"; // devnet USDC
+    // Devnet USDC mint. Mainnet: EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1m
+    let usdc_mint = "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU";
 
     // For now, build a descriptive Solana Pay URL.
     // The frontend will use the bethere-escrow-client to build the actual TX.

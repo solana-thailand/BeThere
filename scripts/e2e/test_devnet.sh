@@ -242,12 +242,12 @@ if [ "$MINT_ONLY" = false ]; then
 
     if [ -z "$AUTH_TOKEN" ]; then
         skip "Admin adventure config — set AUTH_TOKEN to run"
-        info "Get your token: login at $BASE_URL/login, then check browser cookies"
+        info "Set AUTH_TOKEN to a valid JWT (login at $BASE_URL/login, check cookie event_checkin_token)"
         info "Usage: AUTH_TOKEN=xxx bash scripts/e2e/test_devnet.sh"
     else
         # Read config
         RESPONSE=$(curl -s "$BASE_URL/api/admin/adventure?event_id=$EVENT_ID" \
-            -H "Cookie: auth_token=$AUTH_TOKEN")
+            -H "Authorization: Bearer $AUTH_TOKEN")
 
         SUCCESS=$(echo "$RESPONSE" | python3 -c "import sys,json; print(str(json.load(sys.stdin).get('success','')).lower())" 2>/dev/null || echo "false")
 
@@ -271,7 +271,7 @@ else:
         # Update config (enable adventure, set required_level=1)
         info "Updating adventure config: enabled=true, required_level=1"
         PUT_RESPONSE=$(curl -s -X PUT "$BASE_URL/api/admin/adventure?event_id=$EVENT_ID" \
-            -H "Cookie: auth_token=$AUTH_TOKEN" \
+            -H "Authorization: Bearer $AUTH_TOKEN" \
             -H "Content-Type: application/json" \
             -d '{
                 "enabled": true,
@@ -332,6 +332,7 @@ if [ "$MINT_ONLY" = false ]; then
     section "8. Deposit & Refund API"
 
     DEPOSIT_ATTENDEE="e2e-test-attendee-deposit"
+    DEPOSIT_ATTENDEE_THB="e2e-test-attendee-deposit-thb"
     DEPOSIT_UPLOAD_OK=false
 
     # --- 8a: GET /api/deposit/status/{attendee_id} ---
@@ -384,7 +385,7 @@ if [ "$MINT_ONLY" = false ]; then
     # --- 8c: POST /api/deposit/thb/upload ---
     RESPONSE=$(curl -s -X POST "$BASE_URL/api/deposit/thb/upload" \
         -H "Content-Type: application/json" \
-        -d "{\"event_id\": \"$EVENT_ID\", \"attendee_id\": \"$DEPOSIT_ATTENDEE\", \"slip_url\": \"https://example.com/e2e-test-slip.jpg\"}")
+        -d "{\"event_id\": \"$EVENT_ID\", \"attendee_id\": \"$DEPOSIT_ATTENDEE_THB\", \"slip_url\": \"https://example.com/e2e-test-slip.jpg\"}")
 
     PARSE_OK=$(echo "$RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print('ok')" 2>/dev/null || echo "err")
 
@@ -409,11 +410,11 @@ if [ "$MINT_ONLY" = false ]; then
         skip "GET /api/refund/queue — set AUTH_TOKEN to run"
         skip "POST /api/deposit/thb/verify — set AUTH_TOKEN to run"
         skip "POST /api/refund/mark/{attendee} — set AUTH_TOKEN to run"
-        info "Get your token: login at $BASE_URL/login, then check browser cookies"
+        info "Set AUTH_TOKEN to a valid JWT (login at $BASE_URL/login, check cookie event_checkin_token)"
     else
         # --- 8d: GET /api/deposit/thb/pending ---
         RESPONSE=$(curl -s "$BASE_URL/api/deposit/thb/pending?event_id=$EVENT_ID" \
-            -H "Cookie: auth_token=$AUTH_TOKEN")
+            -H "Authorization: Bearer $AUTH_TOKEN")
 
         PARSE_OK=$(echo "$RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print('ok')" 2>/dev/null || echo "err")
 
@@ -438,7 +439,7 @@ if [ "$MINT_ONLY" = false ]; then
 
         # --- 8e: GET /api/refund/queue ---
         RESPONSE=$(curl -s "$BASE_URL/api/refund/queue?event_id=$EVENT_ID" \
-            -H "Cookie: auth_token=$AUTH_TOKEN")
+            -H "Authorization: Bearer $AUTH_TOKEN")
 
         PARSE_OK=$(echo "$RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print('ok')" 2>/dev/null || echo "err")
 
@@ -453,9 +454,9 @@ if [ "$MINT_ONLY" = false ]; then
         # --- 8f: POST /api/deposit/thb/verify (only if upload succeeded) ---
         if [ "$DEPOSIT_UPLOAD_OK" = true ]; then
             RESPONSE=$(curl -s -X POST "$BASE_URL/api/deposit/thb/verify" \
-                -H "Cookie: auth_token=$AUTH_TOKEN" \
+                -H "Authorization: Bearer $AUTH_TOKEN" \
                 -H "Content-Type: application/json" \
-                -d "{\"event_id\": \"$EVENT_ID\", \"attendee_id\": \"$DEPOSIT_ATTENDEE\", \"approved\": true}")
+                -d "{\"event_id\": \"$EVENT_ID\", \"attendee_id\": \"$DEPOSIT_ATTENDEE_THB\", \"approved\": true}")
 
             PARSE_OK=$(echo "$RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print('ok')" 2>/dev/null || echo "err")
 
@@ -474,7 +475,7 @@ if [ "$MINT_ONLY" = false ]; then
 
             # --- 8g: GET /api/refund/queue (should now show verified deposit) ---
             RESPONSE=$(curl -s "$BASE_URL/api/refund/queue?event_id=$EVENT_ID" \
-                -H "Cookie: auth_token=$AUTH_TOKEN")
+                -H "Authorization: Bearer $AUTH_TOKEN")
 
             PARSE_OK=$(echo "$RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print('ok')" 2>/dev/null || echo "err")
 
@@ -486,7 +487,7 @@ import sys, json
 try:
     d = json.load(sys.stdin)
     for p in d.get('pending', []):
-        if p.get('attendee_id') == '$DEPOSIT_ATTENDEE':
+        if p.get('attendee_id') == '$DEPOSIT_ATTENDEE_THB':
             print('yes')
             break
     else:
@@ -496,7 +497,7 @@ except:
 " 2>/dev/null || echo "no")
 
                 if [ "$HAS_ATTENDEE" = "yes" ]; then
-                    pass "GET /api/refund/queue → $DEPOSIT_ATTENDEE appears in queue"
+                    pass "GET /api/refund/queue → THB attendee appears in queue"
                 else
                     pass "GET /api/refund/queue → responded ($PENDING_COUNT pending, test attendee not in queue)"
                 fi
@@ -506,8 +507,8 @@ except:
             fi
 
             # --- 8h: POST /api/refund/mark/{attendee_id} ---
-            RESPONSE=$(curl -s -X POST "$BASE_URL/api/refund/mark/$DEPOSIT_ATTENDEE" \
-                -H "Cookie: auth_token=$AUTH_TOKEN" \
+            RESPONSE=$(curl -s -X POST "$BASE_URL/api/refund/mark/$DEPOSIT_ATTENDEE_THB" \
+                -H "Authorization: Bearer $AUTH_TOKEN" \
                 -H "Content-Type: application/json" \
                 -d "{\"event_id\": \"$EVENT_ID\"}")
 
@@ -516,13 +517,13 @@ except:
             if [ "$PARSE_OK" = "ok" ]; then
                 MARK_SUCCESS=$(echo "$RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(str(d.get('success',False)).lower())" 2>/dev/null || echo "false")
                 if [ "$MARK_SUCCESS" = "true" ]; then
-                    pass "POST /api/refund/mark/$DEPOSIT_ATTENDEE → refund marked complete"
+                    pass "POST /api/refund/mark/$DEPOSIT_ATTENDEE_THB → refund marked complete"
                 else
                     ERR_MSG=$(echo "$RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('error', d.get('message',''))))" 2>/dev/null || echo "unknown")
-                    fail "POST /api/refund/mark/$DEPOSIT_ATTENDEE → error: $ERR_MSG"
+                    fail "POST /api/refund/mark/$DEPOSIT_ATTENDEE_THB → error: $ERR_MSG"
                 fi
             else
-                fail "POST /api/refund/mark/$DEPOSIT_ATTENDEE → invalid JSON"
+                fail "POST /api/refund/mark/{thb-attendee} → invalid JSON"
                 echo "   $(echo "$RESPONSE" | head -c 300)"
             fi
         else
