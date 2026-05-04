@@ -50,6 +50,16 @@ pub struct DepositTransaction {
     pub message: String,
 }
 
+/// Result of building a create_event transaction.
+pub struct CreateEventTransaction {
+    /// Base64-encoded serialized transaction (unsigned).
+    pub transaction_b64: String,
+    /// Human-readable message for Solana Pay.
+    pub message: String,
+    /// Derived EventEscrow PDA address (base58).
+    pub escrow_address: String,
+}
+
 /// Error type for escrow operations.
 #[derive(Debug)]
 pub enum EscrowError {
@@ -180,6 +190,39 @@ fn pubkey_from_base58(s: &str) -> Result<PubkeyBytes, EscrowError> {
     let mut pk = [0u8; 32];
     pk.copy_from_slice(&bytes);
     Ok(pk)
+}
+
+/// Encode bytes into a base58 string.
+fn base58_encode(data: &[u8]) -> String {
+    // Count leading zero bytes
+    let leading_zeros = data.iter().take_while(|&&b| b == 0).count();
+
+    // Convert to big-endian number
+    let mut num: Vec<u8> = data.to_vec();
+
+    let mut result = Vec::new();
+    while !num.iter().all(|&b| b == 0) {
+        let mut carry: u32 = 0;
+        for byte in num.iter_mut() {
+            carry = carry * 256 + *byte as u32;
+            *byte = (carry / 58) as u8;
+            carry %= 58;
+        }
+        result.push(BASE58_ALPHABET[carry as usize]);
+    }
+
+    // Add leading '1' characters for leading zero bytes
+    result.extend(std::iter::repeat_n(b'1', leading_zeros));
+
+    // Reverse (we built it least-significant first)
+    result.reverse();
+
+    String::from_utf8(result).unwrap_or_default()
+}
+
+/// Encode a 32-byte pubkey into base58.
+fn pubkey_to_base58(pk: &PubkeyBytes) -> String {
+    base58_encode(pk)
 }
 
 // ---------------------------------------------------------------------------
@@ -835,6 +878,199 @@ pub async fn build_deposit_transaction(
 }
 
 // ---------------------------------------------------------------------------
+// Create Event Transaction Builder
+// ---------------------------------------------------------------------------
+
+/// Build a serialized `create_event` transaction for the bethere-escrow program.
+///
+/// The `create_event` instruction initializes the EventEscrow PDA and the
+/// vault ATA on-chain. This must be called by the organizer before any
+/// attendee can deposit.
+///
+/// # Arguments
+/// * `rpc_url` — Solana RPC URL (with API key if needed)
+/// * `organizer_pubkey` — Organizer's wallet address (base58), also the signer
+/// * `event_id` — Numeric event ID used for PDA derivation
+/// * `deposit_amount` — Amount in USDC smallest unit (6 decimals)
+/// * `event_end` — Unix timestamp (seconds) when the event ends
+/// * `refund_deadline` — Unix timestamp (seconds) for the refund deadline
+///
+/// # Returns
+/// A `CreateEventTransaction` with the base64-encoded transaction, a message,
+/// and the derived EventEscrow PDA address for storage.
+pub async fn build_create_event_transaction(
+    rpc_url: &str,
+    organizer_pubkey: &str,
+    event_id: u64,
+    deposit_amount: u64,
+    event_end: i64,
+    refund_deadline: i64,
+) -> Result<CreateEventTransaction, EscrowError> {
+    // Parse pubkeys
+    let organizer = pubkey_from_base58(organizer_pubkey)?;
+    let program_id = pubkey_from_base58(ESCROW_PROGRAM_ID)?;
+    let usdc_mint = pubkey_from_base58(USDC_MINT_DEVNET)?;
+    let token_program = pubkey_from_base58(TOKEN_PROGRAM_ID)?;
+    let system_program = pubkey_from_base58(SYSTEM_PROGRAM_ID)?;
+    let rent_sysvar = pubkey_from_base58(RENT_SYSVAR_ID)?;
+
+    // Derive EventEscrow PDA: ["escrow", organizer, event_id]
+    let (event_escrow, _escrow_bump) = find_program_address(
+        &[b"escrow", organizer.as_slice(), &event_id.to_le_bytes()],
+        &program_id,
+    )
+    .await?;
+
+    // Derive vault ATA (owned by EventEscrow PDA)
+    let vault = get_associated_token_address(&event_escrow, &usdc_mint).await?;
+
+    // Build the create_event instruction data:
+    // [0 (discriminator)] + [event_id u64 LE] + [deposit_amount u64 LE] + [event_end i64 LE] + [refund_deadline i64 LE]
+    let mut ix_data = vec![0u8]; // create_event discriminator
+    ix_data.extend_from_slice(&event_id.to_le_bytes());
+    ix_data.extend_from_slice(&deposit_amount.to_le_bytes());
+    ix_data.extend_from_slice(&event_end.to_le_bytes());
+    ix_data.extend_from_slice(&refund_deadline.to_le_bytes());
+
+    // The create_event instruction expects accounts in this order:
+    //   organizer (signer+writable), event_escrow (writable), usdc_mint (readonly),
+    //   vault (writable), rent (readonly), token_program (readonly), system_program (readonly)
+    let instruction_accounts = vec![
+        AccountMeta {
+            pubkey: organizer,
+            is_signer: true,
+            is_writable: true,
+        }, // 0
+        AccountMeta {
+            pubkey: event_escrow,
+            is_signer: false,
+            is_writable: true,
+        }, // 1
+        AccountMeta {
+            pubkey: usdc_mint,
+            is_signer: false,
+            is_writable: false,
+        }, // 2
+        AccountMeta {
+            pubkey: vault,
+            is_signer: false,
+            is_writable: true,
+        }, // 3
+        AccountMeta {
+            pubkey: rent_sysvar,
+            is_signer: false,
+            is_writable: false,
+        }, // 4
+        AccountMeta {
+            pubkey: token_program,
+            is_signer: false,
+            is_writable: false,
+        }, // 5
+        AccountMeta {
+            pubkey: system_program,
+            is_signer: false,
+            is_writable: false,
+        }, // 6
+    ];
+
+    // Build the message account keys in Solana's canonical order:
+    // signers(writable) → signers(readonly) → non-signers(writable) → non-signers(readonly)
+    let mut message_accounts: Vec<AccountMeta> = Vec::new();
+
+    // 1. Signer + writable
+    for m in &instruction_accounts {
+        if m.is_signer && m.is_writable {
+            message_accounts.push(AccountMeta {
+                pubkey: m.pubkey,
+                is_signer: true,
+                is_writable: true,
+            });
+        }
+    }
+    // 2. Signer + readonly (none)
+    for m in &instruction_accounts {
+        if m.is_signer && !m.is_writable {
+            message_accounts.push(AccountMeta {
+                pubkey: m.pubkey,
+                is_signer: true,
+                is_writable: false,
+            });
+        }
+    }
+    // 3. Non-signer + writable
+    for m in &instruction_accounts {
+        if !m.is_signer && m.is_writable {
+            message_accounts.push(AccountMeta {
+                pubkey: m.pubkey,
+                is_signer: false,
+                is_writable: true,
+            });
+        }
+    }
+    // 4. Non-signer + readonly (includes program_id if not already present)
+    let mut program_id_in_message = false;
+    for m in &instruction_accounts {
+        if !m.is_signer && !m.is_writable {
+            if m.pubkey == program_id {
+                program_id_in_message = true;
+            }
+            message_accounts.push(AccountMeta {
+                pubkey: m.pubkey,
+                is_signer: false,
+                is_writable: false,
+            });
+        }
+    }
+    // Add program_id if not already in the list
+    if !program_id_in_message {
+        message_accounts.push(AccountMeta {
+            pubkey: program_id,
+            is_signer: false,
+            is_writable: false,
+        });
+    }
+
+    // Build a lookup: pubkey → index in message_accounts
+    let get_index = |pk: &PubkeyBytes| -> u8 {
+        message_accounts
+            .iter()
+            .position(|m| &m.pubkey == pk)
+            .expect("all accounts should be in message") as u8
+    };
+
+    let program_id_index = get_index(&program_id);
+
+    let ix_account_indices: Vec<u8> = instruction_accounts
+        .iter()
+        .map(|m| get_index(&m.pubkey))
+        .collect();
+
+    let compiled_ix = CompiledInstruction {
+        program_id_index,
+        accounts: ix_account_indices,
+        data: ix_data,
+    };
+
+    // Fetch recent blockhash
+    let blockhash_resp = get_latest_blockhash(rpc_url).await?;
+    let blockhash_bytes = pubkey_from_base58(&blockhash_resp.value)?;
+
+    // Serialize the transaction
+    let tx_bytes = serialize_transaction(&message_accounts, &[compiled_ix], &blockhash_bytes);
+
+    let tx_b64 = base64::engine::general_purpose::STANDARD.encode(&tx_bytes);
+    let escrow_address = pubkey_to_base58(&event_escrow);
+
+    let amount_display = deposit_amount as f64 / 1_000_000.0;
+
+    Ok(CreateEventTransaction {
+        transaction_b64: tx_b64,
+        message: format!("Create event escrow ({amount_display:.2} USDC deposit)"),
+        escrow_address,
+    })
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -866,6 +1102,20 @@ mod tests {
     fn test_pubkey_from_base58_invalid() {
         let result = pubkey_from_base58("0".repeat(32).as_str());
         assert!(result.is_err()); // '0' is not valid base58
+    }
+
+    #[test]
+    fn test_base58_roundtrip_system_program() {
+        let pk = pubkey_from_base58(SYSTEM_PROGRAM_ID).unwrap();
+        let encoded = pubkey_to_base58(&pk);
+        assert_eq!(encoded, SYSTEM_PROGRAM_ID);
+    }
+
+    #[test]
+    fn test_base58_roundtrip_escrow_program() {
+        let pk = pubkey_from_base58(ESCROW_PROGRAM_ID).unwrap();
+        let encoded = pubkey_to_base58(&pk);
+        assert_eq!(encoded, ESCROW_PROGRAM_ID);
     }
 
     #[test]

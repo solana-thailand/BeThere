@@ -106,6 +106,11 @@ pub fn routes(state: AppState) -> Router<()> {
             "/refund/mark/{attendee_id}",
             post(deposit::mark_refund_handler),
         )
+        // Escrow management (protected — organizer initializes on-chain escrow)
+        .route(
+            "/escrow/create-event",
+            post(deposit::create_event_tx_handler),
+        )
         .layer(middleware::from_fn_with_state(
             state.clone(),
             crate::auth::require_auth,
