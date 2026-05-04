@@ -4,9 +4,60 @@
 //! in the BeThere admin dashboard.
 
 use leptos::prelude::*;
+use wasm_bindgen::prelude::*;
 
 use crate::api;
 use crate::components;
+
+// ===== Solana Wallet JS Interop =====
+// Reuses the same wallet adapter module used by the scanner page.
+
+#[wasm_bindgen(module = "/js/solana_wallet.js")]
+extern "C" {
+    #[wasm_bindgen(js_name = "getDetectedWallets")]
+    fn get_detected_wallets_js() -> Vec<String>;
+
+    #[wasm_bindgen(js_name = "connectWallet")]
+    async fn connect_wallet_js(wallet_name: &str) -> Option<String>;
+
+    #[wasm_bindgen(js_name = "signAndSendTransaction")]
+    async fn sign_and_send_tx_js(wallet_name: &str, transaction_b64: &str) -> Option<String>;
+}
+
+/// State machine for the two-step escrow initialization flow.
+#[derive(Debug, Clone, PartialEq)]
+enum EscrowInitState {
+    /// No wallet connected yet.
+    Idle,
+    /// Wallet connected, ready to create vault ATA (step 1).
+    WalletConnected {
+        wallet_name: String,
+        public_key: String,
+    },
+    /// Creating vault ATA — TX being signed.
+    CreatingVault {
+        wallet_name: String,
+    },
+    /// Vault ATA created on-chain. Ready to initialize escrow (step 2).
+    VaultCreated {
+        wallet_name: String,
+        public_key: String,
+        vault_address: String,
+    },
+    /// Creating escrow — TX being signed.
+    CreatingEscrow {
+        wallet_name: String,
+    },
+    /// Escrow initialized on-chain.
+    EscrowCreated {
+        escrow_address: String,
+        signature: String,
+    },
+    /// Error during any step.
+    Error {
+        message: String,
+    },
+}
 
 // ===== View State =====
 
@@ -235,6 +286,9 @@ pub fn EventsPage(
     let (slug_manually_edited, set_slug_manually_edited) = signal(false);
     let (refresh_counter, set_refresh_counter) = signal(0u32);
 
+    // Escrow init state machine (two-step: create vault ATA → create event escrow)
+    let (escrow_init, set_escrow_init) = signal(EscrowInitState::Idle);
+
     // Load events on mount and on refresh
     Effect::new(move |_| {
         let _ = refresh_counter.get();
@@ -267,6 +321,7 @@ pub fn EventsPage(
     let handle_create = move |_: web_sys::MouseEvent| {
         set_form.set(default_form());
         set_slug_manually_edited.set(false);
+        set_escrow_init.set(EscrowInitState::Idle);
         set_current_view.set(EventsView::Create);
     };
 
@@ -506,12 +561,14 @@ pub fn EventsPage(
                                                     let set_form = set_form;
                                                     let set_editing_id = set_editing_id;
                                                     let set_current_view = set_current_view;
+                                                    let set_escrow_init = set_escrow_init;
                                                     let set_toast = set_toast;
                                                     leptos::task::spawn_local(async move {
                                                         match api::get_event_detail(&edit_id).await {
                                                             Ok(data) => {
                                                                 set_form.set(form_from_detail(&data.event));
                                                                 set_editing_id.set(Some(edit_id));
+                                                                set_escrow_init.set(EscrowInitState::Idle);
                                                                 set_current_view.set(EventsView::Edit);
                                                             }
                                                             Err(e) => {
@@ -1005,81 +1062,350 @@ pub fn EventsPage(
                                     </div>
                                 </div>
 
-                                // ── Initialize Escrow On-Chain Button ──
+                                // ── Escrow Initialization (Two-Step) ──
+                                // Step 1: Create Vault ATA (connect wallet → sign TX)
+                                // Step 2: Initialize Event Escrow (sign TX)
                                 {move || {
                                     let f = form.get();
-                                    let show_button = f.deposit_enabled
+                                    let show_escrow = f.deposit_enabled
                                         && !f.organizer_wallet.is_empty()
-                                        && f.escrow_address.is_empty()
                                         && !editing_id.get().unwrap_or_default().is_empty();
-                                    if show_button {
-                                        let eid = editing_id.get().unwrap_or_default();
-                                        let set_form_btn = set_form.clone();
-                                        let set_toast_btn = set_toast.clone();
-                                        view! {
-                                            <div style="margin-top:1rem;padding:0.75rem;border:1px dashed var(--border);border-radius:8px;background:var(--bg-secondary)">
-                                                <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem">
-                                                    <div>
-                                                        <div style="font-size:0.85rem;font-weight:600;color:var(--text-primary)">
-                                                            "🔗 Initialize On-Chain Escrow"
-                                                        </div>
-                                                        <div style="font-size:0.75rem;color:var(--text-secondary);margin-top:0.25rem">
-                                                            "Builds the create_event transaction for the organizer's wallet to sign."
-                                                        </div>
-                                                    </div>
-                                                    <button
-                                                        class="btn-primary"
-                                                        style="white-space:nowrap;font-size:0.8rem;padding:0.4rem 0.8rem"
-                                                        on:click=move |_| {
-                                                            let eid_click = eid.clone();
-                                                            let set_form_c = set_form_btn.clone();
-                                                            let set_toast_c = set_toast_btn.clone();
-                                                            leptos::task::spawn_local(async move {
-                                                                let req = api::CreateEventEscrowRequest {
-                                                                    event_id: eid_click.clone(),
-                                                                };
-                                                                match api::create_event_escrow(&req).await {
-                                                                    Ok(resp) => {
-                                                                        set_form_c.update(|f| {
-                                                                            f.escrow_address = resp.escrow_address.clone();
-                                                                            if resp.on_chain_event_id > 0 {
-                                                                                f.on_chain_event_id = resp.on_chain_event_id.to_string();
-                                                                            }
-                                                                        });
-                                                                        components::show_toast(
-                                                                            &set_toast_c,
-                                                                            &format!("Escrow TX built! Address: {}... Sign & submit from your wallet.", &resp.escrow_address[..8.min(resp.escrow_address.len())]),
-                                                                            components::ToastType::Success,
-                                                                        );
-                                                                    }
-                                                                    Err(e) => {
-                                                                        log::error!("[events-page] create_event_escrow failed: {e}");
-                                                                        components::show_toast(
-                                                                            &set_toast_c,
-                                                                            &format!("Failed to build escrow TX: {e}"),
-                                                                            components::ToastType::Error,
-                                                                        );
-                                                                    }
-                                                                }
-                                                            });
-                                                        }
-                                                    >
-                                                        "⚡ Build TX"
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        }.into_any()
-                                    } else if !f.escrow_address.is_empty() {
-                                        view! {
+
+                                    if !show_escrow {
+                                        return view! { <div></div> }.into_any();
+                                    }
+
+                                    // Already initialized — show success badge
+                                    if !f.escrow_address.is_empty() {
+                                        return view! {
                                             <div style="margin-top:0.75rem;padding:0.5rem 0.75rem;border:1px solid var(--success,green);border-radius:6px;background:rgba(0,128,0,0.05)">
                                                 <span style="font-size:0.8rem;color:var(--success,green)">
                                                     "✅ Escrow initialized: "
                                                     <code style="font-size:0.75rem">{f.escrow_address}</code>
                                                 </span>
                                             </div>
-                                        }.into_any()
-                                    } else {
-                                        view! { <div></div> }.into_any()
+                                        }.into_any();
+                                    }
+
+                                    // Render two-step escrow init panel
+                                    let state = escrow_init.get();
+                                    let eid = editing_id.get().unwrap_or_default();
+                                    let set_form_btn = set_form.clone();
+                                    let set_toast_btn = set_toast.clone();
+                                    let set_state_btn = set_escrow_init.clone();
+
+                                    // Helper: detect wallets
+                                    let wallets = get_detected_wallets_js();
+                                    let has_wallets = !wallets.is_empty();
+
+                                    match &state {
+                                        EscrowInitState::Idle => {
+                                            view! {
+                                                <div style="margin-top:1rem;padding:0.75rem;border:1px dashed var(--border);border-radius:8px;background:var(--bg-secondary)">
+                                                    <div style="font-size:0.85rem;font-weight:600;color:var(--text-primary);margin-bottom:0.5rem">
+                                                        "⛓ On-Chain Escrow Setup"
+                                                    </div>
+                                                    <div style="font-size:0.75rem;color:var(--text-secondary);margin-bottom:0.75rem">
+                                                        "Two steps: create vault ATA → initialize event escrow. Requires organizer wallet."
+                                                    </div>
+                                                    <Show when=move || has_wallets fallback=|| view! {
+                                                        <div style="font-size:0.75rem;color:var(--warning,orange)">
+                                                            "⚠ No Solana wallet detected. Install Phantom or Solflare."
+                                                        </div>
+                                                    }>
+                                                        <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+                                                            {wallets.iter().map(|w| {
+                                                                let wn = w.clone();
+                                                                let wn_click = w.clone();
+                                                                let set_s = set_state_btn.clone();
+                                                                let set_t = set_toast_btn.clone();
+                                                                view! {
+                                                                    <button
+                                                                        class="btn-primary"
+                                                                        style="font-size:0.8rem;padding:0.4rem 0.8rem"
+                                                                        on:click=move |_| {
+                                                                            let wn = wn_click.clone();
+                                                                            let set_s = set_s.clone();
+                                                                            let set_t = set_t.clone();
+                                                                            leptos::task::spawn_local(async move {
+                                                                                match connect_wallet_js(&wn).await {
+                                                                                    Some(pk) => {
+                                                                                        log::info!("[events-page] wallet connected: {} ({})", wn, pk);
+                                                                                        set_s.set(EscrowInitState::WalletConnected {
+                                                                                            wallet_name: wn,
+                                                                                            public_key: pk,
+                                                                                        });
+                                                                                    }
+                                                                                    None => {
+                                                                                        components::show_toast(
+                                                                                            &set_t,
+                                                                                            "Failed to connect wallet",
+                                                                                            components::ToastType::Error,
+                                                                                        );
+                                                                                    }
+                                                                                }
+                                                                            });
+                                                                        }
+                                                                    >
+                                                                        {format!("🔗 Connect {}", wn)}
+                                                                    </button>
+                                                                }
+                                                            }).collect_view()}
+                                                        </div>
+                                                    </Show>
+                                                </div>
+                                            }.into_any()
+                                        }
+                                        EscrowInitState::WalletConnected { wallet_name, public_key } => {
+                                            let wn = wallet_name.clone();
+                                            let pk = public_key.clone();
+                                            let eid_c = eid.clone();
+                                            let set_s = set_state_btn.clone();
+                                            let set_t = set_toast_btn.clone();
+                                            view! {
+                                                <div style="margin-top:1rem;padding:0.75rem;border:1px dashed var(--border);border-radius:8px;background:var(--bg-secondary)">
+                                                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem">
+                                                        <div>
+                                                            <div style="font-size:0.85rem;font-weight:600;color:var(--text-primary)">
+                                                                "⛓ On-Chain Escrow Setup"
+                                                            </div>
+                                                            <div style="font-size:0.75rem;color:var(--text-secondary);margin-top:0.2rem">
+                                                                {format!("Connected: {} ({})", wn, &pk[..8.min(pk.len())])}
+                                                            </div>
+                                                        </div>
+                                                        <button
+                                                            class="btn btn-outline"
+                                                            style="font-size:0.7rem;padding:0.2rem 0.5rem"
+                                                            on:click=move |_| set_escrow_init.set(EscrowInitState::Idle)
+                                                        >
+                                                            "Disconnect"
+                                                        </button>
+                                                    </div>
+
+                                                    // Step 1: Create Vault ATA
+                                                    <div style="padding:0.5rem 0.75rem;border:1px solid var(--border);border-radius:6px;background:var(--bg-primary);margin-bottom:0.5rem">
+                                                        <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem">
+                                                            <div>
+                                                                <div style="font-size:0.8rem;font-weight:600;color:var(--text-primary)">
+                                                                    "Step 1: Create Vault ATA"
+                                                                </div>
+                                                                <div style="font-size:0.7rem;color:var(--text-secondary)">
+                                                                    "Creates the token account for holding USDC deposits."
+                                                                </div>
+                                                            </div>
+                                                            <button
+                                                                class="btn-primary"
+                                                                style="white-space:nowrap;font-size:0.8rem;padding:0.4rem 0.8rem"
+                                                                on:click=move |_| {
+                                                                    let eid = eid_c.clone();
+                                                                    let wn = wn.clone();
+                                                                    let pk_clone = pk.clone();
+                                                                    let set_s = set_s.clone();
+                                                                    let set_t = set_t.clone();
+                                                                    set_s.set(EscrowInitState::CreatingVault { wallet_name: wn.clone() });
+                                                                    leptos::task::spawn_local(async move {
+                                                                        let req = api::CreateVaultAtaRequest {
+                                                                            event_id: eid.clone(),
+                                                                        };
+                                                                        match api::create_vault_ata(&req).await {
+                                                                            Ok(resp) => {
+                                                                                log::info!("[events-page] vault ATA TX built, signing...");
+                                                                                match sign_and_send_tx_js(&wn, &resp.transaction).await {
+                                                                                    Some(signature) => {
+                                                                                        log::info!("[events-page] vault ATA TX confirmed: {}", signature);
+                                                                                        set_s.set(EscrowInitState::VaultCreated {
+                                                                                            wallet_name: wn,
+                                                                                            public_key: pk_clone,
+                                                                                            vault_address: resp.vault_address,
+                                                                                        });
+                                                                                        components::show_toast(
+                                                                                            &set_t,
+                                                                                            &format!("Vault ATA created! {}", signature),
+                                                                                            components::ToastType::Success,
+                                                                                        );
+                                                                                    }
+                                                                                    None => {
+                                                                                        log::error!("[events-page] vault ATA TX rejected");
+                                                                                        set_s.set(EscrowInitState::Error {
+                                                                                            message: "Vault ATA transaction rejected or failed".to_string(),
+                                                                                        });
+                                                                                    }
+                                                                                }
+                                                                            }
+                                                                            Err(e) => {
+                                                                                log::error!("[events-page] create_vault_ata failed: {e}");
+                                                                                set_s.set(EscrowInitState::Error {
+                                                                                    message: format!("Failed to build vault ATA TX: {e}"),
+                                                                                });
+                                                                            }
+                                                                        }
+                                                                    });
+                                                                }
+                                                            >
+                                                                "⚡ Create & Sign"
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            }.into_any()
+                                        }
+                                        EscrowInitState::CreatingVault { wallet_name } => {
+                                            let wn = wallet_name.clone();
+                                            view! {
+                                                <div style="margin-top:1rem;padding:0.75rem;border:1px dashed var(--border);border-radius:8px;background:var(--bg-secondary)">
+                                                    <div style="display:flex;align-items:center;gap:0.5rem">
+                                                        <span class="spinner spinner-sm"></span>
+                                                        <span style="font-size:0.85rem;color:var(--text-primary)">
+                                                            {format!("Creating Vault ATA via {}...", wn)}
+                                                        </span>
+                                                    </div>
+                                                    <div style="font-size:0.75rem;color:var(--text-secondary);margin-top:0.25rem">
+                                                        "Approve the transaction in your wallet."
+                                                    </div>
+                                                </div>
+                                            }.into_any()
+                                        }
+                                        EscrowInitState::VaultCreated { wallet_name, public_key: _public_key, vault_address } => {
+                                            let wn = wallet_name.clone();
+                                            let va = vault_address.clone();
+                                            let eid_c = eid.clone();
+                                            let set_s = set_state_btn.clone();
+                                            let set_t = set_toast_btn.clone();
+                                            let set_f = set_form_btn.clone();
+                                            view! {
+                                                <div style="margin-top:1rem;padding:0.75rem;border:1px dashed var(--border);border-radius:8px;background:var(--bg-secondary)">
+                                                    <div style="font-size:0.85rem;font-weight:600;color:var(--text-primary);margin-bottom:0.5rem">
+                                                        "⛓ On-Chain Escrow Setup"
+                                                    </div>
+                                                    <div style="font-size:0.75rem;color:var(--success,green);margin-bottom:0.5rem">
+                                                        {format!("✅ Step 1 done — Vault: {}", &va[..16.min(va.len())])}
+                                                    </div>
+
+                                                    // Step 2: Initialize Escrow
+                                                    <div style="padding:0.5rem 0.75rem;border:1px solid var(--border);border-radius:6px;background:var(--bg-primary)">
+                                                        <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem">
+                                                            <div>
+                                                                <div style="font-size:0.8rem;font-weight:600;color:var(--text-primary)">
+                                                                    "Step 2: Initialize Event Escrow"
+                                                                </div>
+                                                                <div style="font-size:0.7rem;color:var(--text-secondary)">
+                                                                    "Initializes the on-chain escrow PDA for deposits & refunds."
+                                                                </div>
+                                                            </div>
+                                                            <button
+                                                                class="btn-primary"
+                                                                style="white-space:nowrap;font-size:0.8rem;padding:0.4rem 0.8rem"
+                                                                on:click=move |_| {
+                                                                    let eid = eid_c.clone();
+                                                                    let wn = wn.clone();
+                                                                    let set_s = set_s.clone();
+                                                                    let set_t = set_t.clone();
+                                                                    let set_f = set_f.clone();
+                                                                    set_s.set(EscrowInitState::CreatingEscrow { wallet_name: wn.clone() });
+                                                                    leptos::task::spawn_local(async move {
+                                                                        let req = api::CreateEventEscrowRequest {
+                                                                            event_id: eid.clone(),
+                                                                        };
+                                                                        match api::create_event_escrow(&req).await {
+                                                                            Ok(resp) => {
+                                                                                log::info!("[events-page] escrow TX built, signing...");
+                                                                                match sign_and_send_tx_js(&wn, &resp.transaction).await {
+                                                                                    Some(signature) => {
+                                                                                        log::info!("[events-page] escrow TX confirmed: {}", signature);
+                                                                                        set_f.update(|f| {
+                                                                                            f.escrow_address = resp.escrow_address.clone();
+                                                                                            if resp.on_chain_event_id > 0 {
+                                                                                                f.on_chain_event_id = resp.on_chain_event_id.to_string();
+                                                                                            }
+                                                                                        });
+                                                                                        set_s.set(EscrowInitState::EscrowCreated {
+                                                                                            escrow_address: resp.escrow_address,
+                                                                                            signature,
+                                                                                        });
+                                                                                        components::show_toast(
+                                                                                            &set_t,
+                                                                                            "Escrow initialized on-chain!",
+                                                                                            components::ToastType::Success,
+                                                                                        );
+                                                                                    }
+                                                                                    None => {
+                                                                                        log::error!("[events-page] escrow TX rejected");
+                                                                                        set_s.set(EscrowInitState::Error {
+                                                                                            message: "Escrow transaction rejected or failed".to_string(),
+                                                                                        });
+                                                                                    }
+                                                                                }
+                                                                            }
+                                                                            Err(e) => {
+                                                                                log::error!("[events-page] create_event_escrow failed: {e}");
+                                                                                set_s.set(EscrowInitState::Error {
+                                                                                    message: format!("Failed to build escrow TX: {e}"),
+                                                                                });
+                                                                            }
+                                                                        }
+                                                                    });
+                                                                }
+                                                            >
+                                                                "⚡ Create & Sign"
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            }.into_any()
+                                        }
+                                        EscrowInitState::CreatingEscrow { wallet_name } => {
+                                            let wn = wallet_name.clone();
+                                            view! {
+                                                <div style="margin-top:1rem;padding:0.75rem;border:1px dashed var(--border);border-radius:8px;background:var(--bg-secondary)">
+                                                    <div style="display:flex;align-items:center;gap:0.5rem">
+                                                        <span class="spinner spinner-sm"></span>
+                                                        <span style="font-size:0.85rem;color:var(--text-primary)">
+                                                            {format!("Initializing Escrow via {}...", wn)}
+                                                        </span>
+                                                    </div>
+                                                    <div style="font-size:0.75rem;color:var(--text-secondary);margin-top:0.25rem">
+                                                        "Approve the transaction in your wallet."
+                                                    </div>
+                                                </div>
+                                            }.into_any()
+                                        }
+                                        EscrowInitState::EscrowCreated { escrow_address, signature } => {
+                                            let ea = escrow_address.clone();
+                                            let sig = signature.clone();
+                                            let solscan = format!("https://solscan.io/tx/{sig}?cluster=devnet");
+                                            view! {
+                                                <div style="margin-top:0.75rem;padding:0.5rem 0.75rem;border:1px solid var(--success,green);border-radius:6px;background:rgba(0,128,0,0.05)">
+                                                    <div style="font-size:0.8rem;color:var(--success,green);font-weight:600">
+                                                        "✅ Escrow initialized on-chain"
+                                                    </div>
+                                                    <div style="font-size:0.75rem;margin-top:0.25rem">
+                                                        <code>{ea}</code>
+                                                    </div>
+                                                    <div style="font-size:0.7rem;margin-top:0.25rem">
+                                                        <a href=solscan target="_blank" rel="noopener" style="color:var(--accent)">
+                                                            "View on Solscan ↗"
+                                                        </a>
+                                                    </div>
+                                                </div>
+                                            }.into_any()
+                                        }
+                                        EscrowInitState::Error { message } => {
+                                            let msg = message.clone();
+                                            view! {
+                                                <div style="margin-top:1rem;padding:0.5rem 0.75rem;border:1px solid var(--error,red);border-radius:6px;background:rgba(255,0,0,0.05)">
+                                                    <div style="font-size:0.8rem;color:var(--error,red)">
+                                                        {format!("❌ {msg}")}
+                                                    </div>
+                                                    <button
+                                                        class="btn btn-outline"
+                                                        style="font-size:0.7rem;padding:0.2rem 0.5rem;margin-top:0.25rem"
+                                                        on:click=move |_| set_escrow_init.set(EscrowInitState::Idle)
+                                                    >
+                                                        "Retry"
+                                                    </button>
+                                                </div>
+                                            }.into_any()
+                                        }
                                     }
                                 }}
                             </div>
