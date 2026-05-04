@@ -136,6 +136,11 @@ pub struct ClaimLookup {
     pub quiz_status: QuizStatus,
     pub total_checked_in: usize,
     pub total_claimed: usize,
+    pub api_id: String,
+    pub event_id: String,
+    pub deposit_enabled: bool,
+    pub deposit_amount_usdc: u64,
+    pub deposit_amount_thb: u64,
 }
 
 /// Result of a successful NFT claim (POST).
@@ -237,6 +242,11 @@ pub async fn lookup_claim(
         quiz_status,
         total_checked_in,
         total_claimed,
+        api_id: attendee.api_id.clone(),
+        event_id: event.id.clone(),
+        deposit_enabled: event.deposit_enabled,
+        deposit_amount_usdc: event.deposit_amount_usdc,
+        deposit_amount_thb: event.deposit_amount_thb,
     })
 }
 

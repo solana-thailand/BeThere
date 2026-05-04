@@ -630,6 +630,21 @@ pub struct ClaimLookupData {
     /// Total number of attendees who have claimed their NFT.
     #[serde(default)]
     pub total_claimed: usize,
+    /// Attendee's API ID (for deposit page link: /deposit/{api_id}).
+    #[serde(default)]
+    pub api_id: String,
+    /// Event ID (for deposit page link query param).
+    #[serde(default)]
+    pub event_id: String,
+    /// Whether deposit is enabled for this event.
+    #[serde(default)]
+    pub deposit_enabled: bool,
+    /// Deposit amount in USDC (smallest unit, e.g. 15000000 = 15 USDC).
+    #[serde(default)]
+    pub deposit_amount_usdc: u64,
+    /// Deposit amount in THB (e.g. 500).
+    #[serde(default)]
+    pub deposit_amount_thb: u64,
 }
 
 /// Response data for POST /api/claim/{token} — NFT mint result.

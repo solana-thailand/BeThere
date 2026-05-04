@@ -805,6 +805,64 @@ fn QuizSubmittedView(
     }
 }
 
+// ---------------------------------------------------------------------------
+// Deposit info component (shown after NFT claim)
+// ---------------------------------------------------------------------------
+
+/// Renders a deposit info card with link to the deposit page.
+/// Shown on the claim page when the event has deposits enabled.
+#[component]
+fn DepositInfo(
+    api_id: String,
+    event_id: String,
+    deposit_amount_usdc: u64,
+    deposit_amount_thb: u64,
+) -> impl IntoView {
+    // USDC display: smallest unit → human-readable (6 decimals)
+    let usdc_display = format!("{:.2}", deposit_amount_usdc as f64 / 1_000_000.0);
+    let deposit_link = if event_id.is_empty() {
+        format!("/deposit/{api_id}")
+    } else {
+        format!("/deposit/{api_id}?event_id={event_id}")
+    };
+
+    view! {
+        <div class="card" style="margin-top:1.5rem;text-align:center">
+            <div style="font-size:1.25rem;margin-bottom:0.5rem">"💰 Deposit Required"</div>
+            <p style="color:var(--text-muted);margin-bottom:0.75rem">
+                "This event requires a deposit to confirm your spot."
+            </p>
+            <div style="display:flex;gap:1rem;justify-content:center;flex-wrap:wrap;margin-bottom:1rem">
+                {if deposit_amount_usdc > 0 {
+                    view! {
+                        <div class="badge" style="background:var(--badge-bg,#1e1b4b);color:#c084fc;padding:0.5rem 1rem;border-radius:0.5rem">
+                            {format!("{} USDC", usdc_display)}
+                        </div>
+                    }.into_any()
+                } else {
+                    view! { <div></div> }.into_any()
+                }}
+                {if deposit_amount_thb > 0 {
+                    view! {
+                        <div class="badge" style="background:var(--badge-bg,#1e1b4b);color:#c084fc;padding:0.5rem 1rem;border-radius:0.5rem">
+                            {format!("{} THB", deposit_amount_thb)}
+                        </div>
+                    }.into_any()
+                } else {
+                    view! { <div></div> }.into_any()
+                }}
+            </div>
+            <a
+                href=deposit_link
+                class="btn btn-primary"
+                style="display:inline-block"
+            >
+                "Go to Deposit Page"
+            </a>
+        </div>
+    }
+}
+
 /// The page looks up their check-in record and allows them to mint a
 /// compressed NFT badge to their Solana wallet.
 #[component]
@@ -831,6 +889,13 @@ pub fn Claim() -> impl IntoView {
     // Claim counter (fetched from backend on initial lookup)
     let (total_checked_in, set_total_checked_in) = signal(0usize);
     let (total_claimed, set_total_claimed) = signal(0usize);
+
+    // Deposit info (persisted across state transitions)
+    let (deposit_api_id, set_deposit_api_id) = signal(String::new());
+    let (deposit_event_id, set_deposit_event_id) = signal(String::new());
+    let (deposit_enabled, set_deposit_enabled) = signal(false);
+    let (deposit_amount_usdc, set_deposit_amount_usdc) = signal(0u64);
+    let (deposit_amount_thb, set_deposit_amount_thb) = signal(0u64);
 
     // Extract token from URL params and fetch claim info on mount
     Effect::new(move |_| {
@@ -863,6 +928,13 @@ pub fn Claim() -> impl IntoView {
                     set_evt_end.set(data.event.event_end_ms);
                     set_total_checked_in.set(data.total_checked_in);
                     set_total_claimed.set(data.total_claimed);
+
+                    // Store deposit info for use across state transitions
+                    set_deposit_api_id.set(data.api_id.clone());
+                    set_deposit_event_id.set(data.event_id.clone());
+                    set_deposit_enabled.set(data.deposit_enabled);
+                    set_deposit_amount_usdc.set(data.deposit_amount_usdc);
+                    set_deposit_amount_thb.set(data.deposit_amount_thb);
 
                     if data.claimed {
                         set_state.set(ClaimState::AlreadyClaimed(data));
@@ -1515,6 +1587,20 @@ pub fn Claim() -> impl IntoView {
                                         </div>
                                     </div>
                                 </div>
+                                {move || {
+                                    if deposit_enabled.get() && !deposit_api_id.get().is_empty() {
+                                        view! {
+                                            <DepositInfo
+                                                api_id=deposit_api_id.get()
+                                                event_id=deposit_event_id.get()
+                                                deposit_amount_usdc=deposit_amount_usdc.get()
+                                                deposit_amount_thb=deposit_amount_thb.get()
+                                            />
+                                        }.into_any()
+                                    } else {
+                                        view! { <div></div> }.into_any()
+                                    }
+                                }}
                             }
                                 .into_any()
                         }
@@ -1540,6 +1626,20 @@ pub fn Claim() -> impl IntoView {
                                         </p>
                                     </div>
                                 </div>
+                                {move || {
+                                    if deposit_enabled.get() && !deposit_api_id.get().is_empty() {
+                                        view! {
+                                            <DepositInfo
+                                                api_id=deposit_api_id.get()
+                                                event_id=deposit_event_id.get()
+                                                deposit_amount_usdc=deposit_amount_usdc.get()
+                                                deposit_amount_thb=deposit_amount_thb.get()
+                                            />
+                                        }.into_any()
+                                    } else {
+                                        view! { <div></div> }.into_any()
+                                    }
+                                }}
                             }
                                 .into_any()
                         }
