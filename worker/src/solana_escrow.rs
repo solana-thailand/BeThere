@@ -628,6 +628,109 @@ fn encode_compact_u16(value: usize, buf: &mut Vec<u8>) {
 }
 
 // ---------------------------------------------------------------------------
+// Message account ordering helper
+// ---------------------------------------------------------------------------
+
+/// Build message account keys in Solana's canonical order and resolve instruction indices.
+///
+/// Solana wire format requires accounts ordered as:
+///   1. Signer + writable
+///   2. Signer + readonly
+///   3. Non-signer + writable
+///   4. Non-signer + readonly
+///
+/// `extra_message_accounts` are CPI-only accounts appended after the 4-pass ordering
+/// (deduplicated against already-present accounts).
+///
+/// Returns (message_accounts, program_id_index, ix_account_indices).
+fn build_message_accounts(
+    instruction_accounts: &[AccountMeta],
+    program_id: &PubkeyBytes,
+    extra_message_accounts: &[AccountMeta],
+) -> (Vec<AccountMeta>, u8, Vec<u8>) {
+    let mut message_accounts: Vec<AccountMeta> = Vec::new();
+
+    // 1. Signer + writable
+    for m in instruction_accounts {
+        if m.is_signer && m.is_writable {
+            message_accounts.push(AccountMeta {
+                pubkey: m.pubkey,
+                is_signer: true,
+                is_writable: true,
+            });
+        }
+    }
+    // 2. Signer + readonly
+    for m in instruction_accounts {
+        if m.is_signer && !m.is_writable {
+            message_accounts.push(AccountMeta {
+                pubkey: m.pubkey,
+                is_signer: true,
+                is_writable: false,
+            });
+        }
+    }
+    // 3. Non-signer + writable
+    for m in instruction_accounts {
+        if !m.is_signer && m.is_writable {
+            message_accounts.push(AccountMeta {
+                pubkey: m.pubkey,
+                is_signer: false,
+                is_writable: true,
+            });
+        }
+    }
+    // 4. Non-signer + readonly (includes program_id if not already present)
+    let mut program_id_in_message = false;
+    for m in instruction_accounts {
+        if !m.is_signer && !m.is_writable {
+            if m.pubkey == *program_id {
+                program_id_in_message = true;
+            }
+            message_accounts.push(AccountMeta {
+                pubkey: m.pubkey,
+                is_signer: false,
+                is_writable: false,
+            });
+        }
+    }
+    if !program_id_in_message {
+        message_accounts.push(AccountMeta {
+            pubkey: *program_id,
+            is_signer: false,
+            is_writable: false,
+        });
+    }
+
+    // Append CPI-only extra accounts (deduplicated)
+    for m in extra_message_accounts {
+        if !message_accounts.iter().any(|ma| ma.pubkey == m.pubkey) {
+            message_accounts.push(AccountMeta {
+                pubkey: m.pubkey,
+                is_signer: false,
+                is_writable: false,
+            });
+        }
+    }
+
+    // Build a lookup: pubkey → index in message_accounts
+    let get_index = |pk: &PubkeyBytes| -> u8 {
+        message_accounts
+            .iter()
+            .position(|m| &m.pubkey == pk)
+            .expect("all accounts should be in message") as u8
+    };
+
+    let program_id_index = get_index(program_id);
+    let ix_account_indices: Vec<u8> = instruction_accounts
+        .iter()
+        .map(|m| get_index(&m.pubkey))
+        .collect();
+
+    (message_accounts, program_id_index, ix_account_indices)
+}
+
+// ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
@@ -755,80 +858,9 @@ pub async fn build_deposit_transaction(
         }, // 8
     ];
 
-    // Build the message account keys in Solana's canonical order:
-    // signers(writable) → signers(readonly) → non-signers(writable) → non-signers(readonly)
-    // The program_id is included as a non-signer readonly.
-    let mut message_accounts: Vec<AccountMeta> = Vec::new();
-
-    // 1. Signer + writable
-    for m in &instruction_accounts {
-        if m.is_signer && m.is_writable {
-            message_accounts.push(AccountMeta {
-                pubkey: m.pubkey,
-                is_signer: true,
-                is_writable: true,
-            });
-        }
-    }
-    // 2. Signer + readonly (none in our case)
-    for m in &instruction_accounts {
-        if m.is_signer && !m.is_writable {
-            message_accounts.push(AccountMeta {
-                pubkey: m.pubkey,
-                is_signer: true,
-                is_writable: false,
-            });
-        }
-    }
-    // 3. Non-signer + writable
-    for m in &instruction_accounts {
-        if !m.is_signer && m.is_writable {
-            message_accounts.push(AccountMeta {
-                pubkey: m.pubkey,
-                is_signer: false,
-                is_writable: true,
-            });
-        }
-    }
-    // 4. Non-signer + readonly (includes program_id if not already present)
-    let mut program_id_in_message = false;
-    for m in &instruction_accounts {
-        if !m.is_signer && !m.is_writable {
-            if m.pubkey == program_id {
-                program_id_in_message = true;
-            }
-            message_accounts.push(AccountMeta {
-                pubkey: m.pubkey,
-                is_signer: false,
-                is_writable: false,
-            });
-        }
-    }
-    // Add program_id if not already in the list
-    if !program_id_in_message {
-        message_accounts.push(AccountMeta {
-            pubkey: program_id,
-            is_signer: false,
-            is_writable: false,
-        });
-    }
-
-    // Build a lookup: pubkey → index in message_accounts
-    let get_index = |pk: &PubkeyBytes| -> u8 {
-        message_accounts
-            .iter()
-            .position(|m| &m.pubkey == pk)
-            .expect("all accounts should be in message") as u8
-    };
-
-    // The program_id_index
-    let program_id_index = get_index(&program_id);
-
-    // Build instruction account indices in the order the program expects
-    let ix_account_indices: Vec<u8> = instruction_accounts
-        .iter()
-        .map(|m| get_index(&m.pubkey))
-        .collect();
+    // Build message accounts in Solana canonical order + resolve indices
+    let (message_accounts, program_id_index, ix_account_indices) =
+        build_message_accounts(&instruction_accounts, &program_id, &[]);
 
     let compiled_ix = CompiledInstruction {
         program_id_index,
@@ -974,90 +1006,9 @@ pub async fn build_refund_transaction(
         is_writable: false,
     }];
 
-    // Build the message account keys in Solana's canonical order:
-    // signers(writable) → signers(readonly) → non-signers(writable) → non-signers(readonly)
-    // The program_id is included as a non-signer readonly.
-    let mut message_accounts: Vec<AccountMeta> = Vec::new();
-
-    // 1. Signer + writable
-    for m in &instruction_accounts {
-        if m.is_signer && m.is_writable {
-            message_accounts.push(AccountMeta {
-                pubkey: m.pubkey,
-                is_signer: true,
-                is_writable: true,
-            });
-        }
-    }
-    // 2. Signer + readonly (none in our case)
-    for m in &instruction_accounts {
-        if m.is_signer && !m.is_writable {
-            message_accounts.push(AccountMeta {
-                pubkey: m.pubkey,
-                is_signer: true,
-                is_writable: false,
-            });
-        }
-    }
-    // 3. Non-signer + writable
-    for m in &instruction_accounts {
-        if !m.is_signer && m.is_writable {
-            message_accounts.push(AccountMeta {
-                pubkey: m.pubkey,
-                is_signer: false,
-                is_writable: true,
-            });
-        }
-    }
-    // 4. Non-signer + readonly (includes program_id if not already present)
-    let mut program_id_in_message = false;
-    for m in &instruction_accounts {
-        if !m.is_signer && !m.is_writable {
-            if m.pubkey == program_id {
-                program_id_in_message = true;
-            }
-            message_accounts.push(AccountMeta {
-                pubkey: m.pubkey,
-                is_signer: false,
-                is_writable: false,
-            });
-        }
-    }
-    // Add program_id if not already in the list
-    if !program_id_in_message {
-        message_accounts.push(AccountMeta {
-            pubkey: program_id,
-            is_signer: false,
-            is_writable: false,
-        });
-    }
-    // 5. Extra CPI-only accounts (ATA program) — appended after program_id
-    for m in &extra_message_accounts {
-        if !message_accounts.iter().any(|ma| ma.pubkey == m.pubkey) {
-            message_accounts.push(AccountMeta {
-                pubkey: m.pubkey,
-                is_signer: false,
-                is_writable: false,
-            });
-        }
-    }
-
-    // Build a lookup: pubkey → index in message_accounts
-    let get_index = |pk: &PubkeyBytes| -> u8 {
-        message_accounts
-            .iter()
-            .position(|m| &m.pubkey == pk)
-            .expect("all accounts should be in message") as u8
-    };
-
-    // The program_id_index
-    let program_id_index = get_index(&program_id);
-
-    // Build instruction account indices in the order the program expects
-    let ix_account_indices: Vec<u8> = instruction_accounts
-        .iter()
-        .map(|m| get_index(&m.pubkey))
-        .collect();
+    // Build message accounts in Solana canonical order + resolve indices
+    let (message_accounts, program_id_index, ix_account_indices) =
+        build_message_accounts(&instruction_accounts, &program_id, &extra_message_accounts);
 
     let compiled_ix = CompiledInstruction {
         program_id_index,
@@ -1197,87 +1148,9 @@ pub async fn build_create_event_transaction(
         is_writable: false,
     }];
 
-    // Build the message account keys in Solana's canonical order:
-    // signers(writable) → signers(readonly) → non-signers(writable) → non-signers(readonly)
-    let mut message_accounts: Vec<AccountMeta> = Vec::new();
-
-    // 1. Signer + writable
-    for m in &instruction_accounts {
-        if m.is_signer && m.is_writable {
-            message_accounts.push(AccountMeta {
-                pubkey: m.pubkey,
-                is_signer: true,
-                is_writable: true,
-            });
-        }
-    }
-    // 2. Signer + readonly (none)
-    for m in &instruction_accounts {
-        if m.is_signer && !m.is_writable {
-            message_accounts.push(AccountMeta {
-                pubkey: m.pubkey,
-                is_signer: true,
-                is_writable: false,
-            });
-        }
-    }
-    // 3. Non-signer + writable
-    for m in &instruction_accounts {
-        if !m.is_signer && m.is_writable {
-            message_accounts.push(AccountMeta {
-                pubkey: m.pubkey,
-                is_signer: false,
-                is_writable: true,
-            });
-        }
-    }
-    // 4. Non-signer + readonly (from instruction accounts)
-    let mut program_id_in_message = false;
-    for m in &instruction_accounts {
-        if !m.is_signer && !m.is_writable {
-            if m.pubkey == program_id {
-                program_id_in_message = true;
-            }
-            message_accounts.push(AccountMeta {
-                pubkey: m.pubkey,
-                is_signer: false,
-                is_writable: false,
-            });
-        }
-    }
-    if !program_id_in_message {
-        message_accounts.push(AccountMeta {
-            pubkey: program_id,
-            is_signer: false,
-            is_writable: false,
-        });
-    }
-    // 5. Extra CPI-only accounts (ATA program) — appended after program_id
-    for m in &extra_message_accounts {
-        // Skip if already present (e.g., if ATA program was somehow in instruction accounts)
-        if !message_accounts.iter().any(|ma| ma.pubkey == m.pubkey) {
-            message_accounts.push(AccountMeta {
-                pubkey: m.pubkey,
-                is_signer: false,
-                is_writable: false,
-            });
-        }
-    }
-
-    // Build lookups
-    let get_index = |pk: &PubkeyBytes| -> u8 {
-        message_accounts
-            .iter()
-            .position(|m| &m.pubkey == pk)
-            .expect("all accounts should be in message") as u8
-    };
-
-    let program_id_index = get_index(&program_id);
-
-    let ix_account_indices: Vec<u8> = instruction_accounts
-        .iter()
-        .map(|m| get_index(&m.pubkey))
-        .collect();
+    // Build message accounts in Solana canonical order + resolve indices
+    let (message_accounts, program_id_index, ix_account_indices) =
+        build_message_accounts(&instruction_accounts, &program_id, &extra_message_accounts);
 
     let compiled_ix = CompiledInstruction {
         program_id_index,
@@ -1368,74 +1241,9 @@ pub async fn build_mark_checked_in_transaction(
         },
     ];
 
-    // Build the message account keys in Solana's canonical order:
-    // signers(writable) → signers(readonly) → non-signers(writable) → non-signers(readonly)
-    let mut message_accounts: Vec<AccountMeta> = Vec::new();
-
-    // 1. Signer + writable
-    for m in &instruction_accounts {
-        if m.is_signer && m.is_writable {
-            message_accounts.push(AccountMeta {
-                pubkey: m.pubkey,
-                is_signer: true,
-                is_writable: true,
-            });
-        }
-    }
-    // 2. Signer + readonly (none)
-    for m in &instruction_accounts {
-        if m.is_signer && !m.is_writable {
-            message_accounts.push(AccountMeta {
-                pubkey: m.pubkey,
-                is_signer: true,
-                is_writable: false,
-            });
-        }
-    }
-    // 3. Non-signer + writable
-    for m in &instruction_accounts {
-        if !m.is_signer && m.is_writable {
-            message_accounts.push(AccountMeta {
-                pubkey: m.pubkey,
-                is_signer: false,
-                is_writable: true,
-            });
-        }
-    }
-    // 4. Non-signer + readonly (includes program_id)
-    let mut program_id_in_message = false;
-    for m in &instruction_accounts {
-        if !m.is_signer && !m.is_writable {
-            if m.pubkey == program_id {
-                program_id_in_message = true;
-            }
-            message_accounts.push(AccountMeta {
-                pubkey: m.pubkey,
-                is_signer: false,
-                is_writable: false,
-            });
-        }
-    }
-    if !program_id_in_message {
-        message_accounts.push(AccountMeta {
-            pubkey: program_id,
-            is_signer: false,
-            is_writable: false,
-        });
-    }
-
-    let get_index = |pk: &PubkeyBytes| -> u8 {
-        message_accounts
-            .iter()
-            .position(|m| &m.pubkey == pk)
-            .expect("all accounts should be in message") as u8
-    };
-
-    let program_id_index = get_index(&program_id);
-    let ix_account_indices: Vec<u8> = instruction_accounts
-        .iter()
-        .map(|m| get_index(&m.pubkey))
-        .collect();
+    // Build message accounts in Solana canonical order + resolve indices
+    let (message_accounts, program_id_index, ix_account_indices) =
+        build_message_accounts(&instruction_accounts, &program_id, &[]);
 
     let compiled_ix = CompiledInstruction {
         program_id_index,
@@ -1545,75 +1353,10 @@ pub async fn build_create_vault_ata_transaction(
         },
     ];
 
-    // Build the message account keys in Solana's canonical order:
-    // signers(writable) → signers(readonly) → non-signers(writable) → non-signers(readonly)
-    let mut message_accounts: Vec<AccountMeta> = Vec::new();
-
-    // 1. Signer + writable
-    for m in &instruction_accounts {
-        if m.is_signer && m.is_writable {
-            message_accounts.push(AccountMeta {
-                pubkey: m.pubkey,
-                is_signer: true,
-                is_writable: true,
-            });
-        }
-    }
-    // 2. Signer + readonly (none)
-    for m in &instruction_accounts {
-        if m.is_signer && !m.is_writable {
-            message_accounts.push(AccountMeta {
-                pubkey: m.pubkey,
-                is_signer: true,
-                is_writable: false,
-            });
-        }
-    }
-    // 3. Non-signer + writable
-    for m in &instruction_accounts {
-        if !m.is_signer && m.is_writable {
-            message_accounts.push(AccountMeta {
-                pubkey: m.pubkey,
-                is_signer: false,
-                is_writable: true,
-            });
-        }
-    }
-    // 4. Non-signer + readonly
-    let mut ata_program_in_message = false;
-    for m in &instruction_accounts {
-        if !m.is_signer && !m.is_writable {
-            if m.pubkey == ata_program {
-                ata_program_in_message = true;
-            }
-            message_accounts.push(AccountMeta {
-                pubkey: m.pubkey,
-                is_signer: false,
-                is_writable: false,
-            });
-        }
-    }
-    if !ata_program_in_message {
-        message_accounts.push(AccountMeta {
-            pubkey: ata_program,
-            is_signer: false,
-            is_writable: false,
-        });
-    }
-
-    let get_index = |pk: &PubkeyBytes| -> u8 {
-        message_accounts
-            .iter()
-            .position(|m| &m.pubkey == pk)
-            .expect("all accounts should be in message") as u8
-    };
-
-    // The ATA program is the instruction program (not the escrow program)
-    let ata_program_index = get_index(&ata_program);
-    let ix_account_indices: Vec<u8> = instruction_accounts
-        .iter()
-        .map(|m| get_index(&m.pubkey))
-        .collect();
+    // Build message accounts in Solana canonical order + resolve indices
+    // Note: ATA program is the instruction program (not escrow program)
+    let (message_accounts, ata_program_index, ix_account_indices) =
+        build_message_accounts(&instruction_accounts, &ata_program, &[]);
 
     let compiled_ix = CompiledInstruction {
         program_id_index: ata_program_index,
