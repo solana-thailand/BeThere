@@ -872,6 +872,10 @@ pub struct EventDetail {
     #[serde(default)]
     pub escrow_address: String,
     #[serde(default)]
+    pub organizer_wallet: String,
+    #[serde(default)]
+    pub on_chain_event_id: u64,
+    #[serde(default)]
     pub refund_deadline_hours: u32,
     #[serde(default)]
     pub created_at: String,
@@ -944,6 +948,10 @@ pub struct CreateEventBody {
     #[serde(default)]
     pub escrow_address: String,
     #[serde(default)]
+    pub organizer_wallet: String,
+    #[serde(default)]
+    pub on_chain_event_id: u64,
+    #[serde(default)]
     pub refund_deadline_hours: u32,
 }
 
@@ -1002,6 +1010,10 @@ pub struct UpdateEventBody {
     pub deposit_amount_thb: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub escrow_address: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub organizer_wallet: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub on_chain_event_id: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub refund_deadline_hours: Option<u32>,
 }
@@ -1144,6 +1156,34 @@ pub async fn create_event(body: &CreateEventBody) -> Result<EventMutationData, A
 pub async fn update_event(id: &str, body: &UpdateEventBody) -> Result<EventMutationData, ApiError> {
     let path = format!("/events/{id}");
     api_put_json(&path, body).await
+}
+
+// ---------------------------------------------------------------------------
+// Escrow — create_event on-chain
+// ---------------------------------------------------------------------------
+
+/// Request body for POST /api/escrow/create-event.
+#[derive(Debug, Clone, Serialize)]
+pub struct CreateEventEscrowRequest {
+    pub event_id: String,
+}
+
+/// Response from POST /api/escrow/create-event.
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct CreateEventEscrowResponse {
+    /// Base64-encoded serialized transaction (unsigned — wallet signs).
+    pub transaction: String,
+    /// Human-readable message for wallet confirmation.
+    pub message: String,
+    /// Derived EventEscrow PDA address (base58).
+    pub escrow_address: String,
+    /// The on-chain event ID used for PDA derivation.
+    pub on_chain_event_id: u64,
+}
+
+/// POST /api/escrow/create-event — build a create_event transaction for the escrow program.
+pub async fn create_event_escrow(body: &CreateEventEscrowRequest) -> Result<CreateEventEscrowResponse, ApiError> {
+    api_post_json("/escrow/create-event", body).await
 }
 
 /// DELETE /api/events/{id} — archive an event.

@@ -48,6 +48,8 @@ struct EventForm {
     deposit_amount_usdc: String,
     deposit_amount_thb: String,
     escrow_address: String,
+    organizer_wallet: String,
+    on_chain_event_id: String,
     refund_deadline_hours: String,
 }
 
@@ -101,6 +103,8 @@ fn default_form() -> EventForm {
         deposit_amount_usdc: String::new(),
         deposit_amount_thb: String::new(),
         escrow_address: String::new(),
+        organizer_wallet: String::new(),
+        on_chain_event_id: String::new(),
         refund_deadline_hours: String::new(),
         ..Default::default()
     }
@@ -150,6 +154,8 @@ fn form_from_detail(detail: &api::EventDetail) -> EventForm {
         deposit_amount_usdc: if detail.deposit_amount_usdc > 0 { detail.deposit_amount_usdc.to_string() } else { String::new() },
         deposit_amount_thb: if detail.deposit_amount_thb > 0 { detail.deposit_amount_thb.to_string() } else { String::new() },
         escrow_address: detail.escrow_address.clone(),
+        organizer_wallet: detail.organizer_wallet.clone(),
+        on_chain_event_id: if detail.on_chain_event_id > 0 { detail.on_chain_event_id.to_string() } else { String::new() },
         refund_deadline_hours: if detail.refund_deadline_hours > 0 { detail.refund_deadline_hours.to_string() } else { String::new() },
     }
 }
@@ -329,6 +335,8 @@ pub fn EventsPage(
                 deposit_amount_usdc: current_form.deposit_amount_usdc.parse::<u64>().unwrap_or(0),
                 deposit_amount_thb: current_form.deposit_amount_thb.parse::<u64>().unwrap_or(0),
                 escrow_address: current_form.escrow_address.trim().to_string(),
+                organizer_wallet: current_form.organizer_wallet.trim().to_string(),
+                on_chain_event_id: current_form.on_chain_event_id.parse::<u64>().unwrap_or(0),
                 refund_deadline_hours: current_form.refund_deadline_hours.parse::<u32>().unwrap_or(0),
             };
 
@@ -382,6 +390,8 @@ pub fn EventsPage(
                 deposit_amount_usdc: Some(current_form.deposit_amount_usdc.parse::<u64>().unwrap_or(0)),
                 deposit_amount_thb: Some(current_form.deposit_amount_thb.parse::<u64>().unwrap_or(0)),
                 escrow_address: Some(current_form.escrow_address.trim().to_string()),
+                organizer_wallet: Some(current_form.organizer_wallet.trim().to_string()),
+                on_chain_event_id: Some(current_form.on_chain_event_id.parse::<u64>().unwrap_or(0)),
                 refund_deadline_hours: Some(current_form.refund_deadline_hours.parse::<u32>().unwrap_or(0)),
             };
 
@@ -942,20 +952,120 @@ pub fn EventsPage(
                                             prop:value=move || form.get().escrow_address
                                             on:input=move |ev| set_form.update(|f| f.escrow_address = event_target_value(&ev))
                                         />
-                                        <span class="quiz-setting-hint">"On-chain escrow PDA for this event"</span>
+                                        <span class="quiz-setting-hint">"On-chain escrow PDA for this event (auto-filled after on-chain init)"</span>
+                                    </div>
+                                    <div class="quiz-setting-item">
+                                        <label class="quiz-field-label">"Organizer Wallet"</label>
+                                        <input
+                                            type="text"
+                                            class="quiz-number-input"
+                                            placeholder="e.g. 7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU"
+                                            prop:value=move || form.get().organizer_wallet
+                                            on:input=move |ev| set_form.update(|f| f.organizer_wallet = event_target_value(&ev))
+                                        />
+                                        <span class="quiz-setting-hint">"Organizer's Solana wallet address (base58) — required for escrow"</span>
+                                    </div>
+                                    <div class="quiz-setting-item">
+                                        <label class="quiz-field-label">"On-Chain Event ID"</label>
+                                        <input
+                                            type="text"
+                                            class="quiz-number-input"
+                                            placeholder="Leave empty for auto-derive from event slug"
+                                            prop:value=move || form.get().on_chain_event_id
+                                            on:input=move |ev| set_form.update(|f| f.on_chain_event_id = event_target_value(&ev))
+                                        />
+                                        <span class="quiz-setting-hint">"Numeric ID for PDA seeds (0 = auto-derive via hash)"</span>
                                     </div>
                                     <div class="quiz-setting-item">
                                         <label class="quiz-field-label">"Refund Deadline (hours)"</label>
                                         <input
                                             type="text"
                                             class="quiz-number-input"
-                                            placeholder="e.g. 48"
+                                            placeholder="e.g. 168 (= 7 days)"
                                             prop:value=move || form.get().refund_deadline_hours
                                             on:input=move |ev| set_form.update(|f| f.refund_deadline_hours = event_target_value(&ev))
                                         />
-                                        <span class="quiz-setting-hint">"Hours before event start when refunds close"</span>
+                                        <span class="quiz-setting-hint">"Hours after event end for refund deadline (default: 168 = 7 days)"</span>
                                     </div>
                                 </div>
+
+                                // ── Initialize Escrow On-Chain Button ──
+                                {move || {
+                                    let f = form.get();
+                                    let show_button = f.deposit_enabled
+                                        && !f.organizer_wallet.is_empty()
+                                        && f.escrow_address.is_empty()
+                                        && !editing_id.get().unwrap_or_default().is_empty();
+                                    if show_button {
+                                        let eid = editing_id.get().unwrap_or_default();
+                                        let set_form_btn = set_form.clone();
+                                        let set_toast_btn = set_toast.clone();
+                                        view! {
+                                            <div style="margin-top:1rem;padding:0.75rem;border:1px dashed var(--border);border-radius:8px;background:var(--bg-secondary)">
+                                                <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem">
+                                                    <div>
+                                                        <div style="font-size:0.85rem;font-weight:600;color:var(--text-primary)">
+                                                            "🔗 Initialize On-Chain Escrow"
+                                                        </div>
+                                                        <div style="font-size:0.75rem;color:var(--text-secondary);margin-top:0.25rem">
+                                                            "Builds the create_event transaction for the organizer's wallet to sign."
+                                                        </div>
+                                                    </div>
+                                                    <button
+                                                        class="btn-primary"
+                                                        style="white-space:nowrap;font-size:0.8rem;padding:0.4rem 0.8rem"
+                                                        on:click=move |_| {
+                                                            let eid_click = eid.clone();
+                                                            let set_form_c = set_form_btn.clone();
+                                                            let set_toast_c = set_toast_btn.clone();
+                                                            leptos::task::spawn_local(async move {
+                                                                let req = api::CreateEventEscrowRequest {
+                                                                    event_id: eid_click.clone(),
+                                                                };
+                                                                match api::create_event_escrow(&req).await {
+                                                                    Ok(resp) => {
+                                                                        set_form_c.update(|f| {
+                                                                            f.escrow_address = resp.escrow_address.clone();
+                                                                            if resp.on_chain_event_id > 0 {
+                                                                                f.on_chain_event_id = resp.on_chain_event_id.to_string();
+                                                                            }
+                                                                        });
+                                                                        components::show_toast(
+                                                                            &set_toast_c,
+                                                                            &format!("Escrow TX built! Address: {}... Sign & submit from your wallet.", &resp.escrow_address[..8.min(resp.escrow_address.len())]),
+                                                                            components::ToastType::Success,
+                                                                        );
+                                                                    }
+                                                                    Err(e) => {
+                                                                        log::error!("[events-page] create_event_escrow failed: {e}");
+                                                                        components::show_toast(
+                                                                            &set_toast_c,
+                                                                            &format!("Failed to build escrow TX: {e}"),
+                                                                            components::ToastType::Error,
+                                                                        );
+                                                                    }
+                                                                }
+                                                            });
+                                                        }
+                                                    >
+                                                        "⚡ Build TX"
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        }.into_any()
+                                    } else if !f.escrow_address.is_empty() {
+                                        view! {
+                                            <div style="margin-top:0.75rem;padding:0.5rem 0.75rem;border:1px solid var(--success,green);border-radius:6px;background:rgba(0,128,0,0.05)">
+                                                <span style="font-size:0.8rem;color:var(--success,green)">
+                                                    "✅ Escrow initialized: "
+                                                    <code style="font-size:0.75rem">{f.escrow_address}</code>
+                                                </span>
+                                            </div>
+                                        }.into_any()
+                                    } else {
+                                        view! { <div></div> }.into_any()
+                                    }
+                                }}
                             </div>
 
                             // ── People ──
