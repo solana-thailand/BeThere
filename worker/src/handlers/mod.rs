@@ -121,6 +121,14 @@ pub fn routes(state: AppState) -> Router<()> {
             "/escrow/create-event",
             post(deposit::create_event_tx_handler),
         )
+        .route(
+            "/escrow/create-vault-ata",
+            post(deposit::create_vault_ata_tx_handler),
+        )
+        .route(
+            "/escrow/mark-checked-in",
+            post(deposit::mark_checked_in_tx_handler),
+        )
         .layer(middleware::from_fn_with_state(
             state.clone(),
             crate::auth::require_auth,

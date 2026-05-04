@@ -4,10 +4,12 @@
 # ============================================================================
 # Tests the full on-chain escrow flow end-to-end on Solana devnet:
 #   1. Health check + event setup
-#   2. Build & submit `create_event` TX → creates EventEscrow PDA + Vault ATA
-#   3. Build & submit `deposit` TX → USDC → vault
-#   4. Build & submit `refund` TX → USDC back to attendee
-#   5. Verify all PDAs and token balances on-chain
+#   2. Build & submit `create_vault_ata` TX → pre-creates vault ATA (skipped by default)
+#   3. Build & submit `create_event` TX → creates EventEscrow PDA
+#   4. Build & submit `deposit` TX → USDC → vault
+#   5. Build & submit `mark_checked_in` TX → marks attendee checked-in
+#   6. Build & submit `refund` TX → USDC back to attendee
+#   7. Verify all PDAs and token balances on-chain
 #
 # Prerequisites:
 #   - `cd worker && npx wrangler dev --port 8787` running
@@ -18,7 +20,8 @@
 #
 # Usage:
 #   bash scripts/e2e/test_escrow_devnet.sh
-#   bash scripts/e2e/test_escrow_devnet.sh --skip-setup    # reuse existing event
+#   bash scripts/e2e/test_escrow_devnet.sh --skip-setup       # reuse existing event
+#   bash scripts/e2e/test_escrow_devnet.sh --with-vault-ata   # run create_vault_ata step
 #   EVENT_ID=myevent bash scripts/e2e/test_escrow_devnet.sh
 # ============================================================================
 
@@ -66,6 +69,13 @@ check_json() {
         echo "     actual:   $actual"
         return 1
     fi
+}
+
+sign_and_submit_tx() {
+    local tx_b64="$1"
+    local keypair_json="$2"
+    local rpc_url="${3:-$RPC_URL}"
+    python3 "$(dirname "$0")/sign_and_submit.py" "$tx_b64" "$keypair_json" "$rpc_url"
 }
 
 # --- Parse args ---
@@ -164,15 +174,15 @@ if (( $(echo "$ATT_BALANCE < 0.05" | bc -l 2>/dev/null || echo "1") )); then
     solana airdrop 1 "$ATTENDEE_WALLET" --url devnet 2>&1 || warn "Airdrop failed — fund manually"
 fi
 
-# Check attendee USDC balance
-ATT_USDC_ATA=$(spl-token address --token "$USDC_MINT" --owner "$ATTENDEE_WALLET" --url devnet 2>/dev/null | head -1 || echo "")
+# Check attendee USDC ATA
+ATT_USDC_ATA=$(spl-token address --token "$USDC_MINT" --owner "$ATTENDEE_KEYPAIR" --url devnet 2>/dev/null | head -1 || echo "")
 if [ -z "$ATT_USDC_ATA" ] || [ "$ATT_USDC_ATA" = "None" ] || [ "$ATT_USDC_ATA" = "Creating" ]; then
     info "Creating attendee USDC ATA..."
-    ATT_USDC_ATA=$(spl-token create-account "$USDC_MINT" --owner "$ATTENDEE_WALLET" --url devnet 2>&1 | grep "Creating account" | awk '{print $3}' || echo "")
+    ATT_USDC_ATA=$(spl-token create-account "$USDC_MINT" --owner "$ATTENDEE_KEYPAIR" --url devnet 2>&1 | grep "Creating account" | awk '{print $3}' || echo "")
 fi
 info "Attendee USDC ATA: ${ATT_USDC_ATA:0:8}...${ATT_USDC_ATA: -4}"
 
-ATT_USDC_BALANCE=$(spl-token balance --address "$USDC_MINT" --url devnet --owner "$ATTENDEE_WALLET" 2>&1 | awk '{print $1}' || echo "0")
+ATT_USDC_BALANCE=$(spl-token balance "$USDC_MINT" --url devnet --owner "$ATTENDEE_WALLET" 2>&1 | awk '{print $1}' || echo "0")
 info "Attendee USDC balance: $ATT_USDC_BALANCE"
 
 if (( $(echo "$ATT_USDC_BALANCE < 1" | bc -l 2>/dev/null || echo "1") )); then
@@ -188,7 +198,7 @@ if (( $(echo "$ATT_USDC_BALANCE < 1" | bc -l 2>/dev/null || echo "1") )); then
         warn "--skip-onchain: skipping USDC-dependent on-chain tests"
     else
         read -p "  Press Enter after getting USDC (or Ctrl+C to abort)..." -r
-        ATT_USDC_BALANCE=$(spl-token balance --address "$USDC_MINT" --url devnet --owner "$ATTENDEE_WALLET" 2>&1 | awk '{print $1}' || echo "0")
+        ATT_USDC_BALANCE=$(spl-token balance "$USDC_MINT" --url devnet --owner "$ATTENDEE_WALLET" 2>&1 | awk '{print $1}' || echo "0")
         info "Attendee USDC balance (updated): $ATT_USDC_BALANCE"
     fi
 fi
@@ -205,6 +215,9 @@ else
     # Uses dev-token auth (DEV_MODE=1)
     info "Creating event '$EVENT_ID' with deposit config..."
 
+    # IMPORTANT: event_end_ms is set to 1 hour in the past so that the
+    # on-chain refund instruction can succeed (it checks clock > event_end).
+    # refund_deadline_hours=168 means refund deadline = event_end + 7 days.
     EVENT_RESPONSE=$(curl -s -X POST "$BASE_URL/api/events" \
         -H "Authorization: Bearer dev-token" \
         -H "Content-Type: application/json" \
@@ -213,8 +226,9 @@ else
             \"slug\": \"$EVENT_ID\",
             \"tagline\": \"Automated E2E test for deposit/refund escrow\",
             \"link\": \"https://example.com/e2e-test\",
-            \"event_start_ms\": $(date +%s)000,
-            \"event_end_ms\": $(($(date +%s) + 86400))000,
+            \"sheet_id\": \"e2e-test-dummy\",
+            \"event_start_ms\": $(($(date +%s) - 7200))000,
+            \"event_end_ms\": $(($(date +%s) - 3600))000,
             \"status\": \"active\",
             \"deposit_enabled\": true,
             \"deposit_amount_usdc\": $DEPOSIT_AMOUNT_USDC,
@@ -309,9 +323,62 @@ else
 fi
 
 # ============================================================================
-# Step 3: Build `create_event` Transaction
+# Step 3: Build `create_vault_ata` Transaction
 # ============================================================================
-section "Step 3: Build create_event Transaction"
+section "Step 3: Build create_vault_ata Transaction"
+
+# REQUIRED: The escrow program's init(idempotent) CPI to the ATA program fails
+# with "signer privilege escalated". The workaround is to pre-create the vault ATA
+# before calling create_event. The init(idempotent) will then be a no-op.
+if [ -n "$ESCROW_ADDR" ] && [ "$ESCROW_ADDR" != "" ]; then
+    skip "create_vault_ata TX — escrow already initialized at $ESCROW_ADDR"
+else
+    info "Requesting create_vault_ata TX from worker..."
+
+    VAULT_ATA_RESPONSE=$(curl -s -X POST "$BASE_URL/api/escrow/create-vault-ata" \
+        -H "Authorization: Bearer dev-token" \
+        -H "Content-Type: application/json" \
+        -d "{\"event_id\": \"$EVENT_ID\"}")
+
+    VAULT_ATA_SUCCESS=$(echo "$VAULT_ATA_RESPONSE" | python3 -c "import sys,json; print(str(json.load(sys.stdin).get('success','')).lower())" 2>/dev/null || echo "false")
+
+    if [ "$VAULT_ATA_SUCCESS" = "true" ]; then
+        VAULT_ATA_TX=$(echo "$VAULT_ATA_RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['transaction'])" 2>/dev/null || echo "")
+        VAULT_ATA_ADDR=$(echo "$VAULT_ATA_RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['vault_address'])" 2>/dev/null || echo "")
+        VAULT_ATA_MSG=$(echo "$VAULT_ATA_RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['message'])" 2>/dev/null || echo "")
+
+        pass "create_vault_ata TX built"
+        info "Message: $VAULT_ATA_MSG"
+        info "Vault ATA: $VAULT_ATA_ADDR"
+
+        # Submit TX with organizer keypair
+        ORG_KEYPAIR_JSON=$(cat ~/.config/solana/id.json)
+        VAULT_ATA_SUBMIT=$(sign_and_submit_tx "$VAULT_ATA_TX" "$ORG_KEYPAIR_JSON")
+        info "Vault ATA submit: $VAULT_ATA_SUBMIT"
+
+        if echo "$VAULT_ATA_SUBMIT" | grep -q "SIGNATURE="; then
+            VAULT_ATA_SIG=$(echo "$VAULT_ATA_SUBMIT" | grep "SIGNATURE=" | cut -d= -f2)
+            pass "create_vault_ata TX submitted!"
+            info "Signature: $VAULT_ATA_SIG"
+            info "View: https://explorer.solana.com/tx/$VAULT_ATA_SIG?cluster=devnet"
+            sleep 5
+        else
+            fail "create_vault_ata TX submission failed"
+            echo "   $VAULT_ATA_SUBMIT" | head -c 500
+            # The vault ATA may already exist (idempotent), continue anyway
+            warn "Continuing — vault ATA may already exist"
+        fi
+    else
+        ERR=$(echo "$VAULT_ATA_RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('error', d.get('message', str(d)[:200])))" 2>/dev/null || echo "unknown")
+        warn "create_vault_ata TX build failed: $ERR"
+        warn "Continuing — vault ATA may already exist or will be created manually"
+    fi
+fi
+
+# ============================================================================
+# Step 4: Build `create_event` Transaction
+# ============================================================================
+section "Step 4: Build create_event Transaction"
 
 if [ -n "$ESCROW_ADDR" ] && [ "$ESCROW_ADDR" != "" ]; then
     skip "create_event TX — escrow already initialized at $ESCROW_ADDR"
@@ -336,98 +403,11 @@ else
         info "Escrow PDA: $ESCROW_ADDR"
         info "On-chain event ID: $ON_CHAIN_ID"
 
-        # Submit TX using solana CLI
+        # Submit TX with organizer keypair
         info "Signing and submitting TX to devnet..."
-        echo "$TX_B64" | base64 -d > /tmp/bethere-create-event-tx.bin
-        SIGNATURE=$(solana sign-offchain-message /tmp/bethere-create-event-tx.bin --keypair ~/.config/solana/id.json --url devnet 2>&1 || echo "FAILED")
-
-        # Actually, we need to use `solana transmit` or decode the TX
-        # The worker builds a serialized Solana transaction (not offchain message)
-        # We need to decode, sign with organizer keypair, and submit
-        info "Decoding and signing TX with organizer keypair..."
-
-        # Use python to decode base64 TX, sign with keypair, and submit via RPC
-        SUBMIT_RESULT=$(python3 << PYEOF
-import json, base64, subprocess, sys
-
-tx_b64 = "$TX_B64"
-tx_bytes = base64.b64decode(tx_b64)
-
-# Write raw TX to temp file
-with open("/tmp/bethere-create-event-tx.raw", "wb") as f:
-    f.write(tx_bytes)
-
-# Use solana CLI to sign the transaction
-# First convert to the format solana expects
-# Actually, let's use the RPC directly with the keypair
-print("TX_SIZE=" + str(len(tx_bytes)))
-PYEOF
-)
-        info "$SUBMIT_RESULT"
-
-        # Use `solana confirm` pattern — write TX to file, sign, submit
-        # The simplest approach: use the `solana` CLI's `confirm` with base64 TX
-        # Actually, `solana` can't directly sign arbitrary TX bytes from CLI
-        # We need to use a script approach
-
-        # Let's submit via RPC with the keypair signing
-        # First, get the keypair bytes
         ORG_KEYPAIR_JSON=$(cat ~/.config/solana/id.json)
 
-        SUBMIT_OUTPUT=$(python3 << PYEOF
-import json, base64, urllib.request, sys, nacl.signing
-
-with open("/tmp/bethere-create-event-tx.raw", "rb") as f:
-    tx_bytes = bytearray(f.read())
-
-keypair_data = json.loads('''$ORG_KEYPAIR_JSON''')
-signing_key = nacl.signing.SigningKey(bytes(keypair_data[:32]))
-
-pos = 0
-sig_count = tx_bytes[pos]
-pos += 1
-if sig_count == 0:
-    print("ERROR=no signatures expected")
-    sys.exit(0)
-
-sig_start = pos
-pos += sig_count * 64
-message = bytes(tx_bytes[pos:])
-
-signed = signing_key.sign(message)
-tx_bytes[sig_start:sig_start+64] = signed.signature
-
-tx_b64_signed = base64.b64encode(bytes(tx_bytes)).decode()
-
-payload = {
-    "jsonrpc": "2.0",
-    "id": 1,
-    "method": "sendTransaction",
-    "params": [
-        tx_b64_signed,
-        {"encoding": "base64", "skipPreflight": False}
-    ]
-}
-
-req = urllib.request.Request(
-    "$RPC_URL",
-    data=json.dumps(payload).encode(),
-    headers={"Content-Type": "application/json"}
-)
-
-try:
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        result = json.loads(resp.read().decode())
-        sig = result.get("result", "")
-        print("SIGNATURE=" + sig)
-        if not sig:
-            print("ERROR=" + str(result))
-except Exception as e:
-    print("ERROR=" + str(e))
-    if hasattr(e, 'read'):
-        print("BODY=" + e.read().decode()[:500])
-PYEOF
-)
+        SUBMIT_OUTPUT=$(sign_and_submit_tx "$TX_B64" "$ORG_KEYPAIR_JSON")
         info "Submit output: $SUBMIT_OUTPUT"
 
         if echo "$SUBMIT_OUTPUT" | grep -q "SIGNATURE="; then
@@ -478,9 +458,9 @@ PYEOF
 fi
 
 # ============================================================================
-# Step 4: Verify Escrow On-Chain
+# Step 5: Verify Escrow On-Chain
 # ============================================================================
-section "Step 4: Verify Escrow On-Chain"
+section "Step 5: Verify Escrow On-Chain"
 
 if [ -n "$ESCROW_ADDR" ] && [ "$ESCROW_ADDR" != "" ]; then
     info "Checking escrow account: $ESCROW_ADDR"
@@ -528,18 +508,18 @@ print('checking...')
 
     # Check vault via spl-token balance for the escrow PDA
     info "Checking vault USDC balance (if vault ATA exists)..."
-    VAULT_USDC=$(spl-token balance --address "$USDC_MINT" --url devnet --owner "$ESCROW_ADDR" 2>&1 || echo "0 (vault may not exist yet)")
+    VAULT_USDC=$(spl-token balance "$USDC_MINT" --url devnet --owner "$ESCROW_ADDR" 2>&1 || echo "0 (vault may not exist yet)")
     info "Vault USDC: $VAULT_USDC"
 else
     skip "Escrow verification — no escrow_address"
 fi
 
 # ============================================================================
-# Step 5: Deposit Status Check (pre-deposit)
+# Step 6: Deposit Status Check (pre-deposit)
 # ============================================================================
-section "Step 5: Deposit Status (Pre-Deposit)"
+section "Step 6: Deposit Status (Pre-Deposit)"
 
-TEST_ATTENDEE_ID="e2e-test-attendee-001"
+TEST_ATTENDEE_ID="e2e-attendee-$(date +%s)"
 DEPOSIT_STATUS=$(curl -s "$BASE_URL/api/deposit/status/$TEST_ATTENDEE_ID?event_id=$EVENT_ID")
 
 STATUS_PARSE=$(echo "$DEPOSIT_STATUS" | python3 -c "import sys,json; d=json.load(sys.stdin); print('ok')" 2>/dev/null || echo "err")
@@ -557,13 +537,15 @@ else
 fi
 
 # ============================================================================
-# Step 6: Build Deposit TX (Solana Pay)
+# Step 7: Build Deposit TX (Solana Pay)
 # ============================================================================
-section "Step 6: Build Deposit Transaction"
+section "Step 7: Build Deposit Transaction"
 
 info "Requesting deposit TX for attendee $ATTENDEE_WALLET..."
 
-DEPOSIT_TX=$(curl -s -X POST "$BASE_URL/api/deposit/usdc" \
+# Step 7a: Initiate deposit — POST /api/deposit/usdc
+# This creates a pending deposit status and returns a Solana Pay URL.
+DEPOSIT_INIT=$(curl -s -X POST "$BASE_URL/api/deposit/usdc" \
     -H "Content-Type: application/json" \
     -d "{
         \"event_id\": \"$EVENT_ID\",
@@ -571,104 +553,38 @@ DEPOSIT_TX=$(curl -s -X POST "$BASE_URL/api/deposit/usdc" \
         \"wallet_address\": \"$ATTENDEE_WALLET\"
     }")
 
-DEP_TX_SUCCESS=$(echo "$DEPOSIT_TX" | python3 -c "import sys,json; d=json.load(sys.stdin); print('yes' if d.get('transaction') or d.get('solana_pay_url') else 'no')" 2>/dev/null || echo "no")
-DEP_TX_ERROR=$(echo "$DEPOSIT_TX" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('error', d.get('message','')))" 2>/dev/null || echo "")
+DEP_INIT_SUCCESS=$(echo "$DEPOSIT_INIT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(str(d.get('success','')).lower())" 2>/dev/null || echo "false")
+DEP_INIT_ERROR=$(echo "$DEPOSIT_INIT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('error', d.get('message','')))" 2>/dev/null || echo "")
 
-if [ "$DEP_TX_SUCCESS" = "yes" ]; then
-    DEP_TX_B64=$(echo "$DEPOSIT_TX" | python3 -c "import sys,json; print(json.load(sys.stdin).get('transaction',''))" 2>/dev/null || echo "")
-    DEP_SOL_URL=$(echo "$DEPOSIT_TX" | python3 -c "import sys,json; print(json.load(sys.stdin).get('solana_pay_url',''))" 2>/dev/null || echo "")
+if [ "$DEP_INIT_SUCCESS" = "true" ]; then
+    DEP_SOL_URL=$(echo "$DEPOSIT_INIT" | python3 -c "import sys,json; d=json.load(sys.stdin).get('data',{}); print(d.get('solana_pay_url',''))" 2>/dev/null || echo "")
+    pass "Deposit initiated (Solana Pay URL)"
+    info "Solana Pay URL: ${DEP_SOL_URL:0:80}..."
 
-    pass "Deposit TX built"
-    info "Transaction: ${DEP_TX_B64:0:40}..."
-    info "Solana Pay URL: ${DEP_SOL_URL:0:60}..."
-
-    # Also test the Solana Pay callback endpoint
-    info "Testing Solana Pay TX callback..."
+    # Step 7b: Fetch the actual serialized TX from the Solana Pay callback.
+    # The wallet calls this URL to get the base64 TX to sign.
+    info "Fetching deposit TX from Solana Pay callback..."
     PAY_CALLBACK=$(curl -s "$BASE_URL/api/deposit/usdc/tx?event_id=$EVENT_ID&attendee_id=$TEST_ATTENDEE_ID&wallet=$ATTENDEE_WALLET")
 
-    PAY_SUCCESS=$(echo "$PAY_CALLBACK" | python3 -c "import sys,json; d=json.load(sys.stdin); print('yes' if d.get('transaction') else 'no')" 2>/dev/null || echo "no")
-    if [ "$PAY_SUCCESS" = "yes" ]; then
-        pass "Solana Pay callback works (GET /api/deposit/usdc/tx)"
+    DEP_TX_B64=$(echo "$PAY_CALLBACK" | python3 -c "import sys,json; print(json.load(sys.stdin).get('transaction',''))" 2>/dev/null || echo "")
+
+    if [ -n "$DEP_TX_B64" ] && [ "$DEP_TX_B64" != "" ]; then
+        pass "Deposit TX built via callback"
+        info "Transaction: ${DEP_TX_B64:0:50}..."
     else
-        ERR=$(echo "$PAY_CALLBACK" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('error',''))" 2>/dev/null || echo "")
-        warn "Solana Pay callback: $ERR"
+        # Callback might return error
+        CB_ERR=$(echo "$PAY_CALLBACK" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('error', str(d)[:200]))" 2>/dev/null || echo "")
+        warn "Solana Pay callback error: $CB_ERR"
+        fail "Deposit TX build failed via callback"
     fi
 
-    # Submit the deposit TX with attendee keypair
-    if [ -f "$ATTENDEE_KEYPAIR" ]; then
+    # Step 7c: Submit the deposit TX with attendee keypair
+    if [ -n "$DEP_TX_B64" ] && [ "$DEP_TX_B64" != "" ] && [ -f "$ATTENDEE_KEYPAIR" ]; then
         info "Signing and submitting deposit TX with attendee keypair..."
 
         ATT_KEYPAIR_JSON=$(cat "$ATTENDEE_KEYPAIR")
 
-        DEP_SUBMIT=$(python3 << PYEOF
-import json, base64, urllib.request
-
-# Load TX
-tx_b64 = "$DEP_TX_B64"
-tx_bytes = bytearray(base64.b64decode(tx_b64))
-
-# Load attendee keypair
-keypair_data = json.loads('''$ATT_KEYPAIR_JSON''')
-
-try:
-    import nacl.signing
-    signing_key = nacl.signing.SigningKey(bytes(keypair_data[:32]))
-except ImportError:
-    print("ERROR=PyNaCl not installed. pip3 install pynacl")
-    import sys
-    sys.exit(0)
-
-# Parse TX: sig_count + signatures + message
-pos = 0
-sig_count = tx_bytes[pos]
-pos += 1
-
-sig_start = pos
-pos += sig_count * 64
-
-message = bytes(tx_bytes[pos:])
-
-# Sign
-signed = signing_key.sign(message)
-signature = signed.signature
-
-# Fill in signature
-tx_bytes[sig_start:sig_start+64] = signature
-
-tx_b64_signed = base64.b64encode(bytes(tx_bytes)).decode()
-
-payload = {
-    "jsonrpc": "2.0",
-    "id": 1,
-    "method": "sendTransaction",
-    "params": [
-        tx_b64_signed,
-        {"encoding": "base64", "skipPreflight": False}
-    ]
-}
-
-req = urllib.request.Request(
-    "$RPC_URL",
-    data=json.dumps(payload).encode(),
-    headers={"Content-Type": "application/json"}
-)
-
-try:
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        result = json.loads(resp.read().decode())
-        sig = result.get("result", "")
-        print("SIGNATURE=" + sig)
-        if not sig:
-            print("ERROR=" + str(result))
-except Exception as e:
-    err_body = ""
-    if hasattr(e, 'read'):
-        err_body = e.read().decode()[:500]
-    print("ERROR=" + str(e))
-    if err_body:
-        print("BODY=" + err_body)
-PYEOF
-)
+        DEP_SUBMIT=$(sign_and_submit_tx "$DEP_TX_B64" "$ATT_KEYPAIR_JSON")
         info "Deposit submit: $DEP_SUBMIT"
 
         if echo "$DEP_SUBMIT" | grep -q "SIGNATURE="; then
@@ -681,7 +597,26 @@ PYEOF
             info "Waiting for deposit confirmation..."
             sleep 5
 
-            # Verify deposit via confirm endpoint
+            # Notify the worker about the TX signature so it can verify on-chain
+            info "Notifying worker of deposit TX signature..."
+            WEBHOOK_RESPONSE=$(curl -s -X POST "$BASE_URL/api/deposit/usdc/webhook" \
+                -H "Content-Type: application/json" \
+                -d "{
+                    \"event_id\": \"$EVENT_ID\",
+                    \"attendee_id\": \"$TEST_ATTENDEE_ID\",
+                    \"tx_signature\": \"$DEP_SIG\"
+                }")
+
+            WEBHOOK_SUCCESS=$(echo "$WEBHOOK_RESPONSE" | python3 -c "import sys,json; print(str(json.load(sys.stdin).get('success','')).lower())" 2>/dev/null || echo "false")
+            if [ "$WEBHOOK_SUCCESS" = "true" ]; then
+                WEBHOOK_CONFIRMED=$(echo "$WEBHOOK_RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); r=d.get('data',d); print(r.get('confirmed',False))" 2>/dev/null || echo "False")
+                pass "Deposit webhook: confirmed=$WEBHOOK_CONFIRMED"
+            else
+                WH_ERR=$(echo "$WEBHOOK_RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin).get('error',''))" 2>/dev/null || echo "")
+                warn "Deposit webhook: $WH_ERR"
+            fi
+
+            # Also verify via confirm endpoint
             info "Verifying deposit via /api/deposit/usdc/confirm..."
             CONFIRM_RESPONSE=$(curl -s "$BASE_URL/api/deposit/usdc/confirm?event_id=$EVENT_ID&attendee_id=$TEST_ATTENDEE_ID" \
                 -H "Authorization: Bearer dev-token")
@@ -696,7 +631,7 @@ PYEOF
 
             # Check vault balance after deposit
             info "Checking vault USDC balance after deposit..."
-            VAULT_BAL=$(spl-token balance --address "$USDC_MINT" --url devnet --owner "$ESCROW_ADDR" 2>&1 || echo "?")
+            VAULT_BAL=$(spl-token balance "$USDC_MINT" --url devnet --owner "$ESCROW_ADDR" 2>&1 || echo "?")
             info "Vault USDC: $VAULT_BAL"
         else
             fail "Deposit TX submission failed"
@@ -712,33 +647,19 @@ PYEOF
             fi
         fi
     else
-        skip "Deposit TX submission — attendee keypair not available"
-        info "To submit manually: copy transaction_b64 and sign with wallet adapter"
+        skip "Deposit TX submission — no TX or attendee keypair not available"
+        info "To submit manually: use the Solana Pay URL in a wallet adapter"
     fi
 else
-    # It might be an error response or the deposit_usdc endpoint returns different format
-    DEP_SUCCESS=$(echo "$DEPOSIT_TX" | python3 -c "import sys,json; d=json.load(sys.stdin); print(str(d.get('success','')).lower())" 2>/dev/null || echo "false")
-    if [ "$DEP_SUCCESS" = "false" ] || [ -n "$DEP_TX_ERROR" ]; then
-        fail "Deposit TX build failed"
-        info "Error: $DEP_TX_ERROR"
-        echo "   Full: $(echo "$DEPOSIT_TX" | head -c 400)"
-    else
-        # Check if there's a transaction field in a success wrapper
-        DEP_TX_B64=$(echo "$DEPOSIT_TX" | python3 -c "import sys,json; d=json.load(sys.stdin); r=d.get('data',d); print(r.get('transaction',''))" 2>/dev/null || echo "")
-        if [ -n "$DEP_TX_B64" ]; then
-            pass "Deposit TX built (wrapped in success)"
-            info "Transaction: ${DEP_TX_B64:0:40}..."
-        else
-            warn "Unexpected deposit response format"
-            echo "   $(echo "$DEPOSIT_TX" | head -c 400)"
-        fi
-    fi
+    fail "Deposit init failed"
+    info "Error: $DEP_INIT_ERROR"
+    echo "   Full: $(echo "$DEPOSIT_INIT" | head -c 400)"
 fi
 
 # ============================================================================
-# Step 7: Deposit Status Check (post-deposit)
+# Step 8: Deposit Status Check (post-deposit)
 # ============================================================================
-section "Step 7: Deposit Status (Post-Deposit)"
+section "Step 8: Deposit Status (Post-Deposit)"
 
 DEPOSIT_STATUS2=$(curl -s "$BASE_URL/api/deposit/status/$TEST_ATTENDEE_ID?event_id=$EVENT_ID")
 
@@ -759,10 +680,61 @@ else
 fi
 
 # ============================================================================
-# Step 8: Build Refund TX
+# Step 9: Mark Attendee Checked-In
 # ============================================================================
-section "Step 8: Build Refund Transaction"
+section "Step 9: Mark Attendee Checked-In"
 
+# The organizer must mark the attendee as checked in before a refund can be claimed.
+# This is a protected endpoint (organizer signs the TX).
+if [ -z "$ESCROW_ADDR" ] || [ "$ESCROW_ADDR" = "" ]; then
+    skip "mark_checked_in TX — no escrow_address (deposit may not have succeeded)"
+else
+    info "Requesting mark_checked_in TX for attendee $ATTENDEE_WALLET..."
+
+    MARK_CI_RESPONSE=$(curl -s -X POST "$BASE_URL/api/escrow/mark-checked-in" \
+        -H "Authorization: Bearer dev-token" \
+        -H "Content-Type: application/json" \
+        -d "{\"event_id\": \"$EVENT_ID\", \"attendee_wallet\": \"$ATTENDEE_WALLET\"}")
+
+    MARK_CI_SUCCESS=$(echo "$MARK_CI_RESPONSE" | python3 -c "import sys,json; print(str(json.load(sys.stdin).get('success','')).lower())" 2>/dev/null || echo "false")
+
+    if [ "$MARK_CI_SUCCESS" = "true" ]; then
+        MARK_CI_TX=$(echo "$MARK_CI_RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['transaction'])" 2>/dev/null || echo "")
+        MARK_CI_MSG=$(echo "$MARK_CI_RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['message'])" 2>/dev/null || echo "")
+
+        pass "mark_checked_in TX built"
+        info "Message: $MARK_CI_MSG"
+
+        # Submit TX with organizer keypair (organizer signs this)
+        ORG_KEYPAIR_JSON=$(cat ~/.config/solana/id.json)
+        MARK_CI_SUBMIT=$(sign_and_submit_tx "$MARK_CI_TX" "$ORG_KEYPAIR_JSON")
+        info "Mark checked-in submit: $MARK_CI_SUBMIT"
+
+        if echo "$MARK_CI_SUBMIT" | grep -q "SIGNATURE="; then
+            MARK_CI_SIG=$(echo "$MARK_CI_SUBMIT" | grep "SIGNATURE=" | cut -d= -f2)
+            pass "mark_checked_in TX submitted!"
+            info "Signature: $MARK_CI_SIG"
+            info "View: https://explorer.solana.com/tx/$MARK_CI_SIG?cluster=devnet"
+            sleep 5
+        else
+            fail "mark_checked_in TX submission failed"
+            echo "   $MARK_CI_SUBMIT" | head -c 500
+        fi
+    else
+        ERR=$(echo "$MARK_CI_RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('error', d.get('message', str(d)[:200])))" 2>/dev/null || echo "unknown")
+        warn "mark_checked_in TX build failed: $ERR"
+        info "Note: This may fail if deposit wasn't confirmed on-chain"
+    fi
+fi
+
+# ============================================================================
+# Step 10: Build Refund TX
+# ============================================================================
+section "Step 10: Build Refund Transaction"
+
+# The on-chain refund instruction requires: clock.unix_timestamp > event_end.
+# We set event_end_ms to 1 hour in the past in Step 1, so this should pass.
+# The refund also requires the attendee to be marked as checked-in first.
 info "Requesting refund TX for attendee $ATTENDEE_WALLET..."
 
 REFUND_TX=$(curl -s -X POST "$BASE_URL/api/escrow/refund" \
@@ -790,66 +762,7 @@ if [ "$REFUND_SUCCESS" = "yes" ]; then
 
         ATT_KEYPAIR_JSON=$(cat "$ATTENDEE_KEYPAIR")
 
-        REFUND_SUBMIT=$(python3 << PYEOF
-import json, base64, urllib.request
-
-tx_b64 = "$REFUND_TX_B64"
-tx_bytes = bytearray(base64.b64decode(tx_b64))
-
-keypair_data = json.loads('''$ATT_KEYPAIR_JSON''')
-
-try:
-    import nacl.signing
-    signing_key = nacl.signing.SigningKey(bytes(keypair_data[:32]))
-except ImportError:
-    print("ERROR=PyNaCl not installed")
-    import sys
-    sys.exit(0)
-
-pos = 0
-sig_count = tx_bytes[pos]
-pos += 1
-sig_start = pos
-pos += sig_count * 64
-message = bytes(tx_bytes[pos:])
-
-signed = signing_key.sign(message)
-tx_bytes[sig_start:sig_start+64] = signed.signature
-
-tx_b64_signed = base64.b64encode(bytes(tx_bytes)).decode()
-
-payload = {
-    "jsonrpc": "2.0",
-    "id": 1,
-    "method": "sendTransaction",
-    "params": [
-        tx_b64_signed,
-        {"encoding": "base64", "skipPreflight": False}
-    ]
-}
-
-req = urllib.request.Request(
-    "$RPC_URL",
-    data=json.dumps(payload).encode(),
-    headers={"Content-Type": "application/json"}
-)
-
-try:
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        result = json.loads(resp.read().decode())
-        sig = result.get("result", "")
-        print("SIGNATURE=" + sig)
-        if not sig:
-            print("ERROR=" + str(result))
-except Exception as e:
-    err_body = ""
-    if hasattr(e, 'read'):
-        err_body = e.read().decode()[:500]
-    print("ERROR=" + str(e))
-    if err_body:
-        print("BODY=" + err_body)
-PYEOF
-)
+        REFUND_SUBMIT=$(sign_and_submit_tx "$REFUND_TX_B64" "$ATT_KEYPAIR_JSON")
         info "Refund submit: $REFUND_SUBMIT"
 
         if echo "$REFUND_SUBMIT" | grep -q "SIGNATURE="; then
@@ -863,7 +776,7 @@ PYEOF
             sleep 5
 
             # Check attendee balance after refund
-            ATT_USDC_AFTER=$(spl-token balance --address "$USDC_MINT" --url devnet --owner "$ATTENDEE_WALLET" 2>&1 | awk '{print $1}' || echo "?")
+            ATT_USDC_AFTER=$(spl-token balance "$USDC_MINT" --url devnet --owner "$ATTENDEE_WALLET" 2>&1 | awk '{print $1}' || echo "?")
             info "Attendee USDC after refund: $ATT_USDC_AFTER"
         else
             fail "Refund TX submission failed"
@@ -882,8 +795,31 @@ else
     REFUND_WRAP=$(echo "$REFUND_TX" | python3 -c "import sys,json; d=json.load(sys.stdin); print('yes' if d.get('data',{}).get('transaction') else 'no')" 2>/dev/null || echo "no")
     if [ "$REFUND_WRAP" = "yes" ]; then
         REFUND_TX_B64=$(echo "$REFUND_TX" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['transaction'])" 2>/dev/null || echo "")
+        REFUND_MSG=$(echo "$REFUND_TX" | python3 -c "import sys,json; print(json.load(sys.stdin)['data'].get('message',''))" 2>/dev/null || echo "")
         pass "Refund TX built (wrapped response)"
+        info "Message: $REFUND_MSG"
         info "Transaction: ${REFUND_TX_B64:0:40}..."
+
+        # Submit refund TX with attendee keypair
+        if [ -f "$ATTENDEE_KEYPAIR" ] && [ -n "$REFUND_TX_B64" ]; then
+            info "Signing and submitting refund TX with attendee keypair..."
+            ATT_KEYPAIR_JSON=$(cat "$ATTENDEE_KEYPAIR")
+            REFUND_SUBMIT=$(sign_and_submit_tx "$REFUND_TX_B64" "$ATT_KEYPAIR_JSON")
+            info "Refund submit: $REFUND_SUBMIT"
+
+            if echo "$REFUND_SUBMIT" | grep -q "SIGNATURE="; then
+                REFUND_SIG=$(echo "$REFUND_SUBMIT" | grep "SIGNATURE=" | cut -d= -f2)
+                pass "Refund TX submitted!"
+                info "Signature: $REFUND_SIG"
+                info "View: https://explorer.solana.com/tx/$REFUND_SIG?cluster=devnet"
+                sleep 5
+                ATT_USDC_AFTER=$(spl-token balance "$USDC_MINT" --url devnet --owner "$ATTENDEE_WALLET" 2>&1 | awk '{print $1}' || echo "?")
+                info "Attendee USDC after refund: $ATT_USDC_AFTER"
+            else
+                fail "Refund TX submission failed"
+                echo "   $REFUND_SUBMIT" | head -c 500
+            fi
+        fi
     else
         fail "Refund TX build failed"
         info "Error: $REFUND_ERROR"
@@ -897,26 +833,26 @@ else
 fi
 
 # ============================================================================
-# Step 9: Verify Final State
+# Step 11: Verify Final State
 # ============================================================================
-section "Step 9: Verify Final On-Chain State"
+section "Step 11: Verify Final On-Chain State"
 
 info "Checking final vault balance..."
 if [ -n "$ESCROW_ADDR" ] && [ "$ESCROW_ADDR" != "" ]; then
-    VAULT_FINAL=$(spl-token balance --address "$USDC_MINT" --url devnet --owner "$ESCROW_ADDR" 2>&1 || echo "0 (no vault)")
+    VAULT_FINAL=$(spl-token balance "$USDC_MINT" --url devnet --owner "$ESCROW_ADDR" 2>&1 || echo "0 (no vault)")
     info "Vault USDC (final): $VAULT_FINAL"
 fi
 
-ATT_USDC_FINAL=$(spl-token balance --address "$USDC_MINT" --url devnet --owner "$ATTENDEE_WALLET" 2>&1 | awk '{print $1}' || echo "?")
+ATT_USDC_FINAL=$(spl-token balance "$USDC_MINT" --url devnet --owner "$ATTENDEE_WALLET" 2>&1 | awk '{print $1}' || echo "?")
 info "Attendee USDC (final): $ATT_USDC_FINAL"
 
 ATT_SOL_FINAL=$(solana balance "$ATTENDEE_WALLET" --url devnet 2>&1 | awk '{print $1}' || echo "?")
 info "Attendee SOL (final): $ATT_SOL_FINAL"
 
 # ============================================================================
-# Step 10: THB Deposit Flow Test (PromptPay QR + Slip Upload)
+# Step 12: THB Deposit Flow Test
 # ============================================================================
-section "Step 10: THB Deposit Flow"
+section "Step 12: THB Deposit Flow"
 
 # Test THB slip upload
 info "Testing THB slip upload..."
@@ -985,6 +921,4 @@ echo "  - Connect wallet → sign TX → verify on explorer"
 echo ""
 
 # Cleanup
-rm -f /tmp/bethere-create-event-tx.bin /tmp/bethere-create-event-tx.raw
-
 exit $FAIL

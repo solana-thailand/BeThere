@@ -73,6 +73,24 @@ pub struct CreateEventTransaction {
     pub escrow_address: String,
 }
 
+/// Result of building a mark_checked_in transaction.
+pub struct MarkCheckedInTransaction {
+    /// Base64-encoded serialized transaction (unsigned).
+    pub transaction_b64: String,
+    /// Human-readable message for Solana Pay.
+    pub message: String,
+}
+
+/// Result of building a create_vault_ata transaction.
+pub struct CreateVaultAtaTransaction {
+    /// Base64-encoded serialized transaction (unsigned).
+    pub transaction_b64: String,
+    /// Human-readable message for wallet confirmation.
+    pub message: String,
+    /// Derived vault ATA address (base58).
+    pub vault_address: String,
+}
+
 /// Error type for escrow operations.
 #[derive(Debug)]
 #[allow(dead_code)]
@@ -862,6 +880,7 @@ pub async fn build_refund_transaction(
     let usdc_mint = pubkey_from_base58(USDC_MINT_DEVNET)?;
     let token_program = pubkey_from_base58(TOKEN_PROGRAM_ID)?;
     let system_program = pubkey_from_base58(SYSTEM_PROGRAM_ID)?;
+    let rent_sysvar = pubkey_from_base58(RENT_SYSVAR_ID)?;
 
     // Derive EventEscrow PDA: ["escrow", organizer, event_id]
     let (event_escrow, _escrow_bump) = find_program_address(
@@ -878,60 +897,82 @@ pub async fn build_refund_transaction(
     .await?;
 
     // Derive vault ATA (owned by EventEscrow PDA)
-    let vault_ta = get_associated_token_address(&event_escrow, &usdc_mint).await?;
+    let vault = get_associated_token_address(&event_escrow, &usdc_mint).await?;
 
     // Derive attendee's USDC ATA
     let attendee_ta = get_associated_token_address(&attendee, &usdc_mint).await?;
 
-    // Refund instruction data: just the discriminator [3]
-    let ix_data = vec![3u8];
+    // Refund instruction data: [3 (discriminator)] + [event_id u64 LE]
+    let mut ix_data = vec![3u8];
+    ix_data.extend_from_slice(&event_id.to_le_bytes());
 
-    // The refund instruction expects accounts in this order:
-    //   event_escrow (writable), attendee_deposit (writable), attendee (signer),
-    //   vault_ta (writable), attendee_ta (writable), organizer (readonly),
-    //   token_program (readonly), system_program (readonly)
+    // The escrow program's Refund struct expects accounts in this order:
+    //   attendee (signer, writable), event_escrow (writable), usdc_mint (readonly),
+    //   attendee_deposit (writable), attendee_ta (init idempotent), vault (writable),
+    //   rent (readonly), token_program (readonly), system_program (readonly)
+    //
+    // Note: No `organizer` account in the Refund struct — the attendee signs.
+    // The event_escrow is used (with PDA seeds) to authorize the vault → attendee_ta transfer.
     let instruction_accounts = vec![
-        AccountMeta {
-            pubkey: event_escrow,
-            is_signer: false,
-            is_writable: true,
-        }, // 0
-        AccountMeta {
-            pubkey: attendee_deposit,
-            is_signer: false,
-            is_writable: true,
-        }, // 1
         AccountMeta {
             pubkey: attendee,
             is_signer: true,
             is_writable: true,
-        }, // 2
+        }, // 0 — attendee (Signer)
         AccountMeta {
-            pubkey: vault_ta,
+            pubkey: event_escrow,
             is_signer: false,
             is_writable: true,
-        }, // 3
+        }, // 1 — event_escrow (mut)
+        AccountMeta {
+            pubkey: usdc_mint,
+            is_signer: false,
+            is_writable: false,
+        }, // 2 — usdc_mint (readonly)
+        AccountMeta {
+            pubkey: attendee_deposit,
+            is_signer: false,
+            is_writable: true,
+        }, // 3 — attendee_deposit (mut)
         AccountMeta {
             pubkey: attendee_ta,
             is_signer: false,
             is_writable: true,
-        }, // 4
+        }, // 4 — attendee_ta (init idempotent)
         AccountMeta {
-            pubkey: organizer,
+            pubkey: vault,
+            is_signer: false,
+            is_writable: true,
+        }, // 5 — vault (mut)
+        AccountMeta {
+            pubkey: rent_sysvar,
             is_signer: false,
             is_writable: false,
-        }, // 5
+        }, // 6 — rent (readonly)
         AccountMeta {
             pubkey: token_program,
             is_signer: false,
             is_writable: false,
-        }, // 6
+        }, // 7 — token_program (readonly)
         AccountMeta {
             pubkey: system_program,
             is_signer: false,
             is_writable: false,
-        }, // 7
+        }, // 8 — system_program (readonly)
     ];
+
+    // Extra accounts needed for CPI but NOT passed to the escrow instruction.
+    // The Refund struct has `init(idempotent)` on attendee_ta which CPIs to the ATA program.
+    // The ATA program must be present in the top-level transaction's account keys.
+    //
+    // NOTE: Same limitation as create_event — the init(idempotent) CPI may fail with
+    // "signer privilege escalated". If so, the attendee_ta must be pre-created.
+    let ata_program = pubkey_from_base58(ASSOCIATED_TOKEN_PROGRAM_ID)?;
+    let extra_message_accounts: Vec<AccountMeta> = vec![AccountMeta {
+        pubkey: ata_program,
+        is_signer: false,
+        is_writable: false,
+    }];
 
     // Build the message account keys in Solana's canonical order:
     // signers(writable) → signers(readonly) → non-signers(writable) → non-signers(readonly)
@@ -989,6 +1030,16 @@ pub async fn build_refund_transaction(
             is_signer: false,
             is_writable: false,
         });
+    }
+    // 5. Extra CPI-only accounts (ATA program) — appended after program_id
+    for m in &extra_message_accounts {
+        if !message_accounts.iter().any(|ma| ma.pubkey == m.pubkey) {
+            message_accounts.push(AccountMeta {
+                pubkey: m.pubkey,
+                is_signer: false,
+                is_writable: false,
+            });
+        }
     }
 
     // Build a lookup: pubkey → index in message_accounts
@@ -1066,6 +1117,7 @@ pub async fn build_create_event_transaction(
     let token_program = pubkey_from_base58(TOKEN_PROGRAM_ID)?;
     let system_program = pubkey_from_base58(SYSTEM_PROGRAM_ID)?;
     let rent_sysvar = pubkey_from_base58(RENT_SYSVAR_ID)?;
+    let ata_program = pubkey_from_base58(ASSOCIATED_TOKEN_PROGRAM_ID)?; // Needed for init(idempotent) CPI
 
     // Derive EventEscrow PDA: ["escrow", organizer, event_id]
     let (event_escrow, _escrow_bump) = find_program_address(
@@ -1085,12 +1137,18 @@ pub async fn build_create_event_transaction(
     ix_data.extend_from_slice(&event_end.to_le_bytes());
     ix_data.extend_from_slice(&refund_deadline.to_le_bytes());
 
-    // IMPORTANT: The vault ATA must be pre-created before this transaction is submitted.
-    // The quasar-lang `init(idempotent)` constraint validates the account exists but
-    // does NOT create it via CPI. The handler should create the vault ATA via a
-    // separate RPC call before returning this transaction to the client.
+    // The escrow program's CreateEvent struct has `init(idempotent)` on the vault.
+    // However, the CPI from the escrow program to the ATA program fails with
+    // "signer privilege escalated" because the framework can't correctly sign
+    // the ATA creation with the event_escrow PDA seeds in a single instruction.
+    //
+    // WORKAROUND: Pre-create the vault ATA using `create_vault_ata` endpoint first,
+    // then call `create_event`. The `init(idempotent)` will be a no-op since the
+    // vault already exists. This is the REQUIRED two-step approach.
     //
     // All accounts needed for the create_event instruction
+    // IMPORTANT: Account ordering must match the escrow program's CreateEvent struct:
+    //   organizer(S,W), event_escrow(W), usdc_mint(R), vault(W), rent(R), token_program(R), system_program(R)
     let instruction_accounts = vec![
         AccountMeta {
             pubkey: organizer,
@@ -1103,14 +1161,14 @@ pub async fn build_create_event_transaction(
             is_writable: true,
         },
         AccountMeta {
-            pubkey: vault,
-            is_signer: false,
-            is_writable: true,
-        },
-        AccountMeta {
             pubkey: usdc_mint,
             is_signer: false,
             is_writable: false,
+        },
+        AccountMeta {
+            pubkey: vault,
+            is_signer: false,
+            is_writable: true,
         },
         AccountMeta {
             pubkey: rent_sysvar,
@@ -1124,6 +1182,364 @@ pub async fn build_create_event_transaction(
         },
         AccountMeta {
             pubkey: system_program,
+            is_signer: false,
+            is_writable: false,
+        },
+    ];
+
+    // Extra accounts needed for CPI but NOT passed to the escrow instruction.
+    // The escrow program's init(idempotent) on the vault CPIs to the ATA program,
+    // which must be present in the top-level transaction's account keys.
+    // These accounts are added to the message but NOT to ix_account_indices.
+    let extra_message_accounts: Vec<AccountMeta> = vec![AccountMeta {
+        pubkey: ata_program,
+        is_signer: false,
+        is_writable: false,
+    }];
+
+    // Build the message account keys in Solana's canonical order:
+    // signers(writable) → signers(readonly) → non-signers(writable) → non-signers(readonly)
+    let mut message_accounts: Vec<AccountMeta> = Vec::new();
+
+    // 1. Signer + writable
+    for m in &instruction_accounts {
+        if m.is_signer && m.is_writable {
+            message_accounts.push(AccountMeta {
+                pubkey: m.pubkey,
+                is_signer: true,
+                is_writable: true,
+            });
+        }
+    }
+    // 2. Signer + readonly (none)
+    for m in &instruction_accounts {
+        if m.is_signer && !m.is_writable {
+            message_accounts.push(AccountMeta {
+                pubkey: m.pubkey,
+                is_signer: true,
+                is_writable: false,
+            });
+        }
+    }
+    // 3. Non-signer + writable
+    for m in &instruction_accounts {
+        if !m.is_signer && m.is_writable {
+            message_accounts.push(AccountMeta {
+                pubkey: m.pubkey,
+                is_signer: false,
+                is_writable: true,
+            });
+        }
+    }
+    // 4. Non-signer + readonly (from instruction accounts)
+    let mut program_id_in_message = false;
+    for m in &instruction_accounts {
+        if !m.is_signer && !m.is_writable {
+            if m.pubkey == program_id {
+                program_id_in_message = true;
+            }
+            message_accounts.push(AccountMeta {
+                pubkey: m.pubkey,
+                is_signer: false,
+                is_writable: false,
+            });
+        }
+    }
+    if !program_id_in_message {
+        message_accounts.push(AccountMeta {
+            pubkey: program_id,
+            is_signer: false,
+            is_writable: false,
+        });
+    }
+    // 5. Extra CPI-only accounts (ATA program) — appended after program_id
+    for m in &extra_message_accounts {
+        // Skip if already present (e.g., if ATA program was somehow in instruction accounts)
+        if !message_accounts.iter().any(|ma| ma.pubkey == m.pubkey) {
+            message_accounts.push(AccountMeta {
+                pubkey: m.pubkey,
+                is_signer: false,
+                is_writable: false,
+            });
+        }
+    }
+
+    // Build lookups
+    let get_index = |pk: &PubkeyBytes| -> u8 {
+        message_accounts
+            .iter()
+            .position(|m| &m.pubkey == pk)
+            .expect("all accounts should be in message") as u8
+    };
+
+    let program_id_index = get_index(&program_id);
+
+    let ix_account_indices: Vec<u8> = instruction_accounts
+        .iter()
+        .map(|m| get_index(&m.pubkey))
+        .collect();
+
+    let compiled_ix = CompiledInstruction {
+        program_id_index,
+        accounts: ix_account_indices,
+        data: ix_data,
+    };
+
+    // Fetch recent blockhash
+    let blockhash_resp = get_latest_blockhash(rpc_url).await?;
+    let blockhash_bytes = pubkey_from_base58(&blockhash_resp.value)?;
+
+    // Serialize the transaction
+    let tx_bytes = serialize_transaction(&message_accounts, &[compiled_ix], &blockhash_bytes);
+
+    let tx_b64 = base64::engine::general_purpose::STANDARD.encode(&tx_bytes);
+    let escrow_address = pubkey_to_base58(&event_escrow);
+
+    let amount_display = deposit_amount as f64 / 1_000_000.0;
+
+    Ok(CreateEventTransaction {
+        transaction_b64: tx_b64,
+        message: format!("Create event escrow ({amount_display:.2} USDC deposit)"),
+        escrow_address,
+    })
+}
+
+// ---------------------------------------------------------------------------
+// Mark Checked-In Transaction Builder
+// ---------------------------------------------------------------------------
+
+/// Build a serialized `mark_checked_in` transaction for the bethere-escrow program.
+///
+/// The `mark_checked_in` instruction marks an attendee as checked in so they
+/// can later claim a refund. Only the organizer can execute this.
+///
+/// # Arguments
+/// * `rpc_url` — Solana RPC URL (with API key if needed)
+/// * `organizer_pubkey` — Organizer's wallet address (base58), signer
+/// * `event_id` — Numeric event ID used for PDA derivation
+/// * `attendee_pubkey` — Attendee's wallet address (base58)
+pub async fn build_mark_checked_in_transaction(
+    rpc_url: &str,
+    organizer_pubkey: &str,
+    event_id: u64,
+    attendee_pubkey: &str,
+) -> Result<MarkCheckedInTransaction, EscrowError> {
+    let organizer = pubkey_from_base58(organizer_pubkey)?;
+    let attendee = pubkey_from_base58(attendee_pubkey)?;
+    let program_id = pubkey_from_base58(ESCROW_PROGRAM_ID)?;
+
+    // Derive EventEscrow PDA: ["escrow", organizer, event_id]
+    let (event_escrow, _) = find_program_address(
+        &[b"escrow", organizer.as_slice(), &event_id.to_le_bytes()],
+        &program_id,
+    )
+    .await?;
+
+    // Derive AttendeeDeposit PDA: ["deposit", event_escrow, attendee]
+    let (attendee_deposit, _) = find_program_address(
+        &[b"deposit", event_escrow.as_slice(), attendee.as_slice()],
+        &program_id,
+    )
+    .await?;
+
+    // mark_checked_in instruction data: [2 (discriminator)] + [event_id u64 LE]
+    let mut ix_data = vec![2u8];
+    ix_data.extend_from_slice(&event_id.to_le_bytes());
+
+    // Accounts for mark_checked_in:
+    //   organizer (signer, writable), event_escrow (writable),
+    //   attendee_deposit (writable)
+    // The program also needs system_program in the accounts list.
+    let instruction_accounts = vec![
+        AccountMeta {
+            pubkey: organizer,
+            is_signer: true,
+            is_writable: true,
+        },
+        AccountMeta {
+            pubkey: event_escrow,
+            is_signer: false,
+            is_writable: true,
+        },
+        AccountMeta {
+            pubkey: attendee_deposit,
+            is_signer: false,
+            is_writable: true,
+        },
+    ];
+
+    // Build the message account keys in Solana's canonical order:
+    // signers(writable) → signers(readonly) → non-signers(writable) → non-signers(readonly)
+    let mut message_accounts: Vec<AccountMeta> = Vec::new();
+
+    // 1. Signer + writable
+    for m in &instruction_accounts {
+        if m.is_signer && m.is_writable {
+            message_accounts.push(AccountMeta {
+                pubkey: m.pubkey,
+                is_signer: true,
+                is_writable: true,
+            });
+        }
+    }
+    // 2. Signer + readonly (none)
+    for m in &instruction_accounts {
+        if m.is_signer && !m.is_writable {
+            message_accounts.push(AccountMeta {
+                pubkey: m.pubkey,
+                is_signer: true,
+                is_writable: false,
+            });
+        }
+    }
+    // 3. Non-signer + writable
+    for m in &instruction_accounts {
+        if !m.is_signer && m.is_writable {
+            message_accounts.push(AccountMeta {
+                pubkey: m.pubkey,
+                is_signer: false,
+                is_writable: true,
+            });
+        }
+    }
+    // 4. Non-signer + readonly (includes program_id)
+    let mut program_id_in_message = false;
+    for m in &instruction_accounts {
+        if !m.is_signer && !m.is_writable {
+            if m.pubkey == program_id {
+                program_id_in_message = true;
+            }
+            message_accounts.push(AccountMeta {
+                pubkey: m.pubkey,
+                is_signer: false,
+                is_writable: false,
+            });
+        }
+    }
+    if !program_id_in_message {
+        message_accounts.push(AccountMeta {
+            pubkey: program_id,
+            is_signer: false,
+            is_writable: false,
+        });
+    }
+
+    let get_index = |pk: &PubkeyBytes| -> u8 {
+        message_accounts
+            .iter()
+            .position(|m| &m.pubkey == pk)
+            .expect("all accounts should be in message") as u8
+    };
+
+    let program_id_index = get_index(&program_id);
+    let ix_account_indices: Vec<u8> = instruction_accounts
+        .iter()
+        .map(|m| get_index(&m.pubkey))
+        .collect();
+
+    let compiled_ix = CompiledInstruction {
+        program_id_index,
+        accounts: ix_account_indices,
+        data: ix_data,
+    };
+
+    // Fetch recent blockhash
+    let blockhash_resp = get_latest_blockhash(rpc_url).await?;
+    let blockhash_bytes = pubkey_from_base58(&blockhash_resp.value)?;
+
+    let tx_bytes = serialize_transaction(&message_accounts, &[compiled_ix], &blockhash_bytes);
+    let tx_b64 = base64::engine::general_purpose::STANDARD.encode(&tx_bytes);
+
+    Ok(MarkCheckedInTransaction {
+        transaction_b64: tx_b64,
+        message: "Mark attendee as checked in".to_string(),
+    })
+}
+
+// ---------------------------------------------------------------------------
+// Create Vault ATA Transaction Builder
+// ---------------------------------------------------------------------------
+
+/// Build a serialized transaction to create the vault Associated Token Account
+/// for the EventEscrow PDA. This must be called **before** `create_event`
+/// because the `init(idempotent)` constraint in the escrow program validates
+/// the account exists but does NOT create it via CPI.
+///
+/// # Arguments
+/// * `rpc_url` — Solana RPC URL (with API key if needed)
+/// * `organizer_pubkey` — Organizer's wallet address (base58), signer + payer
+/// * `event_id` — Numeric event ID used for PDA derivation
+///
+/// # Returns
+/// A `CreateVaultAtaTransaction` with the base64-encoded transaction and
+/// the derived vault ATA address.
+pub async fn build_create_vault_ata_transaction(
+    rpc_url: &str,
+    organizer_pubkey: &str,
+    event_id: u64,
+) -> Result<CreateVaultAtaTransaction, EscrowError> {
+    let organizer = pubkey_from_base58(organizer_pubkey)?;
+    let program_id = pubkey_from_base58(ESCROW_PROGRAM_ID)?;
+    let usdc_mint = pubkey_from_base58(USDC_MINT_DEVNET)?;
+    let token_program = pubkey_from_base58(TOKEN_PROGRAM_ID)?;
+    let system_program = pubkey_from_base58(SYSTEM_PROGRAM_ID)?;
+    let ata_program = pubkey_from_base58(ASSOCIATED_TOKEN_PROGRAM_ID)?;
+
+    // Derive EventEscrow PDA: ["escrow", organizer, event_id]
+    let (event_escrow, _) = find_program_address(
+        &[b"escrow", organizer.as_slice(), &event_id.to_le_bytes()],
+        &program_id,
+    )
+    .await?;
+
+    // Derive vault ATA (owned by EventEscrow PDA)
+    let vault = get_associated_token_address(&event_escrow, &usdc_mint).await?;
+
+    // ATA program instruction: create_associated_token_account_idempotent
+    // The ATA program expects accounts in this order:
+    //   0. payer (writable, signer)
+    //   1. ata (writable) — the new associated token account
+    //   2. owner (readonly) — the wallet that owns the ATA (event_escrow PDA)
+    //   3. mint (readonly) — the token mint (USDC)
+    //   4. system_program (readonly)
+    //   5. token_program (readonly)
+    //
+    // The ATA program uses a single-byte discriminator:
+    //   [] (empty)  → Create (non-idempotent, fails if account exists)
+    //   [1]         → CreateIdempotent (no-op if account exists)
+    //
+    // IMPORTANT: The owner/wallet account must be readonly, NOT writable.
+    // Using writable causes IllegalOwner errors on-chain.
+    let ata_ix_data: Vec<u8> = vec![1]; // CreateIdempotent discriminator
+
+    let instruction_accounts = vec![
+        AccountMeta {
+            pubkey: organizer,
+            is_signer: true,
+            is_writable: true,
+        },
+        AccountMeta {
+            pubkey: vault,
+            is_signer: false,
+            is_writable: true,
+        },
+        AccountMeta {
+            pubkey: event_escrow,
+            is_signer: false,
+            is_writable: false, // ATA program expects owner as readonly
+        },
+        AccountMeta {
+            pubkey: usdc_mint,
+            is_signer: false,
+            is_writable: false,
+        },
+        AccountMeta {
+            pubkey: system_program,
+            is_signer: false,
+            is_writable: false,
+        },
+        AccountMeta {
+            pubkey: token_program,
             is_signer: false,
             is_writable: false,
         },
@@ -1164,11 +1580,11 @@ pub async fn build_create_event_transaction(
         }
     }
     // 4. Non-signer + readonly
-    let mut program_id_in_message = false;
+    let mut ata_program_in_message = false;
     for m in &instruction_accounts {
         if !m.is_signer && !m.is_writable {
-            if m.pubkey == program_id {
-                program_id_in_message = true;
+            if m.pubkey == ata_program {
+                ata_program_in_message = true;
             }
             message_accounts.push(AccountMeta {
                 pubkey: m.pubkey,
@@ -1177,15 +1593,14 @@ pub async fn build_create_event_transaction(
             });
         }
     }
-    if !program_id_in_message {
+    if !ata_program_in_message {
         message_accounts.push(AccountMeta {
-            pubkey: program_id,
+            pubkey: ata_program,
             is_signer: false,
             is_writable: false,
         });
     }
 
-    // Build lookups
     let get_index = |pk: &PubkeyBytes| -> u8 {
         message_accounts
             .iter()
@@ -1193,35 +1608,31 @@ pub async fn build_create_event_transaction(
             .expect("all accounts should be in message") as u8
     };
 
-    let program_id_index = get_index(&program_id);
-
+    // The ATA program is the instruction program (not the escrow program)
+    let ata_program_index = get_index(&ata_program);
     let ix_account_indices: Vec<u8> = instruction_accounts
         .iter()
         .map(|m| get_index(&m.pubkey))
         .collect();
 
     let compiled_ix = CompiledInstruction {
-        program_id_index,
+        program_id_index: ata_program_index,
         accounts: ix_account_indices,
-        data: ix_data,
+        data: ata_ix_data,
     };
 
     // Fetch recent blockhash
     let blockhash_resp = get_latest_blockhash(rpc_url).await?;
     let blockhash_bytes = pubkey_from_base58(&blockhash_resp.value)?;
 
-    // Serialize the transaction
     let tx_bytes = serialize_transaction(&message_accounts, &[compiled_ix], &blockhash_bytes);
-
     let tx_b64 = base64::engine::general_purpose::STANDARD.encode(&tx_bytes);
-    let escrow_address = pubkey_to_base58(&event_escrow);
+    let vault_address = pubkey_to_base58(&vault);
 
-    let amount_display = deposit_amount as f64 / 1_000_000.0;
-
-    Ok(CreateEventTransaction {
+    Ok(CreateVaultAtaTransaction {
         transaction_b64: tx_b64,
-        message: format!("Create event escrow ({amount_display:.2} USDC deposit)"),
-        escrow_address,
+        message: "Create vault token account for event escrow".to_string(),
+        vault_address,
     })
 }
 
@@ -1422,6 +1833,27 @@ mod tests {
 
         let expected = "5exYHTcLvUbKPd3V8jxpkXn4RJL337URHM38kM2K6zbS";
         assert_eq!(pubkey_to_base58(&vault), expected, "Vault ATA mismatch");
+    }
+
+    /// Verify the ATA CreateIdempotent discriminator is [1].
+    /// The ATA program dispatches on instruction data:
+    ///   [] → Create (non-idempotent, fails with IllegalOwner if account exists)
+    ///   [1] → CreateIdempotent (no-op if account exists)
+    ///   [2] → RecoverNested
+    /// Using empty data was the root cause of the IllegalOwner bug.
+    #[test]
+    fn test_ata_create_idempotent_discriminator() {
+        // The discriminator for CreateIdempotent must be [1], NOT empty
+        let discriminator: Vec<u8> = vec![1];
+        assert_eq!(
+            discriminator,
+            vec![1],
+            "ATA CreateIdempotent must use [1] as discriminator"
+        );
+        assert!(
+            !discriminator.is_empty(),
+            "ATA discriminator must not be empty"
+        );
     }
 
     /// Verify Attendee USDC ATA derivation matches @solana/web3.js reference.
