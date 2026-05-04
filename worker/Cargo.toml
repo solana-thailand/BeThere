@@ -23,6 +23,9 @@ tower-service = "0.3"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
+# Ed25519 curve check for PDA derivation (fiat backend, no std needed)
+curve25519-dalek = { version = "4.1", default-features = false }
+
 # Encoding — WASM-compatible
 base64 = "0.22"
 
@@ -49,6 +52,9 @@ tracing = "0.1"
 tracing-wasm = "0.2"
 console_log = "1"
 log = "0.4"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt", "macros"] }
 
 [lib]
 crate-type = ["cdylib", "rlib"]

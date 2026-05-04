@@ -8,8 +8,12 @@
 //! Transaction serialization follows the Solana wire format (bincode-like).
 
 use base64::Engine;
+
+#[cfg(not(test))]
 use js_sys::{Object, Reflect, Uint8Array};
+#[cfg(not(test))]
 use wasm_bindgen::prelude::*;
+#[cfg(not(test))]
 use wasm_bindgen_futures::JsFuture;
 
 // ---------------------------------------------------------------------------
@@ -27,7 +31,8 @@ const USDC_MINT_DEVNET: &str = "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU";
 const TOKEN_PROGRAM_ID: &str = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
 
 /// Associated Token Program ID.
-const ASSOCIATED_TOKEN_PROGRAM_ID: &str = "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efOPsEErJbPX";
+/// Source: https://github.com/solana-program/associated-token-account
+const ASSOCIATED_TOKEN_PROGRAM_ID: &str = "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL";
 
 /// System program ID.
 const SYSTEM_PROGRAM_ID: &str = "11111111111111111111111111111111";
@@ -62,6 +67,7 @@ pub struct CreateEventTransaction {
 
 /// Error type for escrow operations.
 #[derive(Debug)]
+#[allow(dead_code)]
 pub enum EscrowError {
     /// Invalid base58 pubkey string.
     InvalidPubkey(String),
@@ -87,11 +93,119 @@ impl std::fmt::Display for EscrowError {
 impl std::error::Error for EscrowError {}
 
 // ---------------------------------------------------------------------------
-// SubtleCrypto SHA-256
+// SHA-256
 // ---------------------------------------------------------------------------
 
-/// Compute SHA-256 hash using Web Crypto SubtleCrypto.
+/// Compute SHA-256 hash.
+/// In WASM (worker runtime): uses Web Crypto SubtleCrypto.
+/// In native (tests): uses pure Rust implementation.
 async fn sha256(data: &[u8]) -> Result<[u8; 32], EscrowError> {
+    #[cfg(not(test))]
+    {
+        sha256_wasm(data).await
+    }
+    #[cfg(test)]
+    {
+        sha256_native(data)
+    }
+}
+
+/// Pure Rust SHA-256 for native test builds.
+#[cfg(test)]
+fn sha256_native(data: &[u8]) -> Result<[u8; 32], EscrowError> {
+    // Minimal SHA-256 implementation (no external dependency needed for tests)
+    let mut state: [u32; 8] = [
+        0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab,
+        0x5be0cd19,
+    ];
+    let k: [u32; 64] = [
+        0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4,
+        0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe,
+        0x9bdc06a7, 0xc19bf174, 0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f,
+        0x4a7484aa, 0x5cb0a9dc, 0x76f988da, 0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7,
+        0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967, 0x27b70a85, 0x2e1b2138, 0x4d2c6dfc,
+        0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85, 0xa2bfe8a1, 0xa81a664b,
+        0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070, 0x19a4c116,
+        0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+        0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7,
+        0xc67178f2,
+    ];
+
+    // Pad message
+    let bit_len = (data.len() as u64) * 8;
+    let mut padded = data.to_vec();
+    padded.push(0x80);
+    while padded.len() % 64 != 56 {
+        padded.push(0x00);
+    }
+    padded.extend_from_slice(&bit_len.to_be_bytes());
+
+    // Process 64-byte blocks
+    for chunk in padded.chunks(64) {
+        let mut w = [0u32; 64];
+        for i in 0..16 {
+            w[i] = u32::from_be_bytes([
+                chunk[i * 4],
+                chunk[i * 4 + 1],
+                chunk[i * 4 + 2],
+                chunk[i * 4 + 3],
+            ]);
+        }
+        for i in 16..64 {
+            let s0 = w[i - 15].rotate_right(7) ^ w[i - 15].rotate_right(18) ^ (w[i - 15] >> 3);
+            let s1 = w[i - 2].rotate_right(17) ^ w[i - 2].rotate_right(19) ^ (w[i - 2] >> 10);
+            w[i] = w[i - 16]
+                .wrapping_add(s0)
+                .wrapping_add(w[i - 7])
+                .wrapping_add(s1);
+        }
+
+        let [a, b, c, d, e, f, g, h] = state;
+        let mut state_working = [a, b, c, d, e, f, g, h];
+
+        for i in 0..64 {
+            let s1 = state_working[4].rotate_right(6)
+                ^ state_working[4].rotate_right(11)
+                ^ state_working[4].rotate_right(25);
+            let ch = (state_working[4] & state_working[5]) ^ (!state_working[4] & state_working[6]);
+            let temp1 = state_working[7]
+                .wrapping_add(s1)
+                .wrapping_add(ch)
+                .wrapping_add(k[i])
+                .wrapping_add(w[i]);
+            let s0 = state_working[0].rotate_right(2)
+                ^ state_working[0].rotate_right(13)
+                ^ state_working[0].rotate_right(22);
+            let maj = (state_working[0] & state_working[1])
+                ^ (state_working[0] & state_working[2])
+                ^ (state_working[1] & state_working[2]);
+            let temp2 = s0.wrapping_add(maj);
+
+            state_working[7] = state_working[6];
+            state_working[6] = state_working[5];
+            state_working[5] = state_working[4];
+            state_working[4] = state_working[3].wrapping_add(temp1);
+            state_working[3] = state_working[2];
+            state_working[2] = state_working[1];
+            state_working[1] = state_working[0];
+            state_working[0] = temp1.wrapping_add(temp2);
+        }
+
+        for i in 0..8 {
+            state[i] = state[i].wrapping_add(state_working[i]);
+        }
+    }
+
+    let mut result = [0u8; 32];
+    for i in 0..8 {
+        result[i * 4..i * 4 + 4].copy_from_slice(&state[i].to_be_bytes());
+    }
+    Ok(result)
+}
+
+/// Web Crypto SubtleCrypto SHA-256 for WASM worker runtime.
+#[cfg(not(test))]
+async fn sha256_wasm(data: &[u8]) -> Result<[u8; 32], EscrowError> {
     let global = js_sys::global();
 
     let crypto_val = Reflect::get(&global, &JsValue::from_str("crypto"))
@@ -278,185 +392,13 @@ async fn find_program_address(
 
 /// Check if a 32-byte value is a point on the Ed25519 curve.
 ///
+/// Uses `curve25519-dalek` (fiat backend) for formally verified field arithmetic.
 /// This is the same check used by `solana_sdk::pubkey::is_on_curve`.
 fn is_on_ed25519_curve(bytes: &[u8; 32]) -> bool {
-    // Attempt to decompress the point using the standard Ed25519 encoding.
-    // In Ed25519, the last byte's high bit is the sign bit, and the remaining
-    // 255 bits encode the y-coordinate. A point is valid if it satisfies
-    // -x^2 + y^2 = 1 + d*x^2*y^2 where d = -121665/121666 mod p.
-    //
-    // For PDA derivation, we use the approach from solana_sdk which uses
-    // curve25519_dalek's decompression. Since we can't depend on that crate
-    // in WASM, we implement a simplified check.
-    //
-    // The p (prime) for Ed25519: 2^255 - 19
-    let p: [u64; 4] = [
-        0xffffffffffffffed,
-        0xffffffffffffffff,
-        0xffffffffffffffff,
-        0xffffffffffffffff,
-    ];
+    use curve25519_dalek::edwards::CompressedEdwardsY;
 
-    // Convert bytes to a 255-bit little-endian scalar (clear top bit of last byte)
-    let mut y_bytes = *bytes;
-    y_bytes[31] &= 0x7f; // Clear sign bit
-
-    // Convert to u64 limbs (little-endian)
-    let y = [
-        u64::from_le_bytes(y_bytes[0..8].try_into().unwrap()),
-        u64::from_le_bytes(y_bytes[8..16].try_into().unwrap()),
-        u64::from_le_bytes(y_bytes[16..24].try_into().unwrap()),
-        u64::from_le_bytes(y_bytes[24..32].try_into().unwrap()),
-    ];
-
-    // Check y < p
-    if scalar_gte(&y, &p) {
-        return false;
-    }
-
-    // d = -121665 * (121666^-1) mod p
-    // Pre-computed: d = 37095705934669439343138083508754565189542113879843219016388785533085940483562
-    let d: [u64; 4] = [
-        0xa5304a3b3f0b3d32,
-        0x9db8a8e2e43949fd,
-        0x3ec7ebe6c5b6b598,
-        0x52036cee2b6ffe73,
-    ];
-
-    // y^2 mod p
-    let y2 = scalar_mul(&y, &y, &p);
-
-    // u = y^2 - 1 mod p
-    let u = scalar_sub(&y2, &[1, 0, 0, 0], &p);
-
-    // v = d * y^2 + 1 mod p
-    let dy2 = scalar_mul(&d, &y2, &p);
-    let v = scalar_add(&dy2, &[1, 0, 0, 0], &p);
-
-    // Check: u * v^3 == v * u^3  (equivalent to -x^2 + y^2 = 1 + d*x^2*y^2)
-    let v2 = scalar_mul(&v, &v, &p);
-    let v3 = scalar_mul(&v2, &v, &p);
-    let u2 = scalar_mul(&u, &u, &p);
-    let u3 = scalar_mul(&u2, &u, &p);
-
-    let lhs = scalar_mul(&u, &v3, &p);
-    let rhs = scalar_mul(&v, &u3, &p);
-
-    lhs == rhs
-}
-
-// 256-bit modular arithmetic helpers (little-endian u64 limbs)
-
-fn scalar_add(a: &[u64; 4], b: &[u64; 4], _p: &[u64; 4]) -> [u64; 4] {
-    let mut carry = 0u128;
-    let mut result = [0u64; 4];
-    for i in 0..4 {
-        let sum = a[i] as u128 + b[i] as u128 + carry;
-        result[i] = sum as u64;
-        carry = sum >> 64;
-    }
-    result
-}
-
-fn scalar_sub(a: &[u64; 4], b: &[u64; 4], p: &[u64; 4]) -> [u64; 4] {
-    let mut borrow = 0i128;
-    let mut result = [0u64; 4];
-    for i in 0..4 {
-        let diff = a[i] as i128 - b[i] as i128 - borrow;
-        if diff < 0 {
-            result[i] = (diff + (1i128 << 64)) as u64;
-            borrow = 1;
-        } else {
-            result[i] = diff as u64;
-            borrow = 0;
-        }
-    }
-    // If we borrowed, add p back
-    if borrow > 0 {
-        let mut carry = 0u128;
-        for i in 0..4 {
-            let sum = result[i] as u128 + p[i] as u128 + carry;
-            result[i] = sum as u64;
-            carry = sum >> 64;
-        }
-    }
-    result
-}
-
-/// schoolbook multiplication mod p
-fn scalar_mul(a: &[u64; 4], b: &[u64; 4], p: &[u64; 4]) -> [u64; 4] {
-    // Full 512-bit product
-    let mut product = [0u128; 8];
-    for i in 0..4 {
-        let mut carry = 0u128;
-        for j in 0..4 {
-            let val = a[i] as u128 * b[j] as u128 + product[i + j] + carry;
-            product[i + j] = val & 0xFFFFFFFFFFFFFFFF;
-            carry = val >> 64;
-        }
-        product[i + 4] += carry;
-    }
-
-    // Reduce mod p using simple long division
-    // For efficiency, we'll use a barrett-style reduction.
-    // But for simplicity, just mask and subtract multiples of p.
-    //
-    // p = 2^255 - 19, so we can use the special reduction:
-    // Take the high 256 bits, multiply by 19, add to low 256 bits, reduce.
-    let low = [
-        product[0] as u64,
-        product[1] as u64,
-        product[2] as u64,
-        product[3] as u64,
-    ];
-    let high = [
-        product[4] as u64,
-        product[5] as u64,
-        product[6] as u64,
-        product[7] as u64,
-    ];
-
-    // high * 19
-    let mut r = low;
-    let mut carry = 0u128;
-    for i in 0..4 {
-        let val = r[i] as u128 + high[i] as u128 * 19 + carry;
-        r[i] = val as u64;
-        carry = val >> 64;
-    }
-    // One more reduction step if carry
-    if carry > 0 {
-        let val = r[0] as u128 + carry * 19;
-        r[0] = val as u64;
-        carry = val >> 64;
-        for item in r.iter_mut().skip(1) {
-            if carry == 0 {
-                break;
-            }
-            let val = *item as u128 + carry;
-            *item = val as u64;
-            carry = val >> 64;
-        }
-    }
-
-    // Final reduction mod p
-    while scalar_gte(&r, p) {
-        r = scalar_sub(&r, p, p);
-    }
-
-    r
-}
-
-fn scalar_gte(a: &[u64; 4], b: &[u64; 4]) -> bool {
-    for i in (0..4).rev() {
-        if a[i] > b[i] {
-            return true;
-        }
-        if a[i] < b[i] {
-            return false;
-        }
-    }
-    true // equal
+    let compressed = CompressedEdwardsY(*bytes);
+    compressed.decompress().is_some()
 }
 
 // ---------------------------------------------------------------------------
@@ -1146,7 +1088,7 @@ mod tests {
             encode_compact_u16(val, &mut buf);
             // Decode manually
             let decoded = decode_compact_u16(&buf);
-            assert_eq!(decoded, val as usize, "roundtrip failed for {val}");
+            assert_eq!(decoded, val, "roundtrip failed for {val}");
         }
     }
 
@@ -1161,5 +1103,126 @@ mod tests {
             shift += 7;
         }
         val
+    }
+
+    // -----------------------------------------------------------------------
+    // PDA derivation verification tests
+    //
+    // Test vectors computed by reference implementation using ed25519-dalek + sha2
+    // (see /tmp/pda_test or scripts/verify_pda.rs)
+    //
+    // Seeds: organizer="9ZNTfG4NyQgxy2SWjSiQoUyBPEvXT2xo7fKc5hPYYJ7b", event_id=1
+    // -----------------------------------------------------------------------
+
+    /// Test that base58_decode handles the correct ATA program address.
+    /// The previous address had an invalid base58 character ('O' at position 34).
+    #[test]
+    fn test_base58_decode_ata_program() {
+        let bytes = base58_decode(ASSOCIATED_TOKEN_PROGRAM_ID).unwrap();
+        assert_eq!(bytes.len(), 32);
+    }
+
+    #[test]
+    fn test_base58_roundtrip_ata_program() {
+        let pk = pubkey_from_base58(ASSOCIATED_TOKEN_PROGRAM_ID).unwrap();
+        let encoded = pubkey_to_base58(&pk);
+        assert_eq!(encoded, ASSOCIATED_TOKEN_PROGRAM_ID);
+    }
+
+    /// Verify EventEscrow PDA derivation matches reference.
+    /// Expected: 9gm93ehPdPjZfSCg6v1agUSmSUu82WQQWHWkmReMSAi5 (bump=254)
+    #[tokio::test]
+    async fn test_find_event_escrow_pda() {
+        let program_id = pubkey_from_base58(ESCROW_PROGRAM_ID).unwrap();
+        let organizer = pubkey_from_base58("9ZNTfG4NyQgxy2SWjSiQoUyBPEvXT2xo7fKc5hPYYJ7b").unwrap();
+        let event_id: u64 = 1u64;
+
+        let (pda, bump) = find_program_address(
+            &[b"escrow", organizer.as_slice(), &event_id.to_le_bytes()],
+            &program_id,
+        )
+        .await
+        .unwrap();
+
+        let expected = "9gm93ehPdPjZfSCg6v1agUSmSUu82WQQWHWkmReMSAi5";
+        assert_eq!(pubkey_to_base58(&pda), expected, "EventEscrow PDA mismatch");
+        assert_eq!(bump, 254, "EventEscrow bump mismatch");
+    }
+
+    /// Verify AttendeeDeposit PDA derivation matches reference.
+    /// Expected: E1wALGV1gMH6Aek6vnuVDBEvtkquwYH3Hves3akiTTjP (bump=254)
+    #[tokio::test]
+    async fn test_find_attendee_deposit_pda() {
+        let program_id = pubkey_from_base58(ESCROW_PROGRAM_ID).unwrap();
+        let organizer = pubkey_from_base58("9ZNTfG4NyQgxy2SWjSiQoUyBPEvXT2xo7fKc5hPYYJ7b").unwrap();
+        let event_id: u64 = 1u64;
+        let attendee = pubkey_from_base58("9ZNTfG4NyQgxy2SWjSiQoUyBPEvXT2xo7fKc5hPYYJ7b").unwrap();
+
+        // First derive EventEscrow PDA
+        let (escrow_pda, _) = find_program_address(
+            &[b"escrow", organizer.as_slice(), &event_id.to_le_bytes()],
+            &program_id,
+        )
+        .await
+        .unwrap();
+
+        // Then derive AttendeeDeposit PDA
+        let (pda, bump) = find_program_address(
+            &[b"deposit", escrow_pda.as_slice(), attendee.as_slice()],
+            &program_id,
+        )
+        .await
+        .unwrap();
+
+        let expected = "E1wALGV1gMH6Aek6vnuVDBEvtkquwYH3Hves3akiTTjP";
+        assert_eq!(
+            pubkey_to_base58(&pda),
+            expected,
+            "AttendeeDeposit PDA mismatch"
+        );
+        assert_eq!(bump, 254, "AttendeeDeposit bump mismatch");
+    }
+
+    /// Verify Vault ATA derivation matches reference.
+    /// Expected: 3dap2pJrHmpbqNegkvvNMJwHW6YDBMzL376nfrMeQAf8 (bump=255)
+    #[tokio::test]
+    async fn test_find_vault_ata() {
+        let program_id = pubkey_from_base58(ESCROW_PROGRAM_ID).unwrap();
+        let organizer = pubkey_from_base58("9ZNTfG4NyQgxy2SWjSiQoUyBPEvXT2xo7fKc5hPYYJ7b").unwrap();
+        let event_id: u64 = 1u64;
+
+        // Derive EventEscrow PDA
+        let (escrow_pda, _) = find_program_address(
+            &[b"escrow", organizer.as_slice(), &event_id.to_le_bytes()],
+            &program_id,
+        )
+        .await
+        .unwrap();
+
+        // Derive vault ATA
+        let vault = get_associated_token_address(
+            &escrow_pda,
+            &pubkey_from_base58(USDC_MINT_DEVNET).unwrap(),
+        )
+        .await
+        .unwrap();
+
+        let expected = "3dap2pJrHmpbqNegkvvNMJwHW6YDBMzL376nfrMeQAf8";
+        assert_eq!(pubkey_to_base58(&vault), expected, "Vault ATA mismatch");
+    }
+
+    /// Verify Attendee USDC ATA derivation matches reference.
+    /// Expected: 8QyQEuFNiJnsNmgyBDW1ZT3zZTMt2MdLuiKxP5mmvSJz (bump=254)
+    #[tokio::test]
+    async fn test_find_attendee_ata() {
+        let attendee = pubkey_from_base58("9ZNTfG4NyQgxy2SWjSiQoUyBPEvXT2xo7fKc5hPYYJ7b").unwrap();
+        let usdc_mint = pubkey_from_base58(USDC_MINT_DEVNET).unwrap();
+
+        let ata = get_associated_token_address(&attendee, &usdc_mint)
+            .await
+            .unwrap();
+
+        let expected = "8QyQEuFNiJnsNmgyBDW1ZT3zZTMt2MdLuiKxP5mmvSJz";
+        assert_eq!(pubkey_to_base58(&ata), expected, "Attendee ATA mismatch");
     }
 }
