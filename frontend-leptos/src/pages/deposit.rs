@@ -7,8 +7,9 @@
 //! 3. If deposit not enabled → show message
 //! 4. If already deposited → show status
 //! 5. If not deposited → show dual-track payment options (USDC / THB)
-//! 6. USDC: calls deposit_usdc() → shows Solana Pay URL (copy-to-clipboard)
-//! 7. THB: text input for slip URL (MVP) → calls upload_thb_slip()
+//! 6. USDC (wallet adapter): connect wallet → fetch TX → sign & send → poll confirmation
+//! 7. USDC (QR fallback): generate Solana Pay QR → wallet scans → poll confirmation
+//! 8. THB: text input for slip URL (MVP) → calls upload_thb_slip()
 
 use leptos::prelude::*;
 use leptos_meta::Title;
@@ -16,14 +17,14 @@ use leptos_router::hooks::use_params;
 use leptos_router::params::Params;
 
 use crate::api::{
-    self, DepositStatusResponse, ThbSlipUploadRequest, UsdcDepositRequest,
+    self, ConfirmDepositResponse, DepositStatusResponse, ThbSlipUploadRequest, UsdcDepositRequest,
 };
 use crate::components::{self, Toast, ToastType};
 use crate::utils::format_timestamp;
 use wasm_bindgen::prelude::*;
 
 // ---------------------------------------------------------------------------
-// JS interop
+// JS interop — QR generation + clipboard
 // ---------------------------------------------------------------------------
 
 #[wasm_bindgen(module = "/js/qr_generate.js")]
@@ -35,6 +36,37 @@ extern "C" {
     /// Generate a QR code as a base64 PNG data URL.
     #[wasm_bindgen(js_name = "generateQrDataUrl")]
     fn generate_qr_data_url_js(text: &str, size: u32) -> Option<String>;
+}
+
+// ---------------------------------------------------------------------------
+// JS interop — Solana wallet adapter
+// ---------------------------------------------------------------------------
+
+#[wasm_bindgen(module = "/js/solana_wallet.js")]
+extern "C" {
+    /// Get a list of detected Solana wallet adapter names.
+    #[wasm_bindgen(js_name = "getDetectedWallets")]
+    fn get_detected_wallets_js() -> Vec<String>;
+
+    /// Connect to a Solana wallet and return the public key (base58).
+    #[wasm_bindgen(js_name = "connectWallet")]
+    async fn connect_wallet_js(wallet_name: &str) -> Option<String>;
+
+    /// Get the currently connected wallet's public key (base58) without prompting.
+    #[wasm_bindgen(js_name = "getConnectedPublicKey")]
+    async fn get_connected_public_key_js(wallet_name: &str) -> Option<String>;
+
+    /// Sign and send a base64-encoded serialized transaction.
+    #[wasm_bindgen(js_name = "signAndSendTransaction")]
+    async fn sign_and_send_tx_js(wallet_name: &str, transaction_b64: &str) -> Option<String>;
+
+    /// Fetch the serialized deposit transaction from the Solana Pay callback URL.
+    #[wasm_bindgen(js_name = "fetchTransactionFromCallback")]
+    async fn fetch_tx_from_callback_js(callback_url: &str) -> Option<String>;
+
+    /// Check if a wallet provider is available.
+    #[wasm_bindgen(js_name = "isWalletAvailable")]
+    fn is_wallet_available_js(wallet_name: &str) -> bool;
 }
 
 // ---------------------------------------------------------------------------
@@ -64,7 +96,16 @@ enum DepositPageState {
     AlreadyDeposited(DepositStatusResponse),
     /// Ready to choose payment method.
     ChoosePayment(DepositStatusResponse),
-    /// USDC QR URL generated and ready to display.
+    /// Wallet connected — ready to send TX.
+    WalletConnected(DepositStatusResponse, String, String),
+    // (deposit_data, wallet_name, public_key)
+    /// TX sent — polling for on-chain confirmation.
+    AwaitingConfirmation(DepositStatusResponse, String, String),
+    // (deposit_data, wallet_name, tx_signature)
+    /// Deposit confirmed on-chain.
+    DepositConfirmed(DepositStatusResponse, String),
+    // (deposit_data, tx_signature)
+    /// USDC QR URL generated and ready to display (QR fallback for mobile).
     UsdcQrReady(DepositStatusResponse, String),
     /// THB slip is being uploaded.
     #[allow(dead_code)]
@@ -151,12 +192,201 @@ pub fn Deposit() -> impl IntoView {
         }
     });
 
-    // --- USDC Pay handler ---
-    let handle_pay_usdc = move || {
+    // --- Detect installed wallets on mount ---
+    let detected_wallets = get_detected_wallets_js();
+    let has_wallets = !detected_wallets.is_empty();
+
+    // --- Connect Wallet handler ---
+    let handle_connect_wallet = move |wallet_name: String| {
+        let deposit_data = match &state.get() {
+            DepositPageState::ChoosePayment(d) => d.clone(),
+            _ => return,
+        };
+
+        let wallet_name_clone = wallet_name.clone();
+        let deposit_data_for_state = deposit_data.clone();
+        leptos::task::spawn_local(async move {
+            match connect_wallet_js(&wallet_name_clone).await {
+                Some(pubkey) => {
+                    log::info!("[deposit] wallet connected: {} ({})", wallet_name_clone, pubkey);
+                    set_state.set(DepositPageState::WalletConnected(
+                        deposit_data_for_state,
+                        wallet_name_clone,
+                        pubkey,
+                    ));
+                }
+                None => {
+                    components::show_toast(
+                        &set_toast,
+                        "Failed to connect wallet. Please try again.",
+                        ToastType::Error,
+                    );
+                }
+            }
+        });
+    };
+
+    // --- Send Deposit TX (via connected wallet) ---
+    let handle_send_deposit = move |wallet_name: String, public_key: String| {
+        let current_state = state.get();
+        let deposit_data = match &current_state {
+            DepositPageState::WalletConnected(d, _, _) => d.clone(),
+            _ => return,
+        };
+
+        // Re-extract attendee_id and event_id from URL
+        let attendee_id = match params.get() {
+            Ok(p) => p.attendee_id.unwrap_or_default(),
+            Err(_) => return,
+        };
+        let event_id = web_sys::Url::new(
+            &web_sys::window()
+                .unwrap()
+                .location()
+                .href()
+                .unwrap(),
+        )
+        .ok()
+        .and_then(|url| url.search_params().get("event_id"));
+
+        let pk_for_api = public_key.clone();
+        let wallet_name_for_tx = wallet_name.clone();
+        let deposit_data_for_state = deposit_data.clone();
+        let event_id_str = event_id.unwrap_or_default();
+
+        leptos::task::spawn_local(async move {
+            // Step 1: Initiate deposit with backend (records pending status + gets callback URL)
+            let body = UsdcDepositRequest {
+                event_id: event_id_str.clone(),
+                attendee_id: attendee_id.clone(),
+                wallet_address: pk_for_api,
+            };
+            let deposit_resp = match api::deposit_usdc(&body).await {
+                Ok(r) => r,
+                Err(e) => {
+                    log::error!("[deposit] USDC deposit initiate failed: {e}");
+                    components::show_toast(
+                        &set_toast,
+                        &format!("Failed to initiate deposit: {e}"),
+                        ToastType::Error,
+                    );
+                    return;
+                }
+            };
+
+            // Step 2: Extract the callback URL from the Solana Pay URL
+            // solana_pay_url format: "solana:https://...callback_url"
+            let callback_url = if deposit_resp.solana_pay_url.starts_with("solana:") {
+                &deposit_resp.solana_pay_url[7..]
+            } else {
+                &deposit_resp.solana_pay_url
+            };
+
+            // Step 3: Fetch the serialized TX from the callback
+            let tx_b64 = match fetch_tx_from_callback_js(callback_url).await {
+                Some(tx) => tx,
+                None => {
+                    log::error!("[deposit] failed to fetch TX from callback");
+                    components::show_toast(
+                        &set_toast,
+                        "Failed to build deposit transaction. Please try again.",
+                        ToastType::Error,
+                    );
+                    return;
+                }
+            };
+
+            // Step 4: Sign and send the TX via the wallet
+            match sign_and_send_tx_js(&wallet_name_for_tx, &tx_b64).await {
+                Some(signature) => {
+                    log::info!("[deposit] TX sent, signature: {}", signature);
+
+                    // Step 5: Record the TX signature with the backend
+                    let _ = api::record_deposit_tx(
+                        &event_id_str,
+                        &attendee_id,
+                        &signature,
+                    )
+                    .await;
+
+                    // Step 6: Start polling for confirmation
+                    set_state.set(DepositPageState::AwaitingConfirmation(
+                        deposit_data_for_state.clone(),
+                        wallet_name_for_tx.clone(),
+                        signature.clone(),
+                    ));
+                }
+                None => {
+                    log::error!("[deposit] wallet sign+send failed");
+                    components::show_toast(
+                        &set_toast,
+                        "Transaction rejected or failed. Please try again.",
+                        ToastType::Error,
+                    );
+                }
+            }
+        });
+    };
+
+    // --- Deposit Confirmation Polling ---
+    let handle_poll_confirmation =
+        move |event_id: String, attendee_id: String, _tx_sig: String| {
+            let set_state = set_state;
+            let set_toast = set_toast;
+            leptos::task::spawn_local(async move {
+                // Poll the confirmation endpoint
+                let mut attempts = 0u32;
+                let max_attempts = 30; // 30 * 2s = 60s max
+                let deposit_data_for_state = match &state.get() {
+                    DepositPageState::AwaitingConfirmation(d, _, _) => d.clone(),
+                    _ => return,
+                };
+
+                while attempts < max_attempts {
+                    match api::confirm_deposit(&event_id, &attendee_id).await {
+                        Ok(ConfirmDepositResponse {
+                            confirmed: true,
+                            tx_signature: Some(sig),
+                            ..
+                        }) => {
+                            log::info!("[deposit] confirmed on-chain: {}", sig);
+                            set_state.set(DepositPageState::DepositConfirmed(
+                                deposit_data_for_state.clone(),
+                                sig,
+                            ));
+                            return;
+                        }
+                        Ok(_) => {
+                            // Not yet confirmed, keep polling
+                            attempts += 1;
+                            if attempts < max_attempts {
+                                gloo::timers::future::TimeoutFuture::new(2000).await;
+                            }
+                        }
+                        Err(e) => {
+                            log::warn!("[deposit] confirmation poll error: {e}");
+                            attempts += 1;
+                            if attempts < max_attempts {
+                                gloo::timers::future::TimeoutFuture::new(3000).await;
+                            }
+                        }
+                    }
+                }
+
+                // Timeout — show the signature for manual checking
+                components::show_toast(
+                    &set_toast,
+                    "Confirmation is taking longer than expected. Your deposit may still be processing.",
+                    ToastType::Warning,
+                );
+            });
+        };
+
+    // --- USDC QR Fallback handler (for mobile / no wallet browser) ---
+    let handle_pay_usdc_qr = move || {
         let current_state = state.get();
         let (deposit_data, attendee_id, event_id) = match &current_state {
             DepositPageState::ChoosePayment(d) => {
-                // Re-extract attendee_id and event_id from URL
                 let aid = match params.get() {
                     Ok(p) => p.attendee_id.unwrap_or_default(),
                     Err(_) => return,
@@ -194,7 +424,7 @@ pub fn Deposit() -> impl IntoView {
             };
             match api::deposit_usdc(&body).await {
                 Ok(resp) => {
-                    log::info!("[deposit] USDC deposit initiated, solana_pay_url received");
+                    log::info!("[deposit] USDC QR deposit initiated");
                     set_state.set(DepositPageState::UsdcQrReady(
                         deposit_data_for_set,
                         resp.solana_pay_url,
@@ -421,6 +651,8 @@ pub fn Deposit() -> impl IntoView {
                         // ===== Choose Payment =====
                         DepositPageState::ChoosePayment(data) => {
                             let data_clone = data.clone();
+                            let wallets = detected_wallets.clone();
+                            let show_wallets = has_wallets;
                             view! {
                                 <p class="subtitle" style="margin-bottom:1.5rem;">
                                     "Choose your preferred payment method to secure your spot."
@@ -437,27 +669,71 @@ pub fn Deposit() -> impl IntoView {
                                             </span>
                                         </div>
                                         <p style="color:var(--text-secondary);font-size:0.9rem;margin-bottom:1rem;">
-                                            "Pay via Solana Pay. Enter your wallet address, then click the button to generate a payment link."
+                                            "Pay via Solana. Connect your wallet to send the deposit directly, or use a QR code."
                                         </p>
-                                        <div style="margin-bottom:0.75rem;">
-                                            <input
-                                                type="text"
-                                                class="form-input"
-                                                placeholder="Enter your Solana wallet address"
-                                                prop:value=move || wallet_input.get()
-                                                on:input=move |ev| {
-                                                    let val = event_target_value(&ev);
-                                                    set_wallet_input.set(val);
-                                                }
-                                                style="width:100%;padding:0.6rem 0.8rem;border-radius:6px;border:1px solid var(--border-color,rgba(255,255,255,0.2));background:var(--bg-secondary,#1a1a2e);color:var(--text-primary,#fff);font-size:0.9rem;"
-                                            />
+
+                                        // Wallet adapter buttons (shown if wallets detected)
+                                        {if show_wallets {
+                                            let wallets_for_click = wallets.clone();
+                                            view! {
+                                                <div style="display:flex;flex-direction:column;gap:0.5rem;margin-bottom:1rem;">
+                                                    <p style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:0.25rem;">
+                                                        "🔗 Connect your Solana wallet:"
+                                                    </p>
+                                                    {wallets_for_click.into_iter().map(|w| {
+                                                        let w_clone = w.clone();
+                                                        let wallet_icon = match w.as_str() {
+                                                            "Phantom" => "👻",
+                                                            "Backpack" => "🎒",
+                                                            "Solflare" => "☀️",
+                                                            "Coinbase" => "🪙",
+                                                            _ => "💼",
+                                                        };
+                                                        view! {
+                                                            <button
+                                                                class="btn btn-primary btn-block"
+                                                                style="display:flex;align-items:center;justify-content:center;gap:0.5rem;"
+                                                                on:click={
+                                                                    let w = w.clone();
+                                                                    move |_| handle_connect_wallet(w.clone())
+                                                                }
+                                                            >
+                                                                <span>{wallet_icon}</span>
+                                                                <span>{format!("Connect {}", &w_clone)}</span>
+                                                            </button>
+                                                        }
+                                                    }).collect::<Vec<_>>()}
+                                                </div>
+                                            }.into_any()
+                                        } else {
+                                            view! { <div></div> }.into_any()
+                                        }}
+
+                                        // QR fallback section
+                                        <div style="border-top:1px solid var(--border-color,rgba(255,255,255,0.1));padding-top:1rem;margin-top:0.5rem;">
+                                            <p style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:0.5rem;">
+                                                "📱 No wallet? Use QR code instead:"
+                                            </p>
+                                            <div style="margin-bottom:0.75rem;">
+                                                <input
+                                                    type="text"
+                                                    class="form-input"
+                                                    placeholder="Enter your Solana wallet address"
+                                                    prop:value=move || wallet_input.get()
+                                                    on:input=move |ev| {
+                                                        let val = event_target_value(&ev);
+                                                        set_wallet_input.set(val);
+                                                    }
+                                                    style="width:100%;padding:0.6rem 0.8rem;border-radius:6px;border:1px solid var(--border-color,rgba(255,255,255,0.2));background:var(--bg-secondary,#1a1a2e);color:var(--text-primary,#fff);font-size:0.9rem;"
+                                                />
+                                            </div>
+                                            <button
+                                                class="btn btn-outline btn-block"
+                                                on:click=move |_| handle_pay_usdc_qr()
+                                            >
+                                                "Generate QR Code"
+                                            </button>
                                         </div>
-                                        <button
-                                            class="btn btn-primary btn-block"
-                                            on:click=move |_| handle_pay_usdc()
-                                        >
-                                            "Pay with USDC"
-                                        </button>
                                     </div>
 
                                     // THB Card
@@ -501,6 +777,157 @@ pub fn Deposit() -> impl IntoView {
                                 <a href="/" style="color:var(--text-secondary);font-size:0.85rem;margin-top:1.5rem;text-decoration:none;">
                                     "← Back to home"
                                 </a>
+                            }
+                                .into_any()
+                        }
+
+                        // ===== Wallet Connected — Ready to send TX =====
+                        DepositPageState::WalletConnected(data, wallet_name, public_key) => {
+                            let wallet_name_send = wallet_name.clone();
+                            let pk_send = public_key.clone();
+                            let wallet_icon = match wallet_name.as_str() {
+                                "Phantom" => "👻",
+                                "Backpack" => "🎒",
+                                "Solflare" => "☀️",
+                                "Coinbase" => "🪙",
+                                _ => "💼",
+                            };
+                            let pk_short = if public_key.len() > 12 {
+                                format!("{}...{}", &public_key[..4], &public_key[public_key.len()-4..])
+                            } else {
+                                public_key.clone()
+                            };
+                            view! {
+                                <div class="card" style="margin-top:1.5rem;text-align:center;width:100%;max-width:480px;">
+                                    <div class="card-header">
+                                        <h2 class="card-title">"🪙 USDC Deposit"
+                                        </h2>
+                                        <span class="badge badge-info">
+                                            {format!("{} USDC", data.deposit_amount_usdc)}
+                                        </span>
+                                    </div>
+                                    <div style="background:var(--bg-secondary,#1a1a2e);border-radius:8px;padding:1rem;margin-bottom:1rem;display:flex;align-items:center;justify-content:center;gap:0.75rem;">
+                                        <span style="font-size:1.5rem;">{wallet_icon}</span>
+                                        <div style="text-align:left;">
+                                            <div style="font-size:0.8rem;color:var(--text-secondary);">"Connected via " {wallet_name.clone()}</div>
+                                            <div style="font-weight:600;font-family:monospace;">{pk_short}</div>
+                                        </div>
+                                        <span class="badge badge-success" style="margin-left:auto;">"✅ Connected"</span>
+                                    </div>
+                                    <p style="color:var(--text-secondary);font-size:0.9rem;margin-bottom:1rem;">
+                                        "Click below to send your deposit transaction. You'll be asked to approve the transaction in your wallet."
+                                    </p>
+                                    <button
+                                        class="btn btn-primary btn-block"
+                                        style="font-size:1.1rem;padding:0.8rem;"
+                                        on:click=move |_| handle_send_deposit(wallet_name_send.clone(), pk_send.clone())
+                                    >
+                                        "Send " {format!("{} USDC", data.deposit_amount_usdc)} " Deposit"
+                                    </button>
+                                    <button
+                                        class="btn btn-outline btn-sm"
+                                        style="margin-top:0.75rem;"
+                                        on:click=move |_| {
+                                            set_state.set(DepositPageState::ChoosePayment(data.clone()));
+                                        }
+                                    >
+                                        "← Go Back"
+                                    </button>
+                                </div>
+                            }
+                                .into_any()
+                        }
+
+                        // ===== Awaiting Confirmation — polling for TX =====
+                        DepositPageState::AwaitingConfirmation(data, _wallet_name, tx_sig) => {
+                            let event_id = web_sys::Url::new(
+                                &web_sys::window()
+                                    .unwrap()
+                                    .location()
+                                    .href()
+                                    .unwrap(),
+                            )
+                            .ok()
+                            .and_then(|url| url.search_params().get("event_id"));
+                            let attendee_id = match params.get() {
+                                Ok(p) => p.attendee_id.unwrap_or_default(),
+                                Err(_) => String::new(),
+                            };
+                            let sig_display = if tx_sig.len() > 20 {
+                                format!("{}...{}", &tx_sig[..8], &tx_sig[tx_sig.len()-8..])
+                            } else {
+                                tx_sig.clone()
+                            };
+
+                            // Trigger confirmation polling
+                            let eid = event_id.unwrap_or_default();
+                            let aid = attendee_id.clone();
+                            let sig = tx_sig.clone();
+                            Effect::new(move |_| {
+                                let eid_c = eid.clone();
+                                let aid_c = aid.clone();
+                                let sig_c = sig.clone();
+                                leptos::task::spawn_local(async move {
+                                    handle_poll_confirmation(eid_c, aid_c, sig_c);
+                                });
+                            });
+
+                            view! {
+                                <div class="card" style="margin-top:1.5rem;text-align:center;width:100%;max-width:480px;">
+                                    <div class="card-header">
+                                        <h2 class="card-title">"⏳ Confirming Deposit..."</h2>
+                                        <span class="badge badge-info">
+                                            {format!("{} USDC", data.deposit_amount_usdc)}
+                                        </span>
+                                    </div>
+                                    <div style="margin:1.5rem 0;">
+                                        <span class="spinner spinner-lg" style="width:48px;height:48px;border-width:3px;"></span>
+                                    </div>
+                                    <p style="color:var(--text-secondary);font-size:0.9rem;margin-bottom:0.5rem;">
+                                        "Your transaction has been submitted! Waiting for on-chain confirmation..."
+                                    </p>
+                                    <div style="background:var(--bg-secondary,#1a1a2e);border-radius:8px;padding:0.75rem;margin-top:0.75rem;font-family:monospace;font-size:0.75rem;color:var(--text-secondary);word-break:break-all;">
+                                        {format!("TX: {}", &sig_display)}
+                                    </div>
+                                    <p style="font-size:0.75rem;color:var(--text-secondary);margin-top:0.75rem;">
+                                        "This usually takes 5-15 seconds. Don't close this page."
+                                    </p>
+                                </div>
+                            }
+                                .into_any()
+                        }
+
+                        // ===== Deposit Confirmed =====
+                        DepositPageState::DepositConfirmed(data, tx_sig) => {
+                            let sig_display = if tx_sig.len() > 20 {
+                                format!("{}...{}", &tx_sig[..8], &tx_sig[tx_sig.len()-8..])
+                            } else {
+                                tx_sig.clone()
+                            };
+                            let solscan_url = format!("https://solscan.io/tx/{}?cluster=devnet", tx_sig);
+                            view! {
+                                <div class="card" style="margin-top:1.5rem;text-align:center;width:100%;max-width:480px;">
+                                    <div class="card-header">
+                                        <h2 class="card-title">"✅ Deposit Confirmed!"</h2>
+                                        <span class="badge badge-success">"On-chain verified"</span>
+                                    </div>
+                                    <div style="font-size:3rem;margin:1rem 0;">"🎉"</div>
+                                    <p style="font-size:1.1rem;font-weight:600;margin-bottom:0.5rem;">
+                                        {format!("{} USDC deposited", data.deposit_amount_usdc)}
+                                    </p>
+                                    <p style="color:var(--text-secondary);font-size:0.9rem;margin-bottom:1rem;">
+                                        "Your deposit has been confirmed on Solana. You're all set for the event!"
+                                    </p>
+                                    <div style="background:var(--bg-secondary,#1a1a2e);border-radius:8px;padding:0.75rem;margin-bottom:1rem;font-family:monospace;font-size:0.75rem;color:var(--text-secondary);word-break:break-all;">
+                                        {format!("TX: {}", &sig_display)}
+                                    </div>
+                                    <a href=&solscan_url target="_blank" style="color:var(--accent,#14f195);font-size:0.85rem;">
+                                        "View on Solscan ↗"
+                                    </a>
+                                    <div style="margin-top:1.25rem;">
+                                        <a href="/" class="btn btn-primary">"Go Home"</a>
+                                    </div>
+                                </div>
                             }
                                 .into_any()
                         }

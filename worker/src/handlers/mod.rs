@@ -56,6 +56,14 @@ pub fn routes(state: AppState) -> Router<()> {
         .route("/deposit/usdc", post(deposit::deposit_usdc_handler))
         .route("/deposit/usdc/tx", get(deposit::deposit_usdc_tx_handler))
         .route(
+            "/deposit/usdc/confirm",
+            get(deposit::confirm_deposit_handler),
+        )
+        .route(
+            "/deposit/usdc/webhook",
+            post(deposit::deposit_webhook_handler),
+        )
+        .route(
             "/deposit/thb/upload",
             post(deposit::upload_thb_slip_handler),
         );

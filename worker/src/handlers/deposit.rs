@@ -25,7 +25,7 @@ use event_checkin_domain::models::deposit::{
 };
 use event_checkin_domain::models::error::AppError;
 
-use crate::error::WorkerError;
+use crate::error::{ApiOk, WorkerError};
 use crate::event_store;
 use crate::handlers::ext::EventIdQuery;
 use crate::state::AppState;
@@ -41,7 +41,7 @@ pub async fn get_deposit_status_handler(
     State(state): State<AppState>,
     Path(attendee_id): Path<String>,
     Query(query): Query<EventIdQuery>,
-) -> Result<Json<DepositStatusResponse>, WorkerError> {
+) -> Result<ApiOk<DepositStatusResponse>, WorkerError> {
     let kv = state
         .events_kv
         .as_ref()
@@ -56,7 +56,7 @@ pub async fn get_deposit_status_handler(
         .await
         .map_err(AppError::Internal)?;
 
-    Ok(Json(DepositStatusResponse {
+    Ok(ApiOk::new(DepositStatusResponse {
         deposit_enabled: event.deposit_enabled,
         deposit_amount_usdc: event.deposit_amount_usdc,
         deposit_amount_thb: event.deposit_amount_thb,
@@ -83,7 +83,7 @@ pub async fn get_deposit_status_handler(
 pub async fn deposit_usdc_handler(
     State(state): State<AppState>,
     Json(body): Json<UsdcDepositRequest>,
-) -> Result<Json<UsdcDepositResponse>, WorkerError> {
+) -> Result<ApiOk<UsdcDepositResponse>, WorkerError> {
     let kv = state
         .events_kv
         .as_ref()
@@ -148,7 +148,7 @@ pub async fn deposit_usdc_handler(
         "USDC deposit initiated"
     );
 
-    Ok(Json(UsdcDepositResponse {
+    Ok(ApiOk::new(UsdcDepositResponse {
         transaction: String::new(), // Transaction is built on-demand by the callback endpoint
         solana_pay_url,
     }))
@@ -287,8 +287,333 @@ pub async fn deposit_usdc_tx_handler(
     }))
 }
 
-/// Derive a stable u64 event ID from a string event ID for on-chain PDA derivation.
-/// Uses FNV-1a hash for deterministic, collision-resistant mapping.
+// Derive a stable u64 event ID from a string event ID for on-chain PDA derivation.
+// Uses FNV-1a hash for deterministic, collision-resistant mapping.
+// ---------------------------------------------------------------------------
+// GET /api/deposit/usdc/confirm — Poll for deposit TX confirmation
+// ---------------------------------------------------------------------------
+
+/// Query parameters for checking deposit confirmation.
+#[derive(Debug, serde::Deserialize)]
+pub struct ConfirmDepositQuery {
+    /// Event ID.
+    pub event_id: String,
+    /// Attendee API ID.
+    pub attendee_id: String,
+}
+
+/// Response for deposit confirmation check.
+#[derive(Debug, serde::Serialize)]
+pub struct ConfirmDepositResponse {
+    /// Whether the deposit has been confirmed on-chain.
+    pub confirmed: bool,
+    /// Transaction signature if confirmed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tx_signature: Option<String>,
+    /// Solana Pay URL to retry (if not yet confirmed and TX not sent).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub solana_pay_url: Option<String>,
+}
+
+/// Check if a USDC deposit has been confirmed on-chain.
+///
+/// This endpoint is polled by the frontend after the attendee sends the deposit TX.
+/// It checks the KV-stored `DepositStatus` for the `verified` flag and
+/// optionally calls the RPC to verify the TX landed.
+#[worker::send]
+pub async fn confirm_deposit_handler(
+    State(state): State<AppState>,
+    Query(query): Query<ConfirmDepositQuery>,
+) -> Result<ApiOk<ConfirmDepositResponse>, WorkerError> {
+    let kv = state
+        .events_kv
+        .as_ref()
+        .ok_or_else(|| AppError::Internal("EVENTS KV not configured".to_string()))?;
+
+    let event = event_store::get_event_config(kv, &query.event_id)
+        .await
+        .map_err(AppError::Internal)?
+        .ok_or_else(|| AppError::NotFound(format!("event '{}' not found", query.event_id)))?;
+
+    // Check deposit status in KV
+    let deposit_status = event_store::get_deposit_status(kv, &event.id, &query.attendee_id)
+        .await
+        .map_err(AppError::Internal)?;
+
+    match deposit_status {
+        Some(status) if status.verified => {
+            // Already verified
+            Ok(ApiOk::new(ConfirmDepositResponse {
+                confirmed: true,
+                tx_signature: status.tx_signature.clone(),
+                solana_pay_url: None,
+            }))
+        }
+        Some(status) => {
+            // Pending — check if there's a tx_signature to verify on-chain
+            match &status.tx_signature {
+                Some(sig) if !sig.is_empty() => {
+                    // Verify the TX on-chain via RPC
+                    let rpc_url = format!(
+                        "{}{}{}",
+                        state.config.solana.rpc_url,
+                        if state.config.solana.rpc_url.contains('?') {
+                            "&"
+                        } else {
+                            "?api-key="
+                        },
+                        state.config.solana.api_key
+                    );
+                    let confirmed = verify_tx_on_chain(&rpc_url, sig).await;
+
+                    if confirmed {
+                        // Update the deposit status to verified
+                        let mut updated = status.clone();
+                        updated.verified = true;
+                        event_store::save_deposit_status(kv, &updated)
+                            .await
+                            .map_err(AppError::Internal)?;
+
+                        tracing::info!(
+                            attendee_id = %query.attendee_id,
+                            tx_signature = %sig,
+                            "USDC deposit confirmed on-chain"
+                        );
+
+                        Ok(ApiOk::new(ConfirmDepositResponse {
+                            confirmed: true,
+                            tx_signature: Some(sig.clone()),
+                            solana_pay_url: None,
+                        }))
+                    } else {
+                        // TX not yet confirmed, keep polling
+                        Ok(ApiOk::new(ConfirmDepositResponse {
+                            confirmed: false,
+                            tx_signature: Some(sig.clone()),
+                            solana_pay_url: None,
+                        }))
+                    }
+                }
+                _ => {
+                    // No TX signature yet — still pending
+                    // Return the Solana Pay URL so frontend can retry
+                    let callback_url = format!(
+                        "{}/api/deposit/usdc/tx?event_id={}&attendee_id={}&wallet=",
+                        state.config.server.url,
+                        urlencoding::encode(&event.id),
+                        urlencoding::encode(&query.attendee_id),
+                    );
+                    Ok(ApiOk::new(ConfirmDepositResponse {
+                        confirmed: false,
+                        tx_signature: None,
+                        solana_pay_url: Some(format!("solana:{callback_url}")),
+                    }))
+                }
+            }
+        }
+        None => {
+            // No deposit record — attendee hasn't initiated yet
+            Ok(ApiOk::new(ConfirmDepositResponse {
+                confirmed: false,
+                tx_signature: None,
+                solana_pay_url: None,
+            }))
+        }
+    }
+}
+
+/// Verify a transaction signature on-chain by checking its confirmation status via RPC.
+async fn verify_tx_on_chain(rpc_url: &str, signature: &str) -> bool {
+    let body = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": "bethere-confirm",
+        "method": "getSignatureStatuses",
+        "params": [[signature]]
+    });
+
+    let json_body = match serde_json::to_string(&body) {
+        Ok(b) => b,
+        Err(e) => {
+            tracing::error!("failed to serialize signature status request: {e}");
+            return false;
+        }
+    };
+
+    let headers = worker::Headers::new();
+    if let Err(e) = headers.set("Content-Type", "application/json") {
+        tracing::error!("failed to set header: {e:?}");
+        return false;
+    }
+
+    let mut init = worker::RequestInit::new();
+    init.with_method(worker::Method::Post)
+        .with_headers(headers)
+        .with_body(Some(wasm_bindgen::JsValue::from_str(&json_body)));
+
+    let request = match worker::Request::new_with_init(rpc_url, &init) {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::error!("failed to create RPC request: {e:?}");
+            return false;
+        }
+    };
+
+    let mut response = match worker::Fetch::Request(request).send().await {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::warn!("RPC request failed: {e:?}");
+            return false;
+        }
+    };
+
+    let body_text = match response.text().await {
+        Ok(t) => t,
+        Err(e) => {
+            tracing::warn!("failed to read RPC response: {e:?}");
+            return false;
+        }
+    };
+
+    // Parse the response: { result: { value: [ { confirmationStatus: "confirmed" | "finalized", err: null } ] } }
+    let parsed: serde_json::Value = match serde_json::from_str(&body_text) {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::warn!("failed to parse RPC response: {e}");
+            return false;
+        }
+    };
+
+    // Navigate to result.value[0].confirmationStatus
+    if let Some(status) = parsed
+        .get("result")
+        .and_then(|r| r.get("value"))
+        .and_then(|v| v.as_array())
+        .and_then(|arr| arr.first())
+    {
+        // Check if there's an error
+        if status.get("err").is_some_and(|e| !e.is_null()) {
+            tracing::warn!(tx_signature = %signature, "TX failed on-chain: {:?}", status.get("err"));
+            return false;
+        }
+        // Check confirmation status
+        let confirmed = status
+            .get("confirmationStatus")
+            .and_then(|s| s.as_str())
+            .is_some_and(|s| s == "confirmed" || s == "finalized");
+        return confirmed;
+    }
+
+    false
+}
+
+// ---------------------------------------------------------------------------
+// POST /api/deposit/usdc/webhook — Helius webhook for TX confirmation
+// ---------------------------------------------------------------------------
+
+/// Helius webhook payload for transaction notification.
+/// See: https://docs.helius.dev/webhooks/webhook-payload
+#[derive(Debug, serde::Deserialize)]
+#[allow(dead_code)]
+pub struct HeliusWebhookPayload {
+    /// Array of transaction notifications.
+    #[serde(default)]
+    pub data: Vec<HeliusTransactionData>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[allow(dead_code)]
+pub struct HeliusTransactionData {
+    /// Transaction signature.
+    pub signature: String,
+    /// Transaction type.
+    #[serde(default)]
+    pub r#type: String,
+    /// Description (human-readable).
+    #[serde(default)]
+    pub description: String,
+}
+
+/// Response body for updating deposit status with TX signature.
+#[derive(Debug, serde::Deserialize)]
+pub struct UpdateDepositSignatureRequest {
+    /// Event ID.
+    pub event_id: String,
+    /// Attendee API ID.
+    pub attendee_id: String,
+    /// On-chain transaction signature.
+    pub tx_signature: String,
+}
+
+/// Helius webhook handler for USDC deposit confirmations.
+///
+/// Called by Helius when a monitored transaction is confirmed on-chain.
+/// Updates the deposit status in KV to `verified: true`.
+///
+/// This endpoint is also called directly by the frontend after a wallet
+/// sends a deposit TX, to record the TX signature for later polling.
+#[worker::send]
+pub async fn deposit_webhook_handler(
+    State(state): State<AppState>,
+    Json(body): Json<UpdateDepositSignatureRequest>,
+) -> Result<ApiOk<serde_json::Value>, WorkerError> {
+    let kv = state
+        .events_kv
+        .as_ref()
+        .ok_or_else(|| AppError::Internal("EVENTS KV not configured".to_string()))?;
+
+    // Get existing deposit status
+    let mut deposit_status = event_store::get_deposit_status(kv, &body.event_id, &body.attendee_id)
+        .await
+        .map_err(AppError::Internal)?
+        .ok_or_else(|| {
+            AppError::NotFound(format!(
+                "no deposit record for attendee '{}' in event '{}'",
+                body.attendee_id, body.event_id
+            ))
+        })?;
+
+    // Update with TX signature
+    deposit_status.tx_signature = Some(body.tx_signature.clone());
+
+    // Try to verify the TX on-chain immediately
+    let rpc_url = format!(
+        "{}{}{}",
+        state.config.solana.rpc_url,
+        if state.config.solana.rpc_url.contains('?') {
+            "&"
+        } else {
+            "?api-key="
+        },
+        state.config.solana.api_key
+    );
+    let confirmed = verify_tx_on_chain(&rpc_url, &body.tx_signature).await;
+
+    if confirmed {
+        deposit_status.verified = true;
+        tracing::info!(
+            attendee_id = %body.attendee_id,
+            tx_signature = %body.tx_signature,
+            "USDC deposit verified via webhook"
+        );
+    } else {
+        tracing::info!(
+            attendee_id = %body.attendee_id,
+            tx_signature = %body.tx_signature,
+            "USDC deposit TX signature recorded, pending on-chain confirmation"
+        );
+    }
+
+    event_store::save_deposit_status(kv, &deposit_status)
+        .await
+        .map_err(AppError::Internal)?;
+
+    Ok(ApiOk::new(serde_json::json!({
+        "success": true,
+        "confirmed": confirmed,
+        "tx_signature": body.tx_signature,
+    })))
+}
+
 fn derive_on_chain_event_id(event_id: &str) -> u64 {
     // FNV-1a 64-bit hash
     let mut hash: u64 = 0xcbf29ce484222325; // FNV offset basis
@@ -344,7 +669,7 @@ pub async fn create_event_tx_handler(
     State(state): State<AppState>,
     Extension(_claims): Extension<Claims>,
     Json(body): Json<CreateEventTxRequest>,
-) -> Result<Json<CreateEventTxResponse>, WorkerError> {
+) -> Result<ApiOk<CreateEventTxResponse>, WorkerError> {
     let kv = state
         .events_kv
         .as_ref()
@@ -437,7 +762,7 @@ pub async fn create_event_tx_handler(
         "Create event TX built for organizer"
     );
 
-    Ok(Json(CreateEventTxResponse {
+    Ok(ApiOk::new(CreateEventTxResponse {
         transaction: tx.transaction_b64,
         message: tx.message,
         escrow_address: tx.escrow_address,
@@ -457,7 +782,7 @@ pub async fn create_event_tx_handler(
 pub async fn upload_thb_slip_handler(
     State(state): State<AppState>,
     Json(body): Json<ThbSlipUploadRequest>,
-) -> Result<Json<serde_json::Value>, WorkerError> {
+) -> Result<ApiOk<serde_json::Value>, WorkerError> {
     let kv = state
         .events_kv
         .as_ref()
@@ -528,7 +853,7 @@ pub async fn upload_thb_slip_handler(
         "THB deposit slip uploaded"
     );
 
-    Ok(Json(serde_json::json!({
+    Ok(ApiOk::new(serde_json::json!({
         "success": true,
         "message": "slip uploaded, awaiting verification"
     })))
@@ -555,7 +880,7 @@ pub async fn verify_thb_slip_handler(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
     Json(body): Json<VerifySlipRequest>,
-) -> Result<Json<serde_json::Value>, WorkerError> {
+) -> Result<ApiOk<serde_json::Value>, WorkerError> {
     let kv = state
         .events_kv
         .as_ref()
@@ -618,7 +943,7 @@ pub async fn verify_thb_slip_handler(
         "deposit rejected"
     };
 
-    Ok(Json(serde_json::json!({
+    Ok(ApiOk::new(serde_json::json!({
         "success": true,
         "message": msg
     })))
@@ -634,7 +959,7 @@ pub async fn pending_thb_slips_handler(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
     Query(query): Query<EventIdQuery>,
-) -> Result<Json<PendingSlipResponse>, WorkerError> {
+) -> Result<ApiOk<PendingSlipResponse>, WorkerError> {
     let kv = state
         .events_kv
         .as_ref()
@@ -653,7 +978,7 @@ pub async fn pending_thb_slips_handler(
         .filter(|d| !d.verified && d.slip_url.is_some())
         .collect();
 
-    Ok(Json(PendingSlipResponse { slips: pending }))
+    Ok(ApiOk::new(PendingSlipResponse { slips: pending }))
 }
 
 // ---------------------------------------------------------------------------
@@ -666,7 +991,7 @@ pub async fn refund_queue_handler(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
     Query(query): Query<EventIdQuery>,
-) -> Result<Json<RefundQueueResponse>, WorkerError> {
+) -> Result<ApiOk<RefundQueueResponse>, WorkerError> {
     let kv = state
         .events_kv
         .as_ref()
@@ -685,7 +1010,7 @@ pub async fn refund_queue_handler(
         .filter(|d| d.verified && !d.refunded)
         .collect();
 
-    Ok(Json(RefundQueueResponse { pending }))
+    Ok(ApiOk::new(RefundQueueResponse { pending }))
 }
 
 // ---------------------------------------------------------------------------
@@ -699,7 +1024,7 @@ pub async fn mark_refund_handler(
     Extension(claims): Extension<Claims>,
     Path(attendee_id): Path<String>,
     Json(body): Json<MarkRefundRequest>,
-) -> Result<Json<serde_json::Value>, WorkerError> {
+) -> Result<ApiOk<serde_json::Value>, WorkerError> {
     let kv = state
         .events_kv
         .as_ref()
@@ -744,7 +1069,7 @@ pub async fn mark_refund_handler(
         "THB refund marked complete"
     );
 
-    Ok(Json(serde_json::json!({
+    Ok(ApiOk::new(serde_json::json!({
         "success": true,
         "message": "refund marked complete"
     })))

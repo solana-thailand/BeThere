@@ -1695,6 +1695,13 @@ pub struct MarkRefundRequest {
     pub event_id: String,
 }
 
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+pub struct ConfirmDepositResponse {
+    pub confirmed: bool,
+    pub tx_signature: Option<String>,
+    pub solana_pay_url: Option<String>,
+}
+
 // ===== Deposit/Refund API =====
 
 /// GET /api/deposit/status/{attendee_id}?event_id=xxx
@@ -1735,6 +1742,52 @@ pub async fn get_deposit_status(
 /// POST /api/deposit/usdc
 pub async fn deposit_usdc(body: &UsdcDepositRequest) -> Result<UsdcDepositResponse, ApiError> {
     api_post_json("/deposit/usdc", body).await
+}
+
+/// POST /api/deposit/usdc/webhook — record TX signature
+pub async fn record_deposit_tx(
+    event_id: &str,
+    attendee_id: &str,
+    tx_signature: &str,
+) -> Result<serde_json::Value, ApiError> {
+    let body = serde_json::json!({
+        "event_id": event_id,
+        "attendee_id": attendee_id,
+        "tx_signature": tx_signature,
+    });
+    api_post_json("/deposit/usdc/webhook", &body).await
+}
+
+/// GET /api/deposit/usdc/confirm?event_id=xxx&attendee_id=xxx
+pub async fn confirm_deposit(
+    event_id: &str,
+    attendee_id: &str,
+) -> Result<ConfirmDepositResponse, ApiError> {
+    let path = format!("/deposit/usdc/confirm?event_id={event_id}&attendee_id={attendee_id}");
+    let response = api_get(&path).await?;
+
+    if !response.ok() {
+        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
+            success: false,
+            data: None,
+            error: Some("Failed to check deposit confirmation".to_string()),
+        });
+        return Err(ApiError {
+            message: body.error.unwrap_or_default(),
+            status: 0,
+        });
+    }
+
+    let wrapper: ApiResponse<ConfirmDepositResponse> =
+        response.json().await.map_err(|e| ApiError {
+            message: format!("Failed to parse deposit confirmation: {e}"),
+            status: 0,
+        })?;
+
+    wrapper.data.ok_or_else(|| ApiError {
+        message: wrapper.error.unwrap_or("No data".to_string()),
+        status: 0,
+    })
 }
 
 /// POST /api/deposit/thb/upload
