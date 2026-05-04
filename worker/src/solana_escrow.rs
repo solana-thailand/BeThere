@@ -546,8 +546,12 @@ fn serialize_transaction(
 
     let mut buf = Vec::new();
 
-    // 1. Signature count (0 — unsigned, wallet will sign)
-    encode_compact_u16(0, &mut buf);
+    // 1. Signature count — must match num_signatures, with zero-filled placeholders
+    // Wallet adapter fills in actual signatures when signing
+    encode_compact_u16(num_signatures as usize, &mut buf);
+    for _ in 0..num_signatures {
+        buf.extend_from_slice(&[0u8; 64]); // zero-filled signature placeholder
+    }
 
     // 2. Message header
     buf.push(num_signatures);
@@ -1081,45 +1085,48 @@ pub async fn build_create_event_transaction(
     ix_data.extend_from_slice(&event_end.to_le_bytes());
     ix_data.extend_from_slice(&refund_deadline.to_le_bytes());
 
-    // The create_event instruction expects accounts in this order:
-    //   organizer (signer+writable), event_escrow (writable), usdc_mint (readonly),
-    //   vault (writable), rent (readonly), token_program (readonly), system_program (readonly)
+    // IMPORTANT: The vault ATA must be pre-created before this transaction is submitted.
+    // The quasar-lang `init(idempotent)` constraint validates the account exists but
+    // does NOT create it via CPI. The handler should create the vault ATA via a
+    // separate RPC call before returning this transaction to the client.
+    //
+    // All accounts needed for the create_event instruction
     let instruction_accounts = vec![
         AccountMeta {
             pubkey: organizer,
             is_signer: true,
             is_writable: true,
-        }, // 0
+        },
         AccountMeta {
             pubkey: event_escrow,
             is_signer: false,
             is_writable: true,
-        }, // 1
-        AccountMeta {
-            pubkey: usdc_mint,
-            is_signer: false,
-            is_writable: false,
-        }, // 2
+        },
         AccountMeta {
             pubkey: vault,
             is_signer: false,
             is_writable: true,
-        }, // 3
+        },
+        AccountMeta {
+            pubkey: usdc_mint,
+            is_signer: false,
+            is_writable: false,
+        },
         AccountMeta {
             pubkey: rent_sysvar,
             is_signer: false,
             is_writable: false,
-        }, // 4
+        },
         AccountMeta {
             pubkey: token_program,
             is_signer: false,
             is_writable: false,
-        }, // 5
+        },
         AccountMeta {
             pubkey: system_program,
             is_signer: false,
             is_writable: false,
-        }, // 6
+        },
     ];
 
     // Build the message account keys in Solana's canonical order:
@@ -1156,7 +1163,7 @@ pub async fn build_create_event_transaction(
             });
         }
     }
-    // 4. Non-signer + readonly (includes program_id if not already present)
+    // 4. Non-signer + readonly
     let mut program_id_in_message = false;
     for m in &instruction_accounts {
         if !m.is_signer && !m.is_writable {
@@ -1170,7 +1177,6 @@ pub async fn build_create_event_transaction(
             });
         }
     }
-    // Add program_id if not already in the list
     if !program_id_in_message {
         message_accounts.push(AccountMeta {
             pubkey: program_id,
@@ -1179,7 +1185,7 @@ pub async fn build_create_event_transaction(
         });
     }
 
-    // Build a lookup: pubkey → index in message_accounts
+    // Build lookups
     let get_index = |pk: &PubkeyBytes| -> u8 {
         message_accounts
             .iter()
