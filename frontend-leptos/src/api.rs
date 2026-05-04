@@ -1650,6 +1650,8 @@ pub struct DepositStatusInfo {
     pub tx_signature: Option<String>,
     pub verified: bool,
     pub deposited_at: String,
+    #[serde(default)]
+    pub wallet_address: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, serde::Deserialize)]
@@ -1950,7 +1952,8 @@ pub async fn create_vault_ata(body: &CreateVaultAtaRequest) -> Result<CreateVaul
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct MarkCheckedInRequest {
     pub event_id: String,
-    pub attendee_wallet: String,
+    /// Attendee API ID — backend resolves wallet from deposit record.
+    pub attendee_id: String,
 }
 
 /// Response from POST /api/escrow/mark-checked-in.

@@ -136,6 +136,7 @@ pub async fn deposit_usdc_handler(
         tx_signature: None,
         verified: false,
         deposited_at: Utc::now().to_rfc3339(),
+        wallet_address: Some(body.wallet_address.clone()),
     };
 
     event_store::save_deposit_status(kv, &deposit_status)
@@ -878,6 +879,7 @@ pub async fn upload_thb_slip_handler(
         tx_signature: None,
         verified: false,
         deposited_at: now,
+        wallet_address: None,
     };
 
     event_store::save_deposit_status(kv, &deposit_status)
@@ -1259,8 +1261,12 @@ pub async fn refund_tx_handler(
 pub struct MarkCheckedInTxRequest {
     /// Event ID (slug or KV key).
     pub event_id: String,
+    /// Attendee API ID from Google Sheets (used to look up wallet from deposit).
+    pub attendee_id: String,
     /// Attendee's Solana wallet address (base58).
-    pub attendee_wallet: String,
+    /// If not provided, looked up from the deposit record.
+    #[serde(default)]
+    pub attendee_wallet: Option<String>,
 }
 
 #[derive(Debug, serde::Serialize)]
@@ -1303,8 +1309,31 @@ pub async fn mark_checked_in_tx_handler(
         );
     }
 
+    // Resolve attendee wallet: use provided value or look up from deposit record
+    let attendee_wallet = match &body.attendee_wallet {
+        Some(w) if !w.is_empty() => w.clone(),
+        _ => {
+            // Look up from deposit status
+            let deposit = event_store::get_deposit_status(kv, &event.id, &body.attendee_id)
+                .await
+                .map_err(AppError::Internal)?
+                .ok_or_else(|| {
+                    AppError::NotFound(format!(
+                        "no deposit found for attendee '{}' — cannot resolve wallet",
+                        body.attendee_id
+                    ))
+                })?;
+            deposit.wallet_address.ok_or_else(|| {
+                AppError::NotFound(format!(
+                    "deposit for attendee '{}' has no wallet address",
+                    body.attendee_id
+                ))
+            })?
+        }
+    };
+
     // Validate attendee wallet
-    crate::solana::validate_wallet_address(&body.attendee_wallet).map_err(AppError::Validation)?;
+    crate::solana::validate_wallet_address(&attendee_wallet).map_err(AppError::Validation)?;
 
     // Determine organizer pubkey
     let organizer_pubkey = if event.organizer_wallet.is_empty() {
@@ -1339,13 +1368,14 @@ pub async fn mark_checked_in_tx_handler(
         &rpc_url,
         organizer_pubkey,
         on_chain_event_id,
-        &body.attendee_wallet,
+        &attendee_wallet,
     )
     .await
     .map_err(|e| AppError::Internal(format!("failed to build mark_checked_in TX: {e}")))?;
 
     tracing::info!(
-        attendee_wallet = %body.attendee_wallet,
+        attendee_wallet = %attendee_wallet,
+        attendee_id = %body.attendee_id,
         event_id = %event.id,
         "Mark checked-in TX built for organizer"
     );

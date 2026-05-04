@@ -41,6 +41,9 @@ pub struct DepositStatus {
     pub verified: bool,
     /// ISO 8601 timestamp when deposit was recorded.
     pub deposited_at: String,
+    /// Attendee's Solana wallet address (USDC deposits only).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub wallet_address: Option<String>,
 }
 
 /// THB deposit record (stored in KV, no on-chain record).
