@@ -152,6 +152,10 @@ pub struct EventConfig {
     /// Deposit amount in Thai Baht (for PromptPay track). e.g., 500.
     #[serde(default)]
     pub deposit_amount_thb: u64,
+    /// PromptPay ID for THB payments (Thai phone number or national ID).
+    /// e.g., "0812345678" or "1-1001-00000-00-0".
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub promptpay_id: String,
     /// EventEscrow PDA address (set after on-chain create_event). Empty if not yet created.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub escrow_address: String,
@@ -283,6 +287,7 @@ impl EventConfig {
             deposit_enabled: false,
             deposit_amount_usdc: 0,
             deposit_amount_thb: 0,
+            promptpay_id: String::new(),
             escrow_address: String::new(),
             organizer_wallet: String::new(),
             on_chain_event_id: 0,
@@ -367,6 +372,9 @@ pub struct CreateEventRequest {
     /// Deposit amount in Thai Baht (for PromptPay track).
     #[serde(default)]
     pub deposit_amount_thb: u64,
+    /// PromptPay ID for THB payments (Thai phone number or national ID).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub promptpay_id: String,
     /// EventEscrow PDA address.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub escrow_address: String,
@@ -381,6 +389,7 @@ pub struct CreateEventRequest {
     pub refund_deadline_hours: u32,
 }
 
+/// Request body for updating an existing event.
 /// Request body for PUT /api/events/{id} — update an existing event.
 /// All fields are optional; only provided fields are updated.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -459,6 +468,9 @@ pub struct UpdateEventRequest {
     /// Deposit amount in Thai Baht (for PromptPay track).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub deposit_amount_thb: Option<u64>,
+    /// PromptPay ID for THB payments (Thai phone number or national ID).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub promptpay_id: Option<String>,
     /// EventEscrow PDA address.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub escrow_address: Option<String>,

@@ -60,6 +60,7 @@ pub async fn get_deposit_status_handler(
         deposit_enabled: event.deposit_enabled,
         deposit_amount_usdc: event.deposit_amount_usdc,
         deposit_amount_thb: event.deposit_amount_thb,
+        promptpay_id: event.promptpay_id,
         status,
     }))
 }
@@ -1073,4 +1074,142 @@ pub async fn mark_refund_handler(
         "success": true,
         "message": "refund marked complete"
     })))
+}
+
+// ---------------------------------------------------------------------------
+// POST /api/escrow/refund — Build refund TX for attendee
+// ---------------------------------------------------------------------------
+
+/// Request body for building a refund transaction.
+#[derive(Debug, serde::Deserialize)]
+pub struct RefundTxRequest {
+    /// Event ID.
+    pub event_id: String,
+    /// Attendee API ID from Google Sheets.
+    pub attendee_id: String,
+    /// Attendee's Solana wallet address (base58).
+    pub wallet_address: String,
+}
+
+/// Response with the serialized refund transaction.
+#[derive(Debug, serde::Serialize)]
+pub struct RefundTxResponse {
+    /// Base64-encoded serialized transaction (unsigned — wallet signs).
+    pub transaction: String,
+    /// Human-readable message for wallet confirmation.
+    pub message: String,
+}
+
+/// Build a refund transaction for an attendee's verified USDC deposit.
+///
+/// This is a **public endpoint** — attendees call it to claim their refund.
+/// The attendee's wallet signature provides on-chain authentication.
+///
+/// Prerequisites:
+/// - Event has deposits enabled and escrow initialized
+/// - Attendee has a verified USDC deposit
+#[worker::send]
+pub async fn refund_tx_handler(
+    State(state): State<AppState>,
+    Json(body): Json<RefundTxRequest>,
+) -> Result<ApiOk<RefundTxResponse>, WorkerError> {
+    let kv = state
+        .events_kv
+        .as_ref()
+        .ok_or_else(|| AppError::Internal("EVENTS KV not configured".to_string()))?;
+
+    let event = event_store::get_event_config(kv, &body.event_id)
+        .await
+        .map_err(AppError::Internal)?
+        .ok_or_else(|| AppError::NotFound(format!("event '{}' not found", body.event_id)))?;
+
+    if !event.deposit_enabled {
+        return Err(AppError::Validation("deposit not enabled for this event".to_string()).into());
+    }
+
+    // Must have escrow initialized on-chain
+    if event.escrow_address.is_empty() {
+        return Err(
+            AppError::Validation("event escrow not initialized on-chain".to_string()).into(),
+        );
+    }
+
+    // Validate wallet address
+    crate::solana::validate_wallet_address(&body.wallet_address).map_err(AppError::Validation)?;
+
+    // Check attendee has a verified USDC deposit
+    let deposit_status = event_store::get_deposit_status(kv, &event.id, &body.attendee_id)
+        .await
+        .map_err(AppError::Internal)?;
+
+    let status = deposit_status.ok_or_else(|| {
+        AppError::NotFound(format!(
+            "no deposit found for attendee '{}'",
+            body.attendee_id
+        ))
+    })?;
+
+    if !status.verified {
+        return Err(
+            AppError::Validation("deposit not verified yet — cannot refund".to_string()).into(),
+        );
+    }
+
+    if status.method != DepositMethod::Usdc {
+        return Err(AppError::Validation(
+            "refund TX only supported for USDC deposits — use THB refund flow instead".to_string(),
+        )
+        .into());
+    }
+
+    // Determine organizer pubkey for PDA derivation
+    let organizer_pubkey = if event.organizer_wallet.is_empty() {
+        return Err(
+            AppError::Internal("event has no organizer wallet configured".to_string()).into(),
+        );
+    } else {
+        crate::solana::validate_wallet_address(&event.organizer_wallet)
+            .map_err(|e| AppError::Validation(format!("invalid organizer_wallet: {e}")))?;
+        &event.organizer_wallet
+    };
+
+    // The on_chain_event_id for PDA derivation
+    let on_chain_event_id = if event.on_chain_event_id != 0 {
+        event.on_chain_event_id
+    } else {
+        derive_on_chain_event_id(&event.id)
+    };
+
+    // Build the RPC URL with API key
+    let rpc_url = format!(
+        "{}{}{}",
+        state.config.solana.rpc_url,
+        if state.config.solana.rpc_url.contains('?') {
+            "&"
+        } else {
+            "?api-key="
+        },
+        state.config.solana.api_key
+    );
+
+    // Build the refund transaction
+    let tx = crate::solana_escrow::build_refund_transaction(
+        &rpc_url,
+        organizer_pubkey,
+        on_chain_event_id,
+        &body.wallet_address,
+    )
+    .await
+    .map_err(|e| AppError::Internal(format!("failed to build refund TX: {e}")))?;
+
+    tracing::info!(
+        attendee_id = %body.attendee_id,
+        event_id = %event.id,
+        "Refund TX built for attendee"
+    );
+
+    Ok(ApiOk::new(RefundTxResponse {
+        transaction: tx.transaction_b64,
+        message: tx.message,
+    }))
 }

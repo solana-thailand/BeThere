@@ -55,6 +55,14 @@ pub struct DepositTransaction {
     pub message: String,
 }
 
+/// Result of building a refund transaction.
+pub struct RefundTransaction {
+    /// Base64-encoded serialized transaction (unsigned).
+    pub transaction_b64: String,
+    /// Human-readable message for Solana Pay.
+    pub message: String,
+}
+
 /// Result of building a create_event transaction.
 pub struct CreateEventTransaction {
     /// Base64-encoded serialized transaction (unsigned).
@@ -821,6 +829,200 @@ pub async fn build_deposit_transaction(
     Ok(DepositTransaction {
         transaction_b64: tx_b64,
         message: format!("Deposit {amount_display:.2} USDC to event escrow"),
+    })
+}
+
+// ---------------------------------------------------------------------------
+// Refund Transaction Builder
+// ---------------------------------------------------------------------------
+
+/// Build a refund transaction for the escrow program.
+///
+/// Transfers USDC from the vault back to the attendee and closes the
+/// AttendeeDeposit PDA (rent reclaimed). The instruction discriminator is 3.
+///
+/// Accounts (in program-expected order):
+///   event_escrow (writable), attendee_deposit (writable), attendee (signer),
+///   vault_ta (writable), attendee_ta (writable), organizer (readonly),
+///   token_program (readonly), system_program (readonly)
+pub async fn build_refund_transaction(
+    rpc_url: &str,
+    organizer_pubkey: &str,
+    event_id: u64,
+    attendee_pubkey: &str,
+) -> Result<RefundTransaction, EscrowError> {
+    // Parse pubkeys
+    let organizer = pubkey_from_base58(organizer_pubkey)?;
+    let attendee = pubkey_from_base58(attendee_pubkey)?;
+    let program_id = pubkey_from_base58(ESCROW_PROGRAM_ID)?;
+    let usdc_mint = pubkey_from_base58(USDC_MINT_DEVNET)?;
+    let token_program = pubkey_from_base58(TOKEN_PROGRAM_ID)?;
+    let system_program = pubkey_from_base58(SYSTEM_PROGRAM_ID)?;
+
+    // Derive EventEscrow PDA: ["escrow", organizer, event_id]
+    let (event_escrow, _escrow_bump) = find_program_address(
+        &[b"escrow", organizer.as_slice(), &event_id.to_le_bytes()],
+        &program_id,
+    )
+    .await?;
+
+    // Derive AttendeeDeposit PDA: ["deposit", event_escrow, attendee]
+    let (attendee_deposit, _deposit_bump) = find_program_address(
+        &[b"deposit", event_escrow.as_slice(), attendee.as_slice()],
+        &program_id,
+    )
+    .await?;
+
+    // Derive vault ATA (owned by EventEscrow PDA)
+    let vault_ta = get_associated_token_address(&event_escrow, &usdc_mint).await?;
+
+    // Derive attendee's USDC ATA
+    let attendee_ta = get_associated_token_address(&attendee, &usdc_mint).await?;
+
+    // Refund instruction data: just the discriminator [3]
+    let ix_data = vec![3u8];
+
+    // The refund instruction expects accounts in this order:
+    //   event_escrow (writable), attendee_deposit (writable), attendee (signer),
+    //   vault_ta (writable), attendee_ta (writable), organizer (readonly),
+    //   token_program (readonly), system_program (readonly)
+    let instruction_accounts = vec![
+        AccountMeta {
+            pubkey: event_escrow,
+            is_signer: false,
+            is_writable: true,
+        }, // 0
+        AccountMeta {
+            pubkey: attendee_deposit,
+            is_signer: false,
+            is_writable: true,
+        }, // 1
+        AccountMeta {
+            pubkey: attendee,
+            is_signer: true,
+            is_writable: true,
+        }, // 2
+        AccountMeta {
+            pubkey: vault_ta,
+            is_signer: false,
+            is_writable: true,
+        }, // 3
+        AccountMeta {
+            pubkey: attendee_ta,
+            is_signer: false,
+            is_writable: true,
+        }, // 4
+        AccountMeta {
+            pubkey: organizer,
+            is_signer: false,
+            is_writable: false,
+        }, // 5
+        AccountMeta {
+            pubkey: token_program,
+            is_signer: false,
+            is_writable: false,
+        }, // 6
+        AccountMeta {
+            pubkey: system_program,
+            is_signer: false,
+            is_writable: false,
+        }, // 7
+    ];
+
+    // Build the message account keys in Solana's canonical order:
+    // signers(writable) → signers(readonly) → non-signers(writable) → non-signers(readonly)
+    // The program_id is included as a non-signer readonly.
+    let mut message_accounts: Vec<AccountMeta> = Vec::new();
+
+    // 1. Signer + writable
+    for m in &instruction_accounts {
+        if m.is_signer && m.is_writable {
+            message_accounts.push(AccountMeta {
+                pubkey: m.pubkey,
+                is_signer: true,
+                is_writable: true,
+            });
+        }
+    }
+    // 2. Signer + readonly (none in our case)
+    for m in &instruction_accounts {
+        if m.is_signer && !m.is_writable {
+            message_accounts.push(AccountMeta {
+                pubkey: m.pubkey,
+                is_signer: true,
+                is_writable: false,
+            });
+        }
+    }
+    // 3. Non-signer + writable
+    for m in &instruction_accounts {
+        if !m.is_signer && m.is_writable {
+            message_accounts.push(AccountMeta {
+                pubkey: m.pubkey,
+                is_signer: false,
+                is_writable: true,
+            });
+        }
+    }
+    // 4. Non-signer + readonly (includes program_id if not already present)
+    let mut program_id_in_message = false;
+    for m in &instruction_accounts {
+        if !m.is_signer && !m.is_writable {
+            if m.pubkey == program_id {
+                program_id_in_message = true;
+            }
+            message_accounts.push(AccountMeta {
+                pubkey: m.pubkey,
+                is_signer: false,
+                is_writable: false,
+            });
+        }
+    }
+    // Add program_id if not already in the list
+    if !program_id_in_message {
+        message_accounts.push(AccountMeta {
+            pubkey: program_id,
+            is_signer: false,
+            is_writable: false,
+        });
+    }
+
+    // Build a lookup: pubkey → index in message_accounts
+    let get_index = |pk: &PubkeyBytes| -> u8 {
+        message_accounts
+            .iter()
+            .position(|m| &m.pubkey == pk)
+            .expect("all accounts should be in message") as u8
+    };
+
+    // The program_id_index
+    let program_id_index = get_index(&program_id);
+
+    // Build instruction account indices in the order the program expects
+    let ix_account_indices: Vec<u8> = instruction_accounts
+        .iter()
+        .map(|m| get_index(&m.pubkey))
+        .collect();
+
+    let compiled_ix = CompiledInstruction {
+        program_id_index,
+        accounts: ix_account_indices,
+        data: ix_data,
+    };
+
+    // Fetch recent blockhash
+    let blockhash_resp = get_latest_blockhash(rpc_url).await?;
+    let blockhash_bytes = pubkey_from_base58(&blockhash_resp.value)?;
+
+    // Serialize the transaction
+    let tx_bytes = serialize_transaction(&message_accounts, &[compiled_ix], &blockhash_bytes);
+
+    // Base64 encode
+    let tx_b64 = base64::engine::general_purpose::STANDARD.encode(&tx_bytes);
+
+    Ok(RefundTransaction {
+        transaction_b64: tx_b64,
+        message: "Claim refund from event escrow".to_string(),
     })
 }
 

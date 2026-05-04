@@ -39,6 +39,28 @@ extern "C" {
 }
 
 // ---------------------------------------------------------------------------
+// JS interop — PromptPay QR generation
+// ---------------------------------------------------------------------------
+
+#[wasm_bindgen(module = "/js/promptpay_qr.js")]
+extern "C" {
+    /// Generate an EMVCo QR string for Thai PromptPay payments.
+    #[wasm_bindgen(js_name = "generatePromptPayQr")]
+    fn generate_promptpay_qr_js(promptpay_id: &str, amount: f64) -> Option<String>;
+}
+
+// ---------------------------------------------------------------------------
+// JS interop — File upload
+// ---------------------------------------------------------------------------
+
+#[wasm_bindgen(module = "/js/file_upload.js")]
+extern "C" {
+    /// Read a file from an input element as a base64 data URL.
+    #[wasm_bindgen(js_name = "readFileAsDataUrl")]
+    async fn read_file_as_data_url_js(input: &wasm_bindgen::JsValue) -> Option<String>;
+}
+
+// ---------------------------------------------------------------------------
 // JS interop — Solana wallet adapter
 // ---------------------------------------------------------------------------
 
@@ -132,6 +154,9 @@ pub fn Deposit() -> impl IntoView {
     let (slip_url_input, set_slip_url_input) = signal(String::new());
     let (wallet_input, set_wallet_input) = signal(String::new());
     let (pay_url_copied, set_pay_url_copied) = signal(false);
+
+    // File input ref for slip image upload
+    let file_input_ref = NodeRef::<leptos::html::Input>::new();
 
     // Extract attendee_id from URL path and event_id from query params, then fetch status
     Effect::new(move |_| {
@@ -465,20 +490,52 @@ pub fn Deposit() -> impl IntoView {
             _ => return,
         };
 
-        let slip_url = slip_url_input.get();
-        if slip_url.trim().is_empty() {
-            components::show_toast(
-                &set_toast,
-                "Please enter the slip URL.",
-                ToastType::Warning,
-            );
-            return;
-        }
-
         // Transition to uploading state
+        let deposit_data_for_err = deposit_data.clone();
         set_state.set(DepositPageState::ThbUploading(deposit_data));
 
+        let file_ref = file_input_ref.clone();
+        let text_slip_url = slip_url_input.get();
+        let set_state = set_state;
+        let set_toast = set_toast;
+        let params = params.clone();
+
         leptos::task::spawn_local(async move {
+            // Try file upload first, then fall back to text input
+            let slip_url = match file_ref.get() {
+                Some(el) => {
+                    let js_val: wasm_bindgen::JsValue = el.into();
+                    match read_file_as_data_url_js(&js_val).await {
+                        Some(data_url) => data_url,
+                        None => {
+                            // No file selected — try text input
+                            if text_slip_url.trim().is_empty() {
+                                set_state.set(DepositPageState::ChoosePayment(deposit_data_for_err));
+                                components::show_toast(
+                                    &set_toast,
+                                    "Please select a slip image or paste a URL.",
+                                    ToastType::Warning,
+                                );
+                                return;
+                            }
+                            text_slip_url
+                        }
+                    }
+                }
+                None => {
+                    if text_slip_url.trim().is_empty() {
+                        set_state.set(DepositPageState::ChoosePayment(deposit_data_for_err));
+                        components::show_toast(
+                            &set_toast,
+                            "Please select a slip image or paste a URL.",
+                            ToastType::Warning,
+                        );
+                        return;
+                    }
+                    text_slip_url
+                }
+            };
+
             let body = ThbSlipUploadRequest {
                 event_id: event_id.unwrap_or_default(),
                 attendee_id,
@@ -496,7 +553,6 @@ pub fn Deposit() -> impl IntoView {
                         &format!("Failed to upload slip: {e}"),
                         ToastType::Error,
                     );
-                    // Re-extract deposit data to go back to ChoosePayment
                     let aid = match params.get() {
                         Ok(p) => p.attendee_id.unwrap_or_default(),
                         Err(_) => return,
@@ -642,6 +698,17 @@ pub fn Deposit() -> impl IntoView {
                                             <span>{format_timestamp(&info.deposited_at)}</span>
                                         </div>
                                     </div>
+                                    {if info.verified && info.method == "usdc" {
+                                        view! {
+                                            <div style="margin-top:0.75rem;padding:0.75rem;background:var(--bg-secondary,#1a1a2e);border-radius:8px;border:1px dashed var(--border-color,rgba(255,255,255,0.2));">
+                                                <p style="font-size:0.85rem;color:var(--text-secondary);margin:0;">
+                                                    "💰 Refund will be available after the event."
+                                                </p>
+                                            </div>
+                                        }.into_any()
+                                    } else {
+                                        view! { <div></div> }.into_any()
+                                    }}
                                     <a href="/" class="btn btn-primary" style="margin-top:1rem;">"Go Home"</a>
                                 </div>
                             }
@@ -747,22 +814,70 @@ pub fn Deposit() -> impl IntoView {
                                         <p style="color:var(--text-secondary);font-size:0.9rem;margin-bottom:1rem;">
                                             "Transfer via PromptPay and upload your payment slip."
                                         </p>
+
+                                        // PromptPay QR — only shown when promptpay_id is configured
+                                        {if !data_clone.promptpay_id.is_empty() && data_clone.deposit_amount_thb > 0 {
+                                            let pp_qr_string = generate_promptpay_qr_js(
+                                                &data_clone.promptpay_id,
+                                                data_clone.deposit_amount_thb as f64,
+                                            );
+                                            let pp_qr_image = pp_qr_string.as_ref().and_then(|s| generate_qr_data_url_js(s, 256));
+                                            view! {
+                                                <div style="text-align:center;margin-bottom:1rem;">
+                                                    <p style="font-size:0.95rem;font-weight:600;margin-bottom:0.75rem;">
+                                                        {format!("Scan to pay {} THB", data_clone.deposit_amount_thb)}
+                                                    </p>
+                                                    {match pp_qr_image {
+                                                        Some(url) => view! {
+                                                            <div style="background:white;border-radius:12px;padding:1rem;display:inline-block;margin-bottom:0.5rem;">
+                                                                <img src=url alt="PromptPay QR" style="width:220px;height:220px;" />
+                                                            </div>
+                                                        }.into_any(),
+                                                        None => view! {
+                                                            <p style="color:var(--text-secondary);font-size:0.8rem;">"QR generation failed — please pay manually."
+                                                            </p>
+                                                        }.into_any(),
+                                                    }}
+                                                    <p style="font-size:0.75rem;color:var(--text-secondary);margin-top:0.3rem;">
+                                                        "Open your banking app → Scan QR → Pay"
+                                                    </p>
+                                                </div>
+                                            }.into_any()
+                                        } else {
+                                            view! { <div></div> }.into_any()
+                                        }}
+
+                                        // File upload for slip image
                                         <div style="margin-bottom:0.75rem;">
+                                            <label style="display:block;font-size:0.85rem;color:var(--text-secondary);margin-bottom:0.3rem;">
+                                                "📎 Upload payment slip image:"
+                                            </label>
+                                            <input
+                                                type="file"
+                                                accept="image/*"
+                                                node_ref=file_input_ref
+                                                style="width:100%;font-size:0.85rem;color:var(--text-secondary);margin-bottom:0.5rem;"
+                                            />
+                                        </div>
+
+                                        // Text input fallback for slip URL
+                                        <details style="margin-bottom:0.75rem;">
+                                            <summary style="font-size:0.8rem;color:var(--text-secondary);cursor:pointer;margin-bottom:0.3rem;">
+                                                "Or paste slip URL manually"
+                                            </summary>
                                             <input
                                                 type="text"
                                                 class="form-input"
-                                                placeholder="Paste slip URL (upload coming soon)"
+                                                placeholder="Paste slip image URL"
                                                 prop:value=move || slip_url_input.get()
                                                 on:input=move |ev| {
                                                     let val = event_target_value(&ev);
                                                     set_slip_url_input.set(val);
                                                 }
-                                                style="width:100%;padding:0.6rem 0.8rem;border-radius:6px;border:1px solid var(--border-color,rgba(255,255,255,0.2));background:var(--bg-secondary,#1a1a2e);color:var(--text-primary,#fff);font-size:0.9rem;"
+                                                style="width:100%;padding:0.6rem 0.8rem;border-radius:6px;border:1px solid var(--border-color,rgba(255,255,255,0.2));background:var(--bg-secondary,#1a1a2e);color:var(--text-primary,#fff);font-size:0.9rem;margin-top:0.3rem;"
                                             />
-                                            <p style="font-size:0.75rem;color:var(--text-secondary);margin-top:0.3rem;">
-                                                "📎 File upload coming soon — paste the URL for now."
-                                            </p>
-                                        </div>
+                                        </details>
+
                                         <button
                                             class="btn btn-success btn-block"
                                             on:click=move |_| handle_upload_slip()
@@ -924,6 +1039,11 @@ pub fn Deposit() -> impl IntoView {
                                     <a href=&solscan_url target="_blank" style="color:var(--accent,#14f195);font-size:0.85rem;">
                                         "View on Solscan ↗"
                                     </a>
+                                    <div style="margin-top:1rem;padding:0.75rem;background:var(--bg-secondary,#1a1a2e);border-radius:8px;border:1px dashed var(--border-color,rgba(255,255,255,0.2));">
+                                        <p style="font-size:0.85rem;color:var(--text-secondary);margin:0;">
+                                            "💰 Refund will be available after the event."
+                                        </p>
+                                    </div>
                                     <div style="margin-top:1.25rem;">
                                         <a href="/" class="btn btn-primary">"Go Home"</a>
                                     </div>

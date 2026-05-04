@@ -186,6 +186,7 @@ pub async fn create_event(kv: &KvStore, req: &CreateEventRequest) -> Result<Even
         deposit_enabled: req.deposit_enabled,
         deposit_amount_usdc: req.deposit_amount_usdc,
         deposit_amount_thb: req.deposit_amount_thb,
+        promptpay_id: req.promptpay_id.trim().to_string(),
         escrow_address: req.escrow_address.trim().to_string(),
         organizer_wallet: req.organizer_wallet.trim().to_string(),
         on_chain_event_id: req.on_chain_event_id,
@@ -316,6 +317,9 @@ pub async fn update_event(
     }
     if let Some(v) = req.deposit_amount_thb {
         config.deposit_amount_thb = v;
+    }
+    if let Some(ref v) = req.promptpay_id {
+        config.promptpay_id = v.trim().to_string();
     }
     if let Some(ref v) = req.escrow_address {
         config.escrow_address = v.trim().to_string();
@@ -465,6 +469,7 @@ pub async fn seed_from_config(
         deposit_enabled: false,
         deposit_amount_usdc: 0,
         deposit_amount_thb: 0,
+        promptpay_id: String::new(),
         escrow_address: String::new(),
         organizer_wallet: String::new(),
         on_chain_event_id: 0,
@@ -746,8 +751,7 @@ pub async fn save_deposit_status(
     let key = deposit_status_key(&status.event_id, &status.attendee_id);
     let json = serde_json::to_string(status)
         .map_err(|e| format!("failed to serialize deposit status: {e}"))?;
-    kv
-        .put(&key, &json)
+    kv.put(&key, &json)
         .map_err(|e| format!("failed to build deposit status put: {e:?}"))?
         .execute()
         .await
@@ -845,8 +849,7 @@ async fn add_to_deposit_list(
         ids.push(attendee_id.to_string());
         let json = serde_json::to_string(&ids)
             .map_err(|e| format!("failed to serialize deposit list: {e}"))?;
-        kv
-            .put(&list_key, &json)
+        kv.put(&list_key, &json)
             .map_err(|e| format!("failed to build deposit list put: {e:?}"))?
             .execute()
             .await

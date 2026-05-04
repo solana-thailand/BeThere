@@ -47,6 +47,7 @@ struct EventForm {
     deposit_enabled: bool,
     deposit_amount_usdc: String,
     deposit_amount_thb: String,
+    promptpay_id: String,
     escrow_address: String,
     organizer_wallet: String,
     on_chain_event_id: String,
@@ -102,6 +103,7 @@ fn default_form() -> EventForm {
         deposit_enabled: false,
         deposit_amount_usdc: String::new(),
         deposit_amount_thb: String::new(),
+        promptpay_id: String::new(),
         escrow_address: String::new(),
         organizer_wallet: String::new(),
         on_chain_event_id: String::new(),
@@ -153,6 +155,7 @@ fn form_from_detail(detail: &api::EventDetail) -> EventForm {
         deposit_enabled: detail.deposit_enabled,
         deposit_amount_usdc: if detail.deposit_amount_usdc > 0 { detail.deposit_amount_usdc.to_string() } else { String::new() },
         deposit_amount_thb: if detail.deposit_amount_thb > 0 { detail.deposit_amount_thb.to_string() } else { String::new() },
+        promptpay_id: detail.promptpay_id.clone(),
         escrow_address: detail.escrow_address.clone(),
         organizer_wallet: detail.organizer_wallet.clone(),
         on_chain_event_id: if detail.on_chain_event_id > 0 { detail.on_chain_event_id.to_string() } else { String::new() },
@@ -334,6 +337,7 @@ pub fn EventsPage(
                 deposit_enabled: current_form.deposit_enabled,
                 deposit_amount_usdc: current_form.deposit_amount_usdc.parse::<u64>().unwrap_or(0),
                 deposit_amount_thb: current_form.deposit_amount_thb.parse::<u64>().unwrap_or(0),
+                promptpay_id: current_form.promptpay_id.trim().to_string(),
                 escrow_address: current_form.escrow_address.trim().to_string(),
                 organizer_wallet: current_form.organizer_wallet.trim().to_string(),
                 on_chain_event_id: current_form.on_chain_event_id.parse::<u64>().unwrap_or(0),
@@ -389,6 +393,7 @@ pub fn EventsPage(
                 deposit_enabled: Some(current_form.deposit_enabled),
                 deposit_amount_usdc: Some(current_form.deposit_amount_usdc.parse::<u64>().unwrap_or(0)),
                 deposit_amount_thb: Some(current_form.deposit_amount_thb.parse::<u64>().unwrap_or(0)),
+                promptpay_id: Some(current_form.promptpay_id.trim().to_string()),
                 escrow_address: Some(current_form.escrow_address.trim().to_string()),
                 organizer_wallet: Some(current_form.organizer_wallet.trim().to_string()),
                 on_chain_event_id: Some(current_form.on_chain_event_id.parse::<u64>().unwrap_or(0)),
@@ -942,6 +947,17 @@ pub fn EventsPage(
                                             on:input=move |ev| set_form.update(|f| f.deposit_amount_thb = event_target_value(&ev))
                                         />
                                         <span class="quiz-setting-hint">"Amount in Thai Baht"</span>
+                                    </div>
+                                    <div class="quiz-setting-item">
+                                        <label class="quiz-field-label">"PromptPay ID"</label>
+                                        <input
+                                            type="text"
+                                            class="quiz-number-input"
+                                            placeholder="e.g. 0812345678 or 1-1001-00000-00-0"
+                                            prop:value=move || form.get().promptpay_id
+                                            on:input=move |ev| set_form.update(|f| f.promptpay_id = event_target_value(&ev))
+                                        />
+                                        <span class="quiz-setting-hint">"Thai phone number or national ID for PromptPay QR generation"</span>
                                     </div>
                                     <div class="quiz-setting-item">
                                         <label class="quiz-field-label">"Escrow Address"</label>

@@ -101,6 +101,9 @@ pub struct DepositStatusResponse {
     pub deposit_amount_usdc: u64,
     /// Deposit amount in THB.
     pub deposit_amount_thb: u64,
+    /// PromptPay ID for THB payments (Thai phone number or national ID).
+    #[serde(default)]
+    pub promptpay_id: String,
     /// Current deposit status (None if not deposited).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub status: Option<DepositStatus>,

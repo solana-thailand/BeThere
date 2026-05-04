@@ -885,6 +885,8 @@ pub struct EventDetail {
     #[serde(default)]
     pub deposit_amount_thb: u64,
     #[serde(default)]
+    pub promptpay_id: String,
+    #[serde(default)]
     pub escrow_address: String,
     #[serde(default)]
     pub organizer_wallet: String,
@@ -961,6 +963,8 @@ pub struct CreateEventBody {
     #[serde(default)]
     pub deposit_amount_thb: u64,
     #[serde(default)]
+    pub promptpay_id: String,
+    #[serde(default)]
     pub escrow_address: String,
     #[serde(default)]
     pub organizer_wallet: String,
@@ -1023,6 +1027,8 @@ pub struct UpdateEventBody {
     pub deposit_amount_usdc: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub deposit_amount_thb: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub promptpay_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub escrow_address: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1651,6 +1657,7 @@ pub struct DepositStatusResponse {
     pub deposit_enabled: bool,
     pub deposit_amount_usdc: u64,
     pub deposit_amount_thb: u64,
+    pub promptpay_id: String,
     pub status: Option<DepositStatusInfo>,
 }
 
@@ -1886,4 +1893,28 @@ pub async fn mark_refund(
 ) -> Result<serde_json::Value, ApiError> {
     let path = format!("/refund/mark/{attendee_id}");
     api_post_json(&path, body).await
+}
+
+// ---------------------------------------------------------------------------
+// Escrow Refund
+// ---------------------------------------------------------------------------
+
+/// Request body for POST /api/escrow/refund.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct RefundTxRequest {
+    pub event_id: String,
+    pub attendee_id: String,
+    pub wallet_address: String,
+}
+
+/// Response from POST /api/escrow/refund.
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+pub struct RefundTxResponse {
+    pub transaction: String,
+    pub message: String,
+}
+
+/// POST /api/escrow/refund — build refund TX
+pub async fn build_refund_tx(body: &RefundTxRequest) -> Result<RefundTxResponse, ApiError> {
+    api_post_json("/escrow/refund", body).await
 }
