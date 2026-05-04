@@ -429,7 +429,10 @@ async fn verify_tx_on_chain(rpc_url: &str, signature: &str) -> bool {
         "jsonrpc": "2.0",
         "id": "bethere-confirm",
         "method": "getSignatureStatuses",
-        "params": [[signature]]
+        "params": [
+            [signature],
+            { "searchTransactionHistory": true }
+        ]
     });
 
     let json_body = match serde_json::to_string(&body) {
@@ -484,27 +487,50 @@ async fn verify_tx_on_chain(rpc_url: &str, signature: &str) -> bool {
         }
     };
 
-    // Navigate to result.value[0].confirmationStatus
-    if let Some(status) = parsed
+    // Navigate to result.value[0]
+    let status_opt = parsed
         .get("result")
         .and_then(|r| r.get("value"))
         .and_then(|v| v.as_array())
         .and_then(|arr| arr.first())
-    {
-        // Check if there's an error
-        if status.get("err").is_some_and(|e| !e.is_null()) {
-            tracing::warn!(tx_signature = %signature, "TX failed on-chain: {:?}", status.get("err"));
-            return false;
-        }
-        // Check confirmation status
-        let confirmed = status
-            .get("confirmationStatus")
-            .and_then(|s| s.as_str())
-            .is_some_and(|s| s == "confirmed" || s == "finalized");
-        return confirmed;
+        .cloned();
+
+    let Some(status) = status_opt else {
+        tracing::debug!(
+            tx_signature = %signature,
+            "getSignatureStatuses returned null — TX not found (may have expired from status cache)"
+        );
+        return false;
+    };
+
+    // Null status entry means TX not found
+    if status.is_null() {
+        tracing::debug!(
+            tx_signature = %signature,
+            "Signature status is null — TX not found on-chain"
+        );
+        return false;
     }
 
-    false
+    // Check if there's an error
+    if status.get("err").is_some_and(|e| !e.is_null()) {
+        tracing::warn!(tx_signature = %signature, "TX failed on-chain: {:?}", status.get("err"));
+        return false;
+    }
+
+    // Check confirmation status
+    let confirmation = status
+        .get("confirmationStatus")
+        .and_then(|s| s.as_str())
+        .unwrap_or("unknown");
+    let confirmed = confirmation == "confirmed" || confirmation == "finalized";
+    tracing::debug!(
+        tx_signature = %signature,
+        confirmation_status = %confirmation,
+        confirmed = %confirmed,
+        "Signature status checked"
+    );
+    confirmed
 }
 
 // ---------------------------------------------------------------------------
