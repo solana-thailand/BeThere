@@ -1918,3 +1918,49 @@ pub struct RefundTxResponse {
 pub async fn build_refund_tx(body: &RefundTxRequest) -> Result<RefundTxResponse, ApiError> {
     api_post_json("/escrow/refund", body).await
 }
+
+// ---------------------------------------------------------------------------
+// Escrow: Create Vault ATA (admin)
+// ---------------------------------------------------------------------------
+
+/// Request body for POST /api/escrow/create-vault-ata.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct CreateVaultAtaRequest {
+    pub event_id: String,
+}
+
+/// Response from POST /api/escrow/create-vault-ata.
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+pub struct CreateVaultAtaResponse {
+    pub transaction: String,
+    pub message: String,
+    pub vault_address: String,
+}
+
+/// POST /api/escrow/create-vault-ata — create vault ATA
+pub async fn create_vault_ata(body: &CreateVaultAtaRequest) -> Result<CreateVaultAtaResponse, ApiError> {
+    api_post_json("/escrow/create-vault-ata", body).await
+}
+
+// ---------------------------------------------------------------------------
+// Escrow: Mark Checked In (admin)
+// ---------------------------------------------------------------------------
+
+/// Request body for POST /api/escrow/mark-checked-in.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct MarkCheckedInRequest {
+    pub event_id: String,
+    pub attendee_wallet: String,
+}
+
+/// Response from POST /api/escrow/mark-checked-in.
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+pub struct MarkCheckedInResponse {
+    pub transaction: String,
+    pub message: String,
+}
+
+/// POST /api/escrow/mark-checked-in — mark attendee checked in
+pub async fn mark_checked_in(body: &MarkCheckedInRequest) -> Result<MarkCheckedInResponse, ApiError> {
+    api_post_json("/escrow/mark-checked-in", body).await
+}
