@@ -761,6 +761,52 @@ pub async fn save_deposit_status(
     Ok(())
 }
 
+/// List all deposit statuses for an event using KV list with prefix.
+/// Returns all DepositStatus records found under `event:{id}:deposit:status:*`.
+pub async fn list_deposit_statuses(
+    kv: &KvStore,
+    event_id: &str,
+) -> Result<Vec<event_checkin_domain::models::deposit::DepositStatus>, String> {
+    let prefix = format!("event:{event_id}:deposit:status:");
+    let mut deposits = Vec::new();
+    let mut cursor: Option<String> = None;
+
+    loop {
+        let mut builder = kv.list().prefix(prefix.clone());
+        if let Some(c) = cursor.take() {
+            builder = builder.cursor(c);
+        }
+
+        let resp = builder.execute().await.map_err(|e| {
+            format!("failed to list deposit statuses for event '{event_id}': {e:?}")
+        })?;
+
+        for key in &resp.keys {
+            let raw: Option<String> = kv
+                .get(&key.name)
+                .text()
+                .await
+                .map_err(|e| format!("failed to read deposit status '{}': {e:?}", key.name))?;
+
+            if let Some(json) = raw {
+                match serde_json::from_str(&json) {
+                    Ok(deposit) => deposits.push(deposit),
+                    Err(e) => {
+                        tracing::warn!(key = %key.name, error = %e, "skipping malformed deposit status");
+                    }
+                }
+            }
+        }
+
+        if resp.list_complete {
+            break;
+        }
+        cursor = resp.cursor;
+    }
+
+    Ok(deposits)
+}
+
 /// Get THB deposit record for an attendee.
 pub async fn get_thb_deposit(
     kv: &KvStore,

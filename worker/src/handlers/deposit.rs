@@ -1406,6 +1406,253 @@ pub struct CreateVaultAtaTxResponse {
     pub vault_address: String,
 }
 
+// ---------------------------------------------------------------------------
+// POST /api/escrow/backfill-wallets — Admin: backfill wallet_address for deposits
+// ---------------------------------------------------------------------------
+
+/// Request body for POST /api/escrow/backfill-wallets.
+#[derive(Debug, serde::Deserialize)]
+pub struct BackfillWalletsRequest {
+    /// Event ID to backfill. If omitted, backfills all events.
+    #[serde(default)]
+    pub event_id: Option<String>,
+}
+
+/// Response for POST /api/escrow/backfill-wallets.
+#[derive(Debug, serde::Serialize)]
+pub struct BackfillWalletsResponse {
+    /// Total deposits scanned.
+    pub scanned: usize,
+    /// Deposits missing wallet_address.
+    pub missing_wallet: usize,
+    /// Successfully backfilled.
+    pub backfilled: usize,
+    /// Failed to resolve (TX expired, RPC error, etc.).
+    pub failed: usize,
+    /// Already had wallet_address.
+    pub already_present: usize,
+    /// Per-attendee details.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub details: Vec<BackfillDetail>,
+}
+
+#[derive(Debug, serde::Serialize)]
+pub struct BackfillDetail {
+    pub attendee_id: String,
+    pub result: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub wallet_address: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+#[worker::send]
+pub async fn backfill_wallets_handler(
+    State(state): State<AppState>,
+    Extension(_claims): Extension<Claims>,
+    Json(body): Json<BackfillWalletsRequest>,
+) -> Result<ApiOk<BackfillWalletsResponse>, WorkerError> {
+    let kv = state
+        .events_kv
+        .as_ref()
+        .ok_or_else(|| AppError::Internal("EVENTS KV not configured".to_string()))?;
+
+    // Build the RPC URL with API key
+    let rpc_url = format!(
+        "{}{}{}",
+        state.config.solana.rpc_url,
+        if state.config.solana.rpc_url.contains('?') {
+            "&"
+        } else {
+            "?api-key="
+        },
+        state.config.solana.api_key
+    );
+
+    // Resolve event IDs to scan
+    let event_ids: Vec<String> = match &body.event_id {
+        Some(id) => vec![id.clone()],
+        None => {
+            let index = event_store::get_event_index(kv)
+                .await
+                .map_err(AppError::Internal)?;
+            index.events.into_iter().map(|e| e.id).collect()
+        }
+    };
+
+    let mut scanned = 0usize;
+    let mut missing_wallet = 0usize;
+    let mut backfilled = 0usize;
+    let mut failed = 0usize;
+    let mut already_present = 0usize;
+    let mut details = Vec::new();
+
+    for event_id in &event_ids {
+        let deposits = event_store::list_deposit_statuses(kv, event_id)
+            .await
+            .map_err(AppError::Internal)?;
+
+        for mut deposit in deposits {
+            scanned += 1;
+
+            // Already has wallet — skip
+            if deposit.wallet_address.is_some() {
+                already_present += 1;
+                continue;
+            }
+
+            missing_wallet += 1;
+
+            // Only USDC deposits with tx_signature can be backfilled
+            let Some(tx_sig) = &deposit.tx_signature else {
+                details.push(BackfillDetail {
+                    attendee_id: deposit.attendee_id.clone(),
+                    result: "skipped".to_string(),
+                    wallet_address: None,
+                    error: Some("no tx_signature — cannot resolve wallet".to_string()),
+                });
+                failed += 1;
+                continue;
+            };
+
+            // Resolve wallet from on-chain TX
+            match resolve_wallet_from_tx(&rpc_url, tx_sig).await {
+                Ok(wallet) => {
+                    tracing::info!(
+                        attendee_id = %deposit.attendee_id,
+                        event_id = %event_id,
+                        wallet = %wallet,
+                        "Backfilled wallet_address"
+                    );
+                    deposit.wallet_address = Some(wallet.clone());
+                    event_store::save_deposit_status(kv, &deposit)
+                        .await
+                        .map_err(AppError::Internal)?;
+                    backfilled += 1;
+                    details.push(BackfillDetail {
+                        attendee_id: deposit.attendee_id.clone(),
+                        result: "backfilled".to_string(),
+                        wallet_address: Some(wallet),
+                        error: None,
+                    });
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        attendee_id = %deposit.attendee_id,
+                        tx_signature = %tx_sig,
+                        error = %e,
+                        "Failed to resolve wallet from TX"
+                    );
+                    failed += 1;
+                    details.push(BackfillDetail {
+                        attendee_id: deposit.attendee_id.clone(),
+                        result: "failed".to_string(),
+                        wallet_address: None,
+                        error: Some(e),
+                    });
+                }
+            }
+        }
+    }
+
+    tracing::info!(
+        scanned = %scanned,
+        missing_wallet = %missing_wallet,
+        backfilled = %backfilled,
+        failed = %failed,
+        already_present = %already_present,
+        "Wallet backfill complete"
+    );
+
+    Ok(ApiOk::new(BackfillWalletsResponse {
+        scanned,
+        missing_wallet,
+        backfilled,
+        failed,
+        already_present,
+        details,
+    }))
+}
+
+/// Resolve the attendee's wallet address from an on-chain deposit transaction.
+///
+/// Uses `getTransaction` RPC to fetch the TX and extracts the first account key
+/// (which is the attendee/signer for deposit transactions built by this system).
+async fn resolve_wallet_from_tx(rpc_url: &str, tx_signature: &str) -> Result<String, String> {
+    let body = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": "bethere-backfill",
+        "method": "getTransaction",
+        "params": [
+            tx_signature,
+            { "encoding": "json", "maxSupportedTransactionVersion": 0 }
+        ]
+    });
+
+    let json_body = serde_json::to_string(&body)
+        .map_err(|e| format!("failed to serialize getTransaction request: {e}"))?;
+
+    let headers = worker::Headers::new();
+    headers
+        .set("Content-Type", "application/json")
+        .map_err(|e| format!("failed to set header: {e:?}"))?;
+
+    let mut init = worker::RequestInit::new();
+    init.with_method(worker::Method::Post)
+        .with_headers(headers)
+        .with_body(Some(wasm_bindgen::JsValue::from_str(&json_body)));
+
+    let request = worker::Request::new_with_init(rpc_url, &init)
+        .map_err(|e| format!("failed to create RPC request: {e:?}"))?;
+
+    let mut response = worker::Fetch::Request(request)
+        .send()
+        .await
+        .map_err(|e| format!("RPC request failed: {e:?}"))?;
+
+    let body_text = response
+        .text()
+        .await
+        .map_err(|e| format!("failed to read RPC response: {e:?}"))?;
+
+    let parsed: serde_json::Value = serde_json::from_str(&body_text)
+        .map_err(|e| format!("failed to parse RPC response: {e}"))?;
+
+    // Check for RPC error
+    if let Some(error) = parsed.get("error") {
+        let msg = error
+            .get("message")
+            .and_then(|m| m.as_str())
+            .unwrap_or("unknown");
+        return Err(format!("RPC error: {msg}"));
+    }
+
+    // Navigate to result.transaction.message.accountKeys[0]
+    let account_keys = parsed
+        .get("result")
+        .and_then(|r| r.get("transaction"))
+        .and_then(|t| t.get("message"))
+        .and_then(|m| m.get("accountKeys"))
+        .and_then(|a| a.as_array())
+        .ok_or_else(|| "TX not found or expired — account keys not available".to_string())?;
+
+    let first_account = account_keys
+        .first()
+        .and_then(|k| k.as_str())
+        .ok_or_else(|| "no account keys in transaction".to_string())?;
+
+    // Validate it looks like a Solana pubkey (base58, ~32-44 chars)
+    if first_account.len() < 32 || first_account.len() > 44 {
+        return Err(format!("invalid pubkey length: {}", first_account.len()));
+    }
+
+    Ok(first_account.to_string())
+}
+
+// ---------------------------------------------------------------------------
+// POST /api/escrow/create-vault-ata — Build vault ATA creation TX
+// ---------------------------------------------------------------------------
+
 /// Build a transaction to create the vault Associated Token Account for the
 /// EventEscrow PDA. This must be called **before** `create_event`.
 ///

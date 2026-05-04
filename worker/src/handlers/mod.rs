@@ -129,6 +129,10 @@ pub fn routes(state: AppState) -> Router<()> {
             "/escrow/mark-checked-in",
             post(deposit::mark_checked_in_tx_handler),
         )
+        .route(
+            "/escrow/backfill-wallets",
+            post(deposit::backfill_wallets_handler),
+        )
         .layer(middleware::from_fn_with_state(
             state.clone(),
             crate::auth::require_auth,
