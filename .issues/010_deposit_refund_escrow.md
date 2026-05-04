@@ -319,10 +319,14 @@ Image storage: Cloudflare R2 (free tier: 10 GB storage, 10M reads/month).
 
 ### Phase 3 — Frontend Deposit/Refund Flow (~3 days)
 
-- [ ] Deposit page (`/deposit/{attendee_id}`)
-- [ ] Solana Pay QR generation (USDC path)
+- [x] Deposit page (`/deposit/{attendee_id}`)
+- [x] Solana Pay QR generation (USDC path)
+- [x] Wallet adapter frontend (Phantom/Backpack/Solflare/Coinbase) — Phase 5.3
+- [x] Direct TX signing + sending via connected wallet — Phase 5.3
+- [x] Deposit status polling + confirmation (2s interval, 30 attempts) — Phase 5.4
+- [x] On-chain deposit verification via Solana RPC (`getSignatureStatuses`) — Phase 5.4
+- [x] Deposit confirmed view with Solscan TX link — Phase 5.4
 - [ ] PromptPay QR display + slip upload (THB path)
-- [ ] Deposit status polling
 - [ ] Claim page: "Claim Refund" button (USDC auto-refund)
 - [ ] Admin: Deposits tab (all deposit statuses)
 - [ ] Admin: Refund Queue tab (THB refund management)
@@ -380,4 +384,6 @@ Image storage: Cloudflare R2 (free tier: 10 GB storage, 10M reads/month).
 
 ## Status
 
-🟢 Phase 1 complete — escrow program deployed to devnet. Ready for Phase 2 (Worker API).
+🟢 Phase 1–2 complete — escrow program on devnet, worker API done. Phase 3 partially complete (USDC wallet adapter + on-chain confirmation done; THB + admin UI remaining). Phase 4 in progress (API E2E tests pass, devnet wallet E2E pending).
+
+See `.handovers/030_wallet_adapter_confirmation.md` for Phase 5.3–5.4 details.

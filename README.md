@@ -134,6 +134,16 @@ The frontend is served from `frontend-leptos/dist/` via Workers Assets with SPA 
 | POST | `/api/adventure/{token}/save` | No | Save adventure progress |
 | GET | `/api/admin/adventure` | Cookie + Staff | Get adventure config |
 | PUT | `/api/admin/adventure` | Cookie + Staff | Update adventure config |
+| GET | `/api/deposit/status/{attendee_id}` | No | Check deposit status for attendee |
+| POST | `/api/deposit/usdc` | No | Build Solana Pay deposit TX (USDC) |
+| GET | `/api/deposit/usdc/confirm` | No | Poll deposit TX confirmation via Solana RPC |
+| POST | `/api/deposit/usdc/webhook` | No | Record TX signature, verify on-chain |
+| POST | `/api/deposit/thb/upload` | No | Upload PromptPay slip URL (THB) |
+| GET | `/api/deposit/thb/pending` | Cookie + Staff | List pending THB slips |
+| POST | `/api/deposit/thb/verify` | Cookie + Staff | Verify/reject THB slip |
+| GET | `/api/refund/queue` | Cookie + Staff | List pending refunds |
+| POST | `/api/refund/mark/{id}` | Cookie + Staff | Mark refund as completed |
+| POST | `/api/escrow/create-event` | Cookie + Organizer | Initialize on-chain escrow PDA |
 
 ## Frontend Routes
 
@@ -146,6 +156,7 @@ The frontend is served from `frontend-leptos/dist/` via Workers Assets with SPA 
 | `/admin` | Dashboard — attendee list, stats, QR management | Staff |
 | `/admin/events` | Events — create, edit, manage events | SuperAdmin |
 | `/adventure` | Rust Adventures — educational game | Public |
+| `/deposit/{attendee_id}` | Deposit — wallet adapter + QR for USDC/THB deposit | Public |
 
 ## Architecture
 
@@ -272,7 +283,12 @@ See **[DISCUSSION.md](./DISCUSSION.md)** for the full architecture direction and
 | **5b** | Adventure-gated claim flow | ✅ Done |
 | **6** | Security audit + fixes | ✅ Done |
 | **7** | NFT config + production deployment | 🟡 In Progress (devnet cNFT working, mainnet deferred) |
-| **8** | SOL + USDC refund on claim (on-chain) | Planned |
+| **8a** | PDA escrow program (Quasar) | ✅ Done (devnet deployed) |
+| **8b** | Worker deposit/refund API | ✅ Done |
+| **8c** | Deposit page + wallet adapter (Phantom/Backpack) | ✅ Done |
+| **8d** | On-chain deposit confirmation (RPC polling + webhook) | ✅ Done |
+| **8e** | Devnet E2E with real wallets | 🔴 Next |
+| **8f** | Mainnet deploy (escrow + deposit) | Planned |
 
 ### NFT Config Setup (Phase 7)
 

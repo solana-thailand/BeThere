@@ -82,9 +82,9 @@ Both USDC and THB deposits reject with `"attendee already has a deposit"` if the
 ## Remain Work
 
 ### 🔴 Phase 4 Remaining
-- [ ] **USDC on-chain deposit TX building** — Worker returns descriptive Solana Pay URL; need `bethere-escrow-client` to build actual on-chain `deposit` instruction
-- [ ] **Solana Pay wallet adapter** — Frontend needs wallet connection (Phantom, etc.) to sign/submit deposit transaction
-- [ ] **On-chain deposit confirmation** — Webhook/listener to confirm USDC deposits landed on-chain, update `verified: true`
+- [x] ~~**USDC on-chain deposit TX building**~~ — Done in Phase 5.1 (`d22fdc9`). Worker builds actual `deposit` instruction via Solana Pay TX Request
+- [x] ~~**Solana Pay wallet adapter**~~ — Done in Phase 5.3 (`325b737`). Phantom/Backpack/Solflare/Coinbase detection, connect, sign+send
+- [x] ~~**On-chain deposit confirmation**~~ — Done in Phase 5.4 (`325b737`). `GET /api/deposit/usdc/confirm` polls `getSignatureStatuses`, webhook records TX signatures
 - [ ] **R2 image storage for slips** — THB slip upload currently accepts URL string; need R2 bucket for actual file upload
 - [ ] **Deposit link in claim page** — Claim page should show deposit status and link to `/deposit/{attendee_id}`
 - [ ] **Test no-show scenario** — deposit → don't check-in → organizer claims forfeited via escrow program
