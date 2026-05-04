@@ -103,6 +103,17 @@ pub async fn deposit_usdc_handler(
         return Err(AppError::Validation("deposit amount not configured".to_string()).into());
     }
 
+    // Reject deposits after the event has ended — the on-chain refund requires clock > event_end
+    if event.event_end_ms > 0 {
+        let now_ms = chrono::Utc::now().timestamp_millis();
+        if now_ms > event.event_end_ms {
+            return Err(AppError::Validation(
+                "event has ended — deposits are no longer accepted".to_string(),
+            )
+            .into());
+        }
+    }
+
     // Validate wallet address
     crate::solana::validate_wallet_address(&body.wallet_address).map_err(AppError::Validation)?;
 
