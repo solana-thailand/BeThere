@@ -149,6 +149,10 @@ The frontend is served from `frontend-leptos/dist/` via Workers Assets with SPA 
 | GET | `/api/refund/queue` | Cookie + Staff | List pending refunds |
 | POST | `/api/refund/mark/{id}` | Cookie + Staff | Mark refund as completed |
 | POST | `/api/escrow/create-event` | Cookie + Organizer | Initialize on-chain escrow PDA |
+| GET  | `/api/deposit/usdc/tx` | No | Solana Pay TX callback (wallet fetches serialized TX) |
+| POST | `/api/escrow/create-vault-ata` | Cookie + Organizer | Create vault's Associated Token Account |
+| POST | `/api/escrow/mark-checked-in` | Cookie + Organizer | Mark attendee as checked-in on-chain (prerequisite for refund) |
+| POST | `/api/escrow/refund` | No | Build refund TX for attendee's wallet to sign |
 
 ## Frontend Routes
 
@@ -168,6 +172,7 @@ The frontend is served from `frontend-leptos/dist/` via Workers Assets with SPA 
 ```
 worker/src/             — Cloudflare Worker
   handlers/             — API endpoints (auth, check-in, QR, attendee, events, quiz, claim, adventure, health)
+    deposit.rs            — USDC/THB deposit, confirmation, webhook, refund queue
     ext.rs              — Shared utilities (EventIdQuery, resolve_event_with_access, resolve_kv)
   adventure.rs          — Adventure business logic (save progress, check completion)
   auth.rs               — Google OAuth + JWT + role resolution (super_admin/organizer/staff)
@@ -176,6 +181,7 @@ worker/src/             — Cloudflare Worker
   quiz.rs               — Quiz business logic (scoring, KV interaction)
   sheets.rs             — Google Sheets read/write (worker::Fetch) + KV attendee cache + token cache
   solana.rs             — Helius cNFT minting (mintCompressedNft RPC, MintRequest struct)
+  solana_escrow.rs      — Solana escrow TX builders (deposit, refund, create_event, mark_checked_in, create_vault_ata)
   crypto.rs             — SubtleCrypto bridge (RSA-SHA256, HMAC-SHA256)
   http.rs               — HTTP client wrapping worker::Fetch
   middleware.rs         — Security headers, auth guard
@@ -194,6 +200,39 @@ frontend-leptos/src/
   utils.rs              — Helpers (timestamps, badges, participation)
   js/                   — Camera + QR detection module
 ```
+
+### Solana Escrow Architecture
+
+The escrow system uses PDAs (Program Derived Addresses) to hold attendee USDC deposits on-chain. The escrow program is deployed on devnet at `2TGfNNXNez2NgopffDnYYhLNYmndUBBwg5SvpD5XQeLo`.
+
+**Escrow Flow (5 steps, all validated on devnet):**
+
+```
+1. create_vault_ata    →  Organizer signs  →  Vault ATA created
+2. create_event        →  Organizer signs  →  EventEscrow PDA initialized
+3. deposit             →  Attendee signs   →  USDC → vault (Solana Pay)
+4. mark_checked_in     →  Organizer signs  →  Attendee checked-in on-chain
+5. refund              →  Attendee signs   →  USDC → attendee (after event ends)
+```
+
+**PDA Seeds:**
+- `EventEscrow`: `["escrow", organizer_pubkey, event_id_u64_le]`
+- `AttendeeDeposit`: `["deposit", event_escrow_pubkey, attendee_pubkey]`
+- `Vault ATA`: Associated Token Account for (EventEscrow, USDC mint)
+
+**Important constraints:**
+- `create_vault_ata` must be called before `create_event` (two-step initialization)
+- `mark_checked_in` must be called before `refund` (attendee must be checked in)
+- Refund requires `clock > event_end` (event must have ended)
+- Deposits are rejected after the event has ended (`event_end > now` check)
+
+**Constants:**
+| Constant | Devnet | Mainnet |
+|----------|--------|--------|
+| Program ID | `2TGfNNXNez2NgopffDnYYhLNYmndUBBwg5SvpD5XQeLo` | TBD |
+| USDC Mint | `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU` | `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1m` |
+
+**Transaction building:** All 5 TX builders are in `worker/src/solana_escrow.rs`. They use a shared `build_message_accounts()` helper for Solana's canonical 4-pass account ordering.
 
 ### Performance Layers
 
@@ -229,6 +268,15 @@ cargo check -p event-checkin-worker --target wasm32-unknown-unknown
 cargo clippy --all-targets
 ```
 
+### Devnet Escrow E2E
+
+```bash
+# Full 5-step escrow E2E on Solana devnet (requires USDC-funded attendee wallet)
+ATTENDEE_WALLET=~/.config/solana/id.json bash scripts/e2e/test_escrow_devnet.sh
+```
+
+See `scripts/e2e/test_escrow_devnet.sh` for the complete test flow. All 24 tests validated on devnet.
+
 ## Features
 
 - **Camera QR Scanner** — BarcodeDetector (Chrome) + jsQR fallback (Firefox/Safari)
@@ -246,6 +294,9 @@ cargo clippy --all-targets
 - **Rust Adventures** — Educational tile-based game teaching Solana/Rust concepts
 - **Security hardened** — Cookie Secure flag, secret redaction in Debug, attendee-validated adventure saves
 - **Automated E2E tests** — 10-step full E2E suite (`scripts/e2e/test_full_e2e.sh`) + 7-test devnet suite
+- **PDA escrow deposits** — USDC deposits held in on-chain PDAs, refundable after event
+- **Solana Pay integration** — Deposit via QR code scan or wallet adapter (Phantom, Backpack, Solflare)
+- **Dual-track deposits** — USDC (on-chain escrow) or THB (PromptPay QR + slip verification)
 
 ## Security
 
@@ -293,8 +344,9 @@ See **[DISCUSSION.md](./DISCUSSION.md)** for the full architecture direction and
 | **8b** | Worker deposit/refund API | ✅ Done |
 | **8c** | Deposit page + wallet adapter (Phantom/Backpack) | ✅ Done |
 | **8d** | On-chain deposit confirmation (RPC polling + webhook) | ✅ Done |
-| **8e** | Devnet E2E with real wallets | 🔴 Next (PDA fix done, dev-mode bypass added) |
+| **8e** | Devnet E2E with real wallets | ✅ Done (5-step escrow flow validated, 24/24 tests) |
 | **8f** | Mainnet deploy (escrow + deposit) | Planned |
+| **8g** | Frontend refund flow + admin check-in UI | 🔴 Next |
 
 ### NFT Config Setup (Phase 7)
 

@@ -267,3 +267,60 @@ The system evolves from:
 - **Web2 + Web3 hybrid** (Sheets for ops, Solana for rewards)
 
 The key principle: **Web3 is additive, never blocking.** Check-in works without Solana. The NFT and refund are rewards for those who want them.
+
+---
+
+## 8. Evolution: PDA Escrow (Current Architecture)
+
+> **Date**: 2025-05-04
+> **Status**: Implemented — devnet validated
+
+The deposit/refund system evolved from the original SOL+USDC airdrop design (Section 2) to a **PDA-based on-chain escrow** model. Key reasons for the change:
+
+| Original Design | PDA Escrow (Current) |
+|----------------|---------------------|
+| Worker directly transfers USDC from treasury | USDC held in on-chain PDA vault |
+| Requires treasury wallet with full funds | Each event has its own escrow PDA |
+| Single point of failure (treasury key) | Attendee can self-refund (signs TX) |
+| Off-chain tracking only | Full on-chain audit trail |
+| Refund requires worker to be online | Refund works even if worker is down |
+
+### On-Chain Escrow Program
+
+- **Framework**: Quasar (not Anchor) — lighter-weight Solana program framework
+- **Program ID** (devnet): `2TGfNNXNez2NgopffDnYYhLNYmndUBBwg5SvpD5XQeLo`
+- **Source**: `bethere-escrow/` directory
+
+### Instructions
+
+| Discriminator | Instruction | Signer | Purpose |
+|---------------|-------------|--------|---------|
+| 0 | `create_event` | Organizer | Initialize EventEscrow PDA + vault ATA |
+| 1 | `deposit` | Attendee | Transfer USDC to escrow vault |
+| 2 | `mark_checked_in` | Organizer | Mark attendee as checked in (enables refund) |
+| 3 | `refund` | Attendee | Self-refund USDC from vault (after event ends) |
+
+### Dual-Track Deposits
+
+The system supports two deposit methods per event:
+
+| Track | Currency | Flow | Refund |
+|-------|----------|------|--------|
+| **USDC** (on-chain) | USDC (SPL token) | Solana Pay QR → wallet signs TX → on-chain escrow | Self-serve via `refund` instruction |
+| **THB** (off-chain) | Thai Baht | PromptPay QR → attendee uploads payment slip → admin verifies | Admin marks refund as done |
+
+### Deposit Confirmation
+
+USDC deposits use a two-step Solana Pay pattern:
+1. `POST /api/deposit/usdc` → Returns Solana Pay URL
+2. `GET /api/deposit/usdc/tx?event_id=...&attendee_id=...&wallet=...` → Wallet fetches serialized TX
+3. Client signs and submits TX to Solana
+4. `POST /api/deposit/usdc/webhook` → Notifies worker of TX signature
+5. Worker verifies TX on-chain via `getSignatureStatuses` (with `searchTransactionHistory: true`)
+
+### Validation Rules
+
+- Deposits rejected after `event_end_ms` (server-side check)
+- Refunds require `clock > event_end` (on-chain check)
+- Refunds require attendee to be `mark_checked_in` (on-chain check)
+- Vault ATA must be created before `create_event` (two-step initialization)

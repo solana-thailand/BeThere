@@ -1,0 +1,32 @@
+# BeThere Worker — Local Development Variables
+# Copy this file to .dev.vars and fill in real values
+# NEVER commit .dev.vars to git!
+
+# ── Auth ──────────────────────────────────────────
+JWT_SECRET = "change-me-to-a-random-string-at-least-32-chars"
+DEV_MODE = "1"
+DEV_EMAIL = "your-email@example.com"
+
+# ── Google OAuth ──────────────────────────────────
+GOOGLE_CLIENT_ID = "xxx.apps.googleusercontent.com"
+GOOGLE_CLIENT_SECRET = "GOCSPX-xxx"
+GOOGLE_REDIRECT_URI = "http://localhost:8787/api/auth/callback"
+
+# ── Google Sheets API ─────────────────────────────
+GOOGLE_SERVICE_ACCOUNT_EMAIL = "bethere-sa@project.iam.gserviceaccount.com"
+GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY = "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgk...\n-----END PRIVATE KEY-----\n"
+GOOGLE_SERVICE_ACCOUNT_TOKEN_URI = "https://oauth2.googleapis.com/token"
+GOOGLE_SHEET_ID = "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms"
+
+# ── Access Control ────────────────────────────────
+STAFF_EMAILS = "staff1@example.com,staff2@example.com"
+SUPER_ADMIN_EMAILS = "admin@example.com"
+
+# ── Solana (Devnet) ───────────────────────────────
+HELIUS_API_KEY = "your-helius-api-key"
+# HELIUS_RPC_URL is optional — defaults to https://devnet.helius-rpc.com
+
+# ── NFT (Optional) ───────────────────────────────
+# NFT_COLLECTION_MINT = ""
+# NFT_METADATA_URI = ""
+# NFT_IMAGE_URL = ""
