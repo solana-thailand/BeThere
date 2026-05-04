@@ -111,6 +111,24 @@ impl AppState {
                 .unwrap_or(1_777_183_200_000),
         };
 
+        let dev_mode = get_var(env, "DEV_MODE")
+            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+            .unwrap_or(false);
+
+        let dev_email = get_var(env, "DEV_EMAIL").unwrap_or_else(|_| {
+            super_admin_emails
+                .first()
+                .cloned()
+                .unwrap_or_else(|| "dev@localhost".to_string())
+        });
+
+        if dev_mode {
+            tracing::warn!(
+                email = %dev_email,
+                "⚠️  DEV_MODE enabled — JWT verification bypassed, accepting \"dev-token\" as valid"
+            );
+        }
+
         let config = AppConfig {
             google_oauth,
             service_account,
@@ -122,6 +140,8 @@ impl AppState {
             solana,
             nft,
             event_defaults,
+            dev_mode,
+            dev_email,
         };
 
         // Quiz KV namespace — optional, quiz feature disabled if not bound

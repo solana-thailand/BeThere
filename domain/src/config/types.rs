@@ -146,6 +146,13 @@ pub struct AppConfig {
     pub solana: SolanaConfig,
     pub nft: NftConfig,
     pub event_defaults: EventDefaults,
+    /// Dev mode bypasses JWT verification — accepts "dev-token" as valid.
+    /// Enable via `DEV_MODE=1` in `.dev.vars` or `wrangler.toml`.
+    /// **Never enable in production.**
+    pub dev_mode: bool,
+    /// Email to use as the authenticated user in dev mode.
+    /// Defaults to the first super_admin_email or "dev@localhost".
+    pub dev_email: String,
 }
 
 impl fmt::Debug for AppConfig {
@@ -161,6 +168,8 @@ impl fmt::Debug for AppConfig {
             .field("solana", &self.solana)
             .field("nft", &self.nft)
             .field("event_defaults", &self.event_defaults)
+            .field("dev_mode", &self.dev_mode)
+            .field("dev_email", &self.dev_email)
             .finish()
     }
 }

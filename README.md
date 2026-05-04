@@ -27,6 +27,11 @@ npx wrangler secret put GOOGLE_SHEET_ID
 npx wrangler secret put STAFF_EMAILS
 npx wrangler secret put SUPER_ADMIN_EMAILS
 
+# Dev mode (optional — for local E2E testing without Google OAuth)
+# ⚠️ NEVER enable in production!
+echo 'DEV_MODE = "1"' >> worker/.dev.vars
+echo 'DEV_EMAIL = "your-email@example.com"' >> worker/.dev.vars
+
 # 4. Create KV namespaces (first time only)
 npx wrangler kv namespace create EVENTS
 npx wrangler kv namespace create EVENTS --preview
@@ -254,6 +259,7 @@ cargo clippy --all-targets
 | Secrets | ✅ Secure | All via `env.secret()`, redacted from Debug output |
 | Double-claim | ⚠️ Deferred | KV dedup lock recommended before high-traffic events |
 | JWT revocation | ⚠️ Deferred | KV blacklist recommended for compromised tokens |
+| Dev mode | ⚠️ Local only | `DEV_MODE=1` bypasses JWT verification — only for `.dev.vars`, never production |
 
 See `.handovers/025_security_audit_e2e_nft_config.md` for full audit findings.
 
@@ -287,7 +293,7 @@ See **[DISCUSSION.md](./DISCUSSION.md)** for the full architecture direction and
 | **8b** | Worker deposit/refund API | ✅ Done |
 | **8c** | Deposit page + wallet adapter (Phantom/Backpack) | ✅ Done |
 | **8d** | On-chain deposit confirmation (RPC polling + webhook) | ✅ Done |
-| **8e** | Devnet E2E with real wallets | 🔴 Next |
+| **8e** | Devnet E2E with real wallets | 🔴 Next (PDA fix done, dev-mode bypass added) |
 | **8f** | Mainnet deploy (escrow + deposit) | Planned |
 
 ### NFT Config Setup (Phase 7)

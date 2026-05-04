@@ -384,6 +384,17 @@ Image storage: Cloudflare R2 (free tier: 10 GB storage, 10M reads/month).
 
 ## Status
 
-🟢 Phase 1–2 complete — escrow program on devnet, worker API done. Phase 3 partially complete (USDC wallet adapter + on-chain confirmation done; THB + admin UI remaining). Phase 4 in progress (API E2E tests pass, devnet wallet E2E pending).
+🟢 Phase 1–2 complete — escrow program on devnet, worker API done.
+🟢 Phase 3 partially complete — USDC wallet adapter + on-chain confirmation done; THB + admin UI remaining.
+🟡 Phase 4 in progress — API E2E tests pass (17/17). PDA derivation bug fixed (commits `44025d9` + `42a1bd7`), all PDAs now validated against `@solana/web3.js`. Devnet wallet E2E pending (blocked by OAuth flow for local testing — dev-mode bypass planned).
 
+### Key Commits
+| Commit | Description |
+|--------|-------------|
+| `44025d9` | Fix `is_on_ed25519_curve` — replace hand-rolled field arithmetic with `curve25519-dalek` |
+| `42a1bd7` | Fix `find_program_address` — add missing `ProgramDerivedAddress` suffix |
+| `325b737` | Wallet adapter frontend + on-chain deposit confirmation (Phase 5.3-5.4) |
+| `21eb1b2` | E2E auth fixes, separate USDC/THB attendee IDs, correct devnet USDC mint |
+
+See `.handovers/031_pda_suffix_fix.md` for the PDA fix details.
 See `.handovers/030_wallet_adapter_confirmation.md` for Phase 5.3–5.4 details.
