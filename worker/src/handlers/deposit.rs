@@ -1,10 +1,11 @@
 //! Deposit/refund API handlers for dual-track payment (USDC + THB).
 //!
-//! Issue 010 Phase 2 — Worker Deposit/Refund API.
+//! Issue 010 Phase 5 — USDC on-chain TX building + Worker Deposit/Refund API.
 //!
 //! Endpoints:
 //!   GET  /api/deposit/status/{attendee_id}  — check deposit status
-//!   POST /api/deposit/usdc                  — build Solana Pay deposit TX
+//!   POST /api/deposit/usdc                  — initiate USDC deposit (Solana Pay URL)
+//!   GET  /api/deposit/usdc/tx               — Solana Pay TX callback (wallet fetches TX)
 //!   POST /api/deposit/thb/upload            — record THB slip upload
 //!   POST /api/deposit/thb/verify            — admin verifies/rejects slip
 //!   GET  /api/deposit/thb/pending           — list unverified slips (admin)
@@ -66,14 +67,17 @@ pub async fn get_deposit_status_handler(
 // POST /api/deposit/usdc
 // ---------------------------------------------------------------------------
 
-/// Build a Solana Pay URL for USDC deposit.
+/// Initiate a USDC deposit by building a Solana Pay Transaction Request.
 ///
-/// Returns a `solana:{baseUrl}?tx={base64Tx}` URL that the frontend
-/// can render as a QR code or open in a wallet adapter.
+/// This endpoint:
+/// 1. Validates the event, deposit config, and wallet address
+/// 2. Records a pending deposit status in KV
+/// 3. Returns a Solana Pay URL that points to our TX callback endpoint
 ///
-/// For MVP, we return a Solana Pay transfer URL that the wallet will sign.
-/// The actual on-chain escrow deposit instruction is built client-side
-/// using the generated `bethere-escrow-client`.
+/// The Solana Pay flow works as follows:
+/// - Frontend renders the `solana_pay_url` as a QR code
+/// - Wallet scans the QR and calls our callback endpoint (`GET /api/deposit/usdc/tx`)
+/// - Callback returns a serialized transaction for the wallet to sign and send
 #[worker::send]
 pub async fn deposit_usdc_handler(
     State(state): State<AppState>,
@@ -109,19 +113,6 @@ pub async fn deposit_usdc_handler(
         return Err(AppError::Validation("attendee already has a deposit".to_string()).into());
     }
 
-    // Build Solana Pay URL for the deposit.
-    // Escrow program ID deployed on devnet.
-    let program_id = "2TGfNNXNez2NgopffDnYYhLNYmndUBBwg5SvpD5XQeLo";
-    // Devnet USDC mint. Mainnet: EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1m
-    let usdc_mint = "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU";
-
-    // For now, build a descriptive Solana Pay URL.
-    // The frontend will use the bethere-escrow-client to build the actual TX.
-    let solana_pay_url = format!(
-        "solana:{program_id}?deposit={}&event={}&attendee={}&mint={usdc_mint}",
-        event.deposit_amount_usdc, event.id, body.attendee_id,
-    );
-
     // Record a pending deposit status
     let deposit_status = DepositStatus {
         attendee_id: body.attendee_id.clone(),
@@ -138,6 +129,17 @@ pub async fn deposit_usdc_handler(
         .await
         .map_err(AppError::Internal)?;
 
+    // Build Solana Pay Transaction Request URL.
+    // Format: `solana:{callback_url}` — the wallet fetches the actual TX from this URL.
+    let callback_url = format!(
+        "{}/api/deposit/usdc/tx?event_id={}&attendee_id={}&wallet={}",
+        state.config.server.url,
+        urlencoding::encode(&event.id),
+        urlencoding::encode(&body.attendee_id),
+        urlencoding::encode(&body.wallet_address),
+    );
+    let solana_pay_url = format!("solana:{callback_url}");
+
     tracing::info!(
         attendee_id = %body.attendee_id,
         event_id = %event.id,
@@ -146,9 +148,157 @@ pub async fn deposit_usdc_handler(
     );
 
     Ok(Json(UsdcDepositResponse {
-        transaction: String::new(), // MVP: client builds TX from escrow-client
+        transaction: String::new(), // Transaction is built on-demand by the callback endpoint
         solana_pay_url,
     }))
+}
+
+// ---------------------------------------------------------------------------
+// GET /api/deposit/usdc/tx — Solana Pay Transaction Request callback
+// ---------------------------------------------------------------------------
+
+/// Query parameters for the Solana Pay TX callback.
+#[derive(Debug, serde::Deserialize)]
+pub struct DepositTxQuery {
+    /// Event ID.
+    pub event_id: String,
+    /// Attendee API ID from Google Sheets.
+    pub attendee_id: String,
+    /// Attendee's Solana wallet address (base58).
+    pub wallet: String,
+}
+
+/// Solana Pay Transaction Request response.
+///
+/// Returned when a wallet calls the callback URL from a Solana Pay QR code.
+/// Contains a base64-encoded serialized transaction for the wallet to sign and submit.
+#[derive(Debug, serde::Serialize)]
+pub struct DepositTxResponse {
+    /// Base64-encoded serialized transaction (unsigned — wallet adds signature).
+    pub transaction: String,
+    /// Human-readable message shown in the wallet confirmation UI.
+    pub message: String,
+}
+
+/// Solana Pay Transaction Request callback.
+///
+/// When a wallet scans the Solana Pay QR code, it fetches this endpoint
+/// to get the serialized deposit transaction. The wallet then:
+/// 1. Shows the `message` to the user
+/// 2. Signs the transaction with the attendee's keypair
+/// 3. Submits it to the Solana network
+///
+/// This builds the actual on-chain `deposit` instruction with:
+/// - PDA-derived `EventEscrow` and `AttendeeDeposit` accounts
+/// - Associated Token Account for the attendee's USDC
+/// - The escrow vault (ATA of the EventEscrow PDA)
+#[worker::send]
+pub async fn deposit_usdc_tx_handler(
+    State(state): State<AppState>,
+    Query(query): Query<DepositTxQuery>,
+) -> Result<Json<DepositTxResponse>, WorkerError> {
+    let kv = state
+        .events_kv
+        .as_ref()
+        .ok_or_else(|| AppError::Internal("EVENTS KV not configured".to_string()))?;
+
+    let event = event_store::get_event_config(kv, &query.event_id)
+        .await
+        .map_err(AppError::Internal)?
+        .ok_or_else(|| AppError::NotFound(format!("event '{}' not found", query.event_id)))?;
+
+    if !event.deposit_enabled {
+        return Err(AppError::Validation("deposit not enabled for this event".to_string()).into());
+    }
+
+    if event.deposit_amount_usdc == 0 {
+        return Err(AppError::Validation("deposit amount not configured".to_string()).into());
+    }
+
+    // Validate wallet address
+    crate::solana::validate_wallet_address(&query.wallet).map_err(AppError::Validation)?;
+
+    // Verify deposit is still pending (not already completed)
+    let existing = event_store::get_deposit_status(kv, &event.id, &query.attendee_id)
+        .await
+        .map_err(AppError::Internal)?;
+
+    if let Some(status) = &existing
+        && status.verified {
+            return Err(AppError::Validation("deposit already verified".to_string()).into());
+        }
+
+    // Determine organizer pubkey for PDA derivation.
+    // The event must have `organizer_wallet` set (the organizer's Solana address).
+    // This is configured when the event is set up for deposits.
+    let organizer_pubkey = if event.organizer_wallet.is_empty() {
+        return Err(AppError::Internal(
+            "event has no organizer wallet configured — set organizer_wallet before enabling deposits".to_string(),
+        ).into());
+    } else {
+        // Validate it's a proper base58 Solana address
+        crate::solana::validate_wallet_address(&event.organizer_wallet)
+            .map_err(|e| AppError::Internal(format!("invalid organizer_wallet: {e}")))?;
+        &event.organizer_wallet
+    };
+
+    // The on_chain_event_id for PDA derivation.
+    // If explicitly set (non-zero), use it. Otherwise, derive from event ID hash.
+    let on_chain_event_id = if event.on_chain_event_id != 0 {
+        event.on_chain_event_id
+    } else {
+        derive_on_chain_event_id(&event.id)
+    };
+
+    // Build the RPC URL with API key
+    let rpc_url = format!(
+        "{}{}{}",
+        state.config.solana.rpc_url,
+        if state.config.solana.rpc_url.contains('?') {
+            "&"
+        } else {
+            "?api-key="
+        },
+        state.config.solana.api_key
+    );
+
+    // Build the deposit transaction
+    let tx = crate::solana_escrow::build_deposit_transaction(
+        &rpc_url,
+        organizer_pubkey,
+        on_chain_event_id,
+        &query.wallet,
+        event.deposit_amount_usdc,
+    )
+    .await
+    .map_err(|e| AppError::Internal(format!("failed to build deposit TX: {e}")))?;
+
+    tracing::info!(
+        attendee_id = %query.attendee_id,
+        event_id = %event.id,
+        "Deposit TX built for wallet callback"
+    );
+
+    Ok(Json(DepositTxResponse {
+        transaction: tx.transaction_b64,
+        message: tx.message,
+    }))
+}
+
+/// Derive a stable u64 event ID from a string event ID for on-chain PDA derivation.
+/// Uses FNV-1a hash for deterministic, collision-resistant mapping.
+fn derive_on_chain_event_id(event_id: &str) -> u64 {
+    // FNV-1a 64-bit hash
+    let mut hash: u64 = 0xcbf29ce484222325; // FNV offset basis
+    for byte in event_id.bytes() {
+        hash ^= byte as u64;
+        hash = hash.wrapping_mul(0x100000001b3); // FNV prime
+    }
+    // Ensure non-zero
+    if hash == 0 {
+        hash = 1;
+    }
+    hash
 }
 
 // ---------------------------------------------------------------------------

@@ -187,6 +187,8 @@ pub async fn create_event(kv: &KvStore, req: &CreateEventRequest) -> Result<Even
         deposit_amount_usdc: req.deposit_amount_usdc,
         deposit_amount_thb: req.deposit_amount_thb,
         escrow_address: req.escrow_address.trim().to_string(),
+        organizer_wallet: req.organizer_wallet.trim().to_string(),
+        on_chain_event_id: req.on_chain_event_id,
         refund_deadline_hours: req.refund_deadline_hours,
         created_at: now.clone(),
         updated_at: now,
@@ -317,6 +319,12 @@ pub async fn update_event(
     }
     if let Some(ref v) = req.escrow_address {
         config.escrow_address = v.trim().to_string();
+    }
+    if let Some(ref v) = req.organizer_wallet {
+        config.organizer_wallet = v.trim().to_string();
+    }
+    if let Some(v) = req.on_chain_event_id {
+        config.on_chain_event_id = v;
     }
     if let Some(v) = req.refund_deadline_hours {
         config.refund_deadline_hours = v;
@@ -458,6 +466,8 @@ pub async fn seed_from_config(
         deposit_amount_usdc: 0,
         deposit_amount_thb: 0,
         escrow_address: String::new(),
+        organizer_wallet: String::new(),
+        on_chain_event_id: 0,
         refund_deadline_hours: 168,
         created_at: now.clone(),
         updated_at: now,
@@ -736,7 +746,7 @@ pub async fn save_deposit_status(
     let key = deposit_status_key(&status.event_id, &status.attendee_id);
     let json = serde_json::to_string(status)
         .map_err(|e| format!("failed to serialize deposit status: {e}"))?;
-    let _ = kv
+    kv
         .put(&key, &json)
         .map_err(|e| format!("failed to build deposit status put: {e:?}"))?
         .execute()
@@ -835,7 +845,7 @@ async fn add_to_deposit_list(
         ids.push(attendee_id.to_string());
         let json = serde_json::to_string(&ids)
             .map_err(|e| format!("failed to serialize deposit list: {e}"))?;
-        let _ = kv
+        kv
             .put(&list_key, &json)
             .map_err(|e| format!("failed to build deposit list put: {e:?}"))?
             .execute()

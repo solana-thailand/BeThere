@@ -155,6 +155,14 @@ pub struct EventConfig {
     /// EventEscrow PDA address (set after on-chain create_event). Empty if not yet created.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub escrow_address: String,
+    /// Organizer's Solana wallet address (base58). Required for PDA derivation.
+    /// Set when event is created on-chain via the escrow program.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub organizer_wallet: String,
+    /// On-chain event ID (u64) used for PDA seed derivation.
+    /// Set when event is created on-chain. If 0, derived from event slug hash.
+    #[serde(default)]
+    pub on_chain_event_id: u64,
     /// Hours after event_end for refund deadline (default: 168 = 7 days).
     #[serde(default)]
     pub refund_deadline_hours: u32,
@@ -276,6 +284,8 @@ impl EventConfig {
             deposit_amount_usdc: 0,
             deposit_amount_thb: 0,
             escrow_address: String::new(),
+            organizer_wallet: String::new(),
+            on_chain_event_id: 0,
             refund_deadline_hours: 168,
             created_at: String::new(),
             updated_at: String::new(),
@@ -360,6 +370,12 @@ pub struct CreateEventRequest {
     /// EventEscrow PDA address.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub escrow_address: String,
+    /// Organizer's Solana wallet address (base58).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub organizer_wallet: String,
+    /// On-chain event ID (u64) for PDA seed derivation. 0 = auto-derive.
+    #[serde(default)]
+    pub on_chain_event_id: u64,
     /// Hours after event_end for refund deadline (default: 168 = 7 days).
     #[serde(default)]
     pub refund_deadline_hours: u32,
@@ -446,6 +462,12 @@ pub struct UpdateEventRequest {
     /// EventEscrow PDA address.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub escrow_address: Option<String>,
+    /// Organizer's Solana wallet address (base58).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub organizer_wallet: Option<String>,
+    /// On-chain event ID (u64) for PDA seed derivation.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub on_chain_event_id: Option<u64>,
     /// Hours after event_end for refund deadline.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub refund_deadline_hours: Option<u32>,
