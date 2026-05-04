@@ -324,3 +324,20 @@ USDC deposits use a two-step Solana Pay pattern:
 - Refunds require `clock > event_end` (on-chain check)
 - Refunds require attendee to be `mark_checked_in` (on-chain check)
 - Vault ATA must be created before `create_event` (two-step initialization)
+
+### Wallet-Signed Operations (Frontend)
+
+All on-chain operations use a shared wallet adapter JS module (`solana_wallet.js`) supporting Phantom, Backpack, Solflare, and Coinbase via the Wallet Standard API. The pattern:
+
+1. **Detect wallets** → `getDetectedWallets()` checks `window.solana`, `window.backpack`, `window.solflare` + Wallet Standard registry
+2. **Connect wallet** → `connectWallet(name)` prompts user, returns base58 public key
+3. **Backend builds TX** → Server constructs unsigned serialized transaction
+4. **Wallet signs + sends** → `signAndSendTransaction(name, b64_tx)` decodes base64 → wallet signs → broadcasts to Solana
+
+Three flows use this pattern:
+
+| Flow | Where | Steps |
+|------|-------|-------|
+| **Escrow Init** | Admin Events page | Connect → Create Vault ATA (Step 1) → Initialize Escrow (Step 2) |
+| **On-Chain Check-In** | Staff Scanner | After off-chain check-in → Connect → Sign `mark_checked_in` TX |
+| **Refund** | Deposit page | Attendee connects own wallet → Sign `refund` TX |

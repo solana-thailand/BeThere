@@ -297,6 +297,9 @@ See `scripts/e2e/test_escrow_devnet.sh` for the complete test flow. All 24 tests
 - **PDA escrow deposits** — USDC deposits held in on-chain PDAs, refundable after event
 - **Solana Pay integration** — Deposit via QR code scan or wallet adapter (Phantom, Backpack, Solflare)
 - **Dual-track deposits** — USDC (on-chain escrow) or THB (PromptPay QR + slip verification)
+- **Two-step escrow init** — Admin creates vault ATA + event escrow via wallet signing (Phantom/Solflare)
+- **On-chain check-in** — Staff marks attendees checked in on-chain via wallet-signed TX (escrow refund gate)
+- **Wallet adapter interop** — Shared JS module for wallet detection, connection, TX signing across scanner + admin
 
 ## Security
 
@@ -345,8 +348,8 @@ See **[DISCUSSION.md](./DISCUSSION.md)** for the full architecture direction and
 | **8c** | Deposit page + wallet adapter (Phantom/Backpack) | ✅ Done |
 | **8d** | On-chain deposit confirmation (RPC polling + webhook) | ✅ Done |
 | **8e** | Devnet E2E with real wallets | ✅ Done (5-step escrow flow validated, 24/24 tests) |
-| **8f** | Mainnet deploy (escrow + deposit) | Planned |
-| **8g** | Frontend refund flow + admin check-in UI | 🔴 Next |
+| **8g** | Frontend refund flow + admin check-in UI + vault ATA + escrow init | ✅ Done |
+| **8h** | Mainnet deploy (escrow + deposit) | Planned |
 
 ### NFT Config Setup (Phase 7)
 
