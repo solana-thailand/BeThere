@@ -386,8 +386,7 @@ Image storage: Cloudflare R2 (free tier: 10 GB storage, 10M reads/month).
 
 🟢 Phase 1–2 complete — escrow program on devnet, worker API done.
 🟢 Phase 3 complete — USDC wallet adapter + on-chain confirmation + PromptPay QR + slip upload + admin deposit/refund UI.
-🟢 Phase 4 mostly complete — PDA fix done, dev-mode bypass ready, refund TX builder done.
-🔴 Phase 4 remaining — Devnet E2E with real wallets (manual testing with Phantom/Backpack).
+🟢 Phase 4 complete — Full 5-step escrow flow validated on devnet (create_vault_ata → create_event → deposit → mark_checked_in → refund). 37/37 unit tests pass, clippy clean.
 🟡 Phase 5 — Mainnet deployment (security review, mainnet USDC mint, deploy).
 
 ### Key Commits
@@ -400,7 +399,11 @@ Image storage: Cloudflare R2 (free tier: 10 GB storage, 10M reads/month).
 | `44025d9` | Fix `is_on_ed25519_curve` — replace hand-rolled field arithmetic with `curve25519-dalek` |
 | `325b737` | Wallet adapter frontend + on-chain deposit confirmation (Phase 5.3-5.4) |
 | `21eb1b2` | E2E auth fixes, separate USDC/THB attendee IDs, correct devnet USDC mint |
+| `d2a5b3e` | Fix refund TX builder 6-account ordering bug + E2E script fixes (Phase 4) |
+| `18685a1` | Fix verify_tx_on_chain: add searchTransactionHistory + debug logging |
+| `3b2fdab` | Reject USDC deposits after event has ended |
+| `4670d6a` | Refactor: extract build_message_accounts helper (-257 lines) |
 
-See `.handovers/032_promptpay_refund_tx.md` for this session's details.
-See `.handovers/031_pda_suffix_fix.md` for the PDA fix details.
-See `.handovers/030_wallet_adapter_confirmation.md` for Phase 5.3–5.4 details.
+See `.handovers/035_fix_refund_tx_builder_account_ordering.md` for Phase 4 E2E validation details.
+See `.handovers/034_fix_illegal_owner_dual_instruction_bug.md` for create_vault_ata/create_event fixes.
+See `.handovers/033_complete_escrow_tx_builders.md` for all TX builder implementations.
