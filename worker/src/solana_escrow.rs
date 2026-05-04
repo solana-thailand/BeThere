@@ -346,13 +346,17 @@ fn pubkey_to_base58(pk: &PubkeyBytes) -> String {
 /// Find program address (PDA) for given seeds and program ID.
 ///
 /// Iterates bump from 255 down to 0, returns the first valid off-curve PDA.
-/// A valid PDA is one where SHA-256(seeds + bump + program_id) is NOT on the
-/// Ed25519 curve (i.e., the y-coordinate's high bit is not set — checked via
-/// `is_on_curve` which checks if the point is a valid Ed25519 point).
+/// A valid PDA is one where SHA-256(seeds + bump + program_id + "ProgramDerivedAddress")
+/// is NOT on the Ed25519 curve.
+///
+/// Reference: <https://github.com/solana-labs/solana/blob/master/sdk/src/pubkey.rs#L142>
 async fn find_program_address(
     seeds: &[&[u8]],
     program_id: &PubkeyBytes,
 ) -> Result<(PubkeyBytes, u8), EscrowError> {
+    /// The Solana runtime appends this literal after the program ID in PDA derivation.
+    const PDA_MARKER: &[u8] = b"ProgramDerivedAddress";
+
     for bump in (0u8..=255).rev() {
         let mut full_seeds: Vec<u8> = Vec::new();
         for seed in seeds {
@@ -360,6 +364,7 @@ async fn find_program_address(
         }
         full_seeds.push(bump);
         full_seeds.extend_from_slice(program_id);
+        full_seeds.extend_from_slice(PDA_MARKER);
 
         let hash = sha256(&full_seeds).await?;
 
@@ -1129,8 +1134,8 @@ mod tests {
         assert_eq!(encoded, ASSOCIATED_TOKEN_PROGRAM_ID);
     }
 
-    /// Verify EventEscrow PDA derivation matches reference.
-    /// Expected: 9gm93ehPdPjZfSCg6v1agUSmSUu82WQQWHWkmReMSAi5 (bump=254)
+    /// Verify EventEscrow PDA derivation matches @solana/web3.js reference.
+    /// Expected: PawcSqdjb66SKp1utWraYZJDcMQfYBwwpK9QSb3EY5a (bump=255)
     #[tokio::test]
     async fn test_find_event_escrow_pda() {
         let program_id = pubkey_from_base58(ESCROW_PROGRAM_ID).unwrap();
@@ -1144,13 +1149,13 @@ mod tests {
         .await
         .unwrap();
 
-        let expected = "9gm93ehPdPjZfSCg6v1agUSmSUu82WQQWHWkmReMSAi5";
+        let expected = "PawcSqdjb66SKp1utWraYZJDcMQfYBwwpK9QSb3EY5a";
         assert_eq!(pubkey_to_base58(&pda), expected, "EventEscrow PDA mismatch");
-        assert_eq!(bump, 254, "EventEscrow bump mismatch");
+        assert_eq!(bump, 255, "EventEscrow bump mismatch");
     }
 
-    /// Verify AttendeeDeposit PDA derivation matches reference.
-    /// Expected: E1wALGV1gMH6Aek6vnuVDBEvtkquwYH3Hves3akiTTjP (bump=254)
+    /// Verify AttendeeDeposit PDA derivation matches @solana/web3.js reference.
+    /// Expected: Cm8bAdgASHKBYehSBxC8YeVmUw2oT7sB2zVu8VQmfqcn (bump=255)
     #[tokio::test]
     async fn test_find_attendee_deposit_pda() {
         let program_id = pubkey_from_base58(ESCROW_PROGRAM_ID).unwrap();
@@ -1174,17 +1179,17 @@ mod tests {
         .await
         .unwrap();
 
-        let expected = "E1wALGV1gMH6Aek6vnuVDBEvtkquwYH3Hves3akiTTjP";
+        let expected = "Cm8bAdgASHKBYehSBxC8YeVmUw2oT7sB2zVu8VQmfqcn";
         assert_eq!(
             pubkey_to_base58(&pda),
             expected,
             "AttendeeDeposit PDA mismatch"
         );
-        assert_eq!(bump, 254, "AttendeeDeposit bump mismatch");
+        assert_eq!(bump, 255, "AttendeeDeposit bump mismatch");
     }
 
-    /// Verify Vault ATA derivation matches reference.
-    /// Expected: 3dap2pJrHmpbqNegkvvNMJwHW6YDBMzL376nfrMeQAf8 (bump=255)
+    /// Verify Vault ATA derivation matches @solana/web3.js reference.
+    /// Expected: 5exYHTcLvUbKPd3V8jxpkXn4RJL337URHM38kM2K6zbS (bump=255)
     #[tokio::test]
     async fn test_find_vault_ata() {
         let program_id = pubkey_from_base58(ESCROW_PROGRAM_ID).unwrap();
@@ -1207,12 +1212,12 @@ mod tests {
         .await
         .unwrap();
 
-        let expected = "3dap2pJrHmpbqNegkvvNMJwHW6YDBMzL376nfrMeQAf8";
+        let expected = "5exYHTcLvUbKPd3V8jxpkXn4RJL337URHM38kM2K6zbS";
         assert_eq!(pubkey_to_base58(&vault), expected, "Vault ATA mismatch");
     }
 
-    /// Verify Attendee USDC ATA derivation matches reference.
-    /// Expected: 8QyQEuFNiJnsNmgyBDW1ZT3zZTMt2MdLuiKxP5mmvSJz (bump=254)
+    /// Verify Attendee USDC ATA derivation matches @solana/web3.js reference.
+    /// Expected: Bhgn1ZPvwe6ZkA7A9waU4t9BQdpEjdnSM4ZXeNCm1kuw (bump=254)
     #[tokio::test]
     async fn test_find_attendee_ata() {
         let attendee = pubkey_from_base58("9ZNTfG4NyQgxy2SWjSiQoUyBPEvXT2xo7fKc5hPYYJ7b").unwrap();
@@ -1222,7 +1227,7 @@ mod tests {
             .await
             .unwrap();
 
-        let expected = "8QyQEuFNiJnsNmgyBDW1ZT3zZTMt2MdLuiKxP5mmvSJz";
+        let expected = "Bhgn1ZPvwe6ZkA7A9waU4t9BQdpEjdnSM4ZXeNCm1kuw";
         assert_eq!(pubkey_to_base58(&ata), expected, "Attendee ATA mismatch");
     }
 }
