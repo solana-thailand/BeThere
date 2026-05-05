@@ -17,7 +17,10 @@ pub struct CloseEvent {
         address = EventEscrow::seeds(organizer.address(), event_id)
     )]
     pub event_escrow: Account<EventEscrow>,
-    #[account(mut)]
+    #[account(
+        mut,
+        constraints(*vault.address() == *event_escrow.vault()) @ EscrowError::VaultMismatch
+    )]
     pub vault: Account<Token>,
     pub token_program: Program<TokenProgram>,
 }
@@ -25,6 +28,22 @@ pub struct CloseEvent {
 impl CloseEvent {
     #[inline(always)]
     pub fn close_event(&self, bumps: &CloseEventBumps) -> Result<(), ProgramError> {
+        // Safety: vault must be empty before closing.
+        // SPL token close_account zeros the data — remaining tokens would be
+        // permanently lost.
+        //
+        // We verify via accounting: total_deposited == total_refunded + total_forfeited.
+        // This is equivalent to checking vault balance == 0 without reading token data.
+        let total_deposited = self.event_escrow.total_deposited();
+        let total_refunded = self.event_escrow.total_refunded();
+        let total_forfeited = self.event_escrow.total_forfeited();
+        let settled = total_refunded
+            .checked_add(total_forfeited)
+            .ok_or(EscrowError::Overflow)?;
+        if total_deposited != settled {
+            return Err(EscrowError::VaultNotEmpty.into());
+        }
+
         let bump = [bumps.event_escrow];
         let event_id_bytes = self.event_escrow.event_id().to_le_bytes();
         let seeds = [

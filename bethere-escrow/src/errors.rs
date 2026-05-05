@@ -22,4 +22,16 @@ pub enum EscrowError {
     EventStillActive = 8,
     /// Unauthorized signer.
     Unauthorized = 9,
+    /// Vault account does not match the escrow's stored vault.
+    VaultMismatch = 10,
+    /// USDC mint does not match the escrow's stored mint.
+    MintMismatch = 11,
+    /// Deposit amount must be greater than zero.
+    InvalidDepositAmount = 12,
+    /// Event end must be in the future.
+    EventEndInPast = 13,
+    /// Arithmetic overflow.
+    Overflow = 14,
+    /// Vault still has tokens — settle all refunds/claims first.
+    VaultNotEmpty = 15,
 }

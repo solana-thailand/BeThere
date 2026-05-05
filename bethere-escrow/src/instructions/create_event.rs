@@ -41,6 +41,15 @@ impl CreateEvent {
         refund_deadline: i64,
         bumps: &CreateEventBumps,
     ) -> Result<(), ProgramError> {
+        if deposit_amount == 0 {
+            return Err(EscrowError::InvalidDepositAmount.into());
+        }
+
+        let clock = <Clock as quasar_lang::sysvars::Sysvar>::get()?;
+        if event_end <= clock.unix_timestamp.get() {
+            return Err(EscrowError::EventEndInPast.into());
+        }
+
         if refund_deadline <= event_end {
             return Err(EscrowError::RefundDeadlineNotPassed.into());
         }

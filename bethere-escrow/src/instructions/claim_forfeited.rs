@@ -21,8 +21,14 @@ pub struct ClaimForfeited {
         token(mint = usdc_mint, authority = organizer, token_program = token_program)
     )]
     pub organizer_ta: Account<Token>,
+    #[account(
+        constraints(*usdc_mint.address() == *event_escrow.usdc_mint()) @ EscrowError::MintMismatch
+    )]
     pub usdc_mint: Account<Mint>,
-    #[account(mut)]
+    #[account(
+        mut,
+        constraints(*vault.address() == *event_escrow.vault()) @ EscrowError::VaultMismatch
+    )]
     pub vault: Account<Token>,
     pub rent: Sysvar<Rent>,
     pub token_program: Program<TokenProgram>,
@@ -71,8 +77,11 @@ impl ClaimForfeited {
             )
             .invoke_signed(&seeds)?;
 
-        // Update escrow totals
-        self.event_escrow.total_forfeited = (total_forfeited + forfeited).into();
+        // Update escrow totals (checked arithmetic)
+        self.event_escrow.total_forfeited = total_forfeited
+            .checked_add(forfeited)
+            .ok_or(EscrowError::Overflow)?
+            .into();
 
         // Emit event
         emit!(ForfeitedClaimed {

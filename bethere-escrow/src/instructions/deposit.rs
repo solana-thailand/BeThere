@@ -19,6 +19,9 @@ pub struct Deposit {
         address = EventEscrow::seeds(event_escrow.organizer(), event_id)
     )]
     pub event_escrow: Account<EventEscrow>,
+    #[account(
+        constraints(*usdc_mint.address() == *event_escrow.usdc_mint()) @ EscrowError::MintMismatch
+    )]
     pub usdc_mint: Account<Mint>,
     #[account(
         init,
@@ -28,7 +31,10 @@ pub struct Deposit {
     pub attendee_deposit: Account<AttendeeDeposit>,
     #[account(mut)]
     pub attendee_ta: Account<Token>,
-    #[account(mut)]
+    #[account(
+        mut,
+        constraints(*vault.address() == *event_escrow.vault()) @ EscrowError::VaultMismatch
+    )]
     pub vault: Account<Token>,
     pub rent: Sysvar<Rent>,
     pub token_program: Program<TokenProgram>,
@@ -51,9 +57,12 @@ impl Deposit {
             bump: bumps.attendee_deposit,
         });
 
-        // Update escrow totals
+        // Update escrow totals (checked arithmetic)
         let total_deposited = self.event_escrow.total_deposited();
-        self.event_escrow.total_deposited = (total_deposited + amount).into();
+        self.event_escrow.total_deposited = total_deposited
+            .checked_add(amount)
+            .ok_or(EscrowError::Overflow)?
+            .into();
 
         Ok(())
     }

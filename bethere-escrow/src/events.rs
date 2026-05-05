@@ -40,3 +40,9 @@ pub struct ForfeitedClaimed {
 pub struct EventClosed {
     pub escrow: Address,
 }
+
+#[event(discriminator = 6)]
+pub struct EventDeactivated {
+    pub escrow: Address,
+    pub organizer: Address,
+}

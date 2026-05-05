@@ -77,4 +77,12 @@ mod bethere_escrow {
     pub fn close_event(ctx: Ctx<CloseEvent>, _event_id: u64) -> Result<(), ProgramError> {
         ctx.accounts.close_event(&ctx.bumps)
     }
+
+    /// Deactivate an event escrow — stops accepting deposits.
+    /// Called by organizer when registration closes.
+    /// Refunds are still allowed; close_event can be called after.
+    #[instruction(discriminator = 6)]
+    pub fn deactivate_event(ctx: Ctx<DeactivateEvent>, _event_id: u64) -> Result<(), ProgramError> {
+        ctx.accounts.deactivate()
+    }
 }

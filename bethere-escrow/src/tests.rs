@@ -1497,3 +1497,414 @@ fn test_no_show_path() {
 
     println!("  NO_SHOW_PATH CU: {}", result.compute_units_consumed);
 }
+
+// ===========================================================================
+// TEST 17: Deactivate Event — happy path
+// ===========================================================================
+
+#[test]
+fn test_deactivate_event() {
+    let mut svm = setup();
+
+    let (escrow, escrow_bump) = find_event_escrow(&ORGANIZER, EVENT_ID);
+
+    let ix = with_signers(
+        DeactivateEventInstruction {
+            organizer: ORGANIZER,
+            event_escrow: escrow,
+            _event_id: EVENT_ID,
+        }
+        .into(),
+        &[0],
+    );
+
+    let result = svm.process_instruction(
+        &ix,
+        &[
+            signer(ORGANIZER),
+            event_escrow_account(
+                escrow,
+                ORGANIZER,
+                EVENT_ID,
+                USDC_MINT,
+                VAULT,
+                DEPOSIT_AMOUNT,
+                EVENT_END,
+                REFUND_DEADLINE,
+                DEPOSIT_AMOUNT,
+                0,
+                0,
+                true, // is_active = true
+                escrow_bump,
+            ),
+        ],
+    );
+
+    assert!(
+        result.is_ok(),
+        "deactivate_event failed: {:?}",
+        result.raw_result
+    );
+
+    // Verify is_active set to false (offset: 1 + 32 + 8 + 32 + 32 + 8 + 8 + 8 + 8 + 8 + 8 = 148)
+    let escrow_account = result.account(&escrow).unwrap();
+    let is_active_offset = 1 + 32 + 8 + 32 + 32 + 8 + 8 + 8 + 8 + 8 + 8;
+    assert_eq!(
+        escrow_account.data[is_active_offset], 0,
+        "is_active should be false"
+    );
+
+    println!("  DEACTIVATE_EVENT: OK");
+}
+
+// ===========================================================================
+// TEST 18: Deactivate Event — wrong organizer should fail
+// ===========================================================================
+
+#[test]
+fn test_deactivate_event_wrong_organizer() {
+    let mut svm = setup();
+
+    let (escrow, escrow_bump) = find_event_escrow(&ORGANIZER, EVENT_ID);
+
+    let ix = with_signers(
+        DeactivateEventInstruction {
+            organizer: WRONG_ORGANIZER,
+            event_escrow: escrow,
+            _event_id: EVENT_ID,
+        }
+        .into(),
+        &[0],
+    );
+
+    let result = svm.process_instruction(
+        &ix,
+        &[
+            signer(WRONG_ORGANIZER),
+            event_escrow_account(
+                escrow,
+                ORGANIZER, // real organizer
+                EVENT_ID,
+                USDC_MINT,
+                VAULT,
+                DEPOSIT_AMOUNT,
+                EVENT_END,
+                REFUND_DEADLINE,
+                DEPOSIT_AMOUNT,
+                0,
+                0,
+                true,
+                escrow_bump,
+            ),
+        ],
+    );
+
+    assert!(
+        result.is_err(),
+        "deactivate_event should fail with wrong organizer"
+    );
+    println!("  DEACTIVATE_EVENT_WRONG_ORGANIZER: correctly rejected");
+}
+
+// ===========================================================================
+// TEST 19: Deactivate Event — already inactive should fail
+// ===========================================================================
+
+#[test]
+fn test_deactivate_event_already_inactive() {
+    let mut svm = setup();
+
+    let (escrow, escrow_bump) = find_event_escrow(&ORGANIZER, EVENT_ID);
+
+    let ix = with_signers(
+        DeactivateEventInstruction {
+            organizer: ORGANIZER,
+            event_escrow: escrow,
+            _event_id: EVENT_ID,
+        }
+        .into(),
+        &[0],
+    );
+
+    let result = svm.process_instruction(
+        &ix,
+        &[
+            signer(ORGANIZER),
+            event_escrow_account(
+                escrow,
+                ORGANIZER,
+                EVENT_ID,
+                USDC_MINT,
+                VAULT,
+                DEPOSIT_AMOUNT,
+                EVENT_END,
+                REFUND_DEADLINE,
+                DEPOSIT_AMOUNT,
+                0,
+                0,
+                false, // already inactive
+                escrow_bump,
+            ),
+        ],
+    );
+
+    assert!(
+        result.is_err(),
+        "deactivate_event should fail when already inactive"
+    );
+    println!("  DEACTIVATE_EVENT_ALREADY_INACTIVE: correctly rejected");
+}
+
+// ===========================================================================
+// TEST 20: Close Event — vault not empty should fail
+// ===========================================================================
+
+#[test]
+fn test_close_event_vault_not_empty() {
+    let mut svm = setup();
+
+    let token_program = quasar_svm::SPL_TOKEN_PROGRAM_ID;
+    let (escrow, escrow_bump) = find_event_escrow(&ORGANIZER, EVENT_ID);
+
+    let ix = with_signers(
+        CloseEventInstruction {
+            organizer: ORGANIZER,
+            event_escrow: escrow,
+            vault: VAULT,
+            token_program,
+            _event_id: EVENT_ID,
+        }
+        .into(),
+        &[0],
+    );
+
+    let result = svm.process_instruction(
+        &ix,
+        &[
+            signer(ORGANIZER),
+            event_escrow_account(
+                escrow,
+                ORGANIZER,
+                EVENT_ID,
+                USDC_MINT,
+                VAULT,
+                DEPOSIT_AMOUNT,
+                EVENT_END,
+                REFUND_DEADLINE,
+                DEPOSIT_AMOUNT, // total_deposited
+                0,              // total_refunded
+                0,              // total_forfeited → 15M unsettled!
+                false,          // is_active = false
+                escrow_bump,
+            ),
+            // Vault still has tokens
+            token_account(VAULT, USDC_MINT, escrow, DEPOSIT_AMOUNT),
+        ],
+    );
+
+    assert!(
+        result.is_err(),
+        "close_event should fail when vault still has tokens"
+    );
+    println!("  CLOSE_EVENT_VAULT_NOT_EMPTY: correctly rejected");
+}
+
+// ===========================================================================
+// TEST 21: Full lifecycle — create → deposit → check_in → refund → deactivate → close
+// ===========================================================================
+
+#[test]
+fn test_full_lifecycle_with_deactivate() {
+    let mut svm = setup();
+
+    let token_program = quasar_svm::SPL_TOKEN_PROGRAM_ID;
+    let system_program = quasar_svm::system_program::ID;
+    let (escrow, _escrow_bump) = find_event_escrow(&ORGANIZER, EVENT_ID);
+    let (deposit, _deposit_bump) = find_attendee_deposit(&escrow, &ATTENDEE);
+
+    // --- Step 1: Create Event ---
+    let create_ix = with_writable(
+        with_signers(
+            CreateEventInstruction {
+                organizer: ORGANIZER,
+                event_escrow: escrow,
+                usdc_mint: USDC_MINT,
+                vault: VAULT,
+                rent: RENT,
+                token_program,
+                system_program,
+                event_id: EVENT_ID,
+                deposit_amount: DEPOSIT_AMOUNT,
+                event_end: EVENT_END,
+                refund_deadline: REFUND_DEADLINE,
+            }
+            .into(),
+            &[0],
+        ),
+        &[3],
+    );
+
+    let result = svm.process_instruction(
+        &create_ix,
+        &[
+            signer(ORGANIZER),
+            empty(escrow),
+            mint_account(USDC_MINT),
+            token_account(VAULT, USDC_MINT, escrow, 0),
+        ],
+    );
+    assert!(
+        result.is_ok(),
+        "step 1 create_event: {:?}",
+        result.raw_result
+    );
+    println!("  LIFECYCLE step 1 CREATE OK");
+
+    // --- Step 2: Deposit ---
+    let deposit_ix = with_signers(
+        DepositInstruction {
+            attendee: ATTENDEE,
+            event_escrow: escrow,
+            usdc_mint: USDC_MINT,
+            attendee_deposit: deposit,
+            attendee_ta: ATTENDEE_TA,
+            vault: VAULT,
+            rent: RENT,
+            token_program,
+            system_program,
+            _event_id: EVENT_ID,
+        }
+        .into(),
+        &[0],
+    );
+
+    let result = svm.process_instruction(
+        &deposit_ix,
+        &[
+            signer(ATTENDEE),
+            result.account(&escrow).unwrap().clone(),
+            mint_account(USDC_MINT),
+            empty(deposit),
+            token_account(ATTENDEE_TA, USDC_MINT, ATTENDEE, DEPOSIT_AMOUNT),
+            result.account(&VAULT).unwrap().clone(),
+        ],
+    );
+    assert!(result.is_ok(), "step 2 deposit: {:?}", result.raw_result);
+    println!("  LIFECYCLE step 2 DEPOSIT OK");
+
+    let escrow_after_deposit = result.account(&escrow).unwrap().clone();
+    let vault_after_deposit = result.account(&VAULT).unwrap().clone();
+    let deposit_after_step2 = result.account(&deposit).unwrap().clone();
+
+    // --- Step 3: Mark Checked In ---
+    let checkin_ix = with_signers(
+        MarkCheckedInInstruction {
+            organizer: ORGANIZER,
+            event_escrow: escrow,
+            attendee_deposit: deposit,
+            _event_id: EVENT_ID,
+        }
+        .into(),
+        &[0],
+    );
+
+    let result = svm.process_instruction(
+        &checkin_ix,
+        &[signer(ORGANIZER), escrow_after_deposit, deposit_after_step2],
+    );
+    assert!(result.is_ok(), "step 3 check_in: {:?}", result.raw_result);
+    println!("  LIFECYCLE step 3 CHECK_IN OK");
+
+    let escrow_after_checkin = result.account(&escrow).unwrap().clone();
+    let deposit_after_checkin = result.account(&deposit).unwrap().clone();
+
+    // --- Step 4: Warp past event_end, then Refund ---
+    svm.warp_to_timestamp(EVENT_END + 1);
+
+    let refund_ix = with_writable(
+        with_signers(
+            RefundInstruction {
+                attendee: ATTENDEE,
+                event_escrow: escrow,
+                usdc_mint: USDC_MINT,
+                attendee_deposit: deposit,
+                attendee_ta: ATTENDEE_TA,
+                vault: VAULT,
+                rent: RENT,
+                token_program,
+                system_program,
+                _event_id: EVENT_ID,
+            }
+            .into(),
+            &[0],
+        ),
+        &[4],
+    );
+
+    let result = svm.process_instruction(
+        &refund_ix,
+        &[
+            signer(ATTENDEE),
+            escrow_after_checkin,
+            mint_account(USDC_MINT),
+            deposit_after_checkin,
+            token_account(ATTENDEE_TA, USDC_MINT, ATTENDEE, 0),
+            vault_after_deposit,
+        ],
+    );
+    assert!(result.is_ok(), "step 4 refund: {:?}", result.raw_result);
+    println!("  LIFECYCLE step 4 REFUND OK");
+
+    let escrow_after_refund = result.account(&escrow).unwrap().clone();
+    let vault_after_refund = result.account(&VAULT).unwrap().clone();
+
+    // --- Step 5: Deactivate ---
+    let deactivate_ix = with_signers(
+        DeactivateEventInstruction {
+            organizer: ORGANIZER,
+            event_escrow: escrow,
+            _event_id: EVENT_ID,
+        }
+        .into(),
+        &[0],
+    );
+
+    let result = svm.process_instruction(&deactivate_ix, &[signer(ORGANIZER), escrow_after_refund]);
+    assert!(result.is_ok(), "step 5 deactivate: {:?}", result.raw_result);
+    println!("  LIFECYCLE step 5 DEACTIVATE OK");
+
+    let escrow_after_deactivate = result.account(&escrow).unwrap().clone();
+
+    // Verify is_active = false
+    let is_active_offset = 1 + 32 + 8 + 32 + 32 + 8 + 8 + 8 + 8 + 8 + 8;
+    assert_eq!(
+        escrow_after_deactivate.data[is_active_offset], 0,
+        "is_active should be false after deactivate"
+    );
+
+    // --- Step 6: Close Event ---
+    let close_ix = with_signers(
+        CloseEventInstruction {
+            organizer: ORGANIZER,
+            event_escrow: escrow,
+            vault: VAULT,
+            token_program,
+            _event_id: EVENT_ID,
+        }
+        .into(),
+        &[0],
+    );
+
+    let result = svm.process_instruction(
+        &close_ix,
+        &[
+            signer(ORGANIZER),
+            escrow_after_deactivate,
+            vault_after_refund,
+        ],
+    );
+    assert!(result.is_ok(), "step 6 close: {:?}", result.raw_result);
+    println!("  LIFECYCLE step 6 CLOSE OK");
+
+    println!("  FULL LIFECYCLE WITH DEACTIVATE: All 6 steps completed!");
+}

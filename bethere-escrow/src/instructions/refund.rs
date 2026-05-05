@@ -18,6 +18,9 @@ pub struct Refund {
         address = EventEscrow::seeds(event_escrow.organizer(), event_id)
     )]
     pub event_escrow: Account<EventEscrow>,
+    #[account(
+        constraints(*usdc_mint.address() == *event_escrow.usdc_mint()) @ EscrowError::MintMismatch
+    )]
     pub usdc_mint: Account<Mint>,
     #[account(
         mut,
@@ -33,7 +36,10 @@ pub struct Refund {
         token(mint = usdc_mint, authority = attendee, token_program = token_program)
     )]
     pub attendee_ta: Account<Token>,
-    #[account(mut)]
+    #[account(
+        mut,
+        constraints(*vault.address() == *event_escrow.vault()) @ EscrowError::VaultMismatch
+    )]
     pub vault: Account<Token>,
     pub rent: Sysvar<Rent>,
     pub token_program: Program<TokenProgram>,
@@ -55,9 +61,12 @@ impl Refund {
         // Mark as refunded
         self.attendee_deposit.refunded = true.into();
 
-        // Update escrow totals
+        // Update escrow totals (checked arithmetic)
         let total_refunded = self.event_escrow.total_refunded();
-        self.event_escrow.total_refunded = (total_refunded + amount).into();
+        self.event_escrow.total_refunded = total_refunded
+            .checked_add(amount)
+            .ok_or(EscrowError::Overflow)?
+            .into();
 
         Ok(())
     }
