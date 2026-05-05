@@ -1,7 +1,7 @@
 /**
  * QR code image generation module.
  *
- * Uses the QRious library (loaded via CDN in index.html) to generate
+ * Uses the QRious library (lazy-loaded by lazy_assets.js) to generate
  * QR code images as base64 data URLs for display in the frontend.
  *
  * Imported via `#[wasm_bindgen(module = "/js/qr_generate.js")]` in Rust.
@@ -12,7 +12,28 @@
  */
 
 /**
+ * Preload QR libraries (jsQR + QRious) so they are ready when needed.
+ *
+ * Call this on component mount for pages that render QR codes.
+ * Deduplicates — safe to call multiple times.
+ *
+ * @returns {Promise<void>}
+ */
+export async function preloadQrLibraries() {
+  try {
+    var { loadQrLibraries } = await import("./lazy_assets.js");
+    await loadQrLibraries();
+  } catch (e) {
+    console.error("[qr_generate] Failed to preload QR libraries:", e);
+  }
+}
+
+/**
  * Generate a QR code image as a base64 PNG data URL.
+ *
+ * Requires QRious to be loaded (via preloadQrLibraries or startCamera preload).
+ * Returns null if QRious hasn't been loaded yet — callers should ensure
+ * preload is called on component mount before QR codes are needed.
  *
  * @param {string} text - The text to encode (e.g. claim URL).
  * @param {number} [size=200] - The size of the QR code in pixels.
@@ -21,7 +42,9 @@
  */
 export function generateQrDataUrl(text, size) {
   if (typeof QRious === "undefined") {
-    console.error("[qr_generate] QRious library not loaded");
+    console.error(
+      "[qr_generate] QRious library not loaded — call preloadQrLibraries() on mount",
+    );
     return null;
   }
 

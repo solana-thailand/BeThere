@@ -30,11 +30,17 @@ use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen(module = "/js/qr_generate.js")]
 extern "C" {
+    /// Preload jsQR and QRious libraries from CDN.
+    /// Call on mount to ensure QR generation is ready when needed.
+    #[wasm_bindgen(js_name = "preloadQrLibraries")]
+    async fn preload_qr_libraries_js();
+
     /// Copy text to the system clipboard.
     #[wasm_bindgen(js_name = "copyToClipboard")]
     fn copy_to_clipboard_js(text: &str) -> bool;
 
     /// Generate a QR code as a base64 PNG data URL.
+    /// Requires QRious to be preloaded — call preload_qr_libraries_js() on mount.
     #[wasm_bindgen(js_name = "generateQrDataUrl")]
     fn generate_qr_data_url_js(text: &str, size: u32) -> Option<String>;
 }
@@ -169,6 +175,13 @@ pub fn Deposit() -> impl IntoView {
 
     // File input ref for slip image upload
     let file_input_ref = NodeRef::<leptos::html::Input>::new();
+
+    // Preload jsQR + QRious libraries on mount.
+    // The deposit page renders PromptPay/USDC payment QR codes,
+    // so libraries should be loaded before the payment view appears.
+    leptos::task::spawn_local(async {
+        preload_qr_libraries_js().await;
+    });
 
     // Extract attendee_id from URL path and event_id from query params, then fetch status
     Effect::new(move |_| {
