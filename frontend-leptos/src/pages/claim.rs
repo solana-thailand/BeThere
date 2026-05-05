@@ -200,7 +200,9 @@ fn SessionTimer(start_ms: i64, end_ms: i64) -> impl IntoView {
                     set_t.set("Thanks for coming!".to_string());
                     break; // stop polling after event ends
                 }
-                gloo::timers::future::TimeoutFuture::new(1000).await;
+                // 5s interval — reduces re-renders vs 1s; sufficient granularity
+                // for countdown/elapsed display on event time scales (hours).
+                gloo::timers::future::TimeoutFuture::new(5000).await;
             }
         });
     });
