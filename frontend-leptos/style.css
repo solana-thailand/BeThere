@@ -3821,6 +3821,15 @@ nav a.active {
     color: var(--text-muted);
 }
 
+.admin-load-more {
+    text-align: center;
+    padding: 1rem 0 1.5rem;
+}
+
+.admin-load-more .btn {
+    min-width: 200px;
+}
+
 .admin-empty-state-sm {
     text-align: center;
     padding: 1.5rem;

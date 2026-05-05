@@ -221,6 +221,10 @@ pub fn Admin() -> impl IntoView {
     // Active filter pill — All by default
     let (filter_pill, set_filter_pill) = signal(FilterPill::All);
 
+    // B6: Pagination state — show PAGE_SIZE attendees at a time
+    const PAGE_SIZE: usize = 50;
+    let (visible_count, set_visible_count) = signal(PAGE_SIZE);
+
     // Refresh counter — increment to trigger data reload
     let (refresh_counter, set_refresh_counter) = signal(0u32);
 
@@ -296,6 +300,14 @@ pub fn Admin() -> impl IntoView {
         });
 
         filtered
+    });
+
+    // Reset pagination when filters change
+    Effect::new(move |_| {
+        let _ = active_tab.get();
+        let _ = search_query.get();
+        let _ = filter_pill.get();
+        set_visible_count.set(PAGE_SIZE);
     });
 
     // Data loading effect — triggered by refresh_counter or active_event_id changes.
@@ -412,6 +424,7 @@ pub fn Admin() -> impl IntoView {
                 ToastType::Success
             };
             components::show_toast(&set_toast, &msg, toast_type);
+            api::invalidate_attendee_cache();
             set_selected.set(HashSet::new());
             set_refresh.update(|c| *c += 1);
             set_busy.set(false);
@@ -776,10 +789,11 @@ pub fn Admin() -> impl IntoView {
                             </div>
                         </Show>
 
-                        // Inline attendee items with checkboxes
+                        // Inline attendee items with checkboxes (B6: paginated)
                         {move || {
                             let filtered = filtered_attendees.get();
                             let selected = selected_ids.get();
+                            let limit = visible_count.get();
                             if filtered.is_empty() {
                                 view! {
                                     <div class="admin-empty-state">
@@ -787,7 +801,11 @@ pub fn Admin() -> impl IntoView {
                                     </div>
                                 }.into_any()
                             } else {
-                                filtered.iter().map(|attendee| {
+                                let visible: Vec<_> = filtered.iter().take(limit).collect();
+                                let has_more = filtered.len() > limit;
+                                let remaining = filtered.len().saturating_sub(limit);
+
+                                let items = visible.into_iter().map(|attendee| {
                                     let is_checked_in = attendee.checked_in_at.is_some();
                                     let is_vip = is_vip_ticket(&attendee.ticket_name);
                                     let is_selected = selected.contains(&attendee.api_id);
@@ -859,7 +877,21 @@ pub fn Admin() -> impl IntoView {
                                             </div>
                                         </div>
                                     }
-                                }).collect_view().into_any()
+                                }).collect_view();
+
+                                view! {
+                                    {items}
+                                    <Show when=move || has_more>
+                                        <div class="admin-load-more">
+                                            <button
+                                                class="btn btn-outline btn-sm"
+                                                on:click=move |_| set_visible_count.update(|c| *c += PAGE_SIZE)
+                                            >
+                                                {format!("Load more ({remaining} remaining)")}
+                                            </button>
+                                        </div>
+                                    </Show>
+                                }.into_any()
                             }
                         }}
                     </div>
@@ -928,6 +960,7 @@ fn spawn_qr_generation(
                 };
                 components::show_toast(&set_toast, &msg, ToastType::Success);
                 set_qr_result.set(Some(data));
+                api::invalidate_attendee_cache();
                 // Refresh attendee list after generation
                 set_refresh_counter.update(|c| *c += 1);
             }

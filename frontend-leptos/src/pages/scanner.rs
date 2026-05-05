@@ -337,6 +337,7 @@ pub fn Scanner() -> impl IntoView {
                         log::info!("[scanner] check-in successful: {}", result.name);
                         set_state.set(CheckInState::Success(Box::new(result)));
                         set_s_success.update(|c| *c += 1);
+                        api::invalidate_attendee_cache();
                         components::show_toast(
                             &set_t,
                             &format!("{name} checked in successfully!"),
