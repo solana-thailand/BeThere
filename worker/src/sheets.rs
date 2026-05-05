@@ -6,6 +6,7 @@
 
 use base64::Engine;
 use chrono::Utc;
+use std::collections::HashMap;
 
 use event_checkin_domain::models::attendee::{Attendee, AttendeeRow};
 use event_checkin_domain::models::auth::ServiceAccountClaim;
@@ -270,7 +271,42 @@ pub async fn get_attendees(
     Ok(attendees)
 }
 
-/// Get a single attendee by their api_id.
+// ---------------------------------------------------------------------------
+// HashMap helpers for O(1) lookups
+// ---------------------------------------------------------------------------
+
+/// Build a HashMap of attendees keyed by `api_id`.
+/// Internally calls `get_attendees()` so KV caching is preserved.
+async fn get_attendees_map(
+    state: &AppState,
+    sheet_id: &str,
+    sheet_name: &str,
+    kv: Option<&KvStore>,
+) -> Result<HashMap<String, Attendee>, String> {
+    let attendees: Vec<Attendee> = get_attendees(state, sheet_id, sheet_name, kv).await?;
+    Ok(attendees
+        .into_iter()
+        .map(|a| (a.api_id.clone(), a))
+        .collect())
+}
+
+/// Build a HashMap of attendees keyed by `claim_token`.
+/// Only attendees with `Some(token)` are included.
+/// Internally calls `get_attendees()` so KV caching is preserved.
+async fn get_attendees_by_claim_map(
+    state: &AppState,
+    sheet_id: &str,
+    sheet_name: &str,
+    kv: Option<&KvStore>,
+) -> Result<HashMap<String, Attendee>, String> {
+    let attendees: Vec<Attendee> = get_attendees(state, sheet_id, sheet_name, kv).await?;
+    Ok(attendees
+        .into_iter()
+        .filter_map(|a| a.claim_token.clone().map(|token| (token, a)))
+        .collect())
+}
+
+/// Get a single attendee by their api_id — O(1) via HashMap lookup.
 pub async fn get_attendee_by_id(
     api_id: &str,
     state: &AppState,
@@ -278,12 +314,11 @@ pub async fn get_attendee_by_id(
     sheet_name: &str,
     kv: Option<&KvStore>,
 ) -> Result<Option<Attendee>, String> {
-    let attendees: Vec<Attendee> = get_attendees(state, sheet_id, sheet_name, kv).await?;
-    Ok(attendees.into_iter().find(|a| a.api_id == api_id))
+    let map = get_attendees_map(state, sheet_id, sheet_name, kv).await?;
+    Ok(map.get(api_id).cloned())
 }
 
-/// Find an attendee by their claim token (column L).
-/// Scans all attendees and returns the first matching claim_token.
+/// Find an attendee by their claim token (column L) — O(1) via HashMap lookup.
 /// Returns `None` if no attendee has the given token.
 pub async fn get_attendee_by_claim_token(
     claim_token: &str,
@@ -292,14 +327,13 @@ pub async fn get_attendee_by_claim_token(
     sheet_name: &str,
     kv: Option<&KvStore>,
 ) -> Result<Option<Attendee>, String> {
-    let attendees: Vec<Attendee> = get_attendees(state, sheet_id, sheet_name, kv).await?;
-    Ok(attendees
-        .into_iter()
-        .find(|a| a.claim_token.as_deref() == Some(claim_token)))
+    let map = get_attendees_by_claim_map(state, sheet_id, sheet_name, kv).await?;
+    Ok(map.get(claim_token).cloned())
 }
 
 /// Look up an attendee by claim token and return claim counts in a single Sheets API call.
 /// Returns `(attendee, total_checked_in, total_claimed)`.
+/// Attendee lookup is O(1) via HashMap; counts iterate the full Vec.
 pub async fn get_attendee_with_claim_counts(
     claim_token: &str,
     state: &AppState,
@@ -313,9 +347,17 @@ pub async fn get_attendee_with_claim_counts(
         .filter(|a| a.checked_in_at.is_some())
         .count();
     let total_claimed = attendees.iter().filter(|a| a.claimed_at.is_some()).count();
-    let attendee = attendees
+
+    // O(1) lookup by claim token
+    let claim_map: HashMap<String, Attendee> = attendees
         .into_iter()
-        .find(|a| a.claim_token.as_deref() == Some(claim_token));
+        .filter_map(|a| {
+            let token = a.claim_token.clone()?;
+            Some((token, a))
+        })
+        .collect();
+    let attendee = claim_map.get(claim_token).cloned();
+
     Ok((attendee, total_checked_in, total_claimed))
 }
 
