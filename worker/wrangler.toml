@@ -45,6 +45,9 @@ SERVER_URL = "https://bethere.solana-thailand.workers.dev"
 CLAIM_BASE_URL = "https://bethere.solana-thailand.workers.dev/claim"
 GOOGLE_SHEET_NAME = "checkin"
 GOOGLE_STAFF_SHEET_NAME = "staff"
+DEV_MODE = "1"
+DEV_EMAIL = "ratchapon.poc@gmail.com"
+SUPER_ADMIN_EMAILS = "ratchapon.poc@gmail.com"
 
 # Phase 3: Event config (change per event without WASM rebuild)
 EVENT_NAME = "Solana x AI Builders: The Road to Mainnet #1 (Bangkok)"
@@ -70,6 +73,12 @@ EVENT_END_MS = "1777183200000"
 # - NFT_COLLECTION_MINT     (optional — Helius mints to its own tree without a collection)
 # - NFT_METADATA_URI        (optional — metadata JSON on Arweave/IPFS)
 # - NFT_IMAGE_URL           (optional — NFT badge image URL)
+
+# Cron trigger — daily cleanup of expired KV entries (A3 sustainability)
+# Runs at 03:00 UTC to delete expired session data, deposits, claim locks,
+# and fully-expired event configs per retention policy in cleanup.rs.
+[triggers]
+crons = ["0 3 * * *"]
 
 # Phase 4: Quiz KV namespace (Issue 002 — activity-gated claim)
 # Create with: npx wrangler kv namespace create QUIZ

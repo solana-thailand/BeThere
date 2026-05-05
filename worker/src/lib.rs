@@ -1,6 +1,7 @@
 mod adventure;
 mod auth;
 mod claim;
+mod cleanup;
 mod crypto;
 mod error;
 mod event_store;
@@ -62,4 +63,23 @@ async fn fetch(
 
     let mut router = app_router(state);
     Ok(router.call(req).await?)
+}
+
+/// Cron-triggered cleanup — runs daily at 03:00 UTC.
+///
+/// Deletes expired KV entries (session progress, deposits, claim locks,
+/// event configs) based on retention policy defined in `cleanup.rs`.
+#[event(scheduled)]
+async fn scheduled(_event: worker::ScheduledEvent, env: Env, _ctx: worker::ScheduleContext) {
+    console_log::init_with_level(log::Level::Info).ok();
+
+    let events_kv = match env.kv("EVENTS").ok() {
+        Some(kv) => kv,
+        None => {
+            tracing::warn!("cleanup: EVENTS KV namespace not bound, skipping");
+            return;
+        }
+    };
+
+    cleanup::run_cleanup(&events_kv).await;
 }

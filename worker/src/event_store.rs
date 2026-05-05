@@ -38,7 +38,7 @@ pub async fn get_event_index(kv: &KvStore) -> Result<EventIndex, String> {
 }
 
 /// Write the event index to KV.
-async fn save_event_index(kv: &KvStore, index: &EventIndex) -> Result<(), String> {
+pub async fn save_event_index(kv: &KvStore, index: &EventIndex) -> Result<(), String> {
     let json_str = serde_json::to_string(index)
         .map_err(|e| format!("failed to serialize event index: {e:?}"))?;
     kv.put("events", &json_str)
