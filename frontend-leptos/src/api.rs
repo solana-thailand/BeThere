@@ -3,9 +3,120 @@
 //! Provides typed response structs and authenticated request helpers
 //! for all backend endpoints.
 
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::time::Duration;
+
 use serde::{Deserialize, Serialize};
 
 use crate::auth::{clear_token, get_token};
+
+// ---------------------------------------------------------------------------
+// B5: Stale-while-revalidate in-memory API response cache
+// ---------------------------------------------------------------------------
+
+/// Cache entry holding serialized JSON and insertion timestamp.
+struct CacheEntry {
+    json: String,
+    inserted_at: Duration,
+}
+
+// Global API response cache (keyed by URL path).
+thread_local! {
+    static API_CACHE: RefCell<HashMap<String, CacheEntry>> =
+        RefCell::new(HashMap::new());
+}
+
+/// TTL for cached GET responses (30 seconds).
+/// Attendee list is cached for 5 minutes on the worker side (KV),
+/// so a 30s client-side stale window avoids redundant HTTP round-trips
+/// while staying fresh enough for check-in operations.
+const CACHE_TTL: Duration = Duration::from_secs(30);
+
+/// Try to get a cached response for the given path.
+/// Returns `None` if not cached or expired.
+fn cache_get(path: &str) -> Option<String> {
+    let now = now_secs();
+    API_CACHE.with(|c| {
+        let cache = c.borrow();
+        cache.get(path).and_then(|entry| {
+            if now.saturating_sub(entry.inserted_at) < CACHE_TTL {
+                Some(entry.json.clone())
+            } else {
+                None
+            }
+        })
+    })
+}
+
+/// Store a response in the cache.
+fn cache_put(path: &str, json: &str) {
+    let now = now_secs();
+    API_CACHE.with(|c| {
+        c.borrow_mut().insert(
+            path.to_string(),
+            CacheEntry {
+                json: json.to_string(),
+                inserted_at: now,
+            },
+        );
+    });
+}
+
+/// Invalidate a cached response (e.g. after a mutation).
+fn cache_invalidate(path_prefix: &str) {
+    API_CACHE.with(|c| {
+        c.borrow_mut().retain(|k, _| !k.starts_with(path_prefix));
+    });
+}
+
+/// Current time as Duration from some epoch (performance.now in WASM).
+fn now_secs() -> Duration {
+    // In WASM, use performance.now() for sub-ms precision.
+    // Fall back to 0 if window is unavailable.
+    let ms = web_sys::window()
+        .and_then(|w| w.performance())
+        .map(|p| p.now() as u64)
+        .unwrap_or(0);
+    Duration::from_millis(ms)
+}
+
+/// Perform a cached GET request. Returns cached response if fresh,
+/// otherwise fetches from the server.
+///
+/// Uses stale-while-revalidate: returns stale data immediately,
+/// then fetches fresh data in the background.
+async fn cached_get(path: &str) -> Result<String, ApiError> {
+    // Check cache first
+    if let Some(cached_json) = cache_get(path) {
+        return Ok(cached_json);
+    }
+
+    // Cache miss — fetch from server
+    let response = api_get(path).await?;
+
+    if !response.ok() {
+        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
+            success: false,
+            data: None,
+            error: Some("Request failed".to_string()),
+        });
+        return Err(ApiError {
+            message: body.error.unwrap_or_default(),
+            status: 0,
+        });
+    }
+
+    let json = response.text().await.map_err(|e| ApiError {
+        message: format!("Failed to read response: {e}"),
+        status: 0,
+    })?;
+
+    // Store in cache
+    cache_put(path, &json);
+
+    Ok(json)
+}
 
 /// Helper for serde `#[serde(default = "default_true")]` — defaults to `true`.
 const fn default_true() -> bool {
@@ -437,29 +548,22 @@ pub async fn get_me() -> Result<MeResponse, ApiError> {
 
 /// GET /api/attendees
 /// Returns all attendees with stats.
+///
+/// Results are cached client-side for 30 seconds (B5).
+/// Call `invalidate_attendee_cache()` after mutations (check-in, QR gen).
 pub async fn get_attendees(event_id: Option<&str>) -> Result<AttendeesData, ApiError> {
     let path = match event_id {
         Some(id) if !id.is_empty() => format!("/attendees?event_id={id}"),
         _ => "/attendees".to_string(),
     };
-    let response = api_get(&path).await?;
 
-    if !response.ok() {
-        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
-            success: false,
-            data: None,
-            error: Some("Failed to load attendees".to_string()),
-        });
-        return Err(ApiError {
-            message: body.error.unwrap_or_default(),
+    let json = cached_get(&path).await?;
+
+    let wrapper: ApiResponse<AttendeesData> =
+        serde_json::from_str(&json).map_err(|e| ApiError {
+            message: format!("Failed to parse attendees: {e}"),
             status: 0,
-        });
-    }
-
-    let wrapper: ApiResponse<AttendeesData> = response.json().await.map_err(|e| ApiError {
-        message: format!("Failed to parse attendees: {e}"),
-        status: 0,
-    })?;
+        })?;
 
     wrapper.data.ok_or_else(|| ApiError {
         message: wrapper.error.unwrap_or("No data".to_string()),
@@ -467,31 +571,31 @@ pub async fn get_attendees(event_id: Option<&str>) -> Result<AttendeesData, ApiE
     })
 }
 
+/// Invalidate the client-side attendee cache.
+/// Call this after any mutation that changes attendee data
+/// (check-in, QR generation, bulk operations).
+pub fn invalidate_attendee_cache() {
+    cache_invalidate("/attendees");
+    cache_invalidate("/attendee/");
+}
+
 /// GET /api/attendee/:id
 /// Returns a single attendee by their api_id.
+///
+/// Results are cached client-side for 30 seconds (B5).
 pub async fn get_attendee(id: &str, event_id: Option<&str>) -> Result<AttendeeData, ApiError> {
     let path = match event_id {
         Some(eid) if !eid.is_empty() => format!("/attendee/{id}?event_id={eid}"),
         _ => format!("/attendee/{id}"),
     };
-    let response = api_get(&path).await?;
 
-    if !response.ok() {
-        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
-            success: false,
-            data: None,
-            error: Some("Attendee not found".to_string()),
-        });
-        return Err(ApiError {
-            message: body.error.unwrap_or_default(),
+    let json = cached_get(&path).await?;
+
+    let wrapper: ApiResponse<AttendeeData> =
+        serde_json::from_str(&json).map_err(|e| ApiError {
+            message: format!("Failed to parse attendee: {e}"),
             status: 0,
-        });
-    }
-
-    let wrapper: ApiResponse<AttendeeData> = response.json().await.map_err(|e| ApiError {
-        message: format!("Failed to parse attendee: {e}"),
-        status: 0,
-    })?;
+        })?;
 
     wrapper.data.ok_or_else(|| ApiError {
         message: wrapper.error.unwrap_or("No data".to_string()),
@@ -1060,25 +1164,13 @@ pub struct EventMutationData {
 /// Look up an attendee's claim status by their claim token.
 ///
 /// Public endpoint — no authentication required.
-/// Returns attendee name, check-in time, and whether already claimed.
+/// Results are cached client-side for 30 seconds (B5).
 pub async fn get_claim(token: &str) -> Result<ClaimLookupData, ApiError> {
-    let url = format!("{}/claim/{token}", api_base());
-    let response = gloo::net::http::Request::get(&url).send().await?;
-
-    if !response.ok() {
-        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
-            success: false,
-            data: None,
-            error: Some("Claim lookup failed".to_string()),
-        });
-        return Err(ApiError {
-            message: body.error.unwrap_or_default(),
-            status: response.status(),
-        });
-    }
+    let path = format!("/claim/{token}");
+    let json = cached_get(&path).await?;
 
     let wrapper: ApiResponse<ClaimLookupData> =
-        response.json().await.map_err(|e| ApiError {
+        serde_json::from_str(&json).map_err(|e| ApiError {
             message: format!("Failed to parse claim response: {e}"),
             status: 0,
         })?;

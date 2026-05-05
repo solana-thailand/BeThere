@@ -31,6 +31,7 @@ web-sys = { version = "0.3", features = [
   "HtmlElement",
   "HtmlInputElement",
   "Headers",
+  "Performance",
   "Request",
   "RequestInit",
   "RequestMode",
