@@ -890,6 +890,162 @@ else
     info "Pending slips response: $(echo "$PENDING_SLIPS" | head -c 200)"
 fi
 
+# ===========================================================================
+# Step 13: Deactivate Event
+# ===========================================================================
+section "Step 13: Deactivate Event"
+
+if [ -z "$ESCROW_ADDR" ] || [ "$ESCROW_ADDR" = "" ]; then
+    skip "deactivate_event TX — no escrow_address"
+else
+    info "Requesting deactivate_event TX..."
+
+    DEACTIVATE_RESPONSE=$(curl -s -X POST "$BASE_URL/api/escrow/deactivate-event" \
+        -H "Authorization: Bearer dev-token" \
+        -H "Content-Type: application/json" \
+        -d "{\"event_id\": \"$EVENT_ID\"}")
+
+    DEACTIVATE_SUCCESS=$(echo "$DEACTIVATE_RESPONSE" | python3 -c "import sys,json; print(str(json.load(sys.stdin).get('success','')).lower())" 2>/dev/null || echo "false")
+
+    if [ "$DEACTIVATE_SUCCESS" = "true" ]; then
+        DEACTIVATE_TX=$(echo "$DEACTIVATE_RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['transaction'])" 2>/dev/null || echo "")
+        DEACTIVATE_MSG=$(echo "$DEACTIVATE_RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['message'])" 2>/dev/null || echo "")
+
+        pass "deactivate_event TX built"
+        info "Message: $DEACTIVATE_MSG"
+
+        # Submit TX with organizer keypair
+        ORG_KEYPAIR_JSON=$(cat ~/.config/solana/id.json)
+        DEACTIVATE_SUBMIT=$(sign_and_submit_tx "$DEACTIVATE_TX" "$ORG_KEYPAIR_JSON")
+        info "Deactivate submit: $DEACTIVATE_SUBMIT"
+
+        if echo "$DEACTIVATE_SUBMIT" | grep -q "SIGNATURE="; then
+            DEACTIVATE_SIG=$(echo "$DEACTIVATE_SUBMIT" | grep "SIGNATURE=" | cut -d= -f2)
+            pass "deactivate_event TX submitted!"
+            info "Signature: $DEACTIVATE_SIG"
+            info "View: https://explorer.solana.com/tx/$DEACTIVATE_SIG?cluster=devnet"
+            sleep 5
+        else
+            fail "deactivate_event TX submission failed"
+            echo "   $DEACTIVATE_SUBMIT" | head -c 500
+        fi
+    else
+        ERR=$(echo "$DEACTIVATE_RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('error', d.get('message', str(d)[:200])))" 2>/dev/null || echo "unknown")
+        warn "deactivate_event TX build failed: $ERR"
+    fi
+fi
+
+# ===========================================================================
+# Step 14: Claim Forfeited (no-show deposits)
+# ===========================================================================
+section "Step 14: Claim Forfeited Deposits"
+
+if [ -z "$ESCROW_ADDR" ] || [ "$ESCROW_ADDR" = "" ]; then
+    skip "claim_forfeited TX — no escrow_address"
+else
+    info "Requesting claim_forfeited TX..."
+
+    CLAIM_RESPONSE=$(curl -s -X POST "$BASE_URL/api/escrow/claim-forfeited" \
+        -H "Authorization: Bearer dev-token" \
+        -H "Content-Type: application/json" \
+        -d "{\"event_id\": \"$EVENT_ID\"}")
+
+    CLAIM_SUCCESS=$(echo "$CLAIM_RESPONSE" | python3 -c "import sys,json; print(str(json.load(sys.stdin).get('success','')).lower())" 2>/dev/null || echo "false")
+
+    if [ "$CLAIM_SUCCESS" = "true" ]; then
+        CLAIM_TX=$(echo "$CLAIM_RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['transaction'])" 2>/dev/null || echo "")
+        CLAIM_MSG=$(echo "$CLAIM_RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['message'])" 2>/dev/null || echo "")
+
+        pass "claim_forfeited TX built"
+        info "Message: $CLAIM_MSG"
+
+        # Submit TX with organizer keypair
+        ORG_KEYPAIR_JSON=$(cat ~/.config/solana/id.json)
+        CLAIM_SUBMIT=$(sign_and_submit_tx "$CLAIM_TX" "$ORG_KEYPAIR_JSON")
+        info "Claim forfeited submit: $CLAIM_SUBMIT"
+
+        if echo "$CLAIM_SUBMIT" | grep -q "SIGNATURE="; then
+            CLAIM_SIG=$(echo "$CLAIM_SUBMIT" | grep "SIGNATURE=" | cut -d= -f2)
+            pass "claim_forfeited TX submitted!"
+            info "Signature: $CLAIM_SIG"
+            info "View: https://explorer.solana.com/tx/$CLAIM_SIG?cluster=devnet"
+            sleep 5
+        else
+            # claim_forfeited may fail with "nothing to claim" if all attendees were refunded
+            if echo "$CLAIM_SUBMIT" | grep -qi "nothing\|no forfeited"; then
+                pass "claim_forfeited: nothing to claim (expected — all refunded)"
+            else
+                fail "claim_forfeited TX submission failed"
+                echo "   $CLAIM_SUBMIT" | head -c 500
+            fi
+        fi
+    else
+        ERR=$(echo "$CLAIM_RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('error', d.get('message', str(d)[:200])))" 2>/dev/null || echo "unknown")
+        warn "claim_forfeited TX build failed: $ERR"
+    fi
+fi
+
+# ===========================================================================
+# Step 15: Close Event (reclaim rent)
+# ===========================================================================
+section "Step 15: Close Event & Reclaim Rent"
+
+if [ -z "$ESCROW_ADDR" ] || [ "$ESCROW_ADDR" = "" ]; then
+    skip "close_event TX — no escrow_address"
+else
+    info "Requesting close_event TX..."
+
+    CLOSE_RESPONSE=$(curl -s -X POST "$BASE_URL/api/escrow/close-event" \
+        -H "Authorization: Bearer dev-token" \
+        -H "Content-Type: application/json" \
+        -d "{\"event_id\": \"$EVENT_ID\"}")
+
+    CLOSE_SUCCESS=$(echo "$CLOSE_RESPONSE" | python3 -c "import sys,json; print(str(json.load(sys.stdin).get('success','')).lower())" 2>/dev/null || echo "false")
+
+    if [ "$CLOSE_SUCCESS" = "true" ]; then
+        CLOSE_TX=$(echo "$CLOSE_RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['transaction'])" 2>/dev/null || echo "")
+        CLOSE_MSG=$(echo "$CLOSE_RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['message'])" 2>/dev/null || echo "")
+
+        pass "close_event TX built"
+        info "Message: $CLOSE_MSG"
+
+        # Submit TX with organizer keypair
+        ORG_KEYPAIR_JSON=$(cat ~/.config/solana/id.json)
+        CLOSE_SUBMIT=$(sign_and_submit_tx "$CLOSE_TX" "$ORG_KEYPAIR_JSON")
+        info "Close event submit: $CLOSE_SUBMIT"
+
+        if echo "$CLOSE_SUBMIT" | grep -q "SIGNATURE="; then
+            CLOSE_SIG=$(echo "$CLOSE_SUBMIT" | grep "SIGNATURE=" | cut -d= -f2)
+            pass "close_event TX submitted!"
+            info "Signature: $CLOSE_SIG"
+            info "View: https://explorer.solana.com/tx/$CLOSE_SIG?cluster=devnet"
+            sleep 5
+
+            # Verify escrow account is closed
+            info "Verifying escrow account closed..."
+            ESCROW_CHECK=$(solana account "$ESCROW_ADDR" --url devnet 2>&1 || echo "CLOSED")
+            if echo "$ESCROW_CHECK" | grep -qi "error\|not found\|CLOSED"; then
+                pass "Escrow account closed successfully — rent reclaimed"
+            else
+                info "Escrow account still exists: $(echo "$ESCROW_CHECK" | head -c 200)"
+            fi
+        else
+            fail "close_event TX submission failed"
+            echo "   $CLOSE_SUBMIT" | head -c 500
+
+            if echo "$CLOSE_SUBMIT" | grep -qi "still active\|EventStillActive"; then
+                warn "Event still active — deactivate_event must succeed first (Step 13)"
+            fi
+            if echo "$CLOSE_SUBMIT" | grep -qi "not empty\|VaultNotEmpty"; then
+                warn "Vault not empty — all funds must be refunded or claimed first"
+            fi
+        fi
+    else
+        ERR=$(echo "$CLOSE_RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('error', d.get('message', str(d)[:200])))" 2>/dev/null || echo "unknown")
+        warn "close_event TX build failed: $ERR"
+    fi
+fi
+
 # ============================================================================
 # Summary
 # ============================================================================

@@ -1734,3 +1734,277 @@ pub async fn create_vault_ata_tx_handler(
         vault_address: tx.vault_address,
     }))
 }
+
+// ---------------------------------------------------------------------------
+// POST /api/escrow/deactivate-event
+// ---------------------------------------------------------------------------
+
+/// Request body for deactivate_event TX builder.
+#[derive(serde::Deserialize)]
+pub struct DeactivateEventTxRequest {
+    pub event_id: String,
+}
+
+/// Response body for deactivate_event TX builder.
+#[derive(serde::Serialize)]
+pub struct DeactivateEventTxResponse {
+    pub transaction: String,
+    pub message: String,
+}
+
+/// Build a `deactivate_event` transaction for the organizer's wallet to sign.
+///
+/// Sets `is_active = false` on the event escrow, stopping new deposits.
+/// Refunds are still allowed. After deactivation, `close_event` can reclaim rent.
+#[worker::send]
+pub async fn deactivate_event_tx_handler(
+    State(state): State<AppState>,
+    Extension(_claims): Extension<Claims>,
+    Json(body): Json<DeactivateEventTxRequest>,
+) -> Result<ApiOk<DeactivateEventTxResponse>, WorkerError> {
+    let kv = state
+        .events_kv
+        .as_ref()
+        .ok_or_else(|| AppError::Internal("EVENTS KV not configured".to_string()))?;
+
+    let event = event_store::get_event_config(kv, &body.event_id)
+        .await
+        .map_err(AppError::Internal)?
+        .ok_or_else(|| AppError::NotFound(format!("event '{}' not found", body.event_id)))?;
+
+    if !event.deposit_enabled {
+        return Err(AppError::Validation("deposit not enabled for this event".to_string()).into());
+    }
+
+    // Validate organizer wallet
+    let organizer_pubkey = if event.organizer_wallet.is_empty() {
+        return Err(AppError::Validation(
+            "event has no organizer wallet configured — set organizer_wallet first".to_string(),
+        )
+        .into());
+    } else {
+        crate::solana::validate_wallet_address(&event.organizer_wallet)
+            .map_err(|e| AppError::Validation(format!("invalid organizer_wallet: {e}")))?;
+        &event.organizer_wallet
+    };
+
+    let on_chain_event_id = if event.on_chain_event_id != 0 {
+        event.on_chain_event_id
+    } else {
+        derive_on_chain_event_id(&event.id)
+    };
+
+    let rpc_url = format!(
+        "{}{}{}",
+        state.config.solana.rpc_url,
+        if state.config.solana.rpc_url.contains('?') {
+            "&"
+        } else {
+            "?api-key="
+        },
+        state.config.solana.api_key
+    );
+
+    let tx = crate::solana_escrow::build_deactivate_event_transaction(
+        &rpc_url,
+        Some(kv),
+        organizer_pubkey,
+        on_chain_event_id,
+    )
+    .await
+    .map_err(|e| AppError::Internal(format!("failed to build deactivate_event TX: {e}")))?;
+
+    tracing::info!(
+        event_id = %event.id,
+        on_chain_event_id,
+        "Deactivate event TX built for organizer"
+    );
+
+    Ok(ApiOk::new(DeactivateEventTxResponse {
+        transaction: tx.transaction_b64,
+        message: tx.message,
+    }))
+}
+
+// ---------------------------------------------------------------------------
+// POST /api/escrow/close-event
+// ---------------------------------------------------------------------------
+
+/// Request body for close_event TX builder.
+#[derive(serde::Deserialize)]
+pub struct CloseEventTxRequest {
+    pub event_id: String,
+}
+
+/// Response body for close_event TX builder.
+#[derive(serde::Serialize)]
+pub struct CloseEventTxResponse {
+    pub transaction: String,
+    pub message: String,
+}
+
+/// Build a `close_event` transaction for the organizer's wallet to sign.
+///
+/// Closes the event escrow and vault token account, reclaiming rent.
+/// Requires event to be deactivated and vault to be empty (all funds
+/// refunded or claimed as forfeited).
+#[worker::send]
+pub async fn close_event_tx_handler(
+    State(state): State<AppState>,
+    Extension(_claims): Extension<Claims>,
+    Json(body): Json<CloseEventTxRequest>,
+) -> Result<ApiOk<CloseEventTxResponse>, WorkerError> {
+    let kv = state
+        .events_kv
+        .as_ref()
+        .ok_or_else(|| AppError::Internal("EVENTS KV not configured".to_string()))?;
+
+    let event = event_store::get_event_config(kv, &body.event_id)
+        .await
+        .map_err(AppError::Internal)?
+        .ok_or_else(|| AppError::NotFound(format!("event '{}' not found", body.event_id)))?;
+
+    if !event.deposit_enabled {
+        return Err(AppError::Validation("deposit not enabled for this event".to_string()).into());
+    }
+
+    // Validate organizer wallet
+    let organizer_pubkey = if event.organizer_wallet.is_empty() {
+        return Err(AppError::Validation(
+            "event has no organizer wallet configured — set organizer_wallet first".to_string(),
+        )
+        .into());
+    } else {
+        crate::solana::validate_wallet_address(&event.organizer_wallet)
+            .map_err(|e| AppError::Validation(format!("invalid organizer_wallet: {e}")))?;
+        &event.organizer_wallet
+    };
+
+    let on_chain_event_id = if event.on_chain_event_id != 0 {
+        event.on_chain_event_id
+    } else {
+        derive_on_chain_event_id(&event.id)
+    };
+
+    let rpc_url = format!(
+        "{}{}{}",
+        state.config.solana.rpc_url,
+        if state.config.solana.rpc_url.contains('?') {
+            "&"
+        } else {
+            "?api-key="
+        },
+        state.config.solana.api_key
+    );
+
+    let tx = crate::solana_escrow::build_close_event_transaction(
+        &rpc_url,
+        Some(kv),
+        organizer_pubkey,
+        on_chain_event_id,
+    )
+    .await
+    .map_err(|e| AppError::Internal(format!("failed to build close_event TX: {e}")))?;
+
+    tracing::info!(
+        event_id = %event.id,
+        on_chain_event_id,
+        "Close event TX built for organizer"
+    );
+
+    Ok(ApiOk::new(CloseEventTxResponse {
+        transaction: tx.transaction_b64,
+        message: tx.message,
+    }))
+}
+
+// ---------------------------------------------------------------------------
+// POST /api/escrow/claim-forfeited
+// ---------------------------------------------------------------------------
+
+/// Request body for claim_forfeited TX builder.
+#[derive(serde::Deserialize)]
+pub struct ClaimForfeitedTxRequest {
+    pub event_id: String,
+}
+
+/// Response body for claim_forfeited TX builder.
+#[derive(serde::Serialize)]
+pub struct ClaimForfeitedTxResponse {
+    pub transaction: String,
+    pub message: String,
+}
+
+/// Build a `claim_forfeited` transaction for the organizer's wallet to sign.
+///
+/// Transfers forfeited USDC (deposits from no-shows) from the vault to the
+/// organizer's USDC token account. Only callable after refund_deadline.
+#[worker::send]
+pub async fn claim_forfeited_tx_handler(
+    State(state): State<AppState>,
+    Extension(_claims): Extension<Claims>,
+    Json(body): Json<ClaimForfeitedTxRequest>,
+) -> Result<ApiOk<ClaimForfeitedTxResponse>, WorkerError> {
+    let kv = state
+        .events_kv
+        .as_ref()
+        .ok_or_else(|| AppError::Internal("EVENTS KV not configured".to_string()))?;
+
+    let event = event_store::get_event_config(kv, &body.event_id)
+        .await
+        .map_err(AppError::Internal)?
+        .ok_or_else(|| AppError::NotFound(format!("event '{}' not found", body.event_id)))?;
+
+    if !event.deposit_enabled {
+        return Err(AppError::Validation("deposit not enabled for this event".to_string()).into());
+    }
+
+    // Validate organizer wallet
+    let organizer_pubkey = if event.organizer_wallet.is_empty() {
+        return Err(AppError::Validation(
+            "event has no organizer wallet configured — set organizer_wallet first".to_string(),
+        )
+        .into());
+    } else {
+        crate::solana::validate_wallet_address(&event.organizer_wallet)
+            .map_err(|e| AppError::Validation(format!("invalid organizer_wallet: {e}")))?;
+        &event.organizer_wallet
+    };
+
+    let on_chain_event_id = if event.on_chain_event_id != 0 {
+        event.on_chain_event_id
+    } else {
+        derive_on_chain_event_id(&event.id)
+    };
+
+    let rpc_url = format!(
+        "{}{}{}",
+        state.config.solana.rpc_url,
+        if state.config.solana.rpc_url.contains('?') {
+            "&"
+        } else {
+            "?api-key="
+        },
+        state.config.solana.api_key
+    );
+
+    let tx = crate::solana_escrow::build_claim_forfeited_transaction(
+        &rpc_url,
+        Some(kv),
+        organizer_pubkey,
+        on_chain_event_id,
+    )
+    .await
+    .map_err(|e| AppError::Internal(format!("failed to build claim_forfeited TX: {e}")))?;
+
+    tracing::info!(
+        event_id = %event.id,
+        on_chain_event_id,
+        "Claim forfeited TX built for organizer"
+    );
+
+    Ok(ApiOk::new(ClaimForfeitedTxResponse {
+        transaction: tx.transaction_b64,
+        message: tx.message,
+    }))
+}

@@ -133,6 +133,15 @@ pub fn routes(state: AppState) -> Router<()> {
             "/escrow/backfill-wallets",
             post(deposit::backfill_wallets_handler),
         )
+        .route(
+            "/escrow/deactivate-event",
+            post(deposit::deactivate_event_tx_handler),
+        )
+        .route("/escrow/close-event", post(deposit::close_event_tx_handler))
+        .route(
+            "/escrow/claim-forfeited",
+            post(deposit::claim_forfeited_tx_handler),
+        )
         .layer(middleware::from_fn_with_state(
             state.clone(),
             crate::auth::require_auth,

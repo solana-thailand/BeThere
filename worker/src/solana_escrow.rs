@@ -108,6 +108,30 @@ pub struct CreateVaultAtaTransaction {
     pub vault_address: String,
 }
 
+/// Result of building a deactivate_event transaction.
+pub struct DeactivateEventTransaction {
+    /// Base64-encoded serialized transaction (unsigned).
+    pub transaction_b64: String,
+    /// Human-readable message for wallet confirmation.
+    pub message: String,
+}
+
+/// Result of building a close_event transaction.
+pub struct CloseEventTransaction {
+    /// Base64-encoded serialized transaction (unsigned).
+    pub transaction_b64: String,
+    /// Human-readable message for wallet confirmation.
+    pub message: String,
+}
+
+/// Result of building a claim_forfeited transaction.
+pub struct ClaimForfeitedTransaction {
+    /// Base64-encoded serialized transaction (unsigned).
+    pub transaction_b64: String,
+    /// Human-readable message for wallet confirmation.
+    pub message: String,
+}
+
 /// Error type for escrow operations.
 #[derive(Debug)]
 #[allow(dead_code)]
@@ -1453,6 +1477,317 @@ pub async fn build_create_vault_ata_transaction(
         transaction_b64: tx_b64,
         message: "Create vault token account for event escrow".to_string(),
         vault_address,
+    })
+}
+
+// ---------------------------------------------------------------------------
+// Deactivate Event Transaction Builder
+// ---------------------------------------------------------------------------
+
+/// Build a serialized `deactivate_event` transaction for the bethere-escrow program.
+///
+/// Sets `is_active = false` on the event escrow, stopping new deposits.
+/// Refunds are still allowed until refund_deadline. After deactivation,
+/// `close_event` can be called to reclaim rent.
+///
+/// # Arguments
+/// * `rpc_url` — Solana RPC URL (with API key if needed)
+/// * `kv` — Optional KV store for blockhash caching
+/// * `organizer_pubkey` — Organizer's wallet address (base58), must be signer
+/// * `event_id` — Numeric event ID used for PDA derivation
+///
+/// # Discriminator
+/// 6 (deactivate_event)
+///
+/// # Accounts (DeactivateEvent)
+///   0. organizer (signer, writable)
+///   1. event_escrow (writable, PDA)
+pub async fn build_deactivate_event_transaction(
+    rpc_url: &str,
+    kv: Option<&KvStore>,
+    organizer_pubkey: &str,
+    event_id: u64,
+) -> Result<DeactivateEventTransaction, EscrowError> {
+    let organizer = pubkey_from_base58(organizer_pubkey)?;
+    let program_id = pubkey_from_base58(ESCROW_PROGRAM_ID)?;
+
+    // Derive EventEscrow PDA: ["escrow", organizer, event_id]
+    let (event_escrow, _) = find_program_address(
+        &[b"escrow", organizer.as_slice(), &event_id.to_le_bytes()],
+        &program_id,
+    )
+    .await?;
+
+    // deactivate_event instruction data: [6 (discriminator)] + [event_id u64 LE]
+    let mut ix_data = vec![6u8];
+    ix_data.extend_from_slice(&event_id.to_le_bytes());
+
+    // Accounts for deactivate_event:
+    //   organizer (signer, writable), event_escrow (writable)
+    let instruction_accounts = vec![
+        AccountMeta {
+            pubkey: organizer,
+            is_signer: true,
+            is_writable: true,
+        },
+        AccountMeta {
+            pubkey: event_escrow,
+            is_signer: false,
+            is_writable: true,
+        },
+    ];
+
+    let (message_accounts, program_id_index, ix_account_indices) =
+        build_message_accounts(&instruction_accounts, &program_id, &[]);
+
+    let compiled_ix = CompiledInstruction {
+        program_id_index,
+        accounts: ix_account_indices,
+        data: ix_data,
+    };
+
+    let blockhash_resp = get_latest_blockhash(rpc_url, kv).await?;
+    let blockhash_bytes = pubkey_from_base58(&blockhash_resp.value)?;
+
+    let tx_bytes = serialize_transaction(&message_accounts, &[compiled_ix], &blockhash_bytes);
+    let tx_b64 = base64::engine::general_purpose::STANDARD.encode(&tx_bytes);
+
+    Ok(DeactivateEventTransaction {
+        transaction_b64: tx_b64,
+        message: "Deactivate event — stop accepting deposits".to_string(),
+    })
+}
+
+// ---------------------------------------------------------------------------
+// Close Event Transaction Builder
+// ---------------------------------------------------------------------------
+
+/// Build a serialized `close_event` transaction for the bethere-escrow program.
+///
+/// Closes the event escrow account and the vault token account, returning
+/// rent to the organizer. Requires that the event is deactivated (is_active = false)
+/// and the vault is empty (total_deposited == total_refunded + total_forfeited).
+///
+/// # Arguments
+/// * `rpc_url` — Solana RPC URL (with API key if needed)
+/// * `kv` — Optional KV store for blockhash caching
+/// * `organizer_pubkey` — Organizer's wallet address (base58), must be signer
+/// * `event_id` — Numeric event ID used for PDA derivation
+///
+/// # Discriminator
+/// 5 (close_event)
+///
+/// # Accounts (CloseEvent)
+///   0. organizer (signer, writable)
+///   1. event_escrow (writable, PDA, close=organizer)
+///   2. vault (writable, Token account)
+///   3. token_program (readonly)
+pub async fn build_close_event_transaction(
+    rpc_url: &str,
+    kv: Option<&KvStore>,
+    organizer_pubkey: &str,
+    event_id: u64,
+) -> Result<CloseEventTransaction, EscrowError> {
+    let organizer = pubkey_from_base58(organizer_pubkey)?;
+    let program_id = pubkey_from_base58(ESCROW_PROGRAM_ID)?;
+    let usdc_mint = pubkey_from_base58(USDC_MINT_DEVNET)?;
+    let token_program = pubkey_from_base58(TOKEN_PROGRAM_ID)?;
+
+    // Derive EventEscrow PDA: ["escrow", organizer, event_id]
+    let (event_escrow, _) = find_program_address(
+        &[b"escrow", organizer.as_slice(), &event_id.to_le_bytes()],
+        &program_id,
+    )
+    .await?;
+
+    // Derive vault ATA (owned by EventEscrow PDA)
+    let vault = get_associated_token_address(&event_escrow, &usdc_mint).await?;
+
+    // close_event instruction data: [5 (discriminator)] + [event_id u64 LE]
+    let mut ix_data = vec![5u8];
+    ix_data.extend_from_slice(&event_id.to_le_bytes());
+
+    // Accounts for close_event:
+    //   organizer (signer, writable), event_escrow (writable),
+    //   vault (writable), token_program (readonly)
+    let instruction_accounts = vec![
+        AccountMeta {
+            pubkey: organizer,
+            is_signer: true,
+            is_writable: true,
+        },
+        AccountMeta {
+            pubkey: event_escrow,
+            is_signer: false,
+            is_writable: true,
+        },
+        AccountMeta {
+            pubkey: vault,
+            is_signer: false,
+            is_writable: true,
+        },
+        AccountMeta {
+            pubkey: token_program,
+            is_signer: false,
+            is_writable: false,
+        },
+    ];
+
+    let (message_accounts, program_id_index, ix_account_indices) =
+        build_message_accounts(&instruction_accounts, &program_id, &[]);
+
+    let compiled_ix = CompiledInstruction {
+        program_id_index,
+        accounts: ix_account_indices,
+        data: ix_data,
+    };
+
+    let blockhash_resp = get_latest_blockhash(rpc_url, kv).await?;
+    let blockhash_bytes = pubkey_from_base58(&blockhash_resp.value)?;
+
+    let tx_bytes = serialize_transaction(&message_accounts, &[compiled_ix], &blockhash_bytes);
+    let tx_b64 = base64::engine::general_purpose::STANDARD.encode(&tx_bytes);
+
+    Ok(CloseEventTransaction {
+        transaction_b64: tx_b64,
+        message: "Close event escrow and reclaim rent".to_string(),
+    })
+}
+
+// ---------------------------------------------------------------------------
+// Claim Forfeited Transaction Builder
+// ---------------------------------------------------------------------------
+
+/// Build a serialized `claim_forfeited` transaction for the bethere-escrow program.
+///
+/// Transfers forfeited USDC (deposits from no-shows) from the vault to the
+/// organizer's USDC token account. Only callable after refund_deadline has passed.
+///
+/// # Arguments
+/// * `rpc_url` — Solana RPC URL (with API key if needed)
+/// * `kv` — Optional KV store for blockhash caching
+/// * `organizer_pubkey` — Organizer's wallet address (base58), must be signer
+/// * `event_id` — Numeric event ID used for PDA derivation
+///
+/// # Discriminator
+/// 4 (claim_forfeited)
+///
+/// # Accounts (ClaimForfeited)
+///   0. organizer (signer, writable)
+///   1. event_escrow (writable, PDA)
+///   2. organizer_ta (writable, init idempotent)
+///   3. usdc_mint (readonly)
+///   4. vault (writable, Token account)
+///   5. rent (readonly)
+///   6. token_program (readonly)
+///   7. system_program (readonly)
+pub async fn build_claim_forfeited_transaction(
+    rpc_url: &str,
+    kv: Option<&KvStore>,
+    organizer_pubkey: &str,
+    event_id: u64,
+) -> Result<ClaimForfeitedTransaction, EscrowError> {
+    let organizer = pubkey_from_base58(organizer_pubkey)?;
+    let program_id = pubkey_from_base58(ESCROW_PROGRAM_ID)?;
+    let usdc_mint = pubkey_from_base58(USDC_MINT_DEVNET)?;
+    let token_program = pubkey_from_base58(TOKEN_PROGRAM_ID)?;
+    let system_program = pubkey_from_base58(SYSTEM_PROGRAM_ID)?;
+    let rent_sysvar = pubkey_from_base58(RENT_SYSVAR_ID)?;
+    let ata_program = pubkey_from_base58(ASSOCIATED_TOKEN_PROGRAM_ID)?;
+
+    // Derive EventEscrow PDA: ["escrow", organizer, event_id]
+    let (event_escrow, _) = find_program_address(
+        &[b"escrow", organizer.as_slice(), &event_id.to_le_bytes()],
+        &program_id,
+    )
+    .await?;
+
+    // Derive vault ATA (owned by EventEscrow PDA)
+    let vault = get_associated_token_address(&event_escrow, &usdc_mint).await?;
+
+    // Derive organizer's USDC ATA
+    let organizer_ta = get_associated_token_address(&organizer, &usdc_mint).await?;
+
+    // claim_forfeited instruction data: [4 (discriminator)] + [event_id u64 LE]
+    let mut ix_data = vec![4u8];
+    ix_data.extend_from_slice(&event_id.to_le_bytes());
+
+    // Accounts for claim_forfeited:
+    //   organizer (signer, writable), event_escrow (writable),
+    //   organizer_ta (init idempotent), usdc_mint (readonly),
+    //   vault (writable), rent (readonly), token_program (readonly),
+    //   system_program (readonly)
+    let instruction_accounts = vec![
+        AccountMeta {
+            pubkey: organizer,
+            is_signer: true,
+            is_writable: true,
+        },
+        AccountMeta {
+            pubkey: event_escrow,
+            is_signer: false,
+            is_writable: true,
+        },
+        AccountMeta {
+            pubkey: organizer_ta,
+            is_signer: false,
+            is_writable: true,
+        },
+        AccountMeta {
+            pubkey: usdc_mint,
+            is_signer: false,
+            is_writable: false,
+        },
+        AccountMeta {
+            pubkey: vault,
+            is_signer: false,
+            is_writable: true,
+        },
+        AccountMeta {
+            pubkey: rent_sysvar,
+            is_signer: false,
+            is_writable: false,
+        },
+        AccountMeta {
+            pubkey: token_program,
+            is_signer: false,
+            is_writable: false,
+        },
+        AccountMeta {
+            pubkey: system_program,
+            is_signer: false,
+            is_writable: false,
+        },
+    ];
+
+    // Extra accounts needed for CPI but NOT passed to the escrow instruction.
+    // The claim_forfeited struct has `init(idempotent)` on organizer_ta which
+    // CPIs to the ATA program. Same limitation as create_event — pre-create
+    // the organizer_ta if the CPI fails with "signer privilege escalated".
+    let extra_message_accounts: Vec<AccountMeta> = vec![AccountMeta {
+        pubkey: ata_program,
+        is_signer: false,
+        is_writable: false,
+    }];
+
+    let (message_accounts, program_id_index, ix_account_indices) =
+        build_message_accounts(&instruction_accounts, &program_id, &extra_message_accounts);
+
+    let compiled_ix = CompiledInstruction {
+        program_id_index,
+        accounts: ix_account_indices,
+        data: ix_data,
+    };
+
+    let blockhash_resp = get_latest_blockhash(rpc_url, kv).await?;
+    let blockhash_bytes = pubkey_from_base58(&blockhash_resp.value)?;
+
+    let tx_bytes = serialize_transaction(&message_accounts, &[compiled_ix], &blockhash_bytes);
+    let tx_b64 = base64::engine::general_purpose::STANDARD.encode(&tx_bytes);
+
+    Ok(ClaimForfeitedTransaction {
+        transaction_b64: tx_b64,
+        message: "Claim forfeited deposits from no-shows".to_string(),
     })
 }
 
