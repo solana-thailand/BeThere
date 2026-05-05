@@ -9,6 +9,11 @@
 
 use base64::Engine;
 
+/// Optional KV store for caching RPC responses (blockhash).
+/// Import here so the module can accept `Option<&KvStore>` without
+/// coupling to the full worker environment.
+use worker::KvStore;
+
 #[cfg(not(test))]
 use js_sys::{Object, Reflect, Uint8Array};
 #[cfg(not(test))]
@@ -39,6 +44,18 @@ const SYSTEM_PROGRAM_ID: &str = "11111111111111111111111111111111";
 
 /// Rent sysvar ID.
 const RENT_SYSVAR_ID: &str = "SysvarRent111111111111111111111111111111111";
+
+// ---------------------------------------------------------------------------
+// Blockhash cache constants
+// ---------------------------------------------------------------------------
+
+/// KV key for caching the latest Solana blockhash.
+const BLOCKHASH_CACHE_KEY: &str = "cache:blockhash";
+
+/// TTL for the cached blockhash in seconds (30s).
+/// Solana blockhashes expire after ~60s on mainnet; 30s gives a good
+/// trade-off between RPC call reduction and freshness.
+const BLOCKHASH_CACHE_TTL_SECS: u64 = 30;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -466,8 +483,52 @@ struct RecentBlockhash {
     value: String,
 }
 
-/// Fetch the latest blockhash from the Solana JSON-RPC endpoint.
-async fn get_latest_blockhash(rpc_url: &str) -> Result<RecentBlockhash, EscrowError> {
+/// Fetch the latest blockhash, using KV cache when available.
+///
+/// If `kv` is `Some`, checks KV for a cached blockhash. If present and
+/// younger than [`BLOCKHASH_CACHE_TTL_SECS`], returns the cached value.
+/// Otherwise fetches from RPC, stores in KV with the configured TTL,
+/// and returns the fresh value.
+async fn get_latest_blockhash(
+    rpc_url: &str,
+    kv: Option<&KvStore>,
+) -> Result<RecentBlockhash, EscrowError> {
+    // Try KV cache first
+    if let Some(kv) = kv {
+        let cached: Option<String> = kv
+            .get(BLOCKHASH_CACHE_KEY)
+            .text()
+            .await
+            .map_err(|e| {
+                tracing::warn!("blockhash cache read failed: {e:?}");
+                e
+            })
+            .ok()
+            .flatten();
+
+        if let Some(blockhash) = cached
+            && !blockhash.is_empty()
+        {
+            tracing::debug!("using cached blockhash");
+            return Ok(RecentBlockhash { value: blockhash });
+        }
+    }
+
+    // Cache miss or no KV — fetch from RPC
+    let blockhash = fetch_blockhash_from_rpc(rpc_url).await?;
+
+    // Store in KV cache (best-effort — don't fail the tx build on cache write errors)
+    if let Some(kv) = kv
+        && let Err(e) = cache_blockhash(kv, &blockhash.value).await
+    {
+        tracing::warn!("blockhash cache write failed: {e:?}");
+    }
+
+    Ok(blockhash)
+}
+
+/// Fetch the latest blockhash directly from the Solana JSON-RPC endpoint.
+async fn fetch_blockhash_from_rpc(rpc_url: &str) -> Result<RecentBlockhash, EscrowError> {
     let body = serde_json::json!({
         "jsonrpc": "2.0",
         "id": "bethere-deposit",
@@ -517,6 +578,17 @@ async fn get_latest_blockhash(rpc_url: &str) -> Result<RecentBlockhash, EscrowEr
     Ok(RecentBlockhash {
         value: blockhash.to_string(),
     })
+}
+
+/// Store a blockhash in KV with the configured TTL.
+async fn cache_blockhash(kv: &KvStore, blockhash: &str) -> Result<(), EscrowError> {
+    kv.put(BLOCKHASH_CACHE_KEY, blockhash)
+        .map_err(|e| EscrowError::RpcFailed(format!("blockhash cache put: {e:?}")))?
+        .expiration_ttl(BLOCKHASH_CACHE_TTL_SECS)
+        .execute()
+        .await
+        .map_err(|e| EscrowError::RpcFailed(format!("blockhash cache execute: {e:?}")))?;
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -750,6 +822,7 @@ fn build_message_accounts(
 /// A `DepositTransaction` with the base64-encoded transaction and a message.
 pub async fn build_deposit_transaction(
     rpc_url: &str,
+    kv: Option<&KvStore>,
     organizer_pubkey: &str,
     event_id: u64,
     attendee_pubkey: &str,
@@ -869,7 +942,7 @@ pub async fn build_deposit_transaction(
     };
 
     // Fetch recent blockhash
-    let blockhash_resp = get_latest_blockhash(rpc_url).await?;
+    let blockhash_resp = get_latest_blockhash(rpc_url, kv).await?;
     let blockhash_bytes = pubkey_from_base58(&blockhash_resp.value)?;
 
     // Serialize the transaction
@@ -901,6 +974,7 @@ pub async fn build_deposit_transaction(
 ///   token_program (readonly), system_program (readonly)
 pub async fn build_refund_transaction(
     rpc_url: &str,
+    kv: Option<&KvStore>,
     organizer_pubkey: &str,
     event_id: u64,
     attendee_pubkey: &str,
@@ -1017,7 +1091,7 @@ pub async fn build_refund_transaction(
     };
 
     // Fetch recent blockhash
-    let blockhash_resp = get_latest_blockhash(rpc_url).await?;
+    let blockhash_resp = get_latest_blockhash(rpc_url, kv).await?;
     let blockhash_bytes = pubkey_from_base58(&blockhash_resp.value)?;
 
     // Serialize the transaction
@@ -1055,6 +1129,7 @@ pub async fn build_refund_transaction(
 /// and the derived EventEscrow PDA address for storage.
 pub async fn build_create_event_transaction(
     rpc_url: &str,
+    kv: Option<&KvStore>,
     organizer_pubkey: &str,
     event_id: u64,
     deposit_amount: u64,
@@ -1159,7 +1234,7 @@ pub async fn build_create_event_transaction(
     };
 
     // Fetch recent blockhash
-    let blockhash_resp = get_latest_blockhash(rpc_url).await?;
+    let blockhash_resp = get_latest_blockhash(rpc_url, kv).await?;
     let blockhash_bytes = pubkey_from_base58(&blockhash_resp.value)?;
 
     // Serialize the transaction
@@ -1193,6 +1268,7 @@ pub async fn build_create_event_transaction(
 /// * `attendee_pubkey` — Attendee's wallet address (base58)
 pub async fn build_mark_checked_in_transaction(
     rpc_url: &str,
+    kv: Option<&KvStore>,
     organizer_pubkey: &str,
     event_id: u64,
     attendee_pubkey: &str,
@@ -1252,7 +1328,7 @@ pub async fn build_mark_checked_in_transaction(
     };
 
     // Fetch recent blockhash
-    let blockhash_resp = get_latest_blockhash(rpc_url).await?;
+    let blockhash_resp = get_latest_blockhash(rpc_url, kv).await?;
     let blockhash_bytes = pubkey_from_base58(&blockhash_resp.value)?;
 
     let tx_bytes = serialize_transaction(&message_accounts, &[compiled_ix], &blockhash_bytes);
@@ -1283,6 +1359,7 @@ pub async fn build_mark_checked_in_transaction(
 /// the derived vault ATA address.
 pub async fn build_create_vault_ata_transaction(
     rpc_url: &str,
+    kv: Option<&KvStore>,
     organizer_pubkey: &str,
     event_id: u64,
 ) -> Result<CreateVaultAtaTransaction, EscrowError> {
@@ -1365,7 +1442,7 @@ pub async fn build_create_vault_ata_transaction(
     };
 
     // Fetch recent blockhash
-    let blockhash_resp = get_latest_blockhash(rpc_url).await?;
+    let blockhash_resp = get_latest_blockhash(rpc_url, kv).await?;
     let blockhash_bytes = pubkey_from_base58(&blockhash_resp.value)?;
 
     let tx_bytes = serialize_transaction(&message_accounts, &[compiled_ix], &blockhash_bytes);

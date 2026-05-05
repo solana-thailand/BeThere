@@ -52,3 +52,4 @@ worker/.dev.vars
 # cNFT scripts (standalone Rust project)
 scripts/cnft/target/
 scripts/cnft/Cargo.lock
+__pycache__/

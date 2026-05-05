@@ -1,42 +1,50 @@
 #!/usr/bin/env python3
 """Decode a serialized Solana transaction from the BeThere worker."""
-import base64, json, urllib.request, sys
+
+import base64
+import json
+import urllib.request
+from typing import Any
+
 
 def base58_encode(data: bytes) -> str:
-    alphabet = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
-    n = int.from_bytes(data, 'big')
-    result = ''
+    alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+    n = int.from_bytes(data, "big")
+    result = ""
     while n > 0:
         n, r = divmod(n, 58)
         result = alphabet[r] + result
     for byte in data:
         if byte == 0:
-            result = '1' + result
+            result = "1" + result
         else:
             break
     return result
 
-KNOWN = {
+
+KNOWN: dict[str, str] = {
     "9Bz7p4RWdX7eaR4hFUeCc7aSZjDHsie8q1u8imwavkBN": "organizer",
     "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU": "usdc_mint",
     "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA": "token_program",
-    "11111111111111111111111111111111": "system_program",
+    "11111111111111111111111111111": "system_program",
     "SysvarRent111111111111111111111111111111111": "rent_sysvar",
     "2TGfNNXNez2NgopffDnYYhLNYmndUBBwg5SvpD5XQeLo": "escrow_program",
     "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL": "ata_program",
 }
 
-def decode_compact_u16(data, pos):
+
+def decode_compact_u16(data: bytes, pos: int) -> tuple[int, int]:
     val = 0
     shift = 0
     while True:
-        byte = data[pos]
+        byte: int = data[pos]
         pos += 1
-        val |= (byte & 0x7f) << shift
+        val |= (byte & 0x7F) << shift
         if byte & 0x80 == 0:
             break
         shift += 7
     return val, pos
+
 
 # Get TX from worker
 req = urllib.request.Request(
@@ -44,15 +52,16 @@ req = urllib.request.Request(
     data=json.dumps({"event_id": "default"}).encode(),
     headers={
         "Content-Type": "application/json",
-        "Authorization": "Bearer dev-token"
-    }
+        "Authorization": "Bearer dev-token",
+    },
 )
 
-resp = urllib.request.urlopen(req)
-result = json.loads(resp.read())
-tx_b64 = result["data"]["transaction"]
-escrow_addr = result["data"]["escrow_address"]
-on_chain_id = result["data"]["on_chain_event_id"]
+resp = urllib.request.urlopen(req)  # type: ignore[union-attr]
+body = resp.read()  # type: ignore[assignment]
+result: dict[str, Any] = json.loads(body)  # type: ignore[assignment]
+tx_b64: str = result["data"]["transaction"]  # type: ignore[assignment]
+escrow_addr: str = result["data"]["escrow_address"]  # type: ignore[assignment]
+on_chain_id: str = result["data"]["on_chain_event_id"]  # type: ignore[assignment]
 
 tx_bytes = base64.b64decode(tx_b64)
 print(f"TX size: {len(tx_bytes)} bytes")
@@ -66,17 +75,17 @@ sig_count, pos = decode_compact_u16(tx_bytes, pos)
 print(f"\nSignature count: {sig_count}")
 
 for i in range(sig_count):
-    sig = tx_bytes[pos:pos+64]
+    sig = tx_bytes[pos : pos + 64]
     print(f"  Signature {i}: all zeros = {all(b == 0 for b in sig)}")
     pos += 64
 
 # Message header
 num_required_signatures = tx_bytes[pos]
-num_readonly_signed = tx_bytes[pos+1]
-num_readonly_unsigned = tx_bytes[pos+2]
+num_readonly_signed = tx_bytes[pos + 1]
+num_readonly_unsigned = tx_bytes[pos + 2]
 pos += 3
 
-print(f"\nMessage header:")
+print("\nMessage header:")
 print(f"  num_required_signatures: {num_required_signatures}")
 print(f"  num_readonly_signed:     {num_readonly_signed}")
 print(f"  num_readonly_unsigned:   {num_readonly_unsigned}")
@@ -86,9 +95,9 @@ acct_count, pos = decode_compact_u16(tx_bytes, pos)
 print(f"  num_account_keys:        {acct_count}")
 
 # Account keys
-accounts = []
-for i in range(acct_count):
-    key_bytes = tx_bytes[pos:pos+32]
+accounts: list[str] = []
+for _ in range(acct_count):
+    key_bytes = tx_bytes[pos : pos + 32]
     b58 = base58_encode(key_bytes)
     accounts.append(b58)
     pos += 32
@@ -105,14 +114,14 @@ for i, addr in enumerate(accounts):
     else:
         role = "non-signer+readonly"
 
-    label = KNOWN.get(addr, "")
+    label: str = KNOWN.get(addr, "")
     if addr == escrow_addr:
         label = "event_escrow"
 
     print(f"  [{i}] {addr} ({role}) {f'← {label}' if label else ''}")
 
 # Recent blockhash
-blockhash = base58_encode(tx_bytes[pos:pos+32])
+blockhash = base58_encode(tx_bytes[pos : pos + 32])
 pos += 32
 print(f"\nRecent blockhash: {blockhash}")
 
@@ -123,10 +132,10 @@ print(f"\nInstructions: {ix_count}")
 for i in range(ix_count):
     program_idx, pos = decode_compact_u16(tx_bytes, pos)
     acct_len, pos = decode_compact_u16(tx_bytes, pos)
-    acct_indices = list(tx_bytes[pos:pos+acct_len])
+    acct_indices = list(tx_bytes[pos : pos + acct_len])
     pos += acct_len
     data_len, pos = decode_compact_u16(tx_bytes, pos)
-    ix_data = tx_bytes[pos:pos+data_len]
+    ix_data = tx_bytes[pos : pos + data_len]
     pos += data_len
 
     discriminator = ix_data[0] if ix_data else -1
@@ -135,15 +144,17 @@ for i in range(ix_count):
     print(f"    Program: account [{program_idx}] = {accounts[program_idx][:12]}...")
     print(f"    Accounts ({len(acct_indices)}): {acct_indices}")
     for idx in acct_indices:
-        addr = accounts[idx]
-        label = KNOWN.get(addr, "")
-        if addr == escrow_addr:
-            label = "event_escrow"
-        print(f"      [{idx}] {addr[:16]}... {f'({label})' if label else ''}")
+        addr2: str = accounts[idx]
+        label2: str = KNOWN.get(addr2, "")
+        if addr2 == escrow_addr:
+            label2 = "event_escrow"
+        print(f"      [{idx}] {addr2[:16]}... {f'({label2})' if label2 else ''}")
     print(f"    Data ({data_len} bytes): discriminator={discriminator}")
 
     # Decode instruction data
     if len(ix_data) >= 9:
-        event_id = int.from_bytes(ix_data[1:9], 'little')
-        deposit_amt = int.from_bytes(ix_data[9:17], 'little') if len(ix_data) >= 17 else "?"
-        print(f"    event_id={event_id}, deposit_amount={deposit_amt}")
+        event_id_val = int.from_bytes(ix_data[1:9], "little")
+        deposit_amt = (
+            int.from_bytes(ix_data[9:17], "little") if len(ix_data) >= 17 else "?"
+        )
+        print(f"    event_id={event_id_val}, deposit_amount={deposit_amt}")

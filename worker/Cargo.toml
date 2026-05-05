@@ -58,3 +58,10 @@ tokio = { version = "1", features = ["rt", "macros"] }
 
 [lib]
 crate-type = ["cdylib", "rlib"]
+
+[profile.release]
+opt-level = "z"
+lto = true
+strip = true
+codegen-units = 1
+panic = "abort"

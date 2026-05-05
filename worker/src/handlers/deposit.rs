@@ -280,6 +280,7 @@ pub async fn deposit_usdc_tx_handler(
     // Build the deposit transaction
     let tx = crate::solana_escrow::build_deposit_transaction(
         &rpc_url,
+        Some(kv),
         organizer_pubkey,
         on_chain_event_id,
         &query.wallet,
@@ -785,6 +786,7 @@ pub async fn create_event_tx_handler(
     // Build the create_event transaction
     let tx = crate::solana_escrow::build_create_event_transaction(
         &rpc_url,
+        Some(kv),
         organizer_pubkey,
         on_chain_event_id,
         event.deposit_amount_usdc,
@@ -1234,6 +1236,7 @@ pub async fn refund_tx_handler(
     // Build the refund transaction
     let tx = crate::solana_escrow::build_refund_transaction(
         &rpc_url,
+        Some(kv),
         organizer_pubkey,
         on_chain_event_id,
         &body.wallet_address,
@@ -1366,6 +1369,7 @@ pub async fn mark_checked_in_tx_handler(
 
     let tx = crate::solana_escrow::build_mark_checked_in_transaction(
         &rpc_url,
+        Some(kv),
         organizer_pubkey,
         on_chain_event_id,
         &attendee_wallet,
@@ -1711,6 +1715,7 @@ pub async fn create_vault_ata_tx_handler(
 
     let tx = crate::solana_escrow::build_create_vault_ata_transaction(
         &rpc_url,
+        Some(kv),
         organizer_pubkey,
         on_chain_event_id,
     )

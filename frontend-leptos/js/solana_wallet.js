@@ -39,7 +39,12 @@ export function getDetectedWallets() {
       for (var i = 0; i < standardWallets.length; i++) {
         var w = standardWallets[i];
         // Only include Solana-capable wallets not already detected
-        if (w.chains && w.chains.some(function(c) { return c.indexOf("solana:") === 0; })) {
+        if (
+          w.chains &&
+          w.chains.some(function (c) {
+            return c.indexOf("solana:") === 0;
+          })
+        ) {
           var name = w.name || "Unknown";
           if (wallets.indexOf(name) === -1) {
             wallets.push(name);
@@ -77,7 +82,7 @@ export async function connectWallet(walletName) {
 
     return publicKey.toBase58();
   } catch (e) {
-    console.error("[solana_wallet] Connect failed:", e);
+    console.error("[solana_wallet] Connect failed:", e); // eslint-disable-line no-unused-vars
     return null;
   }
 }
@@ -103,10 +108,10 @@ export async function getConnectedPublicKey(walletName) {
     try {
       var response = await provider.connect({ onlyIfTrusted: true });
       return response.publicKey ? response.publicKey.toBase58() : null;
-    } catch (e) {
+    } catch (_e) {
       return null;
     }
-  } catch (e) {
+  } catch (_e) {
     return null;
   }
 }
@@ -163,16 +168,22 @@ export async function signAndSendTransaction(walletName, transactionB64) {
       // Extract from the signed transaction bytes
       // First byte is number of signatures, then 64 bytes per signature
       var numSigs = signedTx instanceof Uint8Array ? signedTx[0] : 0;
-      if (numSigs > 0 && signedTx instanceof Uint8Array && signedTx.length >= 65) {
+      if (
+        numSigs > 0 &&
+        signedTx instanceof Uint8Array &&
+        signedTx.length >= 65
+      ) {
         var sigBytes = signedTx.slice(1, 65);
         return btoa(String.fromCharCode.apply(null, sigBytes));
       }
     }
 
-    console.error("[solana_wallet] Wallet does not support signAndSendTransaction or signTransaction");
+    console.error(
+      "[solana_wallet] Wallet does not support signAndSendTransaction or signTransaction",
+    );
     return null;
   } catch (e) {
-    console.error("[solana_wallet] Sign and send failed:", e);
+    console.error("[solana_wallet] Sign and send failed:", e); // eslint-disable-line no-unused-vars
     if (e.message) {
       console.error("[solana_wallet] Error message:", e.message);
     }
@@ -192,12 +203,16 @@ export async function fetchTransactionFromCallback(callbackUrl) {
     var response = await fetch(callbackUrl, {
       method: "GET",
       headers: {
-        "Accept": "application/json",
+        Accept: "application/json",
       },
     });
 
     if (!response.ok) {
-      console.error("[solana_wallet] Callback fetch failed:", response.status, response.statusText);
+      console.error(
+        "[solana_wallet] Callback fetch failed:",
+        response.status,
+        response.statusText,
+      );
       return null;
     }
 

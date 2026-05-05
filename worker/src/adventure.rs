@@ -11,6 +11,14 @@ use event_checkin_domain::models::adventure::{
     AdventureConfig, AdventureProgress, AdventureStatus, LevelScore,
 };
 
+// ---------------------------------------------------------------------------
+// TTL constants
+// ---------------------------------------------------------------------------
+
+/// TTL for transient adventure progress (1 hour).
+/// Attendee session state — no need to persist beyond the event window.
+const ADVENTURE_PROGRESS_TTL_SECS: u64 = 3600;
+
 // Key helpers
 fn adventure_config_key(event_id: &str) -> String {
     format!("event:{event_id}:adventure:config")
@@ -92,6 +100,7 @@ async fn save_adventure_progress(
         .map_err(|e| format!("failed to serialize adventure progress: {e:?}"))?;
     kv.put(&key, &json_str)
         .map_err(|e| format!("failed to build adventure progress put: {e:?}"))?
+        .expiration_ttl(ADVENTURE_PROGRESS_TTL_SECS)
         .execute()
         .await
         .map_err(|e| format!("failed to write adventure progress to KV: {e:?}"))

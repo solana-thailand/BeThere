@@ -13,15 +13,16 @@ import base64
 import json
 import sys
 import urllib.request
-
-tx_b64 = sys.argv[1]
-keypair_json = sys.argv[2]
-rpc_url = sys.argv[3]
-
-tx_bytes = bytearray(base64.b64decode(tx_b64))
-keypair_data = json.loads(keypair_json)
+from typing import Any
 
 import nacl.signing
+
+tx_b64: str = sys.argv[1]
+keypair_json: str = sys.argv[2]
+rpc_url: str = sys.argv[3]
+
+tx_bytes = bytearray(base64.b64decode(tx_b64))
+keypair_data: list[int] = json.loads(keypair_json)  # type: ignore[assignment]
 
 signing_key = nacl.signing.SigningKey(bytes(keypair_data[:32]))
 
@@ -37,7 +38,7 @@ tx_bytes[sig_start : sig_start + 64] = signed.signature
 
 tx_b64_signed = base64.b64encode(bytes(tx_bytes)).decode()
 
-payload = {
+payload: dict[str, Any] = {
     "jsonrpc": "2.0",
     "id": 1,
     "method": "sendTransaction",
@@ -51,9 +52,10 @@ req = urllib.request.Request(
 )
 
 try:
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        result = json.loads(resp.read().decode())
-        sig = result.get("result", "")
+    with urllib.request.urlopen(req, timeout=30) as resp:  # type: ignore[union-attr]
+        body: bytes = resp.read()  # type: ignore[assignment]
+        result: dict[str, Any] = json.loads(body.decode())  # type: ignore[assignment]
+        sig: Any = result.get("result", "")  # type: ignore[union-attr]
         if sig:
             print(f"SIGNATURE={sig}")
         else:
@@ -62,7 +64,7 @@ except Exception as e:
     err_body = ""
     # HTTP errors may have .read() for response body
     if hasattr(e, "read"):
-        err_body = e.read().decode()[:500]  # pyright: ignore
+        err_body = e.read().decode()[:500]  # pyright: ignore[reportAttributeAccessIssue]
     print(f"ERROR={e}")
     if err_body:
         print(f"BODY={err_body}")

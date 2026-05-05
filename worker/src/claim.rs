@@ -15,6 +15,14 @@ use crate::solana::{self, MintRequest};
 use crate::state::AppState;
 
 // ---------------------------------------------------------------------------
+// TTL constants
+// ---------------------------------------------------------------------------
+
+/// TTL for finalized claim lock records (90 days).
+/// Auto-cleanup post-event; permanent records are not needed indefinitely.
+const CLAIM_LOCK_FINALIZE_TTL_SECS: u64 = 86400 * 90;
+
+// ---------------------------------------------------------------------------
 // Lock helpers (pub(crate) for reuse by handlers if needed)
 // ---------------------------------------------------------------------------
 
@@ -80,9 +88,10 @@ pub(crate) async fn finalize_claim_lock(
     })
     .to_string();
 
-    // Overwrite without TTL — permanent record of claim
+    // Overwrite with 90-day TTL — auto-cleanup post-event
     kv.put(&key, &lock_value)
         .map_err(|e| format!("claim lock finalize failed: {e:?}"))?
+        .expiration_ttl(CLAIM_LOCK_FINALIZE_TTL_SECS)
         .execute()
         .await
         .map_err(|e| format!("claim lock finalize write failed: {e:?}"))?;
