@@ -387,7 +387,8 @@ Image storage: Cloudflare R2 (free tier: 10 GB storage, 10M reads/month).
 🟢 Phase 1–2 complete — escrow program on devnet, worker API done.
 🟢 Phase 3 complete — USDC wallet adapter + on-chain confirmation + PromptPay QR + slip upload + admin deposit/refund UI.
 🟢 Phase 4 complete — Full 5-step escrow flow validated on devnet (create_vault_ata → create_event → deposit → mark_checked_in → refund). 37/37 unit tests pass, clippy clean.
-🟡 Phase 5 — Mainnet deployment (security review, mainnet USDC mint, deploy).
+🟢 Phase 5a — Security audit + hardening complete (22/22 tests, all HIGH findings fixed).
+🟡 Phase 5b — Deploy hardened program to devnet, then mainnet.
 
 ### Key Commits
 | Commit | Description |
