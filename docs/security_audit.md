@@ -22,6 +22,9 @@
 | SEC-006 | 🟢 Low | Duplicate Merkle Tree Field in Form | Open |
 | SEC-007 | 🟢 Info | Worker Cannot Manipulate Funds | Confirmed Safe |
 | SEC-008 | 🟢 Info | On-Chain Escrow Fields Immutable After Creation | Confirmed Safe |
+| SEC-009 | 🟡 Medium | Token Transfers Use `transfer()` Not `transfer_checked()` | Open |
+| SEC-010 | 🟡 Medium | AttendeeDeposit PDAs Never Closed (Rent Leak) | Open |
+| SEC-011 | 🟡 Medium | No `event_end` Guard on `mark_checked_in` | Open |
 
 ---
 
@@ -280,6 +283,95 @@ This is a strong safety property. Once an escrow is created on-chain, the organi
 
 ---
 
+### SEC-009: Token Transfers Use `transfer()` Not `transfer_checked()`
+
+**Severity**: 🟡 Medium
+**Status**: Open
+**Source**: Safe Solana Builder §7 — Token-2022 Compatibility
+
+**Description**:
+All 3 token transfer sites in the escrow program use `transfer()` instead of `transfer_checked()`. The `transfer_checked()` instruction validates the mint and decimals at the token program level, while `transfer()` does not. This is incompatible with Token-2022 tokens that use transfer hooks, and represents a defense-in-depth gap even for legacy SPL token usage.
+
+**Affected Code**:
+- `bethere-escrow/src/instructions/deposit.rs` L65-68 — `transfer()` in `transfer_usdc()`
+- `bethere-escrow/src/instructions/refund.rs` — `transfer()` in vault → attendee refund
+- `bethere-escrow/src/instructions/claim_forfeited.rs` — `transfer()` in vault → organizer claim
+
+**Mitigation**: The program validates `usdc_mint` at the instruction level via account constraints, which partially mitigates this. However, `transfer_checked` is the recommended best practice for forward compatibility and defense-in-depth.
+
+**Recommendation**: Replace all `transfer()` calls with `transfer_checked()`, passing the mint account and decimals. This requires adding the `usdc_mint` account to each instruction's account context (it may already be present for validation).
+
+**Effort**: Small (3 call sites)
+
+---
+
+### SEC-010: AttendeeDeposit PDAs Never Closed (Rent Leak)
+
+**Severity**: 🟡 Medium
+**Status**: Open
+**Source**: Safe Solana Builder §6.3 (Account Closing), §13 (Token Dust)
+
+**Description**:
+The `close_event` instruction closes the `EventEscrow` PDA and the vault token account, but **no instruction exists to close `AttendeeDeposit` PDAs**. After an event completes and all deposits are settled, every attendee's `AttendeeDeposit` PDA remains on-chain forever, permanently locking the rent-exempt SOL (~0.002 SOL each). For an event with 1000 attendees, that's ~2 SOL permanently locked.
+
+**Impact**: Rent leakage, not a fund-loss vulnerability. But accumulates across events and makes the protocol increasingly expensive at scale.
+
+**Recommendation**: Add a `close_deposit` instruction that allows:
+1. Attendee can close their own deposit PDA after `refunded == true`
+2. Anyone can close deposit PDAs after the event escrow is closed (garbage collection)
+
+**Effort**: Medium (new on-chain instruction + TX builder + frontend)
+
+---
+
+### SEC-011: No `event_end` Guard on `mark_checked_in`
+
+**Severity**: 🟡 Medium
+**Status**: Open
+**Source**: Safe Solana Builder §26.4 (Status Transition Guards)
+
+**Description**:
+The `mark_checked_in` instruction has no time-based guard — the organizer can mark attendees as checked in at any time, even after the event has ended. This creates a selective favoritism risk: an organizer could wait until after the event ends, selectively mark only friends as checked in, and exclude others from refunds.
+
+**Affected Code**:
+- `bethere-escrow/src/instructions/mark_checked_in.rs` — no `Clock` sysvar, no `event_end` comparison
+
+**Impact**: Combined with SEC-001 (check-in gates refunds), this allows post-hoc cherry-picking of who gets refunds. The organizer decides after the fact who "attended."
+
+**Recommendation**:
+1. Add `constraints(clock.unix_timestamp <= event_escrow.event_end())` to limit check-ins to during the event
+2. Or, if SEC-001 is fixed (refunds allowed regardless of check-in), this becomes less critical but still worth adding for protocol integrity
+
+**Effort**: Small (single constraint addition)
+
+---
+
+## Safe Solana Builder Cross-Reference Summary
+
+Cross-referenced against [Safe Solana Builder](https://github.com/Frankcastleauditor/safe-solana-builder) by Frank Castle (124⭐, Solana security researcher, 70+ Rust audits, 250+ Critical/High findings).
+
+| # | Rule | Status | Finding |
+|---|---|---|---|
+| §1.1 | Signer Checks | ✅ Compliant | All instructions verify signers correctly |
+| §1.2 | Ownership Checks | ✅ Compliant | Framework enforces owner == program_id |
+| §1.4 | Type Cosplay (Discriminators) | ✅ Compliant | EventEscrow=1, AttendeeDeposit=2 |
+| §2.1 | Canonical Bumps | ✅ Compliant | Stored at creation, reused in CPIs |
+| §2.2 | PDA Sharing Prevention | ✅ Compliant | Seeds unique per organizer+event and event+attendee |
+| §3.1 | Checked Math | ✅ Compliant | All arithmetic uses checked_* operations |
+| §4.1 | Duplicate Mutable Accounts | ⚠️ Partial | Low — runtime prevents, no explicit constraint |
+| §5.2 | Reload After CPI | ✅ Compliant | No stale reads after CPIs |
+| §5.3 | Signer Pass-Through | ✅ Compliant | CPIs correctly scoped to PDA signer only |
+| §6.3 | Account Closing | ⚠️ Partial | SEC-010: AttendeeDeposit never closed |
+| §7 | Token-2022 Compatibility | ❌ Violation | SEC-009: uses transfer() not transfer_checked() |
+| §13 | Token Dust | ⚠️ Partial | SEC-010: rent locked in AttendeeDeposit PDAs |
+| §22.1 | Withdrawal Path | ✅ Compliant | All vaults have refund + claim + close paths |
+| §26.1 | Sentinel Timestamps | ⚠️ Partial | Low — no upper bound on event_end |
+| §26.4 | Status Transition Guards | ⚠️ Partial | SEC-011: no event_end guard on check-in |
+
+**Overall**: The program scores well on core security — strong signer checks, proper checked arithmetic, correct PDA derivation, solid CPI patterns. The main gaps are Token-2022 readiness, rent reclamation, and check-in timing guards.
+
+---
+
 ## Remediation Priority
 
 | Priority | Finding | Effort | Type |
@@ -287,25 +379,28 @@ This is a strong safety property. Once an escrow is created on-chain, the organi
 | P0 | SEC-001: Check-in gate enables fund theft | Medium | On-chain program |
 | P1 | SEC-002: Field immutability after escrow init | Small | Backend validation |
 | P2 | SEC-003: Deposit cap | Small | Backend + On-chain |
-| P3 | SEC-004: Archive guards | Medium | Backend + Frontend |
-| P4 | SEC-005: Explorer links cluster-aware | Small | Frontend |
-| P5 | SEC-006: Duplicate Merkle field | Tiny | Frontend |
+| P3 | SEC-009: Use transfer_checked() | Small | On-chain program |
+| P4 | SEC-011: event_end guard on mark_checked_in | Small | On-chain program |
+| P5 | SEC-004: Archive guards | Medium | Backend + Frontend |
+| P6 | SEC-005: Explorer links cluster-aware | Small | Frontend |
+| P7 | SEC-010: Close AttendeeDeposit PDAs | Medium | On-chain + Frontend |
+| P8 | SEC-006: Duplicate Merkle field | Tiny | Frontend |
 
 ---
 
 ## Scope for Mainnet
 
-**MUST FIX before mainnet**: SEC-001, SEC-002, SEC-003
+**MUST FIX before mainnet**: SEC-001, SEC-002, SEC-003, SEC-009
 
-SEC-001 is a direct fund theft vector. SEC-002 can cause permanent fund lockup. SEC-003 amplifies the impact of SEC-001. None of these three should ship to mainnet in the current state.
+SEC-001 is a direct fund theft vector. SEC-002 can cause permanent fund lockup. SEC-003 amplifies the impact of SEC-001. SEC-009 is a Token-2022 compatibility issue that would prevent the program from working with Token-2022 USDC (the future standard).
 
-**SHOULD FIX before mainnet**: SEC-004, SEC-005
+**SHOULD FIX before mainnet**: SEC-004, SEC-005, SEC-011
 
-SEC-004 is an information asymmetry issue that enables stealth rug pulls when combined with SEC-001. SEC-005 will break the user experience on mainnet (broken explorer links).
+SEC-004 is an information asymmetry issue that enables stealth rug pulls when combined with SEC-001. SEC-005 will break the user experience on mainnet (broken explorer links). SEC-011 allows post-hoc check-in manipulation.
 
-**NICE TO FIX**: SEC-006
+**NICE TO FIX**: SEC-006, SEC-010
 
-Cosmetic issue with no security impact.
+SEC-006 is cosmetic. SEC-010 is a rent efficiency issue that accumulates over time.
 
 ---
 

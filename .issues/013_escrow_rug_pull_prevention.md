@@ -15,6 +15,13 @@ Security audit identified a critical rug pull vector: the organizer controls che
 | SEC-004 | 🟡 Medium | Archive doesn't deactivate on-chain escrow | Backend |
 | SEC-005 | 🟡 Medium | Explorer links hardcoded to devnet | Frontend |
 | SEC-006 | 🟢 Low | Duplicate Merkle Tree field | Frontend |
+| SEC-007 | 🟢 Info | Worker cannot manipulate funds | ✅ Safe |
+| SEC-008 | 🟢 Info | On-chain escrow fields immutable after creation | ✅ Safe |
+| SEC-009 | 🟡 Medium | Token transfers use `transfer()` not `transfer_checked()` | On-chain |
+| SEC-010 | 🟡 Medium | AttendeeDeposit PDAs never closed (rent leak) | On-chain + Frontend |
+| SEC-011 | 🟡 Medium | No `event_end` guard on `mark_checked_in` | On-chain |
+
+**Cross-reference**: [Safe Solana Builder](https://github.com/Frankcastleauditor/safe-solana-builder) by Frank Castle (124⭐, 70+ Rust audits, 250+ Critical/High findings)
 
 ## Implementation Plan
 
@@ -30,14 +37,23 @@ Security audit identified a critical rug pull vector: the organizer controls che
 - [ ] Add escrow account verification (show ✅/❌ if account exists on-chain)
 - [ ] Persist each step's Solscan link in admin_escrow panel
 
-### Phase 3: On-Chain Fix (SEC-001 — Critical)
-- [ ] Modify refund instruction: allow refunds after `event_end` regardless of `checked_in`
-- [ ] Keep `checked_in` for analytics/NFT eligibility, just don't gate refunds
+### Phase 3: On-Chain Fixes (SEC-001, SEC-009, SEC-011)
+- [ ] SEC-001: Modify refund instruction: allow refunds after `event_end` regardless of `checked_in`
+- [ ] SEC-001: Keep `checked_in` for analytics/NFT eligibility, just don't gate refunds
+- [ ] SEC-009: Replace `transfer()` with `transfer_checked()` in 3 sites (deposit, refund, claim_forfeited)
+- [ ] SEC-011: Add `event_end` guard on `mark_checked_in` (no check-ins after event ends)
 - [ ] Update tests in `bethere-escrow/src/tests.rs`
 - [ ] Redeploy program to devnet for testing
 - [ ] Redeploy program to mainnet
 
-### Phase 4: UX Improvements
+### Phase 4: Rent Reclamation (SEC-010)
+- [ ] Add `close_deposit` instruction to escrow program
+- [ ] Attendee can close own deposit PDA after `refunded == true`
+- [ ] Anyone can close deposit PDAs after event escrow is closed
+- [ ] Add TX builder in worker
+- [ ] Add UI button for attendees to reclaim rent
+
+### Phase 5: UX Improvements
 - [ ] Event search/filter/pagination on events page
 - [ ] Progressive disclosure for event form (collapse advanced sections)
 - [ ] Visual priority indicators on form fields (required/recommended/optional)
