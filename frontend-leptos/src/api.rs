@@ -1301,33 +1301,6 @@ pub async fn init_escrow(body: &InitEscrowRequest) -> Result<InitEscrowResponse,
     api_post_json("/escrow/init", body).await
 }
 
-// ---------------------------------------------------------------------------
-// Escrow — create_event on-chain (legacy two-step)
-// ---------------------------------------------------------------------------
-
-/// Request body for POST /api/escrow/create-event.
-#[derive(Debug, Clone, Serialize)]
-pub struct CreateEventEscrowRequest {
-    pub event_id: String,
-}
-
-/// Response from POST /api/escrow/create-event.
-#[derive(Debug, Clone, Deserialize, Default)]
-pub struct CreateEventEscrowResponse {
-    /// Base64-encoded serialized transaction (unsigned — wallet signs).
-    pub transaction: String,
-    /// Human-readable message for wallet confirmation.
-    pub message: String,
-    /// Derived EventEscrow PDA address (base58).
-    pub escrow_address: String,
-    /// The on-chain event ID used for PDA derivation.
-    pub on_chain_event_id: u64,
-}
-
-/// POST /api/escrow/create-event — build a create_event transaction for the escrow program.
-pub async fn create_event_escrow(body: &CreateEventEscrowRequest) -> Result<CreateEventEscrowResponse, ApiError> {
-    api_post_json("/escrow/create-event", body).await
-}
 
 /// DELETE /api/events/{id} — archive an event.
 pub async fn archive_event(id: &str) -> Result<EventMutationData, ApiError> {
@@ -2041,29 +2014,6 @@ pub struct RefundTxResponse {
 /// POST /api/escrow/refund — build refund TX
 pub async fn build_refund_tx(body: &RefundTxRequest) -> Result<RefundTxResponse, ApiError> {
     api_post_json("/escrow/refund", body).await
-}
-
-// ---------------------------------------------------------------------------
-// Escrow: Create Vault ATA (admin)
-// ---------------------------------------------------------------------------
-
-/// Request body for POST /api/escrow/create-vault-ata.
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct CreateVaultAtaRequest {
-    pub event_id: String,
-}
-
-/// Response from POST /api/escrow/create-vault-ata.
-#[derive(Debug, Clone, Default, serde::Deserialize)]
-pub struct CreateVaultAtaResponse {
-    pub transaction: String,
-    pub message: String,
-    pub vault_address: String,
-}
-
-/// POST /api/escrow/create-vault-ata — create vault ATA
-pub async fn create_vault_ata(body: &CreateVaultAtaRequest) -> Result<CreateVaultAtaResponse, ApiError> {
-    api_post_json("/escrow/create-vault-ata", body).await
 }
 
 // ---------------------------------------------------------------------------

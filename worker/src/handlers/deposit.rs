@@ -6,7 +6,6 @@
 //!   GET  /api/deposit/status/{attendee_id}  — check deposit status
 //!   POST /api/deposit/usdc                  — initiate USDC deposit (Solana Pay URL)
 //!   GET  /api/deposit/usdc/tx               — Solana Pay TX callback (wallet fetches TX)
-//!   POST /api/escrow/create-event           — build create_event TX (organizer, protected)
 //!   POST /api/deposit/thb/upload            — record THB slip upload
 //!   POST /api/deposit/thb/verify            — admin verifies/rejects slip
 //!   GET  /api/deposit/thb/pending           — list unverified slips (admin)
@@ -666,149 +665,6 @@ fn derive_on_chain_event_id(event_id: &str) -> u64 {
         hash = 1;
     }
     hash
-}
-
-// ---------------------------------------------------------------------------
-// POST /api/escrow/create-event — Build create_event TX for organizer
-// ---------------------------------------------------------------------------
-
-/// Request body for building a `create_event` transaction.
-///
-/// The organizer calls this to get a serialized transaction that initializes
-/// the EventEscrow PDA on-chain. After the wallet signs and submits, the
-/// `escrow_address` should be saved back to the event config.
-#[derive(Debug, serde::Deserialize)]
-pub struct CreateEventTxRequest {
-    /// Event ID (slug or KV key).
-    pub event_id: String,
-}
-
-/// Response with the serialized `create_event` transaction.
-#[derive(Debug, serde::Serialize)]
-pub struct CreateEventTxResponse {
-    /// Base64-encoded serialized transaction (unsigned — wallet signs).
-    pub transaction: String,
-    /// Human-readable message for wallet confirmation.
-    pub message: String,
-    /// Derived EventEscrow PDA address (base58). Save this to event config after on-chain confirmation.
-    pub escrow_address: String,
-    /// The on-chain event ID used for PDA derivation.
-    pub on_chain_event_id: u64,
-}
-
-/// Build a `create_event` transaction for the escrow program.
-///
-/// This is called by the organizer (admin) to initialize the EventEscrow PDA
-/// on-chain before deposits can be accepted. The organizer's wallet signs and
-/// submits the returned transaction.
-///
-/// The endpoint reads the event config for `organizer_wallet`, `deposit_amount_usdc`,
-/// `event_end_ms`, and `refund_deadline_hours` to build the transaction.
-#[worker::send]
-pub async fn create_event_tx_handler(
-    State(state): State<AppState>,
-    Extension(_claims): Extension<Claims>,
-    Json(body): Json<CreateEventTxRequest>,
-) -> Result<ApiOk<CreateEventTxResponse>, WorkerError> {
-    let kv = state
-        .events_kv
-        .as_ref()
-        .ok_or_else(|| AppError::Internal("EVENTS KV not configured".to_string()))?;
-
-    let event = event_store::get_event_config(kv, &body.event_id)
-        .await
-        .map_err(AppError::Internal)?
-        .ok_or_else(|| AppError::NotFound(format!("event '{}' not found", body.event_id)))?;
-
-    if !event.deposit_enabled {
-        return Err(AppError::Validation("deposit not enabled for this event".to_string()).into());
-    }
-
-    if event.deposit_amount_usdc == 0 {
-        return Err(AppError::Validation("deposit amount not configured".to_string()).into());
-    }
-
-    // Check if already created on-chain
-    if !event.escrow_address.is_empty() {
-        return Err(AppError::Validation(format!(
-            "event already has escrow address: {}",
-            event.escrow_address
-        ))
-        .into());
-    }
-
-    // Validate organizer wallet
-    let organizer_pubkey = if event.organizer_wallet.is_empty() {
-        return Err(AppError::Validation(
-            "event has no organizer wallet configured — set organizer_wallet first".to_string(),
-        )
-        .into());
-    } else {
-        crate::solana::validate_wallet_address(&event.organizer_wallet)
-            .map_err(|e| AppError::Validation(format!("invalid organizer_wallet: {e}")))?;
-        &event.organizer_wallet
-    };
-
-    // Determine on-chain event ID
-    let on_chain_event_id = if event.on_chain_event_id != 0 {
-        event.on_chain_event_id
-    } else {
-        derive_on_chain_event_id(&event.id)
-    };
-
-    // Calculate event_end and refund_deadline as unix timestamps (seconds)
-    let event_end = if event.event_end_ms > 0 {
-        event.event_end_ms / 1000
-    } else {
-        // Default: 7 days from now
-        chrono::Utc::now().timestamp() + 86400 * 7
-    };
-
-    let refund_deadline = if event.refund_deadline_hours > 0 {
-        event_end + (event.refund_deadline_hours as i64 * 3600)
-    } else {
-        // Default: 7 days after event end
-        event_end + 86400 * 7
-    };
-
-    // Build the RPC URL
-    let rpc_url = format!(
-        "{}{}{}",
-        state.config.solana.rpc_url,
-        if state.config.solana.rpc_url.contains('?') {
-            "&"
-        } else {
-            "?api-key="
-        },
-        state.config.solana.api_key
-    );
-
-    // Build the create_event transaction
-    let tx = crate::solana_escrow::build_create_event_transaction(
-        &rpc_url,
-        Some(kv),
-        organizer_pubkey,
-        on_chain_event_id,
-        event.deposit_amount_usdc,
-        event_end,
-        refund_deadline,
-    )
-    .await
-    .map_err(|e| AppError::Internal(format!("failed to build create_event TX: {e}")))?;
-
-    tracing::info!(
-        event_id = %event.id,
-        escrow_address = %tx.escrow_address,
-        on_chain_event_id,
-        "Create event TX built for organizer"
-    );
-
-    Ok(ApiOk::new(CreateEventTxResponse {
-        transaction: tx.transaction_b64,
-        message: tx.message,
-        escrow_address: tx.escrow_address,
-        on_chain_event_id,
-    }))
 }
 
 // ---------------------------------------------------------------------------
@@ -1529,26 +1385,6 @@ pub async fn mark_checked_in_tx_handler(
 }
 
 // ---------------------------------------------------------------------------
-// POST /api/escrow/create-vault-ata — build vault ATA creation TX (organizer)
-// ---------------------------------------------------------------------------
-
-#[derive(Debug, serde::Deserialize)]
-pub struct CreateVaultAtaTxRequest {
-    /// Event ID (slug or KV key).
-    pub event_id: String,
-}
-
-#[derive(Debug, serde::Serialize)]
-pub struct CreateVaultAtaTxResponse {
-    /// Base64-encoded serialized transaction (unsigned — wallet signs).
-    pub transaction: String,
-    /// Human-readable message for wallet confirmation.
-    pub message: String,
-    /// Derived vault ATA address (base58).
-    pub vault_address: String,
-}
-
-// ---------------------------------------------------------------------------
 // POST /api/escrow/backfill-wallets — Admin: backfill wallet_address for deposits
 // ---------------------------------------------------------------------------
 
@@ -1789,88 +1625,6 @@ async fn resolve_wallet_from_tx(rpc_url: &str, tx_signature: &str) -> Result<Str
     }
 
     Ok(first_account.to_string())
-}
-
-// ---------------------------------------------------------------------------
-// POST /api/escrow/create-vault-ata — Build vault ATA creation TX
-// ---------------------------------------------------------------------------
-
-/// Build a transaction to create the vault Associated Token Account for the
-/// EventEscrow PDA. This must be called **before** `create_event`.
-///
-/// The escrow program's `init(idempotent)` constraint validates the vault
-/// exists but does NOT create it via CPI. This endpoint pre-creates the vault
-/// so the subsequent `create_event` instruction succeeds.
-#[worker::send]
-pub async fn create_vault_ata_tx_handler(
-    State(state): State<AppState>,
-    Extension(_claims): Extension<Claims>,
-    Json(body): Json<CreateVaultAtaTxRequest>,
-) -> Result<ApiOk<CreateVaultAtaTxResponse>, WorkerError> {
-    let kv = state
-        .events_kv
-        .as_ref()
-        .ok_or_else(|| AppError::Internal("EVENTS KV not configured".to_string()))?;
-
-    let event = event_store::get_event_config(kv, &body.event_id)
-        .await
-        .map_err(AppError::Internal)?
-        .ok_or_else(|| AppError::NotFound(format!("event '{}' not found", body.event_id)))?;
-
-    if !event.deposit_enabled {
-        return Err(AppError::Validation("deposit not enabled for this event".to_string()).into());
-    }
-
-    // Validate organizer wallet
-    let organizer_pubkey = if event.organizer_wallet.is_empty() {
-        return Err(AppError::Validation(
-            "event has no organizer wallet configured — set organizer_wallet first".to_string(),
-        )
-        .into());
-    } else {
-        crate::solana::validate_wallet_address(&event.organizer_wallet)
-            .map_err(|e| AppError::Validation(format!("invalid organizer_wallet: {e}")))?;
-        &event.organizer_wallet
-    };
-
-    let on_chain_event_id = if event.on_chain_event_id != 0 {
-        event.on_chain_event_id
-    } else {
-        derive_on_chain_event_id(&event.id)
-    };
-
-    // Build the RPC URL with API key
-    let rpc_url = format!(
-        "{}{}{}",
-        state.config.solana.rpc_url,
-        if state.config.solana.rpc_url.contains('?') {
-            "&"
-        } else {
-            "?api-key="
-        },
-        state.config.solana.api_key
-    );
-
-    let tx = crate::solana_escrow::build_create_vault_ata_transaction(
-        &rpc_url,
-        Some(kv),
-        organizer_pubkey,
-        on_chain_event_id,
-    )
-    .await
-    .map_err(|e| AppError::Internal(format!("failed to build vault ATA TX: {e}")))?;
-
-    tracing::info!(
-        event_id = %event.id,
-        vault_address = %tx.vault_address,
-        "Create vault ATA TX built for organizer"
-    );
-
-    Ok(ApiOk::new(CreateVaultAtaTxResponse {
-        transaction: tx.transaction_b64,
-        message: tx.message,
-        vault_address: tx.vault_address,
-    }))
 }
 
 // ---------------------------------------------------------------------------

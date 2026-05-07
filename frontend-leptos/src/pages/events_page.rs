@@ -1007,6 +1007,7 @@ pub fn EventsPage(
                                             class="quiz-number-input"
                                             placeholder="Solana escrow PDA address (base58)"
                                             prop:value=move || form.get().escrow_address
+                                            readonly=move || !form.get().escrow_address.is_empty()
                                             on:input=move |ev| set_form.update(|f| f.escrow_address = event_target_value(&ev))
                                         />
                                         <span class="quiz-setting-hint">"On-chain escrow PDA for this event (auto-filled after on-chain init)"</span>
@@ -1039,6 +1040,7 @@ pub fn EventsPage(
                                             min="0"
                                             step="1"
                                             prop:value=move || form.get().on_chain_event_id
+                                            readonly=move || !form.get().on_chain_event_id.is_empty()
                                             on:input=move |ev| set_form.update(|f| f.on_chain_event_id = event_target_value(&ev))
                                         />
                                         <span class="quiz-setting-hint">"Numeric ID for PDA seeds (0 = auto-derive via hash)"</span>
