@@ -266,6 +266,16 @@ pub fn EventsPage(
     let (slug_manually_edited, set_slug_manually_edited) = signal(false);
     let (refresh_counter, set_refresh_counter) = signal(0u32);
 
+    // Section collapse signals (true = expanded)
+    let (sec_basic_open, set_sec_basic_open) = signal(true);
+    let (sec_schedule_open, set_sec_schedule_open) = signal(true);
+    let (sec_sheets_open, set_sec_sheets_open) = signal(false);
+    let (sec_nft_open, set_sec_nft_open) = signal(false);
+    let (sec_settings_open, set_sec_settings_open) = signal(false);
+    let (sec_deposit_open, set_sec_deposit_open) = signal(true);
+    let (sec_people_open, set_sec_people_open) = signal(false);
+    let (show_advanced, set_show_advanced) = signal(false);
+
     // Load events on mount and on refresh
     Effect::new(move |_| {
         let _ = refresh_counter.get();
@@ -640,61 +650,70 @@ pub fn EventsPage(
                             <h2 class="admin-section-heading">{title}</h2>
 
                             // ── Basic Info ──
-                            <div style="margin-bottom:1.5rem">
-                                <h3 style="font-size:0.95rem;font-weight:600;margin-bottom:0.75rem;color:var(--text-secondary)">
-                                    "📋 Basic Info"
-                                </h3>
-                                <div class="quiz-settings-grid">
-                                    <div class="quiz-setting-item">
-                                        <label class="quiz-field-label">"Name *"</label>
-                                        <input
-                                            type="text"
-                                            class="quiz-number-input"
-                                            placeholder="Event Name"
-                                            prop:value=move || form.get().name
-                                            on:input=handle_name_input
-                                        />
-                                    </div>
-                                    <div class="quiz-setting-item">
-                                        <label class="quiz-field-label">"Slug *"</label>
-                                        <input
-                                            type="text"
-                                            class="quiz-number-input"
-                                            placeholder="event-slug"
-                                            prop:value=move || form.get().slug
-                                            on:input=handle_slug_input
-                                        />
-                                        <span class="quiz-setting-hint">"Auto-generated from name"</span>
-                                    </div>
-                                    <div class="quiz-setting-item">
-                                        <label class="quiz-field-label">"Tagline"</label>
-                                        <input
-                                            type="text"
-                                            class="quiz-number-input"
-                                            placeholder="A short description"
-                                            prop:value=move || form.get().tagline
-                                            on:input=move |ev| set_form.update(|f| f.tagline = event_target_value(&ev))
-                                        />
-                                    </div>
-                                    <div class="quiz-setting-item">
-                                        <label class="quiz-field-label">"Link"</label>
-                                        <input
-                                            type="text"
-                                            class="quiz-number-input"
-                                            placeholder="https://example.com"
-                                            prop:value=move || form.get().link
-                                            on:input=move |ev| set_form.update(|f| f.link = event_target_value(&ev))
-                                        />
+                            <div class="form-section">
+                                <div class="form-section-header" on:click=move |_| set_sec_basic_open.update(|v| *v = !*v)>
+                                    <span class="form-section-icon">"📋"</span>
+                                    <span class="form-section-title">"Basic Info"</span>
+                                    <span class="form-section-badge form-section-badge-required">"Required"</span>
+                                    <span class="form-section-toggle" class:form-section-toggle-open=move || sec_basic_open.get()>"▼"</span>
+                                </div>
+                                <div class="form-section-body" class:form-section-body-hidden=move || !sec_basic_open.get()>
+                                    <div class="quiz-settings-grid">
+                                        <div class="quiz-setting-item">
+                                            <label class="quiz-field-label">"Name"<span class="field-required-badge">"Required"</span></label>
+                                            <input
+                                                type="text"
+                                                class="quiz-number-input"
+                                                placeholder="Event Name"
+                                                prop:value=move || form.get().name
+                                                on:input=handle_name_input
+                                            />
+                                        </div>
+                                        <div class="quiz-setting-item">
+                                            <label class="quiz-field-label">"Slug"<span class="field-required-badge">"Required"</span></label>
+                                            <input
+                                                type="text"
+                                                class="quiz-number-input"
+                                                placeholder="event-slug"
+                                                prop:value=move || form.get().slug
+                                                on:input=handle_slug_input
+                                            />
+                                            <span class="quiz-setting-hint">"Auto-generated from name"</span>
+                                        </div>
+                                        <div class="quiz-setting-item">
+                                            <label class="quiz-field-label">"Tagline"<span class="field-optional-badge">"Optional"</span></label>
+                                            <input
+                                                type="text"
+                                                class="quiz-number-input"
+                                                placeholder="A short description"
+                                                prop:value=move || form.get().tagline
+                                                on:input=move |ev| set_form.update(|f| f.tagline = event_target_value(&ev))
+                                            />
+                                        </div>
+                                        <div class="quiz-setting-item">
+                                            <label class="quiz-field-label">"Link"<span class="field-optional-badge">"Optional"</span></label>
+                                            <input
+                                                type="text"
+                                                class="quiz-number-input"
+                                                placeholder="https://example.com"
+                                                prop:value=move || form.get().link
+                                                on:input=move |ev| set_form.update(|f| f.link = event_target_value(&ev))
+                                            />
+                                        </div>
                                     </div>
                                 </div>
                             </div>
 
                             // ── Schedule ──
-                            <div style="margin-bottom:1.5rem">
-                                <h3 style="font-size:0.95rem;font-weight:600;margin-bottom:0.75rem;color:var(--text-secondary)">
-                                    "🕐 Schedule"
-                                </h3>
-                                <div class="quiz-settings-grid">
+                            <div class="form-section">
+                                <div class="form-section-header" on:click=move |_| set_sec_schedule_open.update(|v| *v = !*v)>
+                                    <span class="form-section-icon">"🕐"</span>
+                                    <span class="form-section-title">"Schedule"</span>
+                                    <span class="form-section-badge form-section-badge-optional">"Optional"</span>
+                                    <span class="form-section-toggle" class:form-section-toggle-open=move || sec_schedule_open.get()>"▼"</span>
+                                </div>
+                                <div class="form-section-body" class:form-section-body-hidden=move || !sec_schedule_open.get()>
+                                    <div class="quiz-settings-grid">
                                     <div class="quiz-setting-item">
                                         <label class="quiz-field-label">"Event Start"</label>
                                         <input
@@ -724,16 +743,21 @@ pub fn EventsPage(
                                         <span class="quiz-setting-hint">"Times in your local timezone"</span>
                                     </div>
                                 </div>
+                                </div>
                             </div>
 
                             // ── Google Sheets ──
-                            <div style="margin-bottom:1.5rem">
-                                <h3 style="font-size:0.95rem;font-weight:600;margin-bottom:0.75rem;color:var(--text-secondary)">
-                                    "📊 Google Sheets"
-                                </h3>
-                                <div class="quiz-settings-grid">
-                                    <div class="quiz-setting-item">
-                                        <label class="quiz-field-label">"Sheet ID *"</label>
+                            <div class="form-section">
+                                <div class="form-section-header" on:click=move |_| set_sec_sheets_open.update(|v| *v = !*v)>
+                                    <span class="form-section-icon">"📊"</span>
+                                    <span class="form-section-title">"Google Sheets"</span>
+                                    <span class="form-section-badge form-section-badge-required">"Required"</span>
+                                    <span class="form-section-toggle" class:form-section-toggle-open=move || sec_sheets_open.get()>"▼"</span>
+                                </div>
+                                <div class="form-section-body" class:form-section-body-hidden=move || !sec_sheets_open.get()>
+                                    <div class="quiz-settings-grid">
+                                        <div class="quiz-setting-item">
+                                            <label class="quiz-field-label">"Sheet ID"<span class="field-required-badge">"Required"</span></label>
                                         <input
                                             type="text"
                                             class="quiz-number-input"
@@ -763,14 +787,19 @@ pub fn EventsPage(
                                         />
                                     </div>
                                 </div>
+                                </div>
                             </div>
 
                             // ── NFT Configuration ──
-                            <div style="margin-bottom:1.5rem">
-                                <h3 style="font-size:0.95rem;font-weight:600;margin-bottom:0.75rem;color:var(--text-secondary)">
-                                    "🎨 NFT Configuration"
-                                </h3>
-                                <div class="quiz-settings-grid">
+                            <div class="form-section">
+                                <div class="form-section-header" on:click=move |_| set_sec_nft_open.update(|v| *v = !*v)>
+                                    <span class="form-section-icon">"🎨"</span>
+                                    <span class="form-section-title">"NFT Configuration"</span>
+                                    <span class="form-section-badge form-section-badge-optional">"Optional"</span>
+                                    <span class="form-section-toggle" class:form-section-toggle-open=move || sec_nft_open.get()>"▼"</span>
+                                </div>
+                                <div class="form-section-body" class:form-section-body-hidden=move || !sec_nft_open.get()>
+                                    <div class="quiz-settings-grid">
                                     <div class="quiz-setting-item">
                                         <label class="quiz-field-label">"Collection Mint"</label>
                                         <input
@@ -859,15 +888,20 @@ pub fn EventsPage(
                                         ></textarea>
                                     </div>
                                 </div>
+                                </div>
                             </div>
 
                             // ── Settings ──
-                            <div style="margin-bottom:1.5rem">
-                                <h3 style="font-size:0.95rem;font-weight:600;margin-bottom:0.75rem;color:var(--text-secondary)">
-                                    "⚙️ Settings"
-                                </h3>
-                                <div class="quiz-settings-grid">
-                                    <div class="quiz-setting-item">
+                            <div class="form-section">
+                                <div class="form-section-header" on:click=move |_| set_sec_settings_open.update(|v| *v = !*v)>
+                                    <span class="form-section-icon">"⚙️"</span>
+                                    <span class="form-section-title">"Settings"</span>
+                                    <span class="form-section-badge form-section-badge-optional">"Optional"</span>
+                                    <span class="form-section-toggle" class:form-section-toggle-open=move || sec_settings_open.get()>"▼"</span>
+                                </div>
+                                <div class="form-section-body" class:form-section-body-hidden=move || !sec_settings_open.get()>
+                                    <div class="quiz-settings-grid">
+                                        <div class="quiz-setting-item">
                                         <label class="quiz-field-label">"Claim Base URL"</label>
                                         <input
                                             type="text"
@@ -879,19 +913,21 @@ pub fn EventsPage(
                                     </div>
                                     <div class="quiz-setting-item">
                                         <label class="quiz-field-label">"Quiz Enabled"</label>
-                                        <div style="display:flex;align-items:center;gap:0.5rem;padding-top:0.3rem">
+                                        <label class="quiz-toggle-label" style="cursor:pointer;padding-top:0.3rem">
                                             <input
                                                 type="checkbox"
+                                                class="quiz-toggle-checkbox"
                                                 prop:checked=move || form.get().quiz_enabled
                                                 on:change=move |ev| {
                                                     let checked = event_target_checked(&ev);
                                                     set_form.update(|f| f.quiz_enabled = checked);
                                                 }
                                             />
-                                            <span style="font-size:0.85rem;color:var(--text-secondary)">
+                                            <span class="quiz-toggle-switch"></span>
+                                            <span class="quiz-toggle-text">
                                                 {move || if form.get().quiz_enabled { "Yes" } else { "No" }}
                                             </span>
-                                        </div>
+                                        </label>
                                     </div>
                                     // Status selector (edit only)
                                     {if is_edit {
@@ -928,32 +964,43 @@ pub fn EventsPage(
                                         view! { <div></div> }.into_any()
                                     }}
                                 </div>
+                                </div>
                             </div>
 
                             // ── Deposit Configuration ──
-                            <div style="margin-bottom:1.5rem">
-                                <h3 style="font-size:0.95rem;font-weight:600;margin-bottom:0.75rem;color:var(--text-secondary)">
-                                    "💰 Deposit Configuration"
-                                </h3>
-                                <div class="quiz-settings-grid">
-                                    <div class="quiz-setting-item">
-                                        <label class="quiz-field-label">"Deposit Enabled"</label>
-                                        <div style="display:flex;align-items:center;gap:0.5rem;padding-top:0.3rem">
-                                            <input
-                                                type="checkbox"
-                                                prop:checked=move || form.get().deposit_enabled
-                                                on:change=move |ev| {
-                                                    let checked = event_target_checked(&ev);
-                                                    set_form.update(|f| f.deposit_enabled = checked);
-                                                }
-                                            />
-                                            <span style="font-size:0.85rem;color:var(--text-secondary)">
-                                                {move || if form.get().deposit_enabled { "Yes" } else { "No" }}
-                                            </span>
-                                        </div>
-                                    </div>
-                                    <div class="quiz-setting-item">
-                                        <label class="quiz-field-label">"USDC Amount"</label>
+                            // Deposit toggle always visible
+                            <div style="margin-bottom:0.75rem;display:flex;align-items:center;gap:0.75rem">
+                                <span style="font-size:0.95rem;font-weight:600;color:var(--text-secondary)">"💰 Deposit"</span>
+                                <label class="quiz-toggle-label" style="cursor:pointer">
+                                    <input
+                                        type="checkbox"
+                                        class="quiz-toggle-checkbox"
+                                        prop:checked=move || form.get().deposit_enabled
+                                        on:change=move |ev| {
+                                            let checked = event_target_checked(&ev);
+                                            set_form.update(|f| f.deposit_enabled = checked);
+                                        }
+                                    />
+                                    <span class="quiz-toggle-switch"></span>
+                                    <span class="quiz-toggle-text">
+                                        {move || if form.get().deposit_enabled { "Enabled" } else { "Disabled" }}
+                                    </span>
+                                </label>
+                            </div>
+
+                            // Deposit config section — only when enabled
+                            <Show when=move || form.get().deposit_enabled fallback=|| view! { <div></div> }>
+                            <div class="form-section">
+                                <div class="form-section-header" on:click=move |_| set_sec_deposit_open.update(|v| *v = !*v)>
+                                    <span class="form-section-icon">"💳"</span>
+                                    <span class="form-section-title">"Deposit Details"</span>
+                                    <span class="form-section-badge form-section-badge-optional">"Optional"</span>
+                                    <span class="form-section-toggle" class:form-section-toggle-open=move || sec_deposit_open.get()>"▼"</span>
+                                </div>
+                                <div class="form-section-body" class:form-section-body-hidden=move || !sec_deposit_open.get()>
+                                    <div class="quiz-settings-grid">
+                                        <div class="quiz-setting-item">
+                                            <label class="quiz-field-label">"USDC Amount"<span class="field-optional-badge">"Optional"</span></label>
                                         <input
                                             type="number"
                                             class="quiz-number-input"
@@ -1020,19 +1067,26 @@ pub fn EventsPage(
                                             <span class="quiz-setting-hint" style="color:var(--success,green)">"✅ Wallet locked — use escrow panel to change"</span>
                                         </Show>
                                     </div>
-                                    <div class="quiz-setting-item">
-                                        <label class="quiz-field-label">"On-Chain Event ID"</label>
-                                        <input
-                                            type="number"
-                                            class="quiz-number-input"
-                                            placeholder="Leave empty for auto-derive from event slug"
-                                            min="0"
-                                            step="1"
-                                            prop:value=move || form.get().on_chain_event_id
-                                            readonly=move || !form.get().on_chain_event_id.is_empty()
-                                            on:input=move |ev| set_form.update(|f| f.on_chain_event_id = event_target_value(&ev))
-                                        />
-                                        <span class="quiz-setting-hint">"Numeric ID for PDA seeds (0 = auto-derive via hash)"</span>
+                                    // Advanced toggle for on-chain event ID
+                                    <div class="advanced-toggle-row" on:click=move |_| set_show_advanced.update(|v| *v = !*v)>
+                                        <span class="advanced-toggle-icon" class:advanced-toggle-icon-open=move || show_advanced.get()>"▶"</span>
+                                        <span class="advanced-toggle-label">"Advanced: On-Chain Event ID"</span>
+                                    </div>
+                                    <div class:advanced-fields-hidden=move || !show_advanced.get()>
+                                        <div class="quiz-setting-item">
+                                            <label class="quiz-field-label">"On-Chain Event ID"<span class="field-optional-badge">"Auto"</span></label>
+                                            <input
+                                                type="number"
+                                                class="quiz-number-input"
+                                                placeholder="Leave empty for auto-derive from event slug"
+                                                min="0"
+                                                step="1"
+                                                prop:value=move || form.get().on_chain_event_id
+                                                readonly=move || !form.get().on_chain_event_id.is_empty()
+                                                on:input=move |ev| set_form.update(|f| f.on_chain_event_id = event_target_value(&ev))
+                                            />
+                                            <span class="quiz-setting-hint">"Numeric ID for PDA seeds (0 = auto-derive via hash)"</span>
+                                        </div>
                                     </div>
                                     <div class="quiz-setting-item">
                                         <label class="quiz-field-label">"Refund Deadline (hours)"</label>
@@ -1083,14 +1137,20 @@ pub fn EventsPage(
                                     </Show>
 
                                 </Show>
+                                </div>
                             </div>
+                            </Show>
 
                             // ── People ──
-                            <div style="margin-bottom:1.5rem">
-                                <h3 style="font-size:0.95rem;font-weight:600;margin-bottom:0.75rem;color:var(--text-secondary)">
-                                    "📧 People"
-                                </h3>
-                                <div class="quiz-settings-grid">
+                            <div class="form-section">
+                                <div class="form-section-header" on:click=move |_| set_sec_people_open.update(|v| *v = !*v)>
+                                    <span class="form-section-icon">"📧"</span>
+                                    <span class="form-section-title">"People"</span>
+                                    <span class="form-section-badge form-section-badge-optional">"Optional"</span>
+                                    <span class="form-section-toggle" class:form-section-toggle-open=move || sec_people_open.get()>"▼"</span>
+                                </div>
+                                <div class="form-section-body" class:form-section-body-hidden=move || !sec_people_open.get()>
+                                    <div class="quiz-settings-grid">
                                     <div class="quiz-setting-item">
                                         <label class="quiz-field-label">"Organizer Emails"</label>
                                         <textarea
@@ -1111,6 +1171,7 @@ pub fn EventsPage(
                                         ></textarea>
                                         <span class="quiz-setting-hint">"Comma-separated"</span>
                                     </div>
+                                </div>
                                 </div>
                             </div>
 

@@ -6092,6 +6092,150 @@ nav a.active {
     color: var(--text-muted, rgba(255, 255, 255, 0.35));
 }
 
+/* ===== Collapsible Form Sections ===== */
+.form-section {
+    margin-bottom: 1.5rem;
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.form-section-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+    cursor: pointer;
+    user-select: none;
+    background: var(--bg-secondary, rgba(255, 255, 255, 0.03));
+    transition: background 0.15s ease;
+}
+
+.form-section-header:hover {
+    background: var(--bg-hover, rgba(255, 255, 255, 0.06));
+}
+
+.form-section-icon {
+    font-size: 1rem;
+    flex-shrink: 0;
+}
+
+.form-section-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-secondary, #aaa);
+    flex: 1;
+}
+
+.form-section-badge {
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    line-height: 1.4;
+}
+
+.form-section-badge-required {
+    background: rgba(239, 68, 68, 0.15);
+    color: #f87171;
+    border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+.form-section-badge-optional {
+    background: rgba(107, 114, 128, 0.15);
+    color: #9ca3af;
+    border: 1px solid rgba(107, 114, 128, 0.2);
+}
+
+.form-section-toggle {
+    font-size: 0.7rem;
+    color: var(--text-secondary, #888);
+    transition: transform 0.2s ease;
+    flex-shrink: 0;
+}
+
+.form-section-toggle-open {
+    transform: rotate(180deg);
+}
+
+.form-section-body {
+    padding: 0.75rem 1rem 1rem;
+    border-top: 1px solid var(--border, rgba(255, 255, 255, 0.06));
+}
+
+.form-section-body-hidden {
+    display: none;
+}
+
+/* ===== Field Priority Badges ===== */
+.field-required-badge {
+    display: inline-block;
+    font-size: 0.65rem;
+    font-weight: 700;
+    padding: 0.1rem 0.35rem;
+    border-radius: 3px;
+    margin-left: 0.35rem;
+    vertical-align: middle;
+    background: rgba(239, 68, 68, 0.12);
+    color: #f87171;
+    border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.field-optional-badge {
+    display: inline-block;
+    font-size: 0.65rem;
+    font-weight: 600;
+    padding: 0.1rem 0.35rem;
+    border-radius: 3px;
+    margin-left: 0.35rem;
+    vertical-align: middle;
+    background: rgba(107, 114, 128, 0.12);
+    color: #9ca3af;
+    border: 1px solid rgba(107, 114, 128, 0.15);
+}
+
+/* ===== Advanced Toggle ===== */
+.advanced-toggle-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+    padding: 0.4rem 0;
+    cursor: pointer;
+    user-select: none;
+}
+
+.advanced-toggle-row:hover {
+    opacity: 0.85;
+}
+
+.advanced-toggle-icon {
+    font-size: 0.75rem;
+    color: var(--text-secondary, #888);
+    transition: transform 0.2s ease;
+}
+
+.advanced-toggle-icon-open {
+    transform: rotate(90deg);
+}
+
+.advanced-toggle-label {
+    font-size: 0.8rem;
+    color: var(--text-secondary, #888);
+    font-style: italic;
+}
+
+.advanced-fields-hidden {
+    display: none;
+}
+
+/* ===== Deposit Section Conditional ===== */
+.deposit-config-body-hidden {
+    display: none;
+}
+
 /* Responsive */
 @media (max-width: 480px) {
     .deposit-method-cards {
