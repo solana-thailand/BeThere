@@ -36,4 +36,8 @@ pub enum EscrowError {
     VaultNotEmpty = 15,
     /// Event has ended — check-ins no longer allowed.
     EventEnded = 16,
+    /// Deposit has not been refunded yet — cannot close.
+    DepositNotRefunded = 17,
+    /// Event escrow still has data and deposit not refunded.
+    EventEscrowStillActive = 18,
 }

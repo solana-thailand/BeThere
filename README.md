@@ -359,7 +359,7 @@ See **[DISCUSSION.md](./DISCUSSION.md)** for the full architecture direction and
 | **8h** | Mainnet deploy (escrow + deposit) | Planned |
 | **9a** | Escrow security hardening (SEC-001/002/003/004/009/011) | 🟡 Phase 1+3 done, needs rebuild + redeploy |
 | **9b** | Frontend fixes (SEC-005/006, explorer links, Merkle field) | ✅ Done (cluster-aware Solscan links, duplicate Merkle removed) |
-| **9c** | Rent reclamation — close AttendeeDeposit PDAs (SEC-010) | Planned |
+| **9c** | Rent reclamation — close AttendeeDeposit PDAs (SEC-010) | ✅ Done (close_deposit instruction + TX builder + UI) |
 | **9d** | UX improvements (search/filter, progressive disclosure form) | Planned |
 
 ### NFT Config Setup (Phase 7)

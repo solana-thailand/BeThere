@@ -1911,3 +1911,289 @@ fn test_full_lifecycle_with_deactivate() {
 
     println!("  FULL LIFECYCLE WITH DEACTIVATE: All 6 steps completed!");
 }
+
+// ===========================================================================
+// TEST: Close Deposit — attendee closes after refunded=true
+// ===========================================================================
+
+#[test]
+fn test_close_deposit_after_refund() {
+    let mut svm = setup();
+
+    let system_program = quasar_svm::system_program::ID;
+    let (escrow, escrow_bump) = find_event_escrow(&ORGANIZER, EVENT_ID);
+    let (deposit, deposit_bump) = find_attendee_deposit(&escrow, &ATTENDEE);
+
+    let ix = with_signers(
+        CloseDepositInstruction {
+            signer: ATTENDEE,
+            event_escrow: escrow,
+            attendee_deposit: deposit,
+            system_program,
+            _event_id: EVENT_ID,
+        }
+        .into(),
+        &[0],
+    );
+
+    let result = svm.process_instruction(
+        &ix,
+        &[
+            signer(ATTENDEE),
+            // event_escrow still exists (not closed) — but has data
+            event_escrow_account(
+                escrow,
+                ORGANIZER,
+                EVENT_ID,
+                USDC_MINT,
+                VAULT,
+                DEPOSIT_AMOUNT,
+                EVENT_END,
+                REFUND_DEADLINE,
+                DEPOSIT_AMOUNT,
+                DEPOSIT_AMOUNT, // total_refunded == total_deposited
+                0,
+                false, // inactive
+                escrow_bump,
+            ),
+            attendee_deposit_account(
+                deposit,
+                ATTENDEE,
+                escrow,
+                DEPOSIT_AMOUNT,
+                1_699_000_000,
+                true, // checked in
+                true, // refunded
+                deposit_bump,
+            ),
+        ],
+    );
+
+    assert!(
+        result.is_ok(),
+        "close_deposit after refund failed: {:?}",
+        result.raw_result
+    );
+    result.print_logs();
+
+    // Verify deposit account was closed (zero lamports)
+    let deposit_account = result.account(&deposit).unwrap();
+    assert_eq!(
+        deposit_account.lamports, 0,
+        "deposit should have 0 lamports after close"
+    );
+
+    // Verify signer received rent
+    let signer_account = result.account(&ATTENDEE).unwrap();
+    assert!(
+        signer_account.lamports > 10_000_000_000,
+        "signer should have received rent lamports"
+    );
+
+    println!(
+        "  CLOSE_DEPOSIT_AFTER_REFUND CU: {}",
+        result.compute_units_consumed
+    );
+}
+
+// ===========================================================================
+// TEST: Close Deposit — should fail if not refunded
+// ===========================================================================
+
+#[test]
+fn test_close_deposit_not_refunded() {
+    let mut svm = setup();
+
+    let system_program = quasar_svm::system_program::ID;
+    let (escrow, escrow_bump) = find_event_escrow(&ORGANIZER, EVENT_ID);
+    let (deposit, deposit_bump) = find_attendee_deposit(&escrow, &ATTENDEE);
+
+    let ix = with_signers(
+        CloseDepositInstruction {
+            signer: ATTENDEE,
+            event_escrow: escrow,
+            attendee_deposit: deposit,
+            system_program,
+            _event_id: EVENT_ID,
+        }
+        .into(),
+        &[0],
+    );
+
+    let result = svm.process_instruction(
+        &ix,
+        &[
+            signer(ATTENDEE),
+            event_escrow_account(
+                escrow,
+                ORGANIZER,
+                EVENT_ID,
+                USDC_MINT,
+                VAULT,
+                DEPOSIT_AMOUNT,
+                EVENT_END,
+                REFUND_DEADLINE,
+                DEPOSIT_AMOUNT,
+                0, // nothing refunded
+                0,
+                false,
+                escrow_bump,
+            ),
+            attendee_deposit_account(
+                deposit,
+                ATTENDEE,
+                escrow,
+                DEPOSIT_AMOUNT,
+                1_699_000_000,
+                true,
+                false, // NOT refunded — should fail
+                deposit_bump,
+            ),
+        ],
+    );
+
+    assert!(
+        result.is_err(),
+        "close_deposit should fail when deposit not refunded"
+    );
+    println!("  CLOSE_DEPOSIT_NOT_REFUNDED: correctly rejected");
+}
+
+// ===========================================================================
+// TEST: Close Deposit — should fail if wrong signer when escrow still exists
+// ===========================================================================
+
+#[test]
+fn test_close_deposit_wrong_signer() {
+    let mut svm = setup();
+
+    const WRONG_ATTENDEE: Pubkey = Pubkey::new_from_array([8; 32]);
+
+    let system_program = quasar_svm::system_program::ID;
+    let (escrow, escrow_bump) = find_event_escrow(&ORGANIZER, EVENT_ID);
+    let (deposit, deposit_bump) = find_attendee_deposit(&escrow, &ATTENDEE);
+
+    // WRONG_ATTENDEE tries to close ATTENDEE's deposit while escrow exists
+    let ix = with_signers(
+        CloseDepositInstruction {
+            signer: WRONG_ATTENDEE,
+            event_escrow: escrow,
+            attendee_deposit: deposit,
+            system_program,
+            _event_id: EVENT_ID,
+        }
+        .into(),
+        &[0],
+    );
+
+    let result = svm.process_instruction(
+        &ix,
+        &[
+            signer(WRONG_ATTENDEE),
+            event_escrow_account(
+                escrow,
+                ORGANIZER,
+                EVENT_ID,
+                USDC_MINT,
+                VAULT,
+                DEPOSIT_AMOUNT,
+                EVENT_END,
+                REFUND_DEADLINE,
+                DEPOSIT_AMOUNT,
+                DEPOSIT_AMOUNT,
+                0,
+                false,
+                escrow_bump,
+            ),
+            attendee_deposit_account(
+                deposit,
+                ATTENDEE,
+                escrow,
+                DEPOSIT_AMOUNT,
+                1_699_000_000,
+                true,
+                true, // refunded
+                deposit_bump,
+            ),
+        ],
+    );
+
+    assert!(
+        result.is_err(),
+        "close_deposit should fail when wrong signer tries to close while escrow exists"
+    );
+    println!("  CLOSE_DEPOSIT_WRONG_SIGNER: correctly rejected");
+}
+
+// ===========================================================================
+// TEST: Close Deposit — anyone can close when event_escrow is closed (GC)
+// ===========================================================================
+
+#[test]
+fn test_close_deposit_gc_after_event_closed() {
+    let mut svm = setup();
+
+    const RANDOM_USER: Pubkey = Pubkey::new_from_array([9; 32]);
+
+    let system_program = quasar_svm::system_program::ID;
+    let (escrow, _escrow_bump) = find_event_escrow(&ORGANIZER, EVENT_ID);
+    let (deposit, deposit_bump) = find_attendee_deposit(&escrow, &ATTENDEE);
+
+    // RANDOM_USER closes ATTENDEE's deposit after event_escrow has been closed
+    let ix = with_signers(
+        CloseDepositInstruction {
+            signer: RANDOM_USER,
+            event_escrow: escrow,
+            attendee_deposit: deposit,
+            system_program,
+            _event_id: EVENT_ID,
+        }
+        .into(),
+        &[0],
+    );
+
+    let result = svm.process_instruction(
+        &ix,
+        &[
+            signer(RANDOM_USER),
+            // event_escrow is closed — empty account (zero data)
+            empty(escrow),
+            attendee_deposit_account(
+                deposit,
+                ATTENDEE,
+                escrow,
+                DEPOSIT_AMOUNT,
+                1_699_000_000,
+                false, // not checked in
+                false, // not refunded — but GC allows closing anyway
+                deposit_bump,
+            ),
+        ],
+    );
+
+    assert!(
+        result.is_ok(),
+        "GC close_deposit should succeed when event_escrow is closed: {:?}",
+        result.raw_result
+    );
+    result.print_logs();
+
+    // Verify deposit account was closed
+    let deposit_account = result.account(&deposit).unwrap();
+    assert_eq!(
+        deposit_account.lamports, 0,
+        "deposit should have 0 lamports after GC close"
+    );
+
+    // Verify GC caller received rent
+    let gc_account = result.account(&RANDOM_USER).unwrap();
+    assert!(
+        gc_account.lamports > 10_000_000_000,
+        "GC caller should have received rent lamports"
+    );
+
+    println!(
+        "  CLOSE_DEPOSIT_GC_AFTER_EVENT_CLOSED CU: {}",
+        result.compute_units_consumed
+    );
+}

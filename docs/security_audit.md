@@ -23,7 +23,7 @@
 | SEC-007 | 🟢 Info | Worker Cannot Manipulate Funds | Confirmed Safe |
 | SEC-008 | 🟢 Info | On-Chain Escrow Fields Immutable After Creation | Confirmed Safe |
 | SEC-009 | 🟡 Medium | Token Transfers Use `transfer()` Not `transfer_checked()` | ✅ Fixed (Phase 3) |
-| SEC-010 | 🟡 Medium | AttendeeDeposit PDAs Never Closed (Rent Leak) | Open |
+| SEC-010 | 🟡 Medium | AttendeeDeposit PDAs Never Closed (Rent Leak) | ✅ Fixed (Phase 4) |
 | SEC-011 | 🟡 Medium | No `event_end` Guard on `mark_checked_in` | ✅ Fixed (Phase 3) |
 
 ---
@@ -308,19 +308,18 @@ All 3 token transfer sites in the escrow program use `transfer()` instead of `tr
 ### SEC-010: AttendeeDeposit PDAs Never Closed (Rent Leak)
 
 **Severity**: 🟡 Medium
-**Status**: Open
+**Status**: ✅ Fixed (Phase 4)
 **Source**: Safe Solana Builder §6.3 (Account Closing), §13 (Token Dust)
 
 **Description**:
-The `close_event` instruction closes the `EventEscrow` PDA and the vault token account, but **no instruction exists to close `AttendeeDeposit` PDAs**. After an event completes and all deposits are settled, every attendee's `AttendeeDeposit` PDA remains on-chain forever, permanently locking the rent-exempt SOL (~0.002 SOL each). For an event with 1000 attendees, that's ~2 SOL permanently locked.
+The `close_event` instruction closes the `EventEscrow` PDA and the vault token account, but **no instruction existed to close `AttendeeDeposit` PDAs**. After an event completes and all deposits are settled, every attendee's `AttendeeDeposit` PDA remains on-chain forever, permanently locking the rent-exempt SOL (~0.002 SOL each). For an event with 1000 attendees, that's ~2 SOL permanently locked.
 
-**Impact**: Rent leakage, not a fund-loss vulnerability. But accumulates across events and makes the protocol increasingly expensive at scale.
+**Fix (Phase 4)**:
+Added `close_deposit` instruction (discriminator 7) with two close paths:
+1. **Self-close**: Attendee closes their own deposit PDA after `refunded == true`
+2. **GC close**: Anyone can close deposit PDAs after the parent `EventEscrow` has been closed (detected by `data_len() == 0`)
 
-**Recommendation**: Add a `close_deposit` instruction that allows:
-1. Attendee can close their own deposit PDA after `refunded == true`
-2. Anyone can close deposit PDAs after the event escrow is closed (garbage collection)
-
-**Effort**: Medium (new on-chain instruction + TX builder + frontend)
+Includes TX builder in worker (`build_close_deposit_transaction`), public API endpoint (`POST /api/escrow/close-deposit`), and frontend "Reclaim Rent" button on the deposit page.
 
 ---
 
@@ -361,14 +360,14 @@ Cross-referenced against [Safe Solana Builder](https://github.com/Frankcastleaud
 | §4.1 | Duplicate Mutable Accounts | ⚠️ Partial | Low — runtime prevents, no explicit constraint |
 | §5.2 | Reload After CPI | ✅ Compliant | No stale reads after CPIs |
 | §5.3 | Signer Pass-Through | ✅ Compliant | CPIs correctly scoped to PDA signer only |
-| §6.3 | Account Closing | ⚠️ Partial | SEC-010: AttendeeDeposit never closed |
-| §7 | Token-2022 Compatibility | ❌ Violation | SEC-009: uses transfer() not transfer_checked() |
-| §13 | Token Dust | ⚠️ Partial | SEC-010: rent locked in AttendeeDeposit PDAs |
+| §6.3 | Account Closing | ✅ Compliant | SEC-010 fixed: close_deposit instruction added |
+| §7 | Token-2022 Compatibility | ✅ Compliant | SEC-009 fixed: transfer_checked() in Phase 3 |
+| §13 | Token Dust | ✅ Compliant | SEC-010 fixed: deposit PDAs can be closed for rent |
 | §22.1 | Withdrawal Path | ✅ Compliant | All vaults have refund + claim + close paths |
 | §26.1 | Sentinel Timestamps | ⚠️ Partial | Low — no upper bound on event_end |
-| §26.4 | Status Transition Guards | ⚠️ Partial | SEC-011: no event_end guard on check-in |
+| §26.4 | Status Transition Guards | ✅ Compliant | SEC-011 fixed: event_end guard on mark_checked_in |
 
-**Overall**: The program scores well on core security — strong signer checks, proper checked arithmetic, correct PDA derivation, solid CPI patterns. The main gaps are Token-2022 readiness, rent reclamation, and check-in timing guards.
+**Overall**: The program scores well on core security — strong signer checks, proper checked arithmetic, correct PDA derivation, solid CPI patterns, Token-2022 compatibility (`transfer_checked`), rent reclamation (`close_deposit`), and check-in timing guards (`event_end`). All audit findings resolved across Phases 1–4.
 
 ---
 
@@ -383,7 +382,7 @@ Cross-referenced against [Safe Solana Builder](https://github.com/Frankcastleaud
 | P4 | SEC-011: event_end guard on mark_checked_in | Small | On-chain program | ✅ Fixed (Phase 3) |
 | P5 | SEC-004: Archive guards | Medium | Backend + Frontend | ✅ Fixed (Phase 1) |
 | P6 | SEC-005: Explorer links cluster-aware | Small | Frontend | ✅ Fixed (Phase 2) |
-| P7 | SEC-010: Close AttendeeDeposit PDAs | Medium | On-chain + Frontend | Open |
+| P7 | SEC-010: Close AttendeeDeposit PDAs | Medium | On-chain + Frontend | ✅ Fixed (Phase 4) |
 | P8 | SEC-006: Duplicate Merkle field | Tiny | Frontend | ✅ Fixed (Phase 2) |
 
 ---
@@ -398,9 +397,7 @@ SEC-001 was a direct fund theft vector (organizer rug pull). SEC-002 caused perm
 
 SEC-005 was explorer links hardcoded to devnet cluster. ✅ Fixed in Phase 2 — all Solscan links now use cluster-aware URLs via `/api/health` endpoint.
 
-**NICE TO FIX**: SEC-006, SEC-010
-
-SEC-006 was a cosmetic duplicate Merkle field. ✅ Fixed in Phase 2. SEC-010 is a rent efficiency issue (AttendeeDeposit PDAs never closed).
+**ALL FINDINGS RESOLVED**: All 9 actionable findings (SEC-001 through SEC-011, excluding SEC-007/008 confirmed safe) are now fixed. SEC-010 (rent reclamation) was the last open finding, resolved in Phase 4 with the `close_deposit` instruction.
 
 ---
 
@@ -433,7 +430,7 @@ External resources and vulnerability patterns relevant to the BeThere escrow.
 | Week 1: StakeFlow `instant_unlock` bypasses lockup check | Time-gate bypass | SEC-011: `mark_checked_in` has no `event_end` guard |
 | Week 2: MissionX Token-2022 `transfer()` incompatibility | Token-2022 readiness | SEC-009: Escrow uses `transfer()` not `transfer_checked()` |
 | Week 3: Zenon uncapped buy causing underflow | Missing bounds | SEC-003: No max deposit cap on `deposit_amount_usdc` |
-| Week 1: StakeFlow `UserStake` PDA rent never reclaimed | Rent leak | SEC-010: `AttendeeDeposit` PDAs never closed |
+| Week 1: StakeFlow `UserStake` PDA rent never reclaimed | Rent leak | SEC-010: ✅ Fixed — `close_deposit` instruction reclaims rent |
 
 ### Recommendation
 

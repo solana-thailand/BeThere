@@ -68,7 +68,12 @@ pub fn routes(state: AppState) -> Router<()> {
             post(deposit::upload_thb_slip_handler),
         )
         // Escrow refund (public — attendee claims refund with wallet signature)
-        .route("/escrow/refund", post(deposit::refund_tx_handler));
+        .route("/escrow/refund", post(deposit::refund_tx_handler))
+        // Escrow close deposit (public — attendee closes deposit PDA to reclaim rent)
+        .route(
+            "/escrow/close-deposit",
+            post(deposit::close_deposit_tx_handler),
+        );
 
     // Protected routes — require staff auth
     let protected = Router::new()

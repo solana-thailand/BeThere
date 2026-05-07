@@ -17,8 +17,8 @@ use leptos_router::hooks::use_params;
 use leptos_router::params::Params;
 
 use crate::api::{
-    self, ConfirmDepositResponse, DepositStatusResponse, RefundTxRequest, ThbSlipUploadRequest,
-    UsdcDepositRequest,
+    self, CloseDepositRequest, ConfirmDepositResponse, DepositStatusResponse, RefundTxRequest,
+    ThbSlipUploadRequest, UsdcDepositRequest,
 };
 use crate::components::{self, Toast, ToastType};
 use crate::utils::{format_timestamp, solscan_tx_url, get_cluster};
@@ -253,6 +253,17 @@ enum DepositPageState {
     // (deposit_data, wallet_name, public_key)
     /// Refund flow — TX confirmed on-chain.
     RefundConfirmed(DepositStatusResponse, String),
+    // (deposit_data, tx_signature)
+    /// Close deposit — choosing wallet to connect.
+    CloseDepositChooseWallet(DepositStatusResponse),
+    /// Close deposit — wallet connected, ready to close.
+    CloseDepositWalletConnected(DepositStatusResponse, String, String),
+    // (deposit_data, wallet_name, public_key)
+    /// Close deposit — signing TX.
+    CloseDepositSigning(DepositStatusResponse, String, String),
+    // (deposit_data, wallet_name, public_key)
+    /// Close deposit — confirmed.
+    CloseDepositConfirmed(DepositStatusResponse, String),
     // (deposit_data, tx_signature)
 }
 
@@ -876,6 +887,139 @@ pub fn Deposit() -> impl IntoView {
         });
     };
 
+    // --- Close Deposit: Connect wallet for close deposit ---
+    let handle_close_deposit_connect_wallet = move |wallet_name: String| {
+        let deposit_data = match &state.get() {
+            DepositPageState::CloseDepositChooseWallet(d) => d.clone(),
+            _ => return,
+        };
+
+        let wallet_name_clone = wallet_name.clone();
+        let deposit_data_for_state = deposit_data.clone();
+        leptos::task::spawn_local(async move {
+            match connect_wallet_js(&wallet_name_clone).await {
+                Some(pubkey) => {
+                    log::info!("[deposit] close-deposit wallet connected: {} ({})", wallet_name_clone, pubkey);
+                    set_state.set(DepositPageState::CloseDepositWalletConnected(
+                        deposit_data_for_state,
+                        wallet_name_clone,
+                        pubkey,
+                    ));
+                }
+                None => {
+                    components::show_toast(
+                        &set_toast,
+                        "Failed to connect wallet. Please try again.",
+                        ToastType::Error,
+                    );
+                }
+            }
+        });
+    };
+
+    // --- Close Deposit: Reclaim rent (sign & send close-deposit TX) ---
+    let handle_close_deposit = move |wallet_name: String, public_key: String| {
+        let current_state = state.get();
+        let deposit_data = match &current_state {
+            DepositPageState::CloseDepositWalletConnected(d, _, _) => d.clone(),
+            _ => return,
+        };
+
+        // Extract attendee_id and event_id from URL
+        let attendee_id = match params.get() {
+            Ok(p) => p.attendee_id.unwrap_or_default(),
+            Err(_) => return,
+        };
+        let event_id = web_sys::Url::new(
+            &web_sys::window()
+                .unwrap()
+                .location()
+                .href()
+                .unwrap(),
+        )
+        .ok()
+        .and_then(|url| url.search_params().get("event_id"))
+        .unwrap_or_default();
+
+        let wallet_name_for_tx = wallet_name.clone();
+        let pk_for_tx = public_key.clone();
+        let deposit_data_for_state = deposit_data.clone();
+
+        // Transition to signing state
+        set_state.set(DepositPageState::CloseDepositSigning(
+            deposit_data.clone(),
+            wallet_name.clone(),
+            public_key.clone(),
+        ));
+
+        leptos::task::spawn_local(async move {
+            // Step 1: Request close-deposit TX from backend
+            let req = CloseDepositRequest {
+                event_id: event_id.clone(),
+                attendee_id: attendee_id.clone(),
+                wallet_address: pk_for_tx.clone(),
+            };
+            let close_resp = match api::close_deposit(&req).await {
+                Ok(r) => r,
+                Err(e) => {
+                    log::error!("[deposit] close-deposit TX build failed: {e}");
+                    components::show_toast(
+                        &set_toast,
+                        &format!("Failed to build close-deposit transaction: {e}"),
+                        ToastType::Error,
+                    );
+                    set_state.set(DepositPageState::CloseDepositWalletConnected(
+                        deposit_data_for_state,
+                        wallet_name_for_tx,
+                        pk_for_tx,
+                    ));
+                    return;
+                }
+            };
+
+            let tx_b64 = close_resp.transaction;
+
+            if tx_b64.is_empty() {
+                log::error!("[deposit] close-deposit TX is empty");
+                components::show_toast(
+                    &set_toast,
+                    "Close-deposit transaction was empty. Please try again later.",
+                    ToastType::Error,
+                );
+                set_state.set(DepositPageState::CloseDepositWalletConnected(
+                    deposit_data,
+                    wallet_name_for_tx,
+                    pk_for_tx,
+                ));
+                return;
+            }
+
+            // Step 2: Sign and send via wallet
+            match sign_and_send_tx_js(&wallet_name_for_tx, &tx_b64).await {
+                Some(signature) => {
+                    log::info!("[deposit] close-deposit TX sent, signature: {}", signature);
+                    set_state.set(DepositPageState::CloseDepositConfirmed(
+                        deposit_data,
+                        signature,
+                    ));
+                }
+                None => {
+                    log::error!("[deposit] close-deposit wallet sign+send failed");
+                    components::show_toast(
+                        &set_toast,
+                        "Close-deposit transaction rejected or failed. Please try again.",
+                        ToastType::Error,
+                    );
+                    set_state.set(DepositPageState::CloseDepositWalletConnected(
+                        deposit_data_for_state,
+                        wallet_name_for_tx,
+                        pk_for_tx,
+                    ));
+                }
+            }
+        });
+    };
+
     view! {
         <Title text="BeThere — Event Deposit" />
         <div class="center-page">
@@ -977,6 +1121,7 @@ pub fn Deposit() -> impl IntoView {
                                     </div>
                                     {if info.verified && info.method == "usdc" {
                                         let data_clone_for_refund = data.clone();
+                                        let data_clone_for_close = data.clone();
                                         view! {
                                             <div style="margin-top:0.75rem;padding:0.75rem;background:var(--bg-secondary,#1a1a2e);border-radius:8px;border:1px dashed var(--border-color,rgba(255,255,255,0.2));">
                                                 <p style="font-size:0.85rem;color:var(--text-secondary);margin:0;">
@@ -991,6 +1136,15 @@ pub fn Deposit() -> impl IntoView {
                                                 }
                                             >
                                                 "💸 Claim Refund"
+                                            </button>
+                                            <button
+                                                class="btn btn-outline btn-block"
+                                                style="margin-top:0.5rem;font-size:0.9rem;padding:0.6rem;"
+                                                on:click=move |_| {
+                                                    set_state.set(DepositPageState::CloseDepositChooseWallet(data_clone_for_close.clone()));
+                                                }
+                                            >
+                                                "♻️ Reclaim Rent"
                                             </button>
                                         }.into_any()
                                     } else {
@@ -1575,6 +1729,7 @@ pub fn Deposit() -> impl IntoView {
                                 tx_sig.clone()
                             };
                             let solscan_url = solscan_tx_url(&tx_sig, &get_cluster());
+                            let data_clone_for_close = data.clone();
                             view! {
                                 <div class="card" style="margin-top:1.5rem;text-align:center;width:100%;max-width:480px;">
                                     <div class="card-header">
@@ -1587,6 +1742,193 @@ pub fn Deposit() -> impl IntoView {
                                     </p>
                                     <p style="color:var(--text-secondary);font-size:0.9rem;margin-bottom:1rem;">
                                         "Your refund has been confirmed on Solana. The funds should appear in your wallet shortly."
+                                    </p>
+                                    <div style="background:var(--bg-secondary,#1a1a2e);border-radius:8px;padding:0.75rem;margin-bottom:1rem;font-family:monospace;font-size:0.75rem;color:var(--text-secondary);word-break:break-all;">
+                                        {format!("TX: {}", &sig_display)}
+                                    </div>
+                                    <a href=&solscan_url target="_blank" style="color:var(--accent,#14f195);font-size:0.85rem;">
+                                        "View on Solscan ↗"
+                                    </a>
+                                    <div style="margin-top:1rem;padding:0.75rem;background:var(--bg-secondary,#1a1a2e);border-radius:8px;border:1px dashed var(--border-color,rgba(255,255,255,0.2));">
+                                        <p style="font-size:0.85rem;color:var(--text-secondary);margin:0 0 0.5rem;">
+                                            "Reclaim ~0.002 SOL rent from your deposit account."
+                                        </p>
+                                        <button
+                                            class="btn btn-outline btn-block"
+                                            style="font-size:0.9rem;padding:0.6rem;"
+                                            on:click=move |_| {
+                                                set_state.set(DepositPageState::CloseDepositChooseWallet(data_clone_for_close.clone()));
+                                            }
+                                        >
+                                            "♻️ Reclaim Rent"
+                                        </button>
+                                    </div>
+                                    <div style="margin-top:1.25rem;">
+                                        <a href="/" class="btn btn-primary">"Go Home"</a>
+                                    </div>
+                                </div>
+                            }
+                                .into_any()
+                        }
+
+                        // ===== Close Deposit: Choose Wallet =====
+                        DepositPageState::CloseDepositChooseWallet(data) => {
+                            let wallets = detected_wallets.get();
+                            let data_for_back = data.clone();
+                            view! {
+                                <div class="card" style="margin-top:1.5rem;text-align:center;width:100%;max-width:480px;">
+                                    <div class="card-header">
+                                        <h2 class="card-title">"♻️ Reclaim Deposit Rent"</h2>
+                                        <span class="badge badge-info">"~0.002 SOL"</span>
+                                    </div>
+                                    <p style="color:var(--text-secondary);font-size:0.9rem;margin-bottom:1rem;">
+                                        "Connect the wallet you used to deposit. This closes your deposit account and returns the rent-exempt SOL."
+                                    </p>
+                                    {if wallets.is_empty() {
+                                        view! {
+                                            <div style="padding:1rem;background:var(--bg-secondary,#1a1a2e);border-radius:8px;margin-bottom:1rem;">
+                                                <p style="color:var(--text-secondary);font-size:0.85rem;margin:0;">
+                                                    "No Solana wallet detected. Please install a wallet extension (Phantom, Backpack, Solflare) and refresh."
+                                                </p>
+                                            </div>
+                                        }.into_any()
+                                    } else {
+                                        let wallets_for_click = wallets.clone();
+                                        view! {
+                                            <div style="display:flex;flex-direction:column;gap:0.5rem;margin-bottom:1rem;">
+                                                {wallets_for_click.into_iter().map(|w| {
+                                                    let w_clone = w.clone();
+                                                    let wallet_icon = match w.as_str() {
+                                                        "Phantom" => "👻",
+                                                        "Backpack" => "🎒",
+                                                        "Solflare" => "☀️",
+                                                        "Coinbase" => "🪙",
+                                                        _ => "💼",
+                                                    };
+                                                    view! {
+                                                        <button
+                                                            class="btn btn-primary btn-block"
+                                                            style="display:flex;align-items:center;justify-content:center;gap:0.5rem;"
+                                                            on:click={
+                                                                let w = w.clone();
+                                                                move |_| handle_close_deposit_connect_wallet(w.clone())
+                                                            }
+                                                        >
+                                                            <span>{wallet_icon}</span>
+                                                            <span>{format!("Connect {}", &w_clone)}</span>
+                                                        </button>
+                                                    }
+                                                }).collect::<Vec<_>>()}
+                                            </div>
+                                        }.into_any()
+                                    }}
+                                    <button
+                                        class="btn btn-outline btn-sm"
+                                        on:click=move |_| {
+                                            set_state.set(DepositPageState::RefundChooseWallet(data_for_back.clone()));
+                                        }
+                                    >
+                                        "← Go Back"
+                                    </button>
+                                </div>
+                            }
+                                .into_any()
+                        }
+
+                        // ===== Close Deposit: Wallet Connected — Ready to close =====
+                        DepositPageState::CloseDepositWalletConnected(data, wallet_name, public_key) => {
+                            let wallet_name_send = wallet_name.clone();
+                            let pk_send = public_key.clone();
+                            let wallet_icon = match wallet_name.as_str() {
+                                "Phantom" => "👻",
+                                "Backpack" => "🎒",
+                                "Solflare" => "☀️",
+                                "Coinbase" => "🪙",
+                                _ => "💼",
+                            };
+                            let pk_short = if public_key.len() > 12 {
+                                format!("{}...{}", &public_key[..4], &public_key[public_key.len()-4..])
+                            } else {
+                                public_key.clone()
+                            };
+                            let data_for_back = data.clone();
+                            view! {
+                                <div class="card" style="margin-top:1.5rem;text-align:center;width:100%;max-width:480px;">
+                                    <div class="card-header">
+                                        <h2 class="card-title">"♻️ Reclaim Deposit Rent"</h2>
+                                        <span class="badge badge-info">"~0.002 SOL"</span>
+                                    </div>
+                                    <div style="background:var(--bg-secondary,#1a1a2e);border-radius:8px;padding:1rem;margin-bottom:1rem;display:flex;align-items:center;justify-content:center;gap:0.75rem;">
+                                        <span style="font-size:1.5rem;">{wallet_icon}</span>
+                                        <div style="text-align:left;">
+                                            <div style="font-size:0.8rem;color:var(--text-secondary);">"Connected via " {wallet_name.clone()}</div>
+                                            <div style="font-weight:600;font-family:monospace;">{pk_short}</div>
+                                        </div>
+                                        <span class="badge badge-success" style="margin-left:auto;">"✅ Connected"</span>
+                                    </div>
+                                    <p style="color:var(--text-secondary);font-size:0.9rem;margin-bottom:1rem;">
+                                        "Click below to close your deposit account and reclaim the rent-exempt SOL."
+                                    </p>
+                                    <button
+                                        class="btn btn-success btn-block"
+                                        style="font-size:1.1rem;padding:0.8rem;"
+                                        on:click=move |_| handle_close_deposit(wallet_name_send.clone(), pk_send.clone())
+                                    >
+                                        "♻️ Reclaim ~0.002 SOL Rent"
+                                    </button>
+                                    <button
+                                        class="btn btn-outline btn-sm"
+                                        style="margin-top:0.75rem;"
+                                        on:click=move |_| {
+                                            set_state.set(DepositPageState::CloseDepositChooseWallet(data_for_back.clone()));
+                                        }
+                                    >
+                                        "← Go Back"
+                                    </button>
+                                </div>
+                            }
+                                .into_any()
+                        }
+
+                        // ===== Close Deposit: Signing TX =====
+                        DepositPageState::CloseDepositSigning(_data, _wallet_name, _public_key) => {
+                            view! {
+                                <div class="card" style="margin-top:1.5rem;text-align:center;width:100%;max-width:480px;">
+                                    <div class="card-header">
+                                        <h2 class="card-title">"⏳ Closing Deposit..."</h2>
+                                        <span class="badge badge-info">"~0.002 SOL"</span>
+                                    </div>
+                                    <div style="margin:1.5rem 0;">
+                                        <span class="spinner spinner-lg" style="width:48px;height:48px;border-width:3px;"></span>
+                                    </div>
+                                    <p style="color:var(--text-secondary);font-size:0.9rem;margin-bottom:0.5rem;">
+                                        "Please approve the transaction in your wallet..."
+                                    </p>
+                                </div>
+                            }
+                                .into_any()
+                        }
+
+                        // ===== Close Deposit: Confirmed =====
+                        DepositPageState::CloseDepositConfirmed(_data, tx_sig) => {
+                            let sig_display = if tx_sig.len() > 20 {
+                                format!("{}...{}", &tx_sig[..8], &tx_sig[tx_sig.len()-8..])
+                            } else {
+                                tx_sig.clone()
+                            };
+                            let solscan_url = solscan_tx_url(&tx_sig, &get_cluster());
+                            view! {
+                                <div class="card" style="margin-top:1.5rem;text-align:center;width:100%;max-width:480px;">
+                                    <div class="card-header">
+                                        <h2 class="card-title">"🎉 Rent Reclaimed!"</h2>
+                                        <span class="badge badge-success">"On-chain verified"</span>
+                                    </div>
+                                    <div style="font-size:3rem;margin:1rem 0;">"♻️"</div>
+                                    <p style="font-size:1.1rem;font-weight:600;margin-bottom:0.5rem;">
+                                        "Deposit account closed"
+                                    </p>
+                                    <p style="color:var(--text-secondary);font-size:0.9rem;margin-bottom:1rem;">
+                                        "Your deposit account has been closed and ~0.002 SOL returned to your wallet."
                                     </p>
                                     <div style="background:var(--bg-secondary,#1a1a2e);border-radius:8px;padding:0.75rem;margin-bottom:1rem;font-family:monospace;font-size:0.75rem;color:var(--text-secondary);word-break:break-all;">
                                         {format!("TX: {}", &sig_display)}

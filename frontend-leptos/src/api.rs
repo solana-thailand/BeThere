@@ -2085,6 +2085,30 @@ pub async fn close_event(body: &CloseEventRequest) -> Result<CloseEventResponse,
 }
 
 // ---------------------------------------------------------------------------
+// Escrow: Close Deposit (attendee reclaims rent)
+// ---------------------------------------------------------------------------
+
+/// Request body for POST /api/escrow/close-deposit.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct CloseDepositRequest {
+    pub event_id: String,
+    pub attendee_id: String,
+    pub wallet_address: String,
+}
+
+/// Response from POST /api/escrow/close-deposit.
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+pub struct CloseDepositResponse {
+    pub transaction: String,
+    pub message: String,
+}
+
+/// POST /api/escrow/close-deposit — build close_deposit TX
+pub async fn close_deposit(body: &CloseDepositRequest) -> Result<CloseDepositResponse, ApiError> {
+    api_post_json("/escrow/close-deposit", body).await
+}
+
+// ---------------------------------------------------------------------------
 // Escrow: Claim Forfeited (admin)
 // ---------------------------------------------------------------------------
 

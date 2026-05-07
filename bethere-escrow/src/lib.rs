@@ -85,4 +85,11 @@ mod bethere_escrow {
     pub fn deactivate_event(ctx: Ctx<DeactivateEvent>, _event_id: u64) -> Result<(), ProgramError> {
         ctx.accounts.deactivate()
     }
+
+    /// Close an attendee's deposit PDA to reclaim rent.
+    /// Attendee can close after refund; anyone can close after event escrow is closed.
+    #[instruction(discriminator = 7)]
+    pub fn close_deposit(ctx: Ctx<CloseDeposit>, _event_id: u64) -> Result<(), ProgramError> {
+        ctx.accounts.close_deposit()
+    }
 }

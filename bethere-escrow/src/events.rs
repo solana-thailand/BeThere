@@ -46,3 +46,9 @@ pub struct EventDeactivated {
     pub escrow: Address,
     pub organizer: Address,
 }
+
+#[event(discriminator = 7)]
+pub struct DepositClosed {
+    pub escrow: Address,
+    pub attendee: Address,
+}

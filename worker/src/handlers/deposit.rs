@@ -1900,3 +1900,136 @@ pub async fn claim_forfeited_tx_handler(
         message: tx.message,
     }))
 }
+
+// ---------------------------------------------------------------------------
+// POST /api/escrow/close-deposit — Build close_deposit TX for attendee
+// ---------------------------------------------------------------------------
+
+/// Request body for building a close_deposit transaction.
+#[derive(Debug, serde::Deserialize)]
+pub struct CloseDepositTxRequest {
+    /// Event ID.
+    pub event_id: String,
+    /// Attendee API ID from Google Sheets.
+    pub attendee_id: String,
+    /// Attendee's Solana wallet address (base58).
+    pub wallet_address: String,
+}
+
+/// Response with the serialized close_deposit transaction.
+#[derive(Debug, serde::Serialize)]
+pub struct CloseDepositTxResponse {
+    /// Base64-encoded serialized transaction (unsigned — wallet signs).
+    pub transaction: String,
+    /// Human-readable message for wallet confirmation.
+    pub message: String,
+}
+
+/// Build a close_deposit transaction for an attendee's verified USDC deposit.
+///
+/// This is a **public endpoint** — attendees call it to close their deposit PDAs
+/// and reclaim rent lamports. The attendee's wallet signature provides on-chain authentication.
+///
+/// Prerequisites:
+/// - Event has deposits enabled
+/// - Organizer wallet is configured
+/// - Attendee has a verified USDC deposit
+#[worker::send]
+pub async fn close_deposit_tx_handler(
+    State(state): State<AppState>,
+    Json(body): Json<CloseDepositTxRequest>,
+) -> Result<ApiOk<CloseDepositTxResponse>, WorkerError> {
+    let kv = state
+        .events_kv
+        .as_ref()
+        .ok_or_else(|| AppError::Internal("EVENTS KV not configured".to_string()))?;
+
+    let event = event_store::get_event_config(kv, &body.event_id)
+        .await
+        .map_err(AppError::Internal)?
+        .ok_or_else(|| AppError::NotFound(format!("event '{}' not found", body.event_id)))?;
+
+    if !event.deposit_enabled {
+        return Err(AppError::Validation("deposit not enabled for this event".to_string()).into());
+    }
+
+    // Validate wallet address
+    crate::solana::validate_wallet_address(&body.wallet_address).map_err(AppError::Validation)?;
+
+    // Check attendee has a verified USDC deposit
+    let deposit_status = event_store::get_deposit_status(kv, &event.id, &body.attendee_id)
+        .await
+        .map_err(AppError::Internal)?;
+
+    let status = deposit_status.ok_or_else(|| {
+        AppError::NotFound(format!(
+            "no deposit found for attendee '{}'",
+            body.attendee_id
+        ))
+    })?;
+
+    if !status.verified {
+        return Err(
+            AppError::Validation("deposit not verified yet — cannot close".to_string()).into(),
+        );
+    }
+
+    if status.method != DepositMethod::Usdc {
+        return Err(AppError::Validation(
+            "close_deposit TX only supported for USDC deposits".to_string(),
+        )
+        .into());
+    }
+
+    // Determine organizer pubkey for PDA derivation
+    let organizer_pubkey = if event.organizer_wallet.is_empty() {
+        return Err(
+            AppError::Internal("event has no organizer wallet configured".to_string()).into(),
+        );
+    } else {
+        crate::solana::validate_wallet_address(&event.organizer_wallet)
+            .map_err(|e| AppError::Validation(format!("invalid organizer_wallet: {e}")))?;
+        &event.organizer_wallet
+    };
+
+    // The on_chain_event_id for PDA derivation
+    let on_chain_event_id = if event.on_chain_event_id != 0 {
+        event.on_chain_event_id
+    } else {
+        derive_on_chain_event_id(&event.id)
+    };
+
+    // Build the RPC URL with API key
+    let rpc_url = format!(
+        "{}{}{}",
+        state.config.solana.rpc_url,
+        if state.config.solana.rpc_url.contains('?') {
+            "&"
+        } else {
+            "?api-key="
+        },
+        state.config.solana.api_key
+    );
+
+    // Build the close_deposit transaction
+    let tx = crate::solana_escrow::build_close_deposit_transaction(
+        &rpc_url,
+        Some(kv),
+        organizer_pubkey,
+        on_chain_event_id,
+        &body.wallet_address,
+    )
+    .await
+    .map_err(|e| AppError::Internal(format!("failed to build close_deposit TX: {e}")))?;
+
+    tracing::info!(
+        attendee_id = %body.attendee_id,
+        event_id = %event.id,
+        "Close deposit TX built for attendee"
+    );
+
+    Ok(ApiOk::new(CloseDepositTxResponse {
+        transaction: tx.transaction_b64,
+        message: tx.message,
+    }))
+}

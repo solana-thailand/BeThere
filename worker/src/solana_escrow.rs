@@ -124,6 +124,14 @@ pub struct ClaimForfeitedTransaction {
     pub message: String,
 }
 
+/// Result of building a close_deposit transaction.
+pub struct CloseDepositTransaction {
+    /// Base64-encoded serialized transaction (unsigned).
+    pub transaction_b64: String,
+    /// Human-readable message for wallet confirmation.
+    pub message: String,
+}
+
 /// Error type for escrow operations.
 #[derive(Debug)]
 #[allow(dead_code)]
@@ -1810,6 +1818,110 @@ pub async fn build_claim_forfeited_transaction(
     Ok(ClaimForfeitedTransaction {
         transaction_b64: tx_b64,
         message: "Claim forfeited deposits from no-shows".to_string(),
+    })
+}
+
+// ---------------------------------------------------------------------------
+// Close Deposit Transaction Builder
+// ---------------------------------------------------------------------------
+
+/// Build a serialized `close_deposit` transaction for the bethere-escrow program.
+///
+/// Closes the AttendeeDeposit PDA, reclaiming rent lamports. The attendee
+/// signs the transaction. The instruction discriminator is 7.
+///
+/// # Arguments
+/// * `rpc_url` — Solana RPC URL (with API key if needed)
+/// * `kv` — Optional KV store for blockhash caching
+/// * `organizer_pubkey` — Organizer's wallet address (base58), used for PDA derivation
+/// * `event_id` — Numeric event ID used for PDA derivation
+/// * `attendee_pubkey` — Attendee's wallet address (base58), must be signer
+///
+/// # Discriminator
+/// 7 (close_deposit)
+///
+/// # Accounts (CloseDeposit)
+///   0. signer (signer, writable) — attendee or GC closer
+///   1. event_escrow (readonly) — may be closed/empty
+///   2. attendee_deposit (writable) — will be closed
+///   3. system_program (readonly)
+pub async fn build_close_deposit_transaction(
+    rpc_url: &str,
+    kv: Option<&KvStore>,
+    organizer_pubkey: &str,
+    event_id: u64,
+    attendee_pubkey: &str,
+) -> Result<CloseDepositTransaction, EscrowError> {
+    let attendee = pubkey_from_base58(attendee_pubkey)?;
+    let program_id = pubkey_from_base58(ESCROW_PROGRAM_ID)?;
+    let system_program = pubkey_from_base58(SYSTEM_PROGRAM_ID)?;
+
+    // Derive EventEscrow PDA: ["escrow", organizer, event_id]
+    let (event_escrow, _) = find_program_address(
+        &[
+            b"escrow",
+            pubkey_from_base58(organizer_pubkey)?.as_slice(),
+            &event_id.to_le_bytes(),
+        ],
+        &program_id,
+    )
+    .await?;
+
+    // Derive AttendeeDeposit PDA: ["deposit", event_escrow, attendee]
+    let (attendee_deposit, _) = find_program_address(
+        &[b"deposit", event_escrow.as_slice(), attendee.as_slice()],
+        &program_id,
+    )
+    .await?;
+
+    // close_deposit instruction data: [7 (discriminator)] + [event_id u64 LE]
+    let mut ix_data = vec![7u8];
+    ix_data.extend_from_slice(&event_id.to_le_bytes());
+
+    // Accounts for close_deposit:
+    //   attendee (signer, writable), event_escrow (readonly),
+    //   attendee_deposit (writable), system_program (readonly)
+    let instruction_accounts = vec![
+        AccountMeta {
+            pubkey: attendee,
+            is_signer: true,
+            is_writable: true,
+        },
+        AccountMeta {
+            pubkey: event_escrow,
+            is_signer: false,
+            is_writable: false,
+        },
+        AccountMeta {
+            pubkey: attendee_deposit,
+            is_signer: false,
+            is_writable: true,
+        },
+        AccountMeta {
+            pubkey: system_program,
+            is_signer: false,
+            is_writable: false,
+        },
+    ];
+
+    let (message_accounts, program_id_index, ix_account_indices) =
+        build_message_accounts(&instruction_accounts, &program_id, &[]);
+
+    let compiled_ix = CompiledInstruction {
+        program_id_index,
+        accounts: ix_account_indices,
+        data: ix_data,
+    };
+
+    let blockhash_resp = get_latest_blockhash(rpc_url, kv).await?;
+    let blockhash_bytes = pubkey_from_base58(&blockhash_resp.value)?;
+
+    let tx_bytes = serialize_transaction(&message_accounts, &[compiled_ix], &blockhash_bytes);
+    let tx_b64 = base64::engine::general_purpose::STANDARD.encode(&tx_bytes);
+
+    Ok(CloseDepositTransaction {
+        transaction_b64: tx_b64,
+        message: "Close deposit account and reclaim rent".to_string(),
     })
 }
 

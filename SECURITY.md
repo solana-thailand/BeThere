@@ -59,7 +59,7 @@ The BeThere escrow has undergone an internal security audit with 11 findings. Se
 | SEC-004 | Archive doesn't deactivate on-chain escrow | ✅ Fixed (Phase 1) |
 | SEC-005 | Explorer links hardcoded to devnet | ✅ Fixed (Phase 2) |
 | SEC-009 | `transfer()` not `transfer_checked()` (Token-2022) | ✅ Fixed (Phase 3) |
-| SEC-010 | AttendeeDeposit PDAs never closed (rent leak) | Open |
+| SEC-010 | AttendeeDeposit PDAs never closed (rent leak) | ✅ Fixed (Phase 4) |
 | SEC-011 | No `event_end` guard on `mark_checked_in` | ✅ Fixed (Phase 3) |
 
 ## Security Audit References
