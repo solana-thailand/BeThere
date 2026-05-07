@@ -33,7 +33,7 @@ extern "C" {
     /// Preload jsQR and QRious libraries from CDN.
     /// Call on mount to ensure QR generation is ready when needed.
     #[wasm_bindgen(js_name = "preloadQrLibraries")]
-    async fn preload_qr_libraries_js();
+    fn preload_qr_libraries_js_raw() -> js_sys::Promise;
 
     /// Copy text to the system clipboard.
     #[wasm_bindgen(js_name = "copyToClipboard")]
@@ -64,7 +64,7 @@ extern "C" {
 extern "C" {
     /// Read a file from an input element as a base64 data URL.
     #[wasm_bindgen(js_name = "readFileAsDataUrl")]
-    async fn read_file_as_data_url_js(input: &wasm_bindgen::JsValue) -> Option<String>;
+    fn read_file_as_data_url_js_raw(input: &wasm_bindgen::JsValue) -> js_sys::Promise;
 }
 
 // ---------------------------------------------------------------------------
@@ -79,23 +79,125 @@ extern "C" {
 
     /// Connect to a Solana wallet and return the public key (base58).
     #[wasm_bindgen(js_name = "connectWallet")]
-    async fn connect_wallet_js(wallet_name: &str) -> Option<String>;
+    fn connect_wallet_js_raw(wallet_name: &str) -> js_sys::Promise;
 
     /// Get the currently connected wallet's public key (base58) without prompting.
     #[wasm_bindgen(js_name = "getConnectedPublicKey")]
-    async fn get_connected_public_key_js(wallet_name: &str) -> Option<String>;
+    fn get_connected_public_key_js_raw(wallet_name: &str) -> js_sys::Promise;
 
     /// Sign and send a base64-encoded serialized transaction.
     #[wasm_bindgen(js_name = "signAndSendTransaction")]
-    async fn sign_and_send_tx_js(wallet_name: &str, transaction_b64: &str) -> Option<String>;
+    fn sign_and_send_tx_js_raw(wallet_name: &str, transaction_b64: &str) -> js_sys::Promise;
 
     /// Fetch the serialized deposit transaction from the Solana Pay callback URL.
     #[wasm_bindgen(js_name = "fetchTransactionFromCallback")]
-    async fn fetch_tx_from_callback_js(callback_url: &str) -> Option<String>;
+    fn fetch_tx_from_callback_js_raw(callback_url: &str) -> js_sys::Promise;
 
     /// Check if a wallet provider is available.
     #[wasm_bindgen(js_name = "isWalletAvailable")]
     fn is_wallet_available_js(wallet_name: &str) -> bool;
+}
+
+// ---------------------------------------------------------------------------
+// Async wrappers — bridge js_sys::Promise → Rust Future
+// ---------------------------------------------------------------------------
+
+/// Preload jsQR and QRious libraries from CDN.
+async fn preload_qr_libraries_js() {
+    let promise = preload_qr_libraries_js_raw();
+    if let Err(e) = wasm_bindgen_futures::JsFuture::from(promise).await {
+        log::error!("[wasm] preload_qr_libraries_js error: {:?}", e);
+    }
+}
+
+/// Read a file from an input element as a base64 data URL.
+async fn read_file_as_data_url_js(input: &wasm_bindgen::JsValue) -> Option<String> {
+    let promise = read_file_as_data_url_js_raw(input);
+    match wasm_bindgen_futures::JsFuture::from(promise).await {
+        Ok(val) => {
+            if val.is_null() || val.is_undefined() {
+                None
+            } else {
+                val.as_string()
+            }
+        }
+        Err(e) => {
+            log::error!("[wasm] read_file_as_data_url_js error: {:?}", e);
+            None
+        }
+    }
+}
+
+/// Connect to a Solana wallet and return the public key (base58).
+async fn connect_wallet_js(wallet_name: &str) -> Option<String> {
+    let promise = connect_wallet_js_raw(wallet_name);
+    match wasm_bindgen_futures::JsFuture::from(promise).await {
+        Ok(val) => {
+            if val.is_null() || val.is_undefined() {
+                None
+            } else {
+                val.as_string()
+            }
+        }
+        Err(e) => {
+            log::error!("[wasm] connect_wallet_js error: {:?}", e);
+            None
+        }
+    }
+}
+
+/// Get the currently connected wallet's public key (base58) without prompting.
+async fn _get_connected_public_key_js(wallet_name: &str) -> Option<String> {
+    let promise = get_connected_public_key_js_raw(wallet_name);
+    match wasm_bindgen_futures::JsFuture::from(promise).await {
+        Ok(val) => {
+            if val.is_null() || val.is_undefined() {
+                None
+            } else {
+                val.as_string()
+            }
+        }
+        Err(e) => {
+            log::error!("[wasm] get_connected_public_key_js error: {:?}", e);
+            None
+        }
+    }
+}
+
+/// Sign and send a base64-encoded serialized transaction.
+async fn sign_and_send_tx_js(wallet_name: &str, transaction_b64: &str) -> Option<String> {
+    let promise = sign_and_send_tx_js_raw(wallet_name, transaction_b64);
+    match wasm_bindgen_futures::JsFuture::from(promise).await {
+        Ok(val) => {
+            if val.is_null() || val.is_undefined() {
+                None
+            } else {
+                val.as_string()
+            }
+        }
+        Err(e) => {
+            log::error!("[wasm] sign_and_send_tx_js error: {:?}", e);
+            None
+        }
+    }
+}
+
+/// Fetch the serialized deposit transaction from the Solana Pay callback URL.
+async fn fetch_tx_from_callback_js(callback_url: &str) -> Option<String> {
+    let promise = fetch_tx_from_callback_js_raw(callback_url);
+    match wasm_bindgen_futures::JsFuture::from(promise).await {
+        Ok(val) => {
+            if val.is_null() || val.is_undefined() {
+                None
+            } else {
+                val.as_string()
+            }
+        }
+        Err(e) => {
+            log::error!("[wasm] fetch_tx_from_callback_js error: {:?}", e);
+            None
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -242,9 +344,26 @@ pub fn Deposit() -> impl IntoView {
         }
     });
 
-    // --- Detect installed wallets on mount ---
-    let detected_wallets = get_detected_wallets_js();
-    let has_wallets = !detected_wallets.is_empty();
+    // --- Detect installed wallets on mount (poll sync with delays for late injection) ---
+    let (detected_wallets, set_detected_wallets) = signal(Vec::<String>::new());
+    let has_wallets = move || !detected_wallets.get().is_empty();
+    {
+        let set_dw = set_detected_wallets;
+        leptos::task::spawn_local(async move {
+            let mut wallets = get_detected_wallets_js();
+            if wallets.is_empty() {
+                for _ in 0..10 {
+                    gloo::timers::future::TimeoutFuture::new(300).await;
+                    wallets = get_detected_wallets_js();
+                    if !wallets.is_empty() {
+                        break;
+                    }
+                }
+            }
+            log::info!("[deposit] detected wallets: {:?}", wallets);
+            set_dw.set(wallets);
+        });
+    }
 
     // --- Connect Wallet handler ---
     let handle_connect_wallet = move |wallet_name: String| {
@@ -892,8 +1011,7 @@ pub fn Deposit() -> impl IntoView {
                         // ===== Choose Payment =====
                         DepositPageState::ChoosePayment(data) => {
                             let data_clone = data.clone();
-                            let wallets = detected_wallets.clone();
-                            let show_wallets = has_wallets;
+                            let wallets = detected_wallets.get();
                             view! {
                                 <p class="subtitle" style="margin-bottom:1.5rem;">
                                     "Choose your preferred payment method to secure your spot."
@@ -914,7 +1032,7 @@ pub fn Deposit() -> impl IntoView {
                                         </p>
 
                                         // Wallet adapter buttons (shown if wallets detected)
-                                        {if show_wallets {
+                                        {if has_wallets() {
                                             let wallets_for_click = wallets.clone();
                                             view! {
                                                 <div style="display:flex;flex-direction:column;gap:0.5rem;margin-bottom:1rem;">
@@ -1307,7 +1425,7 @@ pub fn Deposit() -> impl IntoView {
 
                         // ===== Refund: Choose Wallet =====
                         DepositPageState::RefundChooseWallet(data) => {
-                            let wallets = detected_wallets.clone();
+                            let wallets = detected_wallets.get();
                             let data_for_back = data.clone();
                             view! {
                                 <div class="card" style="margin-top:1.5rem;text-align:center;width:100%;max-width:480px;">

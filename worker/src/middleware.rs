@@ -35,12 +35,12 @@ static REFERRER_POLICY: LazyLock<HeaderValue> =
 static CONTENT_SECURITY_POLICY: LazyLock<HeaderValue> = LazyLock::new(|| {
     HeaderValue::from_static(
         "default-src 'self'; \
-         script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://unpkg.com https://cdn.jsdelivr.net; \
-         style-src 'self' 'unsafe-inline'; \
+         script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://unpkg.com https://cdn.jsdelivr.net https://static.cloudflareinsights.com; \
+         style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; \
          img-src 'self' data: blob:; \
          media-src 'self' blob:; \
          connect-src 'self'; \
-         font-src 'self'; \
+         font-src 'self' https://fonts.gstatic.com; \
          frame-ancestors 'none'; \
          base-uri 'self'; \
          form-action 'self'",

@@ -102,11 +102,47 @@ extern "C" {
 
     /// Connect to a Solana wallet and return the public key (base58).
     #[wasm_bindgen(js_name = "connectWallet")]
-    async fn connect_wallet_js(wallet_name: &str) -> Option<String>;
+    fn connect_wallet_js_raw(wallet_name: &str) -> js_sys::Promise;
 
     /// Sign and send a base64-encoded serialized transaction.
     #[wasm_bindgen(js_name = "signAndSendTransaction")]
-    async fn sign_and_send_tx_js(wallet_name: &str, transaction_b64: &str) -> Option<String>;
+    fn sign_and_send_tx_js_raw(wallet_name: &str, transaction_b64: &str) -> js_sys::Promise;
+}
+
+/// Async wrapper: connect to a Solana wallet and return the public key (base58).
+async fn connect_wallet_js(wallet_name: &str) -> Option<String> {
+    if wallet_name.is_empty() {
+        log::warn!("[wasm] connect_wallet_js: empty wallet name, returning None");
+        return None;
+    }
+    let promise = connect_wallet_js_raw(wallet_name);
+    match wasm_bindgen_futures::JsFuture::from(promise).await {
+        Ok(val) => {
+            if val.is_null() || val.is_undefined() { None } else { val.as_string() }
+        }
+        Err(e) => {
+            log::error!("[wasm] connect_wallet_js error: {:?}", e);
+            None
+        }
+    }
+}
+
+/// Async wrapper: sign and send a base64-encoded serialized transaction.
+async fn sign_and_send_tx_js(wallet_name: &str, transaction_b64: &str) -> Option<String> {
+    if wallet_name.is_empty() {
+        log::warn!("[wasm] sign_and_send_tx_js: empty wallet name, returning None");
+        return None;
+    }
+    let promise = sign_and_send_tx_js_raw(wallet_name, transaction_b64);
+    match wasm_bindgen_futures::JsFuture::from(promise).await {
+        Ok(val) => {
+            if val.is_null() || val.is_undefined() { None } else { val.as_string() }
+        }
+        Err(e) => {
+            log::error!("[wasm] sign_and_send_tx_js error: {:?}", e);
+            None
+        }
+    }
 }
 
 // ===== State Types =====

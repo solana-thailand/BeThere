@@ -1272,7 +1272,37 @@ pub async fn update_event(id: &str, body: &UpdateEventBody) -> Result<EventMutat
 }
 
 // ---------------------------------------------------------------------------
-// Escrow — create_event on-chain
+// Escrow — init (combined ATA + CreateEvent in one TX)
+// ---------------------------------------------------------------------------
+
+/// Request body for POST /api/escrow/init.
+#[derive(Debug, Clone, Serialize)]
+pub struct InitEscrowRequest {
+    pub event_id: String,
+}
+
+/// Response from POST /api/escrow/init.
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct InitEscrowResponse {
+    /// Base64-encoded serialized transaction (unsigned — wallet signs).
+    pub transaction: String,
+    /// Human-readable message for wallet confirmation.
+    pub message: String,
+    /// Derived EventEscrow PDA address (base58).
+    pub escrow_address: String,
+    /// Derived vault ATA address (base58).
+    pub vault_address: String,
+    /// The on-chain event ID used for PDA derivation.
+    pub on_chain_event_id: u64,
+}
+
+/// POST /api/escrow/init — combined ATA + create_event in one transaction.
+pub async fn init_escrow(body: &InitEscrowRequest) -> Result<InitEscrowResponse, ApiError> {
+    api_post_json("/escrow/init", body).await
+}
+
+// ---------------------------------------------------------------------------
+// Escrow — create_event on-chain (legacy two-step)
 // ---------------------------------------------------------------------------
 
 /// Request body for POST /api/escrow/create-event.
@@ -2058,4 +2088,70 @@ pub struct MarkCheckedInResponse {
 /// POST /api/escrow/mark-checked-in — mark attendee checked in
 pub async fn mark_checked_in(body: &MarkCheckedInRequest) -> Result<MarkCheckedInResponse, ApiError> {
     api_post_json("/escrow/mark-checked-in", body).await
+}
+
+// ---------------------------------------------------------------------------
+// Escrow: Deactivate Event (admin)
+// ---------------------------------------------------------------------------
+
+/// Request body for POST /api/escrow/deactivate-event.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct DeactivateEventRequest {
+    pub event_id: String,
+}
+
+/// Response from POST /api/escrow/deactivate-event.
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+pub struct DeactivateEventResponse {
+    pub transaction: String,
+    pub message: String,
+}
+
+/// POST /api/escrow/deactivate-event — build deactivate_event TX
+pub async fn deactivate_event(body: &DeactivateEventRequest) -> Result<DeactivateEventResponse, ApiError> {
+    api_post_json("/escrow/deactivate-event", body).await
+}
+
+// ---------------------------------------------------------------------------
+// Escrow: Close Event (admin)
+// ---------------------------------------------------------------------------
+
+/// Request body for POST /api/escrow/close-event.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct CloseEventRequest {
+    pub event_id: String,
+}
+
+/// Response from POST /api/escrow/close-event.
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+pub struct CloseEventResponse {
+    pub transaction: String,
+    pub message: String,
+}
+
+/// POST /api/escrow/close-event — build close_event TX
+pub async fn close_event(body: &CloseEventRequest) -> Result<CloseEventResponse, ApiError> {
+    api_post_json("/escrow/close-event", body).await
+}
+
+// ---------------------------------------------------------------------------
+// Escrow: Claim Forfeited (admin)
+// ---------------------------------------------------------------------------
+
+/// Request body for POST /api/escrow/claim-forfeited.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ClaimForfeitedRequest {
+    pub event_id: String,
+}
+
+/// Response from POST /api/escrow/claim-forfeited.
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+pub struct ClaimForfeitedResponse {
+    pub transaction: String,
+    pub message: String,
+}
+
+/// POST /api/escrow/claim-forfeited — build claim_forfeited TX
+pub async fn claim_forfeited(body: &ClaimForfeitedRequest) -> Result<ClaimForfeitedResponse, ApiError> {
+    api_post_json("/escrow/claim-forfeited", body).await
 }

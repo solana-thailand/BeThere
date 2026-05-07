@@ -32,6 +32,18 @@ const ESCROW_PROGRAM_ID: &str = "2TGfNNXNez2NgopffDnYYhLNYmndUBBwg5SvpD5XQeLo";
 /// Mainnet: EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1m
 const USDC_MINT_DEVNET: &str = "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU";
 
+/// Mainnet USDC mint.
+const USDC_MINT_MAINNET: &str = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1m";
+
+/// Returns the USDC mint address based on the SOLANA_CLUSTER env var.
+/// Defaults to devnet if not set.
+fn usdc_mint() -> &'static str {
+    match std::env::var("SOLANA_CLUSTER").unwrap_or_default().as_str() {
+        "mainnet-beta" => USDC_MINT_MAINNET,
+        _ => USDC_MINT_DEVNET,
+    }
+}
+
 /// SPL Token program ID.
 const TOKEN_PROGRAM_ID: &str = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
 
@@ -620,6 +632,7 @@ async fn cache_blockhash(kv: &KvStore, blockhash: &str) -> Result<(), EscrowErro
 // ---------------------------------------------------------------------------
 
 /// Account metadata for transaction building.
+#[derive(Clone)]
 struct AccountMeta {
     pubkey: PubkeyBytes,
     is_signer: bool,
@@ -856,7 +869,7 @@ pub async fn build_deposit_transaction(
     let organizer = pubkey_from_base58(organizer_pubkey)?;
     let attendee = pubkey_from_base58(attendee_pubkey)?;
     let program_id = pubkey_from_base58(ESCROW_PROGRAM_ID)?;
-    let usdc_mint = pubkey_from_base58(USDC_MINT_DEVNET)?;
+    let usdc_mint = pubkey_from_base58(usdc_mint())?;
     let token_program = pubkey_from_base58(TOKEN_PROGRAM_ID)?;
     let system_program = pubkey_from_base58(SYSTEM_PROGRAM_ID)?;
     let rent_sysvar = pubkey_from_base58(RENT_SYSVAR_ID)?;
@@ -1007,7 +1020,7 @@ pub async fn build_refund_transaction(
     let organizer = pubkey_from_base58(organizer_pubkey)?;
     let attendee = pubkey_from_base58(attendee_pubkey)?;
     let program_id = pubkey_from_base58(ESCROW_PROGRAM_ID)?;
-    let usdc_mint = pubkey_from_base58(USDC_MINT_DEVNET)?;
+    let usdc_mint = pubkey_from_base58(usdc_mint())?;
     let token_program = pubkey_from_base58(TOKEN_PROGRAM_ID)?;
     let system_program = pubkey_from_base58(SYSTEM_PROGRAM_ID)?;
     let rent_sysvar = pubkey_from_base58(RENT_SYSVAR_ID)?;
@@ -1163,7 +1176,7 @@ pub async fn build_create_event_transaction(
     // Parse pubkeys
     let organizer = pubkey_from_base58(organizer_pubkey)?;
     let program_id = pubkey_from_base58(ESCROW_PROGRAM_ID)?;
-    let usdc_mint = pubkey_from_base58(USDC_MINT_DEVNET)?;
+    let usdc_mint = pubkey_from_base58(usdc_mint())?;
     let token_program = pubkey_from_base58(TOKEN_PROGRAM_ID)?;
     let system_program = pubkey_from_base58(SYSTEM_PROGRAM_ID)?;
     let rent_sysvar = pubkey_from_base58(RENT_SYSVAR_ID)?;
@@ -1274,6 +1287,297 @@ pub async fn build_create_event_transaction(
         message: format!("Create event escrow ({amount_display:.2} USDC deposit)"),
         escrow_address,
     })
+}
+
+// ---------------------------------------------------------------------------
+// Combined Init Escrow Transaction Builder (ATA + CreateEvent in one TX)
+// ---------------------------------------------------------------------------
+
+/// Result of building a combined init escrow transaction.
+pub struct InitEscrowTransaction {
+    /// Base64-encoded serialized transaction (unsigned).
+    pub transaction_b64: String,
+    /// Human-readable message for wallet confirmation.
+    pub message: String,
+    /// Derived EventEscrow PDA address (base58).
+    pub escrow_address: String,
+    /// Derived vault ATA address (base58).
+    pub vault_address: String,
+}
+
+/// Build a single transaction containing BOTH:
+/// 1. `create_associated_token_account_idempotent` (ATA program) — creates vault ATA if not exists
+/// 2. `create_event` (escrow program) — initializes the on-chain escrow PDA
+///
+/// This replaces the two-step approach (create-vault-ata → create-event) with
+/// a single transaction that the organizer signs once.
+///
+/// # Arguments
+/// * `rpc_url` — Solana RPC URL (with API key if needed)
+/// * `organizer_pubkey` — Organizer's wallet address (base58), signer + payer
+/// * `event_id` — Numeric event ID used for PDA derivation
+/// * `deposit_amount` — USDC deposit amount in lamports (6 decimals)
+/// * `event_end` — Event end time as unix timestamp (seconds)
+/// * `refund_deadline` — Refund deadline as unix timestamp (seconds)
+pub async fn build_init_escrow_transaction(
+    rpc_url: &str,
+    kv: Option<&KvStore>,
+    organizer_pubkey: &str,
+    event_id: u64,
+    deposit_amount: u64,
+    event_end: i64,
+    refund_deadline: i64,
+) -> Result<InitEscrowTransaction, EscrowError> {
+    let organizer = pubkey_from_base58(organizer_pubkey)?;
+    let escrow_program_id = pubkey_from_base58(ESCROW_PROGRAM_ID)?;
+    let usdc_mint = pubkey_from_base58(usdc_mint())?;
+    let token_program = pubkey_from_base58(TOKEN_PROGRAM_ID)?;
+    let system_program = pubkey_from_base58(SYSTEM_PROGRAM_ID)?;
+    let rent_sysvar = pubkey_from_base58(RENT_SYSVAR_ID)?;
+    let ata_program = pubkey_from_base58(ASSOCIATED_TOKEN_PROGRAM_ID)?;
+
+    // Derive EventEscrow PDA: ["escrow", organizer, event_id]
+    let (event_escrow, _) = find_program_address(
+        &[b"escrow", organizer.as_slice(), &event_id.to_le_bytes()],
+        &escrow_program_id,
+    )
+    .await?;
+
+    // Derive vault ATA (owned by EventEscrow PDA)
+    let vault = get_associated_token_address(&event_escrow, &usdc_mint).await?;
+
+    // ------------------------------------------------------------------
+    // Instruction 1: create_associated_token_account_idempotent
+    // Targets ATA program. Accounts: organizer(S,W), vault(W), event_escrow(R),
+    //   usdc_mint(R), system_program(R), token_program(R)
+    // ------------------------------------------------------------------
+    let ata_ix_accounts = vec![
+        AccountMeta {
+            pubkey: organizer,
+            is_signer: true,
+            is_writable: true,
+        },
+        AccountMeta {
+            pubkey: vault,
+            is_signer: false,
+            is_writable: true,
+        },
+        AccountMeta {
+            pubkey: event_escrow,
+            is_signer: false,
+            is_writable: false,
+        },
+        AccountMeta {
+            pubkey: usdc_mint,
+            is_signer: false,
+            is_writable: false,
+        },
+        AccountMeta {
+            pubkey: system_program,
+            is_signer: false,
+            is_writable: false,
+        },
+        AccountMeta {
+            pubkey: token_program,
+            is_signer: false,
+            is_writable: false,
+        },
+    ];
+    let ata_ix_data: Vec<u8> = vec![1]; // CreateIdempotent discriminator
+
+    // ------------------------------------------------------------------
+    // Instruction 2: create_event
+    // Targets escrow program. Accounts: organizer(S,W), event_escrow(W),
+    //   usdc_mint(R), vault(W), rent_sysvar(R), token_program(R), system_program(R)
+    // ------------------------------------------------------------------
+    let mut escrow_ix_data = vec![0u8]; // create_event discriminator
+    escrow_ix_data.extend_from_slice(&event_id.to_le_bytes());
+    escrow_ix_data.extend_from_slice(&deposit_amount.to_le_bytes());
+    escrow_ix_data.extend_from_slice(&event_end.to_le_bytes());
+    escrow_ix_data.extend_from_slice(&refund_deadline.to_le_bytes());
+
+    let escrow_ix_accounts = vec![
+        AccountMeta {
+            pubkey: organizer,
+            is_signer: true,
+            is_writable: true,
+        },
+        AccountMeta {
+            pubkey: event_escrow,
+            is_signer: false,
+            is_writable: true,
+        },
+        AccountMeta {
+            pubkey: usdc_mint,
+            is_signer: false,
+            is_writable: false,
+        },
+        AccountMeta {
+            pubkey: vault,
+            is_signer: false,
+            is_writable: true,
+        },
+        AccountMeta {
+            pubkey: rent_sysvar,
+            is_signer: false,
+            is_writable: false,
+        },
+        AccountMeta {
+            pubkey: token_program,
+            is_signer: false,
+            is_writable: false,
+        },
+        AccountMeta {
+            pubkey: system_program,
+            is_signer: false,
+            is_writable: false,
+        },
+    ];
+
+    // ------------------------------------------------------------------
+    // Merge accounts from both instructions into a single message
+    // Solana canonical order: signer+writable → signer+readonly →
+    //   non-signer+writable → non-signer+readonly → program IDs
+    // When the same pubkey appears with different writability, use writable.
+    // ------------------------------------------------------------------
+    let all_instruction_accounts: Vec<&[AccountMeta]> = vec![&ata_ix_accounts, &escrow_ix_accounts];
+    let program_ids: Vec<PubkeyBytes> = vec![ata_program, escrow_program_id];
+
+    let message_accounts = merge_message_accounts(&all_instruction_accounts, &program_ids);
+
+    // Build index lookup
+    let get_index = |pk: &PubkeyBytes| -> u8 {
+        message_accounts
+            .iter()
+            .position(|m| &m.pubkey == pk)
+            .expect("all accounts should be in message") as u8
+    };
+
+    // Build Instruction 1 indices
+    let ata_program_index = get_index(&ata_program);
+    let ata_ix_account_indices: Vec<u8> = ata_ix_accounts
+        .iter()
+        .map(|m| get_index(&m.pubkey))
+        .collect();
+    let ata_compiled_ix = CompiledInstruction {
+        program_id_index: ata_program_index,
+        accounts: ata_ix_account_indices,
+        data: ata_ix_data,
+    };
+
+    // Build Instruction 2 indices
+    let escrow_program_index = get_index(&escrow_program_id);
+    let escrow_ix_account_indices: Vec<u8> = escrow_ix_accounts
+        .iter()
+        .map(|m| get_index(&m.pubkey))
+        .collect();
+    let escrow_compiled_ix = CompiledInstruction {
+        program_id_index: escrow_program_index,
+        accounts: escrow_ix_account_indices,
+        data: escrow_ix_data,
+    };
+
+    // Fetch recent blockhash
+    let blockhash_resp = get_latest_blockhash(rpc_url, kv).await?;
+    let blockhash_bytes = pubkey_from_base58(&blockhash_resp.value)?;
+
+    // Serialize with both instructions
+    let tx_bytes = serialize_transaction(
+        &message_accounts,
+        &[ata_compiled_ix, escrow_compiled_ix],
+        &blockhash_bytes,
+    );
+
+    let tx_b64 = base64::engine::general_purpose::STANDARD.encode(&tx_bytes);
+    let escrow_address = pubkey_to_base58(&event_escrow);
+    let vault_address = pubkey_to_base58(&vault);
+    let amount_display = deposit_amount as f64 / 1_000_000.0;
+
+    Ok(InitEscrowTransaction {
+        transaction_b64: tx_b64,
+        message: format!(
+            "Init escrow: create vault + create event ({amount_display:.2} USDC deposit)"
+        ),
+        escrow_address,
+        vault_address,
+    })
+}
+
+/// Merge accounts from multiple instructions into a single deduplicated
+/// message account list in Solana canonical order.
+/// When the same pubkey appears with different writability, prefers writable.
+fn merge_message_accounts(
+    instruction_account_lists: &[&[AccountMeta]],
+    program_ids: &[PubkeyBytes],
+) -> Vec<AccountMeta> {
+    // Collect all accounts, preferring writable over readonly for duplicates
+    let mut seen: std::collections::HashMap<PubkeyBytes, AccountMeta> =
+        std::collections::HashMap::new();
+
+    for list in instruction_account_lists {
+        for m in *list {
+            seen.entry(m.pubkey)
+                .and_modify(|existing| {
+                    // Prefer writable over readonly
+                    if m.is_writable && !existing.is_writable {
+                        existing.is_writable = true;
+                    }
+                    // Prefer signer over non-signer
+                    if m.is_signer && !existing.is_signer {
+                        existing.is_signer = true;
+                    }
+                })
+                .or_insert(AccountMeta {
+                    pubkey: m.pubkey,
+                    is_signer: m.is_signer,
+                    is_writable: m.is_writable,
+                });
+        }
+    }
+
+    // Add program IDs
+    for pid in program_ids {
+        seen.entry(*pid).or_insert(AccountMeta {
+            pubkey: *pid,
+            is_signer: false,
+            is_writable: false,
+        });
+    }
+
+    let all: Vec<AccountMeta> = seen.into_values().collect();
+
+    // Sort in Solana canonical order:
+    // 1. signer + writable
+    // 2. signer + readonly
+    // 3. non-signer + writable
+    // 4. non-signer + readonly
+    let mut signer_writable: Vec<AccountMeta> = Vec::new();
+    let mut signer_readonly: Vec<AccountMeta> = Vec::new();
+    let mut nonsigner_writable: Vec<AccountMeta> = Vec::new();
+    let mut nonsigner_readonly: Vec<AccountMeta> = Vec::new();
+
+    for m in all {
+        match (m.is_signer, m.is_writable) {
+            (true, true) => signer_writable.push(m),
+            (true, false) => signer_readonly.push(m),
+            (false, true) => nonsigner_writable.push(m),
+            (false, false) => nonsigner_readonly.push(m),
+        }
+    }
+
+    // Sort each bucket for deterministic ordering
+    signer_writable.sort_by_key(|m| m.pubkey);
+    signer_readonly.sort_by_key(|m| m.pubkey);
+    nonsigner_writable.sort_by_key(|m| m.pubkey);
+    nonsigner_readonly.sort_by_key(|m| m.pubkey);
+
+    [
+        signer_writable,
+        signer_readonly,
+        nonsigner_writable,
+        nonsigner_readonly,
+    ]
+    .concat()
 }
 
 // ---------------------------------------------------------------------------
@@ -1389,7 +1693,7 @@ pub async fn build_create_vault_ata_transaction(
 ) -> Result<CreateVaultAtaTransaction, EscrowError> {
     let organizer = pubkey_from_base58(organizer_pubkey)?;
     let program_id = pubkey_from_base58(ESCROW_PROGRAM_ID)?;
-    let usdc_mint = pubkey_from_base58(USDC_MINT_DEVNET)?;
+    let usdc_mint = pubkey_from_base58(usdc_mint())?;
     let token_program = pubkey_from_base58(TOKEN_PROGRAM_ID)?;
     let system_program = pubkey_from_base58(SYSTEM_PROGRAM_ID)?;
     let ata_program = pubkey_from_base58(ASSOCIATED_TOKEN_PROGRAM_ID)?;
@@ -1590,7 +1894,7 @@ pub async fn build_close_event_transaction(
 ) -> Result<CloseEventTransaction, EscrowError> {
     let organizer = pubkey_from_base58(organizer_pubkey)?;
     let program_id = pubkey_from_base58(ESCROW_PROGRAM_ID)?;
-    let usdc_mint = pubkey_from_base58(USDC_MINT_DEVNET)?;
+    let usdc_mint = pubkey_from_base58(usdc_mint())?;
     let token_program = pubkey_from_base58(TOKEN_PROGRAM_ID)?;
 
     // Derive EventEscrow PDA: ["escrow", organizer, event_id]
@@ -1689,7 +1993,7 @@ pub async fn build_claim_forfeited_transaction(
 ) -> Result<ClaimForfeitedTransaction, EscrowError> {
     let organizer = pubkey_from_base58(organizer_pubkey)?;
     let program_id = pubkey_from_base58(ESCROW_PROGRAM_ID)?;
-    let usdc_mint = pubkey_from_base58(USDC_MINT_DEVNET)?;
+    let usdc_mint = pubkey_from_base58(usdc_mint())?;
     let token_program = pubkey_from_base58(TOKEN_PROGRAM_ID)?;
     let system_program = pubkey_from_base58(SYSTEM_PROGRAM_ID)?;
     let rent_sysvar = pubkey_from_base58(RENT_SYSVAR_ID)?;
@@ -1979,12 +2283,10 @@ mod tests {
         .unwrap();
 
         // Derive vault ATA
-        let vault = get_associated_token_address(
-            &escrow_pda,
-            &pubkey_from_base58(USDC_MINT_DEVNET).unwrap(),
-        )
-        .await
-        .unwrap();
+        let vault =
+            get_associated_token_address(&escrow_pda, &pubkey_from_base58(usdc_mint()).unwrap())
+                .await
+                .unwrap();
 
         let expected = "5exYHTcLvUbKPd3V8jxpkXn4RJL337URHM38kM2K6zbS";
         assert_eq!(pubkey_to_base58(&vault), expected, "Vault ATA mismatch");
@@ -2016,7 +2318,7 @@ mod tests {
     #[tokio::test]
     async fn test_find_attendee_ata() {
         let attendee = pubkey_from_base58("9ZNTfG4NyQgxy2SWjSiQoUyBPEvXT2xo7fKc5hPYYJ7b").unwrap();
-        let usdc_mint = pubkey_from_base58(USDC_MINT_DEVNET).unwrap();
+        let usdc_mint = pubkey_from_base58(usdc_mint()).unwrap();
 
         let ata = get_associated_token_address(&attendee, &usdc_mint)
             .await

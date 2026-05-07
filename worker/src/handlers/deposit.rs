@@ -812,6 +812,144 @@ pub async fn create_event_tx_handler(
 }
 
 // ---------------------------------------------------------------------------
+// POST /api/escrow/init — Combined ATA + CreateEvent in one TX
+// ---------------------------------------------------------------------------
+
+/// Request body for POST /api/escrow/init.
+#[derive(Debug, serde::Deserialize)]
+pub struct InitEscrowTxRequest {
+    /// Event ID (slug or KV key).
+    pub event_id: String,
+}
+
+/// Response with the combined init escrow transaction.
+#[derive(Debug, serde::Serialize)]
+pub struct InitEscrowTxResponse {
+    /// Base64-encoded serialized transaction (unsigned — wallet signs).
+    pub transaction: String,
+    /// Human-readable message for wallet confirmation.
+    pub message: String,
+    /// Derived EventEscrow PDA address (base58).
+    pub escrow_address: String,
+    /// Derived vault ATA address (base58).
+    pub vault_address: String,
+    /// The on-chain event ID used for PDA derivation.
+    pub on_chain_event_id: u64,
+}
+
+/// Build a single transaction that combines:
+/// 1. Create the vault Associated Token Account (ATA program, idempotent)
+/// 2. Initialize the on-chain event escrow (escrow program)
+///
+/// The organizer signs once instead of twice.
+#[worker::send]
+pub async fn init_escrow_tx_handler(
+    State(state): State<AppState>,
+    Extension(_claims): Extension<Claims>,
+    Json(body): Json<InitEscrowTxRequest>,
+) -> Result<ApiOk<InitEscrowTxResponse>, WorkerError> {
+    let kv = state
+        .events_kv
+        .as_ref()
+        .ok_or_else(|| AppError::Internal("EVENTS KV not configured".to_string()))?;
+
+    let event = event_store::get_event_config(kv, &body.event_id)
+        .await
+        .map_err(AppError::Internal)?
+        .ok_or_else(|| AppError::NotFound(format!("event '{}' not found", body.event_id)))?;
+
+    if !event.deposit_enabled {
+        return Err(AppError::Validation("deposit not enabled for this event".to_string()).into());
+    }
+
+    if event.deposit_amount_usdc == 0 {
+        return Err(AppError::Validation("deposit amount not configured".to_string()).into());
+    }
+
+    // Check if already created on-chain
+    if !event.escrow_address.is_empty() {
+        return Err(AppError::Validation(format!(
+            "event already has escrow address: {}",
+            event.escrow_address
+        ))
+        .into());
+    }
+
+    // Validate organizer wallet
+    let organizer_pubkey = if event.organizer_wallet.is_empty() {
+        return Err(AppError::Validation(
+            "event has no organizer wallet configured — set organizer_wallet first".to_string(),
+        )
+        .into());
+    } else {
+        crate::solana::validate_wallet_address(&event.organizer_wallet)
+            .map_err(|e| AppError::Validation(format!("invalid organizer_wallet: {e}")))?;
+        &event.organizer_wallet
+    };
+
+    // Determine on-chain event ID
+    let on_chain_event_id = if event.on_chain_event_id != 0 {
+        event.on_chain_event_id
+    } else {
+        derive_on_chain_event_id(&event.id)
+    };
+
+    // Calculate event_end and refund_deadline as unix timestamps (seconds)
+    let event_end = if event.event_end_ms > 0 {
+        event.event_end_ms / 1000
+    } else {
+        // Default: 7 days from now
+        chrono::Utc::now().timestamp() + 86400 * 7
+    };
+
+    let refund_deadline = if event.refund_deadline_hours > 0 {
+        event_end + (event.refund_deadline_hours as i64 * 3600)
+    } else {
+        // Default: 7 days after event end
+        event_end + 86400 * 7
+    };
+
+    let rpc_url = format!(
+        "{}{}{}",
+        state.config.solana.rpc_url,
+        if state.config.solana.rpc_url.contains('?') {
+            "&"
+        } else {
+            "?api-key="
+        },
+        state.config.solana.api_key
+    );
+
+    let tx = crate::solana_escrow::build_init_escrow_transaction(
+        &rpc_url,
+        Some(kv),
+        organizer_pubkey,
+        on_chain_event_id,
+        event.deposit_amount_usdc,
+        event_end,
+        refund_deadline,
+    )
+    .await
+    .map_err(|e| AppError::Internal(format!("failed to build init escrow TX: {e}")))?;
+
+    tracing::info!(
+        event_id = %event.id,
+        escrow_address = %tx.escrow_address,
+        vault_address = %tx.vault_address,
+        on_chain_event_id,
+        "Combined init escrow TX built for organizer"
+    );
+
+    Ok(ApiOk::new(InitEscrowTxResponse {
+        transaction: tx.transaction_b64,
+        message: tx.message,
+        escrow_address: tx.escrow_address,
+        vault_address: tx.vault_address,
+        on_chain_event_id,
+    }))
+}
+
+// ---------------------------------------------------------------------------
 // POST /api/deposit/thb/upload
 // ---------------------------------------------------------------------------
 

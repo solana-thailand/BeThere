@@ -27,6 +27,7 @@ use crate::utils;
 enum AdminSection {
     Attendance,
     Deposits,
+    Escrow,
     Quiz,
     Adventure,
     Events,
@@ -574,6 +575,19 @@ pub fn Admin() -> impl IntoView {
                         </button>
                     </div>
                     <div class="admin-sidebar-section">
+                        <div class="admin-sidebar-heading">"Escrow"</div>
+                        <button
+                            class="admin-sidebar-item"
+                            class:active=move || active_section.get() == AdminSection::Escrow
+                            on:click=move |_| set_active_section.set(AdminSection::Escrow)
+                        >
+                            <span class="admin-sidebar-icon">
+                                "⛓"
+                            </span>
+                            "Escrow Management"
+                        </button>
+                    </div>
+                    <div class="admin-sidebar-section">
                         <div class="admin-sidebar-heading">"Quiz"</div>
                         <button
                             class="admin-sidebar-item"
@@ -912,6 +926,11 @@ pub fn Admin() -> impl IntoView {
                 // Deposits section
                 <Show when=move || active_section.get() == AdminSection::Deposits fallback=|| view! { <div></div> }>
                     <crate::pages::admin_deposit::AdminDeposits set_toast=set_toast active_event_id=active_event_id />
+                </Show>
+
+                // Escrow management section
+                <Show when=move || active_section.get() == AdminSection::Escrow fallback=|| view! { <div></div> }>
+                    <crate::pages::admin_escrow::AdminEscrow set_toast=set_toast active_event_id=active_event_id />
                 </Show>
 
                 // Quiz section

@@ -4172,6 +4172,10 @@ nav a.active {
     border-color: var(--accent);
 }
 
+.quiz-number-input[type="datetime-local"] {
+    color-scheme: dark;
+}
+
 .quiz-setting-hint {
     font-size: 0.78rem;
     color: var(--text-muted);
