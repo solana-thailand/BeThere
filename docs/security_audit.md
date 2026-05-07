@@ -18,8 +18,8 @@
 | SEC-002 | 🟠 High | Escrow-Critical Fields Mutable After On-Chain Init | ✅ Fixed (Phase 1) |
 | SEC-003 | 🟡 Medium | No Maximum Deposit Cap | ✅ Fixed (Phase 1) |
 | SEC-004 | 🟡 Medium | Archive Doesn't Deactivate On-Chain Escrow | ✅ Fixed (Phase 1) |
-| SEC-005 | 🟡 Medium | Explorer Links Hardcoded to Devnet | Open |
-| SEC-006 | 🟢 Low | Duplicate Merkle Tree Field in Form | Open |
+| SEC-005 | 🟡 Medium | Explorer Links Hardcoded to Devnet | ✅ Fixed (Phase 2) |
+| SEC-006 | 🟢 Low | Duplicate Merkle Tree Field in Form | ✅ Fixed (Phase 2) |
 | SEC-007 | 🟢 Info | Worker Cannot Manipulate Funds | Confirmed Safe |
 | SEC-008 | 🟢 Info | On-Chain Escrow Fields Immutable After Creation | Confirmed Safe |
 | SEC-009 | 🟡 Medium | Token Transfers Use `transfer()` Not `transfer_checked()` | ✅ Fixed (Phase 3) |
@@ -382,9 +382,9 @@ Cross-referenced against [Safe Solana Builder](https://github.com/Frankcastleaud
 | P3 | SEC-009: Use transfer_checked() | Small | On-chain program | ✅ Fixed (Phase 3) |
 | P4 | SEC-011: event_end guard on mark_checked_in | Small | On-chain program | ✅ Fixed (Phase 3) |
 | P5 | SEC-004: Archive guards | Medium | Backend + Frontend | ✅ Fixed (Phase 1) |
-| P6 | SEC-005: Explorer links cluster-aware | Small | Frontend | Open |
+| P6 | SEC-005: Explorer links cluster-aware | Small | Frontend | ✅ Fixed (Phase 2) |
 | P7 | SEC-010: Close AttendeeDeposit PDAs | Medium | On-chain + Frontend | Open |
-| P8 | SEC-006: Duplicate Merkle field | Tiny | Frontend | Open |
+| P8 | SEC-006: Duplicate Merkle field | Tiny | Frontend | ✅ Fixed (Phase 2) |
 
 ---
 
@@ -396,11 +396,11 @@ SEC-001 was a direct fund theft vector (organizer rug pull). SEC-002 caused perm
 
 **SHOULD FIX before mainnet**: SEC-005
 
-SEC-005 will break the user experience on mainnet (explorer links hardcoded to devnet cluster).
+SEC-005 was explorer links hardcoded to devnet cluster. ✅ Fixed in Phase 2 — all Solscan links now use cluster-aware URLs via `/api/health` endpoint.
 
 **NICE TO FIX**: SEC-006, SEC-010
 
-SEC-006 is cosmetic (duplicate Merkle field). SEC-010 is a rent efficiency issue (AttendeeDeposit PDAs never closed).
+SEC-006 was a cosmetic duplicate Merkle field. ✅ Fixed in Phase 2. SEC-010 is a rent efficiency issue (AttendeeDeposit PDAs never closed).
 
 ---
 

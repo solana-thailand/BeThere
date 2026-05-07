@@ -21,7 +21,7 @@ use crate::api::{
     UsdcDepositRequest,
 };
 use crate::components::{self, Toast, ToastType};
-use crate::utils::format_timestamp;
+use crate::utils::{format_timestamp, solscan_tx_url, get_cluster};
 use wasm_bindgen::prelude::*;
 
 // ---------------------------------------------------------------------------
@@ -1311,7 +1311,7 @@ pub fn Deposit() -> impl IntoView {
                             } else {
                                 tx_sig.clone()
                             };
-                            let solscan_url = format!("https://solscan.io/tx/{}?cluster=devnet", tx_sig);
+                            let solscan_url = solscan_tx_url(&tx_sig, &get_cluster());
                             view! {
                                 <div class="card" style="margin-top:1.5rem;text-align:center;width:100%;max-width:480px;">
                                     <div class="card-header">
@@ -1574,7 +1574,7 @@ pub fn Deposit() -> impl IntoView {
                             } else {
                                 tx_sig.clone()
                             };
-                            let solscan_url = format!("https://solscan.io/tx/{}?cluster=devnet", tx_sig);
+                            let solscan_url = solscan_tx_url(&tx_sig, &get_cluster());
                             view! {
                                 <div class="card" style="margin-top:1.5rem;text-align:center;width:100%;max-width:480px;">
                                     <div class="card-header">

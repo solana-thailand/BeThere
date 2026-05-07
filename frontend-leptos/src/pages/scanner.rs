@@ -1279,7 +1279,7 @@ where
                                 {format!("TX: {}", short_sig)}
                             </p>
                             <a
-                                href={format!("https://solscan.io/tx/{}?cluster=devnet", signature)}
+                                href={utils::solscan_tx_url(&signature, &utils::get_cluster())}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 style="font-size:0.8rem;color:var(--accent);"

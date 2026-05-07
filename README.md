@@ -322,7 +322,7 @@ See `scripts/e2e/test_escrow_devnet.sh` for the complete test flow. All 24 tests
 | JWT revocation | ⚠️ Deferred | KV blacklist recommended for compromised tokens |
 | Dev mode | ⚠️ Local only | `DEV_MODE=1` bypasses JWT verification — only for `.dev.vars`, never production |
 
-See [`docs/security_audit.md`](docs/security_audit.md) for the full escrow security audit (11 findings, 6 fixed, Safe Solana Builder cross-reference). See `.handovers/025_security_audit_e2e_nft_config.md` for the earlier auth/RPC audit.
+See [`docs/security_audit.md`](docs/security_audit.md) for the full escrow security audit (11 findings, 8 fixed, Safe Solana Builder cross-reference). See `.handovers/025_security_audit_e2e_nft_config.md` for the earlier auth/RPC audit.
 
 ## Roles & Access Control
 
@@ -358,7 +358,7 @@ See **[DISCUSSION.md](./DISCUSSION.md)** for the full architecture direction and
 | **8g** | Frontend refund flow + admin check-in UI + vault ATA + escrow init | ✅ Done |
 | **8h** | Mainnet deploy (escrow + deposit) | Planned |
 | **9a** | Escrow security hardening (SEC-001/002/003/004/009/011) | 🟡 Phase 1+3 done, needs rebuild + redeploy |
-| **9b** | Frontend fixes (SEC-005/006, explorer links, Merkle field) | Planned |
+| **9b** | Frontend fixes (SEC-005/006, explorer links, Merkle field) | ✅ Done (cluster-aware Solscan links, duplicate Merkle removed) |
 | **9c** | Rent reclamation — close AttendeeDeposit PDAs (SEC-010) | Planned |
 | **9d** | UX improvements (search/filter, progressive disclosure form) | Planned |
 

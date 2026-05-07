@@ -14,7 +14,7 @@ use leptos_router::hooks::use_params;
 use leptos_router::params::Params;
 
 use crate::api::{self, AdventureStatusType, ClaimLookupData, ClaimMintData, QuizQuestionsData, QuizStatus, QuizSubmitData};
-use crate::utils::{escape_html, format_timestamp};
+use crate::utils::{escape_html, format_timestamp, solscan_tx_url};
 use wasm_bindgen::prelude::*;
 
 // ---------------------------------------------------------------------------
@@ -1405,19 +1405,8 @@ pub fn Claim() -> impl IntoView {
 
                         // ---- Success! ----
                         ClaimState::Success(data) => {
-                            let cluster_param = if data.cluster == "mainnet-beta" {
-                                String::new()
-                            } else {
-                                format!("?cluster={}", data.cluster)
-                            };
-                            let explorer_url = format!(
-                                "https://solscan.io/tx/{}{cluster_param}",
-                                data.signature
-                            );
-                            let asset_url = format!(
-                                "https://solscan.io/token/{}{cluster_param}",
-                                data.asset_id
-                            );
+                            let explorer_url = solscan_tx_url(&data.signature, &data.cluster);
+                            let asset_url = crate::utils::solscan_address_url(&data.asset_id, &data.cluster);
                             let asset_id_display = {
                                 let id = &data.asset_id;
                                 if id.len() > 12 {

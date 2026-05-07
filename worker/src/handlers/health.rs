@@ -5,12 +5,18 @@ use serde_json::{Value, json};
 use crate::state::AppState;
 
 /// Health check endpoint.
-/// Returns basic service status information.
-pub async fn health_check(State(_state): State<AppState>) -> Json<Value> {
+/// Returns basic service status information including Solana cluster.
+pub async fn health_check(State(state): State<AppState>) -> Json<Value> {
+    let cluster = if state.config.solana.rpc_url.contains("mainnet") {
+        "mainnet-beta"
+    } else {
+        "devnet"
+    };
     Json(json!({
         "status": "ok",
         "service": "event-checkin",
         "runtime": "cloudflare-workers",
         "version": env!("CARGO_PKG_VERSION"),
+        "cluster": cluster,
     }))
 }

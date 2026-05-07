@@ -355,7 +355,7 @@ pub fn AdminEscrow(
                         match &last_result.get() {
                             Some((action, Ok(signature))) => {
                                 let sig = signature.clone();
-                                let solscan = format!("https://solscan.io/tx/{sig}?cluster=devnet");
+                                let solscan = crate::utils::solscan_tx_url(&sig, &crate::utils::get_cluster());
                                 view! {
                                     <div style="margin-bottom:0.75rem;padding:0.5rem 0.75rem;border:1px solid var(--success,green);border-radius:6px;background:rgba(0,128,0,0.05)">
                                         <div style="font-size:0.8rem;color:var(--success,green);font-weight:600">
