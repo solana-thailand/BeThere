@@ -186,6 +186,69 @@ solana program show 2TGfNNXNez2NgopffDnYYhLNYmndUBBwg5SvpD5XQeLo --url devnet
 
 ---
 
+## Flow C: Attendee Deposit → Refund → Reclaim Rent
+
+> Tests the full attendee-facing escrow experience including the new Phase 4 rent reclamation.
+
+### Step 9: Open Deposit Page
+
+1. Navigate to the deposit page for your test event (use the deposit link from the events page or go directly to `/deposit?event=<event_id>`)
+2. ✅ Verify: Page shows deposit info (amount, event name)
+3. Enter your attendee ID and the email/name used for registration
+4. Click **"Check Deposit Status"**
+5. ✅ Verify: Shows "No deposit found" or deposit status
+
+### Step 10: Connect Wallet & Deposit
+
+1. Click **"🔗 Connect Phantom"** (or your wallet)
+2. Approve the connection request
+3. ✅ Verify: Shows wallet name + truncated public key
+4. Click **"💰 Deposit USDC"**
+5. Approve the transaction in your wallet popup
+6. ✅ Verify: Shows "✅ Deposit confirmed" with Solscan link
+
+### Step 11: Mark Attendee as Checked In
+
+> The organizer must mark the attendee as checked in before refund is possible.
+
+1. Open the scanner/check-in page for the event
+2. Scan the attendee's QR code or manually check them in
+3. ✅ Verify: Attendee shows as checked in
+
+### Step 12: Refund Deposit
+
+1. Return to the deposit page
+2. The status should now show **"Already Deposited"** with checked-in status
+3. Click **"💸 Refund Deposit"**
+4. Approve the transaction in your wallet
+5. ✅ Verify: Shows "✅ Refund confirmed" with Solscan link
+6. 🔍 Verify on Solscan: USDC returned to your wallet's token account
+
+### Step 13: Reclaim Rent (Phase 4 — SEC-010)
+
+**What this does:** Closes the `AttendeeDeposit` PDA, reclaiming ~0.002 SOL of rent-exempt balance.
+
+1. After refund confirmation, a **"♻️ Reclaim Rent"** button appears
+2. Click **"♻️ Reclaim Rent"**
+3. ✅ Verify: Shows wallet connection prompt
+4. Connect the same wallet used for deposit
+5. Click **"♻️ Close Deposit Account"**
+6. Approve the transaction in your wallet
+7. ✅ Verify: Shows "✅ Rent reclaimed" with Solscan link
+8. 🔍 Verify on Solscan: `close_deposit` instruction (discriminator `7`) succeeded
+9. 🔍 Verify: AttendeeDeposit PDA no longer exists on-chain
+
+### Alternative: Reclaim Rent from Already Deposited View
+
+If you've already refunded and return to the deposit page later:
+
+1. Open the deposit page and check status
+2. Status shows **"Already Deposited"** (refunded: true)
+3. The **"♻️ Reclaim Rent"** button is also visible here
+4. Follow the same flow as Step 13
+
+---
+
 ## Quick CLI Verification Commands
 
 ```bash
@@ -215,12 +278,16 @@ Devnet Testing Checklist
 [ ] Phantom/Solflare installed and on Devnet
 [ ] Devnet SOL airdropped to wallet
 [ ] Devnet USDC obtained from Circle faucet
+
+Flow A: Event Setup
 [ ] Test event created with deposit enabled
 [ ] Wallet connected in Events page
 [ ] Vault ATA created (Step 2a)
 [ ] Event escrow initialized (Step 2b)
 [ ] Escrow fields saved in event config
 [ ] Escrow verified on Solscan/Explorer
+
+Flow B: Admin Escrow Lifecycle
 [ ] Escrow Management page opened
 [ ] Wallet connected in Escrow Management
 [ ] Deactivate event succeeded (Step 6)
@@ -228,5 +295,15 @@ Devnet Testing Checklist
 [ ] Close event succeeded (Step 8)
 [ ] Wrong wallet rejection tested
 [ ] Order enforcement tested
-[ ] All Solscan links verified
+
+Flow C: Attendee Deposit Lifecycle
+[ ] Deposit page opened and status checked (Step 9)
+[ ] Wallet connected and USDC deposited (Step 10)
+[ ] Attendee checked in by organizer (Step 11)
+[ ] Deposit refunded after check-in (Step 12)
+[ ] Rent reclaimed via close_deposit (Step 13)
+[ ] AttendeeDeposit PDA verified closed on Solscan
+
+All Links
+[ ] All Solscan links verified (correct cluster=devnet)
 ```
