@@ -208,11 +208,11 @@ The escrow system uses PDAs (Program Derived Addresses) to hold attendee USDC de
 **Escrow Flow (5 steps, all validated on devnet):**
 
 ```
-1. create_vault_ata    →  Organizer signs  →  Vault ATA created
-2. create_event        →  Organizer signs  →  EventEscrow PDA initialized
-3. deposit             →  Attendee signs   →  USDC → vault (Solana Pay)
-4. mark_checked_in     →  Organizer signs  →  Attendee checked-in on-chain
-5. refund              →  Attendee signs   →  USDC → attendee (after event ends)
+1. create_event        →  Organizer signs  →  EventEscrow PDA + Vault ATA initialized (single TX)
+2. deposit             →  Attendee signs   →  USDC → vault (Solana Pay)
+3. mark_checked_in     →  Organizer signs  →  Attendee checked-in on-chain
+4. refund              →  Attendee signs   →  USDC → attendee (after event ends)
+5. claim_forfeited     →  Organizer signs  →  Forfeited deposits → organizer (after refund deadline)
 ```
 
 **PDA Seeds:**
@@ -221,10 +221,11 @@ The escrow system uses PDAs (Program Derived Addresses) to hold attendee USDC de
 - `Vault ATA`: Associated Token Account for (EventEscrow, USDC mint)
 
 **Important constraints:**
-- `create_vault_ata` must be called before `create_event` (two-step initialization)
-- `mark_checked_in` must be called before `refund` (attendee must be checked in)
 - Refund requires `clock > event_end` (event must have ended)
 - Deposits are rejected after the event has ended (`event_end > now` check)
+- `claim_forfeited` requires `clock > refund_deadline` (post-deadline only)
+
+> ⚠️ **Security note**: The current `refund` instruction requires `checked_in == true`, which creates a rug pull vector (SEC-001). See `docs/security_audit.md` for details and the planned fix (time-based refund eligibility).
 
 **Constants:**
 | Constant | Devnet | Mainnet |
@@ -232,7 +233,7 @@ The escrow system uses PDAs (Program Derived Addresses) to hold attendee USDC de
 | Program ID | `2TGfNNXNez2NgopffDnYYhLNYmndUBBwg5SvpD5XQeLo` | TBD |
 | USDC Mint | `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU` | `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1m` |
 
-**Transaction building:** All 5 TX builders are in `worker/src/solana_escrow.rs`. They use a shared `build_message_accounts()` helper for Solana's canonical 4-pass account ordering.
+**Transaction building:** All TX builders are in `worker/src/solana_escrow.rs`. They use a shared `build_message_accounts()` helper for Solana's canonical 4-pass account ordering.
 
 ### Performance Layers
 
@@ -297,7 +298,7 @@ See `scripts/e2e/test_escrow_devnet.sh` for the complete test flow. All 24 tests
 - **PDA escrow deposits** — USDC deposits held in on-chain PDAs, refundable after event
 - **Solana Pay integration** — Deposit via QR code scan or wallet adapter (Phantom, Backpack, Solflare)
 - **Dual-track deposits** — USDC (on-chain escrow) or THB (PromptPay QR + slip verification)
-- **Two-step escrow init** — Admin creates vault ATA + event escrow via wallet signing (Phantom/Solflare)
+- **Single-TX escrow init** — Admin creates vault ATA + event escrow in one transaction via wallet signing (Phantom/Solflare)
 - **On-chain check-in** — Staff marks attendees checked in on-chain via wallet-signed TX (escrow refund gate)
 - **Wallet adapter interop** — Shared JS module for wallet detection, connection, TX signing across scanner + admin
 
@@ -311,11 +312,14 @@ See `scripts/e2e/test_escrow_devnet.sh` for the complete test flow. All 24 tests
 | Claim gates | ✅ Secure | Sequential check-in → quiz → adventure → mint, no bypass |
 | Solana RPC | ✅ Secure | Hardcoded method, serde serialization, null-safe deserialization, no user-controlled params |
 | Secrets | ✅ Secure | All via `env.secret()`, redacted from Debug output |
+| Escrow (on-chain) | ✅ Secure | Immutable params after creation, checked arithmetic, canonical PDA derivation |
+| Escrow (business logic) | ⚠️ 1 Critical | SEC-001: Check-in gates refunds → organizer rug pull vector. Fix: time-based refund eligibility (see `docs/security_audit.md`) |
+| Escrow (Token-2022) | ⚠️ 1 Medium | SEC-009: Uses `transfer()` not `transfer_checked()` — blocks Token-2022 USDC support |
 | Double-claim | ⚠️ Deferred | KV dedup lock recommended before high-traffic events |
 | JWT revocation | ⚠️ Deferred | KV blacklist recommended for compromised tokens |
 | Dev mode | ⚠️ Local only | `DEV_MODE=1` bypasses JWT verification — only for `.dev.vars`, never production |
 
-See `.handovers/025_security_audit_e2e_nft_config.md` for full audit findings.
+See [`docs/security_audit.md`](docs/security_audit.md) for the full escrow security audit (11 findings, Safe Solana Builder cross-reference). See `.handovers/025_security_audit_e2e_nft_config.md` for the earlier auth/RPC audit.
 
 ## Roles & Access Control
 
@@ -350,6 +354,10 @@ See **[DISCUSSION.md](./DISCUSSION.md)** for the full architecture direction and
 | **8e** | Devnet E2E with real wallets | ✅ Done (5-step escrow flow validated, 24/24 tests) |
 | **8g** | Frontend refund flow + admin check-in UI + vault ATA + escrow init | ✅ Done |
 | **8h** | Mainnet deploy (escrow + deposit) | Planned |
+| **9a** | Escrow security hardening (SEC-001/002/003/009/011) | 🔴 Blocks Mainnet |
+| **9b** | Frontend fixes (SEC-005/006, explorer links, Merkle field) | Planned |
+| **9c** | Rent reclamation — close AttendeeDeposit PDAs (SEC-010) | Planned |
+| **9d** | UX improvements (search/filter, progressive disclosure form) | Planned |
 
 ### NFT Config Setup (Phase 7)
 

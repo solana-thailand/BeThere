@@ -2,7 +2,7 @@
 
 ## Audit Info
 
-- **Date**: 2025-05-07
+- **Date**: 2026-05-07
 - **Auditor**: Internal review
 - **Scope**: On-chain escrow program, backend TX builders, frontend wallet integration, KV store
 - **Codebase**: `bethere-escrow/`, `worker/src/solana_escrow.rs`, `worker/src/handlers/deposit.rs`, `frontend-leptos/`
@@ -409,3 +409,32 @@ SEC-006 is cosmetic. SEC-010 is a rent efficiency issue that accumulates over ti
 The BeThere escrow system has an inherent trust assumption: **the organizer is trusted to fairly check in attendees**. SEC-001 exists because the current design encodes this trust in the refund path. The recommended fix removes this trust assumption by allowing refunds regardless of check-in status, which aligns with the escrow's purpose as a no-show deterrent rather than an organizer-controlled gate.
 
 If the product intent is for the organizer to have complete control over refunds, that should be an explicit design decision documented and communicated to depositors before they sign.
+
+---
+
+## Security References
+
+External resources and vulnerability patterns relevant to the BeThere escrow.
+
+### Safe Solana Builder
+
+- **Repo**: https://github.com/Frankcastleauditor/safe-solana-builder (124⭐)
+- **Author**: Frank Castle (@0xcastle_chain), Solana security researcher, 70+ Rust audits, 250+ Critical/High findings
+- **Usage**: Cross-referenced against BeThere escrow in the table above. 8 rules compliant, 4 partial, 1 violation (Token-2022).
+
+### Solana Audit Arena
+
+- **Repo**: https://github.com/Frankcastleauditor/Solana-Audit-Arena (88⭐)
+- **Format**: Weekly competition — new Anchor program each Monday, researchers submit findings as GitHub Issues
+- **Relevant patterns from past weeks**:
+
+| Arena Finding | Pattern | BeThere Match |
+|---------------|---------|---------------|
+| Week 1: StakeFlow `instant_unlock` bypasses lockup check | Time-gate bypass | SEC-011: `mark_checked_in` has no `event_end` guard |
+| Week 2: MissionX Token-2022 `transfer()` incompatibility | Token-2022 readiness | SEC-009: Escrow uses `transfer()` not `transfer_checked()` |
+| Week 3: Zenon uncapped buy causing underflow | Missing bounds | SEC-003: No max deposit cap on `deposit_amount_usdc` |
+| Week 1: StakeFlow `UserStake` PDA rent never reclaimed | Rent leak | SEC-010: `AttendeeDeposit` PDAs never closed |
+
+### Recommendation
+
+Consider submitting the BeThere escrow program (`bethere-escrow/`) as a future Audit Arena target for community review. The Arena's researchers and Frank Castle's validation would provide independent third-party security assessment at no cost.
