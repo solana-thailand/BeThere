@@ -64,10 +64,15 @@ Updated `docs/devnet_testing_guide.md`:
 
 ## Remaining Work
 
-### Worker + Frontend Deployment (not done yet)
-- [ ] Deploy worker to Cloudflare Workers (`npx wrangler deploy` in worker/)
-- [ ] Build frontend (`./build.sh` in frontend-leptos/) and deploy dist/
-- [ ] Verify worker health endpoint returns correct cluster info
+### ~~Worker + Frontend Deployment~~ ✅ Done
+- [x] Frontend built (`./build.sh` in frontend-leptos/) — 2.0 MB WASM + 64 KB JS
+- [x] Worker deployed to Cloudflare Workers (`bash deploy.sh` in worker/)
+- [x] Health endpoint verified: `{"cluster": "devnet", "status": "ok"}`
+- [x] Close-deposit endpoint live: `POST /api/escrow/close-deposit` validates correctly
+- [x] Frontend loads: `HTTP 200 | 6466 bytes`
+- [x] 8 new/modified static assets uploaded (frontend WASM + JS + CSS)
+
+**Worker Version ID**: `f8242723-cb5f-4806-bdca-0e94f47dde20`
 
 ### Browser E2E Test (manual)
 - [ ] Full Flow A: Create event → connect wallet → create vault ATA → init escrow
