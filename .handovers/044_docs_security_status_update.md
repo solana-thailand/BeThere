@@ -30,11 +30,37 @@
 - **Scope for Mainnet**: Removed SEC-001/002/003/009 from "MUST FIX", SEC-004/011 from "SHOULD FIX", only SEC-005 remains
 - **Trust Model appendix**: Rewrote to reflect SEC-001 fix applied — no longer a trust assumption
 
-## Remaining Open Findings
+## Phase 4: Rent Reclamation (SEC-010) — Completed
 
-| ID | Title | Notes |
-|----|-------|-------|
-| SEC-010 | AttendeeDeposit PDAs never closed (rent leak) | Requires new `close_deposit` on-chain instruction + UI button |
+**Commit**: `cd3bb2f` on `feature/010_deposit_refund_escrow`
+
+All 11 security findings now resolved (9 fixed + 2 confirmed safe).
+
+### Changes
+
+| Layer | File | Change |
+|-------|------|--------|
+| On-chain | `close_deposit.rs` (new) | `close_deposit` instruction (discriminator 7), self-close + GC paths |
+| On-chain | `errors.rs` | `DepositNotRefunded=17`, `EventEscrowStillActive=18` |
+| On-chain | `events.rs` | `DepositClosed` event (discriminator 7) |
+| On-chain | `lib.rs` | Instruction entry point |
+| On-chain | `tests.rs` | 4 new tests (26/26 pass) |
+| Worker | `solana_escrow.rs` | `build_close_deposit_transaction` TX builder |
+| Worker | `deposit.rs` | `close_deposit_tx_handler` — public endpoint |
+| Worker | `mod.rs` | Route `POST /api/escrow/close-deposit` |
+| Frontend | `api.rs` | `CloseDepositRequest/Response` + `close_deposit()` |
+| Frontend | `deposit.rs` | 4 UI states + Reclaim Rent buttons |
+| Docs | `README.md` | Roadmap 9c: Planned → ✅ Done |
+| Docs | `SECURITY.md` | SEC-010: Open → ✅ Fixed (Phase 4) |
+| Docs | `security_audit.md` | All findings resolved, cross-ref table fully compliant |
+
+### Final Finding Tally
+
+| Status | Count | Items |
+|--------|-------|-------|
+| ✅ Fixed | **9** | SEC-001 (Critical), SEC-002 (High), SEC-003/004/005/009/010/011 (Medium), SEC-006 (Low) |
+| ✅ Confirmed Safe | 2 | SEC-007, SEC-008 (Info) |
+| 🔓 Open | **0** | None |
 
 ### Phase 2 Frontend Fixes (SEC-005/006)
 
@@ -51,9 +77,11 @@
 
 ## Plan / Next Steps
 
-1. **Rebuild + redeploy escrow program** — `quasar build` → devnet → E2E validation → mainnet
-2. **Phase 4: Rent reclamation** — SEC-010 `close_deposit` instruction
-3. **Phase 5: UX improvements** — search/filter, progressive disclosure form
+1. **Rebuild + redeploy escrow program** — `quasar build` → devnet → E2E validation → mainnet (Phases 1+3+4 combined)
+2. **Redeploy worker** — includes Phase 1 guards + close_deposit endpoint
+3. **Redeploy frontend** — includes cluster-aware links + close_deposit UI
+4. **Browser E2E test** — full escrow lifecycle with real wallets on devnet
+5. **Phase 5: UX improvements** — search/filter, progressive disclosure form
 
 ## Issues Ref
 
