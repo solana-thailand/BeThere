@@ -165,7 +165,7 @@ pub fn EscrowInitPanel(
         <Show when=is_idle>
             <div style="margin-top:1rem;padding:0.75rem;border:1px dashed var(--border);border-radius:8px;background:var(--bg-secondary)">
                 <div style="font-size:0.85rem;font-weight:600;color:var(--text-primary);margin-bottom:0.5rem">
-                    "⛓ On-Chain Escrow Setup"
+                    "On-Chain Escrow Setup"
                 </div>
                 <div style="font-size:0.75rem;color:var(--text-secondary);margin-bottom:0.75rem">
                     "Single transaction: create vault ATA + initialize event escrow. Requires organizer wallet."
@@ -219,7 +219,7 @@ pub fn EscrowInitPanel(
                                         });
                                     }
                                 >
-                                    {format!("🔗 Connect {}", wn)}
+                                    {format!("Connect {}", wn)}
                                 </button>
                             }
                         }).collect_view()}
@@ -246,7 +246,7 @@ pub fn EscrowInitPanel(
                         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem">
                             <div>
                                 <div style="font-size:0.85rem;font-weight:600;color:var(--text-primary)">
-                                    "⛓ On-Chain Escrow Setup"
+                                    "On-Chain Escrow Setup"
                                 </div>
                                 <div style="font-size:0.75rem;color:var(--text-secondary);margin-top:0.2rem">
                                     {format!("Connected: {} ({})", wn, &pk[..8.min(pk.len())])}
@@ -388,7 +388,7 @@ pub fn EscrowInitPanel(
                                         });
                                     }
                                 >
-                                    "⚡ Create & Sign"
+                                    "Create & Sign"
                                 </button>
                             </div>
                         </div>
@@ -435,7 +435,7 @@ pub fn EscrowInitPanel(
                 view! {
                     <div style="margin-top:0.75rem;padding:0.5rem 0.75rem;border:1px solid var(--success,green);border-radius:6px;background:rgba(0,128,0,0.05)">
                         <div style="font-size:0.8rem;color:var(--success,green);font-weight:600">
-                            "✅ Escrow initialized on-chain"
+                            "Escrow initialized on-chain"
                         </div>
                         <div style="font-size:0.75rem;margin-top:0.25rem">
                             <span style="color:var(--text-secondary)">"Escrow: "</span>
@@ -470,7 +470,7 @@ pub fn EscrowInitPanel(
                 view! {
                     <div style="margin-top:1rem;padding:0.5rem 0.75rem;border:1px solid var(--error,red);border-radius:6px;background:rgba(255,0,0,0.05)">
                         <div style="font-size:0.8rem;color:var(--error,red)">
-                            {format!("❌ {msg}")}
+                            {format!("{msg}")}
                         </div>
                         <button
                             class="btn btn-outline"

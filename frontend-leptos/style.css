@@ -6236,6 +6236,167 @@ nav a.active {
     display: none;
 }
 
+/* ===== Events Search Input ===== */
+.events-search-input {
+    font-size: 0.85rem;
+    padding: 0.4rem 0.75rem;
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+    border-radius: 6px;
+    background: var(--bg-secondary, rgba(255, 255, 255, 0.03));
+    color: var(--text-primary, #eee);
+    outline: none;
+    width: 200px;
+    transition:
+        border-color 0.15s ease,
+        box-shadow 0.15s ease;
+}
+
+.events-search-input:focus {
+    border-color: var(--accent, #6366f1);
+    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
+}
+
+.events-search-input::placeholder {
+    color: var(--text-secondary, #888);
+}
+
+/* ===== Section Icons (emoji-free) ===== */
+.form-section-icon-basic::before {
+    content: "";
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+    background: var(--accent, #6366f1);
+    opacity: 0.7;
+    vertical-align: middle;
+}
+.form-section-icon-schedule::before {
+    content: "";
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 2px solid var(--text-secondary, #888);
+    vertical-align: middle;
+}
+.form-section-icon-sheets::before {
+    content: "";
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border-radius: 2px;
+    background: #22c55e;
+    opacity: 0.6;
+    vertical-align: middle;
+}
+.form-section-icon-nft::before {
+    content: "";
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 2px solid #f59e0b;
+    vertical-align: middle;
+}
+.form-section-icon-settings::before {
+    content: "";
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border-radius: 2px;
+    border: 2px solid var(--text-secondary, #888);
+    vertical-align: middle;
+}
+.form-section-icon-deposit::before {
+    content: "";
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border-radius: 2px;
+    background: #3b82f6;
+    opacity: 0.6;
+    vertical-align: middle;
+}
+.form-section-icon-people::before {
+    content: "";
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--text-secondary, #888);
+    opacity: 0.4;
+    vertical-align: middle;
+}
+
+/* ===== Events Empty Icon ===== */
+.events-empty-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    border: 2px dashed var(--border, rgba(255, 255, 255, 0.15));
+    margin-bottom: 0.5rem;
+}
+
+/* ===== Escrow Solscan Link (inline with label) ===== */
+.escrow-solscan-link {
+    font-size: 0.65rem;
+    font-weight: 600;
+    color: var(--accent, #6366f1);
+    margin-left: 0.5rem;
+    text-decoration: none;
+    padding: 0.1rem 0.3rem;
+    border: 1px solid var(--accent, #6366f1);
+    border-radius: 3px;
+    vertical-align: middle;
+    transition: background 0.15s ease;
+}
+
+.escrow-solscan-link:hover {
+    background: rgba(99, 102, 241, 0.1);
+}
+
+/* ===== Escrow Result Banners ===== */
+.escrow-result {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.5rem;
+    padding: 0.4rem 0.75rem;
+    border-radius: 6px;
+    font-size: 0.8rem;
+}
+
+.escrow-result-success {
+    border: 1px solid var(--success, green);
+    background: rgba(0, 128, 0, 0.05);
+    color: var(--success, green);
+}
+
+.escrow-result-error {
+    border: 1px solid var(--error, red);
+    background: rgba(255, 0, 0, 0.05);
+    color: var(--error, red);
+}
+
+.escrow-result-text {
+    font-weight: 600;
+}
+
+.escrow-result-link a {
+    color: var(--accent, #6366f1);
+    font-size: 0.7rem;
+    text-decoration: none;
+    border: 1px solid var(--accent, #6366f1);
+    border-radius: 3px;
+    padding: 0.15rem 0.35rem;
+    transition: background 0.15s ease;
+}
+
+.escrow-result-link a:hover {
+    background: rgba(99, 102, 241, 0.1);
+}
+
 /* Responsive */
 @media (max-width: 480px) {
     .deposit-method-cards {

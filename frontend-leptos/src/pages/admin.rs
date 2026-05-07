@@ -506,10 +506,10 @@ pub fn Admin() -> impl IntoView {
                                         let id = e.id.clone();
                                         let name = e.name.clone();
                                         let status = match e.status {
-                                            api::EventStatus::Active => "🟢",
-                                            api::EventStatus::Draft => "📝",
-                                            api::EventStatus::Completed => "✅",
-                                            api::EventStatus::Archived => "📦",
+                                            api::EventStatus::Active => "",
+                                            api::EventStatus::Draft => "",
+                                            api::EventStatus::Completed => "",
+                                            api::EventStatus::Archived => "",
                                         };
                                         view! {
                                             <option value=id>{format!("{status} {name}")}</option>
@@ -582,7 +582,7 @@ pub fn Admin() -> impl IntoView {
                             on:click=move |_| set_active_section.set(AdminSection::Escrow)
                         >
                             <span class="admin-sidebar-icon">
-                                "⛓"
+                                ""
                             </span>
                             "Escrow Management"
                         </button>
@@ -878,7 +878,7 @@ pub fn Admin() -> impl IntoView {
                                                     style="margin-left:0.5rem;padding:0.15rem 0.4rem;font-size:0.7rem;"
                                                     title="Deposit page"
                                                 >
-                                                    "💰"
+                                                    "Deposit"
                                                 </a>
                                                 <Show
                                                     when=move || has_time_ago

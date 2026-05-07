@@ -91,11 +91,8 @@ impl EscrowAction {
     }
 
     fn icon(&self) -> &'static str {
-        match self {
-            Self::Deactivate => "⏸",
-            Self::ClaimForfeited => "💰",
-            Self::CloseEvent => "🗑",
-        }
+
+        ""
     }
 
     fn description(&self) -> &'static str {
@@ -135,8 +132,8 @@ pub fn AdminEscrow(
     // Action trigger — set to trigger async execution
     let (action_to_execute, set_action_to_execute) = signal(None::<EscrowAction>);
 
-    // Last result for showing success/error banner
-    let (last_result, set_last_result) = signal(None::<(EscrowAction, Result<String, String>)>);
+    // Per-action results — persists Solscan links across steps
+    let (action_results, set_action_results) = signal(Vec::<(EscrowAction, Result<String, String>)>::new());
 
     // Reset state when event changes
     Effect::new(move |_| {
@@ -145,7 +142,7 @@ pub fn AdminEscrow(
         set_wallet_pk.set(String::new());
         set_completed_actions.set(Vec::new());
         set_signing_action.set(None);
-        set_last_result.set(None);
+        set_action_results.set(Vec::new());
     });
 
     // Detect available wallets — poll sync detection with delays to wait
@@ -204,13 +201,12 @@ pub fn AdminEscrow(
         let wn = wallet_name.get();
         let eid = active_event_id.get().unwrap_or_default();
         let set_sa = set_signing_action.clone();
-        let set_lr = set_last_result.clone();
+        let set_ar = set_action_results.clone();
         let set_done = set_completed_actions.clone();
         let set_t = set_toast.clone();
         let set_trigger = set_action_to_execute.clone();
 
         set_sa.set(Some(action));
-        set_lr.set(None);
 
         leptos::task::spawn_local(async move {
             let tx_result: Result<String, api::ApiError> = match action {
@@ -238,7 +234,7 @@ pub fn AdminEscrow(
                         Some(signature) => {
                             log::info!("[admin-escrow] {} TX confirmed: {}", action.label(), signature);
                             set_done.update(|v| v.push(action));
-                            set_lr.set(Some((action, Ok(signature.clone()))));
+                            set_ar.update(|v| v.push((action, Ok(signature.clone()))));
                             components::show_toast(
                                 &set_t,
                                 &format!(
@@ -252,7 +248,7 @@ pub fn AdminEscrow(
                         None => {
                             log::error!("[admin-escrow] {} TX rejected", action.label());
                             let msg = format!("{} transaction rejected or failed", action.label());
-                            set_lr.set(Some((action, Err(msg.clone()))));
+                            set_ar.update(|v| v.push((action, Err(msg.clone()))));
                             components::show_toast(&set_t, &msg, ToastType::Error);
                         }
                     }
@@ -260,7 +256,7 @@ pub fn AdminEscrow(
                 Err(e) => {
                     log::error!("[admin-escrow] {} failed: {e}", action.label());
                     let msg = format!("{}: {e}", action.label());
-                    set_lr.set(Some((action, Err(msg.clone()))));
+                    set_ar.update(|v| v.push((action, Err(msg.clone()))));
                     components::show_toast(&set_t, &msg, ToastType::Error);
                 }
             }
@@ -276,7 +272,7 @@ pub fn AdminEscrow(
     view! {
         <div class="admin-escrow">
             <div class="admin-section-header">
-                <h3>"⛓ Escrow Management"</h3>
+                <h3>"Escrow Management"</h3>
                 <p class="admin-section-subtitle">
                     "Manage on-chain escrow lifecycle — deactivate, claim forfeited deposits, close."
                 </p>
@@ -296,14 +292,14 @@ pub fn AdminEscrow(
                 <Show when=move || !is_connected() fallback=|| view! { <div></div> }>
                     <div style="margin-bottom:1rem;padding:0.75rem;border:1px solid var(--border);border-radius:8px;background:var(--bg-secondary)">
                         <div style="font-size:0.85rem;font-weight:600;color:var(--text-primary);margin-bottom:0.5rem">
-                            "🔗 Connect Organizer Wallet"
+                            "Connect Organizer Wallet"
                         </div>
                         <div style="font-size:0.75rem;color:var(--text-secondary);margin-bottom:0.75rem">
                             "Connect the wallet that created this event's escrow to sign management transactions."
                         </div>
                         <Show when=move || has_wallets() fallback=|| view! {
                             <div style="font-size:0.75rem;color:var(--warning,orange)">
-                                "⚠ No Solana wallet detected. Install Phantom or Solflare."
+                                "No Solana wallet detected. Install Phantom or Solflare."
                             </div>
                         }>
                             <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
@@ -317,7 +313,7 @@ pub fn AdminEscrow(
                                                 style="font-size:0.8rem;padding:0.4rem 0.8rem"
                                                 on:click=move |_| handle_connect(wn_click.clone())
                                             >
-                                                {format!("🔗 Connect {}", wn)}
+                                                {format!("Connect {}", wn)}
                                             </button>
                                         }
                                     }).collect_view()
@@ -335,7 +331,7 @@ pub fn AdminEscrow(
                             {move || {
                                 let wn = wallet_name.get();
                                 let pk = wallet_pk.get();
-                                format!("🔗 {} ({})", wn, &pk[..8.min(pk.len())])
+                                format!("{} ({})", wn, &pk[..8.min(pk.len())])
                             }}
                         </div>
                         <button
@@ -350,37 +346,39 @@ pub fn AdminEscrow(
                         </button>
                     </div>
 
-                    // ── Last Result Banner ──
+                    // ── Per-Action Results ──
                     {move || {
-                        match &last_result.get() {
-                            Some((action, Ok(signature))) => {
-                                let sig = signature.clone();
-                                let solscan = crate::utils::solscan_tx_url(&sig, &crate::utils::get_cluster());
-                                view! {
-                                    <div style="margin-bottom:0.75rem;padding:0.5rem 0.75rem;border:1px solid var(--success,green);border-radius:6px;background:rgba(0,128,0,0.05)">
-                                        <div style="font-size:0.8rem;color:var(--success,green);font-weight:600">
-                                            {format!("✅ {} confirmed", action.label())}
+                        let results = action_results.get();
+                        results.iter().map(|(action, result)| {
+                            match result {
+                                Ok(signature) => {
+                                    let sig = signature.clone();
+                                    let solscan = crate::utils::solscan_tx_url(&sig, &crate::utils::get_cluster());
+                                    view! {
+                                        <div class="escrow-result escrow-result-success">
+                                            <div class="escrow-result-text">
+                                                {format!("{} confirmed", action.label())}
+                                            </div>
+                                            <div class="escrow-result-link">
+                                                <a href=solscan target="_blank" rel="noopener">
+                                                    "Solscan"
+                                                </a>
+                                            </div>
                                         </div>
-                                        <div style="font-size:0.7rem;margin-top:0.25rem">
-                                            <a href=solscan target="_blank" rel="noopener" style="color:var(--accent)">
-                                                "View on Solscan ↗"
-                                            </a>
+                                    }.into_any()
+                                }
+                                Err(msg) => {
+                                    let m = msg.clone();
+                                    view! {
+                                        <div class="escrow-result escrow-result-error">
+                                            <div class="escrow-result-text">
+                                                {format!("{}: {m}", action.label())}
+                                            </div>
                                         </div>
-                                    </div>
-                                }.into_any()
+                                    }.into_any()
+                                }
                             }
-                            Some((action, Err(msg))) => {
-                                let m = msg.clone();
-                                view! {
-                                    <div style="margin-bottom:0.75rem;padding:0.5rem 0.75rem;border:1px solid var(--error,red);border-radius:6px;background:rgba(255,0,0,0.05)">
-                                        <div style="font-size:0.8rem;color:var(--error,red)">
-                                            {format!("❌ {}: {m}", action.label())}
-                                        </div>
-                                    </div>
-                                }.into_any()
-                            }
-                            None => view! { <div></div> }.into_any(),
-                        }
+                        }).collect_view()
                     }}
 
                     // ── Lifecycle Steps ──
@@ -392,7 +390,7 @@ pub fn AdminEscrow(
                             let done = is_done(action);
                             let signing = signing_action.get() == Some(action);
                             let border = if done { "var(--success,green)" } else { "var(--border)" };
-                            let check = if done { " ✅" } else { "" };
+                            let check = "";
                             let trigger = set_action_to_execute.clone();
                             view! {
                                 <div style=format!("display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:0.5rem 0.75rem;border:1px solid {border};border-radius:6px;background:var(--bg-primary)")>
@@ -420,7 +418,7 @@ pub fn AdminEscrow(
                                                 style="white-space:nowrap;font-size:0.8rem;padding:0.4rem 0.8rem"
                                                 on:click=move |_| trigger.set(Some(action))
                                             >
-                                                "⚡ Sign TX"
+                                                "Sign"
                                             </button>
                                         }.into_any()
                                     }}
@@ -434,7 +432,7 @@ pub fn AdminEscrow(
                             let done = is_done(action);
                             let signing = signing_action.get() == Some(action);
                             let border = if done { "var(--success,green)" } else { "var(--border)" };
-                            let check = if done { " ✅" } else { "" };
+                            let check = "";
                             let trigger = set_action_to_execute.clone();
                             view! {
                                 <div style=format!("display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:0.5rem 0.75rem;border:1px solid {border};border-radius:6px;background:var(--bg-primary)")>
@@ -462,7 +460,7 @@ pub fn AdminEscrow(
                                                 style="white-space:nowrap;font-size:0.8rem;padding:0.4rem 0.8rem"
                                                 on:click=move |_| trigger.set(Some(action))
                                             >
-                                                "⚡ Sign TX"
+                                                "Sign"
                                             </button>
                                         }.into_any()
                                     }}
@@ -476,7 +474,7 @@ pub fn AdminEscrow(
                             let done = is_done(action);
                             let signing = signing_action.get() == Some(action);
                             let border = if done { "var(--success,green)" } else { "var(--border)" };
-                            let check = if done { " ✅" } else { "" };
+                            let check = "";
                             let trigger = set_action_to_execute.clone();
                             view! {
                                 <div style=format!("display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:0.5rem 0.75rem;border:1px solid {border};border-radius:6px;background:var(--bg-primary)")>
@@ -504,7 +502,7 @@ pub fn AdminEscrow(
                                                 style="white-space:nowrap;font-size:0.8rem;padding:0.4rem 0.8rem"
                                                 on:click=move |_| trigger.set(Some(action))
                                             >
-                                                "⚡ Sign TX"
+                                                "Sign"
                                             </button>
                                         }.into_any()
                                     }}

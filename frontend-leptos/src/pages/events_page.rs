@@ -230,10 +230,10 @@ fn status_badge_style(status: &api::EventStatus) -> &'static str {
 /// Get status display label.
 fn status_label(status: &api::EventStatus) -> &'static str {
     match status {
-        api::EventStatus::Active => "🟢 Active",
-        api::EventStatus::Draft => "📝 Draft",
-        api::EventStatus::Completed => "✅ Completed",
-        api::EventStatus::Archived => "📦 Archived",
+        api::EventStatus::Active => "Active",
+        api::EventStatus::Draft => "Draft",
+        api::EventStatus::Completed => "Completed",
+        api::EventStatus::Archived => "Archived",
     }
 }
 
@@ -275,6 +275,7 @@ pub fn EventsPage(
     let (sec_deposit_open, set_sec_deposit_open) = signal(true);
     let (sec_people_open, set_sec_people_open) = signal(false);
     let (show_advanced, set_show_advanced) = signal(false);
+    let (search_query, set_search_query) = signal(String::new());
 
     // Load events on mount and on refresh
     Effect::new(move |_| {
@@ -479,11 +480,20 @@ pub fn EventsPage(
                 // Header with create button (hidden for staff users)
                 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
                     <h2 class="admin-section-heading" style="margin-bottom:0">"Events Management"</h2>
-                    <Show when=move || components::can_manage_events(&user_role.get()) fallback=|| view! { <div></div> }>
-                        <button class="btn btn-primary btn-sm" on:click=handle_create>
-                            "+ Create Event"
-                        </button>
-                    </Show>
+                    <div style="display:flex;align-items:center;gap:0.75rem">
+                        <input
+                            type="text"
+                            class="events-search-input"
+                            placeholder="Search events..."
+                            prop:value=move || search_query.get()
+                            on:input=move |ev| set_search_query.set(event_target_value(&ev))
+                        />
+                        <Show when=move || components::can_manage_events(&user_role.get()) fallback=|| view! { <div></div> }>
+                            <button class="btn btn-primary btn-sm" on:click=handle_create>
+                                "+ Create Event"
+                            </button>
+                        </Show>
+                    </div>
                 </div>
 
                 // Loading state
@@ -501,7 +511,7 @@ pub fn EventsPage(
                 >
                     <div class="card">
                         <div class="admin-empty-state">
-                            <div style="font-size:2rem;margin-bottom:0.5rem">"📅"</div>
+                            <div class="events-empty-icon"></div>
                             <h3>"No Events Yet"</h3>
                             <p>"Create your first event to get started with check-in management."</p>
                             <Show when=move || components::can_manage_events(&user_role.get()) fallback=|| view! { <div></div> }>
@@ -516,8 +526,18 @@ pub fn EventsPage(
                 // Events list
                 <Show when=move || !events.get().is_empty() fallback=|| view! { <div></div> }>
                     {move || {
+                        let query = search_query.get().to_lowercase();
                         let events_list = events.get();
-                        events_list.iter().map(|event| {
+                        let filtered: Vec<_> = if query.is_empty() {
+                            events_list.iter().collect()
+                        } else {
+                            events_list.iter().filter(|e| {
+                                e.name.to_lowercase().contains(&query)
+                                    || e.slug.to_lowercase().contains(&query)
+                                    || e.sheet_id.to_lowercase().contains(&query)
+                            }).collect()
+                        };
+                        filtered.iter().map(|event| {
                             let edit_id = event.id.clone();
                             let archive_id = event.id.clone();
                             let badge_class = status_badge_class(&event.status);
@@ -567,7 +587,7 @@ pub fn EventsPage(
                                                     });
                                                 }
                                             >
-                                                "✏️ Edit"
+                                                "Edit"
                                             </button>
                                             {if !is_archived {
                                                 let aid = archive_id.clone();
@@ -600,7 +620,7 @@ pub fn EventsPage(
                                                             });
                                                         }
                                                     >
-                                                        "📦 Archive"
+                                                        "Archive"
                                                     </button>
                                                 }.into_any()
                                             } else {
@@ -641,7 +661,7 @@ pub fn EventsPage(
                 {move || {
                     let is_edit = current_view.get() == EventsView::Edit;
                     let title = if is_edit { "Edit Event" } else { "Create Event" };
-                    let save_label = if is_edit { "💾 Update Event" } else { "💾 Create Event" };
+                    let save_label = if is_edit { "Update Event" } else { "Create Event" };
                     let is_saving = saving.get();
                     let archive_eid = editing_id.get().unwrap_or_default();
 
@@ -652,7 +672,7 @@ pub fn EventsPage(
                             // ── Basic Info ──
                             <div class="form-section">
                                 <div class="form-section-header" on:click=move |_| set_sec_basic_open.update(|v| *v = !*v)>
-                                    <span class="form-section-icon">"📋"</span>
+                                    <span class="form-section-icon form-section-icon-basic"></span>
                                     <span class="form-section-title">"Basic Info"</span>
                                     <span class="form-section-badge form-section-badge-required">"Required"</span>
                                     <span class="form-section-toggle" class:form-section-toggle-open=move || sec_basic_open.get()>"▼"</span>
@@ -707,7 +727,7 @@ pub fn EventsPage(
                             // ── Schedule ──
                             <div class="form-section">
                                 <div class="form-section-header" on:click=move |_| set_sec_schedule_open.update(|v| *v = !*v)>
-                                    <span class="form-section-icon">"🕐"</span>
+                                    <span class="form-section-icon form-section-icon-schedule"></span>
                                     <span class="form-section-title">"Schedule"</span>
                                     <span class="form-section-badge form-section-badge-optional">"Optional"</span>
                                     <span class="form-section-toggle" class:form-section-toggle-open=move || sec_schedule_open.get()>"▼"</span>
@@ -749,7 +769,7 @@ pub fn EventsPage(
                             // ── Google Sheets ──
                             <div class="form-section">
                                 <div class="form-section-header" on:click=move |_| set_sec_sheets_open.update(|v| *v = !*v)>
-                                    <span class="form-section-icon">"📊"</span>
+                                    <span class="form-section-icon form-section-icon-sheets"></span>
                                     <span class="form-section-title">"Google Sheets"</span>
                                     <span class="form-section-badge form-section-badge-required">"Required"</span>
                                     <span class="form-section-toggle" class:form-section-toggle-open=move || sec_sheets_open.get()>"▼"</span>
@@ -793,7 +813,7 @@ pub fn EventsPage(
                             // ── NFT Configuration ──
                             <div class="form-section">
                                 <div class="form-section-header" on:click=move |_| set_sec_nft_open.update(|v| *v = !*v)>
-                                    <span class="form-section-icon">"🎨"</span>
+                                    <span class="form-section-icon form-section-icon-nft"></span>
                                     <span class="form-section-title">"NFT Configuration"</span>
                                     <span class="form-section-badge form-section-badge-optional">"Optional"</span>
                                     <span class="form-section-toggle" class:form-section-toggle-open=move || sec_nft_open.get()>"▼"</span>
@@ -864,7 +884,7 @@ pub fn EventsPage(
                                             fallback=|| view! { <div></div> }
                                         >
                                             <div style="color:var(--warning);font-size:0.75rem;margin-top:0.25rem">
-                                                "⚠ Resolved name exceeds 32-char limit (Bubblegum max). Name will be truncated."
+                                                "Resolved name exceeds 32-char limit (Bubblegum max). Name will be truncated."
                                             </div>
                                         </Show>
                                     </div>
@@ -894,7 +914,7 @@ pub fn EventsPage(
                             // ── Settings ──
                             <div class="form-section">
                                 <div class="form-section-header" on:click=move |_| set_sec_settings_open.update(|v| *v = !*v)>
-                                    <span class="form-section-icon">"⚙️"</span>
+                                    <span class="form-section-icon form-section-icon-settings"></span>
                                     <span class="form-section-title">"Settings"</span>
                                     <span class="form-section-badge form-section-badge-optional">"Optional"</span>
                                     <span class="form-section-toggle" class:form-section-toggle-open=move || sec_settings_open.get()>"▼"</span>
@@ -954,9 +974,9 @@ pub fn EventsPage(
                                                         }
                                                     }
                                                 >
-                                                    <option value="draft">"📝 Draft"</option>
-                                                    <option value="active">"🟢 Active"</option>
-                                                    <option value="completed">"✅ Completed"</option>
+                                                    <option value="draft">"Draft"</option>
+                                                    <option value="active">"Active"</option>
+                                                    <option value="completed">"Completed"</option>
                                                 </select>
                                             </div>
                                         }.into_any()
@@ -970,7 +990,7 @@ pub fn EventsPage(
                             // ── Deposit Configuration ──
                             // Deposit toggle always visible
                             <div style="margin-bottom:0.75rem;display:flex;align-items:center;gap:0.75rem">
-                                <span style="font-size:0.95rem;font-weight:600;color:var(--text-secondary)">"💰 Deposit"</span>
+                                <span style="font-size:0.95rem;font-weight:600;color:var(--text-secondary)">"Deposit"</span>
                                 <label class="quiz-toggle-label" style="cursor:pointer">
                                     <input
                                         type="checkbox"
@@ -992,7 +1012,7 @@ pub fn EventsPage(
                             <Show when=move || form.get().deposit_enabled fallback=|| view! { <div></div> }>
                             <div class="form-section">
                                 <div class="form-section-header" on:click=move |_| set_sec_deposit_open.update(|v| *v = !*v)>
-                                    <span class="form-section-icon">"💳"</span>
+                                    <span class="form-section-icon form-section-icon-deposit"></span>
                                     <span class="form-section-title">"Deposit Details"</span>
                                     <span class="form-section-badge form-section-badge-optional">"Optional"</span>
                                     <span class="form-section-toggle" class:form-section-toggle-open=move || sec_deposit_open.get()>"▼"</span>
@@ -1037,7 +1057,19 @@ pub fn EventsPage(
                                         <span class="quiz-setting-hint">"Thai phone number or national ID for PromptPay QR generation"</span>
                                     </div>
                                     <div class="quiz-setting-item">
-                                        <label class="quiz-field-label">"Escrow Address"</label>
+                                        <label class="quiz-field-label">
+                                            "Escrow Address"
+                                            <Show when=move || !form.get().escrow_address.is_empty() fallback=|| view! { <span></span> }>
+                                                <a
+                                                    href=move || crate::utils::solscan_address_url(&form.get().escrow_address, &crate::utils::get_cluster())
+                                                    target="_blank"
+                                                    rel="noopener"
+                                                    class="escrow-solscan-link"
+                                                >
+                                                    "Solscan"
+                                                </a>
+                                            </Show>
+                                        </label>
                                         <input
                                             type="text"
                                             class="quiz-number-input"
@@ -1064,7 +1096,7 @@ pub fn EventsPage(
                                                 <span class="quiz-setting-hint">"Organizer's Solana wallet address (base58) — connect wallet below or paste manually"</span>
                                             }
                                         >
-                                            <span class="quiz-setting-hint" style="color:var(--success,green)">"✅ Wallet locked — use escrow panel to change"</span>
+                                            <span class="quiz-setting-hint" style="color:var(--success,green)">"Wallet locked -- use escrow panel to change"</span>
                                         </Show>
                                     </div>
                                     // Advanced toggle for on-chain event ID
@@ -1119,7 +1151,7 @@ pub fn EventsPage(
                                         {move || view! {
                                             <div style="margin-top:0.75rem;padding:0.5rem 0.75rem;border:1px solid var(--success,green);border-radius:6px;background:rgba(0,128,0,0.05)">
                                                 <span style="font-size:0.8rem;color:var(--success,green)">
-                                                    "✅ Escrow initialized: "
+                                                    "Escrow initialized: "
                                                     <code style="font-size:0.75rem">{form.get().escrow_address}</code>
                                                 </span>
                                             </div>
@@ -1144,7 +1176,7 @@ pub fn EventsPage(
                             // ── People ──
                             <div class="form-section">
                                 <div class="form-section-header" on:click=move |_| set_sec_people_open.update(|v| *v = !*v)>
-                                    <span class="form-section-icon">"📧"</span>
+                                    <span class="form-section-icon form-section-icon-people"></span>
                                     <span class="form-section-title">"People"</span>
                                     <span class="form-section-badge form-section-badge-optional">"Optional"</span>
                                     <span class="form-section-toggle" class:form-section-toggle-open=move || sec_people_open.get()>"▼"</span>
@@ -1220,7 +1252,7 @@ pub fn EventsPage(
                                                 });
                                             }
                                         >
-                                            "📦 Archive Event"
+                                            "Archive Event"
                                         </button>
                                     }.into_any()
                                 } else {

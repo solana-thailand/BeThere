@@ -208,7 +208,7 @@ pub fn AdminDeposits(
                     class:active=move || active_tab.get() == AdminDepositTab::Deposits
                     on:click=move |_| set_active_tab.set(AdminDepositTab::Deposits)
                 >
-                    "📋 Deposits"
+                    "Deposits"
                     <Show when=move || pending_count.get() != 0 fallback=|| view! { <span></span> }>
                         <span class="badge badge-warning" style="margin-left:0.5rem">
                             {move || pending_count.get()}
@@ -246,7 +246,7 @@ pub fn AdminDeposits(
                     fallback=|| view! { <div></div> }
                 >
                     <div class="admin-section-header">
-                        <h3>{format!("📋 {} pending slip{}", pending_count.get(), if pending_count.get() != 1 { "s" } else { "" })}</h3>
+                        <h3>{format!("{} pending slip{}", pending_count.get(), if pending_count.get() != 1 { "s" } else { "" })}</h3>
                     </div>
 
                     <Show
