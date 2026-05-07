@@ -122,6 +122,14 @@ pub async fn create_event(kv: &KvStore, req: &CreateEventRequest) -> Result<Even
         return Err("event_end_ms must be after event_start_ms".to_string());
     }
 
+    // SEC-003: Max deposit cap ($1,000 USDC = 1_000_000_000 smallest units, 6 decimals)
+    const MAX_DEPOSIT_USDC: u64 = 1_000_000_000;
+    if req.deposit_amount_usdc > MAX_DEPOSIT_USDC {
+        return Err(format!(
+            "deposit_amount_usdc exceeds maximum cap ({MAX_DEPOSIT_USDC} = $1,000 USDC)"
+        ));
+    }
+
     // Generate slug from name if not provided
     let slug = if req.slug.trim().is_empty() {
         slugify(&req.name)
@@ -226,6 +234,31 @@ pub async fn update_event(
         .await?
         .ok_or_else(|| format!("event '{id}' not found"))?;
 
+    // SEC-002: Lock escrow-critical fields after on-chain init.
+    // If escrow_address is set (escrow initialized on-chain), reject changes to
+    // fields that are baked into the on-chain EventEscrow PDA.
+    if !config.escrow_address.is_empty()
+        && (req.organizer_wallet.is_some()
+            || req.on_chain_event_id.is_some()
+            || req.deposit_amount_usdc.is_some()
+            || req.refund_deadline_hours.is_some())
+    {
+        return Err(
+            "cannot change organizer_wallet, on_chain_event_id, deposit_amount_usdc, or refund_deadline_hours after escrow is initialized on-chain".to_string()
+        );
+    }
+
+    // SEC-003: Max deposit cap in update path
+    const MAX_DEPOSIT_USDC: u64 = 1_000_000_000;
+    if let Some(v) = req.deposit_amount_usdc {
+        if v > MAX_DEPOSIT_USDC {
+            return Err(format!(
+                "deposit_amount_usdc exceeds maximum cap ({MAX_DEPOSIT_USDC} = $1,000 USDC)"
+            ));
+        }
+        config.deposit_amount_usdc = v;
+    }
+
     // Apply partial updates
     if let Some(ref name) = req.name {
         config.name = name.trim().to_string();
@@ -312,9 +345,7 @@ pub async fn update_event(
     if let Some(v) = req.deposit_enabled {
         config.deposit_enabled = v;
     }
-    if let Some(v) = req.deposit_amount_usdc {
-        config.deposit_amount_usdc = v;
-    }
+    // deposit_amount_usdc handled above with SEC-003 max cap validation
     if let Some(v) = req.deposit_amount_thb {
         config.deposit_amount_thb = v;
     }
@@ -352,10 +383,20 @@ pub async fn update_event(
 }
 
 /// Archive (soft-delete) an event by setting its status to Archived.
+///
+/// SEC-004: Rejects archive if the event has an active on-chain escrow.
+/// Archive the event first on-chain (close escrow) before archiving here.
 pub async fn archive_event(kv: &KvStore, id: &str) -> Result<(), String> {
     let mut config = get_event_config(kv, id)
         .await?
         .ok_or_else(|| format!("event '{id}' not found"))?;
+
+    // SEC-004: Block archive if escrow is active on-chain
+    if !config.escrow_address.is_empty() {
+        return Err(
+            "cannot archive event with active on-chain escrow — close escrow first".to_string(),
+        );
+    }
 
     config.status = EventStatus::Archived;
     config.updated_at = chrono::Utc::now().to_rfc3339();
@@ -370,6 +411,38 @@ pub async fn archive_event(kv: &KvStore, id: &str) -> Result<(), String> {
     save_event_index(kv, &index).await?;
 
     tracing::info!(event_id = %id, "event archived");
+
+    Ok(())
+}
+
+/// Restore (unarchive) an event by setting its status back to Draft.
+///
+/// Only works on Archived events. This is the reverse of `archive_event`.
+pub async fn restore_event(kv: &KvStore, id: &str) -> Result<(), String> {
+    let mut config = get_event_config(kv, id)
+        .await?
+        .ok_or_else(|| format!("event '{id}' not found"))?;
+
+    if config.status != EventStatus::Archived {
+        return Err(format!(
+            "event '{id}' is not archived (current status: {}) — only archived events can be restored",
+            config.status.as_str()
+        ));
+    }
+
+    config.status = EventStatus::Draft;
+    config.updated_at = chrono::Utc::now().to_rfc3339();
+
+    save_event_config(kv, &config).await?;
+
+    // Update index
+    let mut index = get_event_index(kv).await?;
+    if let Some(entry) = index.events.iter_mut().find(|e| e.id == id) {
+        entry.status = EventStatus::Draft;
+    }
+    save_event_index(kv, &index).await?;
+
+    tracing::info!(event_id = %id, "event restored from archive");
 
     Ok(())
 }
