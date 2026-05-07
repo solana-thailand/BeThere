@@ -1,11 +1,13 @@
-# Handover 044: Docs Security Status Update
+# Handover 044: Docs Update + Phase 2 Frontend Security Fixes
 
 **Date**: 2026-05-07
 **Branch**: `feature/010_deposit_refund_escrow`
 
 ## What Happened
 
-Updated all documentation to reflect the security fixes from Phases 1 and 3. Six findings (SEC-001/002/003/004/009/011) are now resolved in code but were still marked "Open" across docs.
+1. Updated all documentation to reflect security fixes from Phases 1 and 3 (6 findings were resolved in code but still marked "Open" in docs)
+2. Committed Phase 3 on-chain changes (SEC-001/009/011) together with the docs update
+3. Implemented Phase 2 frontend fixes (SEC-005 cluster-aware explorer links, SEC-006 duplicate Merkle field)
 
 ## Changes Made
 
@@ -28,23 +30,30 @@ Updated all documentation to reflect the security fixes from Phases 1 and 3. Six
 - **Scope for Mainnet**: Removed SEC-001/002/003/009 from "MUST FIX", SEC-004/011 from "SHOULD FIX", only SEC-005 remains
 - **Trust Model appendix**: Rewrote to reflect SEC-001 fix applied — no longer a trust assumption
 
-## Remaining Uncommitted Work
+## Remaining Open Findings
 
-The Phase 3 on-chain code changes (SEC-001/009/011 + test updates) are still uncommitted:
-- `bethere-escrow/src/errors.rs` — EventEnded error variant
-- `bethere-escrow/src/instructions/claim_forfeited.rs` — transfer_checked
-- `bethere-escrow/src/instructions/deposit.rs` — transfer_checked
-- `bethere-escrow/src/instructions/mark_checked_in.rs` — event_end guard
-- `bethere-escrow/src/instructions/refund.rs` — removed checked_in constraint + transfer_checked
-- `bethere-escrow/src/tests.rs` — test_refund_not_checked_in now asserts is_ok()
+| ID | Title | Notes |
+|----|-------|-------|
+| SEC-010 | AttendeeDeposit PDAs never closed (rent leak) | Requires new `close_deposit` on-chain instruction + UI button |
+
+### Phase 2 Frontend Fixes (SEC-005/006)
+
+| File | Fix | Details |
+|------|-----|--------|
+| `worker/src/handlers/health.rs` | SEC-005 | Add `cluster` field to health response (from RPC URL) |
+| `frontend-leptos/src/utils.rs` | SEC-005 | Add `fetch_cluster()`, `get_cluster()`, `solscan_tx_url()`, `solscan_address_url()` helpers |
+| `frontend-leptos/src/pages/scanner.rs` | SEC-005 | Replace hardcoded `?cluster=devnet` with `solscan_tx_url()` |
+| `frontend-leptos/src/pages/deposit.rs` | SEC-005 | Replace 2 hardcoded devnet URLs (deposit + refund confirmation) |
+| `frontend-leptos/src/pages/escrow_init.rs` | SEC-005 | Replace hardcoded devnet URL in escrow init success |
+| `frontend-leptos/src/pages/admin_escrow.rs` | SEC-005 | Replace hardcoded devnet URL in action result |
+| `frontend-leptos/src/pages/claim.rs` | SEC-005 | Refactor to use shared `solscan_tx_url`/`solscan_address_url` helpers |
+| `frontend-leptos/src/pages/events_page.rs` | SEC-006 | Remove duplicate Merkle Tree field from NFT Settings section |
 
 ## Plan / Next Steps
 
-1. **Commit Phase 3 on-chain fixes** with this docs update
-2. **Phase 2 frontend fixes**: SEC-005 (cluster-aware explorer links), SEC-006 (duplicate Merkle field)
-3. **Rebuild + redeploy**: `quasar build` → devnet deploy → E2E validation
-4. **Phase 4**: Rent reclamation (SEC-010)
-5. **Phase 5**: UX improvements
+1. **Rebuild + redeploy escrow program** — `quasar build` → devnet → E2E validation → mainnet
+2. **Phase 4: Rent reclamation** — SEC-010 `close_deposit` instruction
+3. **Phase 5: UX improvements** — search/filter, progressive disclosure form
 
 ## Issues Ref
 
