@@ -28,6 +28,12 @@ pub struct MarkCheckedIn {
 impl MarkCheckedIn {
     #[inline(always)]
     pub fn mark_checked_in(&mut self) -> Result<(), ProgramError> {
+        // SEC-011: Prevent check-ins after event ends
+        let clock = <Clock as quasar_lang::sysvars::Sysvar>::get()?;
+        if clock.unix_timestamp.get() > self.event_escrow.event_end() {
+            return Err(crate::errors::EscrowError::EventEnded.into());
+        }
+
         self.attendee_deposit.checked_in = true.into();
         Ok(())
     }

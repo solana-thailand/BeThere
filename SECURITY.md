@@ -25,7 +25,7 @@ We aim to acknowledge reports within 48 hours and provide a substantive response
 
 | Component | Type | Severity |
 |-----------|------|----------|
-| `bethere-escrow/` | On-chain Solana program (Anchor) | Critical, High, Medium |
+| `bethere-escrow/` | On-chain Solana program (Quasar) | Critical, High, Medium |
 | `worker/src/solana_escrow.rs` | TX builders (deposit, refund, claim) | Critical, High, Medium |
 | `worker/src/handlers/deposit.rs` | Deposit confirmation, webhook handling | Critical, High |
 | `worker/src/auth.rs` | JWT authentication, session management | Critical, High |
@@ -48,19 +48,19 @@ The BeThere escrow has undergone an internal security audit with 11 findings. Se
 
 | ID | Severity | Title | Status |
 |----|----------|-------|--------|
-| SEC-001 | 🔴 Critical | Check-in gate enables complete fund theft | Open |
-| SEC-002 | 🟠 High | Escrow fields mutable after on-chain init | Open |
+| SEC-001 | 🔴 Critical | Check-in gate enables complete fund theft | ✅ Fixed (Phase 3) |
+| SEC-002 | 🟠 High | Escrow fields mutable after on-chain init | ✅ Fixed (Phase 1) |
 
 ### Medium (Should Fix Before Mainnet)
 
 | ID | Title | Status |
 |----|-------|--------|
-| SEC-003 | No maximum deposit cap | Open |
-| SEC-004 | Archive doesn't deactivate on-chain escrow | Open |
+| SEC-003 | No maximum deposit cap | ✅ Fixed (Phase 1) |
+| SEC-004 | Archive doesn't deactivate on-chain escrow | ✅ Fixed (Phase 1) |
 | SEC-005 | Explorer links hardcoded to devnet | Open |
-| SEC-009 | `transfer()` not `transfer_checked()` (Token-2022) | Open |
+| SEC-009 | `transfer()` not `transfer_checked()` (Token-2022) | ✅ Fixed (Phase 3) |
 | SEC-010 | AttendeeDeposit PDAs never closed (rent leak) | Open |
-| SEC-011 | No `event_end` guard on `mark_checked_in` | Open |
+| SEC-011 | No `event_end` guard on `mark_checked_in` | ✅ Fixed (Phase 3) |
 
 ## Security Audit References
 

@@ -34,4 +34,6 @@ pub enum EscrowError {
     Overflow = 14,
     /// Vault still has tokens — settle all refunds/claims first.
     VaultNotEmpty = 15,
+    /// Event has ended — check-ins no longer allowed.
+    EventEnded = 16,
 }

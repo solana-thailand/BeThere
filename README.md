@@ -123,6 +123,7 @@ The frontend is served from `frontend-leptos/dist/` via Workers Assets with SPA 
 | GET | `/api/events/{id}` | Cookie | Get event config |
 | PUT | `/api/events/{id}` | Cookie + SuperAdmin | Update event config |
 | DELETE | `/api/events/{id}` | Cookie + SuperAdmin | Archive event |
+| POST | `/api/events/{id}/restore` | Cookie + SuperAdmin | Restore archived event to Draft |
 | POST | `/api/events/seed` | Cookie + SuperAdmin | Seed event from env vars |
 | POST | `/api/events/migrate` | Cookie + SuperAdmin | Migrate quiz KV → event KV |
 | GET | `/api/attendees` | Cookie + Event Staff | List all attendees + stats |
@@ -221,11 +222,13 @@ The escrow system uses PDAs (Program Derived Addresses) to hold attendee USDC de
 - `Vault ATA`: Associated Token Account for (EventEscrow, USDC mint)
 
 **Important constraints:**
-- Refund requires `clock > event_end` (event must have ended)
+- Refund requires `clock > event_end` (event must have ended) — no check-in required
 - Deposits are rejected after the event has ended (`event_end > now` check)
+- `mark_checked_in` rejects after `event_end` (SEC-011: prevents post-event attendance manipulation)
 - `claim_forfeited` requires `clock > refund_deadline` (post-deadline only)
+- All SPL token transfers use `transfer_checked()` with 6-decimal USDC (Token-2022 compatible)
 
-> ⚠️ **Security note**: The current `refund` instruction requires `checked_in == true`, which creates a rug pull vector (SEC-001). See `docs/security_audit.md` for details and the planned fix (time-based refund eligibility).
+> **Security note**: SEC-001 (check-in gate rug pull) has been fixed — refunds no longer require `checked_in == true`. Attendees can refund after `event_end` regardless of check-in status. See `docs/security_audit.md` for full audit.
 
 **Constants:**
 | Constant | Devnet | Mainnet |
@@ -312,14 +315,14 @@ See `scripts/e2e/test_escrow_devnet.sh` for the complete test flow. All 24 tests
 | Claim gates | ✅ Secure | Sequential check-in → quiz → adventure → mint, no bypass |
 | Solana RPC | ✅ Secure | Hardcoded method, serde serialization, null-safe deserialization, no user-controlled params |
 | Secrets | ✅ Secure | All via `env.secret()`, redacted from Debug output |
-| Escrow (on-chain) | ✅ Secure | Immutable params after creation, checked arithmetic, canonical PDA derivation |
-| Escrow (business logic) | ⚠️ 1 Critical | SEC-001: Check-in gates refunds → organizer rug pull vector. Fix: time-based refund eligibility (see `docs/security_audit.md`) |
-| Escrow (Token-2022) | ⚠️ 1 Medium | SEC-009: Uses `transfer()` not `transfer_checked()` — blocks Token-2022 USDC support |
+| Escrow (on-chain) | ✅ Secure | Immutable params after creation, checked arithmetic, canonical PDA derivation, `transfer_checked()` (SEC-009 fixed), `event_end` guard (SEC-011 fixed) |
+| Escrow (business logic) | ✅ Secure | SEC-001/002/003/004 all fixed — refunds don't require check-in, fields locked after escrow init, $1K deposit cap, archive guards escrow |
+| Escrow (Token-2022) | ✅ Secure | SEC-009 fixed — all transfers use `transfer_checked()` with 6-decimal USDC |
 | Double-claim | ⚠️ Deferred | KV dedup lock recommended before high-traffic events |
 | JWT revocation | ⚠️ Deferred | KV blacklist recommended for compromised tokens |
 | Dev mode | ⚠️ Local only | `DEV_MODE=1` bypasses JWT verification — only for `.dev.vars`, never production |
 
-See [`docs/security_audit.md`](docs/security_audit.md) for the full escrow security audit (11 findings, Safe Solana Builder cross-reference). See `.handovers/025_security_audit_e2e_nft_config.md` for the earlier auth/RPC audit.
+See [`docs/security_audit.md`](docs/security_audit.md) for the full escrow security audit (11 findings, 6 fixed, Safe Solana Builder cross-reference). See `.handovers/025_security_audit_e2e_nft_config.md` for the earlier auth/RPC audit.
 
 ## Roles & Access Control
 
@@ -354,7 +357,7 @@ See **[DISCUSSION.md](./DISCUSSION.md)** for the full architecture direction and
 | **8e** | Devnet E2E with real wallets | ✅ Done (5-step escrow flow validated, 24/24 tests) |
 | **8g** | Frontend refund flow + admin check-in UI + vault ATA + escrow init | ✅ Done |
 | **8h** | Mainnet deploy (escrow + deposit) | Planned |
-| **9a** | Escrow security hardening (SEC-001/002/003/009/011) | 🔴 Blocks Mainnet |
+| **9a** | Escrow security hardening (SEC-001/002/003/004/009/011) | 🟡 Phase 1+3 done, needs rebuild + redeploy |
 | **9b** | Frontend fixes (SEC-005/006, explorer links, Merkle field) | Planned |
 | **9c** | Rent reclamation — close AttendeeDeposit PDAs (SEC-010) | Planned |
 | **9d** | UX improvements (search/filter, progressive disclosure form) | Planned |

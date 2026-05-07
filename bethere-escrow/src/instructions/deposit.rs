@@ -71,7 +71,7 @@ impl Deposit {
     pub fn transfer_usdc(&self) -> Result<(), ProgramError> {
         let amount = self.event_escrow.deposit_amount();
         self.token_program
-            .transfer(&self.attendee_ta, &self.vault, &self.attendee, amount)
+            .transfer_checked(&self.attendee_ta, &self.usdc_mint, &self.vault, &self.attendee, amount, 6)
             .invoke()
     }
 

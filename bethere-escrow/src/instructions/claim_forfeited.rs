@@ -69,11 +69,13 @@ impl ClaimForfeited {
         ];
 
         self.token_program
-            .transfer(
+            .transfer_checked(
                 &self.vault,
+                &self.usdc_mint,
                 &self.organizer_ta,
                 &self.event_escrow,
                 forfeited,
+                6,
             )
             .invoke_signed(&seeds)?;
 

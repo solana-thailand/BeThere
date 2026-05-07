@@ -14,17 +14,17 @@
 
 | ID | Severity | Title | Status |
 |----|----------|-------|--------|
-| SEC-001 | 🔴 Critical | Check-in Gate Enables Complete Fund Theft | Open |
-| SEC-002 | 🟠 High | Escrow-Critical Fields Mutable After On-Chain Init | Open |
-| SEC-003 | 🟡 Medium | No Maximum Deposit Cap | Open |
-| SEC-004 | 🟡 Medium | Archive Doesn't Deactivate On-Chain Escrow | Open |
+| SEC-001 | 🔴 Critical | Check-in Gate Enables Complete Fund Theft | ✅ Fixed (Phase 3) |
+| SEC-002 | 🟠 High | Escrow-Critical Fields Mutable After On-Chain Init | ✅ Fixed (Phase 1) |
+| SEC-003 | 🟡 Medium | No Maximum Deposit Cap | ✅ Fixed (Phase 1) |
+| SEC-004 | 🟡 Medium | Archive Doesn't Deactivate On-Chain Escrow | ✅ Fixed (Phase 1) |
 | SEC-005 | 🟡 Medium | Explorer Links Hardcoded to Devnet | Open |
 | SEC-006 | 🟢 Low | Duplicate Merkle Tree Field in Form | Open |
 | SEC-007 | 🟢 Info | Worker Cannot Manipulate Funds | Confirmed Safe |
 | SEC-008 | 🟢 Info | On-Chain Escrow Fields Immutable After Creation | Confirmed Safe |
-| SEC-009 | 🟡 Medium | Token Transfers Use `transfer()` Not `transfer_checked()` | Open |
+| SEC-009 | 🟡 Medium | Token Transfers Use `transfer()` Not `transfer_checked()` | ✅ Fixed (Phase 3) |
 | SEC-010 | 🟡 Medium | AttendeeDeposit PDAs Never Closed (Rent Leak) | Open |
-| SEC-011 | 🟡 Medium | No `event_end` Guard on `mark_checked_in` | Open |
+| SEC-011 | 🟡 Medium | No `event_end` Guard on `mark_checked_in` | ✅ Fixed (Phase 3) |
 
 ---
 
@@ -33,7 +33,7 @@
 ### SEC-001: Check-in Gate Enables Complete Fund Theft
 
 **Severity**: 🔴 Critical
-**Status**: Open
+**Status**: ✅ Fixed (Phase 3) — `checked_in` constraint removed from `refund.rs`
 
 **Description**:
 The `refund` instruction requires `checked_in == true` on the `AttendeeDeposit` account, which only the organizer can set via `mark_checked_in`. If the organizer refuses to check in attendees, nobody can refund. After the `refund_deadline` passes, the organizer calls `claim_forfeited` and takes all deposits.
@@ -374,41 +374,41 @@ Cross-referenced against [Safe Solana Builder](https://github.com/Frankcastleaud
 
 ## Remediation Priority
 
-| Priority | Finding | Effort | Type |
-|----------|---------|--------|------|
-| P0 | SEC-001: Check-in gate enables fund theft | Medium | On-chain program |
-| P1 | SEC-002: Field immutability after escrow init | Small | Backend validation |
-| P2 | SEC-003: Deposit cap | Small | Backend + On-chain |
-| P3 | SEC-009: Use transfer_checked() | Small | On-chain program |
-| P4 | SEC-011: event_end guard on mark_checked_in | Small | On-chain program |
-| P5 | SEC-004: Archive guards | Medium | Backend + Frontend |
-| P6 | SEC-005: Explorer links cluster-aware | Small | Frontend |
-| P7 | SEC-010: Close AttendeeDeposit PDAs | Medium | On-chain + Frontend |
-| P8 | SEC-006: Duplicate Merkle field | Tiny | Frontend |
+| Priority | Finding | Effort | Type | Status |
+|----------|---------|--------|------|--------|
+| P0 | SEC-001: Check-in gate enables fund theft | Medium | On-chain program | ✅ Fixed (Phase 3) |
+| P1 | SEC-002: Field immutability after escrow init | Small | Backend validation | ✅ Fixed (Phase 1) |
+| P2 | SEC-003: Deposit cap | Small | Backend + On-chain | ✅ Fixed (Phase 1) |
+| P3 | SEC-009: Use transfer_checked() | Small | On-chain program | ✅ Fixed (Phase 3) |
+| P4 | SEC-011: event_end guard on mark_checked_in | Small | On-chain program | ✅ Fixed (Phase 3) |
+| P5 | SEC-004: Archive guards | Medium | Backend + Frontend | ✅ Fixed (Phase 1) |
+| P6 | SEC-005: Explorer links cluster-aware | Small | Frontend | Open |
+| P7 | SEC-010: Close AttendeeDeposit PDAs | Medium | On-chain + Frontend | Open |
+| P8 | SEC-006: Duplicate Merkle field | Tiny | Frontend | Open |
 
 ---
 
 ## Scope for Mainnet
 
-**MUST FIX before mainnet**: SEC-001, SEC-002, SEC-003, SEC-009
+**FIXED**: SEC-001, SEC-002, SEC-003, SEC-004, SEC-009, SEC-011 (Phases 1 + 3)
 
-SEC-001 is a direct fund theft vector. SEC-002 can cause permanent fund lockup. SEC-003 amplifies the impact of SEC-001. SEC-009 is a Token-2022 compatibility issue that would prevent the program from working with Token-2022 USDC (the future standard).
+SEC-001 was a direct fund theft vector (organizer rug pull). SEC-002 caused permanent fund lockup risk. SEC-003 amplified SEC-001 impact. SEC-009 was a Token-2022 compatibility blocker. SEC-011 allowed post-hoc check-in manipulation. SEC-004 was an information asymmetry enabling stealth rug pulls. All six are now resolved.
 
-**SHOULD FIX before mainnet**: SEC-004, SEC-005, SEC-011
+**SHOULD FIX before mainnet**: SEC-005
 
-SEC-004 is an information asymmetry issue that enables stealth rug pulls when combined with SEC-001. SEC-005 will break the user experience on mainnet (broken explorer links). SEC-011 allows post-hoc check-in manipulation.
+SEC-005 will break the user experience on mainnet (explorer links hardcoded to devnet cluster).
 
 **NICE TO FIX**: SEC-006, SEC-010
 
-SEC-006 is cosmetic. SEC-010 is a rent efficiency issue that accumulates over time.
+SEC-006 is cosmetic (duplicate Merkle field). SEC-010 is a rent efficiency issue (AttendeeDeposit PDAs never closed).
 
 ---
 
 ## Appendix: Trust Model
 
-The BeThere escrow system has an inherent trust assumption: **the organizer is trusted to fairly check in attendees**. SEC-001 exists because the current design encodes this trust in the refund path. The recommended fix removes this trust assumption by allowing refunds regardless of check-in status, which aligns with the escrow's purpose as a no-show deterrent rather than an organizer-controlled gate.
+The BeThere escrow system previously had a trust assumption where **the organizer was trusted to fairly check in attendees**. SEC-001 encoded this trust in the refund path. This has been resolved (Phase 3) — refunds no longer require `checked_in == true`, removing the organizer rug pull vector entirely. The escrow now functions as a pure no-show deterrent: attendees can always reclaim their deposit after `event_end`, regardless of whether the organizer checked them in.
 
-If the product intent is for the organizer to have complete control over refunds, that should be an explicit design decision documented and communicated to depositors before they sign.
+The `checked_in` field still serves as an analytics signal and NFT eligibility marker, but no longer gates fund access. The `mark_checked_in` instruction now includes an `event_end` guard (SEC-011 fix) to prevent post-event manipulation of attendance records.
 
 ---
 

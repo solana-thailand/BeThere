@@ -25,7 +25,6 @@ pub struct Refund {
     #[account(
         mut,
         constraints(*attendee_deposit.attendee() == *attendee.address()) @ EscrowError::Unauthorized,
-        constraints(attendee_deposit.checked_in()) @ EscrowError::NotCheckedIn,
         constraints(!attendee_deposit.refunded()) @ EscrowError::AlreadyRefunded,
         address = AttendeeDeposit::seeds(event_escrow.address(), attendee.address())
     )]
@@ -84,7 +83,14 @@ impl Refund {
         ];
 
         self.token_program
-            .transfer(&self.vault, &self.attendee_ta, &self.event_escrow, amount)
+            .transfer_checked(
+                &self.vault,
+                &self.usdc_mint,
+                &self.attendee_ta,
+                &self.event_escrow,
+                amount,
+                6,
+            )
             .invoke_signed(&seeds)
     }
 

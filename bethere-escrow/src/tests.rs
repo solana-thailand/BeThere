@@ -715,6 +715,9 @@ fn test_refund() {
 
 #[test]
 fn test_refund_not_checked_in() {
+    // SEC-001 fix: refunds are now allowed regardless of check-in status.
+    // Previously this test asserted refund fails when not checked in.
+    // Now we assert refund SUCCEEDS when not checked in (after event_end).
     let mut svm = setup();
     svm.warp_to_timestamp(EVENT_END + 1);
 
@@ -769,7 +772,7 @@ fn test_refund_not_checked_in() {
                 escrow,
                 DEPOSIT_AMOUNT,
                 1_699_000_000,
-                false, // NOT checked in
+                false, // NOT checked in — but refund should still succeed (SEC-001)
                 false,
                 deposit_bump,
             ),
@@ -779,10 +782,10 @@ fn test_refund_not_checked_in() {
     );
 
     assert!(
-        result.is_err(),
-        "refund should fail when attendee not checked in"
+        result.is_ok(),
+        "refund should succeed even when attendee not checked in (SEC-001 fix)"
     );
-    println!("  REFUND_NOT_CHECKED_IN: correctly rejected");
+    println!("  REFUND_NOT_CHECKED_IN: correctly allowed (SEC-001 fix — refund without check-in)");
 }
 
 // ===========================================================================
