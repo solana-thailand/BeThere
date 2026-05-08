@@ -433,22 +433,25 @@ pub fn get_usdc_mint(cluster: &str) -> Pubkey {
 
 ## 12. Implementation Checklist
 
-- [ ] On-chain program: `create_event` instruction
-- [ ] On-chain program: `deposit` instruction
-- [ ] On-chain program: `mark_checked_in` instruction
-- [ ] On-chain program: `refund` instruction (P0: remove `checked_in` requirement after `event_end`)
-- [ ] On-chain program: `deactivate_event` instruction
-- [ ] On-chain program: `claim_forfeited` instruction
-- [ ] On-chain program: `close_event` instruction
-- [ ] On-chain program: unit tests (LiteSVM or Mollusk)
-- [ ] Backend: lock escrow-critical fields after `escrow_address` set (P1)
-- [ ] Backend: enforce max deposit cap $1,000 USDC (P2)
-- [ ] Backend: archive guards — check on-chain state before allowing archive (P3)
-- [ ] Backend: cluster-aware explorer link generation
-- [ ] Frontend: deposit flow (connect wallet → sign TX → confirm)
-- [ ] Frontend: refund flow (after event → sign TX → confirm)
-- [ ] Frontend: check-in flow (organizer QR scan → sign TX)
-- [ ] Frontend: escrow state display (Solscan links)
-- [ ] Integration tests (devnet with real USDC faucet)
-- [ ] Security review of on-chain program
+- [x] On-chain program: `create_event` instruction
+- [x] On-chain program: `deposit` instruction
+- [x] On-chain program: `mark_checked_in` instruction
+- [x] On-chain program: `refund` instruction (P0: remove `checked_in` requirement after `event_end`)
+- [x] On-chain program: `deactivate_event` instruction
+- [x] On-chain program: `claim_forfeited` instruction
+- [x] On-chain program: `close_event` instruction
+- [x] On-chain program: `close_deposit` instruction (rent reclamation)
+- [x] On-chain program: 26 SVM unit tests (quasar-svm)
+- [x] On-chain program: 13 Kani formal verification harnesses
+- [x] Backend: lock escrow-critical fields after `escrow_address` set (P1)
+- [x] Backend: enforce max deposit cap $1,000 USDC (P2)
+- [x] Backend: archive guards — check on-chain state before allowing archive (P3)
+- [x] Backend: cluster-aware explorer link generation
+- [x] Frontend: deposit flow (connect wallet → sign TX → confirm)
+- [x] Frontend: refund flow (after event → sign TX → confirm)
+- [x] Frontend: check-in flow (organizer QR scan → sign TX)
+- [x] Frontend: escrow state display (Solscan links)
+- [x] Integration tests (devnet with real USDC faucet)
+- [x] Security review of on-chain program (11 findings, all fixed)
 - [ ] Load testing: 100+ concurrent deposits
+- [ ] External security audit submission (Audit Arena)

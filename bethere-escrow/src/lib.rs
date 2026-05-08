@@ -12,6 +12,9 @@ use instructions::*;
 #[cfg(test)]
 mod tests;
 
+#[cfg(kani)]
+mod kani;
+
 declare_id!("2TGfNNXNez2NgopffDnYYhLNYmndUBBwg5SvpD5XQeLo");
 
 #[program]

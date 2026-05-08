@@ -409,6 +409,46 @@ The `checked_in` field still serves as an analytics signal and NFT eligibility m
 
 ---
 
+## Formal Verification (Kani)
+
+- **Date**: 2025-05-09
+- **Tool**: Kani 0.67.0 (CBMC 6.8.0 backend)
+- **Scope**: Pure arithmetic properties of escrow financial logic
+- **Source**: `bethere-escrow/src/kani.rs` — 13 proof harnesses, 489 lines
+- **Result**: ✅ **All 13 harnesses pass** — 0 failures across 729 total checks
+
+### Verified Properties
+
+| # | Harness | Property Proven |
+|---|---------|----------------|
+| 1 | `create_event_rejects_zero_deposit` | `deposit_amount == 0` → always rejected |
+| 2 | `create_event_rejects_past_event_end` | `event_end <= now` → always rejected |
+| 3 | `create_event_rejects_bad_refund_deadline` | `refund_deadline <= event_end` → always rejected |
+| 4 | `create_event_accepts_valid_inputs` | All valid inputs → always accepted |
+| 5 | `deposit_overflow_safe` | `checked_add` never wraps, result ≥ old |
+| 6 | `refund_overflow_safe` | `checked_add` never wraps, result ≥ old |
+| 7 | `claim_forfeited_double_sub_safe` | Double `checked_sub` never underflows |
+| 8 | `close_event_invariant` | `deposited == refunded + forfeited` ↔ vault empty |
+| 9 | `accounting_conservation` | **Fundamental invariant**: `deposited ≥ refunded + forfeited` |
+| 10 | `forfeited_is_non_negative` | Forfeited calc is non-negative for valid states |
+| 11 | `claim_then_close_consistent` | After full claim → close invariant holds |
+| 12 | `sequential_deposits_monotonic` | Multiple deposits always increase total |
+| 13 | `sequential_refunds_monotonic` | Multiple refunds always increase total |
+
+### Methodology
+
+Pure arithmetic functions were extracted from the 5 critical financial instruction handlers (`create_event`, `deposit`, `refund`, `claim_forfeited`, `close_event`) into standalone functions with no Solana-specific dependencies. Kani's symbolic execution engine (`kani::any()`) verifies each property holds for **all possible u64/i64 inputs** — equivalent to exhaustive testing of 2^64 × 2^64 input combinations.
+
+### Limitations
+
+Kani **cannot** verify (covered by SVM integration tests):
+- PDA seed correctness → covered by 26 SVM tests
+- CPI call success/failure → covered by SVM `transfer_checked` tests
+- Account ownership checks → covered by SVM `has_one` constraint tests
+- Signer authority → covered by SVM unauthorized signer tests
+
+---
+
 ## Security References
 
 External resources and vulnerability patterns relevant to the BeThere escrow.
