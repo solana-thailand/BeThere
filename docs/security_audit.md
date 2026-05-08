@@ -25,6 +25,8 @@
 | SEC-009 | 🟡 Medium | Token Transfers Use `transfer()` Not `transfer_checked()` | ✅ Fixed (Phase 3) |
 | SEC-010 | 🟡 Medium | AttendeeDeposit PDAs Never Closed (Rent Leak) | ✅ Fixed (Phase 4) |
 | SEC-011 | 🟡 Medium | No `event_end` Guard on `mark_checked_in` | ✅ Fixed (Phase 3) |
+| SEC-012 | 🟠 High | Refund No refund_deadline Upper Bound (Race with claim_forfeited) | ✅ Fixed (Phase 5) |
+| SEC-013 | 🟡 Medium | Vault Griefing via External USDC Airdrop Blocks close_event | ✅ Fixed (Phase 5) |
 
 ---
 
@@ -345,6 +347,30 @@ The `mark_checked_in` instruction has no time-based guard — the organizer can 
 
 ---
 
+### SEC-012: Refund No refund_deadline Upper Bound — Race with claim_forfeited
+
+**Severity**: 🟠 High
+**Status**: ✅ Fixed (Phase 5)
+
+**Description**: The `refund` instruction only checked `clock >= event_end` (lower bound) but had no upper bound check against `refund_deadline`. Meanwhile, `claim_forfeited` checks `clock >= refund_deadline`. This created an overlap window after `refund_deadline` where both instructions were valid.
+
+**Attack**: Organizer calls `claim_forfeited` immediately after `refund_deadline`, draining the vault. Attendee then attempts refund — time check passes (still after `event_end`), but `transfer_usdc` fails because the vault is empty. The attendee's deposit PDA remains `refunded = false` with no USDC to recover.
+
+**Fix**: Added `clock >= refund_deadline → RefundDeadlinePassed` check to `validate_and_update()`. Refund window is now strictly `[event_end, refund_deadline)`.
+
+### SEC-013: Vault Griefing via External USDC Airdrop Blocks close_event
+
+**Severity**: 🟡 Medium
+**Status**: ✅ Fixed (Phase 5)
+
+**Description**: The `close_event` instruction verified vault emptiness via accounting invariant (`total_deposited == total_refunded + total_forfeited`) but did not check the actual vault token balance. Since anyone can transfer tokens to any SPL token account, an attacker could airdrop 1 lamport USDC to the vault.
+
+**Attack**: After event lifecycle completes normally (accounting balances correct), attacker sends 1 micro-USDC to the vault. `close_event` accounting check passes, but SPL Token's `close_account` CPI fails because `amount != 0`. Organizer is permanently stuck — cannot close event or reclaim vault rent (~0.002 SOL).
+
+**Fix**: Added `vault.amount() != 0` check in `close_event()` before the `close_account` CPI. Returns `VaultNotEmpty` if griefing detected.
+
+---
+
 ## Safe Solana Builder Cross-Reference Summary
 
 Cross-referenced against [Safe Solana Builder](https://github.com/Frankcastleauditor/safe-solana-builder) by Frank Castle (124⭐, Solana security researcher, 70+ Rust audits, 250+ Critical/High findings).
@@ -384,6 +410,8 @@ Cross-referenced against [Safe Solana Builder](https://github.com/Frankcastleaud
 | P6 | SEC-005: Explorer links cluster-aware | Small | Frontend | ✅ Fixed (Phase 2) |
 | P7 | SEC-010: Close AttendeeDeposit PDAs | Medium | On-chain + Frontend | ✅ Fixed (Phase 4) |
 | P8 | SEC-006: Duplicate Merkle field | Tiny | Frontend | ✅ Fixed (Phase 2) |
+| P9 | SEC-012: Refund deadline upper bound | Small | On-chain program | ✅ Fixed (Phase 5) |
+| P10 | SEC-013: Vault griefing via airdrop | Small | On-chain program | ✅ Fixed (Phase 5) |
 
 ---
 
@@ -397,7 +425,7 @@ SEC-001 was a direct fund theft vector (organizer rug pull). SEC-002 caused perm
 
 SEC-005 was explorer links hardcoded to devnet cluster. ✅ Fixed in Phase 2 — all Solscan links now use cluster-aware URLs via `/api/health` endpoint.
 
-**ALL FINDINGS RESOLVED**: All 9 actionable findings (SEC-001 through SEC-011, excluding SEC-007/008 confirmed safe) are now fixed. SEC-010 (rent reclamation) was the last open finding, resolved in Phase 4 with the `close_deposit` instruction.
+**ALL FINDINGS RESOLVED**: All 11 actionable findings (SEC-001 through SEC-013, excluding SEC-007/008 confirmed safe) are now fixed. SEC-010 (rent reclamation) resolved in Phase 4 with the `close_deposit` instruction. SEC-012 (refund deadline upper bound) and SEC-013 (vault griefing via airdrop) resolved in Phase 5.
 
 ---
 
