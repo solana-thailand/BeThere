@@ -302,7 +302,7 @@ pub fn AdminEscrow(
                                 "No Solana wallet detected. Install Phantom or Solflare."
                             </div>
                         }>
-                            <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+                            <div class="flex-wrap-row">
                                 {move || {
                                     wallets.get().iter().map(|w| {
                                         let wn = w.clone();
@@ -382,7 +382,7 @@ pub fn AdminEscrow(
                     }}
 
                     // ── Lifecycle Steps ──
-                    <div style="display:flex;flex-direction:column;gap:0.5rem">
+                    <div class="step-list">
 
                         // Step 1: Deactivate
                         {move || {
@@ -403,7 +403,7 @@ pub fn AdminEscrow(
                                         </div>
                                     </div>
                                     {if done {
-                                        view! { <span style="font-size:0.8rem;color:var(--success,green)">"Done"</span> }.into_any()
+                                        view! { <span class="badge-done">"Done"</span> }.into_any()
                                     } else if signing {
                                         view! {
                                             <div style="display:flex;align-items:center;gap:0.3rem">
@@ -445,7 +445,7 @@ pub fn AdminEscrow(
                                         </div>
                                     </div>
                                     {if done {
-                                        view! { <span style="font-size:0.8rem;color:var(--success,green)">"Done"</span> }.into_any()
+                                        view! { <span class="badge-done">"Done"</span> }.into_any()
                                     } else if signing {
                                         view! {
                                             <div style="display:flex;align-items:center;gap:0.3rem">
@@ -487,7 +487,7 @@ pub fn AdminEscrow(
                                         </div>
                                     </div>
                                     {if done {
-                                        view! { <span style="font-size:0.8rem;color:var(--success,green)">"Done"</span> }.into_any()
+                                        view! { <span class="badge-done">"Done"</span> }.into_any()
                                     } else if signing {
                                         view! {
                                             <div style="display:flex;align-items:center;gap:0.3rem">

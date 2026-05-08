@@ -35,7 +35,7 @@ pub fn App() -> impl IntoView {
                 <Routes fallback=|| {
                     view! {
                         <div class="center-page">
-                            <div class="container" style="display:flex;flex-direction:column;align-items:center;">
+                            <div class="container layout-col-center">
                                 <div class="logo">"🔍"</div>
                                 <h1>"Page Not Found"</h1>
                                 <p class="subtitle">"The page you're looking for doesn't exist."</p>

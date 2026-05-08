@@ -1023,7 +1023,7 @@ pub fn Deposit() -> impl IntoView {
     view! {
         <Title text="BeThere — Event Deposit" />
         <div class="center-page">
-            <div class="container" style="display:flex;flex-direction:column;align-items:center;">
+            <div class="container layout-col-center">
                 // Logo
                 <div class="brand-logo">"BeThere"</div>
                 <div class="brand-logo-sub">"Proof of Attendance"</div>
@@ -1036,7 +1036,7 @@ pub fn Deposit() -> impl IntoView {
                         // ===== Loading =====
                         DepositPageState::Loading => {
                             view! {
-                                <div class="loading visible" style="margin-top:2rem;">
+                                <div class="loading visible loading-top">
                                     <span class="spinner spinner-lg"></span>
                                     " Loading deposit info..."
                                 </div>
@@ -1047,11 +1047,11 @@ pub fn Deposit() -> impl IntoView {
                         // ===== Error =====
                         DepositPageState::Error(msg) => {
                             view! {
-                                <div class="card" style="margin-top:2rem;text-align:center;">
+                                <div class="card dep-card-error">
                                     <div class="card-header">
                                         <h2 class="card-title">"⚠️ Error"</h2>
                                     </div>
-                                    <p style="color:var(--text-secondary);margin-bottom:1rem;">
+                                    <p class="hint-desc">
                                         {msg}
                                     </p>
                                     <a href="/" class="btn btn-primary">"Go Home"</a>
@@ -1063,11 +1063,11 @@ pub fn Deposit() -> impl IntoView {
                         // ===== Not Enabled =====
                         DepositPageState::NotEnabled => {
                             view! {
-                                <div class="card" style="margin-top:2rem;text-align:center;">
+                                <div class="card dep-card-error">
                                     <div class="card-header">
                                         <h2 class="card-title">"💳 Deposits Not Available"</h2>
                                     </div>
-                                    <p style="color:var(--text-secondary);margin-bottom:1rem;">
+                                    <p class="hint-desc">
                                         "Deposits are not enabled for this event."
                                     </p>
                                     <a href="/" class="btn btn-primary">"Go Home"</a>
@@ -1095,27 +1095,27 @@ pub fn Deposit() -> impl IntoView {
                                 "badge badge-warning"
                             };
                             view! {
-                                <div class="card" style="margin-top:2rem;text-align:center;">
+                                <div class="card dep-card-error">
                                     <div class="card-header">
                                         <h2 class="card-title">"✅ Deposit Received"</h2>
                                     </div>
-                                    <div style="text-align:left;margin:1rem 0;">
-                                        <div style="display:flex;justify-content:space-between;padding:0.5rem 0;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.1));">
-                                            <span style="color:var(--text-secondary);">"Method"</span>
+                                    <div class="dep-details-block">
+                                        <div class="dep-detail-row">
+                                            <span class="dep-label">"Method"</span>
                                             <span>{method_label}</span>
                                         </div>
-                                        <div style="display:flex;justify-content:space-between;padding:0.5rem 0;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.1));">
-                                            <span style="color:var(--text-secondary);">"Amount"</span>
+                                        <div class="dep-detail-row">
+                                            <span class="dep-label">"Amount"</span>
                                             <span>
                                                 {format!("{} {}", info.amount, info.currency)}
                                             </span>
                                         </div>
-                                        <div style="display:flex;justify-content:space-between;align-items:center;padding:0.5rem 0;border-bottom:1px solid var(--border-color,rgba(255,255,255,0.1));">
-                                            <span style="color:var(--text-secondary);">"Status"</span>
+                                        <div class="dep-detail-row-center">
+                                            <span class="dep-label">"Status"</span>
                                             <span class=verified_class>{verified_badge}</span>
                                         </div>
-                                        <div style="display:flex;justify-content:space-between;padding:0.5rem 0;">
-                                            <span style="color:var(--text-secondary);">"Date"</span>
+                                        <div class="dep-detail-row-last">
+                                            <span class="dep-label">"Date"</span>
                                             <span>{format_timestamp(&info.deposited_at)}</span>
                                         </div>
                                     </div>
@@ -1123,14 +1123,13 @@ pub fn Deposit() -> impl IntoView {
                                         let data_clone_for_refund = data.clone();
                                         let data_clone_for_close = data.clone();
                                         view! {
-                                            <div style="margin-top:0.75rem;padding:0.75rem;background:var(--bg-secondary,#1a1a2e);border-radius:8px;border:1px dashed var(--border-color,rgba(255,255,255,0.2));">
-                                                <p style="font-size:0.85rem;color:var(--text-secondary);margin:0;">
+                                            <div class="dep-info-note">
+                                                <p class="hint-note">
                                                     "💰 Your deposit is secured on-chain. You can claim a refund after the event ends."
                                                 </p>
                                             </div>
                                             <button
-                                                class="btn btn-success btn-block"
-                                                style="margin-top:1rem;font-size:1rem;padding:0.7rem;"
+                                                class="btn btn-success btn-block btn-action-lg"
                                                 on:click=move |_| {
                                                     set_state.set(DepositPageState::RefundChooseWallet(data_clone_for_refund.clone()));
                                                 }
@@ -1138,8 +1137,7 @@ pub fn Deposit() -> impl IntoView {
                                                 "💸 Claim Refund"
                                             </button>
                                             <button
-                                                class="btn btn-outline btn-block"
-                                                style="margin-top:0.5rem;font-size:0.9rem;padding:0.6rem;"
+                                                class="btn btn-outline btn-block btn-action-sm"
                                                 on:click=move |_| {
                                                     set_state.set(DepositPageState::CloseDepositChooseWallet(data_clone_for_close.clone()));
                                                 }
@@ -1149,14 +1147,14 @@ pub fn Deposit() -> impl IntoView {
                                         }.into_any()
                                     } else {
                                         view! {
-                                            <div style="margin-top:0.75rem;padding:0.75rem;background:var(--bg-secondary,#1a1a2e);border-radius:8px;border:1px dashed var(--border-color,rgba(255,255,255,0.2));">
-                                                <p style="font-size:0.85rem;color:var(--text-secondary);margin:0;">
+                                            <div class="dep-info-note">
+                                                <p class="hint-note">
                                                     "💰 Refund will be available after the event."
                                                 </p>
                                             </div>
                                         }.into_any()
                                     }}
-                                    <a href="/" class="btn btn-primary" style="margin-top:1rem;">"Go Home"</a>
+                                    <a href="/" class="btn btn-primary action-row-top">"Go Home"</a>
                                 </div>
                             }
                                 .into_any()
@@ -1167,11 +1165,11 @@ pub fn Deposit() -> impl IntoView {
                             let data_clone = data.clone();
                             let wallets = detected_wallets.get();
                             view! {
-                                <p class="subtitle" style="margin-bottom:1.5rem;">
+                                <p class="subtitle subtitle-lg">
                                     "Choose your preferred payment method to secure your spot."
                                 </p>
 
-                                <div style="width:100%;max-width:480px;display:flex;flex-direction:column;gap:1.5rem;">
+                                <div class="dep-methods">
 
                                     // USDC Card
                                     <div class="card">
@@ -1181,7 +1179,7 @@ pub fn Deposit() -> impl IntoView {
                                                 {format!("{:.2} USDC", data.deposit_amount_usdc as f64 / 1_000_000.0)}
                                             </span>
                                         </div>
-                                        <p style="color:var(--text-secondary);font-size:0.9rem;margin-bottom:1rem;">
+                                        <p class="hint-desc">
                                             "Pay via Solana. Connect your wallet to send the deposit directly, or use a QR code."
                                         </p>
 
@@ -1189,8 +1187,8 @@ pub fn Deposit() -> impl IntoView {
                                         {if has_wallets() {
                                             let wallets_for_click = wallets.clone();
                                             view! {
-                                                <div style="display:flex;flex-direction:column;gap:0.5rem;margin-bottom:1rem;">
-                                                    <p style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:0.25rem;">
+                                                <div class="wallet-list">
+                                                    <p class="wallet-prompt">
                                                         "🔗 Connect your Solana wallet:"
                                                     </p>
                                                     {wallets_for_click.into_iter().map(|w| {
@@ -1204,8 +1202,7 @@ pub fn Deposit() -> impl IntoView {
                                                         };
                                                         view! {
                                                             <button
-                                                                class="btn btn-primary btn-block"
-                                                                style="display:flex;align-items:center;justify-content:center;gap:0.5rem;"
+                                                                class="btn btn-primary btn-block wallet-btn-inner"
                                                                 on:click={
                                                                     let w = w.clone();
                                                                     move |_| handle_connect_wallet(w.clone())
@@ -1223,21 +1220,20 @@ pub fn Deposit() -> impl IntoView {
                                         }}
 
                                         // QR fallback section
-                                        <div style="border-top:1px solid var(--border-color,rgba(255,255,255,0.1));padding-top:1rem;margin-top:0.5rem;">
-                                            <p style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:0.5rem;">
+                                        <div class="dep-divider-section">
+                                            <p class="hint-sm">
                                                 "📱 No wallet? Use QR code instead:"
                                             </p>
-                                            <div style="margin-bottom:0.75rem;">
+                                            <div class="u-mb-sm">
                                                 <input
                                                     type="text"
-                                                    class="form-input"
+                                                    class="form-input dep-input"
                                                     placeholder="Enter your Solana wallet address"
                                                     prop:value=move || wallet_input.get()
                                                     on:input=move |ev| {
                                                         let val = event_target_value(&ev);
                                                         set_wallet_input.set(val);
                                                     }
-                                                    style="width:100%;padding:0.6rem 0.8rem;border-radius:6px;border:1px solid var(--border-color,rgba(255,255,255,0.2));background:var(--bg-secondary,#1a1a2e);color:var(--text-primary,#fff);font-size:0.9rem;"
                                                 />
                                             </div>
                                             <button
@@ -1257,7 +1253,7 @@ pub fn Deposit() -> impl IntoView {
                                                 {format!("{} THB", data_clone.deposit_amount_thb)}
                                             </span>
                                         </div>
-                                        <p style="color:var(--text-secondary);font-size:0.9rem;margin-bottom:1rem;">
+                                        <p class="hint-desc">
                                             "Transfer via PromptPay and upload your payment slip."
                                         </p>
 
@@ -1269,22 +1265,22 @@ pub fn Deposit() -> impl IntoView {
                                             );
                                             let pp_qr_image = pp_qr_string.as_ref().and_then(|s| generate_qr_data_url_js(s, 256));
                                             view! {
-                                                <div style="text-align:center;margin-bottom:1rem;">
-                                                    <p style="font-size:0.95rem;font-weight:600;margin-bottom:0.75rem;">
+                                                <div class="layout-col-center u-mb-1rem">
+                                                    <p class="text-amount">
                                                         {format!("Scan to pay {} THB", data_clone.deposit_amount_thb)}
                                                     </p>
                                                     {match pp_qr_image {
                                                         Some(url) => view! {
-                                                            <div style="background:white;border-radius:12px;padding:1rem;display:inline-block;margin-bottom:0.5rem;">
-                                                                <img src=url alt="PromptPay QR" style="width:220px;height:220px;" />
+                                                            <div class="qr-wrapper u-mb-half">
+                                                                <img src=url alt="PromptPay QR" class="qr-img-md" />
                                                             </div>
                                                         }.into_any(),
                                                         None => view! {
-                                                            <p style="color:var(--text-secondary);font-size:0.8rem;">"QR generation failed — please pay manually."
+                                                            <p class="hint-2xs">"QR generation failed — please pay manually."
                                                             </p>
                                                         }.into_any(),
                                                     }}
-                                                    <p style="font-size:0.75rem;color:var(--text-secondary);margin-top:0.3rem;">
+                                                    <p class="qr-hint-text">
                                                         "Open your banking app → Scan QR → Pay"
                                                     </p>
                                                 </div>
@@ -1294,33 +1290,32 @@ pub fn Deposit() -> impl IntoView {
                                         }}
 
                                         // File upload for slip image
-                                        <div style="margin-bottom:0.75rem;">
-                                            <label style="display:block;font-size:0.85rem;color:var(--text-secondary);margin-bottom:0.3rem;">
+                                        <div class="u-mb-sm">
+                                            <label class="upload-label">
                                                 "📎 Upload payment slip image:"
                                             </label>
                                             <input
                                                 type="file"
                                                 accept="image/*"
                                                 node_ref=file_input_ref
-                                                style="width:100%;font-size:0.85rem;color:var(--text-secondary);margin-bottom:0.5rem;"
+                                                class="file-input-styled"
                                             />
                                         </div>
 
                                         // Text input fallback for slip URL
-                                        <details style="margin-bottom:0.75rem;">
-                                            <summary style="font-size:0.8rem;color:var(--text-secondary);cursor:pointer;margin-bottom:0.3rem;">
+                                        <details class="u-mb-sm">
+                                            <summary class="details-summary-text">
                                                 "Or paste slip URL manually"
                                             </summary>
                                             <input
                                                 type="text"
-                                                class="form-input"
+                                                class="form-input dep-input u-mt-xs"
                                                 placeholder="Paste slip image URL"
                                                 prop:value=move || slip_url_input.get()
                                                 on:input=move |ev| {
                                                     let val = event_target_value(&ev);
                                                     set_slip_url_input.set(val);
                                                 }
-                                                style="width:100%;padding:0.6rem 0.8rem;border-radius:6px;border:1px solid var(--border-color,rgba(255,255,255,0.2));background:var(--bg-secondary,#1a1a2e);color:var(--text-primary,#fff);font-size:0.9rem;margin-top:0.3rem;"
                                             />
                                         </details>
 
@@ -1335,7 +1330,7 @@ pub fn Deposit() -> impl IntoView {
                                 </div>
 
                                 // Back to home
-                                <a href="/" style="color:var(--text-secondary);font-size:0.85rem;margin-top:1.5rem;text-decoration:none;">
+                                <a href="/" class="link-back-home">
                                     "← Back to home"
                                 </a>
                             }
@@ -1359,7 +1354,7 @@ pub fn Deposit() -> impl IntoView {
                                 public_key.clone()
                             };
                             view! {
-                                <div class="card" style="margin-top:1.5rem;text-align:center;width:100%;max-width:480px;">
+                                <div class="card dep-card">
                                     <div class="card-header">
                                         <h2 class="card-title">"🪙 USDC Deposit"
                                         </h2>
@@ -1367,27 +1362,25 @@ pub fn Deposit() -> impl IntoView {
                                             {format!("{:.2} USDC", data.deposit_amount_usdc as f64 / 1_000_000.0)}
                                         </span>
                                     </div>
-                                    <div style="background:var(--bg-secondary,#1a1a2e);border-radius:8px;padding:1rem;margin-bottom:1rem;display:flex;align-items:center;justify-content:center;gap:0.75rem;">
-                                        <span style="font-size:1.5rem;">{wallet_icon}</span>
-                                        <div style="text-align:left;">
-                                            <div style="font-size:0.8rem;color:var(--text-secondary);">"Connected via " {wallet_name.clone()}</div>
-                                            <div style="font-weight:600;font-family:monospace;">{pk_short}</div>
+                                    <div class="wallet-connected-bar">
+                                        <span class="wallet-icon-lg">{wallet_icon}</span>
+                                        <div class="wallet-info-left">
+                                            <div class="wallet-label">"Connected via " {wallet_name.clone()}</div>
+                                            <div class="wallet-address-bold">{pk_short}</div>
                                         </div>
-                                        <span class="badge badge-success" style="margin-left:auto;">"✅ Connected"</span>
+                                        <span class="badge badge-success u-ml-auto">"✅ Connected"</span>
                                     </div>
-                                    <p style="color:var(--text-secondary);font-size:0.9rem;margin-bottom:1rem;">
+                                    <p class="hint-desc">
                                         "Click below to send your deposit transaction. You'll be asked to approve the transaction in your wallet."
                                     </p>
                                     <button
-                                        class="btn btn-primary btn-block"
-                                        style="font-size:1.1rem;padding:0.8rem;"
+                                        class="btn btn-primary btn-block btn-action-lg"
                                         on:click=move |_| handle_send_deposit(wallet_name_send.clone(), pk_send.clone())
                                     >
                                         "Send " {format!("{:.2} USDC", data.deposit_amount_usdc as f64 / 1_000_000.0)} " Deposit"
                                     </button>
                                     <button
-                                        class="btn btn-outline btn-sm"
-                                        style="margin-top:0.75rem;"
+                                        class="btn btn-outline btn-sm btn-action-secondary"
                                         on:click=move |_| {
                                             set_state.set(DepositPageState::ChoosePayment(data.clone()));
                                         }
@@ -1434,23 +1427,23 @@ pub fn Deposit() -> impl IntoView {
                             });
 
                             view! {
-                                <div class="card" style="margin-top:1.5rem;text-align:center;width:100%;max-width:480px;">
+                                <div class="card dep-card">
                                     <div class="card-header">
                                         <h2 class="card-title">"⏳ Confirming Deposit..."</h2>
                                         <span class="badge badge-info">
                                             {format!("{:.2} USDC", data.deposit_amount_usdc as f64 / 1_000_000.0)}
                                         </span>
                                     </div>
-                                    <div style="margin:1.5rem 0;">
-                                        <span class="spinner spinner-lg" style="width:48px;height:48px;border-width:3px;"></span>
+                                    <div class="spinner-wrap">
+                                        <span class="spinner spinner-lg spinner-xl"></span>
                                     </div>
-                                    <p style="color:var(--text-secondary);font-size:0.9rem;margin-bottom:0.5rem;">
+                                    <p class="hint-sm">
                                         "Your transaction has been submitted! Waiting for on-chain confirmation..."
                                     </p>
-                                    <div style="background:var(--bg-secondary,#1a1a2e);border-radius:8px;padding:0.75rem;margin-top:0.75rem;font-family:monospace;font-size:0.75rem;color:var(--text-secondary);word-break:break-all;">
+                                    <div class="tx-hash-box-top">
                                         {format!("TX: {}", &sig_display)}
                                     </div>
-                                    <p style="font-size:0.75rem;color:var(--text-secondary);margin-top:0.75rem;">
+                                    <p class="hint-xs">
                                         "This usually takes 5-15 seconds. Don't close this page."
                                     </p>
                                 </div>
@@ -1467,30 +1460,30 @@ pub fn Deposit() -> impl IntoView {
                             };
                             let solscan_url = solscan_tx_url(&tx_sig, &get_cluster());
                             view! {
-                                <div class="card" style="margin-top:1.5rem;text-align:center;width:100%;max-width:480px;">
+                                <div class="card dep-card">
                                     <div class="card-header">
                                         <h2 class="card-title">"✅ Deposit Confirmed!"</h2>
                                         <span class="badge badge-success">"On-chain verified"</span>
                                     </div>
-                                    <div style="font-size:3rem;margin:1rem 0;">"🎉"</div>
-                                    <p style="font-size:1.1rem;font-weight:600;margin-bottom:0.5rem;">
+                                    <div class="celebration-emoji">"🎉"</div>
+                                    <p class="success-title">
                                         {format!("{:.2} USDC deposited", data.deposit_amount_usdc as f64 / 1_000_000.0)}
                                     </p>
-                                    <p style="color:var(--text-secondary);font-size:0.9rem;margin-bottom:1rem;">
+                                    <p class="hint-desc">
                                         "Your deposit has been confirmed on Solana. You're all set for the event!"
                                     </p>
-                                    <div style="background:var(--bg-secondary,#1a1a2e);border-radius:8px;padding:0.75rem;margin-bottom:1rem;font-family:monospace;font-size:0.75rem;color:var(--text-secondary);word-break:break-all;">
+                                    <div class="tx-hash-box">
                                         {format!("TX: {}", &sig_display)}
                                     </div>
-                                    <a href=&solscan_url target="_blank" style="color:var(--accent,#14f195);font-size:0.85rem;">
+                                    <a href=&solscan_url target="_blank" class="tx-explorer-link">
                                         "View on Solscan ↗"
                                     </a>
-                                    <div style="margin-top:1rem;padding:0.75rem;background:var(--bg-secondary,#1a1a2e);border-radius:8px;border:1px dashed var(--border-color,rgba(255,255,255,0.2));">
-                                        <p style="font-size:0.85rem;color:var(--text-secondary);margin:0;">
+                                    <div class="dep-info-note-lg">
+                                        <p class="hint-note">
                                             "💰 Refund will be available after the event."
                                         </p>
                                     </div>
-                                    <div style="margin-top:1.25rem;">
+                                    <div class="action-row-top-lg">
                                         <a href="/" class="btn btn-primary">"Go Home"</a>
                                     </div>
                                 </div>
@@ -1508,25 +1501,25 @@ pub fn Deposit() -> impl IntoView {
                             let copy_btn_text = if copied { "✅ Copied!" } else { "📋 Copy Link" };
                             let copy_btn_class = if copied { "btn btn-success btn-sm" } else { "btn btn-outline btn-sm" };
                             view! {
-                                <div class="card" style="margin-top:1.5rem;text-align:center;width:100%;max-width:480px;">
+                                <div class="card dep-card">
                                     <div class="card-header">
                                         <h2 class="card-title">"🪙 USDC Payment Ready"</h2>
                                         <span class="badge badge-info">
                                             {format!("{:.2} USDC", data.deposit_amount_usdc as f64 / 1_000_000.0)}
                                         </span>
                                     </div>
-                                    <p style="color:var(--text-secondary);font-size:0.9rem;margin-bottom:1rem;">
+                                    <p class="hint-desc">
                                         "Scan this QR code with a Solana wallet, or copy the link below:"
                                     </p>
                                     {match qr_data_url {
                                         Some(url) => view! {
-                                            <div style="background:white;border-radius:12px;padding:1rem;display:inline-block;margin-bottom:1rem;">
-                                                <img src=url alt="Solana Pay QR" style="width:256px;height:256px;" />
+                                            <div class="qr-wrapper">
+                                                <img src=url alt="Solana Pay QR" class="qr-img-lg" />
                                             </div>
                                         }.into_any(),
                                         None => view! { <div></div> }.into_any(),
                                     }}
-                                    <div style="background:var(--bg-secondary,#1a1a2e);border:1px solid var(--border-color,rgba(255,255,255,0.15));border-radius:8px;padding:1rem;margin-bottom:1rem;word-break:break-all;font-size:0.8rem;color:var(--text-secondary);text-align:left;">
+                                    <div class="tx-pay-url-box">
                                         {pay_url_display}
                                     </div>
                                     <button
@@ -1535,12 +1528,12 @@ pub fn Deposit() -> impl IntoView {
                                     >
                                         {copy_btn_text}
                                     </button>
-                                    <p style="font-size:0.8rem;color:var(--text-secondary);margin-top:1rem;">
+                                    <p class="hint-2xs u-mt-1rem">
                                         "After payment, your deposit will be verified automatically."
                                     </p>
                                 </div>
 
-                                <a href="/" style="color:var(--text-secondary);font-size:0.85rem;margin-top:1.5rem;text-decoration:none;">
+                                <a href="/" class="link-back-home">
                                     "← Back to home"
                                 </a>
                             }
@@ -1550,7 +1543,7 @@ pub fn Deposit() -> impl IntoView {
                         // ===== THB Uploading =====
                         DepositPageState::ThbUploading(_) => {
                             view! {
-                                <div class="loading visible" style="margin-top:2rem;">
+                                <div class="loading visible loading-top">
                                     <span class="spinner spinner-lg"></span>
                                     " Uploading slip..."
                                 </div>
@@ -1561,15 +1554,15 @@ pub fn Deposit() -> impl IntoView {
                         // ===== THB Uploaded =====
                         DepositPageState::ThbUploaded => {
                             view! {
-                                <div class="card" style="margin-top:2rem;text-align:center;">
+                                <div class="card dep-card-error">
                                     <div class="card-header">
                                         <h2 class="card-title">"✅ Slip Uploaded"</h2>
                                     </div>
-                                    <p style="color:var(--text-secondary);margin-bottom:1rem;">
+                                    <p class="hint-desc">
                                         "Your payment slip has been submitted for verification. You'll be notified once it's confirmed."
                                     </p>
                                     <span class="badge badge-warning">"⏳ Pending Verification"</span>
-                                    <div style="margin-top:1rem;">
+                                    <div class="action-row-top">
                                         <a href="/" class="btn btn-primary">"Go Home"</a>
                                     </div>
                                 </div>
@@ -1582,20 +1575,20 @@ pub fn Deposit() -> impl IntoView {
                             let wallets = detected_wallets.get();
                             let data_for_back = data.clone();
                             view! {
-                                <div class="card" style="margin-top:1.5rem;text-align:center;width:100%;max-width:480px;">
+                                <div class="card dep-card">
                                     <div class="card-header">
                                         <h2 class="card-title">"💸 Claim Refund"</h2>
                                         <span class="badge badge-info">
                                             {format!("{:.2} USDC", data.deposit_amount_usdc as f64 / 1_000_000.0)}
                                         </span>
                                     </div>
-                                    <p style="color:var(--text-secondary);font-size:0.9rem;margin-bottom:1rem;">
+                                    <p class="hint-desc">
                                         "Connect the wallet you used to deposit. Your refund will be sent to the same wallet."
                                     </p>
                                     {if wallets.is_empty() {
                                         view! {
-                                            <div style="padding:1rem;background:var(--bg-secondary,#1a1a2e);border-radius:8px;margin-bottom:1rem;">
-                                                <p style="color:var(--text-secondary);font-size:0.85rem;margin:0;">
+                                            <div class="wallet-fallback-box">
+                                                <p class="wallet-fallback-text">
                                                     "No Solana wallet detected. Please install a wallet extension (Phantom, Backpack, Solflare) and refresh."
                                                 </p>
                                             </div>
@@ -1603,7 +1596,7 @@ pub fn Deposit() -> impl IntoView {
                                     } else {
                                         let wallets_for_click = wallets.clone();
                                         view! {
-                                            <div style="display:flex;flex-direction:column;gap:0.5rem;margin-bottom:1rem;">
+                                            <div class="wallet-list">
                                                 {wallets_for_click.into_iter().map(|w| {
                                                     let w_clone = w.clone();
                                                     let wallet_icon = match w.as_str() {
@@ -1615,8 +1608,7 @@ pub fn Deposit() -> impl IntoView {
                                                     };
                                                     view! {
                                                         <button
-                                                            class="btn btn-primary btn-block"
-                                                            style="display:flex;align-items:center;justify-content:center;gap:0.5rem;"
+                                                            class="btn btn-primary btn-block wallet-btn-inner"
                                                             on:click={
                                                                 let w = w.clone();
                                                                 move |_| handle_refund_connect_wallet(w.clone())
@@ -1661,34 +1653,32 @@ pub fn Deposit() -> impl IntoView {
                             };
                             let data_for_back = data.clone();
                             view! {
-                                <div class="card" style="margin-top:1.5rem;text-align:center;width:100%;max-width:480px;">
+                                <div class="card dep-card">
                                     <div class="card-header">
                                         <h2 class="card-title">"💸 Claim Refund"</h2>
                                         <span class="badge badge-info">
                                             {format!("{:.2} USDC", data.deposit_amount_usdc as f64 / 1_000_000.0)}
                                         </span>
                                     </div>
-                                    <div style="background:var(--bg-secondary,#1a1a2e);border-radius:8px;padding:1rem;margin-bottom:1rem;display:flex;align-items:center;justify-content:center;gap:0.75rem;">
-                                        <span style="font-size:1.5rem;">{wallet_icon}</span>
-                                        <div style="text-align:left;">
-                                            <div style="font-size:0.8rem;color:var(--text-secondary);">"Connected via " {wallet_name.clone()}</div>
-                                            <div style="font-weight:600;font-family:monospace;">{pk_short}</div>
+                                    <div class="wallet-connected-bar">
+                                        <span class="wallet-icon-lg">{wallet_icon}</span>
+                                        <div class="wallet-info-left">
+                                            <div class="wallet-label">"Connected via " {wallet_name.clone()}</div>
+                                            <div class="wallet-address-bold">{pk_short}</div>
                                         </div>
-                                        <span class="badge badge-success" style="margin-left:auto;">"✅ Connected"</span>
+                                        <span class="badge badge-success u-ml-auto">"✅ Connected"</span>
                                     </div>
-                                    <p style="color:var(--text-secondary);font-size:0.9rem;margin-bottom:1rem;">
+                                    <p class="hint-desc">
                                         "Click below to claim your refund. You'll approve the transaction in your wallet."
                                     </p>
                                     <button
-                                        class="btn btn-success btn-block"
-                                        style="font-size:1.1rem;padding:0.8rem;"
+                                        class="btn btn-success btn-block btn-action-lg"
                                         on:click=move |_| handle_claim_refund(wallet_name_send.clone(), pk_send.clone())
                                     >
                                         "💸 Claim " {format!("{:.2} USDC", data.deposit_amount_usdc as f64 / 1_000_000.0)} " Refund"
                                     </button>
                                     <button
-                                        class="btn btn-outline btn-sm"
-                                        style="margin-top:0.75rem;"
+                                        class="btn btn-outline btn-sm btn-action-secondary"
                                         on:click=move |_| {
                                             set_state.set(DepositPageState::RefundChooseWallet(data_for_back.clone()));
                                         }
@@ -1703,17 +1693,17 @@ pub fn Deposit() -> impl IntoView {
                         // ===== Refund: Signing TX =====
                         DepositPageState::RefundSigning(data, _wallet_name, _public_key) => {
                             view! {
-                                <div class="card" style="margin-top:1.5rem;text-align:center;width:100%;max-width:480px;">
+                                <div class="card dep-card">
                                     <div class="card-header">
                                         <h2 class="card-title">"⏳ Processing Refund..."</h2>
                                         <span class="badge badge-info">
                                             {format!("{:.2} USDC", data.deposit_amount_usdc as f64 / 1_000_000.0)}
                                         </span>
                                     </div>
-                                    <div style="margin:1.5rem 0;">
-                                        <span class="spinner spinner-lg" style="width:48px;height:48px;border-width:3px;"></span>
+                                    <div class="spinner-wrap">
+                                        <span class="spinner spinner-lg spinner-xl"></span>
                                     </div>
-                                    <p style="color:var(--text-secondary);font-size:0.9rem;margin-bottom:0.5rem;">
+                                    <p class="hint-sm">
                                         "Please approve the transaction in your wallet..."
                                     </p>
                                 </div>
@@ -1731,31 +1721,30 @@ pub fn Deposit() -> impl IntoView {
                             let solscan_url = solscan_tx_url(&tx_sig, &get_cluster());
                             let data_clone_for_close = data.clone();
                             view! {
-                                <div class="card" style="margin-top:1.5rem;text-align:center;width:100%;max-width:480px;">
+                                <div class="card dep-card">
                                     <div class="card-header">
                                         <h2 class="card-title">"🎉 Refund Confirmed!"</h2>
                                         <span class="badge badge-success">"On-chain verified"</span>
                                     </div>
-                                    <div style="font-size:3rem;margin:1rem 0;">"💰"</div>
-                                    <p style="font-size:1.1rem;font-weight:600;margin-bottom:0.5rem;">
+                                    <div class="celebration-emoji">"💰"</div>
+                                    <p class="success-title">
                                         {format!("{:.2} USDC refunded", data.deposit_amount_usdc as f64 / 1_000_000.0)}
                                     </p>
-                                    <p style="color:var(--text-secondary);font-size:0.9rem;margin-bottom:1rem;">
+                                    <p class="hint-desc">
                                         "Your refund has been confirmed on Solana. The funds should appear in your wallet shortly."
                                     </p>
-                                    <div style="background:var(--bg-secondary,#1a1a2e);border-radius:8px;padding:0.75rem;margin-bottom:1rem;font-family:monospace;font-size:0.75rem;color:var(--text-secondary);word-break:break-all;">
+                                    <div class="tx-hash-box">
                                         {format!("TX: {}", &sig_display)}
                                     </div>
-                                    <a href=&solscan_url target="_blank" style="color:var(--accent,#14f195);font-size:0.85rem;">
+                                    <a href=&solscan_url target="_blank" class="tx-explorer-link">
                                         "View on Solscan ↗"
                                     </a>
-                                    <div style="margin-top:1rem;padding:0.75rem;background:var(--bg-secondary,#1a1a2e);border-radius:8px;border:1px dashed var(--border-color,rgba(255,255,255,0.2));">
-                                        <p style="font-size:0.85rem;color:var(--text-secondary);margin:0 0 0.5rem;">
+                                    <div class="dep-info-note-lg">
+                                        <p class="hint-note-sm">
                                             "Reclaim ~0.002 SOL rent from your deposit account."
                                         </p>
                                         <button
-                                            class="btn btn-outline btn-block"
-                                            style="font-size:0.9rem;padding:0.6rem;"
+                                            class="btn btn-outline btn-block btn-action-sm"
                                             on:click=move |_| {
                                                 set_state.set(DepositPageState::CloseDepositChooseWallet(data_clone_for_close.clone()));
                                             }
@@ -1763,7 +1752,7 @@ pub fn Deposit() -> impl IntoView {
                                             "♻️ Reclaim Rent"
                                         </button>
                                     </div>
-                                    <div style="margin-top:1.25rem;">
+                                    <div class="action-row-top-lg">
                                         <a href="/" class="btn btn-primary">"Go Home"</a>
                                     </div>
                                 </div>
@@ -1776,18 +1765,18 @@ pub fn Deposit() -> impl IntoView {
                             let wallets = detected_wallets.get();
                             let data_for_back = data.clone();
                             view! {
-                                <div class="card" style="margin-top:1.5rem;text-align:center;width:100%;max-width:480px;">
+                                <div class="card dep-card">
                                     <div class="card-header">
                                         <h2 class="card-title">"♻️ Reclaim Deposit Rent"</h2>
                                         <span class="badge badge-info">"~0.002 SOL"</span>
                                     </div>
-                                    <p style="color:var(--text-secondary);font-size:0.9rem;margin-bottom:1rem;">
+                                    <p class="hint-desc">
                                         "Connect the wallet you used to deposit. This closes your deposit account and returns the rent-exempt SOL."
                                     </p>
                                     {if wallets.is_empty() {
                                         view! {
-                                            <div style="padding:1rem;background:var(--bg-secondary,#1a1a2e);border-radius:8px;margin-bottom:1rem;">
-                                                <p style="color:var(--text-secondary);font-size:0.85rem;margin:0;">
+                                            <div class="wallet-fallback-box">
+                                                <p class="wallet-fallback-text">
                                                     "No Solana wallet detected. Please install a wallet extension (Phantom, Backpack, Solflare) and refresh."
                                                 </p>
                                             </div>
@@ -1795,7 +1784,7 @@ pub fn Deposit() -> impl IntoView {
                                     } else {
                                         let wallets_for_click = wallets.clone();
                                         view! {
-                                            <div style="display:flex;flex-direction:column;gap:0.5rem;margin-bottom:1rem;">
+                                            <div class="wallet-list">
                                                 {wallets_for_click.into_iter().map(|w| {
                                                     let w_clone = w.clone();
                                                     let wallet_icon = match w.as_str() {
@@ -1807,8 +1796,7 @@ pub fn Deposit() -> impl IntoView {
                                                     };
                                                     view! {
                                                         <button
-                                                            class="btn btn-primary btn-block"
-                                                            style="display:flex;align-items:center;justify-content:center;gap:0.5rem;"
+                                                            class="btn btn-primary btn-block wallet-btn-inner"
                                                             on:click={
                                                                 let w = w.clone();
                                                                 move |_| handle_close_deposit_connect_wallet(w.clone())
@@ -1853,32 +1841,30 @@ pub fn Deposit() -> impl IntoView {
                             };
                             let data_for_back = data.clone();
                             view! {
-                                <div class="card" style="margin-top:1.5rem;text-align:center;width:100%;max-width:480px;">
+                                <div class="card dep-card">
                                     <div class="card-header">
                                         <h2 class="card-title">"♻️ Reclaim Deposit Rent"</h2>
                                         <span class="badge badge-info">"~0.002 SOL"</span>
                                     </div>
-                                    <div style="background:var(--bg-secondary,#1a1a2e);border-radius:8px;padding:1rem;margin-bottom:1rem;display:flex;align-items:center;justify-content:center;gap:0.75rem;">
-                                        <span style="font-size:1.5rem;">{wallet_icon}</span>
-                                        <div style="text-align:left;">
-                                            <div style="font-size:0.8rem;color:var(--text-secondary);">"Connected via " {wallet_name.clone()}</div>
-                                            <div style="font-weight:600;font-family:monospace;">{pk_short}</div>
+                                    <div class="wallet-connected-bar">
+                                        <span class="wallet-icon-lg">{wallet_icon}</span>
+                                        <div class="wallet-info-left">
+                                            <div class="wallet-label">"Connected via " {wallet_name.clone()}</div>
+                                            <div class="wallet-address-bold">{pk_short}</div>
                                         </div>
-                                        <span class="badge badge-success" style="margin-left:auto;">"✅ Connected"</span>
+                                        <span class="badge badge-success u-ml-auto">"✅ Connected"</span>
                                     </div>
-                                    <p style="color:var(--text-secondary);font-size:0.9rem;margin-bottom:1rem;">
+                                    <p class="hint-desc">
                                         "Click below to close your deposit account and reclaim the rent-exempt SOL."
                                     </p>
                                     <button
-                                        class="btn btn-success btn-block"
-                                        style="font-size:1.1rem;padding:0.8rem;"
+                                        class="btn btn-success btn-block btn-action-lg"
                                         on:click=move |_| handle_close_deposit(wallet_name_send.clone(), pk_send.clone())
                                     >
                                         "♻️ Reclaim ~0.002 SOL Rent"
                                     </button>
                                     <button
-                                        class="btn btn-outline btn-sm"
-                                        style="margin-top:0.75rem;"
+                                        class="btn btn-outline btn-sm btn-action-secondary"
                                         on:click=move |_| {
                                             set_state.set(DepositPageState::CloseDepositChooseWallet(data_for_back.clone()));
                                         }
@@ -1893,15 +1879,15 @@ pub fn Deposit() -> impl IntoView {
                         // ===== Close Deposit: Signing TX =====
                         DepositPageState::CloseDepositSigning(_data, _wallet_name, _public_key) => {
                             view! {
-                                <div class="card" style="margin-top:1.5rem;text-align:center;width:100%;max-width:480px;">
+                                <div class="card dep-card">
                                     <div class="card-header">
                                         <h2 class="card-title">"⏳ Closing Deposit..."</h2>
                                         <span class="badge badge-info">"~0.002 SOL"</span>
                                     </div>
-                                    <div style="margin:1.5rem 0;">
-                                        <span class="spinner spinner-lg" style="width:48px;height:48px;border-width:3px;"></span>
+                                    <div class="spinner-wrap">
+                                        <span class="spinner spinner-lg spinner-xl"></span>
                                     </div>
-                                    <p style="color:var(--text-secondary);font-size:0.9rem;margin-bottom:0.5rem;">
+                                    <p class="hint-sm">
                                         "Please approve the transaction in your wallet..."
                                     </p>
                                 </div>
@@ -1918,25 +1904,25 @@ pub fn Deposit() -> impl IntoView {
                             };
                             let solscan_url = solscan_tx_url(&tx_sig, &get_cluster());
                             view! {
-                                <div class="card" style="margin-top:1.5rem;text-align:center;width:100%;max-width:480px;">
+                                <div class="card dep-card">
                                     <div class="card-header">
                                         <h2 class="card-title">"🎉 Rent Reclaimed!"</h2>
                                         <span class="badge badge-success">"On-chain verified"</span>
                                     </div>
-                                    <div style="font-size:3rem;margin:1rem 0;">"♻️"</div>
-                                    <p style="font-size:1.1rem;font-weight:600;margin-bottom:0.5rem;">
+                                    <div class="celebration-emoji">"♻️"</div>
+                                    <p class="success-title">
                                         "Deposit account closed"
                                     </p>
-                                    <p style="color:var(--text-secondary);font-size:0.9rem;margin-bottom:1rem;">
+                                    <p class="hint-desc">
                                         "Your deposit account has been closed and ~0.002 SOL returned to your wallet."
                                     </p>
-                                    <div style="background:var(--bg-secondary,#1a1a2e);border-radius:8px;padding:0.75rem;margin-bottom:1rem;font-family:monospace;font-size:0.75rem;color:var(--text-secondary);word-break:break-all;">
+                                    <div class="tx-hash-box">
                                         {format!("TX: {}", &sig_display)}
                                     </div>
-                                    <a href=&solscan_url target="_blank" style="color:var(--accent,#14f195);font-size:0.85rem;">
+                                    <a href=&solscan_url target="_blank" class="tx-explorer-link">
                                         "View on Solscan ↗"
                                     </a>
-                                    <div style="margin-top:1.25rem;">
+                                    <div class="action-row-top-lg">
                                         <a href="/" class="btn btn-primary">"Go Home"</a>
                                     </div>
                                 </div>
@@ -1947,7 +1933,7 @@ pub fn Deposit() -> impl IntoView {
                 }}
 
                 // Footer
-                <div class="claim-footer" style="margin-top:2rem;">
+                <div class="claim-footer loading-top">
                     <div class="brand-line">
                         <span class="accent">"BeThere"</span>
                         " — Proof of Attendance"

@@ -829,12 +829,12 @@ fn DepositInfo(
     };
 
     view! {
-        <div class="card" style="margin-top:1.5rem;text-align:center">
-            <div style="font-size:1.25rem;margin-bottom:0.5rem">"💰 Deposit Required"</div>
-            <p style="color:var(--text-muted);margin-bottom:0.75rem">
+        <div class="card dep-card">
+            <div class="celebration-emoji">"💰 Deposit Required"</div>
+            <p class="hint-sm">
                 "This event requires a deposit to confirm your spot."
             </p>
-            <div style="display:flex;gap:1rem;justify-content:center;flex-wrap:wrap;margin-bottom:1rem">
+            <div class="badge-row">
                 {if deposit_amount_usdc > 0 {
                     view! {
                         <div class="badge" style="background:var(--badge-bg,#1e1b4b);color:#c084fc;padding:0.5rem 1rem;border-radius:0.5rem">
@@ -857,7 +857,6 @@ fn DepositInfo(
             <a
                 href=deposit_link
                 class="btn btn-primary"
-                style="display:inline-block"
             >
                 "Go to Deposit Page"
             </a>
@@ -1161,8 +1160,8 @@ pub fn Claim() -> impl IntoView {
                                     </div>
 
                                     // Shimmer: wallet input card (label + input bar + hint)
-                                    <div class="shimmer-card" style="margin-bottom:1rem;">
-                                        <div class="shimmer shimmer-line-sm" style="width:40%;margin-bottom:0.75rem;"></div>
+                                    <div class="shimmer-card u-mb-sm">
+                                        <div class="shimmer shimmer-line-sm u-mb-sm" style="width:40%;"></div>
                                         <div class="shimmer claim-shimmer-input"></div>
                                         <div class="shimmer shimmer-line-sm" style="width:55%;"></div>
                                     </div>

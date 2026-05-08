@@ -208,22 +208,8 @@ fn status_badge_class(status: &api::EventStatus) -> &'static str {
     match status {
         api::EventStatus::Active => "badge badge-success",
         api::EventStatus::Draft => "badge badge-warning",
-        api::EventStatus::Completed => "badge",
-        api::EventStatus::Archived => "badge",
-    }
-}
-
-/// Get inline style for statuses without dedicated badge classes.
-fn status_badge_style(status: &api::EventStatus) -> &'static str {
-    match status {
-        api::EventStatus::Active => "",
-        api::EventStatus::Draft => "",
-        api::EventStatus::Completed => {
-            "background:rgba(59,130,246,0.15);color:#3b82f6;border:1px solid rgba(59,130,246,0.3);"
-        }
-        api::EventStatus::Archived => {
-            "background:rgba(107,114,128,0.15);color:#9ca3af;border:1px solid rgba(107,114,128,0.3);"
-        }
+        api::EventStatus::Completed => "badge badge-completed",
+        api::EventStatus::Archived => "badge badge-archived",
     }
 }
 
@@ -276,6 +262,29 @@ pub fn EventsPage(
     let (sec_people_open, set_sec_people_open) = signal(false);
     let (show_advanced, set_show_advanced) = signal(false);
     let (search_query, set_search_query) = signal(String::new());
+    let search_input_ref: NodeRef<leptos::html::Input> = NodeRef::new();
+
+    // Ctrl+K keyboard shortcut to focus search
+    Effect::new(move |_| {
+        let search_ref = search_input_ref;
+        let handler = wasm_bindgen::closure::Closure::<dyn Fn(web_sys::KeyboardEvent)>::new(
+            move |ev: web_sys::KeyboardEvent| {
+                if (ev.ctrl_key() || ev.meta_key()) && ev.key() == "k" {
+                    ev.prevent_default();
+                    if let Some(el) = search_ref.get() {
+                        el.focus().ok();
+                    }
+                }
+            },
+        );
+        let window = web_sys::window().expect("no window");
+        use wasm_bindgen::JsCast;
+        let _ = window.add_event_listener_with_callback(
+            "keydown",
+            handler.as_ref().unchecked_ref(),
+        );
+        handler.forget();
+    });
 
     // Load events on mount and on refresh
     Effect::new(move |_| {
@@ -478,16 +487,20 @@ pub fn EventsPage(
             // === List View ===
             <Show when=move || current_view.get() == EventsView::List fallback=|| view! { <div></div> }>
                 // Header with create button (hidden for staff users)
-                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
-                    <h2 class="admin-section-heading" style="margin-bottom:0">"Events Management"</h2>
-                    <div style="display:flex;align-items:center;gap:0.75rem">
-                        <input
-                            type="text"
-                            class="events-search-input"
-                            placeholder="Search events..."
-                            prop:value=move || search_query.get()
-                            on:input=move |ev| set_search_query.set(event_target_value(&ev))
-                        />
+                <div class="events-header-row">
+                    <h2 class="admin-section-heading">"Events Management"</h2>
+                    <div class="events-header-actions">
+                        <div class="search-wrapper">
+                            <input
+                                type="text"
+                                class="events-search-input"
+                                placeholder="Search events..."
+                                prop:value=move || search_query.get()
+                                on:input=move |ev| set_search_query.set(event_target_value(&ev))
+                                node_ref=search_input_ref
+                            />
+                            <span class="kbd search-kbd-hint">"Ctrl+K"</span>
+                        </div>
                         <Show when=move || components::can_manage_events(&user_role.get()) fallback=|| view! { <div></div> }>
                             <button class="btn btn-primary btn-sm" on:click=handle_create>
                                 "+ Create Event"
@@ -541,7 +554,6 @@ pub fn EventsPage(
                             let edit_id = event.id.clone();
                             let archive_id = event.id.clone();
                             let badge_class = status_badge_class(&event.status);
-                            let badge_style = status_badge_style(&event.status);
                             let status_text = status_label(&event.status);
                             let start = format_date_display(event.event_start_ms);
                             let end = format_date_display(event.event_end_ms);
@@ -554,12 +566,12 @@ pub fn EventsPage(
                             view! {
                                 <div class="card">
                                     <div class="card-header">
-                                        <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap">
+                                        <div class="flex-row-gap" style="flex-wrap:wrap">
                                             <span class="card-title">{ename}</span>
-                                            <span class=badge_class style=badge_style>{status_text}</span>
+                                            <span class=badge_class>{status_text}</span>
                                         </div>
                                         {if can_manage { view! {
-                                        <div style="display:flex;gap:0.5rem">
+                                        <div class="flex-row-gap" style="gap:0.5rem">
                                             <button
                                                 class="btn btn-outline btn-sm"
                                                 on:click=move |_| {
@@ -632,21 +644,21 @@ pub fn EventsPage(
                                     <div class="quiz-settings-grid">
                                         <div class="quiz-setting-item">
                                             <span class="quiz-setting-label">"Start"</span>
-                                            <span style="font-size:0.85rem">{start}</span>
+                                            <span class="setting-value">{start}</span>
                                         </div>
                                         <div class="quiz-setting-item">
                                             <span class="quiz-setting-label">"End"</span>
-                                            <span style="font-size:0.85rem">{end}</span>
+                                            <span class="setting-value">{end}</span>
                                         </div>
                                         <div class="quiz-setting-item">
                                             <span class="quiz-setting-label">"Sheet ID"</span>
-                                            <span style="font-size:0.85rem;font-family:monospace">{sheet_preview}"…"</span>
+                                            <span class="setting-value-mono">{sheet_preview}"…"</span>
                                         </div>
                                         <div class="quiz-setting-item">
                                             <span class="quiz-setting-label">"Organizers"</span>
-                                            <span style="font-size:0.85rem">
-                                                {if organizers_count == 0 { "—".to_string() } else { format!("{organizers_count}") }}
-                                            </span>
+                                            <span class="setting-value">
+                                                                                            {if organizers_count == 0 { "—".to_string() } else { format!("{organizers_count}") }}
+                                                                                        </span>
                                         </div>
                                     </div>
                                 </div>
@@ -883,7 +895,7 @@ pub fn EventsPage(
                                             }
                                             fallback=|| view! { <div></div> }
                                         >
-                                            <div style="color:var(--warning);font-size:0.75rem;margin-top:0.25rem">
+                                            <div class="hint-warning-xs">
                                                 "Resolved name exceeds 32-char limit (Bubblegum max). Name will be truncated."
                                             </div>
                                         </Show>
@@ -989,8 +1001,8 @@ pub fn EventsPage(
 
                             // ── Deposit Configuration ──
                             // Deposit toggle always visible
-                            <div style="margin-bottom:0.75rem;display:flex;align-items:center;gap:0.75rem">
-                                <span style="font-size:0.95rem;font-weight:600;color:var(--text-secondary)">"Deposit"</span>
+                            <div class="dep-config-row">
+                                <span class="dep-config-label">"Deposit"</span>
                                 <label class="quiz-toggle-label" style="cursor:pointer">
                                     <input
                                         type="checkbox"
@@ -1152,7 +1164,7 @@ pub fn EventsPage(
                                             <div style="margin-top:0.75rem;padding:0.5rem 0.75rem;border:1px solid var(--success,green);border-radius:6px;background:rgba(0,128,0,0.05)">
                                                 <span style="font-size:0.8rem;color:var(--success,green)">
                                                     "Escrow initialized: "
-                                                    <code style="font-size:0.75rem">{form.get().escrow_address}</code>
+                                                    <code class="code-xs">{form.get().escrow_address}</code>
                                                 </span>
                                             </div>
                                         }}
@@ -1208,7 +1220,7 @@ pub fn EventsPage(
                             </div>
 
                             // ── Action Buttons ──
-                            <div style="display:flex;gap:0.75rem;padding-top:0.5rem;align-items:center">
+                            <div class="form-actions-row">
                                 <button
                                     class="btn btn-primary"
                                     on:click=handle_save
@@ -1222,8 +1234,7 @@ pub fn EventsPage(
                                 {if is_edit && !archive_eid.is_empty() {
                                     view! {
                                         <button
-                                            class="btn btn-outline"
-                                            style="margin-left:auto;color:var(--warning)"
+                                            class="btn btn-outline btn-archive"
                                             on:click=move |_| {
                                                 let aid = archive_eid.clone();
                                                 let set_toast = set_toast;

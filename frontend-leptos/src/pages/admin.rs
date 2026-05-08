@@ -874,8 +874,7 @@ pub fn Admin() -> impl IntoView {
                                                 <span class=badge_class>{badge_text}</span>
                                                 <a
                                                     href=deposit_link
-                                                    class="btn btn-outline btn-xs"
-                                                    style="margin-left:0.5rem;padding:0.15rem 0.4rem;font-size:0.7rem;"
+                                                    class="btn btn-outline btn-xs btn-xs-override"
                                                     title="Deposit page"
                                                 >
                                                     "Deposit"

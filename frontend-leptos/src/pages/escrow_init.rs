@@ -163,19 +163,19 @@ pub fn EscrowInitPanel(
     view! {
         // ===== Idle: wallet detection + connect buttons =====
         <Show when=is_idle>
-            <div style="margin-top:1rem;padding:0.75rem;border:1px dashed var(--border);border-radius:8px;background:var(--bg-secondary)">
-                <div style="font-size:0.85rem;font-weight:600;color:var(--text-primary);margin-bottom:0.5rem">
+            <div class="panel-box-dashed" style="margin-top:1rem">
+                <div class="panel-label">
                     "On-Chain Escrow Setup"
                 </div>
-                <div style="font-size:0.75rem;color:var(--text-secondary);margin-bottom:0.75rem">
+                <div class="panel-hint u-mb-sm">
                     "Single transaction: create vault ATA + initialize event escrow. Requires organizer wallet."
                 </div>
                 <Show when=move || !detected_wallets.get().is_empty() fallback=|| view! {
-                    <div style="font-size:0.75rem;color:var(--text-secondary)">
+                    <div class="panel-hint">
                         "No Solana wallets detected. Install Phantom or another wallet extension."
                     </div>
                 }>
-                    <div style="display:flex;flex-wrap:wrap;gap:0.5rem">
+                    <div class="flex-wrap-row">
                         {move || detected_wallets.get().iter().map(|wn| {
                             let wn_c = wn.clone();
                             let set_s = set_state;
@@ -183,8 +183,7 @@ pub fn EscrowInitPanel(
                             let set_f = set_f;
                             view! {
                                 <button
-                                    class="btn btn-outline"
-                                    style="font-size:0.8rem;padding:0.4rem 0.8rem"
+                                    class="btn btn-outline btn-sm"
                                     on:click=move |_| {
                                         let wn = wn_c.clone();
                                         let set_s = set_s;
@@ -242,19 +241,18 @@ pub fn EscrowInitPanel(
                 let set_t = set_t;
                 let set_f = set_f;
                 view! {
-                    <div style="margin-top:1rem;padding:0.75rem;border:1px dashed var(--border);border-radius:8px;background:var(--bg-secondary)">
-                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem">
+                    <div class="panel-box-dashed" style="margin-top:1rem">
+                        <div class="flex-row-center u-mb-sm">
                             <div>
-                                <div style="font-size:0.85rem;font-weight:600;color:var(--text-primary)">
+                                <div class="panel-label u-mb-0">
                                     "On-Chain Escrow Setup"
                                 </div>
-                                <div style="font-size:0.75rem;color:var(--text-secondary);margin-top:0.2rem">
+                                <div class="panel-hint u-mt-xs">
                                     {format!("Connected: {} ({})", wn, &pk[..8.min(pk.len())])}
                                 </div>
                             </div>
                             <button
-                                class="btn btn-outline"
-                                style="font-size:0.7rem;padding:0.2rem 0.5rem"
+                                class="btn btn-outline btn-sm"
                                 on:click=move |_| set_state.set(EscrowInitState::Idle)
                             >
                                 "Disconnect"
@@ -262,19 +260,18 @@ pub fn EscrowInitPanel(
                         </div>
 
                         // Single step: Initialize Escrow (vault ATA + event escrow in one TX)
-                        <div style="padding:0.5rem 0.75rem;border:1px solid var(--border);border-radius:6px;background:var(--bg-primary)">
-                            <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem">
+                        <div class="step-card">
+                            <div class="flex-row-center u-gap-lg">
                                 <div>
-                                    <div style="font-size:0.8rem;font-weight:600;color:var(--text-primary)">
+                                    <div class="step-card-title">
                                         "Initialize Escrow"
                                     </div>
-                                    <div style="font-size:0.7rem;color:var(--text-secondary)">
+                                    <div class="step-card-desc">
                                         "Creates vault ATA + event escrow PDA in a single transaction."
                                     </div>
                                 </div>
                                 <button
-                                    class="btn-primary"
-                                    style="white-space:nowrap;font-size:0.8rem;padding:0.4rem 0.8rem"
+                                    class="btn-primary btn-sm u-nowrap"
                                     on:click=move |_| {
                                         let eid = eid.clone();
                                         let pk = pk.clone();
@@ -406,14 +403,14 @@ pub fn EscrowInitPanel(
                     _ => String::new(),
                 };
                 view! {
-                    <div style="margin-top:1rem;padding:0.75rem;border:1px dashed var(--border);border-radius:8px;background:var(--bg-secondary)">
-                        <div style="display:flex;align-items:center;gap:0.5rem">
+                    <div class="panel-box-dashed" style="margin-top:1rem">
+                        <div class="flex-row-gap">
                             <span class="spinner spinner-sm"></span>
-                            <span style="font-size:0.85rem;color:var(--text-primary)">
+                            <span class="panel-label u-mb-0">
                                 {format!("Initializing escrow via {}...", wn)}
                             </span>
                         </div>
-                        <div style="font-size:0.75rem;color:var(--text-secondary);margin-top:0.25rem">
+                        <div class="panel-hint u-mt-2xs">
                             "Approve the transaction in your wallet."
                         </div>
                     </div>
@@ -433,24 +430,24 @@ pub fn EscrowInitPanel(
                 };
                 let solscan = crate::utils::solscan_tx_url(&sig, &crate::utils::get_cluster());
                 view! {
-                    <div style="margin-top:0.75rem;padding:0.5rem 0.75rem;border:1px solid var(--success,green);border-radius:6px;background:rgba(0,128,0,0.05)">
-                        <div style="font-size:0.8rem;color:var(--success,green);font-weight:600">
+                    <div class="panel-success" style="margin-top:0.75rem">
+                        <div class="step-card-title badge-done">
                             "Escrow initialized on-chain"
                         </div>
-                        <div style="font-size:0.75rem;margin-top:0.25rem">
-                            <span style="color:var(--text-secondary)">"Escrow: "</span>
-                            <code style="font-size:0.7rem">{ea}</code>
+                        <div class="panel-hint u-mt-2xs">
+                            <span class="text-label">"Escrow: "</span>
+                            <code class="code-xs">{ea}</code>
                         </div>
-                        <div style="font-size:0.75rem;margin-top:0.2rem">
-                            <span style="color:var(--text-secondary)">"Vault: "</span>
-                            <code style="font-size:0.7rem">{va}</code>
+                        <div class="panel-hint u-mt-xs">
+                            <span class="text-label">"Vault: "</span>
+                            <code class="code-xs">{va}</code>
                         </div>
-                        <div style="font-size:0.75rem;margin-top:0.2rem">
-                            <span style="color:var(--text-secondary)">"On-chain event ID: "</span>
-                            <code style="font-size:0.7rem">{oeid}</code>
+                        <div class="panel-hint u-mt-xs">
+                            <span class="text-label">"On-chain event ID: "</span>
+                            <code class="code-xs">{oeid}</code>
                         </div>
-                        <div style="font-size:0.7rem;margin-top:0.25rem">
-                            <a href=solscan target="_blank" rel="noopener" style="color:var(--accent)">
+                        <div class="code-xs u-mt-2xs">
+                            <a href=solscan target="_blank" rel="noopener" class="link-accent">
                                 "View on Solscan ↗"
                             </a>
                         </div>
@@ -468,13 +465,12 @@ pub fn EscrowInitPanel(
                     _ => String::new(),
                 };
                 view! {
-                    <div style="margin-top:1rem;padding:0.5rem 0.75rem;border:1px solid var(--error,red);border-radius:6px;background:rgba(255,0,0,0.05)">
-                        <div style="font-size:0.8rem;color:var(--error,red)">
+                    <div class="panel-error" style="margin-top:1rem">
+                        <div class="panel-hint" style="color:var(--error,red)">
                             {format!("{msg}")}
                         </div>
                         <button
-                            class="btn btn-outline"
-                            style="font-size:0.7rem;padding:0.2rem 0.5rem;margin-top:0.25rem"
+                            class="btn btn-outline btn-sm u-mt-2xs"
                             on:click=move |_| set_state.set(EscrowInitState::Idle)
                         >
                             "Retry"

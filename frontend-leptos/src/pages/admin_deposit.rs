@@ -210,7 +210,7 @@ pub fn AdminDeposits(
                 >
                     "Deposits"
                     <Show when=move || pending_count.get() != 0 fallback=|| view! { <span></span> }>
-                        <span class="badge badge-warning" style="margin-left:0.5rem">
+                        <span class="badge badge-warning">
                             {move || pending_count.get()}
                         </span>
                     </Show>
@@ -222,7 +222,7 @@ pub fn AdminDeposits(
                 >
                     "💸 Refund Queue"
                     <Show when=move || refund_count.get() != 0 fallback=|| view! { <span></span> }>
-                        <span class="badge badge-warning" style="margin-left:0.5rem">
+                        <span class="badge badge-warning">
                             {move || refund_count.get()}
                         </span>
                     </Show>
@@ -279,16 +279,16 @@ pub fn AdminDeposits(
                             let slip_for_reject = slip.clone();
 
                             view! {
-                                <div class="card" style="margin-bottom:1rem">
-                                    <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:0.5rem">
+                                <div class="card">
+                                    <div class="flex-row-wrap">
                                         <div>
-                                            <div style="font-weight:600;margin-bottom:0.25rem">
+                                            <div class="admin-attendee-name">
                                                 {format!("Attendee: {}", utils::escape_html(&slip.attendee_id))}
                                             </div>
-                                            <div style="margin-bottom:0.25rem">
+                                            <div class="admin-amount-line">
                                                 {amount}
                                             </div>
-                                            <div style="color:var(--text-muted);font-size:0.875rem">
+                                            <div class="panel-hint">
                                                 {"Uploaded: "}
                                                 <span title={uploaded_formatted.clone()}>{uploaded_ago.clone()}</span>
                                             </div>
@@ -298,14 +298,14 @@ pub fn AdminDeposits(
                                                         href=slip_url.clone().unwrap_or_default()
                                                         target="_blank"
                                                         rel="noopener noreferrer"
-                                                        style="color:var(--accent)"
+                                                        class="link-accent"
                                                     >
                                                         "View Slip"
                                                     </a>
                                                 </div>
                                             </Show>
                                         </div>
-                                        <div style="display:flex;gap:0.5rem;align-items:center">
+                                        <div class="flex-row-gap">
                                             <button
                                                 class="btn btn-success btn-sm"
                                                 disabled=approve_disabled
@@ -361,19 +361,19 @@ pub fn AdminDeposits(
                             let item_for_refund = item.clone();
 
                             view! {
-                                <div class="card" style="margin-bottom:1rem">
-                                    <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:0.5rem">
+                                <div class="card">
+                                    <div class="flex-row-wrap">
                                         <div>
-                                            <div style="font-weight:600;margin-bottom:0.25rem">
+                                            <div class="admin-attendee-name">
                                                 {format!("Attendee: {}", utils::escape_html(&item.attendee_id))}
                                             </div>
-                                            <div style="margin-bottom:0.25rem">
+                                            <div class="admin-amount-line">
                                                 {amount}
                                             </div>
-                                            <div style="color:var(--text-muted);font-size:0.875rem">
+                                            <div class="panel-hint">
                                                 {format!("Verified by: {}", utils::escape_html(verified_by))}
                                             </div>
-                                            <div style="color:var(--text-muted);font-size:0.875rem">
+                                            <div class="panel-hint">
                                                 {format!("Verified at: {verified_at}")}
                                             </div>
                                         </div>
