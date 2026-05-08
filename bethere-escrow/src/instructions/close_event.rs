@@ -32,8 +32,10 @@ impl CloseEvent {
         // SPL token close_account zeros the data — remaining tokens would be
         // permanently lost.
         //
-        // We verify via accounting: total_deposited == total_refunded + total_forfeited.
-        // This is equivalent to checking vault balance == 0 without reading token data.
+        // Double check: accounting invariant AND actual vault balance.
+        // The accounting check catches normal flow issues.
+        // The vault balance check catches external airdrop griefing
+        // (anyone can transfer tokens to the vault without going through the program).
         let total_deposited = self.event_escrow.total_deposited();
         let total_refunded = self.event_escrow.total_refunded();
         let total_forfeited = self.event_escrow.total_forfeited();
@@ -41,6 +43,13 @@ impl CloseEvent {
             .checked_add(total_forfeited)
             .ok_or(EscrowError::Overflow)?;
         if total_deposited != settled {
+            return Err(EscrowError::VaultNotEmpty.into());
+        }
+
+        // Verify actual vault token balance is zero.
+        // Prevents griefing where someone airdrops 1 lamport USDC to vault,
+        // which would cause SPL close_account to fail (requires amount == 0).
+        if self.vault.amount() != 0 {
             return Err(EscrowError::VaultNotEmpty.into());
         }
 

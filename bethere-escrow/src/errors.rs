@@ -40,4 +40,6 @@ pub enum EscrowError {
     DepositNotRefunded = 17,
     /// Event escrow still has data and deposit not refunded.
     EventEscrowStillActive = 18,
+    /// Refund deadline has passed — organizer may claim forfeited.
+    RefundDeadlinePassed = 19,
 }

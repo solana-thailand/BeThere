@@ -55,6 +55,14 @@ impl Refund {
             return Err(EscrowError::RefundNotYetAllowed.into());
         }
 
+        // Verify refund deadline has not passed
+        // After refund_deadline, only claim_forfeited is available.
+        // This prevents a race where organizer claims forfeited (draining vault)
+        // and then attendee refunds fail because vault is empty.
+        if clock.unix_timestamp.get() >= self.event_escrow.refund_deadline() {
+            return Err(EscrowError::RefundDeadlinePassed.into());
+        }
+
         let amount = self.attendee_deposit.amount();
 
         // Mark as refunded

@@ -17,9 +17,12 @@
 //! | `deposit_overflow_safe` | checked_add never silently wraps |
 //! | `refund_overflow_safe` | checked_add on total_refunded never silently wraps |
 //! | `claim_forfeited_double_sub_safe` | double checked_sub never silently wraps |
-//! | `close_event_invariant` | total_deposited == total_refunded + total_forfeited ⟹ settled == total_deposited |
-//! | `accounting_conservation` | total_deposited ≥ total_refunded + total_forfeited always holds for valid states |
-//! | `forfeited_is_non_negative` | forfeited = deposited - refunded - already_forfeited ≥ 0 for valid states |
+//! | `close_event_invariant` | accounting == settled AND vault_balance == 0 |
+//! | `refund_window_exclusive` | refund ONLY in [event_end, refund_deadline) |
+//! | `refund_deadline_blocks_post_deadline` | post-deadline refund always fails |
+//! | `vault_griefing_detected` | vault_balance != 0 blocks close |
+//! | `accounting_conservation` | total_deposited >= total_refunded + total_forfeited always holds for valid states |
+//! | `forfeited_is_non_negative` | forfeited = deposited - refunded - already_forfeited >= 0 for valid states |
 //! | `claim_then_close_consistent` | After claiming all forfeited, close invariant holds |
 
 #![cfg(kani)]
@@ -42,6 +45,9 @@ enum ValidationError {
     EventEndInPast = 13,
     RefundDeadlineNotPassed = 3,
     Overflow = 14,
+    RefundDeadlinePassed = 19,
+    RefundNotYetAllowed = 1,
+    VaultNotEmpty = 15,
 }
 
 fn validate_create_event(
@@ -58,6 +64,40 @@ fn validate_create_event(
     }
     if refund_deadline <= event_end {
         return Err(ValidationError::RefundDeadlineNotPassed);
+    }
+    Ok(())
+}
+
+/// Validates refund timing.
+/// Mirrors: `Refund::validate_and_update` — refund window is `[event_end, refund_deadline)`.
+///
+/// Returns `Ok(())` if within refund window, `Err` otherwise.
+fn validate_refund(event_end: i64, refund_deadline: i64, now: i64) -> Result<(), ValidationError> {
+    if now < event_end {
+        return Err(ValidationError::RefundNotYetAllowed);
+    }
+    if now >= refund_deadline {
+        return Err(ValidationError::RefundDeadlinePassed);
+    }
+    Ok(())
+}
+
+/// Validates close_event with vault balance.
+/// Mirrors: `CloseEvent::close_event` — accounting check + vault balance == 0.
+fn validate_close_vault(
+    total_deposited: u64,
+    total_refunded: u64,
+    total_forfeited: u64,
+    vault_balance: u64,
+) -> Result<(), ValidationError> {
+    let settled = total_refunded
+        .checked_add(total_forfeited)
+        .ok_or(ValidationError::Overflow)?;
+    if total_deposited != settled {
+        return Err(ValidationError::VaultNotEmpty);
+    }
+    if vault_balance != 0 {
+        return Err(ValidationError::VaultNotEmpty);
     }
     Ok(())
 }
@@ -105,25 +145,6 @@ fn calculate_forfeited(
         .ok_or(ValidationError::Overflow)?;
 
     Ok((new_total_forfeited, forfeited))
-}
-
-/// Validates close_event invariant.
-/// Mirrors: `CloseEvent::close_event` — `total_deposited == total_refunded + total_forfeited`.
-///
-/// Returns `Ok(())` if vault is settled (empty), `Err(VaultNotEmpty)` otherwise.
-fn validate_close_invariant(
-    total_deposited: u64,
-    total_refunded: u64,
-    total_forfeited: u64,
-) -> Result<(), ValidationError> {
-    let settled = total_refunded
-        .checked_add(total_forfeited)
-        .ok_or(ValidationError::Overflow)?;
-
-    if total_deposited != settled {
-        return Err(ValidationError::Overflow); // VaultNotEmpty
-    }
-    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -279,27 +300,99 @@ fn claim_forfeited_double_sub_safe() {
     }
 }
 
-/// **Property**: Close event invariant check is **complete**.
+/// **Property**: Close event with vault balance check is **complete**.
 ///
-/// When `total_deposited == total_refunded + total_forfeited`, the close succeeds.
-/// When they differ, the close fails.
+/// When `total_deposited == total_refunded + total_forfeited` AND `vault_balance == 0`,
+/// the close succeeds. When either fails, the close fails.
 #[kani::proof]
 fn close_event_invariant() {
     let total_deposited: u64 = kani::any();
     let total_refunded: u64 = kani::any();
     let total_forfeited: u64 = kani::any();
+    let vault_balance: u64 = kani::any();
 
     // Constrain to avoid overflow in the check itself
     kani::assume(total_refunded.checked_add(total_forfeited).is_some());
 
     let settled = total_refunded + total_forfeited;
-    let result = validate_close_invariant(total_deposited, total_refunded, total_forfeited);
+    let result = validate_close_vault(
+        total_deposited,
+        total_refunded,
+        total_forfeited,
+        vault_balance,
+    );
 
-    if total_deposited == settled {
+    if total_deposited == settled && vault_balance == 0 {
         assert_eq!(result, Ok(()));
     } else {
         assert!(result.is_err());
     }
+}
+
+/// **Property**: Refund is ONLY allowed in the window `[event_end, refund_deadline)`.
+///
+/// Before `event_end` → rejected (RefundNotYetAllowed).
+/// At or after `refund_deadline` → rejected (RefundDeadlinePassed).
+/// In between → accepted.
+#[kani::proof]
+fn refund_window_exclusive() {
+    let event_end: i64 = kani::any();
+    let refund_deadline: i64 = kani::any();
+    let now: i64 = kani::any();
+
+    // Valid event setup
+    kani::assume(refund_deadline > event_end);
+
+    let result = validate_refund(event_end, refund_deadline, now);
+
+    if now < event_end {
+        assert_eq!(result, Err(ValidationError::RefundNotYetAllowed));
+    } else if now >= refund_deadline {
+        assert_eq!(result, Err(ValidationError::RefundDeadlinePassed));
+    } else {
+        assert_eq!(result, Ok(()));
+    }
+}
+
+/// **Property**: Refund deadline prevents race with claim_forfeited.
+///
+/// After refund_deadline, refund ALWAYS fails. This means the organizer
+/// can safely call claim_forfeited knowing no more refunds will drain the vault.
+#[kani::proof]
+fn refund_deadline_blocks_post_deadline() {
+    let event_end: i64 = kani::any();
+    let refund_deadline: i64 = kani::any();
+    let now: i64 = kani::any();
+
+    kani::assume(refund_deadline > event_end);
+    kani::assume(now >= refund_deadline); // post-deadline
+
+    let result = validate_refund(event_end, refund_deadline, now);
+    assert_eq!(result, Err(ValidationError::RefundDeadlinePassed));
+}
+
+/// **Property**: Vault griefing is detected — vault_balance != 0 blocks close.
+///
+/// Even when accounting is correct, a non-zero vault balance (from external
+/// airdrop) prevents close_event.
+#[kani::proof]
+fn vault_griefing_detected() {
+    let total_deposited: u64 = kani::any();
+    let total_refunded: u64 = kani::any();
+    let total_forfeited: u64 = kani::any();
+    let vault_balance: u64 = kani::any();
+
+    kani::assume(total_refunded.checked_add(total_forfeited).is_some());
+    kani::assume(vault_balance > 0); // attacker airdropped dust
+    kani::assume(total_deposited == total_refunded + total_forfeited); // accounting OK
+
+    let result = validate_close_vault(
+        total_deposited,
+        total_refunded,
+        total_forfeited,
+        vault_balance,
+    );
+    assert!(result.is_err()); // blocked!
 }
 
 /// **Property**: Accounting conservation law holds for valid escrow states.
@@ -330,7 +423,7 @@ fn accounting_conservation() {
 
     // After claiming all forfeited (vault_balance), the invariant holds
     let new_forfeited = total_forfeited + vault_balance;
-    let result = validate_close_invariant(total_deposited, total_refunded, new_forfeited);
+    let result = validate_close_vault(total_deposited, total_refunded, new_forfeited, 0);
     assert_eq!(result, Ok(()));
 }
 
@@ -398,7 +491,7 @@ fn claim_then_close_consistent() {
 
                 // Step 6: Verify close invariant
                 let close_result =
-                    validate_close_invariant(total_deposited, total_refunded, new_forfeited);
+                    validate_close_vault(total_deposited, total_refunded, new_forfeited, 0);
                 assert_eq!(close_result, Ok(()));
             }
             Err(_) => {
@@ -409,7 +502,7 @@ fn claim_then_close_consistent() {
     } else {
         // No remaining forfeited — close should work directly
         let close_result =
-            validate_close_invariant(total_deposited, total_refunded, total_forfeited_before);
+            validate_close_vault(total_deposited, total_refunded, total_forfeited_before, 0);
         assert_eq!(close_result, Ok(()));
     }
 }

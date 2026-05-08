@@ -58,8 +58,9 @@ mod bethere_escrow {
         ctx.accounts.emit_event()
     }
 
-    /// Refund USDC to checked-in attendee after event ends.
+    /// Refund USDC to attendee after event ends (before refund_deadline).
     /// Called by attendee (signed by their wallet).
+    /// Note: refund does NOT require checked_in — anti-rug-pull (SEC-001 fix).
     #[instruction(discriminator = 3)]
     pub fn refund(ctx: Ctx<Refund>, _event_id: u64) -> Result<(), ProgramError> {
         ctx.accounts.validate_and_update()?;
