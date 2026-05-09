@@ -11,6 +11,7 @@ pub mod metadata;
 pub mod qr;
 pub mod quiz;
 pub mod waitlist;
+pub mod walkin;
 
 use crate::state::AppState;
 use axum::{
@@ -84,6 +85,8 @@ pub fn routes(state: AppState) -> Router<()> {
         .route("/attendee/{id}", get(attendee::get_attendee))
         .route("/checkin/{id}", post(checkin::check_in))
         .route("/generate-qrs", post(qr::generate_qrs))
+        // Walk-in attendee registration (protected — staff registers on-the-spot)
+        .route("/walkin/register", post(walkin::register_walkin))
         // Admin quiz management (protected — organizer sets questions)
         .route(
             "/admin/quiz",

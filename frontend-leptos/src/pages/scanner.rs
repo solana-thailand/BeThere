@@ -13,7 +13,7 @@
 use leptos::prelude::*;
 use wasm_bindgen::prelude::*;
 
-use crate::api::{self, AttendeeData, CheckInData};
+use crate::api::{self, AttendeeData, CheckInData, WalkinRegisterRequest};
 use crate::auth;
 use crate::components::{self, ToastType};
 use crate::utils;
@@ -198,6 +198,16 @@ enum CheckInState {
     EscrowError {
         check_in_data: Box<CheckInData>,
         message: String,
+    },
+    // --- Walk-in registration states ---
+    /// Walk-in registration form is displayed.
+    WalkinForm,
+    /// Walk-in registration request in progress.
+    WalkinRegistering,
+    /// Walk-in registration succeeded — show claim QR to attendee.
+    WalkinSuccess {
+        claim_url: String,
+        name: String,
     },
 }
 
@@ -585,6 +595,94 @@ pub fn Scanner() -> impl IntoView {
         }
     };
 
+    // ===== Walk-in registration =====
+
+    // Walk-in form signals
+    let (walkin_name, set_walkin_name) = signal(String::new());
+    let (walkin_email, set_walkin_email) = signal(String::new());
+    let (walkin_phone, set_walkin_phone) = signal(String::new());
+
+    // Handler: open walk-in form
+    let handle_walkin_open = move |_: web_sys::MouseEvent| {
+        set_walkin_name.set(String::new());
+        set_walkin_email.set(String::new());
+        set_walkin_phone.set(String::new());
+        set_check_in_state.set(CheckInState::WalkinForm);
+    };
+
+    // Handler: cancel walk-in form → back to Idle
+    let handle_walkin_cancel = move |_: web_sys::MouseEvent| {
+        set_check_in_state.set(CheckInState::Idle);
+        set_scan_round.update(|r| *r += 1);
+    };
+
+    // Handler: submit walk-in registration
+    let handle_walkin_submit = move |ev: leptos::ev::SubmitEvent| {
+        ev.prevent_default();
+        let name = walkin_name.get().trim().to_string();
+        let email = walkin_email.get().trim().to_string();
+        let phone = walkin_phone.get().trim().to_string();
+
+        if name.is_empty() || email.is_empty() {
+            components::show_toast(
+                &set_toast,
+                "Name and email are required",
+                ToastType::Warning,
+            );
+            return;
+        }
+
+        let event_id = match escrow_event_id.get() {
+            Some(eid) if !eid.is_empty() => eid,
+            _ => {
+                components::show_toast(
+                    &set_toast,
+                    "No event selected. Select an event first.",
+                    ToastType::Warning,
+                );
+                return;
+            }
+        };
+
+        set_check_in_state.set(CheckInState::WalkinRegistering);
+
+        let set_state = set_check_in_state;
+        let set_t = set_toast;
+        let name_for_callback = name.clone();
+
+        leptos::task::spawn_local(async move {
+            let req = WalkinRegisterRequest {
+                event_id,
+                name: name.clone(),
+                email: email.clone(),
+                phone: if phone.is_empty() { None } else { Some(phone) },
+            };
+            match api::register_walkin(&req).await {
+                Ok(resp) => {
+                    log::info!("[scanner] walk-in registered: {}", resp.claim_url);
+                    set_state.set(CheckInState::WalkinSuccess {
+                        claim_url: resp.claim_url,
+                        name: name_for_callback,
+                    });
+                    components::show_toast(
+                        &set_t,
+                        "Walk-in attendee registered!",
+                        ToastType::Success,
+                    );
+                }
+                Err(err) => {
+                    log::error!("[scanner] walk-in register failed: {err}");
+                    set_state.set(CheckInState::WalkinForm);
+                    components::show_toast(
+                        &set_t,
+                        &format!("Registration failed: {err}"),
+                        ToastType::Error,
+                    );
+                }
+            }
+        });
+    };
+
     // Handle sign out
     let handle_sign_out = move |_: web_sys::MouseEvent| {
         auth::logout();
@@ -658,18 +756,162 @@ pub fn Scanner() -> impl IntoView {
             >
                 <div class="scanner-result-overlay">
                     <div class="scanner-glass-card">
-                        {move || {
-                            let state = check_in_state.get();
-                            render_check_in_state(
-                                state,
-                                handle_check_in,
-                                handle_reset,
-                                handle_escrow_check_in,
-                                handle_escrow_wallet_connect,
-                                handle_escrow_sign,
-                                escrow_enabled.get(),
+                        // Walk-in registration form
+                        <Show
+                            when=move || matches!(check_in_state.get(), CheckInState::WalkinForm)
+                            fallback=|| view! { <div></div> }
+                        >
+                            <div>
+                                <div class="scanner-state-header">
+                                    <h2>"Register Walk-in Attendee"</h2>
+                                </div>
+                                <form on:submit=handle_walkin_submit>
+                                    <div style="display:flex;flex-direction:column;gap:0.75rem;">
+                                        <div>
+                                            <label style="display:block;font-size:0.85rem;margin-bottom:0.25rem;color:var(--muted);">"Name *"</label>
+                                            <input
+                                                type="text"
+                                                class="manual-input"
+                                                style="width:100%;"
+                                                placeholder="Attendee name"
+                                                required=true
+                                                prop:value=move || walkin_name.get()
+                                                on:input=move |ev| set_walkin_name.set(event_target_value(&ev))
+                                            />
+                                        </div>
+                                        <div>
+                                            <label style="display:block;font-size:0.85rem;margin-bottom:0.25rem;color:var(--muted);">"Email *"</label>
+                                            <input
+                                                type="email"
+                                                class="manual-input"
+                                                style="width:100%;"
+                                                placeholder="attendee@email.com"
+                                                required=true
+                                                prop:value=move || walkin_email.get()
+                                                on:input=move |ev| set_walkin_email.set(event_target_value(&ev))
+                                            />
+                                        </div>
+                                        <div>
+                                            <label style="display:block;font-size:0.85rem;margin-bottom:0.25rem;color:var(--muted);">"Phone (optional)"</label>
+                                            <input
+                                                type="tel"
+                                                class="manual-input"
+                                                style="width:100%;"
+                                                placeholder="+66..."
+                                                prop:value=move || walkin_phone.get()
+                                                on:input=move |ev| set_walkin_phone.set(event_target_value(&ev))
+                                            />
+                                        </div>
+                                    </div>
+                                    <button
+                                        class="btn btn-success btn-block"
+                                        type="submit"
+                                        style="margin-top:1rem;"
+                                    >
+                                        "Register"
+                                    </button>
+                                    <button
+                                        class="btn btn-outline btn-block"
+                                        type="button"
+                                        style="margin-top:0.5rem;"
+                                        on:click=handle_walkin_cancel
+                                    >
+                                        "Cancel"
+                                    </button>
+                                </form>
+                            </div>
+                        </Show>
+                        // Walk-in registering spinner
+                        <Show
+                            when=move || matches!(check_in_state.get(), CheckInState::WalkinRegistering)
+                            fallback=|| view! { <div></div> }
+                        >
+                            <div class="scanner-state-loading">
+                                <div class="page-loading">
+                                    <span class="spinner spinner-lg"></span>
+                                    <span>"Registering walk-in..."</span>
+                                </div>
+                            </div>
+                        </Show>
+                        // Walk-in success — show claim QR
+                        <Show
+                            when=move || matches!(check_in_state.get(), CheckInState::WalkinSuccess { .. })
+                            fallback=|| view! { <div></div> }
+                        >
+                            {move || {
+                                let state = check_in_state.get();
+                                match state {
+                                    CheckInState::WalkinSuccess { ref claim_url, ref name } => {
+                                        let qr_data_url = generate_qr_data_url(claim_url, 240);
+                                        let claim_url_for_display = claim_url.clone();
+                                        let name_clone = name.clone();
+                                        view! {
+                                            <div>
+                                                <div class="result-success">
+                                                    <div class="success-check">
+                                                        <svg viewBox="0 0 24 24">
+                                                            <polyline points="20 6 9 17 4 12"></polyline>
+                                                        </svg>
+                                                    </div>
+                                                    <h2 class="claim-success-title">"Walk-in Registered!"</h2>
+                                                    <div class="result-details">
+                                                        <p class="scanner-attendee-name">{name_clone}</p>
+                                                    </div>
+                                                </div>
+                                                {move || {
+                                                    let url = claim_url_for_display.clone();
+                                                    match &qr_data_url {
+                                                        Some(img_src) => {
+                                                            view! {
+                                                                <ClaimQrCard
+                                                                    qr_src=img_src.clone()
+                                                                    claim_url=url
+                                                                    label="Show this QR to the attendee:"
+                                                                />
+                                                            }
+                                                                .into_any()
+                                                        }
+                                                        None => view! { <div></div> }.into_any(),
+                                                    }
+                                                }}
+                                                <button
+                                                    class="btn btn-success btn-block"
+                                                    style="margin-top:0.5rem;"
+                                                    on:click=handle_reset
+                                                >
+                                                    "Scan Another"
+                                                </button>
+                                            </div>
+                                        }
+                                            .into_any()
+                                    }
+                                    _ => view! { <div></div> }.into_any(),
+                                }
+                            }}
+                        </Show>
+                        // Non-walk-in states: delegate to render_check_in_state
+                        <Show
+                            when=move || !matches!(
+                                check_in_state.get(),
+                                CheckInState::WalkinForm
+                                    | CheckInState::WalkinRegistering
+                                    | CheckInState::WalkinSuccess { .. }
                             )
-                        }}
+                            fallback=|| view! { <div></div> }
+                        >
+                            {move || {
+                                let state = check_in_state.get();
+                                render_check_in_state(
+                                    state,
+                                    handle_check_in,
+                                    handle_reset,
+                                    handle_escrow_check_in,
+                                    handle_escrow_wallet_connect,
+                                    handle_escrow_sign,
+                                    escrow_enabled.get(),
+                                )
+                            }}
+                        </Show>
                     </div>
                 </div>
             </Show>
@@ -767,6 +1009,15 @@ pub fn Scanner() -> impl IntoView {
                             </form>
                         </div>
                     </Show>
+                    // Register Walk-in button
+                    <div style="margin-top:0.75rem;padding:0 0.25rem;">
+                        <button
+                            class="btn btn-primary btn-block"
+                            on:click=handle_walkin_open
+                        >
+                            "Register Walk-in Attendee"
+                        </button>
+                    </div>
                 </div>
             </Show>
 
@@ -1328,5 +1579,9 @@ where
             }
             .into_any()
         }
+        // Walk-in states are rendered directly in the view; these arms should not be reached.
+        CheckInState::WalkinForm => view! { <div></div> }.into_any(),
+        CheckInState::WalkinRegistering => view! { <div></div> }.into_any(),
+        CheckInState::WalkinSuccess { .. } => view! { <div></div> }.into_any(),
     }
 }

@@ -635,6 +635,31 @@ pub async fn check_in(id: &str, event_id: Option<&str>) -> Result<CheckInData, A
     })
 }
 
+// ===== Walk-in Registration =====
+
+/// Request body for POST /api/walkin/register
+#[derive(Debug, Clone, Serialize)]
+pub struct WalkinRegisterRequest {
+    pub event_id: String,
+    pub name: String,
+    pub email: String,
+    pub phone: Option<String>,
+}
+
+/// Response from POST /api/walkin/register
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct WalkinRegisterResponse {
+    pub claim_token: String,
+    pub claim_url: String,
+}
+
+/// POST /api/walkin/register
+/// Register a walk-in attendee for an event.
+pub async fn register_walkin(req: &WalkinRegisterRequest) -> Result<WalkinRegisterResponse, ApiError> {
+    let response = api_post_json("/walkin/register", req).await?;
+    Ok(response)
+}
+
 /// POST /api/generate-qrs?force={force}
 /// Bulk generate QR codes for all approved attendees.
 ///

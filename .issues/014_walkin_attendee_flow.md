@@ -3,7 +3,32 @@
 ## Summary
 BeThere currently requires attendees to pre-register via Google Sheet before the event. Walk-in attendees (who show up without pre-registering) cannot be properly handled. This issue tracks the hybrid KV-based walk-in solution: staff registers walk-ins via the admin scanner UI → backend creates KV attendee record → same deposit/NFT/refund loop as pre-registered attendees.
 
-## Status: OPEN
+## Status: IN PROGRESS
+
+### Phase 1 — Backend Walk-in Registration API ✅ Done
+- [x] Add `WalkinAttendee` struct in `domain/src/models/attendee.rs`
+- [x] Add `POST /api/walkin/register` endpoint (staff-only, requires auth)
+- [x] Validate input: name (required), email (required), phone (optional)
+- [x] Create KV attendee record with `walkin:{event_id}:{email}` key (90-day TTL)
+- [x] Generate claim token (UUID v7) + reverse mapping `claim_walkin:{token}`
+- [x] Return claim token + claim URL to staff UI
+
+### Phase 2 — Deposit/Refund/NFT Flow Compatibility ✅ Done
+- [x] Walk-in claim lookup: `lookup_walkin_by_claim_token()` checks KV first
+- [x] Walk-in claim execution: `execute_walkin_claim()` mints NFT + updates KV (no sheet)
+- [x] Deposit flow: wallet-based, works independently of attendee records
+- [x] Refund flow: wallet-based, works independently of attendee records
+
+### Phase 3 — Scanner UI ✅ Done
+- [x] `WalkinRegisterRequest` / `WalkinRegisterResponse` in frontend API
+- [x] "Register Walk-in Attendee" button in scanner Idle state
+- [x] Walk-in registration form: name, email, phone
+- [x] Walk-in success: QR code of claim URL for attendee to scan
+- [x] "Scan Another" button returns to Idle
+
+### Phase 4 — Optional: Post-event Sync
+- [ ] Sync walk-in data to Google Sheet post-event (batch)
+- [ ] Export walk-in attendee list as CSV
 
 ## Background
 BeThere is an event check-in platform on Solana with deposit-backed attendance (USDC escrow). The current flow is:

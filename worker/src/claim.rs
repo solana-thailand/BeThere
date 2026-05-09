@@ -8,6 +8,7 @@ use worker::KvStore;
 
 use event_checkin_domain::models::adventure::AdventureStatus;
 use event_checkin_domain::models::api::{EventConfig as ApiEventConfig, QuizStatus};
+use event_checkin_domain::models::attendee::WalkinAttendee;
 use event_checkin_domain::models::error::AppError;
 
 use crate::handlers::ext::{resolve_event, resolve_kv};
@@ -129,6 +130,66 @@ pub(crate) fn mask_wallet(addr: &str) -> String {
 }
 
 // ---------------------------------------------------------------------------
+// Walk-in attendee lookup
+// ---------------------------------------------------------------------------
+
+/// KV key for walk-in reverse mapping (claim token → walk-in record).
+const CLAIM_WALKIN_PREFIX: &str = "claim_walkin:";
+
+/// KV key prefix for walk-in attendee records.
+const WALKIN_PREFIX: &str = "walkin:";
+
+/// Try to look up a walk-in attendee by claim token.
+/// Returns None if not a walk-in (falls back to normal sheet lookup).
+pub(crate) async fn lookup_walkin_by_claim_token(
+    kv: &KvStore,
+    token: &str,
+) -> Option<WalkinAttendee> {
+    let reverse_key = format!("{CLAIM_WALKIN_PREFIX}{token}");
+    let mapping: Option<String> = kv.get(&reverse_key).text().await.ok().flatten();
+
+    let mapping = mapping?;
+    // mapping format: "{event_id}:{email_lower}"
+    let walkin_key = format!("{WALKIN_PREFIX}{mapping}");
+
+    let walkin: Option<WalkinAttendee> = kv.get(&walkin_key).json().await.ok().flatten();
+
+    walkin
+}
+
+/// Mark a walk-in attendee as claimed (update KV record with wallet + timestamp).
+pub(crate) async fn mark_walkin_claimed(
+    kv: &KvStore,
+    event_id: &str,
+    email: &str,
+    wallet_address: &str,
+    claimed_at: &str,
+) -> Result<(), String> {
+    let email_lower = email.to_lowercase();
+    let walkin_key = format!("{WALKIN_PREFIX}{event_id}:{email_lower}");
+
+    let mut walkin: WalkinAttendee = kv
+        .get(&walkin_key)
+        .json()
+        .await
+        .ok()
+        .flatten()
+        .ok_or_else(|| format!("walk-in record not found: {walkin_key}"))?;
+
+    walkin.wallet_address = Some(wallet_address.to_string());
+    walkin.claimed_at = Some(claimed_at.to_string());
+
+    kv.put(&walkin_key, serde_json::to_string(&walkin).unwrap())
+        .map_err(|e| format!("walk-in claimed update failed: {e:?}"))?
+        .expiration_ttl(86400 * 90) // 90 days
+        .execute()
+        .await
+        .map_err(|e| format!("walk-in claimed write failed: {e:?}"))?;
+
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
 // Result types
 // ---------------------------------------------------------------------------
 
@@ -175,8 +236,45 @@ pub async fn lookup_claim(
     tracing::info!(claim_token = %token, "claim lookup");
 
     let event = resolve_event(state, event_id).await?;
-
     let kv = resolve_kv(state);
+
+    // ── Walk-in path: check KV for walk-in attendee first ──
+    if let Some(kv_ref) = kv
+        && let Some(walkin) = lookup_walkin_by_claim_token(kv_ref, token).await
+    {
+        tracing::info!(claim_token = %token, email = %walkin.email, "claim lookup: found walk-in attendee");
+
+        let nft_available = !event.nft_metadata_uri.is_empty()
+            && !event.nft_image_url.is_empty()
+            && !state.config.solana.api_key.is_empty();
+
+        return Ok(ClaimLookup {
+            name: walkin.name.clone(),
+            checked_in_at: walkin.checked_in_at.clone(),
+            claim_token: token.to_string(),
+            claimed: walkin.claimed_at.is_some(),
+            claimed_at: walkin.claimed_at.clone(),
+            nft_available,
+            locked_wallet: walkin.wallet_address.clone(),
+            event: ApiEventConfig {
+                event_name: event.name.clone(),
+                event_tagline: event.tagline.clone(),
+                event_link: event.link.clone(),
+                event_start_ms: event.event_start_ms,
+                event_end_ms: event.event_end_ms,
+            },
+            quiz_status: QuizStatus::NotRequired, // walk-ins skip quiz
+            total_checked_in: 0,                  // walk-ins don't contribute to sheet stats
+            total_claimed: 0,
+            api_id: format!("walkin:{}", walkin.email),
+            event_id: event.id.clone(),
+            deposit_enabled: event.deposit_enabled,
+            deposit_amount_usdc: event.deposit_amount_usdc,
+            deposit_amount_thb: event.deposit_amount_thb,
+        });
+    }
+
+    // ── Pre-registered path: look up from Google Sheet ──
     let (attendee, total_checked_in, total_claimed) =
         match crate::sheets::get_attendee_with_claim_counts(
             token,
@@ -275,9 +373,16 @@ pub async fn execute_claim(
 
     // 1. Resolve event context
     let event = resolve_event(state, event_id).await?;
-
-    // 2. Look up attendee by claim token
     let kv = resolve_kv(state);
+
+    // 2. Check walk-in path first
+    if let Some(kv_ref) = kv
+        && let Some(walkin) = lookup_walkin_by_claim_token(kv_ref, token).await
+    {
+        return execute_walkin_claim(state, kv_ref, &event, token, wallet_address, walkin).await;
+    }
+
+    // 3. Pre-registered path: look up attendee by claim token from Google Sheet
     let attendee = match crate::sheets::get_attendee_by_claim_token(
         token,
         state,
@@ -484,6 +589,111 @@ pub async fn execute_claim(
     );
 
     // 12. Return result
+    let cluster = if config.solana.rpc_url.contains("mainnet") {
+        "mainnet-beta"
+    } else {
+        "devnet"
+    };
+
+    Ok(ClaimResult {
+        name: display_name,
+        asset_id: mint_result.asset_id,
+        signature: mint_result.signature,
+        wallet_address: wallet_address.to_string(),
+        claimed_at,
+        cluster: cluster.to_string(),
+    })
+}
+
+// ---------------------------------------------------------------------------
+// Walk-in claim logic (KV-only, no Google Sheet dependency)
+// ---------------------------------------------------------------------------
+
+/// Execute the claim flow for a walk-in attendee.
+/// Walk-ins skip quiz/adventure gates and record claims in KV (not Sheets).
+async fn execute_walkin_claim(
+    state: &AppState,
+    kv: &KvStore,
+    event: &event_checkin_domain::models::event::EventConfig,
+    token: &str,
+    wallet_address: &str,
+    walkin: WalkinAttendee,
+) -> Result<ClaimResult, AppError> {
+    let display_name = walkin.name.clone();
+
+    // Already claimed check
+    if walkin.claimed_at.is_some() {
+        tracing::warn!(claim_token = %token, "walk-in already claimed");
+        return Err(AppError::Validation("NFT has already been claimed".into()));
+    }
+
+    // Claim dedup lock
+    if let Err(e) = acquire_claim_lock(kv, &event.id, token, wallet_address).await {
+        return Err(AppError::RateLimited(e));
+    }
+
+    // Mint compressed NFT via Helius
+    let config = &state.config;
+    let mint_req = MintRequest {
+        wallet_address,
+        rpc_url: &config.solana.rpc_url,
+        api_key: &config.solana.api_key,
+        collection_mint: &event.nft_collection_mint,
+        metadata_uri: &event.nft_metadata_uri,
+        image_url: &event.nft_image_url,
+        nft_name: &event.nft_name(),
+        nft_symbol: &event.nft_symbol,
+        nft_description: &event.nft_description(),
+        nft_external_url: &event.link,
+        merkle_tree: &event.merkle_tree,
+    };
+
+    let mint_result = match crate::solana::mint_compressed_nft(&mint_req).await {
+        Ok(result) => result,
+        Err(ref e) => {
+            tracing::error!(claim_token = %token, error = %e, "walk-in mint failed");
+            let _ = release_claim_lock(kv, &event.id, token).await;
+            return Err(AppError::External {
+                service: "helius".into(),
+                status: 502,
+                body: e.to_string(),
+            });
+        }
+    };
+
+    // Mark as claimed in KV (not Google Sheet — walk-ins are KV-only)
+    let claimed_at = Utc::now().to_rfc3339();
+    if let Err(e) = mark_walkin_claimed(
+        kv,
+        &walkin.event_id,
+        &walkin.email,
+        wallet_address,
+        &claimed_at,
+    )
+    .await
+    {
+        tracing::error!(claim_token = %token, error = %e, "walk-in mint succeeded but failed to mark claimed");
+        return Err(AppError::Internal(format!(
+            "NFT minted but failed to record claim. Asset ID: {}. Error: {e}",
+            mint_result.asset_id
+        )));
+    }
+
+    // Finalize claim lock
+    if let Err(e) =
+        finalize_claim_lock(kv, &event.id, token, wallet_address, &mint_result.asset_id).await
+    {
+        tracing::warn!(error = %e, "walk-in claim lock finalize failed (non-blocking)");
+    }
+
+    tracing::info!(
+        claim_token = %token,
+        name = %display_name,
+        asset_id = %mint_result.asset_id,
+        wallet_address = %wallet_address,
+        "walk-in claim fulfilled"
+    );
+
     let cluster = if config.solana.rpc_url.contains("mainnet") {
         "mainnet-beta"
     } else {

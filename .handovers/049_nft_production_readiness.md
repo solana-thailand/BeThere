@@ -21,7 +21,18 @@ Also created the deferred walk-in attendee issue doc (Issue 014) from the previo
 | 3 | `worker/src/badge_production.svg` | **New** — 1000x1000 production badge (Solana gradient, hexagonal shield, checkmark, "BeThere" branding) |
 | 4 | `.issues/008_nft_config_and_production_readiness.md` | Restructured with self-hosted Option A (recommended) and Arweave Option B |
 | 5 | `.issues/012_escrow_panel_single_tx_migration.md` | Closed as RESOLVED (was stale — all work already done) |
-| 6 | `.issues/014_walkin_attendee_flow.md` | **New** — walk-in attendee hybrid approach (4 phases) |
+| 6 | `.issues/014_walkin_attendee_flow.md` | New — walk-in attendee hybrid approach (Phase 1-3 done) |
+
+### Walk-in Implementation (Additional Files)
+
+| # | File | Change |
+|---|------|--------|
+| 7 | `domain/src/models/attendee.rs` | Added `WalkinAttendee` struct |
+| 8 | `worker/src/handlers/walkin.rs` | **New** — `POST /api/walkin/register` endpoint |
+| 9 | `worker/src/handlers/mod.rs` | Added walkin module + route |
+| 10 | `worker/src/claim.rs` | Walk-in claim lookup + execution path (KV-first, sheet fallback) |
+| 11 | `frontend-leptos/src/api.rs` | Added `register_walkin()` + request/response structs |
+| 12 | `frontend-leptos/src/pages/scanner.rs` | Walk-in form, registering spinner, success QR display |
 
 ### New Endpoints
 
@@ -29,6 +40,7 @@ Also created the deferred walk-in attendee issue doc (Issue 014) from the previo
 |-------|---------|
 | `GET /api/badge-hd.svg` | Production 1000x1000 SVG badge for NFT image |
 | `GET /api/metadata/{event_id}` | Dynamic per-event Metaplex metadata (already existed, now loads from KV) |
+| `POST /api/walkin/register` | Staff-only: register walk-in attendee, returns claim token + URL |
 
 ### Self-Hosted NFT Configuration
 
@@ -52,7 +64,7 @@ The metadata endpoint dynamically includes event name, date, and description in 
 1. **Configure `HELIUS_API_KEY`** — Worker secret needed for cNFT minting
 2. **Set NFT fields in admin UI** — Enter self-hosted URLs for first event
 3. **Browser test full deposit lifecycle** — Verify behavioral economics changes on devnet
-4. **Walk-in implementation** (Issue 014) — Backend API + scanner UI
+4. **Walk-in Phase 4** — Post-event Google Sheet sync + CSV export
 5. **Mainnet escrow program deploy** (~0.5 SOL)
 6. **Load testing** (100+ concurrent deposits)
 7. **External security audit submission**
@@ -62,7 +74,7 @@ The metadata endpoint dynamically includes event name, date, and description in 
 - `.issues/008_nft_config_and_production_readiness.md` — NFT config (Option A self-hosted ready)
 - `.issues/012_escrow_panel_single_tx_migration.md` — Closed (RESOLVED)
 - `.issues/013_escrow_rug_pull_prevention.md` — All 11 findings fixed
-- `.issues/014_walkin_attendee_flow.md` — New (OPEN, walk-in attendee hybrid)
+- `.issues/014_walkin_attendee_flow.md` — IN PROGRESS (Phase 1-3 done, Phase 4 optional)
 
 ## How to Verify
 
