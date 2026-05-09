@@ -54,6 +54,8 @@ pub struct EventForm {
     pub organizer_wallet: String,
     pub on_chain_event_id: String,
     pub refund_deadline_hours: String,
+    /// Server-side `updated_at` captured at load time for optimistic concurrency.
+    pub updated_at: String,
 }
 
 // ===== Helpers =====
@@ -191,6 +193,7 @@ fn form_from_detail(detail: &api::EventDetail) -> EventForm {
         organizer_wallet: detail.organizer_wallet.clone(),
         on_chain_event_id: if detail.on_chain_event_id > 0 { detail.on_chain_event_id.to_string() } else { String::new() },
         refund_deadline_hours: if detail.refund_deadline_hours > 0 { detail.refund_deadline_hours.to_string() } else { String::new() },
+        updated_at: detail.updated_at.clone(),
     }
 }
 
@@ -633,6 +636,7 @@ pub fn EventsPage(
                 organizer_wallet: Some(current_form.organizer_wallet.trim().to_string()),
                 on_chain_event_id: Some(current_form.on_chain_event_id.parse::<u64>().unwrap_or(0)),
                 refund_deadline_hours: Some(current_form.refund_deadline_hours.parse::<u32>().unwrap_or(0)),
+                expected_updated_at: if current_form.updated_at.is_empty() { None } else { Some(current_form.updated_at.clone()) },
             };
 
             leptos::task::spawn_local(async move {
@@ -648,11 +652,12 @@ pub fn EventsPage(
                     }
                     Err(e) => {
                         log::error!("[events-page] update failed: {e}");
-                        components::show_toast(
-                            &set_toast,
-                            &format!("Failed to update event: {e}"),
-                            components::ToastType::Error,
-                        );
+                        let msg = if e.message.contains("conflict") {
+                            "Event was modified by another user. Please reload the event and re-apply your changes.".to_string()
+                        } else {
+                            format!("Failed to update event: {e}")
+                        };
+                        components::show_toast(&set_toast, &msg, components::ToastType::Error);
                     }
                 }
                 set_saving.set(false);

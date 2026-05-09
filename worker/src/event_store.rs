@@ -234,6 +234,17 @@ pub async fn update_event(
         .await?
         .ok_or_else(|| format!("event '{id}' not found"))?;
 
+    // Optimistic concurrency: if client provides expected_updated_at,
+    // verify it matches the stored value to prevent blind overwrites.
+    if let Some(ref expected) = req.expected_updated_at {
+        if expected != &config.updated_at {
+            return Err(format!(
+                "conflict: event was modified by another user at {}. Please reload and retry.",
+                config.updated_at
+            ));
+        }
+    }
+
     // SEC-002: Lock escrow-critical fields after on-chain init.
     // If escrow_address is set (escrow initialized on-chain), reject changes to
     // fields that are baked into the on-chain EventEscrow PDA.

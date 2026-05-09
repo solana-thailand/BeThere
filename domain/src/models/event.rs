@@ -491,6 +491,10 @@ pub struct UpdateEventRequest {
     /// Hours after event_end for refund deadline.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub refund_deadline_hours: Option<u32>,
+    /// Optimistic concurrency: if provided, update only succeeds when this
+    /// matches the stored `updated_at` timestamp. Prevents blind overwrites.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expected_updated_at: Option<String>,
 }
 
 /// Response for GET /api/events — list all events.

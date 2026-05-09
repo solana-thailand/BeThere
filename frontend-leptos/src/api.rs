@@ -1145,6 +1145,9 @@ pub struct UpdateEventBody {
     pub on_chain_event_id: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub refund_deadline_hours: Option<u32>,
+    /// Optimistic concurrency: matches server `updated_at` to prevent blind overwrites.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expected_updated_at: Option<String>,
 }
 
 /// Response from event create/update (partial data).
