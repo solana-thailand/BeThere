@@ -845,22 +845,9 @@ pub fn EventsPage(
 
             // === Create / Edit Form View ===
             <Show when=move || current_view.get() != EventsView::List fallback=|| view! { <div></div> }>
-                {move || {
-                    let is_edit = current_view.get() == EventsView::Edit;
-                    let title = if is_edit { "Edit Event" } else { "Create Event" };
-                    let save_label = if is_edit {
-                        "Update Event"
-                    } else if !create_wallet_pk.get().is_empty() && form.get().deposit_enabled {
-                        "Create Event + Initialize Escrow"
-                    } else {
-                        "Create Event"
-                    };
-                    let is_saving = saving.get();
-                    let archive_eid = editing_id.get().unwrap_or_default();
-
-                    view! {
-                        <div class="card">
-                            <h2 class="admin-section-heading">{title}</h2>
+                <div class="card">
+                    // Title is reactive — re-renders heading text only, not the form inputs
+                    <h2 class="admin-section-heading">{move || if current_view.get() == EventsView::Edit { "Edit Event" } else { "Create Event" }}</h2>
 
                             // ── Basic Info ──
                             <div class="form-section">
@@ -1155,39 +1142,35 @@ pub fn EventsPage(
                                         </label>
                                     </div>
                                     // Status selector (edit only)
-                                    {if is_edit {
-                                        view! {
-                                            <div class="quiz-setting-item">
-                                                <label class="quiz-field-label">"Status"</label>
-                                                <select
-                                                    class="quiz-number-input"
-                                                    on:change=move |ev| {
-                                                        let val = event_target_value(&ev);
-                                                        let status = match val.as_str() {
-                                                            "active" => api::EventStatus::Active,
-                                                            "completed" => api::EventStatus::Completed,
-                                                            _ => api::EventStatus::Draft,
-                                                        };
-                                                        set_form.update(|f| f.status = status);
+                                    <Show when=move || current_view.get() == EventsView::Edit fallback=|| view! { <div></div> }>
+                                        <div class="quiz-setting-item">
+                                            <label class="quiz-field-label">"Status"</label>
+                                            <select
+                                                class="quiz-number-input"
+                                                on:change=move |ev| {
+                                                    let val = event_target_value(&ev);
+                                                    let status = match val.as_str() {
+                                                        "active" => api::EventStatus::Active,
+                                                        "completed" => api::EventStatus::Completed,
+                                                        _ => api::EventStatus::Draft,
+                                                    };
+                                                    set_form.update(|f| f.status = status);
+                                                }
+                                                prop:value=move || {
+                                                    match form.get().status {
+                                                        api::EventStatus::Active => "active".to_string(),
+                                                        api::EventStatus::Completed => "completed".to_string(),
+                                                        api::EventStatus::Draft => "draft".to_string(),
+                                                        api::EventStatus::Archived => "archived".to_string(),
                                                     }
-                                                    prop:value=move || {
-                                                        match form.get().status {
-                                                            api::EventStatus::Active => "active".to_string(),
-                                                            api::EventStatus::Completed => "completed".to_string(),
-                                                            api::EventStatus::Draft => "draft".to_string(),
-                                                            api::EventStatus::Archived => "archived".to_string(),
-                                                        }
-                                                    }
-                                                >
-                                                    <option value="draft">"Draft"</option>
-                                                    <option value="active">"Active"</option>
-                                                    <option value="completed">"Completed"</option>
-                                                </select>
-                                            </div>
-                                        }.into_any()
-                                    } else {
-                                        view! { <div></div> }.into_any()
-                                    }}
+                                                }
+                                            >
+                                                <option value="draft">"Draft"</option>
+                                                <option value="active">"Active"</option>
+                                                <option value="completed">"Completed"</option>
+                                            </select>
+                                        </div>
+                                    </Show>
                                 </div>
                                 </div>
                             </div>
@@ -1541,55 +1524,65 @@ pub fn EventsPage(
                                 <button
                                     class="btn btn-primary"
                                     on:click=handle_save
-                                    disabled=is_saving
+                                    disabled=move || saving.get()
                                 >
-                                    {if is_saving { "Saving..." } else { save_label }}
+                                    {move || {
+                                        if saving.get() {
+                                            "Saving...".to_string()
+                                        } else if current_view.get() == EventsView::Edit {
+                                            "Update Event".to_string()
+                                        } else if !create_wallet_pk.get().is_empty() && form.get().deposit_enabled {
+                                            "Create Event + Initialize Escrow".to_string()
+                                        } else {
+                                            "Create Event".to_string()
+                                        }
+                                    }}
                                 </button>
                                 <button class="btn btn-outline" on:click=handle_cancel>
                                     "Cancel"
                                 </button>
-                                {if is_edit && !archive_eid.is_empty() {
-                                    view! {
-                                        <button
-                                            class="btn btn-outline btn-archive"
-                                            on:click=move |_| {
-                                                let aid = archive_eid.clone();
-                                                let set_toast = set_toast;
-                                                let reload = do_reload;
-                                                let set_view = set_current_view;
-                                                leptos::task::spawn_local(async move {
-                                                    match api::archive_event(&aid).await {
-                                                        Ok(data) => {
-                                                            components::show_toast(
-                                                                &set_toast,
-                                                                &format!("Event '{}' archived", data.name),
-                                                                components::ToastType::Success,
-                                                            );
-                                                            set_view.set(EventsView::List);
-                                                            reload();
-                                                        }
-                                                        Err(e) => {
-                                                            log::error!("[events-page] archive failed: {e}");
-                                                            components::show_toast(
-                                                                &set_toast,
-                                                                &format!("Failed to archive: {e}"),
-                                                                components::ToastType::Error,
-                                                            );
-                                                        }
+                                <Show
+                                    when=move || {
+                                        current_view.get() == EventsView::Edit
+                                            && !editing_id.get().unwrap_or_default().is_empty()
+                                    }
+                                    fallback=|| view! { <div></div> }
+                                >
+                                    <button
+                                        class="btn btn-outline btn-archive"
+                                        on:click=move |_| {
+                                            let aid = editing_id.get().unwrap_or_default();
+                                            let set_toast = set_toast;
+                                            let reload = do_reload;
+                                            let set_view = set_current_view;
+                                            leptos::task::spawn_local(async move {
+                                                match api::archive_event(&aid).await {
+                                                    Ok(data) => {
+                                                        components::show_toast(
+                                                            &set_toast,
+                                                            &format!("Event '{}' archived", data.name),
+                                                            components::ToastType::Success,
+                                                        );
+                                                        set_view.set(EventsView::List);
+                                                        reload();
                                                     }
-                                                });
-                                            }
-                                        >
-                                            "Archive Event"
-                                        </button>
-                                    }.into_any()
-                                } else {
-                                    view! { <div></div> }.into_any()
-                                }}
+                                                    Err(e) => {
+                                                        log::error!("[events-page] archive failed: {e}");
+                                                        components::show_toast(
+                                                            &set_toast,
+                                                            &format!("Failed to archive: {e}"),
+                                                            components::ToastType::Error,
+                                                        );
+                                                    }
+                                                }
+                                            });
+                                        }
+                                    >
+                                        "Archive Event"
+                                    </button>
+                                </Show>
                             </div>
                         </div>
-                    }
-                }}
             </Show>
         </div>
     }
