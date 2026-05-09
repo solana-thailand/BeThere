@@ -229,6 +229,13 @@ pub fn AdminEscrow(
 
             match tx_result {
                 Ok(transaction_b64) => {
+                    // SEC-014: Verify wallet cluster matches expected network.
+                    let expected_cluster = crate::utils::get_cluster();
+                    if let Err(cluster_err) = crate::pages::escrow_init::check_wallet_cluster(&wn, &expected_cluster).await {
+                        log::error!("[admin-escrow] cluster mismatch: {cluster_err}");
+                        set_ar.update(|v| v.push((action, Err(cluster_err.clone()))));
+                        return;
+                    }
                     log::info!("[admin-escrow] {} TX built, signing...", action.label());
                     match sign_and_send_tx_js(&wn, &transaction_b64).await {
                         Some(signature) => {

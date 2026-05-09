@@ -412,6 +412,160 @@ export function isWalletAvailable(walletName) {
 }
 
 // ---------------------------------------------------------------------------
+// Network / Cluster Detection (SEC-014)
+// ---------------------------------------------------------------------------
+
+/**
+ * Known Solana genesis hashes for cluster identification.
+ *
+ * These are the first block hashes on each network and never change.
+ * Source: https://docs.solana.com/cluster/rpc-endpoints
+ */
+var GENESIS_HASHES = {
+  // Devnet
+  EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG: "devnet",
+  // Mainnet Beta
+  "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d": "mainnet-beta",
+  // Testnet
+  "4uhcVJyU9pJkvQyS88uRDiswHXSCkY3zQawwpjk2NsNY": "testnet",
+  // Localnet (default for solana-test-validator / surfnet)
+  GH7ome3E1hLUVh7MaLFd2qqL3VJtHBOkPM7TFhXGmWUL: "localnet",
+};
+
+/**
+ * Detect the wallet's currently connected cluster by reading the
+ * genesis hash from the wallet's RPC connection.
+ *
+ * This is used to prevent signing transactions on the wrong network.
+ * For example, if the app expects devnet but the wallet is on mainnet,
+ * the user could accidentally spend real SOL.
+ *
+ * @param {string} walletName - Name of the wallet (e.g. "Phantom")
+ * @returns {Promise<string|null>} Cluster name ("devnet", "mainnet-beta", "testnet", "localnet") or null on failure
+ */
+export async function getWalletCluster(walletName) {
+  try {
+    var provider = getProvider(walletName);
+    if (!provider) {
+      console.warn(
+        "[solana_wallet] getWalletCluster: provider not found for",
+        walletName,
+      );
+      return null;
+    }
+
+    // Most wallet providers expose a .connection or .rpcEndpoint property.
+    // We can use this to query the genesis hash via RPC.
+    var rpcUrl = null;
+
+    // Phantom and similar wallets expose connection.cluster or connection.rpcEndpoint
+    if (provider.connection) {
+      if (provider.connection.rpcEndpoint) {
+        rpcUrl = provider.connection.rpcEndpoint;
+      } else if (provider.connection._rpcEndpoint) {
+        rpcUrl = provider.connection._rpcEndpoint;
+      }
+    }
+
+    // Some wallets expose the cluster directly
+    // Phantom: provider._connection or provider.connection.cluster
+    if (!rpcUrl && provider.connection && provider.connection.endpoint) {
+      rpcUrl = provider.connection.endpoint;
+    }
+
+    // If we have an RPC URL, query the genesis hash
+    if (rpcUrl) {
+      var genesisHash = await fetchGenesisHash(rpcUrl);
+      if (genesisHash) {
+        var cluster = GENESIS_HASHES[genesisHash];
+        if (cluster) {
+          console.log(
+            "[solana_wallet] Wallet cluster detected:",
+            cluster,
+            "(genesis:",
+            genesisHash.substring(0, 12) + "...)",
+          );
+          return cluster;
+        }
+        // Unknown genesis hash — could be a custom local validator
+        console.warn(
+          "[solana_wallet] Unknown genesis hash:",
+          genesisHash,
+          "— treating as localnet",
+        );
+        return "localnet";
+      }
+    }
+
+    // Fallback: try to read cluster directly from provider
+    // Some wallets expose this property
+    if (provider.cluster) {
+      console.log(
+        "[solana_wallet] Cluster from provider.cluster:",
+        provider.cluster,
+      );
+      return provider.cluster;
+    }
+
+    // Last resort: guess based on the RPC URL pattern
+    if (rpcUrl) {
+      if (rpcUrl.indexOf("mainnet") !== -1) return "mainnet-beta";
+      if (rpcUrl.indexOf("testnet") !== -1) return "testnet";
+      if (
+        rpcUrl.indexOf("localhost") !== -1 ||
+        rpcUrl.indexOf("127.0.0.1") !== -1
+      )
+        return "localnet";
+      // Default to devnet for unknown URLs
+      console.warn(
+        "[solana_wallet] Cannot determine cluster from RPC URL, assuming devnet:",
+        rpcUrl,
+      );
+      return "devnet";
+    }
+
+    // No connection info available — cannot determine cluster
+    console.warn(
+      "[solana_wallet] Cannot determine wallet cluster — no RPC endpoint found",
+    );
+    return null;
+  } catch (e) {
+    console.error("[solana_wallet] getWalletCluster error:", e);
+    return null;
+  }
+}
+
+/**
+ * Fetch the genesis hash from an RPC endpoint.
+ * @param {string} rpcUrl - RPC endpoint URL
+ * @returns {Promise<string|null>} Genesis hash (base58), or null on failure
+ */
+async function fetchGenesisHash(rpcUrl) {
+  try {
+    var response = await fetch(rpcUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "getGenesisHash",
+      }),
+    });
+
+    if (!response.ok) return null;
+
+    var data = await response.json();
+    if (data.result) {
+      return data.result;
+    }
+    return null;
+  } catch (e) {
+    console.warn("[solana_wallet] fetchGenesisHash failed:", e);
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
 

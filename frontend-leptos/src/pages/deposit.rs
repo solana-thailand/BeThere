@@ -476,6 +476,18 @@ pub fn Deposit() -> impl IntoView {
                 }
             };
 
+            // SEC-014: Verify wallet cluster matches expected network.
+            let expected_cluster = crate::utils::get_cluster();
+            if let Err(cluster_err) = crate::pages::escrow_init::check_wallet_cluster(&wallet_name_for_tx, &expected_cluster).await {
+                log::error!("[deposit] cluster mismatch: {cluster_err}");
+                components::show_toast(
+                    &set_toast,
+                    &cluster_err,
+                    ToastType::Error,
+                );
+                return;
+            }
+
             // Step 4: Sign and send the TX via the wallet
             match sign_and_send_tx_js(&wallet_name_for_tx, &tx_b64).await {
                 Some(signature) => {
@@ -861,6 +873,18 @@ pub fn Deposit() -> impl IntoView {
                 return;
             }
 
+            // SEC-014: Verify wallet cluster matches expected network.
+            let expected_cluster = crate::utils::get_cluster();
+            if let Err(cluster_err) = crate::pages::escrow_init::check_wallet_cluster(&wallet_name_for_tx, &expected_cluster).await {
+                log::error!("[deposit] cluster mismatch (refund): {cluster_err}");
+                components::show_toast(
+                    &set_toast,
+                    &cluster_err,
+                    ToastType::Error,
+                );
+                return;
+            }
+
             // Step 2: Sign and send via wallet
             match sign_and_send_tx_js(&wallet_name_for_tx, &tx_b64).await {
                 Some(signature) => {
@@ -991,6 +1015,18 @@ pub fn Deposit() -> impl IntoView {
                     wallet_name_for_tx,
                     pk_for_tx,
                 ));
+                return;
+            }
+
+            // SEC-014: Verify wallet cluster matches expected network.
+            let expected_cluster = crate::utils::get_cluster();
+            if let Err(cluster_err) = crate::pages::escrow_init::check_wallet_cluster(&wallet_name_for_tx, &expected_cluster).await {
+                log::error!("[deposit] cluster mismatch (close): {cluster_err}");
+                components::show_toast(
+                    &set_toast,
+                    &cluster_err,
+                    ToastType::Error,
+                );
                 return;
             }
 

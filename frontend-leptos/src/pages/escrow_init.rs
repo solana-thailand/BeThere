@@ -22,6 +22,11 @@ extern "C" {
 
     #[wasm_bindgen(js_name = "signAndSendTransaction")]
     fn sign_and_send_tx_js_raw(wallet_name: &str, transaction_b64: &str) -> js_sys::Promise;
+
+    /// SEC-014: Detect wallet's connected cluster via genesis hash.
+    /// Returns "devnet", "mainnet-beta", "testnet", "localnet", or null.
+    #[wasm_bindgen(js_name = "getWalletCluster")]
+    fn get_wallet_cluster_js_raw(wallet_name: &str) -> js_sys::Promise;
 }
 
 /// Detect installed Solana wallet extensions.
@@ -67,6 +72,60 @@ pub async fn sign_and_send_tx_js(wallet_name: &str, transaction_b64: &str) -> Op
         Err(e) => {
             log::error!("[escrow-init] sign_and_send_tx_js error: {:?}", e);
             None
+        }
+    }
+}
+
+/// SEC-014: Detect the wallet's connected cluster.
+/// Returns the cluster name ("devnet", "mainnet-beta", etc.) or None if undetectable.
+pub async fn get_wallet_cluster_js(wallet_name: &str) -> Option<String> {
+    if wallet_name.is_empty() {
+        log::warn!("[escrow-init] get_wallet_cluster_js: empty wallet name");
+        return None;
+    }
+    let promise = get_wallet_cluster_js_raw(wallet_name);
+    match wasm_bindgen_futures::JsFuture::from(promise).await {
+        Ok(val) => {
+            if val.is_null() || val.is_undefined() {
+                log::warn!("[escrow-init] get_wallet_cluster_js: wallet returned null");
+                None
+            } else {
+                val.as_string()
+            }
+        }
+        Err(e) => {
+            log::error!("[escrow-init] get_wallet_cluster_js error: {:?}", e);
+            None
+        }
+    }
+}
+
+/// SEC-014: Check if the wallet's cluster matches the expected cluster.
+/// Returns Ok(()) if they match, or Err with a descriptive message.
+pub async fn check_wallet_cluster(wallet_name: &str, expected_cluster: &str) -> Result<(), String> {
+    match get_wallet_cluster_js(wallet_name).await {
+        Some(wallet_cluster) => {
+            if wallet_cluster == expected_cluster {
+                log::info!(
+                    "[escrow-init] cluster check passed: wallet={wallet_cluster}, expected={expected_cluster}"
+                );
+                Ok(())
+            } else {
+                let msg = format!(
+                    "Wallet is on {wallet_cluster} but app expects {expected_cluster}. \
+                     Switch your wallet network to {expected_cluster} and try again."
+                );
+                log::error!("[escrow-init] {msg}");
+                Err(msg)
+            }
+        }
+        None => {
+            // Cannot detect cluster — allow through with a warning log.
+            // Some wallets don't expose their RPC endpoint, so we can't check.
+            log::warn!(
+                "[escrow-init] cannot detect wallet cluster, skipping check (expected={expected_cluster})"
+            );
+            Ok(())
         }
     }
 }
@@ -312,6 +371,16 @@ pub fn EscrowInitPanel(
                                             };
                                             match api::init_escrow(&req).await {
                                                 Ok(resp) => {
+                                                    // SEC-014: Verify wallet cluster matches expected network.
+                                                    let expected_cluster = crate::utils::get_cluster();
+                                                    if let Err(cluster_err) = check_wallet_cluster(&wn, &expected_cluster).await {
+                                                        log::error!("[escrow-init] cluster mismatch: {cluster_err}");
+                                                        set_s.set(EscrowInitState::Error {
+                                                            message: cluster_err,
+                                                        });
+                                                        return;
+                                                    }
+
                                                     log::info!("[escrow-init] escrow TX built, signing...");
                                                     match sign_and_send_tx_js(&wn, &resp.transaction).await {
                                                         Some(signature) => {

@@ -548,6 +548,17 @@ pub fn Scanner() -> impl IntoView {
                     }
                 };
 
+                // SEC-014: Verify wallet cluster matches expected network.
+                let expected_cluster = crate::utils::get_cluster();
+                if let Err(cluster_err) = crate::pages::escrow_init::check_wallet_cluster(&wallet_name, &expected_cluster).await {
+                    log::error!("[scanner] cluster mismatch: {cluster_err}");
+                    set_state.set(CheckInState::EscrowError {
+                        check_in_data,
+                        message: cluster_err,
+                    });
+                    return;
+                }
+
                 // Step 2: Sign and send the TX via the wallet
                 match sign_and_send_tx_js(&wallet_name, &tx_resp.transaction).await {
                     Some(signature) => {

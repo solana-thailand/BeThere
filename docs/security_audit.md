@@ -27,6 +27,7 @@
 | SEC-011 | 🟡 Medium | No `event_end` Guard on `mark_checked_in` | ✅ Fixed (Phase 3) |
 | SEC-012 | 🟠 High | Refund No refund_deadline Upper Bound (Race with claim_forfeited) | ✅ Fixed (Phase 5) |
 | SEC-013 | 🟡 Medium | Vault Griefing via External USDC Airdrop Blocks close_event | ✅ Fixed (Phase 5) |
+| SEC-014 | 🟡 Medium | No Wallet Network Detection (Wrong Cluster TX Signing) | ✅ Fixed (Phase 6) |
 
 ---
 
@@ -369,6 +370,17 @@ The `mark_checked_in` instruction has no time-based guard — the organizer can 
 
 **Fix**: Added `vault.amount() != 0` check in `close_event()` before the `close_account` CPI. Returns `VaultNotEmpty` if griefing detected.
 
+### SEC-014: No Wallet Network Detection (Wrong Cluster TX Signing)
+
+**Severity**: 🟡 Medium
+**Status**: ✅ Fixed (Phase 6)
+
+**Description**: All wallet signing paths (escrow init, deposit, refund, close, check-in, admin escrow actions) had no cluster verification before requesting transaction signatures. A user whose wallet was connected to mainnet could sign a real-value transaction thinking they were on devnet, or vice versa.
+
+**Attack**: App is configured for devnet. User's wallet is set to mainnet. User clicks "Create & Sign" for escrow initialization. The transaction is built against devnet program IDs but signed and broadcast to mainnet — resulting in either failed TX (program doesn't exist) or, in a worst case, interaction with a different program at the same PDA on mainnet.
+
+**Fix**: Added `getWalletCluster()` JS function that detects the wallet's connected cluster via `getGenesisHash` RPC call against the wallet's own RPC endpoint. The `check_wallet_cluster()` Rust function compares this against the app's expected cluster (from `/api/health`) and blocks signing with a clear error message if they don't match. Applied to all 6 signing paths: `escrow_init`, `events_page`, `admin_escrow`, `deposit` (deposit/refund/close), `scanner`.
+
 ---
 
 ## Safe Solana Builder Cross-Reference Summary
@@ -412,6 +424,7 @@ Cross-referenced against [Safe Solana Builder](https://github.com/Frankcastleaud
 | P8 | SEC-006: Duplicate Merkle field | Tiny | Frontend | ✅ Fixed (Phase 2) |
 | P9 | SEC-012: Refund deadline upper bound | Small | On-chain program | ✅ Fixed (Phase 5) |
 | P10 | SEC-013: Vault griefing via airdrop | Small | On-chain program | ✅ Fixed (Phase 5) |
+| P11 | SEC-014: Wallet cluster mismatch | Small | Frontend (JS + Rust) | ✅ Fixed (Phase 6) |
 
 ---
 
@@ -425,7 +438,7 @@ SEC-001 was a direct fund theft vector (organizer rug pull). SEC-002 caused perm
 
 SEC-005 was explorer links hardcoded to devnet cluster. ✅ Fixed in Phase 2 — all Solscan links now use cluster-aware URLs via `/api/health` endpoint.
 
-**ALL FINDINGS RESOLVED**: All 11 actionable findings (SEC-001 through SEC-013, excluding SEC-007/008 confirmed safe) are now fixed. SEC-010 (rent reclamation) resolved in Phase 4 with the `close_deposit` instruction. SEC-012 (refund deadline upper bound) and SEC-013 (vault griefing via airdrop) resolved in Phase 5.
+**ALL FINDINGS RESOLVED**: All 12 actionable findings (SEC-001 through SEC-014, excluding SEC-007/008 confirmed safe) are now fixed. SEC-010 (rent reclamation) resolved in Phase 4. SEC-012 (refund deadline upper bound) and SEC-013 (vault griefing via airdrop) resolved in Phase 5. SEC-014 (wallet network detection) resolved in Phase 6.
 
 ---
 

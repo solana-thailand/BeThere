@@ -516,6 +516,18 @@ pub fn EventsPage(
                     };
                     match api::init_escrow(&req).await {
                         Ok(resp) => {
+                            // SEC-014: Verify wallet cluster matches expected network.
+                            let expected_cluster = crate::utils::get_cluster();
+                            if let Err(cluster_err) = super::escrow_init::check_wallet_cluster(&wn, &expected_cluster).await {
+                                log::error!("[events-page] cluster mismatch: {cluster_err}");
+                                components::show_toast(
+                                    &set_toast,
+                                    &cluster_err,
+                                    components::ToastType::Error,
+                                );
+                                set_saving.set(false);
+                                return;
+                            }
                             log::info!("[events-page] escrow TX built, signing via {}...", wn);
                             match super::escrow_init::sign_and_send_tx_js(&wn, &resp.transaction).await {
                                 Some(signature) => {
