@@ -262,6 +262,7 @@ pub fn EventsPage(
     let (sec_people_open, set_sec_people_open) = signal(false);
     let (search_query, set_search_query) = signal(String::new());
     let search_input_ref: NodeRef<leptos::html::Input> = NodeRef::new();
+    let (slug_taken, set_slug_taken) = signal(false);
 
     // Wallet connection state for combined Create Event + Escrow Init flow.
     // In Create mode, user connects wallet before clicking Create Event.
@@ -361,7 +362,23 @@ pub fn EventsPage(
     // Handle slug input
     let handle_slug_input = move |ev| {
         set_slug_manually_edited.set(true);
-        set_form.update(|f| f.slug = event_target_value(&ev));
+        let val = event_target_value(&ev);
+        set_form.update(|f| f.slug = val);
+        set_slug_taken.set(false);
+    };
+
+    // Check slug availability on blur (client-side check against loaded events)
+    let handle_slug_blur = move |_| {
+        let current_slug = form.get().slug.trim().to_lowercase();
+        if current_slug.is_empty() {
+            set_slug_taken.set(false);
+            return;
+        }
+        let editing = editing_id.get().unwrap_or_default();
+        let taken = events.get().iter().any(|e| {
+            e.slug.to_lowercase() == current_slug && e.id != editing
+        });
+        set_slug_taken.set(taken);
     };
 
     // Handle save (create or update)
@@ -376,6 +393,11 @@ pub fn EventsPage(
         }
         if current_form.slug.trim().is_empty() {
             components::show_toast(&set_toast, "Event slug is required", components::ToastType::Error);
+            return;
+        }
+        // Check slug availability (client-side against loaded events)
+        if slug_taken.get() {
+            components::show_toast(&set_toast, "This slug is already taken by another event", components::ToastType::Error);
             return;
         }
         if current_form.sheet_id.trim().is_empty() {
@@ -877,7 +899,16 @@ pub fn EventsPage(
                                                 placeholder="event-slug"
                                                 prop:value=move || form.get().slug
                                                 on:input=handle_slug_input
+                                                on:focusout=handle_slug_blur
                                             />
+                                            <Show
+                                                when=move || slug_taken.get()
+                                                fallback=|| view! { <div></div> }
+                                            >
+                                                <div class="hint-warning-xs">
+                                                    "This slug is already taken by another event"
+                                                </div>
+                                            </Show>
                                             <span class="quiz-setting-hint">"Auto-generated from name"</span>
                                         </div>
                                         <div class="quiz-setting-item">
@@ -1358,6 +1389,32 @@ pub fn EventsPage(
                                             </div>
                                         </Show>
                                         <span class="quiz-setting-hint">"Hours after event end for refund deadline (default: 168 = 7 days)"</span>
+                                        // Visual timeline: show computed deadline date
+                                        <Show
+                                            when=move || {
+                                                let end_ms = parse_date_to_ms(&form.get().event_end).unwrap_or(0);
+                                                let hrs = form.get().refund_deadline_hours.parse::<u32>().unwrap_or(0);
+                                                end_ms > 0 && hrs > 0
+                                            }
+                                            fallback=|| view! { <div></div> }
+                                        >
+                                            <div class="hint-success-sm">
+                                                {move || {
+                                                    let end_ms = parse_date_to_ms(&form.get().event_end).unwrap_or(0);
+                                                    let hrs = form.get().refund_deadline_hours.parse::<u32>().unwrap_or(0);
+                                                    let deadline_ms = end_ms + (hrs as i64 * 3_600_000);
+                                                    let days = hrs / 24;
+                                                    let day_label = if days >= 7 {
+                                                        format!("{} days", days)
+                                                    } else if days > 0 {
+                                                        format!("{}d {}h", days, hrs % 24)
+                                                    } else {
+                                                        format!("{}h", hrs)
+                                                    };
+                                                    format!("Refund deadline: {} ({day_label} after event end)", format_date_display(deadline_ms))
+                                                }}
+                                            </div>
+                                        </Show>
                                     </div>
                                 </div>
 
