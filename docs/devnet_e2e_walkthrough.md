@@ -1,7 +1,8 @@
 # BeThere Devnet E2E Walkthrough — Manual Browser Testing Guide
 
 > **Version**: 2025-05-09
-> **Deployment**: `https://bethere.solana-thailand.workers.dev`
+> **Deployment (devnet)**: `https://bethere.solana-thailand.workers.dev`
+> **Localhost**: `http://localhost:8787` (run `cd worker && ./deploy.sh dev`)
 > **Cluster**: Solana Devnet
 > **Escrow Program**: `2TGfNNXNez2NgopffDnYYhLNYmndUBBwg5SvpD5XQeLo`
 > **USDC Mint (Devnet)**: `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU`
@@ -10,6 +11,7 @@
 
 ## Table of Contents
 
+0. [Localhost API Test Results (automated)](#0-localhost-api-test-results)
 1. [Prerequisites & Environment Setup](#1-prerequisites--environment-setup)
 2. [Getting Devnet SOL & USDC](#2-getting-devnet-sol--usdc)
 3. [Test Accounts & Login](#3-test-accounts--login)
@@ -27,6 +29,73 @@
 15. [Flow 10 — Scanner: On-Chain Check-In](#15-flow-10--scanner-on-chain-check-in)
 16. [Full Lifecycle Walkthrough](#16-full-lifecycle-walkthrough)
 17. [Troubleshooting & Common Failures](#17-troubleshooting--common-failures)
+
+---
+
+## 0. Localhost API Test Results
+
+> These tests were run via `curl` against `http://localhost:8787` with `Authorization: Bearer dev-token`.
+> All backend validations confirmed working.
+
+### 0.1 How to Run Locally
+
+```bash
+# 1. Build frontend
+cd frontend-leptos && trunk build && cd ..
+
+# 2. Start worker dev server
+cd worker && ./deploy.sh dev
+
+# 3. Verify
+http://localhost:8787/api/health  # {"cluster":"devnet","status":"ok"}
+```
+
+### 0.2 API Test Results (19 tests)
+
+| # | Test | Method | Endpoint | Expected | Result |
+|---|------|--------|----------|----------|--------|
+| 1 | Health check | GET | `/api/health` | `{"cluster":"devnet","status":"ok"}` | ✅ Pass |
+| 2 | Auth required (no token) | GET | `/api/events` | `missing authentication token` | ✅ Pass |
+| 3 | Dev token works | GET | `/api/events` | Event list JSON | ✅ Pass |
+| 4 | Events list has deposit/escrow fields | GET | `/api/events` | `deposit_enabled`, `escrow_address` in each event | ✅ Pass |
+| 5 | Create event without deposit | POST | `/api/events` | Success, id auto-generated | ✅ Pass |
+| 6 | Create event with deposit + 0 USDC | POST | `/api/events` | Success (event created, escrow init blocked later) | ✅ Pass |
+| 7 | Escrow init with 0 deposit | POST | `/api/escrow/init` | `deposit amount not configured` | ✅ Pass |
+| 8 | Create event with valid deposit | POST | `/api/events` | Success | ✅ Pass |
+| 9 | Escrow init with valid deposit | POST | `/api/escrow/init` | Success, TX built, escrow_address returned | ✅ Pass |
+| 10 | Update event deposit fields | PUT | `/api/events/{id}` | Success | ✅ Pass |
+| 11 | Validation: empty name | POST | `/api/events` | `event name is required` | ✅ Pass |
+| 12 | Validation: empty sheet_id | POST | `/api/events` | `google sheet_id is required` | ✅ Pass |
+| 13 | Validation: negative start_ms | POST | `/api/events` | `event_start_ms must be positive` | ✅ Pass |
+| 14 | Validation: end before start | POST | `/api/events` | `event_end_ms must be after event_start_ms` | ✅ Pass |
+| 15 | SEC-003: USDC > $1,000 cap | POST | `/api/events` | `deposit_amount_usdc exceeds maximum cap` | ✅ Pass |
+| 16 | SEC-002: Update deposit after escrow set | PUT | `/api/events/{id}` | `cannot change ... after escrow` | ✅ Pass |
+| 17 | SEC-004: Archive with active escrow | DELETE | `/api/events/{id}` | `cannot archive ... with active on-chain escrow` | ✅ Pass |
+| 18 | Archive without escrow | DELETE | `/api/events/{id}` | Success, status=archived | ✅ Pass |
+| 19 | Duplicate slug check | POST | `/api/events` | `event with id already exists` | ✅ Pass |
+
+### 0.3 Automated Test Results
+
+```
+cargo test (workspace)    → 53 passed; 0 failed
+cargo test (bethere-escrow) → 26 passed; 0 failed (SVM integration tests)
+cargo check --quiet       → clean compile, zero warnings
+```
+
+### 0.4 Not Tested via API (requires browser + wallet)
+
+These flows require Phantom wallet interaction and cannot be tested via curl:
+
+- Wallet connection + signing
+- SEC-014 cluster detection (needs wallet provider)
+- Frontend validation (9 new rules on save)
+- Visual indicator badges rendering
+- Inline warning display
+- Toast messages
+- QR code generation / scanning
+- Attendee deposit flow (Solana Pay)
+
+These are covered in Flows 1–10 below for manual browser testing.
 
 ---
 
