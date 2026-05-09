@@ -260,9 +260,34 @@ pub fn EventsPage(
     let (sec_settings_open, set_sec_settings_open) = signal(false);
     let (sec_deposit_open, set_sec_deposit_open) = signal(true);
     let (sec_people_open, set_sec_people_open) = signal(false);
-    let (show_advanced, set_show_advanced) = signal(false);
     let (search_query, set_search_query) = signal(String::new());
     let search_input_ref: NodeRef<leptos::html::Input> = NodeRef::new();
+
+    // Wallet connection state for combined Create Event + Escrow Init flow.
+    // In Create mode, user connects wallet before clicking Create Event.
+    // The save handler chains: create_event → init_escrow → sign+send TX.
+    let (create_wallet_name, set_create_wallet_name) = signal(String::new());
+    let (create_wallet_pk, set_create_wallet_pk) = signal(String::new());
+    let (detected_wallets, set_detected_wallets) = signal(Vec::<String>::new());
+
+    // Detect installed wallets on mount (poll for late-injecting extensions).
+    {
+        let set_dw = set_detected_wallets;
+        leptos::task::spawn_local(async move {
+            let mut wallets = super::escrow_init::get_detected_wallets_js();
+            if wallets.is_empty() {
+                for _ in 0..10 {
+                    gloo::timers::future::TimeoutFuture::new(300).await;
+                    wallets = super::escrow_init::get_detected_wallets_js();
+                    if !wallets.is_empty() {
+                        break;
+                    }
+                }
+            }
+            log::info!("[events-page] detected wallets: {:?}", wallets);
+            set_dw.set(wallets);
+        });
+    }
 
     // Ctrl+K keyboard shortcut to focus search
     Effect::new(move |_| {
@@ -358,8 +383,69 @@ pub fn EventsPage(
             return;
         }
 
+        // Validate schedule — backend requires positive start_ms and end > start
         let start_ms = parse_date_to_ms(&current_form.event_start).unwrap_or(0);
         let end_ms = parse_date_to_ms(&current_form.event_end).unwrap_or(0);
+        if start_ms <= 0 {
+            components::show_toast(&set_toast, "Event start date is required", components::ToastType::Error);
+            return;
+        }
+        if end_ms <= 0 {
+            components::show_toast(&set_toast, "Event end date is required", components::ToastType::Error);
+            return;
+        }
+        if end_ms <= start_ms {
+            components::show_toast(&set_toast, "Event end must be after event start", components::ToastType::Error);
+            return;
+        }
+
+        // Validate deposit fields when deposit is enabled
+        if current_form.deposit_enabled {
+            let usdc_val = current_form.deposit_amount_usdc.parse::<f64>().unwrap_or(0.0);
+            let thb_val = current_form.deposit_amount_thb.parse::<u64>().unwrap_or(0);
+
+            // At least one deposit amount must be set
+            if usdc_val == 0.0 && thb_val == 0 {
+                components::show_toast(&set_toast, "At least one deposit amount (USDC or THB) is required when deposit is enabled", components::ToastType::Error);
+                return;
+            }
+
+            // USDC minimum precision (6 decimals → 0.01 smallest meaningful)
+            if usdc_val > 0.0 && usdc_val < 0.01 {
+                components::show_toast(&set_toast, "Minimum deposit is 0.01 USDC", components::ToastType::Error);
+                return;
+            }
+
+            // USDC max cap (SEC-003: backend enforces $1,000 = 1,000,000,000 lamports)
+            if usdc_val > 1000.0 {
+                components::show_toast(&set_toast, "Maximum deposit is 1,000 USDC", components::ToastType::Error);
+                return;
+            }
+
+            // THB amount set but no PromptPay ID — QR generation will fail
+            if thb_val > 0 && current_form.promptpay_id.trim().is_empty() {
+                components::show_toast(&set_toast, "PromptPay ID is required when THB amount is set", components::ToastType::Error);
+                return;
+            }
+
+            // Escrow init requires USDC amount — check early when wallet is connected
+            let do_escrow_init = !create_wallet_pk.get().is_empty()
+                && !create_wallet_name.get().is_empty();
+            if do_escrow_init && usdc_val == 0.0 {
+                components::show_toast(
+                    &set_toast,
+                    "USDC deposit amount is required to initialize on-chain escrow",
+                    components::ToastType::Error,
+                );
+                return;
+            }
+
+            let deadline_hrs = current_form.refund_deadline_hours.parse::<u32>().unwrap_or(0);
+            if deadline_hrs == 0 {
+                components::show_toast(&set_toast, "Refund deadline must be at least 1 hour", components::ToastType::Error);
+                return;
+            }
+        }
 
         set_saving.set(true);
 
@@ -395,16 +481,20 @@ pub fn EventsPage(
                 refund_deadline_hours: current_form.refund_deadline_hours.parse::<u32>().unwrap_or(0),
             };
 
+            // Determine if we should also initialize escrow after creating the event.
+            // This happens when: deposit_enabled + wallet connected in Create mode.
+            let do_escrow_init = current_form.deposit_enabled
+                && !create_wallet_pk.get().is_empty()
+                && !create_wallet_name.get().is_empty();
+            let wn = create_wallet_name.get();
+            let pk = create_wallet_pk.get();
+
             leptos::task::spawn_local(async move {
-                match api::create_event(&body).await {
+                // Step 1: Create the event
+                let created = match api::create_event(&body).await {
                     Ok(data) => {
-                        components::show_toast(
-                            &set_toast,
-                            &format!("Event '{}' created", data.name),
-                            components::ToastType::Success,
-                        );
-                        set_current_view.set(EventsView::List);
-                        do_reload();
+                        log::info!("[events-page] event created: id={}", data.id);
+                        data
                     }
                     Err(e) => {
                         log::error!("[events-page] create failed: {e}");
@@ -413,8 +503,68 @@ pub fn EventsPage(
                             &format!("Failed to create event: {e}"),
                             components::ToastType::Error,
                         );
+                        set_saving.set(false);
+                        return;
                     }
+                };
+
+                // Step 2: Initialize escrow on-chain (if wallet connected + deposit enabled)
+                if do_escrow_init {
+                    log::info!("[events-page] initializing escrow for event {}...", created.id);
+                    let req = api::InitEscrowRequest {
+                        event_id: created.id.clone(),
+                    };
+                    match api::init_escrow(&req).await {
+                        Ok(resp) => {
+                            log::info!("[events-page] escrow TX built, signing via {}...", wn);
+                            match super::escrow_init::sign_and_send_tx_js(&wn, &resp.transaction).await {
+                                Some(signature) => {
+                                    log::info!("[events-page] escrow TX confirmed: {}", signature);
+                                    // Update the event with escrow fields from the response
+                                    let update_body = api::UpdateEventBody {
+                                        escrow_address: Some(resp.escrow_address.clone()),
+                                        organizer_wallet: Some(pk.clone()),
+                                        on_chain_event_id: Some(resp.on_chain_event_id),
+                                        ..Default::default()
+                                    };
+                                    if let Err(e) = api::update_event(&created.id, &update_body).await {
+                                        log::warn!("[events-page] failed to save escrow fields: {e}");
+                                    }
+                                    components::show_toast(
+                                        &set_toast,
+                                        &format!("Event '{}' created + escrow initialized", created.name),
+                                        components::ToastType::Success,
+                                    );
+                                }
+                                None => {
+                                    log::error!("[events-page] escrow TX rejected by wallet");
+                                    components::show_toast(
+                                        &set_toast,
+                                        &format!("Event '{}' created, but escrow TX was rejected. Edit event to retry.", created.name),
+                                        components::ToastType::Warning,
+                                    );
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            log::error!("[events-page] init_escrow failed: {e}");
+                            components::show_toast(
+                                &set_toast,
+                                &format!("Event '{}' created, but escrow init failed: {e}. Edit event to retry.", created.name),
+                                components::ToastType::Warning,
+                            );
+                        }
+                    }
+                } else {
+                    components::show_toast(
+                        &set_toast,
+                        &format!("Event '{}' created", created.name),
+                        components::ToastType::Success,
+                    );
                 }
+
+                set_current_view.set(EventsView::List);
+                do_reload();
                 set_saving.set(false);
             });
         } else {
@@ -562,6 +712,8 @@ pub fn EventsPage(
                             let organizers_count = event.organizer_emails.len();
                             let ename = event.name.clone();
                             let can_manage = components::can_manage_events(&user_role.get());
+                            let needs_escrow = event.deposit_enabled && event.escrow_address.is_empty();
+                            let has_escrow = event.deposit_enabled && !event.escrow_address.is_empty();
 
                             view! {
                                 <div class="card">
@@ -569,6 +721,17 @@ pub fn EventsPage(
                                         <div class="flex-row-gap" style="flex-wrap:wrap">
                                             <span class="card-title">{ename}</span>
                                             <span class=badge_class>{status_text}</span>
+                                            {if needs_escrow {
+                                                view! {
+                                                    <span class="badge badge-warning-xs">"⚠ No Escrow"</span>
+                                                }.into_any()
+                                            } else if has_escrow {
+                                                view! {
+                                                    <span class="badge badge-success-xs">"🏦 Escrow"</span>
+                                                }.into_any()
+                                            } else {
+                                                view! { <span></span> }.into_any()
+                                            }}
                                         </div>
                                         {if can_manage { view! {
                                         <div class="flex-row-gap" style="gap:0.5rem">
@@ -673,7 +836,13 @@ pub fn EventsPage(
                 {move || {
                     let is_edit = current_view.get() == EventsView::Edit;
                     let title = if is_edit { "Edit Event" } else { "Create Event" };
-                    let save_label = if is_edit { "Update Event" } else { "Create Event" };
+                    let save_label = if is_edit {
+                        "Update Event"
+                    } else if !create_wallet_pk.get().is_empty() && form.get().deposit_enabled {
+                        "Create Event + Initialize Escrow"
+                    } else {
+                        "Create Event"
+                    };
                     let is_saving = saving.get();
                     let archive_eid = editing_id.get().unwrap_or_default();
 
@@ -741,13 +910,13 @@ pub fn EventsPage(
                                 <div class="form-section-header" on:click=move |_| set_sec_schedule_open.update(|v| *v = !*v)>
                                     <span class="form-section-icon form-section-icon-schedule"></span>
                                     <span class="form-section-title">"Schedule"</span>
-                                    <span class="form-section-badge form-section-badge-optional">"Optional"</span>
+                                    <span class="form-section-badge form-section-badge-required">"Required"</span>
                                     <span class="form-section-toggle" class:form-section-toggle-open=move || sec_schedule_open.get()>"▼"</span>
                                 </div>
                                 <div class="form-section-body" class:form-section-body-hidden=move || !sec_schedule_open.get()>
                                     <div class="quiz-settings-grid">
                                     <div class="quiz-setting-item">
-                                        <label class="quiz-field-label">"Event Start"</label>
+                                        <label class="quiz-field-label">"Event Start"<span class="field-required-badge">"Required"</span></label>
                                         <input
                                             type="datetime-local"
                                             class="quiz-number-input"
@@ -761,7 +930,7 @@ pub fn EventsPage(
                                         <span class="quiz-setting-hint">"Times in your local timezone"</span>
                                     </div>
                                     <div class="quiz-setting-item">
-                                        <label class="quiz-field-label">"Event End"</label>
+                                        <label class="quiz-field-label">"Event End"<span class="field-required-badge">"Required"</span></label>
                                         <input
                                             type="datetime-local"
                                             class="quiz-number-input"
@@ -774,6 +943,18 @@ pub fn EventsPage(
                                         />
                                         <span class="quiz-setting-hint">"Times in your local timezone"</span>
                                     </div>
+                                    <Show
+                                        when=move || {
+                                            let start = parse_date_to_ms(&form.get().event_start).unwrap_or(0);
+                                            let end = parse_date_to_ms(&form.get().event_end).unwrap_or(0);
+                                            start > 0 && end > 0 && end <= start
+                                        }
+                                        fallback=|| view! { <div></div> }
+                                    >
+                                        <div class="hint-warning-xs">
+                                            "Event end must be after event start"
+                                        </div>
+                                    </Show>
                                 </div>
                                 </div>
                             </div>
@@ -1032,18 +1213,52 @@ pub fn EventsPage(
                                 <div class="form-section-body" class:form-section-body-hidden=move || !sec_deposit_open.get()>
                                     <div class="quiz-settings-grid">
                                         <div class="quiz-setting-item">
-                                            <label class="quiz-field-label">"USDC Amount"<span class="field-optional-badge">"Optional"</span></label>
+                                            <label class="quiz-field-label">"USDC Amount"<span class="field-optional-badge">"Required for escrow"</span></label>
                                         <input
                                             type="number"
                                             class="quiz-number-input"
                                             placeholder="e.g. 10 (whole USDC)"
                                             step="0.01"
-                                            min="0"
+                                            min="0.01"
                                             prop:value=move || form.get().deposit_amount_usdc
                                             on:input=move |ev| set_form.update(|f| f.deposit_amount_usdc = event_target_value(&ev))
                                         />
-                                        <span class="quiz-setting-hint">"Amount in whole USDC (e.g. 10 = 10 USDC)"</span>
+                                        <Show
+                                            when=move || {
+                                                let val = form.get().deposit_amount_usdc.parse::<f64>().unwrap_or(0.0);
+                                                form.get().deposit_enabled && val > 0.0 && val < 0.01
+                                            }
+                                            fallback=|| view! { <div></div> }
+                                        >
+                                            <div class="hint-warning-xs">
+                                                "Minimum deposit is 0.01 USDC"
+                                            </div>
+                                        </Show>
+                                        <Show
+                                            when=move || {
+                                                let val = form.get().deposit_amount_usdc.parse::<f64>().unwrap_or(0.0);
+                                                let thb = form.get().deposit_amount_thb.parse::<u64>().unwrap_or(0);
+                                                form.get().deposit_enabled && val == 0.0 && thb == 0
+                                            }
+                                            fallback=|| view! { <div></div> }
+                                        >
+                                            <div class="hint-warning-xs">
+                                                "At least one deposit amount (USDC or THB) is required"
+                                            </div>
+                                        </Show>
+                                        <span class="quiz-setting-hint">"Amount in whole USDC (e.g. 10 = 10 USDC). Max: 1,000 USDC"</span>
                                     </div>
+                                    <Show
+                                        when=move || {
+                                            let val = form.get().deposit_amount_usdc.parse::<f64>().unwrap_or(0.0);
+                                            val > 1000.0
+                                        }
+                                        fallback=|| view! { <div></div> }
+                                    >
+                                        <div class="hint-warning-xs">
+                                            "Maximum deposit is 1,000 USDC (SEC-003 cap)"
+                                        </div>
+                                    </Show>
                                     <div class="quiz-setting-item">
                                         <label class="quiz-field-label">"THB Amount"</label>
                                         <input
@@ -1067,11 +1282,26 @@ pub fn EventsPage(
                                             on:input=move |ev| set_form.update(|f| f.promptpay_id = event_target_value(&ev))
                                         />
                                         <span class="quiz-setting-hint">"Thai phone number or national ID for PromptPay QR generation"</span>
+                                        <Show
+                                            when=move || {
+                                                let thb = form.get().deposit_amount_thb.parse::<u64>().unwrap_or(0);
+                                                let pp = form.get().promptpay_id.trim().to_string();
+                                                thb > 0 && pp.is_empty()
+                                            }
+                                            fallback=|| view! { <div></div> }
+                                        >
+                                            <div class="hint-warning-xs">
+                                                "PromptPay ID is required when THB amount is set"
+                                            </div>
+                                        </Show>
                                     </div>
-                                    <div class="quiz-setting-item">
-                                        <label class="quiz-field-label">
-                                            "Escrow Address"
-                                            <Show when=move || !form.get().escrow_address.is_empty() fallback=|| view! { <span></span> }>
+                                    // ── On-chain escrow fields: always read-only ──
+                                    // These are auto-filled by wallet connect or on-chain init.
+                                    // Never editable — prevents garbage input.
+                                    <Show when=move || !form.get().escrow_address.is_empty() fallback=|| view! { <div></div> }>
+                                        <div class="quiz-setting-item">
+                                            <label class="quiz-field-label">
+                                                "Escrow Address"
                                                 <a
                                                     href=move || crate::utils::solscan_address_url(&form.get().escrow_address, &crate::utils::get_cluster())
                                                     target="_blank"
@@ -1080,74 +1310,149 @@ pub fn EventsPage(
                                                 >
                                                     "Solscan"
                                                 </a>
-                                            </Show>
-                                        </label>
-                                        <input
-                                            type="text"
-                                            class="quiz-number-input"
-                                            placeholder="Solana escrow PDA address (base58)"
-                                            prop:value=move || form.get().escrow_address
-                                            readonly=move || !form.get().escrow_address.is_empty()
-                                            on:input=move |ev| set_form.update(|f| f.escrow_address = event_target_value(&ev))
-                                        />
-                                        <span class="quiz-setting-hint">"On-chain escrow PDA for this event (auto-filled after on-chain init)"</span>
-                                    </div>
-                                    <div class="quiz-setting-item">
-                                        <label class="quiz-field-label">"Organizer Wallet"</label>
-                                        <input
-                                            type="text"
-                                            class="quiz-number-input"
-                                            placeholder="e.g. 7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU"
-                                            prop:value=move || form.get().organizer_wallet
-                                            readonly=move || !form.get().organizer_wallet.is_empty()
-                                            on:input=move |ev| set_form.update(|f| f.organizer_wallet = event_target_value(&ev))
-                                        />
-                                        <Show
-                                            when=move || !form.get().organizer_wallet.is_empty()
-                                            fallback=|| view! {
-                                                <span class="quiz-setting-hint">"Organizer's Solana wallet address (base58) — connect wallet below or paste manually"</span>
-                                            }
-                                        >
-                                            <span class="quiz-setting-hint" style="color:var(--success,green)">"Wallet locked -- use escrow panel to change"</span>
-                                        </Show>
-                                    </div>
-                                    // Advanced toggle for on-chain event ID
-                                    <div class="advanced-toggle-row" on:click=move |_| set_show_advanced.update(|v| *v = !*v)>
-                                        <span class="advanced-toggle-icon" class:advanced-toggle-icon-open=move || show_advanced.get()>"▶"</span>
-                                        <span class="advanced-toggle-label">"Advanced: On-Chain Event ID"</span>
-                                    </div>
-                                    <div class:advanced-fields-hidden=move || !show_advanced.get()>
+                                            </label>
+                                            <div class="readonly-field">
+                                                <span class="readonly-value-mono">{move || form.get().escrow_address}</span>
+                                                <span class="readonly-badge">"Locked"</span>
+                                            </div>
+                                            <span class="quiz-setting-hint">"On-chain escrow PDA — auto-filled after on-chain init"</span>
+                                        </div>
+                                    </Show>
+
+                                    <Show when=move || !form.get().organizer_wallet.is_empty() fallback=|| view! { <div></div> }>
+                                        <div class="quiz-setting-item">
+                                            <label class="quiz-field-label">"Organizer Wallet"</label>
+                                            <div class="readonly-field">
+                                                <span class="readonly-value-mono">{move || form.get().organizer_wallet}</span>
+                                                <span class="readonly-badge">"Locked"</span>
+                                            </div>
+                                            <span class="quiz-setting-hint" style="color:var(--success,green)">"Wallet locked — set by escrow panel"</span>
+                                        </div>
+                                    </Show>
+
+                                    <Show when=move || !form.get().on_chain_event_id.is_empty() && form.get().on_chain_event_id != "0" fallback=|| view! { <div></div> }>
                                         <div class="quiz-setting-item">
                                             <label class="quiz-field-label">"On-Chain Event ID"<span class="field-optional-badge">"Auto"</span></label>
-                                            <input
-                                                type="number"
-                                                class="quiz-number-input"
-                                                placeholder="Leave empty for auto-derive from event slug"
-                                                min="0"
-                                                step="1"
-                                                prop:value=move || form.get().on_chain_event_id
-                                                readonly=move || !form.get().on_chain_event_id.is_empty()
-                                                on:input=move |ev| set_form.update(|f| f.on_chain_event_id = event_target_value(&ev))
-                                            />
-                                            <span class="quiz-setting-hint">"Numeric ID for PDA seeds (0 = auto-derive via hash)"</span>
+                                            <div class="readonly-field">
+                                                <span class="readonly-value">{move || form.get().on_chain_event_id}</span>
+                                                <span class="readonly-badge">"Locked"</span>
+                                            </div>
+                                            <span class="quiz-setting-hint">"Numeric ID for PDA seeds — auto-derived from slug"</span>
                                         </div>
-                                    </div>
+                                    </Show>
                                     <div class="quiz-setting-item">
                                         <label class="quiz-field-label">"Refund Deadline (hours)"</label>
                                         <input
                                             type="number"
                                             class="quiz-number-input"
                                             placeholder="e.g. 168 (= 7 days)"
-                                            min="0"
+                                            min="1"
                                             step="1"
                                             prop:value=move || form.get().refund_deadline_hours
                                             on:input=move |ev| set_form.update(|f| f.refund_deadline_hours = event_target_value(&ev))
                                         />
+                                        <Show
+                                            when=move || {
+                                                let val = form.get().refund_deadline_hours.parse::<u32>().unwrap_or(0);
+                                                form.get().deposit_enabled && val == 0
+                                            }
+                                            fallback=|| view! { <div></div> }
+                                        >
+                                            <div class="hint-warning-xs">
+                                                "Refund deadline must be at least 1 hour"
+                                            </div>
+                                        </Show>
                                         <span class="quiz-setting-hint">"Hours after event end for refund deadline (default: 168 = 7 days)"</span>
                                     </div>
                                 </div>
 
-                                // ── Escrow Initialization (Single-TX) ──
+                                // ── Create Mode: Wallet Connect for combined Create + Escrow Init ──
+                                // Only shows when creating a new event with deposit enabled.
+                                // In Edit mode, the EscrowInitPanel handles wallet connection.
+                                <Show when=move || {
+                                    let f = form.get();
+                                    f.deposit_enabled && current_view.get() == EventsView::Create
+                                }>
+                                    <div class="panel-box-dashed" style="margin-top:0.75rem">
+                                        <div class="panel-label">
+                                            "Escrow Setup"
+                                        </div>
+                                        <div class="panel-hint u-mb-sm">
+                                            "Connect your Solana wallet to initialize escrow when the event is created."
+                                        </div>
+
+                                        // Wallet not yet connected — show connect buttons
+                                        <Show when=move || create_wallet_pk.get().is_empty() fallback=|| view! { <div></div> }>
+                                            <Show when=move || !detected_wallets.get().is_empty() fallback=|| view! {
+                                                <div class="panel-hint">
+                                                    "No Solana wallets detected. Install Phantom or another wallet extension."
+                                                </div>
+                                            }>
+                                                <div class="flex-wrap-row">
+                                                    {move || detected_wallets.get().iter().map(|wn| {
+                                                        let wn_c = wn.clone();
+                                                        let set_wn = set_create_wallet_name;
+                                                        let set_wp = set_create_wallet_pk;
+                                                        let set_t = set_toast;
+                                                        view! {
+                                                            <button
+                                                                class="btn btn-outline btn-sm"
+                                                                on:click=move |_| {
+                                                                    let wn = wn_c.clone();
+                                                                    let set_wn = set_wn;
+                                                                    let set_wp = set_wp;
+                                                                    let set_t = set_t;
+                                                                    leptos::task::spawn_local(async move {
+                                                                        match super::escrow_init::connect_wallet_js(&wn).await {
+                                                                            Some(pk) => {
+                                                                                log::info!("[events-page] wallet connected: {} ({})", wn, &pk[..8.min(pk.len())]);
+                                                                                set_wn.set(wn);
+                                                                                set_wp.set(pk);
+                                                                            }
+                                                                            None => {
+                                                                                components::show_toast(&set_t, "Wallet connection rejected", components::ToastType::Error);
+                                                                            }
+                                                                        }
+                                                                    });
+                                                                }
+                                                            >
+                                                                {format!("Connect {}", wn)}
+                                                            </button>
+                                                        }
+                                                    }).collect_view()}
+                                                </div>
+                                            </Show>
+                                        </Show>
+
+                                        // Wallet connected — show confirmation
+                                        <Show when=move || !create_wallet_pk.get().is_empty() fallback=|| view! { <div></div> }>
+                                            <div class="wallet-connected-bar" style="margin-bottom:0">
+                                                <div class="wallet-info-left">
+                                                    <div class="wallet-label">
+                                                        {move || format!("{} connected", create_wallet_name.get())}
+                                                    </div>
+                                                    <div class="wallet-address-bold">
+                                                        {move || create_wallet_pk.get()}
+                                                    </div>
+                                                </div>
+                                                <button
+                                                    class="btn btn-outline btn-xs"
+                                                    on:click=move |_| {
+                                                        set_create_wallet_name.set(String::new());
+                                                        set_create_wallet_pk.set(String::new());
+                                                    }
+                                                >
+                                                    "Disconnect"
+                                                </button>
+                                            </div>
+                                            <div class="hint-success-sm" style="margin-top:0.5rem">
+                                                "Creating event will also initialize escrow on-chain (wallet signature required)."
+                                            </div>
+                                        </Show>
+                                    </div>
+                                </Show>
+
+                                // ── Escrow Initialization (Edit Mode Only) ──
                                 // Uses Show instead of {move ||} so the EscrowInitPanel
                                 // is NOT re-created when form fields update (e.g. organizer_wallet).
                                 // Show only mounts/unmounts when the `when` result changes.

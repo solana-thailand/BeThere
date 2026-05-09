@@ -58,6 +58,12 @@ pub struct EventMeta {
     /// Emails of users with organizer-level access to this event.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub organizer_emails: Vec<String>,
+    /// Whether deposit is enabled for this event.
+    #[serde(default)]
+    pub deposit_enabled: bool,
+    /// On-chain escrow PDA address. Empty string if not yet initialized.
+    #[serde(default)]
+    pub escrow_address: String,
 }
 
 /// Top-level index of all events, stored under KV key "events".
@@ -191,6 +197,8 @@ impl EventConfig {
             sheet_id: self.sheet_id.clone(),
             created_at: self.created_at.clone(),
             organizer_emails: self.organizer_emails.clone(),
+            deposit_enabled: self.deposit_enabled,
+            escrow_address: self.escrow_address.clone(),
         }
     }
 

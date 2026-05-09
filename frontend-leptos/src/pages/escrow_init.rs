@@ -15,7 +15,7 @@ use crate::components;
 #[wasm_bindgen(module = "/js/solana_wallet.js")]
 extern "C" {
     #[wasm_bindgen(js_name = "getDetectedWallets")]
-    fn get_detected_wallets_js() -> Vec<String>;
+    fn detected_wallets() -> Vec<String>;
 
     #[wasm_bindgen(js_name = "connectWallet")]
     fn connect_wallet_js_raw(wallet_name: &str) -> js_sys::Promise;
@@ -24,7 +24,12 @@ extern "C" {
     fn sign_and_send_tx_js_raw(wallet_name: &str, transaction_b64: &str) -> js_sys::Promise;
 }
 
-async fn connect_wallet_js(wallet_name: &str) -> Option<String> {
+/// Detect installed Solana wallet extensions.
+pub fn get_detected_wallets_js() -> Vec<String> {
+    detected_wallets()
+}
+
+pub async fn connect_wallet_js(wallet_name: &str) -> Option<String> {
     if wallet_name.is_empty() {
         log::warn!("[escrow-init] connect_wallet_js: empty wallet name");
         return None;
@@ -45,7 +50,7 @@ async fn connect_wallet_js(wallet_name: &str) -> Option<String> {
     }
 }
 
-async fn sign_and_send_tx_js(wallet_name: &str, transaction_b64: &str) -> Option<String> {
+pub async fn sign_and_send_tx_js(wallet_name: &str, transaction_b64: &str) -> Option<String> {
     if wallet_name.is_empty() {
         log::warn!("[escrow-init] sign_and_send_tx_js: empty wallet name");
         return None;

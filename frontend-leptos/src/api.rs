@@ -933,6 +933,10 @@ pub struct EventMeta {
     pub created_at: String,
     #[serde(default)]
     pub organizer_emails: Vec<String>,
+    #[serde(default)]
+    pub deposit_enabled: bool,
+    #[serde(default)]
+    pub escrow_address: String,
 }
 
 /// Full event configuration (from GET /api/events/{id}).
