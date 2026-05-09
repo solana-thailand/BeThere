@@ -1051,8 +1051,20 @@ pub fn EventsPage(
                                             placeholder="NFT collection mint address"
                                             prop:value=move || form.get().nft_collection_mint
                                             on:input=move |ev| set_form.update(|f| f.nft_collection_mint = event_target_value(&ev))
-                                            />
-                                        </div>
+                                        />
+                                        <Show
+                                            when=move || {
+                                                let v = form.get().nft_collection_mint.trim().to_string();
+                                                !v.is_empty() && !v.chars().all(|c| c.is_ascii_alphanumeric() && (c.is_ascii_digit() || (c >= 'A' && c <= 'H') || (c >= 'J' && c <= 'N') || (c >= 'P' && c <= 'Z') || (c >= 'a' && c <= 'k') || (c >= 'm' && c <= 'z')))
+                                            }
+                                            fallback=|| view! { <div></div> }
+                                        >
+                                            <div class="hint-warning-xs">
+                                                "Invalid base58 characters detected (expected Solana address format)"
+                                            </div>
+                                        </Show>
+                                        <span class="quiz-setting-hint">"Solana mint address (base58)"</span>
+                                    </div>
                                         <div class="quiz-setting-item">
                                             <label class="quiz-field-label">"Merkle Tree"</label>
                                             <input
@@ -1073,9 +1085,20 @@ pub fn EventsPage(
                                             prop:value=move || form.get().nft_metadata_uri
                                             on:input=move |ev| set_form.update(|f| f.nft_metadata_uri = event_target_value(&ev))
                                         />
+                                        <Show
+                                            when=move || {
+                                                let v = form.get().nft_metadata_uri.trim().to_string();
+                                                !v.is_empty() && !v.starts_with("http://") && !v.starts_with("https://")
+                                            }
+                                            fallback=|| view! { <div></div> }
+                                        >
+                                            <div class="hint-warning-xs">
+                                                "URI must start with http:// or https://"
+                                            </div>
+                                        </Show>
                                     </div>
                                     <div class="quiz-setting-item">
-                                        <label class="quiz-field-label">"Image URL"</label>
+                                            <label class="quiz-field-label">"Image URL"</label>
                                         <input
                                             type="text"
                                             class="quiz-number-input"
@@ -1083,6 +1106,17 @@ pub fn EventsPage(
                                             prop:value=move || form.get().nft_image_url
                                             on:input=move |ev| set_form.update(|f| f.nft_image_url = event_target_value(&ev))
                                         />
+                                        <Show
+                                            when=move || {
+                                                let v = form.get().nft_image_url.trim().to_string();
+                                                !v.is_empty() && !v.starts_with("http://") && !v.starts_with("https://")
+                                            }
+                                            fallback=|| view! { <div></div> }
+                                        >
+                                            <div class="hint-warning-xs">
+                                                "URL must start with http:// or https://"
+                                            </div>
+                                        </Show>
                                     </div>
                                     <div class="quiz-setting-item">
                                         <label class="quiz-field-label">"Name Template"</label>
