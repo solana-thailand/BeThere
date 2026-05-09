@@ -6180,6 +6180,12 @@ nav a.active {
     border: 1px solid rgba(107, 114, 128, 0.2);
 }
 
+.form-section-badge-recommended {
+    background: rgba(20, 241, 149, 0.12);
+    color: #14f195;
+    border: 1px solid rgba(20, 241, 149, 0.25);
+}
+
 .form-section-toggle {
     font-size: 0.7rem;
     color: var(--text-secondary, #888);
@@ -7441,6 +7447,12 @@ nav a.active {
     color: var(--warning);
     font-size: 0.75rem;
     margin-top: 0.25rem;
+}
+
+.hint-info {
+    color: var(--text-secondary, #888);
+    font-size: 0.8rem;
+    line-height: 1.5;
 }
 
 /* ---------- Readonly locked fields (escrow address, wallet, event ID) ---------- */

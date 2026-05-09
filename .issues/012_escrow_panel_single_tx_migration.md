@@ -4,12 +4,18 @@
 
 The `EscrowInitState` enum was simplified from 7 variants to 5, and a new combined single-TX backend endpoint `POST /api/escrow/init` was added. The **frontend match arms** in `events_page.rs` still reference the old 7 variants and must be updated.
 
-## Status: IN PROGRESS
+## Status: RESOLVED
+
+All items completed. The escrow init flow was extracted into `frontend-leptos/src/pages/escrow_init.rs` as a standalone `EscrowInitPanel` component.
 
 - ✅ Enum updated (5 variants: `Idle`, `WalletConnected`, `Initializing`, `Done`, `Error`)
 - ✅ Backend `POST /api/escrow/init` implemented and compiles (`worker/` clean)
 - ✅ Frontend `api::init_escrow()` function added
-- ❌ Frontend match arms in `events_page.rs` NOT yet updated — **8 compile errors**
+- ✅ Frontend match arms updated in dedicated `escrow_init.rs` component
+- ✅ Single-TX flow: `init_escrow()` → `sign_and_send_tx_js()` (1 wallet signature)
+- ✅ Create mode: combined create-event + escrow-init in `events_page.rs`
+- ✅ Edit mode: `EscrowInitPanel` component
+- ✅ `cargo check --workspace --quiet` passes with zero errors
 
 ## Current Compile Errors
 

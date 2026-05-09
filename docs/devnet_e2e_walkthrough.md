@@ -76,9 +76,8 @@ http://localhost:8787/api/health  # {"cluster":"devnet","status":"ok"}
 
 ### 0.3 Automated Test Results
 
+All workspace tests pass (run `cargo test --workspace --quiet` for current count).
 ```
-cargo test (workspace)    → 53 passed; 0 failed
-cargo test (bethere-escrow) → 26 passed; 0 failed (SVM integration tests)
 cargo check --quiet       → clean compile, zero warnings
 ```
 
@@ -159,7 +158,7 @@ Devnet USDC is available via the official Token Faucet:
 spl-token create-account 4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU --url devnet
 
 # Mint 100 USDC to your account (100,000,000 lamports = 100 USDC)
-spl-token mint 4zMMC9srt5Ri5X14GAgXhaMii4vXmq6jfbB7Gy3f7x3D 100000000 <YOUR_ATA_ADDRESS> --url devnet
+spl-token mint 4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU 100000000 <YOUR_ATA_ADDRESS> --url devnet
 ```
 
 **Method 2: Phantom**
@@ -578,6 +577,8 @@ These fields are locked because they were set by the on-chain escrow initializat
 ### Prerequisites
 - Logged in as SuperAdmin
 - On the Create Event form
+
+> **Note on Collapsible Sections**: The form uses collapsible sections. **Basic Info** and **Schedule** are expanded by default (required). All other sections (Google Sheets, Deposit Settings, etc.) start collapsed. Expand the relevant section before testing each case below.
 
 ### Test Cases
 

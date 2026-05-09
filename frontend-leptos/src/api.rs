@@ -1762,6 +1762,10 @@ pub struct DepositStatusResponse {
     pub deposit_amount_usdc: u64,
     pub deposit_amount_thb: u64,
     pub promptpay_id: String,
+    #[serde(default)]
+    pub event_end_ms: i64,
+    #[serde(default)]
+    pub refund_deadline_hours: u32,
     pub status: Option<DepositStatusInfo>,
 }
 

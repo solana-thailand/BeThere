@@ -60,6 +60,8 @@ pub async fn get_deposit_status_handler(
         deposit_amount_usdc: event.deposit_amount_usdc,
         deposit_amount_thb: event.deposit_amount_thb,
         promptpay_id: event.promptpay_id,
+        event_end_ms: event.event_end_ms,
+        refund_deadline_hours: event.refund_deadline_hours,
         status,
     }))
 }

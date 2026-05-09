@@ -26,6 +26,7 @@ pub fn routes(state: AppState) -> Router<()> {
         // NFT metadata (public — wallets/explorers fetch these)
         .route("/metadata/{event_id}", get(metadata::get_metadata))
         .route("/badge.svg", get(metadata::get_badge_svg))
+        .route("/badge-hd.svg", get(metadata::get_badge_hd_svg))
         // Auth routes (public)
         .route("/auth/url", get(auth::auth_url))
         .route("/auth/callback", get(auth::auth_callback))

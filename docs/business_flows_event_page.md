@@ -24,8 +24,8 @@ Each event card shows:
 
 | Indicator | Condition | Meaning |
 |-----------|-----------|---------|
-| `⚠ No Escrow` (yellow badge) | `deposit_enabled=true` AND `escrow_address=""` | Deposit is enabled but on-chain escrow PDA not yet created. Organizer must Edit → Init Escrow. |
-| `🏦 Escrow` (green badge) | `deposit_enabled=true` AND `escrow_address≠""` | On-chain escrow is active and ready to accept deposits. |
+| `No Escrow` badge (yellow, CSS-only) | `deposit_enabled=true` AND `escrow_address=""` | Deposit is enabled but on-chain escrow PDA not yet created. Organizer must Edit → Init Escrow. |
+| `Escrow` badge (green, CSS-only) | `deposit_enabled=true` AND `escrow_address≠""` | On-chain escrow is active and ready to accept deposits. |
 | No badge | `deposit_enabled=false` | No deposit feature — standard event. |
 
 ---
@@ -268,6 +268,8 @@ Note: On-chain escrow PDA still exists but backend won't route deposits to it.
 | `promptpay_id` | Not empty when THB > 0 | `deposit_amount_thb > 0` | "PromptPay ID is required when THB amount is set" |
 | `refund_deadline_hours` | ≥ 1 | `deposit_enabled=true` | "Refund deadline must be at least 1 hour" |
 
+> **Note:** The events page displays a computed refund deadline datetime below the `refund_deadline_hours` input field. The value is calculated as `event_end_ms + (refund_deadline_hours × 3_600_000)` and rendered with a human-friendly duration label (e.g. "Refund deadline: Jan 15, 2026, 11:59 PM — 48 hours after event end").
+
 ### Inline Warnings (Yellow Hints)
 
 | Field | Condition | Hint |
@@ -411,8 +413,8 @@ These are enforced by the backend but the frontend does not have inline warnings
 | Gap | Severity | Notes |
 |-----|----------|-------|
 | No wallet network detection | Medium | User could sign on wrong cluster. Add `connection.getGenesisHash()` check. |
-| No concurrent edit protection | Low | KV is last-write-wins. Could add `updated_at` optimistic concurrency check. |
+| ~~No concurrent edit protection~~ (✅ Fixed) | ~~Low~~ | Optimistic concurrency implemented: backend checks `expected_updated_at` against stored `updated_at`, returns conflict error on mismatch. Frontend detects `"conflict"` in error message and shows a user-friendly toast prompting refresh. |
 | No duplicate slug pre-check | Low | Backend catches it, but could check on slug input blur for better UX. |
 | NFT fields have no format validation | Low | `nft_collection_mint` could validate base58, URLs could validate format. |
-| No event end → refund deadline visual timeline | Low | Could show "Refund deadline: Jan 15, 2026" based on end + hours. |
-| Schedule section defaults to collapsed | Medium | Since schedule is now required, should default to expanded on Create. |
+| ~~No event end → refund deadline visual timeline~~ (✅ Fixed) | ~~Low~~ | Events page now shows a computed refund deadline datetime below the `refund_deadline_hours` input. Calculation: `event_end_ms + (hours × 3_600_000)`, displayed with a human-friendly duration label. |
+| ~~Schedule section defaults to collapsed~~ (✅ Fixed) | ~~Medium~~ | `sec_schedule_open` now initialized to `true`; schedule section defaults to expanded on Create. |

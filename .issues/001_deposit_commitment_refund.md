@@ -1,5 +1,9 @@
 # Issue 001: Deposit Commitment & Refund System
 
+> **Status: CLOSED** — All 4 phases complete and deployed to devnet.
+> See `docs/escrow_protocol.md` for the full implementation spec.
+> See `docs/devnet_e2e_walkthrough.md` for testing walkthrough.
+
 ## Problem
 
 BeThere currently only offers free check-in + NFT minting. This doesn't solve the real organizer pain point: **no-shows waste money** (food, venue, swag for people who register but don't attend).

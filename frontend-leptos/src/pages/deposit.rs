@@ -201,6 +201,35 @@ async fn fetch_tx_from_callback_js(callback_url: &str) -> Option<String> {
 }
 
 // ---------------------------------------------------------------------------
+// Refund deadline helpers (behavioral economics: loss aversion framing)
+// ---------------------------------------------------------------------------
+
+/// Format epoch ms to a short readable date for the refund deadline.
+fn format_refund_deadline(ms: i64) -> String {
+    let date = js_sys::Date::new(&wasm_bindgen::JsValue::from_f64(ms as f64));
+    let month = date.get_month() + 1;
+    let day = date.get_date();
+    let hours = date.get_hours();
+    let minutes = date.get_minutes();
+    format!("{:02}/{:02} {:02}:{:02}", month, day, hours, minutes)
+}
+
+/// Format hours into a human-friendly duration label (e.g. "7 days", "3d 12h").
+fn format_duration_label(hours: u32) -> String {
+    if hours >= 24 {
+        let days = hours / 24;
+        let remaining = hours % 24;
+        if remaining == 0 {
+            if days == 1 { "1 day".to_string() } else { format!("{days} days") }
+        } else {
+            format!("{days}d {remaining}h")
+        }
+    } else {
+        format!("{hours}h")
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Route params
 // ---------------------------------------------------------------------------
 
@@ -1130,10 +1159,20 @@ pub fn Deposit() -> impl IntoView {
                             } else {
                                 "badge badge-warning"
                             };
+                            // Compute refund deadline for loss-aversion framing
+                            let usdc_fmt = format!("{:.2}", data.deposit_amount_usdc as f64 / 1_000_000.0);
+                            let refund_info = if data.event_end_ms > 0 && data.refund_deadline_hours > 0 {
+                                let deadline_ms = data.event_end_ms + (i64::from(data.refund_deadline_hours) * 3_600_000);
+                                let deadline_date = format_refund_deadline(deadline_ms);
+                                let duration_label = format_duration_label(data.refund_deadline_hours);
+                                Some((deadline_date, duration_label))
+                            } else {
+                                None
+                            };
                             view! {
                                 <div class="card dep-card-error">
                                     <div class="card-header">
-                                        <h2 class="card-title">"✅ Deposit Received"</h2>
+                                        <h2 class="card-title">"🎫 Spot Reserved"</h2>
                                     </div>
                                     <div class="dep-details-block">
                                         <div class="dep-detail-row">
@@ -1158,19 +1197,31 @@ pub fn Deposit() -> impl IntoView {
                                     {if info.verified && info.method == "usdc" {
                                         let data_clone_for_refund = data.clone();
                                         let data_clone_for_close = data.clone();
+                                        let refund_info_clone = refund_info.clone();
                                         view! {
                                             <div class="dep-info-note">
                                                 <p class="hint-note">
-                                                    "💰 Your deposit is secured on-chain. You can claim a refund after the event ends."
+                                                    {format!("💰 Your {usdc_fmt} USDC is secured on-chain. Show up → get it all back.")}
                                                 </p>
                                             </div>
+                                            // Refund deadline urgency (loss aversion)
+                                            {match refund_info_clone {
+                                                Some((deadline_date, duration_label)) => view! {
+                                                    <div class="dep-info-note">
+                                                        <p class="hint-note">
+                                                            {format!("⏰ Refund window: {duration_label} after event ends ({deadline_date}).")}
+                                                        </p>
+                                                    </div>
+                                                }.into_any(),
+                                                None => view! { <div></div> }.into_any(),
+                                            }}
                                             <button
                                                 class="btn btn-success btn-block btn-action-lg"
                                                 on:click=move |_| {
                                                     set_state.set(DepositPageState::RefundChooseWallet(data_clone_for_refund.clone()));
                                                 }
                                             >
-                                                "💸 Claim Refund"
+                                                {format!("💸 Don't lose your {usdc_fmt} USDC — claim it now")}
                                             </button>
                                             <button
                                                 class="btn btn-outline btn-block btn-action-sm"
@@ -1178,14 +1229,14 @@ pub fn Deposit() -> impl IntoView {
                                                     set_state.set(DepositPageState::CloseDepositChooseWallet(data_clone_for_close.clone()));
                                                 }
                                             >
-                                                "♻️ Reclaim Rent"
+                                                "♻️ You have ~0.002 SOL waiting — reclaim it"
                                             </button>
                                         }.into_any()
                                     } else {
                                         view! {
                                             <div class="dep-info-note">
                                                 <p class="hint-note">
-                                                    "💰 Refund will be available after the event."
+                                                    {format!("💰 Your {usdc_fmt} USDC deposit is secured. Refund will be available after the event.")}
                                                 </p>
                                             </div>
                                         }.into_any()
@@ -1495,18 +1546,28 @@ pub fn Deposit() -> impl IntoView {
                                 tx_sig.clone()
                             };
                             let solscan_url = solscan_tx_url(&tx_sig, &get_cluster());
+                            let usdc_fmt = format!("{:.2}", data.deposit_amount_usdc as f64 / 1_000_000.0);
+                            // Compute refund deadline info
+                            let refund_info = if data.event_end_ms > 0 && data.refund_deadline_hours > 0 {
+                                let deadline_ms = data.event_end_ms + (i64::from(data.refund_deadline_hours) * 3_600_000);
+                                let deadline_date = format_refund_deadline(deadline_ms);
+                                let duration_label = format_duration_label(data.refund_deadline_hours);
+                                Some((deadline_date, duration_label))
+                            } else {
+                                None
+                            };
                             view! {
                                 <div class="card dep-card">
                                     <div class="card-header">
-                                        <h2 class="card-title">"✅ Deposit Confirmed!"</h2>
+                                        <h2 class="card-title">"🎫 Spot Reserved!"</h2>
                                         <span class="badge badge-success">"On-chain verified"</span>
                                     </div>
                                     <div class="celebration-emoji">"🎉"</div>
                                     <p class="success-title">
-                                        {format!("{:.2} USDC deposited", data.deposit_amount_usdc as f64 / 1_000_000.0)}
+                                        {format!("{usdc_fmt} USDC deposited")}
                                     </p>
                                     <p class="hint-desc">
-                                        "Your deposit has been confirmed on Solana. You're all set for the event!"
+                                        "You're confirmed! Your spot is secured on Solana."
                                     </p>
                                     <div class="tx-hash-box">
                                         {format!("TX: {}", &sig_display)}
@@ -1514,11 +1575,29 @@ pub fn Deposit() -> impl IntoView {
                                     <a href=&solscan_url target="_blank" class="tx-explorer-link">
                                         "View on Solscan ↗"
                                     </a>
+                                    // Ownership + deal framing
                                     <div class="dep-info-note-lg">
                                         <p class="hint-note">
-                                            "💰 Refund will be available after the event."
+                                            {format!("Show up → get your {usdc_fmt} USDC back. That's the deal.")}
                                         </p>
                                     </div>
+                                    // Refund deadline info (loss aversion: inaction = loss)
+                                    {match refund_info {
+                                        Some((deadline_date, duration_label)) => view! {
+                                            <div class="dep-info-note">
+                                                <p class="hint-note">
+                                                    {format!("💰 Refund window: {duration_label} after the event ends ({deadline_date}). Don't lose your deposit — claim it back.")}
+                                                </p>
+                                            </div>
+                                        }.into_any(),
+                                        None => view! {
+                                            <div class="dep-info-note">
+                                                <p class="hint-note">
+                                                    "💰 Refund will be available after the event."
+                                                </p>
+                                            </div>
+                                        }.into_any(),
+                                    }}
                                     <div class="action-row-top-lg">
                                         <a href="/" class="btn btn-primary">"Go Home"</a>
                                     </div>
@@ -1705,13 +1784,13 @@ pub fn Deposit() -> impl IntoView {
                                         <span class="badge badge-success u-ml-auto">"✅ Connected"</span>
                                     </div>
                                     <p class="hint-desc">
-                                        "Click below to claim your refund. You'll approve the transaction in your wallet."
+                                        "Your deposit is waiting to be returned. Click below to claim it."
                                     </p>
                                     <button
                                         class="btn btn-success btn-block btn-action-lg"
                                         on:click=move |_| handle_claim_refund(wallet_name_send.clone(), pk_send.clone())
                                     >
-                                        "💸 Claim " {format!("{:.2} USDC", data.deposit_amount_usdc as f64 / 1_000_000.0)} " Refund"
+                                        "💸 Claim " {format!("{:.2} USDC", data.deposit_amount_usdc as f64 / 1_000_000.0)} " — Don't lose it"
                                     </button>
                                     <button
                                         class="btn btn-outline btn-sm btn-action-secondary"
@@ -1756,15 +1835,16 @@ pub fn Deposit() -> impl IntoView {
                             };
                             let solscan_url = solscan_tx_url(&tx_sig, &get_cluster());
                             let data_clone_for_close = data.clone();
+                            let usdc_fmt = format!("{:.2}", data.deposit_amount_usdc as f64 / 1_000_000.0);
                             view! {
                                 <div class="card dep-card">
                                     <div class="card-header">
-                                        <h2 class="card-title">"🎉 Refund Confirmed!"</h2>
+                                        <h2 class="card-title">"🎉 Refund Recovered!"</h2>
                                         <span class="badge badge-success">"On-chain verified"</span>
                                     </div>
                                     <div class="celebration-emoji">"💰"</div>
                                     <p class="success-title">
-                                        {format!("{:.2} USDC refunded", data.deposit_amount_usdc as f64 / 1_000_000.0)}
+                                        {format!("{usdc_fmt} USDC returned to your wallet")}
                                     </p>
                                     <p class="hint-desc">
                                         "Your refund has been confirmed on Solana. The funds should appear in your wallet shortly."
@@ -1777,7 +1857,7 @@ pub fn Deposit() -> impl IntoView {
                                     </a>
                                     <div class="dep-info-note-lg">
                                         <p class="hint-note-sm">
-                                            "Reclaim ~0.002 SOL rent from your deposit account."
+                                            "You have ~0.002 SOL waiting in your deposit account."
                                         </p>
                                         <button
                                             class="btn btn-outline btn-block btn-action-sm"
@@ -1785,7 +1865,7 @@ pub fn Deposit() -> impl IntoView {
                                                 set_state.set(DepositPageState::CloseDepositChooseWallet(data_clone_for_close.clone()));
                                             }
                                         >
-                                            "♻️ Reclaim Rent"
+                                            "♻️ Reclaim your ~0.002 SOL"
                                         </button>
                                     </div>
                                     <div class="action-row-top-lg">

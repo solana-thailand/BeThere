@@ -128,6 +128,17 @@ fn format_datetime_local(ms: i64) -> String {
     )
 }
 
+/// Get self-hosted NFT badge URLs (served by the worker itself).
+/// No Arweave/IPFS needed — the worker hosts the default badge and dynamic metadata.
+fn get_self_hosted_nft_urls() -> (String, String) {
+    let origin = web_sys::window()
+        .and_then(|w| w.location().origin().ok())
+        .unwrap_or_else(|| "https://bethere.solana-thailand.workers.dev".to_string());
+    let image_url = format!("{origin}/api/badge-hd.svg");
+    let metadata_uri_prefix = format!("{origin}/api/metadata/");
+    (image_url, metadata_uri_prefix)
+}
+
 /// Create a default form state with sensible defaults.
 fn default_form() -> EventForm {
     EventForm {
@@ -762,11 +773,11 @@ pub fn EventsPage(
                                             <span class=badge_class>{status_text}</span>
                                             {if needs_escrow {
                                                 view! {
-                                                    <span class="badge badge-warning-xs">"⚠ No Escrow"</span>
+                                                    <span class="badge badge-warning-xs">"No Escrow"</span>
                                                 }.into_any()
                                             } else if has_escrow {
                                                 view! {
-                                                    <span class="badge badge-success-xs">"🏦 Escrow"</span>
+                                                    <span class="badge badge-success-xs">"Escrow"</span>
                                                 }.into_any()
                                             } else {
                                                 view! { <span></span> }.into_any()
@@ -1042,11 +1053,62 @@ pub fn EventsPage(
                             <div class="form-section">
                                 <div class="form-section-header" on:click=move |_| set_sec_nft_open.update(|v| *v = !*v)>
                                     <span class="form-section-icon form-section-icon-nft"></span>
-                                    <span class="form-section-title">"NFT Configuration"</span>
-                                    <span class="form-section-badge form-section-badge-optional">"Optional"</span>
+                                    <span class="form-section-title">"NFT Attendance Badge"</span>
+                                    <span class="form-section-badge form-section-badge-recommended">"Recommended"</span>
                                     <span class="form-section-toggle" class:form-section-toggle-open=move || sec_nft_open.get()>"▼"</span>
                                 </div>
                                 <div class="form-section-body" class:form-section-body-hidden=move || !sec_nft_open.get()>
+                                    // ── Quick-fill default badge ──
+                                    <div class="quiz-setting-item" style="grid-column:1/-1">
+                                        <div class="hint-info" style="margin-bottom:var(--space-2xs)">
+                                            "NFT badges reward attendees for showing up. Use the default BeThere badge or enter your own custom image URL."
+                                        </div>
+                                        <div style="display:flex;gap:var(--space-xs);align-items:center;flex-wrap:wrap">
+                                            <button
+                                                class="btn btn-outline btn-sm"
+                                                on:click=move |_| {
+                                                    let (img_url, meta_prefix) = get_self_hosted_nft_urls();
+                                                    let eid = editing_id.get().unwrap_or_default();
+                                                    set_form.update(|f| {
+                                                        if f.nft_image_url.is_empty() {
+                                                            f.nft_image_url = img_url;
+                                                        }
+                                                        if f.nft_metadata_uri.is_empty() && !eid.is_empty() {
+                                                            f.nft_metadata_uri = format!("{meta_prefix}{eid}");
+                                                        }
+                                                        if f.nft_name_template.is_empty() {
+                                                            f.nft_name_template = "BeThere - {event_name}".to_string();
+                                                        }
+                                                        if f.nft_symbol.is_empty() {
+                                                            f.nft_symbol = "BETHERE".to_string();
+                                                        }
+                                                        if f.nft_description_template.is_empty() {
+                                                            f.nft_description_template = "Proof of attendance at {event_name}".to_string();
+                                                        }
+                                                    });
+                                                }
+                                            >
+                                                "Use default badge"
+                                            </button>
+                                            // Badge preview
+                                            <Show
+                                                when=move || !form.get().nft_image_url.is_empty()
+                                                fallback=|| view! { <div></div> }
+                                            >
+                                                <img
+                                                    src=move || form.get().nft_image_url
+                                                    alt="NFT badge preview"
+                                                    style="width:48px;height:48px;border-radius:8px;border:1px solid var(--border,rgba(255,255,255,0.1))"
+                                                />
+                                                <span style="font-size:var(--text-xs);color:var(--text-muted,#888)">
+                                                    {move || {
+                                                        let url = form.get().nft_image_url;
+                                                        if url.contains("/api/badge") { "Default badge" } else { "Custom badge" }.to_string()
+                                                    }}
+                                                </span>
+                                            </Show>
+                                        </div>
+                                    </div>
                                     <div class="quiz-settings-grid">
                                     <div class="quiz-setting-item">
                                         <label class="quiz-field-label">"Collection Mint"</label>
@@ -1100,6 +1162,12 @@ pub fn EventsPage(
                                             <div class="hint-warning-xs">
                                                 "URI must start with http:// or https://"
                                             </div>
+                                        </Show>
+                                        <Show
+                                            when=move || editing_id.get().unwrap_or_default().is_empty()
+                                            fallback=|| view! { <div></div> }
+                                        >
+                                            <span class="quiz-setting-hint">"Save the event first, then edit to auto-fill this with the dynamic metadata URL."</span>
                                         </Show>
                                     </div>
                                     <div class="quiz-setting-item">
@@ -1265,6 +1333,14 @@ pub fn EventsPage(
                                     </span>
                                 </label>
                             </div>
+                            // Loss-aversion nudge: show when deposit is disabled
+                            <Show when=move || !form.get().deposit_enabled fallback=|| view! { <div></div> }>
+                                <div class="dep-info-note">
+                                    <p class="hint-note">
+                                        "Events without deposits often see 30-40% no-shows. Deposits reduce no-shows by making attendance the default — attendees get 100% back just by showing up."
+                                    </p>
+                                </div>
+                            </Show>
 
                             // Deposit config section — only when enabled
                             <Show when=move || form.get().deposit_enabled fallback=|| view! { <div></div> }>

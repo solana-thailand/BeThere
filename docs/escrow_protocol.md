@@ -1,4 +1,4 @@
-# BeThere Escrow Protocol
+# BeThere Escrow Protocol (Devnet Deployed)
 
 > Technical design document for the deposit-backed attendance system on Solana.
 > Status: **Draft** — this is the implementation spec.
@@ -291,6 +291,7 @@ Vault (Token Account)
 | `deactivate_event` | Organizer | Before event starts | Set `is_active = false`, stop new deposits |
 | `claim_forfeited` | Organizer | After `refund_deadline` | Transfer unclaimed deposits to organizer |
 | `close_event` | Organizer | After settlement | Reclaim rent, close all PDAs |
+| `close_deposit` | Attendee | Closes `AttendeeDeposit` PDA, reclaims rent-exempt SOL | Event deactivated OR refund completed |
 
 ### Instruction Ordering Constraints
 
@@ -392,7 +393,7 @@ Organizer receives: $14.55
 
 | Cluster | USDC Mint | Explorer Base URL |
 |---------|-----------|-------------------|
-| `devnet` | `4zMMC9srt5Ri5X14GAgXhaMii4vXmq6jfbB7Gy3f7x3D` | `https://explorer.solana.com?cluster=devnet` |
+| `devnet` | `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU` | `https://explorer.solana.com?cluster=devnet` |
 | `mainnet-beta` | `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1m` | `https://explorer.solana.com` |
 
 All explorer links (transaction signatures, account addresses) must be cluster-aware. Read from `SOLANA_CLUSTER` environment variable to determine which cluster and mint to use.
@@ -402,7 +403,7 @@ All explorer links (transaction signatures, account addresses) must be cluster-a
 ```rust
 pub fn get_usdc_mint(cluster: &str) -> Pubkey {
     match cluster {
-        "devnet" => "4zMMC9srt5Ri5X14GAgXhaMii4vXmq6jfbB7Gy3f7x3D"
+        "devnet" => "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"
             .parse()
             .unwrap(),
         "mainnet-beta" => "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1m"
@@ -412,6 +413,39 @@ pub fn get_usdc_mint(cluster: &str) -> Pubkey {
     }
 }
 ```
+
+---
+
+## Behavioral Economics Foundation
+
+The escrow deposit system is grounded in established behavioral economics principles:
+
+### Loss Aversion (Kahneman & Tversky, 1979)
+
+The pain of losing is ~2× as powerful as the pleasure of gaining. Deposits leverage this:
+- **Deposit = skin in the game** — attendees feel the "loss" of their committed USDC if they no-show
+- **Full refund on attendance** — the deposit isn't a fee, it's a commitment device
+- **Forfeiture = real loss** — no-shows permanently lose their deposit to the organizer
+
+### Endowment Effect
+
+Once attendees deposit, they "own" their reserved spot and value it more. The confirmation page reinforces ownership with language like "Your spot is reserved" rather than "Payment received."
+
+### Refund Deadline (Scarcity + Urgency)
+
+The `refund_deadline_hours` field creates a time-bounded refund window after the event. This serves dual purposes:
+- **Anti-rug-pull**: Organizers can't withhold refunds indefinitely
+- **Loss urgency**: After the deadline, unclaimed deposits are forfeited — framing inaction as a loss motivates timely refund claims
+
+### Commitment Device
+
+The deposit acts as a pre-commitment mechanism. Research shows that people who pre-commit to an action are significantly more likely to follow through. The deposit + NFT claim flow creates a two-stage commitment:
+1. **Financial commitment** (deposit) — before the event
+2. **Identity commitment** (NFT claim) — after the event
+
+### Organizer Nudge (Loss Framing)
+
+When creating events, organizers who haven't enabled deposits see: "Events without deposits often see 30-40% no-shows." This frames the decision as avoiding a loss rather than adding a feature.
 
 ---
 
@@ -426,6 +460,7 @@ pub fn get_usdc_mint(cluster: &str) -> Pubkey {
 4. **Multi-organizer events.** Should multiple wallets be able to mark check-ins? Useful for large events with multiple entry points. Suggestion: future feature, not V1.
 
 5. **Deposit currency.** USDC only for V1, or should we support SOL and other SPL tokens? Suggestion: USDC only. Price stability matters for deposits.
+   **Resolution**: Implemented as USDC (on-chain) + THB/PromptPay (off-chain) dual-track in V1.
 
 6. **Event cancellation.** What happens if the organizer cancels the event before `event_end`? All deposits should be immediately refundable. Needs a `cancel_event` instruction.
 
