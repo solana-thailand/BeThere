@@ -236,13 +236,13 @@ pub async fn update_event(
 
     // Optimistic concurrency: if client provides expected_updated_at,
     // verify it matches the stored value to prevent blind overwrites.
-    if let Some(ref expected) = req.expected_updated_at {
-        if expected != &config.updated_at {
-            return Err(format!(
-                "conflict: event was modified by another user at {}. Please reload and retry.",
-                config.updated_at
-            ));
-        }
+    if let Some(ref expected) = req.expected_updated_at
+        && expected != &config.updated_at
+    {
+        return Err(format!(
+            "conflict: event was modified by another user at {}. Please reload and retry.",
+            config.updated_at
+        ));
     }
 
     // SEC-002: Lock escrow-critical fields after on-chain init.
