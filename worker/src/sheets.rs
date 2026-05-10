@@ -617,6 +617,69 @@ pub async fn update_qr_urls(
 }
 
 // ---------------------------------------------------------------------------
+// Self-registration append
+// ---------------------------------------------------------------------------
+
+/// Append a full attendee row to the event's Google Sheet.
+///
+/// Columns A–Y (25 columns), unused slots filled with empty strings:
+/// A[0]=api_id, B[1]=name, C[2]=first_name, D[3]=last_name, E[4]=email,
+/// F[5]="Self-Registered", G[6]=registration_date, H[7]="Approved",
+/// R[17]=claim_token, Y[24]=participation_type.
+#[allow(clippy::too_many_arguments)]
+pub async fn append_attendee_row(
+    api_id: &str,
+    name: &str,
+    first_name: &str,
+    last_name: &str,
+    email: &str,
+    claim_token: &str,
+    participation_type: &str,
+    registration_date: &str,
+    state: &AppState,
+    sheet_id: &str,
+    sheet_name: &str,
+    kv: Option<&KvStore>,
+) -> Result<(), String> {
+    let access_token = get_cached_access_token(state, kv).await?;
+
+    // 25 columns: A(0)..Y(24)
+    let mut row = vec![String::new(); 25];
+    row[0] = api_id.to_string(); // A — api_id
+    row[1] = name.to_string(); // B — name
+    row[2] = first_name.to_string(); // C — first_name
+    row[3] = last_name.to_string(); // D — last_name
+    row[4] = email.to_string(); // E — email
+    row[5] = "Self-Registered".to_string(); // F — ticket_name
+    row[6] = registration_date.to_string(); // G — registration_date
+    row[7] = "Approved".to_string(); // H — approval_status
+    row[17] = claim_token.to_string(); // R — claim_token
+    row[24] = participation_type.to_string(); // Y — participation_type
+
+    let url = format!(
+        "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{}!A:Y:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS",
+        urlencoding::encode(sheet_name)
+    );
+
+    let body = crate::http::ValueRange {
+        range: format!("{sheet_name}!A:Y"),
+        values: vec![row],
+    };
+
+    crate::http::post_json::<serde_json::Value>(&url, &body, Some(&access_token)).await?;
+
+    tracing::info!(
+        %api_id,
+        %email,
+        %participation_type,
+        "appended self-registration row to google sheet"
+    );
+
+    invalidate_attendee_cache(kv, sheet_id, sheet_name).await;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 

@@ -11,6 +11,7 @@ pub mod metadata;
 pub mod public_event;
 pub mod qr;
 pub mod quiz;
+pub mod register;
 pub mod waitlist;
 pub mod walkin;
 
@@ -55,6 +56,8 @@ pub fn routes(state: AppState) -> Router<()> {
         )
         // Waitlist signup (public)
         .route("/waitlist", post(waitlist::join_waitlist))
+        // Self-registration (public — attendees register from public event page)
+        .route("/public/register", post(register::register_attendee))
         // Deposit routes (public — attendee checks/initiates deposit)
         .route(
             "/deposit/status/{attendee_id}",
