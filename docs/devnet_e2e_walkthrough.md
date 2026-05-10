@@ -908,6 +908,7 @@ This is the recommended order for a complete end-to-end test:
 | 401 on all API calls | Session expired | Re-login via Sign In |
 | "Internal Server Error" | Worker crash | Check Cloudflare dashboard for logs |
 | API returns unexpected data | Stale KV cache | Wait 60s for KV propagation |
+| `wrangler dev` fails: "Address already in use (127.0.0.1:8787)" | Stale `wrangler dev` process still bound to port 8787 | Kill stale process: `kill -9 $(lsof -ti:8787)` — or use alternate port: `npx wrangler dev --port 8788` |
 
 ### Wallet Issues
 

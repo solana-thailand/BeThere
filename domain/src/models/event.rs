@@ -177,6 +177,14 @@ pub struct EventConfig {
     #[serde(default)]
     pub refund_deadline_hours: u32,
 
+    // ── Public details ───────────────────────────────────────────────
+    /// Event description (markdown or plain text).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub description: String,
+    /// Event location (venue name, address, or "Online").
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub location: String,
+
     // ── Timestamps ────────────────────────────────────────────────────
     /// ISO 8601 creation timestamp.
     pub created_at: String,
@@ -300,6 +308,8 @@ impl EventConfig {
             organizer_wallet: String::new(),
             on_chain_event_id: 0,
             refund_deadline_hours: 168,
+            description: String::new(),
+            location: String::new(),
             created_at: String::new(),
             updated_at: String::new(),
         }
@@ -395,6 +405,12 @@ pub struct CreateEventRequest {
     /// Hours after event_end for refund deadline (default: 168 = 7 days).
     #[serde(default)]
     pub refund_deadline_hours: u32,
+    /// Event description (markdown or plain text).
+    #[serde(default)]
+    pub description: String,
+    /// Event location (venue name, address, or "Online").
+    #[serde(default)]
+    pub location: String,
 }
 
 /// Request body for updating an existing event.
@@ -495,6 +511,12 @@ pub struct UpdateEventRequest {
     /// matches the stored `updated_at` timestamp. Prevents blind overwrites.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub expected_updated_at: Option<String>,
+    /// New event description.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// New event location.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub location: Option<String>,
 }
 
 /// Response for GET /api/events — list all events.

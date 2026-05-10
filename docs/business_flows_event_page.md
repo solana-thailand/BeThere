@@ -419,7 +419,12 @@ These are enforced by the backend but the frontend does not have inline warnings
 | ~~No event end → refund deadline visual timeline~~ (✅ Fixed) | ~~Low~~ | Events page now shows a computed refund deadline datetime below the `refund_deadline_hours` input. Calculation: `event_end_ms + (hours × 3_600_000)`, displayed with a human-friendly duration label. |
 | ~~Schedule section defaults to collapsed~~ (✅ Fixed) | ~~Medium~~ | `sec_schedule_open` now initialized to `true`; schedule section defaults to expanded on Create. |
 | ~~No NFT badge preview~~ (✅ Fixed) | ~~Low~~ | Events page shows live badge preview + "Use default badge" auto-fill button. `30a23e0`.
-| ~~No walk-in attendee registration~~ (✅ Fixed) | ~~Medium~~ | Staff can register walk-ins via scanner UI → KV record → same deposit/NFT/refund flow. `ef70bca`.
+| ~~No walk-in attendee registration~~ (✅ Fixed) | ~~Medium~~ | Staff can register walk-ins via scanner UI → KV record → same deposit/NFT/refund flow. `ef70bca`. |
+| No public event page (`/e/{slug}`) | ~~**High**~~ | ✅ **Implemented** — `GET /api/public/event/{slug}` + `/e/:slug` frontend. Sanitized response (no sensitive fields). Only Active/Completed events shown. See `docs/ux_roadmap.md` P0-1. |
+| No event context on deposit page | **High** | Deposit page jumps straight to payment without showing what event the deposit is for. Needs event header with name + date. See `docs/ux_roadmap.md` P0-2. |
+| Scanner has no haptic/audio feedback | Medium | No vibration or sound on scan success/failure. Critical for throughput at real events. `navigator.vibrate()` + short beep. See `docs/ux_roadmap.md` P1-1. |
+| No progress indicator on claim flow | Medium | Multi-step flow (connect → deposit → quiz → claim) with no visible step indicator. See `docs/ux_roadmap.md` P1-2. |
+| No share CTA on NFT mint success | Low | Missing free marketing — "Share your badge" button after NFT mint. See `docs/ux_roadmap.md` P1-3. |
 
 ---
 

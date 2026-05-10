@@ -8,6 +8,7 @@ pub mod events;
 pub mod ext;
 pub mod health;
 pub mod metadata;
+pub mod public_event;
 pub mod qr;
 pub mod quiz;
 pub mod waitlist;
@@ -28,6 +29,8 @@ pub fn routes(state: AppState) -> Router<()> {
         .route("/metadata/{event_id}", get(metadata::get_metadata))
         .route("/badge.svg", get(metadata::get_badge_svg))
         .route("/badge-hd.svg", get(metadata::get_badge_hd_svg))
+        // Public event details (no auth)
+        .route("/public/event/{slug}", get(public_event::get_public_event))
         // Auth routes (public)
         .route("/auth/url", get(auth::auth_url))
         .route("/auth/callback", get(auth::auth_callback))

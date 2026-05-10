@@ -107,12 +107,21 @@ pub struct DepositStatusResponse {
     /// PromptPay ID for THB payments (Thai phone number or national ID).
     #[serde(default)]
     pub promptpay_id: String,
+    /// Event start time as Unix epoch milliseconds.
+    #[serde(default)]
+    pub event_start_ms: i64,
     /// Event end time as Unix epoch milliseconds (for refund deadline computation).
     #[serde(default)]
     pub event_end_ms: i64,
     /// Hours after event_end for refund deadline.
     #[serde(default)]
     pub refund_deadline_hours: u32,
+    /// Event name for context display on the deposit page.
+    #[serde(default)]
+    pub event_name: String,
+    /// Event tagline (short description).
+    #[serde(default)]
+    pub event_tagline: String,
     /// Current deposit status (None if not deposited).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub status: Option<DepositStatus>,

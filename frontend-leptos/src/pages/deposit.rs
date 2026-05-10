@@ -215,6 +215,34 @@ fn format_refund_deadline(ms: i64) -> String {
 }
 
 /// Format hours into a human-friendly duration label (e.g. "7 days", "3d 12h").
+/// Extract event context (name, tagline) from the current page state.
+/// Returns None for Loading/Error/NotEnabled/ThbUploaded states.
+fn extract_event_context(state: &DepositPageState) -> Option<(String, String)> {
+    let data: &DepositStatusResponse = match state {
+        DepositPageState::AlreadyDeposited(d)
+        | DepositPageState::ChoosePayment(d)
+        | DepositPageState::WalletConnected(d, _, _)
+        | DepositPageState::AwaitingConfirmation(d, _, _)
+        | DepositPageState::DepositConfirmed(d, _)
+        | DepositPageState::UsdcQrReady(d, _)
+        | DepositPageState::ThbUploading(d)
+        | DepositPageState::RefundChooseWallet(d)
+        | DepositPageState::RefundWalletConnected(d, _, _)
+        | DepositPageState::RefundSigning(d, _, _)
+        | DepositPageState::RefundConfirmed(d, _)
+        | DepositPageState::CloseDepositChooseWallet(d)
+        | DepositPageState::CloseDepositWalletConnected(d, _, _)
+        | DepositPageState::CloseDepositSigning(d, _, _)
+        | DepositPageState::CloseDepositConfirmed(d, _) => d,
+        _ => return None,
+    };
+    if data.event_name.is_empty() {
+        None
+    } else {
+        Some((data.event_name.clone(), data.event_tagline.clone()))
+    }
+}
+
 fn format_duration_label(hours: u32) -> String {
     if hours >= 24 {
         let days = hours / 24;
@@ -1094,6 +1122,24 @@ pub fn Deposit() -> impl IntoView {
                 <div class="brand-logo-sub">"Proof of Attendance"</div>
 
                 <h1 class="claim-title">"Event Deposit"</h1>
+
+                // Event context header — shows which event this deposit is for
+                {move || {
+                    let s = state.get();
+                    match extract_event_context(&s) {
+                        Some((name, tagline)) => view! {
+                            <div class="event-context-header">
+                                <div class="event-context-name">{name}</div>
+                                {if !tagline.is_empty() {
+                                    view! { <div class="event-context-tagline">{tagline}</div> }.into_any()
+                                } else {
+                                    view! { <div></div> }.into_any()
+                                }}
+                            </div>
+                        }.into_any(),
+                        None => view! { <div></div> }.into_any(),
+                    }
+                }}
 
                 {move || {
                     let s = state.get();

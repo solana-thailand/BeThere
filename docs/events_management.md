@@ -354,3 +354,4 @@ Walk-in attendees are registered per-event via the scanner UI:
 | `docs/security_audit.md` | Security findings and fixes |
 | `.issues/008_nft_config_and_production_readiness.md` | NFT configuration guide |
 | `.issues/014_walkin_attendee_flow.md` | Walk-in attendee implementation |
+| `docs/ux_roadmap.md` | Prioritized UX improvements (public event page, scanner feedback, etc.) |

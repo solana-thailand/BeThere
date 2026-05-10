@@ -199,6 +199,8 @@ pub async fn create_event(kv: &KvStore, req: &CreateEventRequest) -> Result<Even
         organizer_wallet: req.organizer_wallet.trim().to_string(),
         on_chain_event_id: req.on_chain_event_id,
         refund_deadline_hours: req.refund_deadline_hours,
+        description: req.description.trim().to_string(),
+        location: req.location.trim().to_string(),
         created_at: now.clone(),
         updated_at: now,
     };
@@ -374,6 +376,12 @@ pub async fn update_event(
     }
     if let Some(v) = req.refund_deadline_hours {
         config.refund_deadline_hours = v;
+    }
+    if let Some(ref v) = req.description {
+        config.description = v.trim().to_string();
+    }
+    if let Some(ref v) = req.location {
+        config.location = v.trim().to_string();
     }
 
     config.updated_at = chrono::Utc::now().to_rfc3339();
@@ -558,6 +566,8 @@ pub async fn seed_from_config(
         organizer_wallet: String::new(),
         on_chain_event_id: 0,
         refund_deadline_hours: 168,
+        description: String::new(),
+        location: String::new(),
         created_at: now.clone(),
         updated_at: now,
     };
