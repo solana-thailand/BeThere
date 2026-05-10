@@ -111,7 +111,7 @@ Staff scanning QR codes at real events need **instant** confirmation without loo
 
 ### P1-2. Claim Flow Progress Indicator
 
-**Status**: ❌ Not started
+**Status**: ✅ Implemented (`frontend-leptos/src/pages/claim.rs` — `ClaimStepper` component)
 
 The claim flow is multi-step (connect wallet → deposit → quiz → claim NFT) but has no visible progress indicator. Users don't know how many steps remain or where they are.
 
