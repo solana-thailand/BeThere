@@ -777,6 +777,9 @@ pub struct ClaimLookupData {
     /// Deposit amount in THB (e.g. 500).
     #[serde(default)]
     pub deposit_amount_thb: u64,
+    /// Attendee's participation type ("In-Person", "Online", etc.).
+    #[serde(default)]
+    pub participation_type: String,
 }
 
 /// Response data for POST /api/claim/{token} — NFT mint result.

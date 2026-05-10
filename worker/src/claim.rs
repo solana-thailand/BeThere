@@ -211,6 +211,7 @@ pub struct ClaimLookup {
     pub deposit_enabled: bool,
     pub deposit_amount_usdc: u64,
     pub deposit_amount_thb: u64,
+    pub participation_type: String,
 }
 
 /// Result of a successful NFT claim (POST).
@@ -271,6 +272,7 @@ pub async fn lookup_claim(
             deposit_enabled: event.deposit_enabled,
             deposit_amount_usdc: event.deposit_amount_usdc,
             deposit_amount_thb: event.deposit_amount_thb,
+            participation_type: "In-Person".to_string(), // walk-ins are always in-person
         });
     }
 
@@ -354,6 +356,7 @@ pub async fn lookup_claim(
         deposit_enabled: event.deposit_enabled,
         deposit_amount_usdc: event.deposit_amount_usdc,
         deposit_amount_thb: event.deposit_amount_thb,
+        participation_type: attendee.participation_type.clone(),
     })
 }
 
@@ -363,6 +366,33 @@ pub async fn lookup_claim(
 
 /// Execute the full claim flow: validate → gates → lock → mint → record.
 /// This is the core business logic extracted from the handler.
+/// Check if an online attendee has completed the required quest (quiz or adventure).
+/// Returns true if at least one is passed, or if neither is required.
+async fn verify_online_quest_completion(
+    state: &AppState,
+    event_id: &str,
+    claim_token: &str,
+) -> bool {
+    let kv = match state.events_kv.as_ref().or(state.quiz_kv.as_ref()) {
+        Some(kv) => kv,
+        None => return true, // no KV = no quest required
+    };
+
+    // Check quiz status first
+    match crate::quiz::get_quiz_status(kv, event_id, claim_token).await {
+        Ok(QuizStatus::Passed) => true,
+        Ok(QuizStatus::NotRequired) => {
+            // Quiz not configured — check adventure
+            match crate::adventure::get_adventure_status(kv, event_id, claim_token).await {
+                Ok(AdventureStatus::Passed) => true,
+                Ok(AdventureStatus::NotRequired) => true, // no quest configured at all
+                _ => false,
+            }
+        }
+        _ => false,
+    }
+}
+
 pub async fn execute_claim(
     state: &AppState,
     token: &str,
@@ -383,7 +413,7 @@ pub async fn execute_claim(
     }
 
     // 3. Pre-registered path: look up attendee by claim token from Google Sheet
-    let attendee = match crate::sheets::get_attendee_by_claim_token(
+    let mut attendee = match crate::sheets::get_attendee_by_claim_token(
         token,
         state,
         &event.sheet_id,
@@ -405,11 +435,58 @@ pub async fn execute_claim(
 
     let display_name = attendee.display_name().to_string();
 
-    // 3. Must be checked in
+    // 3. Check-in verification — with virtual check-in for online attendees
     if attendee.checked_in_at.is_none() {
-        return Err(AppError::Validation(
-            "attendee has not been checked in yet".into(),
-        ));
+        let is_online_attendee = !attendee.is_in_person();
+        if is_online_attendee && event.event_format.has_online() {
+            // Verify quiz/adventure completion (at least one must be passed)
+            let quest_passed = verify_online_quest_completion(state, &event.id, token).await;
+            if quest_passed {
+                // Auto virtual check-in — write to Google Sheet
+                match crate::sheets::mark_virtual_checked_in(
+                    attendee.row_index,
+                    state,
+                    &event.sheet_id,
+                    &event.sheet_name,
+                    kv,
+                )
+                .await
+                {
+                    Ok(ts) => {
+                        tracing::info!(
+                            claim_token = %token,
+                            attendee_id = %attendee.api_id,
+                            checked_in_at = %ts,
+                            "virtual check-in auto-completed for online attendee"
+                        );
+                        attendee.checked_in_at = Some(ts);
+                    }
+                    Err(e) => {
+                        tracing::error!(
+                            claim_token = %token,
+                            error = %e,
+                            "failed to auto virtual check-in"
+                        );
+                        return Err(AppError::Internal(format!(
+                            "failed to complete virtual check-in: {e}"
+                        )));
+                    }
+                }
+            } else {
+                tracing::warn!(
+                    claim_token = %token,
+                    participation_type = %attendee.participation_type,
+                    "online attendee not checked in and quest not completed"
+                );
+                return Err(AppError::Validation(
+                    "you must complete the quiz or adventure before claiming your badge".into(),
+                ));
+            }
+        } else {
+            return Err(AppError::Validation(
+                "attendee has not been checked in yet".into(),
+            ));
+        }
     }
 
     // 4. Quiz gate — must pass quiz before claiming (Issue 002)

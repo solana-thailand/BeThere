@@ -535,6 +535,49 @@ pub async fn mark_checked_in(
     Ok(timestamp)
 }
 
+/// Mark an online attendee as virtually checked in.
+/// Writes checked_in_at (column I) and checked_in_by="virtual" (column J).
+/// Does NOT overwrite claim_token (column R) — already set during registration.
+pub async fn mark_virtual_checked_in(
+    row_index: usize,
+    state: &AppState,
+    sheet_id: &str,
+    sheet_name: &str,
+    kv: Option<&KvStore>,
+) -> Result<String, String> {
+    let access_token = get_cached_access_token(state, kv).await?;
+    let timestamp = Utc::now().to_rfc3339();
+
+    let data = vec![
+        ValueRange {
+            range: format!("{sheet_name}!I{row_index}"),
+            values: vec![vec![timestamp.clone()]],
+        },
+        ValueRange {
+            range: format!("{sheet_name}!J{row_index}"),
+            values: vec![vec!["virtual".to_string()]],
+        },
+    ];
+
+    let url =
+        format!("https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values:batchUpdate");
+
+    let body = BatchUpdateRequest {
+        data,
+        value_input_option: "USER_ENTERED".to_string(),
+    };
+
+    batch_update_sheet(&url, &body, &access_token).await?;
+
+    tracing::info!(
+        row_index = row_index,
+        "marked row as virtually checked in (online attendee)"
+    );
+
+    invalidate_attendee_cache(kv, sheet_id, sheet_name).await;
+    Ok(timestamp)
+}
+
 /// Mark an attendee as claimed by writing wallet to column P and claimed_at to column S.
 /// Called after a successful cNFT mint to persist the claim on the Google Sheet.
 pub async fn mark_claimed(

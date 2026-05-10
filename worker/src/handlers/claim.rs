@@ -55,6 +55,7 @@ pub async fn get_claim(
         deposit_enabled: lookup.deposit_enabled,
         deposit_amount_usdc: lookup.deposit_amount_usdc,
         deposit_amount_thb: lookup.deposit_amount_thb,
+        participation_type: lookup.participation_type,
     };
 
     Ok(ApiOk::new(response))

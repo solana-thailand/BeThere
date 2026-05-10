@@ -116,6 +116,26 @@ fn simple_hash(s: &str) -> u32 {
     hash
 }
 
+/// Check if participation type indicates an online attendee.
+fn is_online_participant(participation_type: &str) -> bool {
+    let lower = participation_type.trim().to_lowercase();
+    lower.contains("online")
+}
+
+/// Build the appropriate label for check-in status.
+/// For online attendees without check-in: "Registered".
+/// For checked-in attendees: "Checked in {timestamp}".
+/// For others without check-in: "Not yet checked in".
+fn checked_in_label(checked_in_at: &str, participation_type: &str) -> String {
+    if checked_in_at.is_empty() || checked_in_at == "N/A" {
+        if is_online_participant(participation_type) {
+            return "Registered".to_string();
+        }
+        return "Not yet checked in".to_string();
+    }
+    format!("Checked in {}", format_timestamp(checked_in_at))
+}
+
 // ---------------------------------------------------------------------------
 // Progress Stepper
 // ---------------------------------------------------------------------------
@@ -667,7 +687,7 @@ fn QuizView(
     set_quiz_answers: WriteSignal<QuizAnswers>,
     set_state: WriteSignal<ClaimState>,
 ) -> impl IntoView {
-    let checked_in_display = format_timestamp(&claim_data.checked_in_at);
+    let checked_in_display = checked_in_label(&claim_data.checked_in_at, &claim_data.participation_type);
     let total_q = quiz_data.questions.len();
     let answered = move || quiz_answers.get().len();
     let all_answered = move || quiz_answers.get().len() == total_q;
@@ -688,7 +708,7 @@ fn QuizView(
             <div class="claim-welcome-card">
                 <ParticipantAvatar name=claim_data.name.clone() />
                 <h3>"Welcome, "{escape_html(&claim_data.name)}"!"</h3>
-                <p class="checked-in-label">"Checked in "{checked_in_display}</p>
+                <p class="checked-in-label">{checked_in_display}</p>
             </div>
 
             // Quiz intro card
@@ -769,7 +789,7 @@ fn QuizSubmittedView(
     set_wallet_input: WriteSignal<String>,
     set_state: WriteSignal<ClaimState>,
 ) -> impl IntoView {
-    let checked_in_display = format_timestamp(&claim_data.checked_in_at);
+    let checked_in_display = checked_in_label(&claim_data.checked_in_at, &claim_data.participation_type);
     let passed = submit_result.passed;
     let score = submit_result.score_percent;
     let remaining = submit_result.remaining_attempts;
@@ -865,7 +885,7 @@ fn QuizSubmittedView(
             <div class="claim-welcome-card">
                 <ParticipantAvatar name=claim_data.name.clone() />
                 <h3>"Welcome, "{escape_html(&claim_data.name)}"!"</h3>
-                <p class="checked-in-label">"Checked in "{checked_in_display}</p>
+                <p class="checked-in-label">{checked_in_display}</p>
             </div>
 
             // Quiz result card
@@ -1294,14 +1314,14 @@ pub fn Claim() -> impl IntoView {
 
                         // ---- NFT Coming Soon ----
                         ClaimState::NftComingSoon(data) => {
-                            let checked_in_display = format_timestamp(&data.checked_in_at);
+                            let checked_in_display = checked_in_label(&data.checked_in_at, &data.participation_type);
                             view! {
                                 <div class="claim-state-full">
                                     // Attendee welcome
                                     <div class="claim-welcome-card">
                                         <ParticipantAvatar name=data.name.clone() />
                                         <h3>"Welcome, "{escape_html(&data.name)}"!"</h3>
-                                        <p class="checked-in-label">"Checked in "{checked_in_display}</p>
+                                        <p class="checked-in-label">{checked_in_display}</p>
                                     </div>
 
                                     // NFT badge preview
@@ -1359,7 +1379,7 @@ pub fn Claim() -> impl IntoView {
 
                         // ---- Ready: show wallet input ----
                         ClaimState::Ready(data) => {
-                            let checked_in_display = format_timestamp(&data.checked_in_at);
+                            let checked_in_display = checked_in_label(&data.checked_in_at, &data.participation_type);
                             let locked_wallet = data.locked_wallet.clone();
                             let locked_wallet_hint = data.locked_wallet.clone();
                             view! {
@@ -1368,7 +1388,7 @@ pub fn Claim() -> impl IntoView {
                                     <div class="claim-welcome-card">
                                         <ParticipantAvatar name=data.name.clone() />
                                         <h3>"Welcome, "{escape_html(&data.name)}"!"</h3>
-                                        <p class="checked-in-label">"Checked in "{checked_in_display}</p>
+                                        <p class="checked-in-label">{checked_in_display}</p>
                                     </div>
 
                                     // NFT badge preview
