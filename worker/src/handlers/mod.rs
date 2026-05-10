@@ -29,6 +29,8 @@ pub fn routes(state: AppState) -> Router<()> {
         .route("/metadata/{event_id}", get(metadata::get_metadata))
         .route("/badge.svg", get(metadata::get_badge_svg))
         .route("/badge-hd.svg", get(metadata::get_badge_hd_svg))
+        // Public event list (no auth — landing page)
+        .route("/public/events", get(public_event::list_public_events))
         // Public event details (no auth)
         .route("/public/event/{slug}", get(public_event::get_public_event))
         // Auth routes (public)

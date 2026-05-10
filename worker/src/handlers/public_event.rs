@@ -8,6 +8,55 @@ use crate::error::ApiOk;
 use crate::state::AppState;
 use event_checkin_domain::models::error::AppError;
 
+/// `GET /api/public/events`
+///
+/// Returns a list of publicly visible events (Active or Completed only).
+/// Sensitive fields (sheet_id, organizer_wallet, staff_emails, etc.) are excluded.
+/// Used by the landing page to display upcoming events.
+#[worker::send]
+pub async fn list_public_events(
+    State(state): State<AppState>,
+) -> Result<ApiOk<Value>, crate::error::WorkerError> {
+    let kv = state
+        .events_kv
+        .as_ref()
+        .ok_or_else(|| AppError::Internal("events KV namespace not configured".into()))?;
+
+    let index = crate::event_store::get_event_index(kv)
+        .await
+        .map_err(AppError::Internal)?;
+
+    let public_events: Vec<Value> = index
+        .events
+        .into_iter()
+        .filter(|e| {
+            matches!(
+                e.status,
+                event_checkin_domain::models::event::EventStatus::Active
+                    | event_checkin_domain::models::event::EventStatus::Completed
+            )
+        })
+        .map(|e| {
+            json!({
+                "id": e.id,
+                "name": e.name,
+                "slug": e.slug,
+                "status": e.status.as_str(),
+                "event_start_ms": e.event_start_ms,
+                "event_end_ms": e.event_end_ms,
+                "deposit_enabled": e.deposit_enabled,
+                "created_at": e.created_at,
+            })
+        })
+        .collect();
+
+    tracing::info!(count = public_events.len(), "public events listed");
+
+    Ok(ApiOk::new(json!({
+        "events": public_events,
+    })))
+}
+
 /// `GET /api/public/event/{slug}`
 ///
 /// Returns publicly visible event details for a given slug.

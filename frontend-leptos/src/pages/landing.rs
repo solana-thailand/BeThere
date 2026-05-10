@@ -6,6 +6,7 @@
 
 use leptos::prelude::*;
 use leptos_router::components::A;
+use serde::Deserialize;
 
 /// Waitlist signup form component.
 #[component]
@@ -411,6 +412,125 @@ fn swimlane_mockup(role: SwimlaneRole, step: usize) -> impl IntoView {
     }
 }
 
+/// Lightweight event item from the public events API.
+#[derive(Clone, Deserialize)]
+struct PublicEventItem {
+    name: String,
+    slug: String,
+    event_start_ms: i64,
+    deposit_enabled: bool,
+}
+
+#[derive(Clone, Deserialize)]
+struct PublicEventsResponse {
+    events: Vec<PublicEventItem>,
+}
+
+/// Upcoming Events section — fetches active events and displays them.
+#[component]
+fn UpcomingEvents() -> impl IntoView {
+    let (events, set_events) = signal(Vec::<PublicEventItem>::new());
+    let (loaded, set_loaded) = signal(false);
+
+    // Fetch events on mount
+    Effect::new(move |_| {
+        leptos::task::spawn_local(async move {
+            let window = web_sys::window().expect("no window");
+            let origin = window
+                .location()
+                .origin()
+                .unwrap_or_else(|_| "http://localhost:8787".to_string());
+            let url = format!("{origin}/api/public/events");
+
+            match gloo::net::http::Request::get(&url).send().await {
+                Ok(resp) if resp.status() == 200 => {
+                    match resp.json::<PublicEventsResponse>().await {
+                        Ok(data) => {
+                            set_events.set(data.events);
+                        }
+                        Err(e) => {
+                            log::warn!("[landing] failed to parse events: {e}");
+                        }
+                    }
+                }
+                Ok(_) => {
+                    log::warn!("[landing] events API returned non-200");
+                }
+                Err(e) => {
+                    log::warn!("[landing] events fetch error: {e}");
+                }
+            }
+            set_loaded.set(true);
+        });
+    });
+
+    view! {
+        {move || {
+            let evts = events.get();
+            let is_loaded = loaded.get();
+            if !is_loaded {
+                // Still loading — show nothing (avoid layout shift)
+                view! { <div></div> }.into_any()
+            } else if evts.is_empty() {
+                // No events — show nothing
+                view! { <div></div> }.into_any()
+            } else {
+                view! {
+                    <section style="max-width:960px;margin:0 auto;padding:1rem 1.5rem 3rem;">
+                        <div style="text-align:center;margin-bottom:1.5rem;">
+                            <h2 style="font-size:1.5rem;font-weight:700;color:#fff;margin-bottom:0.5rem;">
+                                "🎉 Upcoming Events"
+                            </h2>
+                            <p style="color:var(--text-secondary);font-size:0.95rem;">
+                                "Reserve your spot with a deposit. Show up. Get refunded."
+                            </p>
+                        </div>
+                        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1rem;">
+                            {evts.into_iter().map(|evt| {
+                                let event_url = format!("/e/{}", evt.slug);
+                                let date_str = if evt.event_start_ms > 0 {
+                                    let d = js_sys::Date::new_with_year_month_day(0, 0, 0);
+                                    d.set_time(evt.event_start_ms as f64);
+                                    d.to_locale_string("en-US", &js_sys::Object::new()).as_string().unwrap_or_default()
+                                } else {
+                                    "TBA".to_string()
+                                };
+                                let deposit_badge = if evt.deposit_enabled {
+                                    "💰 Deposit required"
+                                } else {
+                                    "🎟️ Free entry"
+                                };
+                                view! {
+                                    <a
+                                        href=event_url
+                                        style="text-decoration:none;"
+                                        class="event-card-link"
+                                    >
+                                        <div
+                                            class="card event-card"
+                                            style="text-align:left;padding:1.25rem 1.5rem;"
+                                        >
+                                            <h3 style="font-size:1rem;font-weight:600;color:#fff;margin-bottom:0.35rem;">
+                                                {evt.name}
+                                            </h3>
+                                            <p style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:0.35rem;">
+                                                "📅 " {date_str}
+                                            </p>
+                                            <p style="font-size:0.8rem;color:var(--text-muted);">
+                                                {deposit_badge}
+                                            </p>
+                                        </div>
+                                    </a>
+                                }
+                            }).collect::<Vec<_>>()}
+                        </div>
+                    </section>
+                }.into_any()
+            }
+        }}
+    }
+}
+
 /// Landing page component.
 #[component]
 pub fn Landing() -> impl IntoView {
@@ -515,6 +635,9 @@ pub fn Landing() -> impl IntoView {
                     </A>
                 </div>
             </section>
+
+            // ===== Upcoming Events =====
+            <UpcomingEvents />
 
             // ===== Social Proof =====
             // Social proof — real users + CTA for organizers
