@@ -13,7 +13,7 @@
 use leptos::prelude::*;
 use wasm_bindgen::prelude::*;
 
-use crate::api::{self, AttendeeData, CheckInData};
+use crate::api::{self, AttendeeData, CheckInData, WalkinRegisterRequest};
 use crate::auth;
 use crate::components::{self, ToastType};
 use crate::utils;
@@ -61,13 +61,22 @@ extern "C" {
 }
 
 // ===== QR Code Generation JS Interop =====
-// Uses the QRious library (CDN-loaded in index.html) to generate QR code images
+// Uses the QRious library (lazy-loaded by lazy_assets.js) to generate QR code images
 // as base64 data URLs. The JS module at frontend-leptos/js/qr_generate.js provides:
-// - generateQrDataUrl(text, size) — returns base64 PNG data URL for a QR code
+// - preloadQrLibraries()        — async: loads jsQR + QRious from CDN (call on mount)
+// - generateQrDataUrl(text, size) — sync: returns base64 PNG data URL (null if not loaded)
 // - copyToClipboard(text)         — copies text to system clipboard
 
 #[wasm_bindgen(module = "/js/qr_generate.js")]
 extern "C" {
+    /// Preload jsQR and QRious libraries from CDN.
+    ///
+    /// Call this on component mount for pages that render QR codes.
+    /// Deduplicates — safe to call multiple times. Libraries load in parallel.
+    /// After resolution, `generate_qr_data_url` will return valid data URLs.
+    #[wasm_bindgen(js_name = "preloadQrLibraries")]
+    async fn preload_qr_libraries_js();
+
     /// Generate a QR code image as a base64 PNG data URL.
     ///
     /// Returns something like "data:image/png;base64,..." or null if
@@ -81,6 +90,90 @@ extern "C" {
     /// Returns true if the copy operation was initiated successfully.
     #[wasm_bindgen(js_name = "copyToClipboard")]
     fn copy_to_clipboard_js(text: &str) -> bool;
+}
+
+// ===== Solana Wallet JS Interop (for on-chain escrow check-in) =====
+
+#[wasm_bindgen(module = "/js/solana_wallet.js")]
+extern "C" {
+    /// Get a list of detected Solana wallet adapter names.
+    #[wasm_bindgen(js_name = "getDetectedWallets")]
+    fn get_detected_wallets_js() -> Vec<String>;
+
+    /// Connect to a Solana wallet and return the public key (base58).
+    #[wasm_bindgen(js_name = "connectWallet")]
+    fn connect_wallet_js_raw(wallet_name: &str) -> js_sys::Promise;
+
+    /// Sign and send a base64-encoded serialized transaction.
+    #[wasm_bindgen(js_name = "signAndSendTransaction")]
+    fn sign_and_send_tx_js_raw(wallet_name: &str, transaction_b64: &str) -> js_sys::Promise;
+}
+
+/// Async wrapper: connect to a Solana wallet and return the public key (base58).
+async fn connect_wallet_js(wallet_name: &str) -> Option<String> {
+    if wallet_name.is_empty() {
+        log::warn!("[wasm] connect_wallet_js: empty wallet name, returning None");
+        return None;
+    }
+    let promise = connect_wallet_js_raw(wallet_name);
+    match wasm_bindgen_futures::JsFuture::from(promise).await {
+        Ok(val) => {
+            if val.is_null() || val.is_undefined() { None } else { val.as_string() }
+        }
+        Err(e) => {
+            log::error!("[wasm] connect_wallet_js error: {:?}", e);
+            None
+        }
+    }
+}
+
+/// Async wrapper: sign and send a base64-encoded serialized transaction.
+async fn sign_and_send_tx_js(wallet_name: &str, transaction_b64: &str) -> Option<String> {
+    if wallet_name.is_empty() {
+        log::warn!("[wasm] sign_and_send_tx_js: empty wallet name, returning None");
+        return None;
+    }
+    let promise = sign_and_send_tx_js_raw(wallet_name, transaction_b64);
+    match wasm_bindgen_futures::JsFuture::from(promise).await {
+        Ok(val) => {
+            if val.is_null() || val.is_undefined() { None } else { val.as_string() }
+        }
+        Err(e) => {
+            log::error!("[wasm] sign_and_send_tx_js error: {:?}", e);
+            None
+        }
+    }
+}
+
+// ===== Haptic & Audio Feedback JS Interop =====
+// Uses Web Audio API + Vibration API for instant scan feedback.
+// The JS module at frontend-leptos/js/feedback.js provides:
+// - feedbackSuccess()  — short vibration + high beep
+// - feedbackWarning()  — double-pulse vibration + medium tone
+// - feedbackError()    — long vibration + low tone
+// - enableAudio()      — opt in to audio beeps
+// - disableAudio()     — opt out of audio beeps
+// - isAudioFeedbackEnabled() — check session preference
+
+#[wasm_bindgen(module = "/js/feedback.js")]
+extern "C" {
+    #[wasm_bindgen(js_name = "feedbackSuccess")]
+    fn feedback_success_js();
+
+    #[wasm_bindgen(js_name = "feedbackWarning")]
+    fn feedback_warning_js();
+
+    #[wasm_bindgen(js_name = "feedbackError")]
+    fn feedback_error_js();
+
+    #[wasm_bindgen(js_name = "enableAudio")]
+    fn enable_audio_js();
+
+    #[wasm_bindgen(js_name = "disableAudio")]
+    fn disable_audio_js();
+
+    #[wasm_bindgen(js_name = "isAudioFeedbackEnabled")]
+    fn is_audio_enabled_js() -> bool;
 }
 
 // ===== State Types =====
@@ -108,6 +201,45 @@ enum CheckInState {
     Success(Box<CheckInData>),
     /// An error occurred at any step.
     Error,
+    // --- Escrow on-chain check-in states (after off-chain Success) ---
+    /// Organizer choosing which wallet to connect for on-chain check-in.
+    EscrowChooseWallet {
+        check_in_data: Box<CheckInData>,
+        attendee_id: String,
+        event_id: String,
+    },
+    /// Organizer wallet connected, ready to sign on-chain TX.
+    EscrowWalletConnected {
+        check_in_data: Box<CheckInData>,
+        attendee_id: String,
+        event_id: String,
+        wallet_name: String,
+        public_key: String,
+    },
+    /// On-chain TX being signed/sent.
+    EscrowSigning {
+        wallet_name: String,
+    },
+    /// On-chain check-in confirmed.
+    EscrowConfirmed {
+        check_in_data: Box<CheckInData>,
+        signature: String,
+    },
+    /// On-chain check-in failed.
+    EscrowError {
+        check_in_data: Box<CheckInData>,
+        message: String,
+    },
+    // --- Walk-in registration states ---
+    /// Walk-in registration form is displayed.
+    WalkinForm,
+    /// Walk-in registration request in progress.
+    WalkinRegistering,
+    /// Walk-in registration succeeded — show claim QR to attendee.
+    WalkinSuccess {
+        claim_url: String,
+        name: String,
+    },
 }
 
 
@@ -141,6 +273,25 @@ pub fn Scanner() -> impl IntoView {
     // Incremented on reset to restart the polling loop without leaving the tab.
     let (scan_round, set_scan_round) = signal(0u32);
     let (flash_enabled, set_flash_enabled) = signal(true);
+    let (audio_enabled, set_audio_enabled) = signal(is_audio_enabled_js());
+
+    // Wallet detection — pre-poll on mount like events_page.rs.
+    // Phantom injects async after page load; a single sync call returns [].
+    let (detected_wallets, set_detected_wallets) = signal(Vec::<String>::new());
+    leptos::task::spawn_local(async move {
+        let mut wallets = get_detected_wallets_js();
+        if wallets.is_empty() {
+            for _ in 0..10 {
+                gloo::timers::future::TimeoutFuture::new(300).await;
+                wallets = get_detected_wallets_js();
+                if !wallets.is_empty() {
+                    break;
+                }
+            }
+        }
+        log::info!("[scanner] detected wallets: {:?}", wallets);
+        set_detected_wallets.set(wallets);
+    });
 
     // Session tracking signals
     let (session_total, set_session_total) = signal(0u32);
@@ -153,6 +304,14 @@ pub fn Scanner() -> impl IntoView {
     on_cleanup(move || {
         log::info!("[scanner] component unmounting — stopping camera");
         stop_camera_js();
+    });
+
+    // Preload jsQR + QRious libraries on mount.
+    // startCamera() also awaits them, but preloading here ensures they're
+    // ready by the time the claim QR card needs QRious after check-in.
+    leptos::task::spawn_local(async {
+        preload_qr_libraries_js().await;
+        log::info!("[scanner] QR libraries preloaded");
     });
 
     // Camera lifecycle: start when Idle, stop when showing results.
@@ -269,11 +428,13 @@ pub fn Scanner() -> impl IntoView {
             let set_t = set_toast;
             let set_s_success = set_session_success;
             leptos::task::spawn_local(async move {
-                match api::check_in(&id, None).await {
+                match api::check_in(&id, None, false).await {
                     Ok(result) => {
                         log::info!("[scanner] check-in successful: {}", result.name);
+                        feedback_success_js(); // Success — vibration + beep
                         set_state.set(CheckInState::Success(Box::new(result)));
                         set_s_success.update(|c| *c += 1);
+                        api::invalidate_attendee_cache();
                         components::show_toast(
                             &set_t,
                             &format!("{name} checked in successfully!"),
@@ -282,10 +443,54 @@ pub fn Scanner() -> impl IntoView {
                     }
                     Err(err) => {
                         log::error!("[scanner] check-in failed: {err}");
+                        feedback_error_js(); // Check-in failed — error tone
                         set_state.set(CheckInState::Error);
                         components::show_toast(
                             &set_t,
                             "Check-in failed. Please try again.",
+                            ToastType::Error,
+                        );
+                    }
+                }
+            });
+        }
+    };
+
+    // Handle virtual check-in for online attendees (hybrid events).
+    // Uses ?online=true to bypass the in-person check on the backend.
+    let handle_online_check_in = move |_: web_sys::MouseEvent| {
+        let state = check_in_state.get();
+        if let CheckInState::NotInPerson(data) = &state {
+            let id = data.attendee.api_id.clone();
+            let name = data.attendee.name.clone();
+            set_check_in_state.set(CheckInState::CheckingIn {
+                name: name.clone(),
+                _id: id.clone(),
+            });
+            let set_state = set_check_in_state;
+            let set_t = set_toast;
+            let set_s_success = set_session_success;
+            leptos::task::spawn_local(async move {
+                match api::check_in(&id, None, true).await {
+                    Ok(result) => {
+                        log::info!("[scanner] virtual check-in successful: {}", result.name);
+                        feedback_success_js();
+                        set_state.set(CheckInState::Success(Box::new(result)));
+                        set_s_success.update(|c| *c += 1);
+                        api::invalidate_attendee_cache();
+                        components::show_toast(
+                            &set_t,
+                            &format!("{name} virtually checked in!"),
+                            ToastType::Success,
+                        );
+                    }
+                    Err(err) => {
+                        log::error!("[scanner] virtual check-in failed: {err}");
+                        feedback_error_js();
+                        set_state.set(CheckInState::Error);
+                        components::show_toast(
+                            &set_t,
+                            "Virtual check-in failed. Please try again.",
                             ToastType::Error,
                         );
                     }
@@ -305,6 +510,274 @@ pub fn Scanner() -> impl IntoView {
         set_manual_input.set(String::new());
         set_manual_mode.set(false);
         set_scan_round.update(|r| *r += 1);
+    };
+
+    // ===== Escrow on-chain check-in state =====
+
+    // Load event config on mount to determine escrow status.
+    // We load the events list, pick the first one, then load its detail.
+    let (escrow_event_id, set_escrow_event_id) = signal(None::<String>);
+    let (escrow_enabled, set_escrow_enabled) = signal(false);
+
+    Effect::new(move |_| {
+        let set_eid = set_escrow_event_id;
+        let set_ee = set_escrow_enabled;
+        leptos::task::spawn_local(async move {
+            // Load events list
+            let events = match api::list_events().await {
+                Ok(data) => data.events,
+                Err(e) => {
+                    log::warn!("[scanner] failed to load events for escrow check: {e}");
+                    return;
+                }
+            };
+            // Pick the first active event
+            let first = match events.first() {
+                Some(e) => e,
+                None => return,
+            };
+            let event_id = first.id.clone();
+            // Load event detail to check escrow status
+            match api::get_event_detail(&event_id).await {
+                Ok(detail) => {
+                    let enabled = detail.event.deposit_enabled
+                        && !detail.event.escrow_address.is_empty();
+                    log::info!(
+                        "[scanner] event '{}' escrow_enabled={}",
+                        event_id,
+                        enabled
+                    );
+                    set_eid.set(Some(event_id));
+                    set_ee.set(enabled);
+                }
+                Err(e) => {
+                    log::warn!("[scanner] failed to load event detail: {e}");
+                }
+            }
+        });
+    });
+
+    // Handler: start escrow check-in (from Success state)
+    let handle_escrow_check_in = move |_: web_sys::MouseEvent| {
+        let state = check_in_state.get();
+        if let CheckInState::Success(data) = &state {
+            let attendee_id = data.api_id.clone();
+            let event_id = escrow_event_id.get().unwrap_or_default();
+            if event_id.is_empty() {
+                components::show_toast(
+                    &set_toast,
+                    "No event selected for on-chain check-in",
+                    ToastType::Warning,
+                );
+                return;
+            }
+            set_check_in_state.set(CheckInState::EscrowChooseWallet {
+                check_in_data: Box::new(data.as_ref().clone()),
+                attendee_id,
+                event_id,
+            });
+        }
+    };
+
+    // Handler: connect organizer wallet (from EscrowChooseWallet state)
+    let handle_escrow_wallet_connect = move |wallet_name: String| {
+        let state = check_in_state.get();
+        if let CheckInState::EscrowChooseWallet { check_in_data, attendee_id, event_id } = &state {
+            let check_in_data = check_in_data.clone();
+            let attendee_id = attendee_id.clone();
+            let event_id = event_id.clone();
+            let wn = wallet_name.clone();
+            let set_state = set_check_in_state;
+            let set_t = set_toast;
+            leptos::task::spawn_local(async move {
+                match connect_wallet_js(&wn).await {
+                    Some(pk) => {
+                        log::info!("[scanner] organizer wallet connected: {} ({})", wn, pk);
+                        set_state.set(CheckInState::EscrowWalletConnected {
+                            check_in_data,
+                            attendee_id,
+                            event_id,
+                            wallet_name: wn,
+                            public_key: pk,
+                        });
+                    }
+                    None => {
+                        components::show_toast(
+                            &set_t,
+                            "Failed to connect wallet",
+                            ToastType::Error,
+                        );
+                    }
+                }
+            });
+        }
+    };
+
+    // Handler: sign and send on-chain mark_checked_in TX
+    let handle_escrow_sign = move |_: web_sys::MouseEvent| {
+        let state = check_in_state.get();
+        if let CheckInState::EscrowWalletConnected {
+            check_in_data,
+            attendee_id,
+            event_id,
+            wallet_name,
+            public_key: _,
+        } = &state
+        {
+            let attendee_id = attendee_id.clone();
+            let event_id = event_id.clone();
+            let wallet_name = wallet_name.clone();
+            let check_in_data = check_in_data.clone();
+            let set_state = set_check_in_state;
+            let set_t = set_toast;
+
+            set_state.set(CheckInState::EscrowSigning {
+                wallet_name: wallet_name.clone(),
+            });
+
+            leptos::task::spawn_local(async move {
+                // Step 1: Build mark_checked_in TX
+                let body = api::MarkCheckedInRequest {
+                    event_id: event_id.clone(),
+                    attendee_id: attendee_id.clone(),
+                };
+                let tx_resp = match api::mark_checked_in(&body).await {
+                    Ok(r) => r,
+                    Err(e) => {
+                        log::error!("[scanner] mark_checked_in API failed: {e}");
+                        set_state.set(CheckInState::EscrowError {
+                            check_in_data,
+                            message: format!("API error: {e}"),
+                        });
+                        return;
+                    }
+                };
+
+                // SEC-014: Verify wallet cluster matches expected network.
+                let expected_cluster = crate::utils::get_cluster();
+                if let Err(cluster_err) = crate::pages::escrow_init::check_wallet_cluster(&wallet_name, &expected_cluster).await {
+                    log::error!("[scanner] cluster mismatch: {cluster_err}");
+                    set_state.set(CheckInState::EscrowError {
+                        check_in_data,
+                        message: cluster_err,
+                    });
+                    return;
+                }
+
+                // Step 2: Sign and send the TX via the wallet
+                match sign_and_send_tx_js(&wallet_name, &tx_resp.transaction).await {
+                    Some(signature) => {
+                        log::info!("[scanner] on-chain check-in TX sent: {}", signature);
+                        feedback_success_js(); // On-chain confirmed — vibration + beep
+                        set_state.set(CheckInState::EscrowConfirmed {
+                            check_in_data,
+                            signature,
+                        });
+                        components::show_toast(
+                            &set_t,
+                            "On-chain check-in confirmed!",
+                            ToastType::Success,
+                        );
+                    }
+                    None => {
+                        log::error!("[scanner] wallet sign+send failed for on-chain check-in");
+                        set_state.set(CheckInState::EscrowError {
+                            check_in_data,
+                            message: "Transaction rejected or failed".to_string(),
+                        });
+                    }
+                }
+            });
+        }
+    };
+
+    // ===== Walk-in registration =====
+
+    // Walk-in form signals
+    let (walkin_name, set_walkin_name) = signal(String::new());
+    let (walkin_email, set_walkin_email) = signal(String::new());
+    let (walkin_phone, set_walkin_phone) = signal(String::new());
+
+    // Handler: open walk-in form
+    let handle_walkin_open = move |_: web_sys::MouseEvent| {
+        set_walkin_name.set(String::new());
+        set_walkin_email.set(String::new());
+        set_walkin_phone.set(String::new());
+        set_check_in_state.set(CheckInState::WalkinForm);
+    };
+
+    // Handler: cancel walk-in form → back to Idle
+    let handle_walkin_cancel = move |_: web_sys::MouseEvent| {
+        set_check_in_state.set(CheckInState::Idle);
+        set_scan_round.update(|r| *r += 1);
+    };
+
+    // Handler: submit walk-in registration
+    let handle_walkin_submit = move |ev: leptos::ev::SubmitEvent| {
+        ev.prevent_default();
+        let name = walkin_name.get().trim().to_string();
+        let email = walkin_email.get().trim().to_string();
+        let phone = walkin_phone.get().trim().to_string();
+
+        if name.is_empty() || email.is_empty() {
+            components::show_toast(
+                &set_toast,
+                "Name and email are required",
+                ToastType::Warning,
+            );
+            return;
+        }
+
+        let event_id = match escrow_event_id.get() {
+            Some(eid) if !eid.is_empty() => eid,
+            _ => {
+                components::show_toast(
+                    &set_toast,
+                    "No event selected. Select an event first.",
+                    ToastType::Warning,
+                );
+                return;
+            }
+        };
+
+        set_check_in_state.set(CheckInState::WalkinRegistering);
+
+        let set_state = set_check_in_state;
+        let set_t = set_toast;
+        let name_for_callback = name.clone();
+
+        leptos::task::spawn_local(async move {
+            let req = WalkinRegisterRequest {
+                event_id,
+                name: name.clone(),
+                email: email.clone(),
+                phone: if phone.is_empty() { None } else { Some(phone) },
+            };
+            match api::register_walkin(&req).await {
+                Ok(resp) => {
+                        log::info!("[scanner] walk-in registered: {}", resp.claim_url);
+                        feedback_success_js(); // Walk-in registered — vibration + beep
+                        set_state.set(CheckInState::WalkinSuccess {
+                        claim_url: resp.claim_url,
+                        name: name_for_callback,
+                    });
+                    components::show_toast(
+                        &set_t,
+                        "Walk-in attendee registered!",
+                        ToastType::Success,
+                    );
+                }
+                Err(err) => {
+                    log::error!("[scanner] walk-in register failed: {err}");
+                    set_state.set(CheckInState::WalkinForm);
+                    components::show_toast(
+                        &set_t,
+                        &format!("Registration failed: {err}"),
+                        ToastType::Error,
+                    );
+                }
+            }
+        });
     };
 
     // Handle sign out
@@ -380,10 +853,164 @@ pub fn Scanner() -> impl IntoView {
             >
                 <div class="scanner-result-overlay">
                     <div class="scanner-glass-card">
-                        {move || {
-                            let state = check_in_state.get();
-                            render_check_in_state(state, handle_check_in, handle_reset)
-                        }}
+                        // Walk-in registration form
+                        <Show
+                            when=move || matches!(check_in_state.get(), CheckInState::WalkinForm)
+                            fallback=|| view! { <div></div> }
+                        >
+                            <div>
+                                <div class="scanner-state-header">
+                                    <h2>"Register Walk-in Attendee"</h2>
+                                </div>
+                                <form on:submit=handle_walkin_submit>
+                                    <div style="display:flex;flex-direction:column;gap:0.75rem;">
+                                        <div>
+                                            <label style="display:block;font-size:0.85rem;margin-bottom:0.25rem;color:var(--muted);">"Name *"</label>
+                                            <input
+                                                type="text"
+                                                class="manual-input"
+                                                style="width:100%;"
+                                                placeholder="Attendee name"
+                                                required=true
+                                                prop:value=move || walkin_name.get()
+                                                on:input=move |ev| set_walkin_name.set(event_target_value(&ev))
+                                            />
+                                        </div>
+                                        <div>
+                                            <label style="display:block;font-size:0.85rem;margin-bottom:0.25rem;color:var(--muted);">"Email *"</label>
+                                            <input
+                                                type="email"
+                                                class="manual-input"
+                                                style="width:100%;"
+                                                placeholder="attendee@email.com"
+                                                required=true
+                                                prop:value=move || walkin_email.get()
+                                                on:input=move |ev| set_walkin_email.set(event_target_value(&ev))
+                                            />
+                                        </div>
+                                        <div>
+                                            <label style="display:block;font-size:0.85rem;margin-bottom:0.25rem;color:var(--muted);">"Phone (optional)"</label>
+                                            <input
+                                                type="tel"
+                                                class="manual-input"
+                                                style="width:100%;"
+                                                placeholder="+66..."
+                                                prop:value=move || walkin_phone.get()
+                                                on:input=move |ev| set_walkin_phone.set(event_target_value(&ev))
+                                            />
+                                        </div>
+                                    </div>
+                                    <button
+                                        class="btn btn-success btn-block"
+                                        type="submit"
+                                        style="margin-top:1rem;"
+                                    >
+                                        "Register"
+                                    </button>
+                                    <button
+                                        class="btn btn-outline btn-block"
+                                        type="button"
+                                        style="margin-top:0.5rem;"
+                                        on:click=handle_walkin_cancel
+                                    >
+                                        "Cancel"
+                                    </button>
+                                </form>
+                            </div>
+                        </Show>
+                        // Walk-in registering spinner
+                        <Show
+                            when=move || matches!(check_in_state.get(), CheckInState::WalkinRegistering)
+                            fallback=|| view! { <div></div> }
+                        >
+                            <div class="scanner-state-loading">
+                                <div class="page-loading">
+                                    <span class="spinner spinner-lg"></span>
+                                    <span>"Registering walk-in..."</span>
+                                </div>
+                            </div>
+                        </Show>
+                        // Walk-in success — show claim QR
+                        <Show
+                            when=move || matches!(check_in_state.get(), CheckInState::WalkinSuccess { .. })
+                            fallback=|| view! { <div></div> }
+                        >
+                            {move || {
+                                let state = check_in_state.get();
+                                match state {
+                                    CheckInState::WalkinSuccess { ref claim_url, ref name } => {
+                                        let qr_data_url = generate_qr_data_url(claim_url, 240);
+                                        let claim_url_for_display = claim_url.clone();
+                                        let name_clone = name.clone();
+                                        view! {
+                                            <div>
+                                                <div class="result-success">
+                                                    <div class="success-check">
+                                                        <svg viewBox="0 0 24 24">
+                                                            <polyline points="20 6 9 17 4 12"></polyline>
+                                                        </svg>
+                                                    </div>
+                                                    <h2 class="claim-success-title">"Walk-in Registered!"</h2>
+                                                    <div class="result-details">
+                                                        <p class="scanner-attendee-name">{name_clone}</p>
+                                                    </div>
+                                                </div>
+                                                {move || {
+                                                    let url = claim_url_for_display.clone();
+                                                    match &qr_data_url {
+                                                        Some(img_src) => {
+                                                            view! {
+                                                                <ClaimQrCard
+                                                                    qr_src=img_src.clone()
+                                                                    claim_url=url
+                                                                    label="Show this QR to the attendee:"
+                                                                />
+                                                            }
+                                                                .into_any()
+                                                        }
+                                                        None => view! { <div></div> }.into_any(),
+                                                    }
+                                                }}
+                                                <button
+                                                    class="btn btn-success btn-block"
+                                                    style="margin-top:0.5rem;"
+                                                    on:click=handle_reset
+                                                >
+                                                    "Scan Another"
+                                                </button>
+                                            </div>
+                                        }
+                                            .into_any()
+                                    }
+                                    _ => view! { <div></div> }.into_any(),
+                                }
+                            }}
+                        </Show>
+                        // Non-walk-in states: delegate to render_check_in_state
+                        <Show
+                            when=move || !matches!(
+                                check_in_state.get(),
+                                CheckInState::WalkinForm
+                                    | CheckInState::WalkinRegistering
+                                    | CheckInState::WalkinSuccess { .. }
+                            )
+                            fallback=|| view! { <div></div> }
+                        >
+                            {move || {
+                                let state = check_in_state.get();
+                                render_check_in_state(
+                                    state,
+                                    handle_check_in,
+                                    handle_reset,
+                                    handle_escrow_check_in,
+                                    handle_escrow_wallet_connect,
+                                    handle_escrow_sign,
+                                    escrow_enabled.get(),
+                                    detected_wallets.get(),
+                                    handle_online_check_in,
+                                )
+                            }}
+                        </Show>
                     </div>
                 </div>
             </Show>
@@ -427,6 +1054,23 @@ pub fn Scanner() -> impl IntoView {
                             >
                                 "⚡"
                                 {move || if flash_enabled.get() { " Flash On" } else { " Flash Off" }}
+                            </button>
+                            <button
+                                class="scanner-manual-toggle"
+                                style=move || if audio_enabled.get() { "color:var(--accent);" } else { "" }
+                                on:click=move |_| {
+                                    let new_val = !audio_enabled.get();
+                                    if new_val {
+                                        enable_audio_js();
+                                    } else {
+                                        disable_audio_js();
+                                    }
+                                    set_audio_enabled.set(new_val);
+                                }
+                                title="Toggle scan audio feedback"
+                            >
+                                "🔊"
+                                {move || if audio_enabled.get() { " Sound On" } else { " Sound Off" }}
                             </button>
                         </div>
                     </div>
@@ -481,6 +1125,15 @@ pub fn Scanner() -> impl IntoView {
                             </form>
                         </div>
                     </Show>
+                    // Register Walk-in button
+                    <div style="margin-top:0.75rem;padding:0 0.25rem;">
+                        <button
+                            class="btn btn-primary btn-block"
+                            on:click=handle_walkin_open
+                        >
+                            "Register Walk-in Attendee"
+                        </button>
+                    </div>
                 </div>
             </Show>
 
@@ -511,17 +1164,22 @@ fn process_attendee_id(
         match api::get_attendee(&attendee_id, None).await {
             Ok(data) => {
                 if data.is_checked_in {
+                    feedback_warning_js(); // Already checked in — warning tone
                     set_state.set(CheckInState::AlreadyCheckedIn(Box::new(data)));
                 } else if !data.is_approved {
+                    feedback_error_js(); // Not approved — error tone
                     set_state.set(CheckInState::NotApproved(Box::new(data)));
                 } else if !data.is_in_person {
+                    feedback_warning_js(); // Not in-person — warning tone
                     set_state.set(CheckInState::NotInPerson(Box::new(data)));
                 } else {
+                    // Found — no feedback yet (wait for actual check-in confirmation)
                     set_state.set(CheckInState::Found(Box::new(data)));
                 }
             }
             Err(err) => {
                 log::warn!("[scanner] attendee lookup failed for id={attendee_id}: {err}");
+                feedback_error_js(); // Not found — error tone
                 set_state.set(CheckInState::NotFound);
                 components::show_toast(&set_toast, "Attendee not found", ToastType::Error);
             }
@@ -605,11 +1263,23 @@ fn AttendeeInfoCard(name: String, email: String) -> impl IntoView {
 // ===== State View Rendering =====
 
 /// Render the current check-in state as a view.
-fn render_check_in_state(
+fn render_check_in_state<E1, E2, E3, E4>(
     state: CheckInState,
     on_check_in: impl Fn(web_sys::MouseEvent) + 'static,
-    on_reset: impl Fn(web_sys::MouseEvent) + 'static,
-) -> AnyView {
+    on_reset: impl Fn(web_sys::MouseEvent) + Clone + 'static,
+    on_escrow_check_in: E1,
+    on_escrow_wallet_connect: E2,
+    on_escrow_sign: E3,
+    escrow_enabled: bool,
+    wallets: Vec<String>,
+    on_online_check_in: E4,
+) -> AnyView
+where
+    E1: Fn(web_sys::MouseEvent) + Clone + 'static,
+    E2: Fn(String) + Clone + 'static,
+    E3: Fn(web_sys::MouseEvent) + Clone + 'static,
+    E4: Fn(web_sys::MouseEvent) + Clone + 'static,
+{
     match state {
         CheckInState::Idle => view! { <div></div> }.into_any(),
         CheckInState::LookingUp => view! {
@@ -734,16 +1404,27 @@ fn render_check_in_state(
             let name = data.attendee.name.clone();
             let email = data.attendee.email.clone();
             let badge = utils::get_participation_badge(&data.participation_type);
+            let on_online = on_online_check_in.clone();
             view! {
                 <div>
                     <div class="result-warning">
-                        <h2>"Not In-Person"</h2>
+                        <h2>"Online Attendee"</h2>
                         <AttendeeInfoCard name=name email=email />
                         <div class="scanner-attendee-badges">
                             <span class=format!("badge badge-pill {}", badge.css_class)>{badge.label}</span>
                         </div>
+                        <p class="scanner-hint" style="margin-top:0.75rem;">
+                            "This attendee registered for the online track. You can perform a virtual check-in to generate their claim link."
+                        </p>
                     </div>
-                    <button class="btn btn-outline btn-block" style="margin-top:1rem;" on:click=on_reset>
+                    <button
+                        class="btn btn-primary btn-block"
+                        style="margin-top:1rem;"
+                        on:click=on_online
+                    >
+                        "🌐 Virtual Check-In"
+                    </button>
+                    <button class="btn btn-outline btn-block" style="margin-top:0.5rem;" on:click=on_reset>
                         "Scan Another"
                     </button>
                 </div>
@@ -794,6 +1475,7 @@ fn render_check_in_state(
                 .as_ref()
                 .and_then(|url| generate_qr_data_url(url, 240));
             let claim_url_for_display = claim_url.clone();
+            let show_escrow = escrow_enabled;
             view! {
                 <div>
                     <div class="result-success">
@@ -826,7 +1508,22 @@ fn render_check_in_state(
                         }
                     }}
 
-                    <button class="btn btn-success btn-block" style="margin-top:1rem;" on:click=on_reset>
+                    // On-chain escrow check-in button (if event has escrow enabled)
+                    {if show_escrow {
+                        view! {
+                            <button
+                                class="btn btn-outline btn-block"
+                                style="margin-top:0.75rem;border-color:var(--accent);color:var(--accent);"
+                                on:click=on_escrow_check_in
+                            >
+                                "⛓ Mark Checked In On-Chain"
+                            </button>
+                        }.into_any()
+                    } else {
+                        view! { <div></div> }.into_any()
+                    }}
+
+                    <button class="btn btn-success btn-block" style="margin-top:0.5rem;" on:click=on_reset>
                         "Scan Next"
                     </button>
                 </div>
@@ -851,5 +1548,174 @@ fn render_check_in_state(
             </div>
         }
         .into_any(),
+
+        // --- Escrow on-chain check-in states ---
+        CheckInState::EscrowChooseWallet { check_in_data, .. } => {
+            let name = check_in_data.name.clone();
+            view! {
+                <div>
+                    <div class="result-success">
+                        <div class="success-check">
+                            <svg viewBox="0 0 24 24">
+                                <polyline points="20 6 9 17 4 12"></polyline>
+                            </svg>
+                        </div>
+                        <h2>"On-Chain Check-In"</h2>
+                        <div class="result-details">
+                            <p class="scanner-attendee-name">{name}</p>
+                            <p>"Connect your organizer wallet to record check-in on Solana."</p>
+                        </div>
+                    </div>
+
+                    <div style="margin-top:1rem;">
+                        {if wallets.is_empty() {
+                            view! {
+                                <div class="result-warning" style="padding:0.75rem;">
+                                    <p style="margin:0;">"No Solana wallet detected. Install Phantom or Solflare."</p>
+                                </div>
+                            }
+                                .into_any()
+                        } else {
+                            let cb = on_escrow_wallet_connect.clone();
+                            wallets
+                                .into_iter()
+                                .map(move |w| {
+                                    let w_clone = w.clone();
+                                    let cb = cb.clone();
+                                    view! {
+                                        <button
+                                            class="btn btn-outline btn-block"
+                                            style="margin-bottom:0.5rem;border-color:var(--accent);color:var(--accent);"
+                                            on:click=move |_| cb(w_clone.clone())
+                                        >
+                                            {format!("Connect {}", w)}
+                                        </button>
+                                    }
+                                })
+                                .collect::<Vec<_>>()
+                                .into_any()
+                        }}
+                    </div>
+
+                    <button class="btn btn-outline btn-block" style="margin-top:0.5rem;" on:click=on_reset>
+                        "Skip & Scan Next"
+                    </button>
+                </div>
+            }
+            .into_any()
+        }
+        CheckInState::EscrowWalletConnected { check_in_data, wallet_name, public_key, .. } => {
+            let name = check_in_data.name.clone();
+            let short_pk = if public_key.len() > 8 {
+                format!("{}...{}", &public_key[..4], &public_key[public_key.len()-4..])
+            } else {
+                public_key.clone()
+            };
+            let wallet_label = wallet_name.clone();
+            view! {
+                <div>
+                    <div class="result-success">
+                        <div class="success-check">
+                            <svg viewBox="0 0 24 24">
+                                <polyline points="20 6 9 17 4 12"></polyline>
+                            </svg>
+                        </div>
+                        <h2>"Ready to Sign"</h2>
+                        <div class="result-details">
+                            <p class="scanner-attendee-name">{name}</p>
+                            <p>
+                                <span style="color:var(--muted);">{format!("{} ({})", wallet_label, short_pk)}</span>
+                            </p>
+                        </div>
+                    </div>
+
+                    <button
+                        class="btn btn-primary btn-block"
+                        style="margin-top:1rem;"
+                        on:click=on_escrow_sign
+                    >
+                        "⛓ Sign On-Chain Check-In"
+                    </button>
+
+                    <button class="btn btn-outline btn-block" style="margin-top:0.5rem;" on:click=on_reset>
+                        "Skip & Scan Next"
+                    </button>
+                </div>
+            }
+            .into_any()
+        }
+        CheckInState::EscrowSigning { wallet_name } => view! {
+            <div class="scanner-state-loading">
+                <div class="page-loading">
+                    <span class="spinner spinner-lg"></span>
+                    <span>{format!("Waiting for {} to approve...", wallet_name)}</span>
+                </div>
+            </div>
+        }
+        .into_any(),
+        CheckInState::EscrowConfirmed { check_in_data, signature } => {
+            let name = check_in_data.name.clone();
+            let short_sig = if signature.len() > 16 {
+                format!("{}...{}", &signature[..8], &signature[signature.len()-8..])
+            } else {
+                signature.clone()
+            };
+            view! {
+                <div>
+                    <div class="result-success">
+                        <div class="success-check">
+                            <svg viewBox="0 0 24 24">
+                                <polyline points="20 6 9 17 4 12"></polyline>
+                            </svg>
+                        </div>
+                        <h2>"On-Chain Check-In Confirmed!"</h2>
+                        <div class="result-details">
+                            <p class="scanner-attendee-name">{name}</p>
+                            <p style="font-size:0.8rem;color:var(--muted);word-break:break-all;">
+                                {format!("TX: {}", short_sig)}
+                            </p>
+                            <a
+                                href={utils::solscan_tx_url(&signature, &utils::get_cluster())}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style="font-size:0.8rem;color:var(--accent);"
+                            >
+                                "View on Solscan ↗"
+                            </a>
+                        </div>
+                    </div>
+
+                    <button class="btn btn-success btn-block" style="margin-top:1rem;" on:click=on_reset>
+                        "Scan Next"
+                    </button>
+                </div>
+            }
+            .into_any()
+        }
+        CheckInState::EscrowError { check_in_data, message } => {
+            let name = check_in_data.name.clone();
+            view! {
+                <div>
+                    <div class="result-error">
+                        <h2>"On-Chain Check-In Failed"</h2>
+                        <div class="result-details">
+                            <p class="scanner-attendee-name">{name}</p>
+                            <p style="font-size:0.85rem;color:var(--warning);">
+                                {message}
+                            </p>
+                        </div>
+                    </div>
+
+                    <button class="btn btn-outline btn-block" style="margin-top:1rem;" on:click=on_reset>
+                        "Skip & Scan Next"
+                    </button>
+                </div>
+            }
+            .into_any()
+        }
+        // Walk-in states are rendered directly in the view; these arms should not be reached.
+        CheckInState::WalkinForm => view! { <div></div> }.into_any(),
+        CheckInState::WalkinRegistering => view! { <div></div> }.into_any(),
+        CheckInState::WalkinSuccess { .. } => view! { <div></div> }.into_any(),
     }
 }

@@ -1,5 +1,68 @@
 //! Shared utility functions extracted from scanner and admin pages.
 
+use std::cell::RefCell;
+
+// ---------------------------------------------------------------------------
+// SEC-005: Cluster-aware Solana explorer URLs
+// ---------------------------------------------------------------------------
+
+thread_local! {
+    // Cached cluster string fetched from `/api/health`.
+    // None = not yet fetched; Some("devnet") or Some("mainnet-beta").
+    static CACHED_CLUSTER: RefCell<Option<String>> = RefCell::new(None);
+}
+
+/// Fetch the Solana cluster from `/api/health` and cache it.
+/// Returns "devnet" as fallback if the fetch fails.
+pub async fn fetch_cluster() -> String {
+    let window = web_sys::window().expect("no window");
+    let origin = window.location().origin().unwrap_or_else(|_| "http://localhost:8787".to_string());
+    let url = format!("{origin}/api/health");
+
+    let cluster = async {
+        let resp = gloo::net::http::Request::get(&url).send().await.ok()?;
+        let body = resp.text().await.ok()?;
+        let val: serde_json::Value = serde_json::from_str(&body).ok()?;
+        val.get("cluster")?.as_str().map(String::from)
+    }
+    .await
+    .unwrap_or_else(|| "devnet".to_string());
+
+    CACHED_CLUSTER.with(|c| *c.borrow_mut() = Some(cluster.clone()));
+
+    cluster
+}
+
+/// Get the cached cluster, or "devnet" as fallback.
+/// Call `fetch_cluster()` first (in `spawn_local`) before using this.
+pub fn get_cluster() -> String {
+    CACHED_CLUSTER.with(|c| {
+        c.borrow()
+            .clone()
+            .unwrap_or_else(|| "devnet".to_string())
+    })
+}
+
+/// Build a cluster-aware Solscan transaction URL.
+pub fn solscan_tx_url(signature: &str, cluster: &str) -> String {
+    let cluster_param = if cluster == "mainnet-beta" {
+        String::new()
+    } else {
+        format!("?cluster={cluster}")
+    };
+    format!("https://solscan.io/tx/{signature}{cluster_param}")
+}
+
+/// Build a cluster-aware Solscan account/address URL.
+pub fn solscan_address_url(address: &str, cluster: &str) -> String {
+    let cluster_param = if cluster == "mainnet-beta" {
+        String::new()
+    } else {
+        format!("?cluster={cluster}")
+    };
+    format!("https://solscan.io/address/{address}{cluster_param}")
+}
+
 /// Result of parsing a participation type string into a display badge.
 #[derive(Debug, Clone)]
 pub struct ParticipationBadge {

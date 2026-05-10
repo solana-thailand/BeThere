@@ -22,6 +22,14 @@ use event_checkin_domain::models::api::{
 use crate::event_store::{quiz_progress_key, quiz_questions_key};
 
 // ---------------------------------------------------------------------------
+// TTL constants
+// ---------------------------------------------------------------------------
+
+/// TTL for transient quiz progress (1 hour).
+/// Attendee session state — no need to persist beyond the event window.
+const QUIZ_PROGRESS_TTL_SECS: u64 = 3600;
+
+// ---------------------------------------------------------------------------
 // Quiz config (questions)
 // ---------------------------------------------------------------------------
 
@@ -114,6 +122,7 @@ async fn save_quiz_progress(
         .map_err(|e| format!("failed to serialize quiz progress: {e:?}"))?;
     kv.put(&key, &json_str)
         .map_err(|e| format!("failed to build quiz progress put: {e:?}"))?
+        .expiration_ttl(QUIZ_PROGRESS_TTL_SECS)
         .execute()
         .await
         .map_err(|e| format!("failed to write quiz progress to KV: {e:?}"))

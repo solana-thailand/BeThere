@@ -6,6 +6,7 @@
 
 use leptos::prelude::*;
 use leptos_router::components::A;
+use serde::Deserialize;
 
 /// Waitlist signup form component.
 #[component]
@@ -224,7 +225,7 @@ fn swimlane_mockup(role: SwimlaneRole, step: usize) -> impl IntoView {
                 <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:1.25rem;font-size:0.8rem;">
                     <div style="font-weight:600;color:#fff;margin-bottom:0.75rem;">"New Event"</div>
                     <div style="display:flex;flex-direction:column;gap:0.5rem;">
-                        <div style="background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:6px;padding:0.5rem 0.65rem;color:var(--text-secondary);">"Solana Bangkok Meetup 2025"</div>
+                        <div style="background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:6px;padding:0.5rem 0.65rem;color:var(--text-secondary);">"Solana Bangkok Meetup 2026"</div>
                         <div style="display:flex;gap:0.5rem;">
                             <div style="flex:1;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:6px;padding:0.5rem 0.65rem;color:var(--text-secondary);">"\u{1f4cd} Bangkok"</div>
                             <div style="flex:1;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:6px;padding:0.5rem 0.65rem;color:var(--text-secondary);">"Cap: 200"</div>
@@ -321,7 +322,7 @@ fn swimlane_mockup(role: SwimlaneRole, step: usize) -> impl IntoView {
                     <div style="width:2.5rem;height:2.5rem;border-radius:50%;background:rgba(34,197,94,0.15);display:inline-flex;align-items:center;justify-content:center;font-size:1.25rem;margin-bottom:0.5rem;">"\u{2705}"</div>
                     <div style="font-weight:700;color:#22c55e;margin-bottom:0.25rem;">"Checked In!"</div>
                     <div style="color:#fff;font-weight:600;">"Alex Chen"</div>
-                    <div style="color:var(--text-secondary);font-size:0.7rem;">"Solana Bangkok 2025"</div>
+                    <div style="color:var(--text-secondary);font-size:0.7rem;">"Solana Bangkok 2026"</div>
                     <div style="color:var(--text-secondary);font-size:0.7rem;margin-top:0.25rem;">"Jul 15 \u{00b7} 2:03 PM"</div>
                 </div>
             }.into_any(),
@@ -348,7 +349,7 @@ fn swimlane_mockup(role: SwimlaneRole, step: usize) -> impl IntoView {
             // Register & Deposit
             0 => view! {
                 <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:1.25rem;font-size:0.8rem;">
-                    <div style="font-weight:600;color:#fff;margin-bottom:0.5rem;">"Solana Bangkok Meetup 2025"</div>
+                    <div style="font-weight:600;color:#fff;margin-bottom:0.5rem;">"Solana Bangkok Meetup 2026"</div>
                     <div style="color:var(--text-secondary);font-size:0.7rem;margin-bottom:0.75rem;">"Jul 15 \u{00b7} Bangkok, Thailand"</div>
                     <div style="display:flex;align-items:center;gap:0.4rem;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:9999px;padding:0.3rem 0.65rem;margin-bottom:0.65rem;">
                         <span style="color:#ab9ff2;">"\u{25cf}"</span>
@@ -370,7 +371,7 @@ fn swimlane_mockup(role: SwimlaneRole, step: usize) -> impl IntoView {
                         </div>
                     </div>
                     <div style="color:#fff;font-weight:600;">"Alex Chen"</div>
-                    <div style="color:var(--text-secondary);font-size:0.7rem;">"Solana Bangkok 2025"</div>
+                    <div style="color:var(--text-secondary);font-size:0.7rem;">"Solana Bangkok 2026"</div>
                 </div>
             }.into_any(),
             // Get Scanned
@@ -378,7 +379,7 @@ fn swimlane_mockup(role: SwimlaneRole, step: usize) -> impl IntoView {
                 <div style="background:var(--bg-secondary);border:1px solid rgba(34,197,94,0.3);border-radius:var(--radius);padding:1.25rem;font-size:0.8rem;text-align:center;">
                     <div style="width:2.5rem;height:2.5rem;border-radius:50%;background:rgba(34,197,94,0.15);display:inline-flex;align-items:center;justify-content:center;font-size:1.25rem;margin-bottom:0.5rem;">"\u{2705}"</div>
                     <div style="font-weight:700;color:#22c55e;margin-bottom:0.25rem;">"Checked In!"</div>
-                    <div style="color:var(--text-secondary);font-size:0.7rem;">"Jul 15, 2025 \u{00b7} 2:03 PM"</div>
+                    <div style="color:var(--text-secondary);font-size:0.7rem;">"Jul 15, 2026 \u{00b7} 2:03 PM"</div>
                     <div style="color:var(--text-secondary);font-size:0.7rem;margin-top:0.15rem;">"Solana Bangkok Meetup"</div>
                 </div>
             }.into_any(),
@@ -408,6 +409,125 @@ fn swimlane_mockup(role: SwimlaneRole, step: usize) -> impl IntoView {
                 </div>
             }.into_any(),
         },
+    }
+}
+
+/// Lightweight event item from the public events API.
+#[derive(Clone, Deserialize)]
+struct PublicEventItem {
+    name: String,
+    slug: String,
+    event_start_ms: i64,
+    deposit_enabled: bool,
+}
+
+#[derive(Clone, Deserialize)]
+struct PublicEventsResponse {
+    events: Vec<PublicEventItem>,
+}
+
+/// Upcoming Events section — fetches active events and displays them.
+#[component]
+fn UpcomingEvents() -> impl IntoView {
+    let (events, set_events) = signal(Vec::<PublicEventItem>::new());
+    let (loaded, set_loaded) = signal(false);
+
+    // Fetch events on mount
+    Effect::new(move |_| {
+        leptos::task::spawn_local(async move {
+            let window = web_sys::window().expect("no window");
+            let origin = window
+                .location()
+                .origin()
+                .unwrap_or_else(|_| "http://localhost:8787".to_string());
+            let url = format!("{origin}/api/public/events");
+
+            match gloo::net::http::Request::get(&url).send().await {
+                Ok(resp) if resp.status() == 200 => {
+                    match resp.json::<PublicEventsResponse>().await {
+                        Ok(data) => {
+                            set_events.set(data.events);
+                        }
+                        Err(e) => {
+                            log::warn!("[landing] failed to parse events: {e}");
+                        }
+                    }
+                }
+                Ok(_) => {
+                    log::warn!("[landing] events API returned non-200");
+                }
+                Err(e) => {
+                    log::warn!("[landing] events fetch error: {e}");
+                }
+            }
+            set_loaded.set(true);
+        });
+    });
+
+    view! {
+        {move || {
+            let evts = events.get();
+            let is_loaded = loaded.get();
+            if !is_loaded {
+                // Still loading — show nothing (avoid layout shift)
+                view! { <div></div> }.into_any()
+            } else if evts.is_empty() {
+                // No events — show nothing
+                view! { <div></div> }.into_any()
+            } else {
+                view! {
+                    <section style="max-width:960px;margin:0 auto;padding:1rem 1.5rem 3rem;">
+                        <div style="text-align:center;margin-bottom:1.5rem;">
+                            <h2 style="font-size:1.5rem;font-weight:700;color:#fff;margin-bottom:0.5rem;">
+                                "🎉 Upcoming Events"
+                            </h2>
+                            <p style="color:var(--text-secondary);font-size:0.95rem;">
+                                "Reserve your spot with a deposit. Show up. Get refunded."
+                            </p>
+                        </div>
+                        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1rem;">
+                            {evts.into_iter().map(|evt| {
+                                let event_url = format!("/e/{}", evt.slug);
+                                let date_str = if evt.event_start_ms > 0 {
+                                    let d = js_sys::Date::new_with_year_month_day(0, 0, 0);
+                                    d.set_time(evt.event_start_ms as f64);
+                                    d.to_locale_string("en-US", &js_sys::Object::new()).as_string().unwrap_or_default()
+                                } else {
+                                    "TBA".to_string()
+                                };
+                                let deposit_badge = if evt.deposit_enabled {
+                                    "💰 Deposit required"
+                                } else {
+                                    "🎟️ Free entry"
+                                };
+                                view! {
+                                    <a
+                                        href=event_url
+                                        style="text-decoration:none;"
+                                        class="event-card-link"
+                                    >
+                                        <div
+                                            class="card event-card"
+                                            style="text-align:left;padding:1.25rem 1.5rem;"
+                                        >
+                                            <h3 style="font-size:1rem;font-weight:600;color:#fff;margin-bottom:0.35rem;">
+                                                {evt.name}
+                                            </h3>
+                                            <p style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:0.35rem;">
+                                                "📅 " {date_str}
+                                            </p>
+                                            <p style="font-size:0.8rem;color:var(--text-muted);">
+                                                {deposit_badge}
+                                            </p>
+                                        </div>
+                                    </a>
+                                }
+                            }).collect::<Vec<_>>()}
+                        </div>
+                    </section>
+                }.into_any()
+            }
+        }}
     }
 }
 
@@ -515,6 +635,9 @@ pub fn Landing() -> impl IntoView {
                     </A>
                 </div>
             </section>
+
+            // ===== Upcoming Events =====
+            <UpcomingEvents />
 
             // ===== Social Proof =====
             // Social proof — real users + CTA for organizers
@@ -900,7 +1023,7 @@ pub fn Landing() -> impl IntoView {
 
                 // Bottom row
                 <div class="landing-footer-bottom">
-                    <span class="landing-footer-copy">"© 2025 BeThere. All rights reserved."</span>
+                    <span class="landing-footer-copy">"© 2026 BeThere. All rights reserved."</span>
                     <span class="landing-footer-powered">
                         <svg viewBox="0 0 397 311" xmlns="http://www.w3.org/2000/svg">
                             <path d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1l62.7-62.7z" fill="currentColor"/>

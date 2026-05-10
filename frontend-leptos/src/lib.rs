@@ -11,8 +11,8 @@ use leptos_router::path;
 
 use crate::components::ProtectedRoute;
 use crate::pages::{
-    admin::Admin, adventure::page::Adventure, claim::Claim, landing::Landing, login::Login,
-    scanner::Scanner,
+    admin::Admin, adventure::page::Adventure, claim::Claim, deposit::Deposit, landing::Landing,
+    login::Login, public_event::PublicEvent, scanner::Scanner,
 };
 
 /// Main application component.
@@ -35,7 +35,7 @@ pub fn App() -> impl IntoView {
                 <Routes fallback=|| {
                     view! {
                         <div class="center-page">
-                            <div class="container" style="display:flex;flex-direction:column;align-items:center;">
+                            <div class="container layout-col-center">
                                 <div class="logo">"🔍"</div>
                                 <h1>"Page Not Found"</h1>
                                 <p class="subtitle">"The page you're looking for doesn't exist."</p>
@@ -47,6 +47,8 @@ pub fn App() -> impl IntoView {
                     <Route path=path!("/") view=Landing />
                     <Route path=path!("/login") view=Login />
                     <Route path=path!("/claim/:token") view=Claim />
+                    <Route path=path!("/deposit/:attendee_id") view=Deposit />
+                    <Route path=path!("/e/:slug") view=PublicEvent />
                     <Route path=path!("/adventure") view=Adventure />
                     <Route path=path!("/staff") view=ProtectedScanner />
                     <Route path=path!("/admin") view=ProtectedAdmin />

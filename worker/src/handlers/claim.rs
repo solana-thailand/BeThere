@@ -50,6 +50,12 @@ pub async fn get_claim(
         quiz_status: lookup.quiz_status,
         total_checked_in: lookup.total_checked_in,
         total_claimed: lookup.total_claimed,
+        api_id: lookup.api_id,
+        event_id: lookup.event_id,
+        deposit_enabled: lookup.deposit_enabled,
+        deposit_amount_usdc: lookup.deposit_amount_usdc,
+        deposit_amount_thb: lookup.deposit_amount_thb,
+        participation_type: lookup.participation_type,
     };
 
     Ok(ApiOk::new(response))

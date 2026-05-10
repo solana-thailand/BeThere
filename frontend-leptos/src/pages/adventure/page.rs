@@ -693,7 +693,7 @@ pub fn Adventure() -> impl IntoView {
                                             </div>
                                             {if let Some(link) = claim_link {
                                                 view! {
-                                                    <a class="btn btn-primary adventure-claim-btn" href={link}>
+                                                    <a class="btn adventure-claim-btn" href={link}>
                                                         "🎁 Claim your NFT Badge"
                                                     </a>
                                                 }.into_any()

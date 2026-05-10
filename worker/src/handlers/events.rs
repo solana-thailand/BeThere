@@ -406,3 +406,53 @@ pub async fn archive_event(
         "status": "archived",
     })))
 }
+
+/// POST /api/events/{id}/restore
+/// Restore an archived event back to Draft status.
+///
+/// Only works on events currently in Archived status.
+/// Requires SuperAdmin or Organizer role for this event.
+#[worker::send]
+pub async fn restore_event(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(id): Path<String>,
+) -> Result<ApiOk<serde_json::Value>, crate::error::WorkerError> {
+    tracing::info!(event_id = %id, staff_email = %claims.email, "restore event requested");
+
+    let kv = state
+        .events_kv
+        .as_ref()
+        .ok_or_else(|| AppError::Internal("events KV namespace not configured".into()))?;
+
+    // Role check: fetch existing event to resolve per-event role
+    let existing_event = crate::event_store::get_event(kv, &id)
+        .await
+        .map_err(|e| {
+            tracing::error!(event_id = %id, error = %e, "failed to fetch event for role check");
+            AppError::Internal(format!("failed to read event: {e}"))
+        })?
+        .ok_or_else(|| AppError::NotFound(format!("event '{id}' not found")))?;
+
+    let role = crate::auth::resolve_user_role(&claims.email, &state, Some(&existing_event)).await;
+    if role < crate::auth::UserRole::Organizer {
+        return Err(AppError::Forbidden(
+            "only super admins or organizers can restore events".into(),
+        )
+        .into());
+    }
+
+    crate::event_store::restore_event(kv, &id)
+        .await
+        .map_err(|e| {
+            tracing::error!(event_id = %id, error = %e, "failed to restore event");
+            AppError::Internal(e.to_string())
+        })?;
+
+    tracing::info!(event_id = %id, staff_email = %claims.email, "event restored from archive");
+
+    Ok(ApiOk::new(json!({
+        "id": id,
+        "status": "draft",
+    })))
+}

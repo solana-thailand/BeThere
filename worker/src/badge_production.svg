@@ -1,0 +1,111 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" width="1000" height="1000">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#9945FF"/>
+      <stop offset="100%" stop-color="#14F195"/>
+    </linearGradient>
+    <linearGradient id="sheen" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="white" stop-opacity="0.15"/>
+      <stop offset="50%" stop-color="white" stop-opacity="0"/>
+      <stop offset="100%" stop-color="white" stop-opacity="0.08"/>
+    </linearGradient>
+    <clipPath id="card">
+      <rect width="1000" height="1000" rx="80"/>
+    </clipPath>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1000" height="1000" rx="80" fill="url(#bg)"/>
+
+  <!-- Decorative ring accents -->
+  <g clip-path="url(#card)" opacity="0.06">
+    <circle cx="500" cy="430" r="320" fill="none" stroke="white" stroke-width="1.5"/>
+    <circle cx="500" cy="430" r="370" fill="none" stroke="white" stroke-width="1"/>
+    <circle cx="500" cy="430" r="420" fill="none" stroke="white" stroke-width="0.75"/>
+    <circle cx="150" cy="150" r="200" fill="none" stroke="white" stroke-width="1"/>
+    <circle cx="850" cy="850" r="250" fill="none" stroke="white" stroke-width="1"/>
+  </g>
+
+  <!-- Subtle corner geometric accents -->
+  <g clip-path="url(#card)" opacity="0.08" stroke="white" fill="none" stroke-width="1">
+    <line x1="0" y1="160" x2="160" y2="0"/>
+    <line x1="0" y1="200" x2="200" y2="0"/>
+    <line x1="1000" y1="840" x2="840" y2="1000"/>
+    <line x1="1000" y1="800" x2="800" y2="1000"/>
+  </g>
+
+  <!-- Sheen overlay -->
+  <rect width="1000" height="1000" rx="80" fill="url(#sheen)"/>
+
+  <!-- Hexagonal shield shape -->
+  <polygon
+    points="500,220 650,310 650,500 500,590 350,500 350,310"
+    fill="none"
+    stroke="white"
+    stroke-width="6"
+    stroke-linejoin="round"
+    opacity="0.9"
+  />
+  <!-- Inner hexagon -->
+  <polygon
+    points="500,260 620,332 620,478 500,550 380,478 380,332"
+    fill="white"
+    fill-opacity="0.06"
+    stroke="white"
+    stroke-width="2"
+    stroke-linejoin="round"
+    opacity="0.5"
+  />
+
+  <!-- Checkmark icon -->
+  <polyline
+    points="430,410 475,458 575,340"
+    fill="none"
+    stroke="white"
+    stroke-width="22"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    opacity="0.95"
+  />
+
+  <!-- "BeThere" title -->
+  <text
+    x="500" y="700"
+    text-anchor="middle"
+    font-family="system-ui,-apple-system,sans-serif"
+    font-size="80"
+    font-weight="700"
+    fill="white"
+    letter-spacing="4"
+  >BeThere</text>
+
+  <!-- "PROOF OF ATTENDANCE" subtitle -->
+  <text
+    x="500" y="752"
+    text-anchor="middle"
+    font-family="system-ui,-apple-system,sans-serif"
+    font-size="28"
+    font-weight="500"
+    fill="white"
+    opacity="0.7"
+    letter-spacing="10"
+  >PROOF OF ATTENDANCE</text>
+
+  <!-- Thin divider line -->
+  <rect x="300" y="790" width="400" height="2" rx="1" fill="white" opacity="0.2"/>
+
+  <!-- Bottom tagline -->
+  <text
+    x="500" y="840"
+    text-anchor="middle"
+    font-family="system-ui,-apple-system,sans-serif"
+    font-size="20"
+    font-weight="400"
+    fill="white"
+    opacity="0.45"
+    letter-spacing="4"
+  >VERIFIED ON-CHAIN</text>
+
+  <!-- Small diamond accent below divider -->
+  <rect x="492" y="862" width="16" height="16" rx="2" fill="white" opacity="0.15" transform="rotate(45 500 870)"/>
+</svg>

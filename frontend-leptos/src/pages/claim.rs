@@ -14,7 +14,7 @@ use leptos_router::hooks::use_params;
 use leptos_router::params::Params;
 
 use crate::api::{self, AdventureStatusType, ClaimLookupData, ClaimMintData, QuizQuestionsData, QuizStatus, QuizSubmitData};
-use crate::utils::{escape_html, format_timestamp};
+use crate::utils::{escape_html, format_timestamp, solscan_tx_url};
 use wasm_bindgen::prelude::*;
 
 // ---------------------------------------------------------------------------
@@ -116,6 +116,110 @@ fn simple_hash(s: &str) -> u32 {
     hash
 }
 
+/// Check if participation type indicates an online attendee.
+fn is_online_participant(participation_type: &str) -> bool {
+    let lower = participation_type.trim().to_lowercase();
+    lower.contains("online")
+}
+
+/// Build the appropriate label for check-in status.
+/// For online attendees without check-in: "Registered".
+/// For checked-in attendees: "Checked in {timestamp}".
+/// For others without check-in: "Not yet checked in".
+fn checked_in_label(checked_in_at: &str, participation_type: &str) -> String {
+    if checked_in_at.is_empty() || checked_in_at == "N/A" {
+        if is_online_participant(participation_type) {
+            return "Registered".to_string();
+        }
+        return "Not yet checked in".to_string();
+    }
+    format!("Checked in {}", format_timestamp(checked_in_at))
+}
+
+// ---------------------------------------------------------------------------
+// Progress Stepper
+// ---------------------------------------------------------------------------
+
+/// Determines the current step number for the claim flow progress indicator.
+/// Returns (current_step, total_steps) where steps are 1-indexed.
+fn claim_step(state: &ClaimState) -> (usize, usize) {
+    match state {
+        // Loading = step 0 (before flow starts)
+        ClaimState::Loading => (0, 3),
+        // Step 1: Verified (attendee found + checked in)
+        ClaimState::NotFound(_) => (0, 3),
+        ClaimState::NftComingSoon(_) => (1, 3),
+        // Step 2: Quiz (if required)
+        ClaimState::Quiz(_, _) | ClaimState::QuizSubmitted(_, _, _) => (2, 3),
+        // Step 2: Adventure gate (alternative to quiz)
+        ClaimState::Adventure(_, _) => (2, 3),
+        // Step 3: Claim (enter wallet + mint)
+        ClaimState::Ready(_) => (3, 3),
+        ClaimState::Minting(_) => (3, 3),
+        // Completed
+        ClaimState::Success(_) => (4, 3),
+        ClaimState::AlreadyClaimed(_) => (4, 3),
+        ClaimState::MintError(_, _) => (3, 3),
+    }
+}
+
+/// Progress stepper for the claim flow.
+/// Shows: Verified → Quiz → Claim NFT
+/// The Quiz step is only shown when relevant.
+#[component]
+fn ClaimStepper(current: usize, total: usize, show_quiz: bool) -> impl IntoView {
+    // Build step labels based on whether quiz is shown
+    let _ = total; // used for context, steps are hardcoded
+    let steps: Vec<(&'static str, &'static str, usize)> = if show_quiz {
+        vec![
+            ("✓", "Verified", 1),
+            ("?", "Quiz", 2),
+            ("🎫", "Claim", 3),
+        ]
+    } else {
+        vec![
+            ("✓", "Verified", 1),
+            ("🎫", "Claim", 2),
+        ]
+    };
+
+    view! {
+        <div class="claim-stepper">
+            <div class="claim-stepper-track">
+                {steps.into_iter().map(|(icon, label, step_num)| {
+                    let is_completed = current > step_num;
+                    let is_current = current == step_num;
+
+                    let circle_class = match (is_completed, is_current) {
+                        (true, _) => "claim-step-circle completed",
+                        (_, true) => "claim-step-circle current",
+                        _ => "claim-step-circle upcoming",
+                    };
+
+                    view! {
+                        <div class="claim-step">
+                            <div class=circle_class>
+                                {if is_completed {
+                                    view! {
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;">
+                                            <polyline points="20 6 9 17 4 12"></polyline>
+                                        </svg>
+                                    }.into_any()
+                                } else {
+                                    view! { <span>{icon}</span> }.into_any()
+                                }}
+                            </div>
+                            <span class=if is_current || is_completed { "claim-step-label active" } else { "claim-step-label" }>
+                                {label}
+                            </span>
+                        </div>
+                    }
+                }).collect::<Vec<_>>()}
+            </div>
+        </div>
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Interactive widgets (client-side only)
 // ---------------------------------------------------------------------------
@@ -200,7 +304,9 @@ fn SessionTimer(start_ms: i64, end_ms: i64) -> impl IntoView {
                     set_t.set("Thanks for coming!".to_string());
                     break; // stop polling after event ends
                 }
-                gloo::timers::future::TimeoutFuture::new(1000).await;
+                // 5s interval — reduces re-renders vs 1s; sufficient granularity
+                // for countdown/elapsed display on event time scales (hours).
+                gloo::timers::future::TimeoutFuture::new(5000).await;
             }
         });
     });
@@ -581,7 +687,7 @@ fn QuizView(
     set_quiz_answers: WriteSignal<QuizAnswers>,
     set_state: WriteSignal<ClaimState>,
 ) -> impl IntoView {
-    let checked_in_display = format_timestamp(&claim_data.checked_in_at);
+    let checked_in_display = checked_in_label(&claim_data.checked_in_at, &claim_data.participation_type);
     let total_q = quiz_data.questions.len();
     let answered = move || quiz_answers.get().len();
     let all_answered = move || quiz_answers.get().len() == total_q;
@@ -602,7 +708,7 @@ fn QuizView(
             <div class="claim-welcome-card">
                 <ParticipantAvatar name=claim_data.name.clone() />
                 <h3>"Welcome, "{escape_html(&claim_data.name)}"!"</h3>
-                <p class="checked-in-label">"Checked in "{checked_in_display}</p>
+                <p class="checked-in-label">{checked_in_display}</p>
             </div>
 
             // Quiz intro card
@@ -683,7 +789,7 @@ fn QuizSubmittedView(
     set_wallet_input: WriteSignal<String>,
     set_state: WriteSignal<ClaimState>,
 ) -> impl IntoView {
-    let checked_in_display = format_timestamp(&claim_data.checked_in_at);
+    let checked_in_display = checked_in_label(&claim_data.checked_in_at, &claim_data.participation_type);
     let passed = submit_result.passed;
     let score = submit_result.score_percent;
     let remaining = submit_result.remaining_attempts;
@@ -779,7 +885,7 @@ fn QuizSubmittedView(
             <div class="claim-welcome-card">
                 <ParticipantAvatar name=claim_data.name.clone() />
                 <h3>"Welcome, "{escape_html(&claim_data.name)}"!"</h3>
-                <p class="checked-in-label">"Checked in "{checked_in_display}</p>
+                <p class="checked-in-label">{checked_in_display}</p>
             </div>
 
             // Quiz result card
@@ -801,6 +907,63 @@ fn QuizSubmittedView(
 
             // Actions: retry or proceed to claim
             {action_view}
+        </div>
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Deposit info component (shown after NFT claim)
+// ---------------------------------------------------------------------------
+
+/// Renders a deposit info card with link to the deposit page.
+/// Shown on the claim page when the event has deposits enabled.
+#[component]
+fn DepositInfo(
+    api_id: String,
+    event_id: String,
+    deposit_amount_usdc: u64,
+    deposit_amount_thb: u64,
+) -> impl IntoView {
+    // USDC display: smallest unit → human-readable (6 decimals)
+    let usdc_display = format!("{:.2}", deposit_amount_usdc as f64 / 1_000_000.0);
+    let deposit_link = if event_id.is_empty() {
+        format!("/deposit/{api_id}")
+    } else {
+        format!("/deposit/{api_id}?event_id={event_id}")
+    };
+
+    view! {
+        <div class="card dep-card">
+            <div class="celebration-emoji">"💰 Deposit Required"</div>
+            <p class="hint-sm">
+                "This event requires a deposit to confirm your spot."
+            </p>
+            <div class="badge-row">
+                {if deposit_amount_usdc > 0 {
+                    view! {
+                        <div class="badge" style="background:var(--badge-bg,#1e1b4b);color:#c084fc;padding:0.5rem 1rem;border-radius:0.5rem">
+                            {format!("{} USDC", usdc_display)}
+                        </div>
+                    }.into_any()
+                } else {
+                    view! { <div></div> }.into_any()
+                }}
+                {if deposit_amount_thb > 0 {
+                    view! {
+                        <div class="badge" style="background:var(--badge-bg,#1e1b4b);color:#c084fc;padding:0.5rem 1rem;border-radius:0.5rem">
+                            {format!("{} THB", deposit_amount_thb)}
+                        </div>
+                    }.into_any()
+                } else {
+                    view! { <div></div> }.into_any()
+                }}
+            </div>
+            <a
+                href=deposit_link
+                class="btn btn-primary"
+            >
+                "Go to Deposit Page"
+            </a>
         </div>
     }
 }
@@ -831,6 +994,13 @@ pub fn Claim() -> impl IntoView {
     // Claim counter (fetched from backend on initial lookup)
     let (total_checked_in, set_total_checked_in) = signal(0usize);
     let (total_claimed, set_total_claimed) = signal(0usize);
+
+    // Deposit info (persisted across state transitions)
+    let (deposit_api_id, set_deposit_api_id) = signal(String::new());
+    let (deposit_event_id, set_deposit_event_id) = signal(String::new());
+    let (deposit_enabled, set_deposit_enabled) = signal(false);
+    let (deposit_amount_usdc, set_deposit_amount_usdc) = signal(0u64);
+    let (deposit_amount_thb, set_deposit_amount_thb) = signal(0u64);
 
     // Extract token from URL params and fetch claim info on mount
     Effect::new(move |_| {
@@ -863,6 +1033,13 @@ pub fn Claim() -> impl IntoView {
                     set_evt_end.set(data.event.event_end_ms);
                     set_total_checked_in.set(data.total_checked_in);
                     set_total_claimed.set(data.total_claimed);
+
+                    // Store deposit info for use across state transitions
+                    set_deposit_api_id.set(data.api_id.clone());
+                    set_deposit_event_id.set(data.event_id.clone());
+                    set_deposit_enabled.set(data.deposit_enabled);
+                    set_deposit_amount_usdc.set(data.deposit_amount_usdc);
+                    set_deposit_amount_thb.set(data.deposit_amount_thb);
 
                     if data.claimed {
                         set_state.set(ClaimState::AlreadyClaimed(data));
@@ -1061,6 +1238,25 @@ pub fn Claim() -> impl IntoView {
                     }
                 }}
 
+                // Progress stepper — shows claim flow progress
+                {move || {
+                    let (current, total) = claim_step(&state.get());
+                    // Only show when flow has started (not loading/not found)
+                    if current > 0 {
+                        // Determine if quiz step is needed for this flow
+                        let show_quiz = matches!(
+                            state.get(),
+                            ClaimState::Quiz(_, _)
+                                | ClaimState::QuizSubmitted(_, _, _)
+                        );
+                        view! {
+                            <ClaimStepper current=current total=total show_quiz=show_quiz />
+                        }.into_any()
+                    } else {
+                        view! { <div></div> }.into_any()
+                    }
+                }}
+
                 // State-dependent rendering
                 {move || {
                     match state.get() {
@@ -1087,8 +1283,8 @@ pub fn Claim() -> impl IntoView {
                                     </div>
 
                                     // Shimmer: wallet input card (label + input bar + hint)
-                                    <div class="shimmer-card" style="margin-bottom:1rem;">
-                                        <div class="shimmer shimmer-line-sm" style="width:40%;margin-bottom:0.75rem;"></div>
+                                    <div class="shimmer-card u-mb-sm">
+                                        <div class="shimmer shimmer-line-sm u-mb-sm" style="width:40%;"></div>
                                         <div class="shimmer claim-shimmer-input"></div>
                                         <div class="shimmer shimmer-line-sm" style="width:55%;"></div>
                                     </div>
@@ -1118,14 +1314,14 @@ pub fn Claim() -> impl IntoView {
 
                         // ---- NFT Coming Soon ----
                         ClaimState::NftComingSoon(data) => {
-                            let checked_in_display = format_timestamp(&data.checked_in_at);
+                            let checked_in_display = checked_in_label(&data.checked_in_at, &data.participation_type);
                             view! {
                                 <div class="claim-state-full">
                                     // Attendee welcome
                                     <div class="claim-welcome-card">
                                         <ParticipantAvatar name=data.name.clone() />
                                         <h3>"Welcome, "{escape_html(&data.name)}"!"</h3>
-                                        <p class="checked-in-label">"Checked in "{checked_in_display}</p>
+                                        <p class="checked-in-label">{checked_in_display}</p>
                                     </div>
 
                                     // NFT badge preview
@@ -1183,7 +1379,7 @@ pub fn Claim() -> impl IntoView {
 
                         // ---- Ready: show wallet input ----
                         ClaimState::Ready(data) => {
-                            let checked_in_display = format_timestamp(&data.checked_in_at);
+                            let checked_in_display = checked_in_label(&data.checked_in_at, &data.participation_type);
                             let locked_wallet = data.locked_wallet.clone();
                             let locked_wallet_hint = data.locked_wallet.clone();
                             view! {
@@ -1192,7 +1388,7 @@ pub fn Claim() -> impl IntoView {
                                     <div class="claim-welcome-card">
                                         <ParticipantAvatar name=data.name.clone() />
                                         <h3>"Welcome, "{escape_html(&data.name)}"!"</h3>
-                                        <p class="checked-in-label">"Checked in "{checked_in_display}</p>
+                                        <p class="checked-in-label">{checked_in_display}</p>
                                     </div>
 
                                     // NFT badge preview
@@ -1331,19 +1527,8 @@ pub fn Claim() -> impl IntoView {
 
                         // ---- Success! ----
                         ClaimState::Success(data) => {
-                            let cluster_param = if data.cluster == "mainnet-beta" {
-                                String::new()
-                            } else {
-                                format!("?cluster={}", data.cluster)
-                            };
-                            let explorer_url = format!(
-                                "https://solscan.io/tx/{}{cluster_param}",
-                                data.signature
-                            );
-                            let asset_url = format!(
-                                "https://solscan.io/token/{}{cluster_param}",
-                                data.asset_id
-                            );
+                            let explorer_url = solscan_tx_url(&data.signature, &data.cluster);
+                            let asset_url = crate::utils::solscan_address_url(&data.asset_id, &data.cluster);
                             let asset_id_display = {
                                 let id = &data.asset_id;
                                 if id.len() > 12 {
@@ -1515,6 +1700,20 @@ pub fn Claim() -> impl IntoView {
                                         </div>
                                     </div>
                                 </div>
+                                {move || {
+                                    if deposit_enabled.get() && !deposit_api_id.get().is_empty() {
+                                        view! {
+                                            <DepositInfo
+                                                api_id=deposit_api_id.get()
+                                                event_id=deposit_event_id.get()
+                                                deposit_amount_usdc=deposit_amount_usdc.get()
+                                                deposit_amount_thb=deposit_amount_thb.get()
+                                            />
+                                        }.into_any()
+                                    } else {
+                                        view! { <div></div> }.into_any()
+                                    }
+                                }}
                             }
                                 .into_any()
                         }
@@ -1540,6 +1739,20 @@ pub fn Claim() -> impl IntoView {
                                         </p>
                                     </div>
                                 </div>
+                                {move || {
+                                    if deposit_enabled.get() && !deposit_api_id.get().is_empty() {
+                                        view! {
+                                            <DepositInfo
+                                                api_id=deposit_api_id.get()
+                                                event_id=deposit_event_id.get()
+                                                deposit_amount_usdc=deposit_amount_usdc.get()
+                                                deposit_amount_thb=deposit_amount_thb.get()
+                                            />
+                                        }.into_any()
+                                    } else {
+                                        view! { <div></div> }.into_any()
+                                    }
+                                }}
                             }
                                 .into_any()
                         }

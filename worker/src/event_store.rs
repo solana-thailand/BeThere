@@ -38,7 +38,7 @@ pub async fn get_event_index(kv: &KvStore) -> Result<EventIndex, String> {
 }
 
 /// Write the event index to KV.
-async fn save_event_index(kv: &KvStore, index: &EventIndex) -> Result<(), String> {
+pub async fn save_event_index(kv: &KvStore, index: &EventIndex) -> Result<(), String> {
     let json_str = serde_json::to_string(index)
         .map_err(|e| format!("failed to serialize event index: {e:?}"))?;
     kv.put("events", &json_str)
@@ -122,6 +122,14 @@ pub async fn create_event(kv: &KvStore, req: &CreateEventRequest) -> Result<Even
         return Err("event_end_ms must be after event_start_ms".to_string());
     }
 
+    // SEC-003: Max deposit cap ($1,000 USDC = 1_000_000_000 smallest units, 6 decimals)
+    const MAX_DEPOSIT_USDC: u64 = 1_000_000_000;
+    if req.deposit_amount_usdc > MAX_DEPOSIT_USDC {
+        return Err(format!(
+            "deposit_amount_usdc exceeds maximum cap ({MAX_DEPOSIT_USDC} = $1,000 USDC)"
+        ));
+    }
+
     // Generate slug from name if not provided
     let slug = if req.slug.trim().is_empty() {
         slugify(&req.name)
@@ -183,6 +191,19 @@ pub async fn create_event(kv: &KvStore, req: &CreateEventRequest) -> Result<Even
             .collect(),
         claim_base_url: req.claim_base_url.trim().to_string(),
         merkle_tree: req.merkle_tree.trim().to_string(),
+        // Deposit auto-enabled when format includes in-person track.
+        // If organizer explicitly sets deposit_enabled=true for online-only, honor it.
+        deposit_enabled: req.deposit_enabled || req.event_format.has_in_person(),
+        deposit_amount_usdc: req.deposit_amount_usdc,
+        deposit_amount_thb: req.deposit_amount_thb,
+        promptpay_id: req.promptpay_id.trim().to_string(),
+        escrow_address: req.escrow_address.trim().to_string(),
+        organizer_wallet: req.organizer_wallet.trim().to_string(),
+        on_chain_event_id: req.on_chain_event_id,
+        refund_deadline_hours: req.refund_deadline_hours,
+        description: req.description.trim().to_string(),
+        location: req.location.trim().to_string(),
+        event_format: req.event_format.clone(),
         created_at: now.clone(),
         updated_at: now,
     };
@@ -217,6 +238,42 @@ pub async fn update_event(
     let mut config = get_event_config(kv, id)
         .await?
         .ok_or_else(|| format!("event '{id}' not found"))?;
+
+    // Optimistic concurrency: if client provides expected_updated_at,
+    // verify it matches the stored value to prevent blind overwrites.
+    if let Some(ref expected) = req.expected_updated_at
+        && expected != &config.updated_at
+    {
+        return Err(format!(
+            "conflict: event was modified by another user at {}. Please reload and retry.",
+            config.updated_at
+        ));
+    }
+
+    // SEC-002: Lock escrow-critical fields after on-chain init.
+    // If escrow_address is set (escrow initialized on-chain), reject changes to
+    // fields that are baked into the on-chain EventEscrow PDA.
+    if !config.escrow_address.is_empty()
+        && (req.organizer_wallet.is_some()
+            || req.on_chain_event_id.is_some()
+            || req.deposit_amount_usdc.is_some()
+            || req.refund_deadline_hours.is_some())
+    {
+        return Err(
+            "cannot change organizer_wallet, on_chain_event_id, deposit_amount_usdc, or refund_deadline_hours after escrow is initialized on-chain".to_string()
+        );
+    }
+
+    // SEC-003: Max deposit cap in update path
+    const MAX_DEPOSIT_USDC: u64 = 1_000_000_000;
+    if let Some(v) = req.deposit_amount_usdc {
+        if v > MAX_DEPOSIT_USDC {
+            return Err(format!(
+                "deposit_amount_usdc exceeds maximum cap ({MAX_DEPOSIT_USDC} = $1,000 USDC)"
+            ));
+        }
+        config.deposit_amount_usdc = v;
+    }
 
     // Apply partial updates
     if let Some(ref name) = req.name {
@@ -300,6 +357,45 @@ pub async fn update_event(
         config.merkle_tree = v.trim().to_string();
     }
 
+    // Deposit fields
+    if let Some(v) = req.deposit_enabled {
+        config.deposit_enabled = v;
+    }
+    // deposit_amount_usdc handled above with SEC-003 max cap validation
+    if let Some(v) = req.deposit_amount_thb {
+        config.deposit_amount_thb = v;
+    }
+    if let Some(ref v) = req.promptpay_id {
+        config.promptpay_id = v.trim().to_string();
+    }
+    if let Some(ref v) = req.escrow_address {
+        config.escrow_address = v.trim().to_string();
+    }
+    if let Some(ref v) = req.organizer_wallet {
+        config.organizer_wallet = v.trim().to_string();
+    }
+    if let Some(v) = req.on_chain_event_id {
+        config.on_chain_event_id = v;
+    }
+    if let Some(v) = req.refund_deadline_hours {
+        config.refund_deadline_hours = v;
+    }
+    if let Some(ref v) = req.description {
+        config.description = v.trim().to_string();
+    }
+    if let Some(ref v) = req.location {
+        config.location = v.trim().to_string();
+    }
+    if let Some(ref v) = req.event_format {
+        config.event_format = v.clone();
+        // Re-sync deposit_enabled when format changes:
+        // - In-person/Hybrid formats always enable deposit
+        // - Online format disables auto-deposit (organizer can still set explicitly)
+        if v.has_in_person() {
+            config.deposit_enabled = true;
+        }
+    }
+
     config.updated_at = chrono::Utc::now().to_rfc3339();
 
     // Save updated config
@@ -318,10 +414,20 @@ pub async fn update_event(
 }
 
 /// Archive (soft-delete) an event by setting its status to Archived.
+///
+/// SEC-004: Rejects archive if the event has an active on-chain escrow.
+/// Archive the event first on-chain (close escrow) before archiving here.
 pub async fn archive_event(kv: &KvStore, id: &str) -> Result<(), String> {
     let mut config = get_event_config(kv, id)
         .await?
         .ok_or_else(|| format!("event '{id}' not found"))?;
+
+    // SEC-004: Block archive if escrow is active on-chain
+    if !config.escrow_address.is_empty() {
+        return Err(
+            "cannot archive event with active on-chain escrow — close escrow first".to_string(),
+        );
+    }
 
     config.status = EventStatus::Archived;
     config.updated_at = chrono::Utc::now().to_rfc3339();
@@ -336,6 +442,38 @@ pub async fn archive_event(kv: &KvStore, id: &str) -> Result<(), String> {
     save_event_index(kv, &index).await?;
 
     tracing::info!(event_id = %id, "event archived");
+
+    Ok(())
+}
+
+/// Restore (unarchive) an event by setting its status back to Draft.
+///
+/// Only works on Archived events. This is the reverse of `archive_event`.
+pub async fn restore_event(kv: &KvStore, id: &str) -> Result<(), String> {
+    let mut config = get_event_config(kv, id)
+        .await?
+        .ok_or_else(|| format!("event '{id}' not found"))?;
+
+    if config.status != EventStatus::Archived {
+        return Err(format!(
+            "event '{id}' is not archived (current status: {}) — only archived events can be restored",
+            config.status.as_str()
+        ));
+    }
+
+    config.status = EventStatus::Draft;
+    config.updated_at = chrono::Utc::now().to_rfc3339();
+
+    save_event_config(kv, &config).await?;
+
+    // Update index
+    let mut index = get_event_index(kv).await?;
+    if let Some(entry) = index.events.iter_mut().find(|e| e.id == id) {
+        entry.status = EventStatus::Draft;
+    }
+    save_event_index(kv, &index).await?;
+
+    tracing::info!(event_id = %id, "event restored from archive");
 
     Ok(())
 }
@@ -360,9 +498,29 @@ pub async fn seed_from_config(
         .events
         .iter()
         .find(|e| e.status == EventStatus::Active)
-        && let Some(config) = get_event_config(kv, &meta.id).await?
+        && let Some(mut config) = get_event_config(kv, &meta.id).await?
     {
-        tracing::info!(event_id = %config.id, "seed: already have active event");
+        // Fix legacy seed events that used hardcoded slug "default"
+        let expected_slug = slugify(&global.event_defaults.name);
+        if config.slug == "default" && expected_slug != "default" {
+            tracing::info!(
+                event_id = %config.id,
+                old_slug = %config.slug,
+                new_slug = %expected_slug,
+                "seed: migrating legacy slug"
+            );
+            config.slug = expected_slug.clone();
+            save_event_config(kv, &config).await?;
+
+            // Update index meta too
+            let mut index = index;
+            if let Some(m) = index.events.iter_mut().find(|e| e.id == config.id) {
+                m.slug = expected_slug;
+            }
+            save_event_index(kv, &index).await?;
+        }
+
+        tracing::info!(event_id = %config.id, slug = %config.slug, "seed: already have active event");
         return Ok(config);
     }
 
@@ -372,7 +530,7 @@ pub async fn seed_from_config(
     let config = EventConfig {
         id: "default".to_string(),
         name: defaults.name.clone(),
-        slug: "default".to_string(),
+        slug: slugify(&defaults.name),
         tagline: defaults.tagline.clone(),
         link: defaults.link.clone(),
         status: EventStatus::Active,
@@ -432,6 +590,17 @@ pub async fn seed_from_config(
         },
         claim_base_url: global.server.claim_base_url.clone(),
         merkle_tree: String::new(), // not in global config — per-event only
+        deposit_enabled: false,
+        deposit_amount_usdc: 0,
+        deposit_amount_thb: 0,
+        promptpay_id: String::new(),
+        escrow_address: String::new(),
+        organizer_wallet: String::new(),
+        on_chain_event_id: 0,
+        refund_deadline_hours: 168,
+        description: String::new(),
+        location: String::new(),
+        event_format: event_checkin_domain::models::event::EventFormat::InPerson,
         created_at: now.clone(),
         updated_at: now,
     };
@@ -656,4 +825,209 @@ fn slugify(input: &str) -> String {
         .filter(|s| !s.is_empty())
         .collect::<Vec<_>>()
         .join("-")
+}
+
+// ---------------------------------------------------------------------------
+// Deposit KV helpers (Issue 010 — dual-track deposit/refund)
+// ---------------------------------------------------------------------------
+
+/// KV key for per-attendee deposit status.
+/// Pattern: `event:{id}:deposit:status:{attendee_id}`
+pub fn deposit_status_key(event_id: &str, attendee_id: &str) -> String {
+    format!("event:{event_id}:deposit:status:{attendee_id}")
+}
+
+/// KV key for THB deposit record.
+/// Pattern: `event:{id}:deposit:thb:{attendee_id}`
+pub fn thb_deposit_key(event_id: &str, attendee_id: &str) -> String {
+    format!("event:{event_id}:deposit:thb:{attendee_id}")
+}
+
+/// KV key for listing all THB deposits in an event.
+/// Pattern: `event:{id}:deposit:thb:list`
+pub fn thb_deposit_list_key(event_id: &str) -> String {
+    format!("event:{event_id}:deposit:thb:list")
+}
+
+/// Get deposit status for an attendee.
+pub async fn get_deposit_status(
+    kv: &KvStore,
+    event_id: &str,
+    attendee_id: &str,
+) -> Result<Option<event_checkin_domain::models::deposit::DepositStatus>, String> {
+    let key = deposit_status_key(event_id, attendee_id);
+    let raw: Option<String> = kv
+        .get(&key)
+        .text()
+        .await
+        .map_err(|e| format!("failed to read deposit status: {e:?}"))?;
+
+    match raw {
+        None => Ok(None),
+        Some(json) => serde_json::from_str(&json)
+            .map_err(|e| format!("failed to parse deposit status: {e}"))
+            .map(Some),
+    }
+}
+
+/// Save deposit status for an attendee.
+pub async fn save_deposit_status(
+    kv: &KvStore,
+    status: &event_checkin_domain::models::deposit::DepositStatus,
+) -> Result<(), String> {
+    let key = deposit_status_key(&status.event_id, &status.attendee_id);
+    let json = serde_json::to_string(status)
+        .map_err(|e| format!("failed to serialize deposit status: {e}"))?;
+    kv.put(&key, &json)
+        .map_err(|e| format!("failed to build deposit status put: {e:?}"))?
+        .execute()
+        .await
+        .map_err(|e| format!("failed to write deposit status to KV: {e:?}"))?;
+    // Add to attendee list for event
+    add_to_deposit_list(kv, &status.event_id, &status.attendee_id).await?;
+    Ok(())
+}
+
+/// List all deposit statuses for an event using KV list with prefix.
+/// Returns all DepositStatus records found under `event:{id}:deposit:status:*`.
+pub async fn list_deposit_statuses(
+    kv: &KvStore,
+    event_id: &str,
+) -> Result<Vec<event_checkin_domain::models::deposit::DepositStatus>, String> {
+    let prefix = format!("event:{event_id}:deposit:status:");
+    let mut deposits = Vec::new();
+    let mut cursor: Option<String> = None;
+
+    loop {
+        let mut builder = kv.list().prefix(prefix.clone());
+        if let Some(c) = cursor.take() {
+            builder = builder.cursor(c);
+        }
+
+        let resp = builder.execute().await.map_err(|e| {
+            format!("failed to list deposit statuses for event '{event_id}': {e:?}")
+        })?;
+
+        for key in &resp.keys {
+            let raw: Option<String> = kv
+                .get(&key.name)
+                .text()
+                .await
+                .map_err(|e| format!("failed to read deposit status '{}': {e:?}", key.name))?;
+
+            if let Some(json) = raw {
+                match serde_json::from_str(&json) {
+                    Ok(deposit) => deposits.push(deposit),
+                    Err(e) => {
+                        tracing::warn!(key = %key.name, error = %e, "skipping malformed deposit status");
+                    }
+                }
+            }
+        }
+
+        if resp.list_complete {
+            break;
+        }
+        cursor = resp.cursor;
+    }
+
+    Ok(deposits)
+}
+
+/// Get THB deposit record for an attendee.
+pub async fn get_thb_deposit(
+    kv: &KvStore,
+    event_id: &str,
+    attendee_id: &str,
+) -> Result<Option<event_checkin_domain::models::deposit::ThbDeposit>, String> {
+    let key = thb_deposit_key(event_id, attendee_id);
+    let raw: Option<String> = kv
+        .get(&key)
+        .text()
+        .await
+        .map_err(|e| format!("failed to read THB deposit: {e:?}"))?;
+
+    match raw {
+        None => Ok(None),
+        Some(json) => serde_json::from_str(&json)
+            .map_err(|e| format!("failed to parse THB deposit: {e}"))
+            .map(Some),
+    }
+}
+
+/// Save THB deposit record for an attendee.
+pub async fn save_thb_deposit(
+    kv: &KvStore,
+    deposit: &event_checkin_domain::models::deposit::ThbDeposit,
+) -> Result<(), String> {
+    let key = thb_deposit_key(&deposit.event_id, &deposit.attendee_id);
+    let json = serde_json::to_string(deposit)
+        .map_err(|e| format!("failed to serialize THB deposit: {e}"))?;
+    kv.put(&key, &json)
+        .map_err(|e| format!("failed to build THB deposit put: {e:?}"))?
+        .execute()
+        .await
+        .map_err(|e| format!("failed to write THB deposit to KV: {e:?}"))
+}
+
+/// List all THB deposits for an event.
+pub async fn list_thb_deposits(
+    kv: &KvStore,
+    event_id: &str,
+) -> Result<Vec<event_checkin_domain::models::deposit::ThbDeposit>, String> {
+    let list_key = thb_deposit_list_key(event_id);
+    let raw: Option<String> = kv
+        .get(&list_key)
+        .text()
+        .await
+        .map_err(|e| format!("failed to read THB deposit list: {e:?}"))?;
+
+    let ids: Vec<String> = match raw {
+        None => return Ok(vec![]),
+        Some(json) => serde_json::from_str(&json)
+            .map_err(|e| format!("failed to parse THB deposit list: {e}"))?,
+    };
+
+    let mut deposits = Vec::with_capacity(ids.len());
+    for id in ids {
+        if let Some(deposit) = get_thb_deposit(kv, event_id, &id).await? {
+            deposits.push(deposit);
+        }
+    }
+
+    Ok(deposits)
+}
+
+/// Add an attendee_id to the THB deposit list for an event.
+async fn add_to_deposit_list(
+    kv: &KvStore,
+    event_id: &str,
+    attendee_id: &str,
+) -> Result<(), String> {
+    let list_key = thb_deposit_list_key(event_id);
+    let raw: Option<String> = kv
+        .get(&list_key)
+        .text()
+        .await
+        .map_err(|e| format!("failed to read deposit list: {e:?}"))?;
+
+    let mut ids: Vec<String> = match raw {
+        None => vec![],
+        Some(json) => {
+            serde_json::from_str(&json).map_err(|e| format!("failed to parse deposit list: {e}"))?
+        }
+    };
+
+    if !ids.iter().any(|id| id == attendee_id) {
+        ids.push(attendee_id.to_string());
+        let json = serde_json::to_string(&ids)
+            .map_err(|e| format!("failed to serialize deposit list: {e}"))?;
+        kv.put(&list_key, &json)
+            .map_err(|e| format!("failed to build deposit list put: {e:?}"))?
+            .execute()
+            .await
+            .map_err(|e| format!("failed to write deposit list to KV: {e:?}"))?;
+    }
+
+    Ok(())
 }

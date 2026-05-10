@@ -1,0 +1,4 @@
+# Force curve25519-dalek to use the fiat (formally verified) backend.
+# The serial backend also works on wasm32, but fiat is preferred for correctness.
+[target.wasm32-unknown-unknown]
+rustflags = ['--cfg=curve25519_dalek_backend="fiat"']

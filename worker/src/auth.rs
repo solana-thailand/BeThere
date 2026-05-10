@@ -298,7 +298,22 @@ fn extract_token_from_request(req: &Request) -> Option<String> {
 }
 
 /// Verify a JWT token and return claims.
+///
+/// In dev mode (`DEV_MODE=1`), accepts the literal string `dev-token`
+/// and returns synthetic Claims with the configured `dev_email`.
 async fn verify_token(token: &Option<String>, state: &AppState) -> Result<Claims, String> {
+    // Dev mode bypass — accept "dev-token" without JWT verification
+    if state.config.dev_mode {
+        let token = token.as_ref().ok_or("missing authentication token")?;
+        if token == "dev-token" {
+            return Ok(Claims::new(
+                state.config.dev_email.clone(),
+                "dev-subject".to_string(),
+            ));
+        }
+        // If not "dev-token", still try normal JWT verification (e.g. real OAuth sessions)
+    }
+
     let token = token.as_ref().ok_or("missing authentication token")?;
     verify_session_jwt(token, &state.config.jwt_secret).await
 }
@@ -483,6 +498,8 @@ mod tests {
                 start_ms: 0,
                 end_ms: 0,
             },
+            dev_mode: false,
+            dev_email: "dev@localhost".to_string(),
         };
 
         AppState {

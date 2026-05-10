@@ -8,6 +8,47 @@
 
 use serde::{Deserialize, Serialize};
 
+/// Event format — controls deposit, check-in, claim, and escrow paths.
+///
+/// - `InPerson`: Physical event, deposit auto-enabled, physical check-in required.
+/// - `Online`: Virtual event, no deposit, quest completion = virtual check-in.
+/// - `Hybrid`: Both tracks in one event, one Google Sheet with participation_type column.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+#[derive(Default)]
+pub enum EventFormat {
+    #[default]
+    InPerson,
+    Online,
+    Hybrid,
+}
+
+impl EventFormat {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::InPerson => "in_person",
+            Self::Online => "online",
+            Self::Hybrid => "hybrid",
+        }
+    }
+
+    /// Whether this format includes an in-person track (requires deposit, physical check-in).
+    pub fn has_in_person(&self) -> bool {
+        matches!(self, Self::InPerson | Self::Hybrid)
+    }
+
+    /// Whether this format includes an online track (quest-based virtual check-in).
+    pub fn has_online(&self) -> bool {
+        matches!(self, Self::Online | Self::Hybrid)
+    }
+}
+
+impl std::fmt::Display for EventFormat {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
 /// Lifecycle status of an event.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -58,6 +99,15 @@ pub struct EventMeta {
     /// Emails of users with organizer-level access to this event.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub organizer_emails: Vec<String>,
+    /// Whether deposit is enabled for this event.
+    #[serde(default)]
+    pub deposit_enabled: bool,
+    /// On-chain escrow PDA address. Empty string if not yet initialized.
+    #[serde(default)]
+    pub escrow_address: String,
+    /// Event format — controls deposit, check-in, and claim paths.
+    #[serde(default)]
+    pub event_format: EventFormat,
 }
 
 /// Top-level index of all events, stored under KV key "events".
@@ -142,6 +192,49 @@ pub struct EventConfig {
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub claim_base_url: String,
 
+    // ── Deposit settings ──────────────────────────────────────────────
+    /// Whether deposit is required for this event.
+    #[serde(default)]
+    pub deposit_enabled: bool,
+    /// Deposit amount in USDC smallest unit (6 decimals). e.g., 15_000_000 = $15.
+    #[serde(default)]
+    pub deposit_amount_usdc: u64,
+    /// Deposit amount in Thai Baht (for PromptPay track). e.g., 500.
+    #[serde(default)]
+    pub deposit_amount_thb: u64,
+    /// PromptPay ID for THB payments (Thai phone number or national ID).
+    /// e.g., "0812345678" or "1-1001-00000-00-0".
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub promptpay_id: String,
+    /// EventEscrow PDA address (set after on-chain create_event). Empty if not yet created.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub escrow_address: String,
+    /// Organizer's Solana wallet address (base58). Required for PDA derivation.
+    /// Set when event is created on-chain via the escrow program.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub organizer_wallet: String,
+    /// On-chain event ID (u64) used for PDA seed derivation.
+    /// Set when event is created on-chain. If 0, derived from event slug hash.
+    #[serde(default)]
+    pub on_chain_event_id: u64,
+    /// Hours after event_end for refund deadline (default: 168 = 7 days).
+    #[serde(default)]
+    pub refund_deadline_hours: u32,
+
+    // ── Public details ───────────────────────────────────────────────
+    /// Event description (markdown or plain text).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub description: String,
+    /// Event location (venue name, address, or "Online").
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub location: String,
+
+    // ── Event format ───────────────────────────────────────────────────
+    /// Event format — In-Person, Online, or Hybrid.
+    /// Controls deposit, check-in, escrow, and claim paths.
+    #[serde(default)]
+    pub event_format: EventFormat,
+
     // ── Timestamps ────────────────────────────────────────────────────
     /// ISO 8601 creation timestamp.
     pub created_at: String,
@@ -162,6 +255,9 @@ impl EventConfig {
             sheet_id: self.sheet_id.clone(),
             created_at: self.created_at.clone(),
             organizer_emails: self.organizer_emails.clone(),
+            deposit_enabled: self.deposit_enabled,
+            escrow_address: self.escrow_address.clone(),
+            event_format: self.event_format.clone(),
         }
     }
 
@@ -255,6 +351,17 @@ impl EventConfig {
             organizer_emails,
             staff_emails,
             claim_base_url: claim_base_url.to_string(),
+            deposit_enabled: false,
+            deposit_amount_usdc: 0,
+            deposit_amount_thb: 0,
+            promptpay_id: String::new(),
+            escrow_address: String::new(),
+            organizer_wallet: String::new(),
+            on_chain_event_id: 0,
+            refund_deadline_hours: 168,
+            description: String::new(),
+            location: String::new(),
+            event_format: EventFormat::InPerson,
             created_at: String::new(),
             updated_at: String::new(),
         }
@@ -324,8 +431,44 @@ pub struct CreateEventRequest {
     /// Base URL for claim links.
     #[serde(default)]
     pub claim_base_url: String,
+
+    // ── Deposit settings ──────────────────────────────────────────────
+    /// Whether deposit is required for this event.
+    #[serde(default)]
+    pub deposit_enabled: bool,
+    /// Deposit amount in USDC smallest unit (6 decimals).
+    #[serde(default)]
+    pub deposit_amount_usdc: u64,
+    /// Deposit amount in Thai Baht (for PromptPay track).
+    #[serde(default)]
+    pub deposit_amount_thb: u64,
+    /// PromptPay ID for THB payments (Thai phone number or national ID).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub promptpay_id: String,
+    /// EventEscrow PDA address.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub escrow_address: String,
+    /// Organizer's Solana wallet address (base58).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub organizer_wallet: String,
+    /// On-chain event ID (u64) for PDA seed derivation. 0 = auto-derive.
+    #[serde(default)]
+    pub on_chain_event_id: u64,
+    /// Hours after event_end for refund deadline (default: 168 = 7 days).
+    #[serde(default)]
+    pub refund_deadline_hours: u32,
+    /// Event description (markdown or plain text).
+    #[serde(default)]
+    pub description: String,
+    /// Event location (venue name, address, or "Online").
+    #[serde(default)]
+    pub location: String,
+    /// Event format — In-Person, Online, or Hybrid.
+    #[serde(default)]
+    pub event_format: EventFormat,
 }
 
+/// Request body for updating an existing event.
 /// Request body for PUT /api/events/{id} — update an existing event.
 /// All fields are optional; only provided fields are updated.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -393,6 +536,45 @@ pub struct UpdateEventRequest {
     /// New claim base URL.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub claim_base_url: Option<String>,
+
+    // ── Deposit settings ──────────────────────────────────────────────
+    /// Whether deposit is required for this event.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deposit_enabled: Option<bool>,
+    /// Deposit amount in USDC smallest unit (6 decimals).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deposit_amount_usdc: Option<u64>,
+    /// Deposit amount in Thai Baht (for PromptPay track).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deposit_amount_thb: Option<u64>,
+    /// PromptPay ID for THB payments (Thai phone number or national ID).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub promptpay_id: Option<String>,
+    /// EventEscrow PDA address.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub escrow_address: Option<String>,
+    /// Organizer's Solana wallet address (base58).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub organizer_wallet: Option<String>,
+    /// On-chain event ID (u64) for PDA seed derivation.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub on_chain_event_id: Option<u64>,
+    /// Hours after event_end for refund deadline.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub refund_deadline_hours: Option<u32>,
+    /// Optimistic concurrency: if provided, update only succeeds when this
+    /// matches the stored `updated_at` timestamp. Prevents blind overwrites.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expected_updated_at: Option<String>,
+    /// New event description.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// New event location.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub location: Option<String>,
+    /// New event format.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub event_format: Option<EventFormat>,
 }
 
 /// Response for GET /api/events — list all events.

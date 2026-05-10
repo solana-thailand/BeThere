@@ -27,6 +27,11 @@ npx wrangler secret put GOOGLE_SHEET_ID
 npx wrangler secret put STAFF_EMAILS
 npx wrangler secret put SUPER_ADMIN_EMAILS
 
+# Dev mode (optional — for local E2E testing without Google OAuth)
+# ⚠️ NEVER enable in production!
+echo 'DEV_MODE = "1"' >> worker/.dev.vars
+echo 'DEV_EMAIL = "your-email@example.com"' >> worker/.dev.vars
+
 # 4. Create KV namespaces (first time only)
 npx wrangler kv namespace create EVENTS
 npx wrangler kv namespace create EVENTS --preview
@@ -118,6 +123,7 @@ The frontend is served from `frontend-leptos/dist/` via Workers Assets with SPA 
 | GET | `/api/events/{id}` | Cookie | Get event config |
 | PUT | `/api/events/{id}` | Cookie + SuperAdmin | Update event config |
 | DELETE | `/api/events/{id}` | Cookie + SuperAdmin | Archive event |
+| POST | `/api/events/{id}/restore` | Cookie + SuperAdmin | Restore archived event to Draft |
 | POST | `/api/events/seed` | Cookie + SuperAdmin | Seed event from env vars |
 | POST | `/api/events/migrate` | Cookie + SuperAdmin | Migrate quiz KV → event KV |
 | GET | `/api/attendees` | Cookie + Event Staff | List all attendees + stats |
@@ -134,6 +140,20 @@ The frontend is served from `frontend-leptos/dist/` via Workers Assets with SPA 
 | POST | `/api/adventure/{token}/save` | No | Save adventure progress |
 | GET | `/api/admin/adventure` | Cookie + Staff | Get adventure config |
 | PUT | `/api/admin/adventure` | Cookie + Staff | Update adventure config |
+| GET | `/api/deposit/status/{attendee_id}` | No | Check deposit status for attendee |
+| POST | `/api/deposit/usdc` | No | Build Solana Pay deposit TX (USDC) |
+| GET | `/api/deposit/usdc/confirm` | No | Poll deposit TX confirmation via Solana RPC |
+| POST | `/api/deposit/usdc/webhook` | No | Record TX signature, verify on-chain |
+| POST | `/api/deposit/thb/upload` | No | Upload PromptPay slip URL (THB) |
+| GET | `/api/deposit/thb/pending` | Cookie + Staff | List pending THB slips |
+| POST | `/api/deposit/thb/verify` | Cookie + Staff | Verify/reject THB slip |
+| GET | `/api/refund/queue` | Cookie + Staff | List pending refunds |
+| POST | `/api/refund/mark/{id}` | Cookie + Staff | Mark refund as completed |
+| POST | `/api/escrow/create-event` | Cookie + Organizer | Initialize on-chain escrow PDA |
+| GET  | `/api/deposit/usdc/tx` | No | Solana Pay TX callback (wallet fetches serialized TX) |
+| POST | `/api/escrow/create-vault-ata` | Cookie + Organizer | Create vault's Associated Token Account |
+| POST | `/api/escrow/mark-checked-in` | Cookie + Organizer | Mark attendee as checked-in on-chain (prerequisite for refund) |
+| POST | `/api/escrow/refund` | No | Build refund TX for attendee's wallet to sign |
 
 ## Frontend Routes
 
@@ -146,12 +166,14 @@ The frontend is served from `frontend-leptos/dist/` via Workers Assets with SPA 
 | `/admin` | Dashboard — attendee list, stats, QR management | Staff |
 | `/admin/events` | Events — create, edit, manage events | SuperAdmin |
 | `/adventure` | Rust Adventures — educational game | Public |
+| `/deposit/{attendee_id}` | Deposit — wallet adapter + QR for USDC/THB deposit | Public |
 
 ## Architecture
 
 ```
 worker/src/             — Cloudflare Worker
   handlers/             — API endpoints (auth, check-in, QR, attendee, events, quiz, claim, adventure, health)
+    deposit.rs            — USDC/THB deposit, confirmation, webhook, refund queue
     ext.rs              — Shared utilities (EventIdQuery, resolve_event_with_access, resolve_kv)
   adventure.rs          — Adventure business logic (save progress, check completion)
   auth.rs               — Google OAuth + JWT + role resolution (super_admin/organizer/staff)
@@ -160,6 +182,7 @@ worker/src/             — Cloudflare Worker
   quiz.rs               — Quiz business logic (scoring, KV interaction)
   sheets.rs             — Google Sheets read/write (worker::Fetch) + KV attendee cache + token cache
   solana.rs             — Helius cNFT minting (mintCompressedNft RPC, MintRequest struct)
+  solana_escrow.rs      — Solana escrow TX builders (deposit, refund, create_event, mark_checked_in, create_vault_ata)
   crypto.rs             — SubtleCrypto bridge (RSA-SHA256, HMAC-SHA256)
   http.rs               — HTTP client wrapping worker::Fetch
   middleware.rs         — Security headers, auth guard
@@ -178,6 +201,42 @@ frontend-leptos/src/
   utils.rs              — Helpers (timestamps, badges, participation)
   js/                   — Camera + QR detection module
 ```
+
+### Solana Escrow Architecture
+
+The escrow system uses PDAs (Program Derived Addresses) to hold attendee USDC deposits on-chain. The escrow program is deployed on devnet at `2TGfNNXNez2NgopffDnYYhLNYmndUBBwg5SvpD5XQeLo`.
+
+**Escrow Flow (5 steps, all validated on devnet):**
+
+```
+1. create_event        →  Organizer signs  →  EventEscrow PDA + Vault ATA initialized (single TX)
+2. deposit             →  Attendee signs   →  USDC → vault (Solana Pay)
+3. mark_checked_in     →  Organizer signs  →  Attendee checked-in on-chain
+4. refund              →  Attendee signs   →  USDC → attendee (after event ends)
+5. claim_forfeited     →  Organizer signs  →  Forfeited deposits → organizer (after refund deadline)
+```
+
+**PDA Seeds:**
+- `EventEscrow`: `["escrow", organizer_pubkey, event_id_u64_le]`
+- `AttendeeDeposit`: `["deposit", event_escrow_pubkey, attendee_pubkey]`
+- `Vault ATA`: Associated Token Account for (EventEscrow, USDC mint)
+
+**Important constraints:**
+- Refund requires `clock > event_end` (event must have ended) — no check-in required
+- Deposits are rejected after the event has ended (`event_end > now` check)
+- `mark_checked_in` rejects after `event_end` (SEC-011: prevents post-event attendance manipulation)
+- `claim_forfeited` requires `clock > refund_deadline` (post-deadline only)
+- All SPL token transfers use `transfer_checked()` with 6-decimal USDC (Token-2022 compatible)
+
+> **Security note**: SEC-001 (check-in gate rug pull) has been fixed — refunds no longer require `checked_in == true`. Attendees can refund after `event_end` regardless of check-in status. See `docs/security_audit.md` for full audit.
+
+**Constants:**
+| Constant | Devnet | Mainnet |
+|----------|--------|--------|
+| Program ID | `2TGfNNXNez2NgopffDnYYhLNYmndUBBwg5SvpD5XQeLo` | TBD |
+| USDC Mint | `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU` | `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1m` |
+
+**Transaction building:** All TX builders are in `worker/src/solana_escrow.rs`. They use a shared `build_message_accounts()` helper for Solana's canonical 4-pass account ordering.
 
 ### Performance Layers
 
@@ -213,6 +272,15 @@ cargo check -p event-checkin-worker --target wasm32-unknown-unknown
 cargo clippy --all-targets
 ```
 
+### Devnet Escrow E2E
+
+```bash
+# Full 5-step escrow E2E on Solana devnet (requires USDC-funded attendee wallet)
+ATTENDEE_WALLET=~/.config/solana/id.json bash scripts/e2e/test_escrow_devnet.sh
+```
+
+See `scripts/e2e/test_escrow_devnet.sh` for the complete test flow. All 24 tests validated on devnet.
+
 ## Features
 
 - **Camera QR Scanner** — BarcodeDetector (Chrome) + jsQR fallback (Firefox/Safari)
@@ -230,6 +298,12 @@ cargo clippy --all-targets
 - **Rust Adventures** — Educational tile-based game teaching Solana/Rust concepts
 - **Security hardened** — Cookie Secure flag, secret redaction in Debug, attendee-validated adventure saves
 - **Automated E2E tests** — 10-step full E2E suite (`scripts/e2e/test_full_e2e.sh`) + 7-test devnet suite
+- **PDA escrow deposits** — USDC deposits held in on-chain PDAs, refundable after event
+- **Solana Pay integration** — Deposit via QR code scan or wallet adapter (Phantom, Backpack, Solflare)
+- **Dual-track deposits** — USDC (on-chain escrow) or THB (PromptPay QR + slip verification)
+- **Single-TX escrow init** — Admin creates vault ATA + event escrow in one transaction via wallet signing (Phantom/Solflare)
+- **On-chain check-in** — Staff marks attendees checked in on-chain via wallet-signed TX (escrow refund gate)
+- **Wallet adapter interop** — Shared JS module for wallet detection, connection, TX signing across scanner + admin
 
 ## Security
 
@@ -241,10 +315,14 @@ cargo clippy --all-targets
 | Claim gates | ✅ Secure | Sequential check-in → quiz → adventure → mint, no bypass |
 | Solana RPC | ✅ Secure | Hardcoded method, serde serialization, null-safe deserialization, no user-controlled params |
 | Secrets | ✅ Secure | All via `env.secret()`, redacted from Debug output |
+| Escrow (on-chain) | ✅ Secure | Immutable params after creation, checked arithmetic, canonical PDA derivation, `transfer_checked()` (SEC-009 fixed), `event_end` guard (SEC-011 fixed) |
+| Escrow (business logic) | ✅ Secure | SEC-001/002/003/004 all fixed — refunds don't require check-in, fields locked after escrow init, $1K deposit cap, archive guards escrow |
+| Escrow (Token-2022) | ✅ Secure | SEC-009 fixed — all transfers use `transfer_checked()` with 6-decimal USDC |
 | Double-claim | ⚠️ Deferred | KV dedup lock recommended before high-traffic events |
 | JWT revocation | ⚠️ Deferred | KV blacklist recommended for compromised tokens |
+| Dev mode | ⚠️ Local only | `DEV_MODE=1` bypasses JWT verification — only for `.dev.vars`, never production |
 
-See `.handovers/025_security_audit_e2e_nft_config.md` for full audit findings.
+See [`docs/security_audit.md`](docs/security_audit.md) for the full escrow security audit (11 findings, 8 fixed, Safe Solana Builder cross-reference). See `.handovers/025_security_audit_e2e_nft_config.md` for the earlier auth/RPC audit.
 
 ## Roles & Access Control
 
@@ -272,7 +350,17 @@ See **[DISCUSSION.md](./DISCUSSION.md)** for the full architecture direction and
 | **5b** | Adventure-gated claim flow | ✅ Done |
 | **6** | Security audit + fixes | ✅ Done |
 | **7** | NFT config + production deployment | 🟡 In Progress (devnet cNFT working, mainnet deferred) |
-| **8** | SOL + USDC refund on claim (on-chain) | Planned |
+| **8a** | PDA escrow program (Quasar) | ✅ Done (devnet deployed) |
+| **8b** | Worker deposit/refund API | ✅ Done |
+| **8c** | Deposit page + wallet adapter (Phantom/Backpack) | ✅ Done |
+| **8d** | On-chain deposit confirmation (RPC polling + webhook) | ✅ Done |
+| **8e** | Devnet E2E with real wallets | ✅ Done (5-step escrow flow validated, 24/24 tests) |
+| **8g** | Frontend refund flow + admin check-in UI + vault ATA + escrow init | ✅ Done |
+| **8h** | Mainnet deploy (escrow + deposit) | Planned |
+| **9a** | Escrow security hardening (SEC-001–011, all phases) | ✅ Done (rebuilt + deployed to devnet) |
+| **9b** | Frontend fixes (SEC-005/006, explorer links, Merkle field) | ✅ Done (cluster-aware Solscan links, duplicate Merkle removed) |
+| **9c** | Rent reclamation — close AttendeeDeposit PDAs (SEC-010) | ✅ Done (close_deposit instruction + TX builder + UI) |
+| **9d** | UX improvements (search/filter, progressive disclosure form) | Planned |
 
 ### NFT Config Setup (Phase 7)
 

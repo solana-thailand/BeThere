@@ -3,9 +3,120 @@
 //! Provides typed response structs and authenticated request helpers
 //! for all backend endpoints.
 
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::time::Duration;
+
 use serde::{Deserialize, Serialize};
 
 use crate::auth::{clear_token, get_token};
+
+// ---------------------------------------------------------------------------
+// B5: Stale-while-revalidate in-memory API response cache
+// ---------------------------------------------------------------------------
+
+/// Cache entry holding serialized JSON and insertion timestamp.
+struct CacheEntry {
+    json: String,
+    inserted_at: Duration,
+}
+
+// Global API response cache (keyed by URL path).
+thread_local! {
+    static API_CACHE: RefCell<HashMap<String, CacheEntry>> =
+        RefCell::new(HashMap::new());
+}
+
+/// TTL for cached GET responses (30 seconds).
+/// Attendee list is cached for 5 minutes on the worker side (KV),
+/// so a 30s client-side stale window avoids redundant HTTP round-trips
+/// while staying fresh enough for check-in operations.
+const CACHE_TTL: Duration = Duration::from_secs(30);
+
+/// Try to get a cached response for the given path.
+/// Returns `None` if not cached or expired.
+fn cache_get(path: &str) -> Option<String> {
+    let now = now_secs();
+    API_CACHE.with(|c| {
+        let cache = c.borrow();
+        cache.get(path).and_then(|entry| {
+            if now.saturating_sub(entry.inserted_at) < CACHE_TTL {
+                Some(entry.json.clone())
+            } else {
+                None
+            }
+        })
+    })
+}
+
+/// Store a response in the cache.
+fn cache_put(path: &str, json: &str) {
+    let now = now_secs();
+    API_CACHE.with(|c| {
+        c.borrow_mut().insert(
+            path.to_string(),
+            CacheEntry {
+                json: json.to_string(),
+                inserted_at: now,
+            },
+        );
+    });
+}
+
+/// Invalidate a cached response (e.g. after a mutation).
+fn cache_invalidate(path_prefix: &str) {
+    API_CACHE.with(|c| {
+        c.borrow_mut().retain(|k, _| !k.starts_with(path_prefix));
+    });
+}
+
+/// Current time as Duration from some epoch (performance.now in WASM).
+fn now_secs() -> Duration {
+    // In WASM, use performance.now() for sub-ms precision.
+    // Fall back to 0 if window is unavailable.
+    let ms = web_sys::window()
+        .and_then(|w| w.performance())
+        .map(|p| p.now() as u64)
+        .unwrap_or(0);
+    Duration::from_millis(ms)
+}
+
+/// Perform a cached GET request. Returns cached response if fresh,
+/// otherwise fetches from the server.
+///
+/// Uses stale-while-revalidate: returns stale data immediately,
+/// then fetches fresh data in the background.
+async fn cached_get(path: &str) -> Result<String, ApiError> {
+    // Check cache first
+    if let Some(cached_json) = cache_get(path) {
+        return Ok(cached_json);
+    }
+
+    // Cache miss — fetch from server
+    let response = api_get(path).await?;
+
+    if !response.ok() {
+        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
+            success: false,
+            data: None,
+            error: Some("Request failed".to_string()),
+        });
+        return Err(ApiError {
+            message: body.error.unwrap_or_default(),
+            status: 0,
+        });
+    }
+
+    let json = response.text().await.map_err(|e| ApiError {
+        message: format!("Failed to read response: {e}"),
+        status: 0,
+    })?;
+
+    // Store in cache
+    cache_put(path, &json);
+
+    Ok(json)
+}
 
 /// Helper for serde `#[serde(default = "default_true")]` — defaults to `true`.
 const fn default_true() -> bool {
@@ -437,29 +548,22 @@ pub async fn get_me() -> Result<MeResponse, ApiError> {
 
 /// GET /api/attendees
 /// Returns all attendees with stats.
+///
+/// Results are cached client-side for 30 seconds (B5).
+/// Call `invalidate_attendee_cache()` after mutations (check-in, QR gen).
 pub async fn get_attendees(event_id: Option<&str>) -> Result<AttendeesData, ApiError> {
     let path = match event_id {
         Some(id) if !id.is_empty() => format!("/attendees?event_id={id}"),
         _ => "/attendees".to_string(),
     };
-    let response = api_get(&path).await?;
 
-    if !response.ok() {
-        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
-            success: false,
-            data: None,
-            error: Some("Failed to load attendees".to_string()),
-        });
-        return Err(ApiError {
-            message: body.error.unwrap_or_default(),
+    let json = cached_get(&path).await?;
+
+    let wrapper: ApiResponse<AttendeesData> =
+        serde_json::from_str(&json).map_err(|e| ApiError {
+            message: format!("Failed to parse attendees: {e}"),
             status: 0,
-        });
-    }
-
-    let wrapper: ApiResponse<AttendeesData> = response.json().await.map_err(|e| ApiError {
-        message: format!("Failed to parse attendees: {e}"),
-        status: 0,
-    })?;
+        })?;
 
     wrapper.data.ok_or_else(|| ApiError {
         message: wrapper.error.unwrap_or("No data".to_string()),
@@ -467,31 +571,31 @@ pub async fn get_attendees(event_id: Option<&str>) -> Result<AttendeesData, ApiE
     })
 }
 
+/// Invalidate the client-side attendee cache.
+/// Call this after any mutation that changes attendee data
+/// (check-in, QR generation, bulk operations).
+pub fn invalidate_attendee_cache() {
+    cache_invalidate("/attendees");
+    cache_invalidate("/attendee/");
+}
+
 /// GET /api/attendee/:id
 /// Returns a single attendee by their api_id.
+///
+/// Results are cached client-side for 30 seconds (B5).
 pub async fn get_attendee(id: &str, event_id: Option<&str>) -> Result<AttendeeData, ApiError> {
     let path = match event_id {
         Some(eid) if !eid.is_empty() => format!("/attendee/{id}?event_id={eid}"),
         _ => format!("/attendee/{id}"),
     };
-    let response = api_get(&path).await?;
 
-    if !response.ok() {
-        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
-            success: false,
-            data: None,
-            error: Some("Attendee not found".to_string()),
-        });
-        return Err(ApiError {
-            message: body.error.unwrap_or_default(),
+    let json = cached_get(&path).await?;
+
+    let wrapper: ApiResponse<AttendeeData> =
+        serde_json::from_str(&json).map_err(|e| ApiError {
+            message: format!("Failed to parse attendee: {e}"),
             status: 0,
-        });
-    }
-
-    let wrapper: ApiResponse<AttendeeData> = response.json().await.map_err(|e| ApiError {
-        message: format!("Failed to parse attendee: {e}"),
-        status: 0,
-    })?;
+        })?;
 
     wrapper.data.ok_or_else(|| ApiError {
         message: wrapper.error.unwrap_or("No data".to_string()),
@@ -501,11 +605,14 @@ pub async fn get_attendee(id: &str, event_id: Option<&str>) -> Result<AttendeeDa
 
 /// POST /api/checkin/:id
 /// Check in an attendee by their api_id.
-pub async fn check_in(id: &str, event_id: Option<&str>) -> Result<CheckInData, ApiError> {
-    let path = match event_id {
+pub async fn check_in(id: &str, event_id: Option<&str>, online: bool) -> Result<CheckInData, ApiError> {
+    let mut path = match event_id {
         Some(eid) if !eid.is_empty() => format!("/checkin/{id}?event_id={eid}"),
         _ => format!("/checkin/{id}"),
     };
+    if online {
+        path = format!("{path}&online=true");
+    }
     let response = api_post(&path).await?;
 
     if !response.ok() {
@@ -529,6 +636,31 @@ pub async fn check_in(id: &str, event_id: Option<&str>) -> Result<CheckInData, A
         message: wrapper.error.unwrap_or("No data".to_string()),
         status: 0,
     })
+}
+
+// ===== Walk-in Registration =====
+
+/// Request body for POST /api/walkin/register
+#[derive(Debug, Clone, Serialize)]
+pub struct WalkinRegisterRequest {
+    pub event_id: String,
+    pub name: String,
+    pub email: String,
+    pub phone: Option<String>,
+}
+
+/// Response from POST /api/walkin/register
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct WalkinRegisterResponse {
+    pub claim_token: String,
+    pub claim_url: String,
+}
+
+/// POST /api/walkin/register
+/// Register a walk-in attendee for an event.
+pub async fn register_walkin(req: &WalkinRegisterRequest) -> Result<WalkinRegisterResponse, ApiError> {
+    let response = api_post_json("/walkin/register", req).await?;
+    Ok(response)
 }
 
 /// POST /api/generate-qrs?force={force}
@@ -630,6 +762,24 @@ pub struct ClaimLookupData {
     /// Total number of attendees who have claimed their NFT.
     #[serde(default)]
     pub total_claimed: usize,
+    /// Attendee's API ID (for deposit page link: /deposit/{api_id}).
+    #[serde(default)]
+    pub api_id: String,
+    /// Event ID (for deposit page link query param).
+    #[serde(default)]
+    pub event_id: String,
+    /// Whether deposit is enabled for this event.
+    #[serde(default)]
+    pub deposit_enabled: bool,
+    /// Deposit amount in USDC (smallest unit, e.g. 15000000 = 15 USDC).
+    #[serde(default)]
+    pub deposit_amount_usdc: u64,
+    /// Deposit amount in THB (e.g. 500).
+    #[serde(default)]
+    pub deposit_amount_thb: u64,
+    /// Attendee's participation type ("In-Person", "Online", etc.).
+    #[serde(default)]
+    pub participation_type: String,
 }
 
 /// Response data for POST /api/claim/{token} — NFT mint result.
@@ -793,6 +943,44 @@ pub enum EventStatus {
     Archived,
 }
 
+/// Event format (mirrors backend EventFormat).
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum EventFormat {
+    #[default]
+    InPerson,
+    Online,
+    Hybrid,
+}
+
+impl EventFormat {
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::InPerson => "In-Person",
+            Self::Online => "Online",
+            Self::Hybrid => "Hybrid",
+        }
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::InPerson => "in_person",
+            Self::Online => "online",
+            Self::Hybrid => "hybrid",
+        }
+    }
+
+    /// Whether this format includes an in-person track.
+    pub fn has_in_person(&self) -> bool {
+        matches!(self, Self::InPerson | Self::Hybrid)
+    }
+
+    /// Whether this format includes an online track.
+    pub fn has_online(&self) -> bool {
+        matches!(self, Self::Online | Self::Hybrid)
+    }
+}
+
 /// Lightweight event metadata from the events list endpoint.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct EventMeta {
@@ -814,6 +1002,12 @@ pub struct EventMeta {
     pub created_at: String,
     #[serde(default)]
     pub organizer_emails: Vec<String>,
+    #[serde(default)]
+    pub deposit_enabled: bool,
+    #[serde(default)]
+    pub escrow_address: String,
+    #[serde(default)]
+    pub event_format: EventFormat,
 }
 
 /// Full event configuration (from GET /api/events/{id}).
@@ -863,6 +1057,24 @@ pub struct EventDetail {
     pub staff_emails: Vec<String>,
     #[serde(default)]
     pub claim_base_url: String,
+    #[serde(default)]
+    pub deposit_enabled: bool,
+    #[serde(default)]
+    pub deposit_amount_usdc: u64,
+    #[serde(default)]
+    pub deposit_amount_thb: u64,
+    #[serde(default)]
+    pub promptpay_id: String,
+    #[serde(default)]
+    pub escrow_address: String,
+    #[serde(default)]
+    pub organizer_wallet: String,
+    #[serde(default)]
+    pub on_chain_event_id: u64,
+    #[serde(default)]
+    pub refund_deadline_hours: u32,
+    #[serde(default)]
+    pub event_format: EventFormat,
     #[serde(default)]
     pub created_at: String,
     #[serde(default)]
@@ -925,9 +1137,25 @@ pub struct CreateEventBody {
     pub staff_emails: Vec<String>,
     #[serde(default)]
     pub claim_base_url: String,
+    #[serde(default)]
+    pub deposit_enabled: bool,
+    #[serde(default)]
+    pub deposit_amount_usdc: u64,
+    #[serde(default)]
+    pub deposit_amount_thb: u64,
+    #[serde(default)]
+    pub promptpay_id: String,
+    #[serde(default)]
+    pub escrow_address: String,
+    #[serde(default)]
+    pub organizer_wallet: String,
+    #[serde(default)]
+    pub on_chain_event_id: u64,
+    #[serde(default)]
+    pub refund_deadline_hours: u32,
+    #[serde(default)]
+    pub event_format: EventFormat,
 }
-
-/// Request body for updating an existing event.
 /// Request body for PUT /api/events/{id} — update event.
 /// All fields optional for partial update.
 #[derive(Debug, Clone, Serialize, Default)]
@@ -974,6 +1202,27 @@ pub struct UpdateEventBody {
     pub staff_emails: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub claim_base_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deposit_enabled: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deposit_amount_usdc: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deposit_amount_thb: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub promptpay_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub escrow_address: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub organizer_wallet: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub on_chain_event_id: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub refund_deadline_hours: Option<u32>,
+    /// Optimistic concurrency: matches server `updated_at` to prevent blind overwrites.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expected_updated_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub event_format: Option<EventFormat>,
 }
 
 /// Response from event create/update (partial data).
@@ -997,25 +1246,13 @@ pub struct EventMutationData {
 /// Look up an attendee's claim status by their claim token.
 ///
 /// Public endpoint — no authentication required.
-/// Returns attendee name, check-in time, and whether already claimed.
+/// Results are cached client-side for 30 seconds (B5).
 pub async fn get_claim(token: &str) -> Result<ClaimLookupData, ApiError> {
-    let url = format!("{}/claim/{token}", api_base());
-    let response = gloo::net::http::Request::get(&url).send().await?;
-
-    if !response.ok() {
-        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
-            success: false,
-            data: None,
-            error: Some("Claim lookup failed".to_string()),
-        });
-        return Err(ApiError {
-            message: body.error.unwrap_or_default(),
-            status: response.status(),
-        });
-    }
+    let path = format!("/claim/{token}");
+    let json = cached_get(&path).await?;
 
     let wrapper: ApiResponse<ClaimLookupData> =
-        response.json().await.map_err(|e| ApiError {
+        serde_json::from_str(&json).map_err(|e| ApiError {
             message: format!("Failed to parse claim response: {e}"),
             status: 0,
         })?;
@@ -1115,6 +1352,37 @@ pub async fn update_event(id: &str, body: &UpdateEventBody) -> Result<EventMutat
     let path = format!("/events/{id}");
     api_put_json(&path, body).await
 }
+
+// ---------------------------------------------------------------------------
+// Escrow — init (combined ATA + CreateEvent in one TX)
+// ---------------------------------------------------------------------------
+
+/// Request body for POST /api/escrow/init.
+#[derive(Debug, Clone, Serialize)]
+pub struct InitEscrowRequest {
+    pub event_id: String,
+}
+
+/// Response from POST /api/escrow/init.
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct InitEscrowResponse {
+    /// Base64-encoded serialized transaction (unsigned — wallet signs).
+    pub transaction: String,
+    /// Human-readable message for wallet confirmation.
+    pub message: String,
+    /// Derived EventEscrow PDA address (base58).
+    pub escrow_address: String,
+    /// Derived vault ATA address (base58).
+    pub vault_address: String,
+    /// The on-chain event ID used for PDA derivation.
+    pub on_chain_event_id: u64,
+}
+
+/// POST /api/escrow/init — combined ATA + create_event in one transaction.
+pub async fn init_escrow(body: &InitEscrowRequest) -> Result<InitEscrowResponse, ApiError> {
+    api_post_json("/escrow/init", body).await
+}
+
 
 /// DELETE /api/events/{id} — archive an event.
 pub async fn archive_event(id: &str) -> Result<EventMutationData, ApiError> {
@@ -1545,4 +1813,411 @@ pub async fn put_admin_adventure_config(
 
     // Return the config we sent (backend echoes it back)
     Ok(config.clone())
+}
+
+// ===== Deposit/Refund types =====
+
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct DepositStatusInfo {
+    pub attendee_id: String,
+    pub event_id: String,
+    pub method: String,
+    pub amount: u64,
+    pub currency: String,
+    pub tx_signature: Option<String>,
+    pub verified: bool,
+    pub deposited_at: String,
+    #[serde(default)]
+    pub wallet_address: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+pub struct DepositStatusResponse {
+    pub deposit_enabled: bool,
+    pub deposit_amount_usdc: u64,
+    pub deposit_amount_thb: u64,
+    pub promptpay_id: String,
+    #[serde(default)]
+    pub event_start_ms: i64,
+    #[serde(default)]
+    pub event_end_ms: i64,
+    #[serde(default)]
+    pub refund_deadline_hours: u32,
+    #[serde(default)]
+    pub event_name: String,
+    #[serde(default)]
+    pub event_tagline: String,
+    pub status: Option<DepositStatusInfo>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct UsdcDepositRequest {
+    pub event_id: String,
+    pub attendee_id: String,
+    pub wallet_address: String,
+}
+
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+pub struct UsdcDepositResponse {
+    pub transaction: String,
+    pub solana_pay_url: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ThbSlipUploadRequest {
+    pub event_id: String,
+    pub attendee_id: String,
+    pub slip_url: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct VerifySlipRequest {
+    pub event_id: String,
+    pub attendee_id: String,
+    pub approved: bool,
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct ThbDepositInfo {
+    pub attendee_id: String,
+    pub event_id: String,
+    pub amount_thb: u64,
+    pub slip_url: Option<String>,
+    pub verified: bool,
+    pub verified_by: Option<String>,
+    pub verified_at: Option<String>,
+    pub uploaded_at: String,
+    pub refunded: bool,
+    pub refunded_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+pub struct PendingSlipResponse {
+    pub slips: Vec<ThbDepositInfo>,
+}
+
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+pub struct RefundQueueResponse {
+    pub pending: Vec<ThbDepositInfo>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct MarkRefundRequest {
+    pub event_id: String,
+}
+
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+pub struct ConfirmDepositResponse {
+    pub confirmed: bool,
+    pub tx_signature: Option<String>,
+    pub solana_pay_url: Option<String>,
+}
+
+// ===== Deposit/Refund API =====
+
+/// GET /api/deposit/status/{attendee_id}?event_id=xxx
+pub async fn get_deposit_status(
+    attendee_id: &str,
+    event_id: Option<&str>,
+) -> Result<DepositStatusResponse, ApiError> {
+    let path = match event_id {
+        Some(eid) if !eid.is_empty() => format!("/deposit/status/{attendee_id}?event_id={eid}"),
+        _ => format!("/deposit/status/{attendee_id}"),
+    };
+    let response = api_get(&path).await?;
+
+    if !response.ok() {
+        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
+            success: false,
+            data: None,
+            error: Some("Failed to get deposit status".to_string()),
+        });
+        return Err(ApiError {
+            message: body.error.unwrap_or_default(),
+            status: 0,
+        });
+    }
+
+    let wrapper: ApiResponse<DepositStatusResponse> =
+        response.json().await.map_err(|e| ApiError {
+            message: format!("Failed to parse deposit status: {e}"),
+            status: 0,
+        })?;
+
+    wrapper.data.ok_or_else(|| ApiError {
+        message: wrapper.error.unwrap_or("No data".to_string()),
+        status: 0,
+    })
+}
+
+/// POST /api/deposit/usdc
+pub async fn deposit_usdc(body: &UsdcDepositRequest) -> Result<UsdcDepositResponse, ApiError> {
+    api_post_json("/deposit/usdc", body).await
+}
+
+/// POST /api/deposit/usdc/webhook — record TX signature
+pub async fn record_deposit_tx(
+    event_id: &str,
+    attendee_id: &str,
+    tx_signature: &str,
+) -> Result<serde_json::Value, ApiError> {
+    let body = serde_json::json!({
+        "event_id": event_id,
+        "attendee_id": attendee_id,
+        "tx_signature": tx_signature,
+    });
+    api_post_json("/deposit/usdc/webhook", &body).await
+}
+
+/// GET /api/deposit/usdc/confirm?event_id=xxx&attendee_id=xxx
+pub async fn confirm_deposit(
+    event_id: &str,
+    attendee_id: &str,
+) -> Result<ConfirmDepositResponse, ApiError> {
+    let path = format!("/deposit/usdc/confirm?event_id={event_id}&attendee_id={attendee_id}");
+    let response = api_get(&path).await?;
+
+    if !response.ok() {
+        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
+            success: false,
+            data: None,
+            error: Some("Failed to check deposit confirmation".to_string()),
+        });
+        return Err(ApiError {
+            message: body.error.unwrap_or_default(),
+            status: 0,
+        });
+    }
+
+    let wrapper: ApiResponse<ConfirmDepositResponse> =
+        response.json().await.map_err(|e| ApiError {
+            message: format!("Failed to parse deposit confirmation: {e}"),
+            status: 0,
+        })?;
+
+    wrapper.data.ok_or_else(|| ApiError {
+        message: wrapper.error.unwrap_or("No data".to_string()),
+        status: 0,
+    })
+}
+
+/// POST /api/deposit/thb/upload
+pub async fn upload_thb_slip(body: &ThbSlipUploadRequest) -> Result<serde_json::Value, ApiError> {
+    api_post_json("/deposit/thb/upload", body).await
+}
+
+/// POST /api/deposit/thb/verify (admin)
+pub async fn verify_thb_slip(body: &VerifySlipRequest) -> Result<serde_json::Value, ApiError> {
+    api_post_json("/deposit/thb/verify", body).await
+}
+
+/// GET /api/deposit/thb/pending?event_id=xxx
+pub async fn get_pending_slips(event_id: Option<&str>) -> Result<PendingSlipResponse, ApiError> {
+    let path = match event_id {
+        Some(eid) if !eid.is_empty() => format!("/deposit/thb/pending?event_id={eid}"),
+        _ => "/deposit/thb/pending".to_string(),
+    };
+    let response = api_get(&path).await?;
+
+    if !response.ok() {
+        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
+            success: false,
+            data: None,
+            error: Some("Failed to get pending slips".to_string()),
+        });
+        return Err(ApiError {
+            message: body.error.unwrap_or_default(),
+            status: 0,
+        });
+    }
+
+    let wrapper: ApiResponse<PendingSlipResponse> =
+        response.json().await.map_err(|e| ApiError {
+            message: format!("Failed to parse pending slips: {e}"),
+            status: 0,
+        })?;
+
+    wrapper.data.ok_or_else(|| ApiError {
+        message: wrapper.error.unwrap_or("No data".to_string()),
+        status: 0,
+    })
+}
+
+/// GET /api/refund/queue?event_id=xxx
+pub async fn get_refund_queue(event_id: Option<&str>) -> Result<RefundQueueResponse, ApiError> {
+    let path = match event_id {
+        Some(eid) if !eid.is_empty() => format!("/refund/queue?event_id={eid}"),
+        _ => "/refund/queue".to_string(),
+    };
+    let response = api_get(&path).await?;
+
+    if !response.ok() {
+        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
+            success: false,
+            data: None,
+            error: Some("Failed to get refund queue".to_string()),
+        });
+        return Err(ApiError {
+            message: body.error.unwrap_or_default(),
+            status: 0,
+        });
+    }
+
+    let wrapper: ApiResponse<RefundQueueResponse> =
+        response.json().await.map_err(|e| ApiError {
+            message: format!("Failed to parse refund queue: {e}"),
+            status: 0,
+        })?;
+
+    wrapper.data.ok_or_else(|| ApiError {
+        message: wrapper.error.unwrap_or("No data".to_string()),
+        status: 0,
+    })
+}
+
+/// POST /api/refund/mark/{attendee_id}
+pub async fn mark_refund(
+    attendee_id: &str,
+    body: &MarkRefundRequest,
+) -> Result<serde_json::Value, ApiError> {
+    let path = format!("/refund/mark/{attendee_id}");
+    api_post_json(&path, body).await
+}
+
+// ---------------------------------------------------------------------------
+// Escrow Refund
+// ---------------------------------------------------------------------------
+
+/// Request body for POST /api/escrow/refund.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct RefundTxRequest {
+    pub event_id: String,
+    pub attendee_id: String,
+    pub wallet_address: String,
+}
+
+/// Response from POST /api/escrow/refund.
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+pub struct RefundTxResponse {
+    pub transaction: String,
+    pub message: String,
+}
+
+/// POST /api/escrow/refund — build refund TX
+pub async fn build_refund_tx(body: &RefundTxRequest) -> Result<RefundTxResponse, ApiError> {
+    api_post_json("/escrow/refund", body).await
+}
+
+// ---------------------------------------------------------------------------
+// Escrow: Mark Checked In (admin)
+// ---------------------------------------------------------------------------
+
+/// Request body for POST /api/escrow/mark-checked-in.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct MarkCheckedInRequest {
+    pub event_id: String,
+    /// Attendee API ID — backend resolves wallet from deposit record.
+    pub attendee_id: String,
+}
+
+/// Response from POST /api/escrow/mark-checked-in.
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+pub struct MarkCheckedInResponse {
+    pub transaction: String,
+    pub message: String,
+}
+
+/// POST /api/escrow/mark-checked-in — mark attendee checked in
+pub async fn mark_checked_in(body: &MarkCheckedInRequest) -> Result<MarkCheckedInResponse, ApiError> {
+    api_post_json("/escrow/mark-checked-in", body).await
+}
+
+// ---------------------------------------------------------------------------
+// Escrow: Deactivate Event (admin)
+// ---------------------------------------------------------------------------
+
+/// Request body for POST /api/escrow/deactivate-event.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct DeactivateEventRequest {
+    pub event_id: String,
+}
+
+/// Response from POST /api/escrow/deactivate-event.
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+pub struct DeactivateEventResponse {
+    pub transaction: String,
+    pub message: String,
+}
+
+/// POST /api/escrow/deactivate-event — build deactivate_event TX
+pub async fn deactivate_event(body: &DeactivateEventRequest) -> Result<DeactivateEventResponse, ApiError> {
+    api_post_json("/escrow/deactivate-event", body).await
+}
+
+// ---------------------------------------------------------------------------
+// Escrow: Close Event (admin)
+// ---------------------------------------------------------------------------
+
+/// Request body for POST /api/escrow/close-event.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct CloseEventRequest {
+    pub event_id: String,
+}
+
+/// Response from POST /api/escrow/close-event.
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+pub struct CloseEventResponse {
+    pub transaction: String,
+    pub message: String,
+}
+
+/// POST /api/escrow/close-event — build close_event TX
+pub async fn close_event(body: &CloseEventRequest) -> Result<CloseEventResponse, ApiError> {
+    api_post_json("/escrow/close-event", body).await
+}
+
+// ---------------------------------------------------------------------------
+// Escrow: Close Deposit (attendee reclaims rent)
+// ---------------------------------------------------------------------------
+
+/// Request body for POST /api/escrow/close-deposit.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct CloseDepositRequest {
+    pub event_id: String,
+    pub attendee_id: String,
+    pub wallet_address: String,
+}
+
+/// Response from POST /api/escrow/close-deposit.
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+pub struct CloseDepositResponse {
+    pub transaction: String,
+    pub message: String,
+}
+
+/// POST /api/escrow/close-deposit — build close_deposit TX
+pub async fn close_deposit(body: &CloseDepositRequest) -> Result<CloseDepositResponse, ApiError> {
+    api_post_json("/escrow/close-deposit", body).await
+}
+
+// ---------------------------------------------------------------------------
+// Escrow: Claim Forfeited (admin)
+// ---------------------------------------------------------------------------
+
+/// Request body for POST /api/escrow/claim-forfeited.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ClaimForfeitedRequest {
+    pub event_id: String,
+}
+
+/// Response from POST /api/escrow/claim-forfeited.
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+pub struct ClaimForfeitedResponse {
+    pub transaction: String,
+    pub message: String,
+}
+
+/// POST /api/escrow/claim-forfeited — build claim_forfeited TX
+pub async fn claim_forfeited(body: &ClaimForfeitedRequest) -> Result<ClaimForfeitedResponse, ApiError> {
+    api_post_json("/escrow/claim-forfeited", body).await
 }

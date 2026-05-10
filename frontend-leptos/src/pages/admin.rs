@@ -26,6 +26,8 @@ use crate::utils;
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum AdminSection {
     Attendance,
+    Deposits,
+    Escrow,
     Quiz,
     Adventure,
     Events,
@@ -220,6 +222,10 @@ pub fn Admin() -> impl IntoView {
     // Active filter pill — All by default
     let (filter_pill, set_filter_pill) = signal(FilterPill::All);
 
+    // B6: Pagination state — show PAGE_SIZE attendees at a time
+    const PAGE_SIZE: usize = 50;
+    let (visible_count, set_visible_count) = signal(PAGE_SIZE);
+
     // Refresh counter — increment to trigger data reload
     let (refresh_counter, set_refresh_counter) = signal(0u32);
 
@@ -295,6 +301,14 @@ pub fn Admin() -> impl IntoView {
         });
 
         filtered
+    });
+
+    // Reset pagination when filters change
+    Effect::new(move |_| {
+        let _ = active_tab.get();
+        let _ = search_query.get();
+        let _ = filter_pill.get();
+        set_visible_count.set(PAGE_SIZE);
     });
 
     // Data loading effect — triggered by refresh_counter or active_event_id changes.
@@ -391,7 +405,7 @@ pub fn Admin() -> impl IntoView {
             let mut failed = 0u32;
 
             for id in ids {
-                match api::check_in(&id, eid.as_deref()).await {
+                match api::check_in(&id, eid.as_deref(), false).await {
                     Ok(_) => succeeded += 1,
                     Err(e) => {
                         failed += 1;
@@ -411,6 +425,7 @@ pub fn Admin() -> impl IntoView {
                 ToastType::Success
             };
             components::show_toast(&set_toast, &msg, toast_type);
+            api::invalidate_attendee_cache();
             set_selected.set(HashSet::new());
             set_refresh.update(|c| *c += 1);
             set_busy.set(false);
@@ -491,10 +506,10 @@ pub fn Admin() -> impl IntoView {
                                         let id = e.id.clone();
                                         let name = e.name.clone();
                                         let status = match e.status {
-                                            api::EventStatus::Active => "🟢",
-                                            api::EventStatus::Draft => "📝",
-                                            api::EventStatus::Completed => "✅",
-                                            api::EventStatus::Archived => "📦",
+                                            api::EventStatus::Active => "",
+                                            api::EventStatus::Draft => "",
+                                            api::EventStatus::Completed => "",
+                                            api::EventStatus::Archived => "",
                                         };
                                         view! {
                                             <option value=id>{format!("{status} {name}")}</option>
@@ -541,6 +556,35 @@ pub fn Admin() -> impl IntoView {
                                 </svg>
                             </span>
                             "Online"
+                        </button>
+                    </div>
+                    <div class="admin-sidebar-section">
+                        <div class="admin-sidebar-heading">"Deposits"</div>
+                        <button
+                            class="admin-sidebar-item"
+                            class:active=move || active_section.get() == AdminSection::Deposits
+                            on:click=move |_| set_active_section.set(AdminSection::Deposits)
+                        >
+                            <span class="admin-sidebar-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <line x1="12" y1="1" x2="12" y2="23"></line>
+                                    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                                </svg>
+                            </span>
+                            "Deposits & Refunds"
+                        </button>
+                    </div>
+                    <div class="admin-sidebar-section">
+                        <div class="admin-sidebar-heading">"Escrow"</div>
+                        <button
+                            class="admin-sidebar-item"
+                            class:active=move || active_section.get() == AdminSection::Escrow
+                            on:click=move |_| set_active_section.set(AdminSection::Escrow)
+                        >
+                            <span class="admin-sidebar-icon">
+                                ""
+                            </span>
+                            "Escrow Management"
                         </button>
                     </div>
                     <div class="admin-sidebar-section">
@@ -759,10 +803,11 @@ pub fn Admin() -> impl IntoView {
                             </div>
                         </Show>
 
-                        // Inline attendee items with checkboxes
+                        // Inline attendee items with checkboxes (B6: paginated)
                         {move || {
                             let filtered = filtered_attendees.get();
                             let selected = selected_ids.get();
+                            let limit = visible_count.get();
                             if filtered.is_empty() {
                                 view! {
                                     <div class="admin-empty-state">
@@ -770,7 +815,11 @@ pub fn Admin() -> impl IntoView {
                                     </div>
                                 }.into_any()
                             } else {
-                                filtered.iter().map(|attendee| {
+                                let visible: Vec<_> = filtered.iter().take(limit).collect();
+                                let has_more = filtered.len() > limit;
+                                let remaining = filtered.len().saturating_sub(limit);
+
+                                let items = visible.into_iter().map(|attendee| {
                                     let is_checked_in = attendee.checked_in_at.is_some();
                                     let is_vip = is_vip_ticket(&attendee.ticket_name);
                                     let is_selected = selected.contains(&attendee.api_id);
@@ -789,6 +838,10 @@ pub fn Admin() -> impl IntoView {
                                     let checked_in_by_suffix = attendee.checked_in_by.as_ref().map_or(String::new(), |by| {
                                         if by.is_empty() { String::new() } else { format!(" by {}", utils::escape_html(by)) }
                                     });
+                                    let deposit_link = match active_event_id.get() {
+                                        Some(ref eid) => format!("/deposit/{api_id}?event_id={eid}"),
+                                        None => format!("/deposit/{api_id}"),
+                                    };
 
                                     view! {
                                         <div class="attendee-item" class:vip=is_vip class:selected=is_selected>
@@ -819,6 +872,13 @@ pub fn Admin() -> impl IntoView {
                                             <div class="attendee-status">
                                                 <span class=p_class.clone()>{p_label.clone()}</span>
                                                 <span class=badge_class>{badge_text}</span>
+                                                <a
+                                                    href=deposit_link
+                                                    class="btn btn-outline btn-xs btn-xs-override"
+                                                    title="Deposit page"
+                                                >
+                                                    "Deposit"
+                                                </a>
                                                 <Show
                                                     when=move || has_time_ago
                                                     fallback=|| view! { <div></div> }
@@ -830,7 +890,21 @@ pub fn Admin() -> impl IntoView {
                                             </div>
                                         </div>
                                     }
-                                }).collect_view().into_any()
+                                }).collect_view();
+
+                                view! {
+                                    {items}
+                                    <Show when=move || has_more>
+                                        <div class="admin-load-more">
+                                            <button
+                                                class="btn btn-outline btn-sm"
+                                                on:click=move |_| set_visible_count.update(|c| *c += PAGE_SIZE)
+                                            >
+                                                {format!("Load more ({remaining} remaining)")}
+                                            </button>
+                                        </div>
+                                    </Show>
+                                }.into_any()
                             }
                         }}
                     </div>
@@ -846,6 +920,16 @@ pub fn Admin() -> impl IntoView {
                         </div>
                     </div>
                 </Show>
+                </Show>
+
+                // Deposits section
+                <Show when=move || active_section.get() == AdminSection::Deposits fallback=|| view! { <div></div> }>
+                    <crate::pages::admin_deposit::AdminDeposits set_toast=set_toast active_event_id=active_event_id />
+                </Show>
+
+                // Escrow management section
+                <Show when=move || active_section.get() == AdminSection::Escrow fallback=|| view! { <div></div> }>
+                    <crate::pages::admin_escrow::AdminEscrow set_toast=set_toast active_event_id=active_event_id />
                 </Show>
 
                 // Quiz section
@@ -894,6 +978,7 @@ fn spawn_qr_generation(
                 };
                 components::show_toast(&set_toast, &msg, ToastType::Success);
                 set_qr_result.set(Some(data));
+                api::invalidate_attendee_cache();
                 // Refresh attendee list after generation
                 set_refresh_counter.update(|c| *c += 1);
             }

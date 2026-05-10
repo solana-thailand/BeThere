@@ -83,6 +83,10 @@ Nothing exists. Column G (solana_address) exists in the sheet but is empty for a
 | D8 | Non-claimers? | **NFT: claim anytime. Refund: manual fallback.** | Don't force crypto on everyone. Keep cash option. |
 | D9 | Data store? | **Google Sheets remains source of truth** | Organizers know Sheets. Don't replace, enhance. |
 | D10 | RPC provider? | **Helius / QuickNode free tier** | Free tier sufficient for event-scale usage (~500 check-ins). |
+| D11 | Event format? | **In-Person / Online / Hybrid (organizer selects)** | Controls deposit, escrow, check-in, and claim paths. |
+| D12 | Online attendee verification? | **Quest completion (quiz/adventure)** | Replaces physical check-in for online track. |
+| D13 | Deposit toggle? | **No toggle — auto-enabled for in-person** | Deposit is a protocol requirement, not an option. |
+| D14 | Self-registration? | **Yes, from public event page** | Attendees can register and deposit without organizer manually adding them. |
 
 ### Why NFT Badge (Not NFT Ticket)?
 
@@ -267,3 +271,269 @@ The system evolves from:
 - **Web2 + Web3 hybrid** (Sheets for ops, Solana for rewards)
 
 The key principle: **Web3 is additive, never blocking.** Check-in works without Solana. The NFT and refund are rewards for those who want them.
+
+---
+
+## 8. Evolution: PDA Escrow (Current Architecture)
+
+> **Date**: 2025-05-04
+> **Status**: Implemented — devnet validated
+
+The deposit/refund system evolved from the original SOL+USDC airdrop design (Section 2) to a **PDA-based on-chain escrow** model. Key reasons for the change:
+
+| Original Design | PDA Escrow (Current) |
+|----------------|---------------------|
+| Worker directly transfers USDC from treasury | USDC held in on-chain PDA vault |
+| Requires treasury wallet with full funds | Each event has its own escrow PDA |
+| Single point of failure (treasury key) | Attendee can self-refund (signs TX) |
+| Off-chain tracking only | Full on-chain audit trail |
+| Refund requires worker to be online | Refund works even if worker is down |
+
+### On-Chain Escrow Program
+
+- **Framework**: Quasar (not Anchor) — lighter-weight Solana program framework
+- **Program ID** (devnet): `2TGfNNXNez2NgopffDnYYhLNYmndUBBwg5SvpD5XQeLo`
+- **Source**: `bethere-escrow/` directory
+
+### Instructions
+
+| Discriminator | Instruction | Signer | Purpose |
+|---------------|-------------|--------|---------|
+| 0 | `create_event` | Organizer | Initialize EventEscrow PDA + vault ATA |
+| 1 | `deposit` | Attendee | Transfer USDC to escrow vault |
+| 2 | `mark_checked_in` | Organizer | Mark attendee as checked in (enables refund) |
+| 3 | `refund` | Attendee | Self-refund USDC from vault (after event ends) |
+
+### Dual-Track Deposits
+
+The system supports two deposit methods per event:
+
+| Track | Currency | Flow | Refund |
+|-------|----------|------|--------|
+| **USDC** (on-chain) | USDC (SPL token) | Solana Pay QR → wallet signs TX → on-chain escrow | Self-serve via `refund` instruction |
+| **THB** (off-chain) | Thai Baht | PromptPay QR → attendee uploads payment slip → admin verifies | Admin marks refund as done |
+
+### Deposit Confirmation
+
+USDC deposits use a two-step Solana Pay pattern:
+1. `POST /api/deposit/usdc` → Returns Solana Pay URL
+2. `GET /api/deposit/usdc/tx?event_id=...&attendee_id=...&wallet=...` → Wallet fetches serialized TX
+3. Client signs and submits TX to Solana
+4. `POST /api/deposit/usdc/webhook` → Notifies worker of TX signature
+5. Worker verifies TX on-chain via `getSignatureStatuses` (with `searchTransactionHistory: true`)
+
+### Validation Rules
+
+- Deposits rejected after `event_end_ms` (server-side check)
+- Refunds require `clock > event_end` (on-chain check)
+- Refunds require attendee to be `mark_checked_in` (on-chain check)
+- Vault ATA must be created before `create_event` (two-step initialization)
+
+### Wallet-Signed Operations (Frontend)
+
+All on-chain operations use a shared wallet adapter JS module (`solana_wallet.js`) supporting Phantom, Backpack, Solflare, and Coinbase via the Wallet Standard API. The pattern:
+
+1. **Detect wallets** → `getDetectedWallets()` checks `window.solana`, `window.backpack`, `window.solflare` + Wallet Standard registry
+2. **Connect wallet** → `connectWallet(name)` prompts user, returns base58 public key
+3. **Backend builds TX** → Server constructs unsigned serialized transaction
+4. **Wallet signs + sends** → `signAndSendTransaction(name, b64_tx)` decodes base64 → wallet signs → broadcasts to Solana
+
+Three flows use this pattern:
+
+| Flow | Where | Steps |
+|------|-------|-------|
+| **Escrow Init** | Admin Events page | Connect → Create Vault ATA (Step 1) → Initialize Escrow (Step 2) |
+| **On-Chain Check-In** | Staff Scanner | After off-chain check-in → Connect → Sign `mark_checked_in` TX |
+| **Refund** | Deposit page | Attendee connects own wallet → Sign `refund` TX |
+
+---
+
+## 9. Event Format Model
+
+> **Date**: 2025-07-12
+> **Status**: Proposed — awaiting implementation
+
+Every BeThere event has a **format** selected by the organizer at event creation. The format is not cosmetic — it is the top-level control that determines which subsystems are active: deposit, escrow, physical check-in, quest, NFT mint, and refund.
+
+### Format Definitions
+
+| Format | Physical Venue | Online Stream | Deposit (USDC/THB) | Physical Check-In | Quest | NFT Claim | Refund |
+|--------|---------------|---------------|---------------------|-------------------|-------|-----------|--------|
+| **In-Person** | ✅ | ❌ | ✅ Auto-enabled | ✅ Required | ✅ Optional | ✅ Post-check-in | ✅ After event |
+| **Online** | ❌ | ✅ | ❌ Disabled | ❌ N/A | ✅ Required (virtual check-in) | ✅ Post-quest | ❌ N/A |
+| **Hybrid** | ✅ | ✅ | ✅ In-person track only | ✅ In-person track | ✅ Both tracks | ✅ Both tracks | ✅ In-person track only |
+
+### How Format Controls the System
+
+The event format is stored as a field on the `EventEscrow` PDA (or the event record in the data store). Every subsystem reads this field to determine its behaviour:
+
+```
+Event Format
+  ├── Deposit Engine → In-Person/Hybrid: enable deposit flow (USDC escrow + THB off-chain)
+  │                   Online: skip deposit entirely
+  ├── Check-In Service → In-Person/Hybrid: require QR scan by staff
+  │                      Online: skip physical check-in
+  ├── Quest Engine → In-Person: optional (bonus engagement)
+  │                 Online: REQUIRED (this IS the virtual check-in)
+  │                 Hybrid: required for online track, optional for in-person track
+  ├── NFT Minter → All formats: mint cNFT badge upon completion criteria met
+  └── Refund Engine → In-Person/Hybrid: enable refund after event ends
+                     Online: no refund (no deposit collected)
+```
+
+### Feature Matrix
+
+| Feature | In-Person | Online | Hybrid (In-Person Track) | Hybrid (Online Track) |
+|---------|-----------|--------|--------------------------|-----------------------|
+| Deposit required | ✅ | ❌ | ✅ | ❌ |
+| Escrow PDA created | ✅ | ❌ | ✅ | ❌ |
+| Staff QR check-in | ✅ | ❌ | ✅ | ❌ |
+| Quest completion | Optional | ✅ Required | Optional | ✅ Required |
+| NFT badge minted | ✅ | ✅ | ✅ | ✅ |
+| SOL + USDC refund | ✅ | ❌ | ✅ | ❌ |
+| Self-registration | ✅ | ✅ | ✅ | ✅ |
+| Claim token issued | At check-in | At quest completion | At check-in | At quest completion |
+
+---
+
+## 10. Attendee Journey by Format
+
+The attendee experience differs significantly depending on the event format. Each format has its own end-to-end flow.
+
+### In-Person Journey
+
+```
+Discovery (event page / social link)
+  → Self-register on public event page
+  → Deposit USDC (Solana Pay) or THB (PromptPay + slip upload)
+  → Attend event at physical venue
+  → Staff scans QR code → physical check-in confirmed
+  → Complete optional quest (engagement activity)
+  → Open claim URL → connect wallet → mint cNFT badge
+  → After event ends → self-refund from escrow PDA (USDC)
+```
+
+**Key characteristics:**
+- Deposit is mandatory (protocol requirement, not optional)
+- Physical check-in is the gate — must be scanned by staff
+- NFT is a reward for showing up
+- Refund returns the deposit to the attendee's wallet
+- Quests are optional engagement, not required for NFT
+
+### Online Journey
+
+```
+Discovery (event page / social link)
+  → Self-register on public event page
+  → No deposit required
+  → Attend online stream / session
+  → Complete quest (quiz, adventure, interactive challenge)
+  → Quest completion = virtual check-in → claim token generated
+  → Open claim URL → connect wallet → mint cNFT badge
+  → No refund (nothing was deposited)
+```
+
+**Key characteristics:**
+- No deposit, no escrow, no financial commitment
+- Quest completion replaces physical check-in as the attendance proof
+- NFT badge is the same cNFT standard (unified badge collection)
+- No refund flow — nothing to return
+- Lower friction, higher accessibility
+
+### Hybrid Journey
+
+Hybrid events run **both tracks in parallel**. An attendee is assigned to a track at registration (or self-selects):
+
+```
+                    ┌─ In-Person Track → deposit → physical check-in → quest (opt) → NFT → refund
+Register ──────────┤
+                    └─ Online Track    → no deposit → quest (required) → NFT → done
+```
+
+**Key characteristics:**
+- Organizer creates one event with `format = Hybrid`
+- Attendees choose their track during self-registration
+- In-person track attendees follow the full deposit/check-in/refund flow
+- Online track attendees follow the quest-based virtual check-in flow
+- Both tracks receive the same cNFT badge (provenance differs by claim path)
+- The `participation_type` field (column Y in Google Sheets) tracks which track each attendee is on
+
+---
+
+## 11. Online Attendee Architecture
+
+> **Date**: 2025-07-12
+> **Status**: Proposed — awaiting implementation
+
+Online attendees do not interact with the escrow, deposit, or physical check-in subsystems. Instead, **quest completion serves as virtual check-in**, producing a claim token that unlocks NFT minting.
+
+### Quest Completion = Virtual Check-In
+
+The quest engine is the online attendee's equivalent of the staff QR scan:
+
+```
+In-Person Check-In:  Staff scans QR  → verified attendance → claim token
+Online Check-In:     Quest completed → verified attendance → claim token
+```
+
+Both paths produce the same output: a `claim_token` (UUID) stored against the attendee record. The claim page is format-agnostic — it only checks that a valid claim token exists.
+
+### KV Storage Pattern for Online Attendees
+
+Online attendees are stored in a lightweight KV store (Cloudflare KV or Workers KV) rather than (or alongside) Google Sheets. This avoids inflating the organizer's sheet with online-only attendees who have no deposit or physical check-in data.
+
+```
+Key:   event:{event_id}:online:{attendee_id}
+Value: {
+         "attendee_id": "uuid",
+         "name": "...",
+         "email": "...",
+         "registered_at": 1720000000,
+         "track": "online",
+         "quest_id": "quiz-001",
+         "quest_completed_at": null,       // null until quest is done
+         "claim_token": null,               // null until quest is done
+         "claimed_at": null,                // null until NFT is minted
+         "wallet_address": null             // null until claim page
+       }
+```
+
+**Lifecycle transitions:**
+
+1. **Registration** → KV entry created with `quest_completed_at: null`
+2. **Quest completion** → `quest_completed_at` + `claim_token` populated
+3. **NFT claim** → `wallet_address` + `claimed_at` populated
+4. **Done** — no further state changes
+
+### Claim Token Generation
+
+Claim tokens for online attendees are generated by the quest engine rather than the check-in service:
+
+```
+// In-person: generated by check-in service after QR scan
+POST /api/checkin { attendee_id, event_id }
+  → claim_token = Uuid::now_v7()
+
+// Online: generated by quest engine after quest completion
+POST /api/quest/complete { attendee_id, event_id, quest_id, answers }
+  → verify answers → claim_token = Uuid::now_v7()
+```
+
+Both paths use the same `Uuid::now_v7()` format and store the token in the same claim URL pattern:
+`bethere.solana-thailand.workers.dev/claim/{TOKEN}`
+
+### No Escrow, No Deposit, No Refund
+
+Online attendees are excluded from the financial subsystem entirely:
+
+| Subsystem | In-Person Attendee | Online Attendee |
+|-----------|-------------------|-----------------|
+| Escrow PDA | Created per event | Not created for online track |
+| Deposit (USDC) | Required | Not collected |
+| Deposit (THB) | Required | Not collected |
+| `mark_checked_in` instruction | Called by staff | Not applicable |
+| `refund` instruction | Available after event | Not applicable |
+| NFT mint (cNFT) | Available | Available |
+| Quest | Optional | **Required** (virtual check-in) |
+
+This separation keeps the financial flows clean — only attendees who deposited funds can refund them. The NFT badge remains the universal reward across all formats.

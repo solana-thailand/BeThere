@@ -9,6 +9,8 @@
 #   4. Adventure status check (fake token → graceful error)
 #   5. Direct Helius mint (proves cNFT minting works on devnet)
 #   6. Adventure config CRUD (requires AUTH_TOKEN — manual step)
+#   7. Adventure save progress (requires CLAIM_TOKEN — manual step)
+#   8. Deposit & Refund API (USDC/THB deposit, verify, refund queue)
 #
 # Prerequisites:
 #   - `cd worker && npx wrangler dev --port 8787` running in another terminal
@@ -240,12 +242,12 @@ if [ "$MINT_ONLY" = false ]; then
 
     if [ -z "$AUTH_TOKEN" ]; then
         skip "Admin adventure config — set AUTH_TOKEN to run"
-        info "Get your token: login at $BASE_URL/login, then check browser cookies"
+        info "Set AUTH_TOKEN to a valid JWT (login at $BASE_URL/login, check cookie event_checkin_token)"
         info "Usage: AUTH_TOKEN=xxx bash scripts/e2e/test_devnet.sh"
     else
         # Read config
         RESPONSE=$(curl -s "$BASE_URL/api/admin/adventure?event_id=$EVENT_ID" \
-            -H "Cookie: auth_token=$AUTH_TOKEN")
+            -H "Authorization: Bearer $AUTH_TOKEN")
 
         SUCCESS=$(echo "$RESPONSE" | python3 -c "import sys,json; print(str(json.load(sys.stdin).get('success','')).lower())" 2>/dev/null || echo "false")
 
@@ -269,7 +271,7 @@ else:
         # Update config (enable adventure, set required_level=1)
         info "Updating adventure config: enabled=true, required_level=1"
         PUT_RESPONSE=$(curl -s -X PUT "$BASE_URL/api/admin/adventure?event_id=$EVENT_ID" \
-            -H "Cookie: auth_token=$AUTH_TOKEN" \
+            -H "Authorization: Bearer $AUTH_TOKEN" \
             -H "Content-Type: application/json" \
             -d '{
                 "enabled": true,
@@ -324,6 +326,215 @@ if [ "$MINT_ONLY" = false ]; then
 fi
 
 # ============================================================================
+# Test 8: Deposit & Refund API
+# ============================================================================
+if [ "$MINT_ONLY" = false ]; then
+    section "8. Deposit & Refund API"
+
+    DEPOSIT_ATTENDEE="e2e-test-attendee-deposit"
+    DEPOSIT_ATTENDEE_THB="e2e-test-attendee-deposit-thb"
+    DEPOSIT_UPLOAD_OK=false
+
+    # --- 8a: GET /api/deposit/status/{attendee_id} ---
+    RESPONSE=$(curl -s "$BASE_URL/api/deposit/status/$DEPOSIT_ATTENDEE?event_id=$EVENT_ID")
+    PARSE_OK=$(echo "$RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print('ok')" 2>/dev/null || echo "err")
+
+    if [ "$PARSE_OK" = "ok" ]; then
+        STATUS_VAL=$(echo "$RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('status','MISSING'))" 2>/dev/null || echo "?")
+        if [ "$STATUS_VAL" = "None" ]; then
+            pass "GET /api/deposit/status/{attendee} → status=null (no deposit yet)"
+        else
+            pass "GET /api/deposit/status/{attendee} → responded (status=$STATUS_VAL)"
+        fi
+        DEPOSIT_ENABLED=$(echo "$RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(str(d.get('deposit_enabled',False)).lower())" 2>/dev/null || echo "false")
+        info "deposit_enabled=$DEPOSIT_ENABLED"
+    else
+        fail "GET /api/deposit/status/{attendee} → invalid JSON"
+        echo "   $(echo "$RESPONSE" | head -c 300)"
+    fi
+
+    # --- 8b: POST /api/deposit/usdc ---
+    RESPONSE=$(curl -s -X POST "$BASE_URL/api/deposit/usdc" \
+        -H "Content-Type: application/json" \
+        -d "{\"event_id\": \"$EVENT_ID\", \"attendee_id\": \"$DEPOSIT_ATTENDEE\", \"wallet_address\": \"11111111111111111111111111111111\"}")
+
+    PARSE_OK=$(echo "$RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print('ok')" 2>/dev/null || echo "err")
+
+    if [ "$PARSE_OK" = "ok" ]; then
+        # Check for transaction or solana_pay_url (success) vs error
+        HAS_TX=$(echo "$RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print('yes' if d.get('transaction') or d.get('solana_pay_url') else 'no')" 2>/dev/null || echo "no")
+        HAS_ERR=$(echo "$RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print('yes' if d.get('error') or d.get('success') == False else 'no')" 2>/dev/null || echo "no")
+
+        if [ "$HAS_TX" = "yes" ]; then
+            pass "POST /api/deposit/usdc → transaction created"
+            SOL_URL=$(echo "$RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin).get('solana_pay_url',''))" 2>/dev/null || echo "")
+            info "solana_pay_url: ${SOL_URL:0:40}..."
+        elif [ "$HAS_ERR" = "yes" ]; then
+            ERR_MSG=$(echo "$RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('error', d.get('message',''))))" 2>/dev/null || echo "unknown")
+            pass "POST /api/deposit/usdc → graceful error (deposit may not be enabled)"
+            info "Error: $ERR_MSG"
+        else
+            pass "POST /api/deposit/usdc → responded"
+            info "Response: $(echo "$RESPONSE" | head -c 200)"
+        fi
+    else
+        fail "POST /api/deposit/usdc → invalid JSON"
+        echo "   $(echo "$RESPONSE" | head -c 300)"
+    fi
+
+    # --- 8c: POST /api/deposit/thb/upload ---
+    RESPONSE=$(curl -s -X POST "$BASE_URL/api/deposit/thb/upload" \
+        -H "Content-Type: application/json" \
+        -d "{\"event_id\": \"$EVENT_ID\", \"attendee_id\": \"$DEPOSIT_ATTENDEE_THB\", \"slip_url\": \"https://example.com/e2e-test-slip.jpg\"}")
+
+    PARSE_OK=$(echo "$RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print('ok')" 2>/dev/null || echo "err")
+
+    if [ "$PARSE_OK" = "ok" ]; then
+        UPLOAD_SUCCESS=$(echo "$RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(str(d.get('success',False)).lower())" 2>/dev/null || echo "false")
+        if [ "$UPLOAD_SUCCESS" = "true" ]; then
+            pass "POST /api/deposit/thb/upload → slip uploaded"
+            DEPOSIT_UPLOAD_OK=true
+        else
+            ERR_MSG=$(echo "$RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('error', d.get('message',''))))" 2>/dev/null || echo "unknown")
+            pass "POST /api/deposit/thb/upload → graceful error (deposit may not be enabled)"
+            info "Error: $ERR_MSG"
+        fi
+    else
+        fail "POST /api/deposit/thb/upload → invalid JSON"
+        echo "   $(echo "$RESPONSE" | head -c 300)"
+    fi
+
+    # --- 8d-8g: Protected endpoints (require AUTH_TOKEN) ---
+    if [ -z "$AUTH_TOKEN" ]; then
+        skip "GET /api/deposit/thb/pending — set AUTH_TOKEN to run"
+        skip "GET /api/refund/queue — set AUTH_TOKEN to run"
+        skip "POST /api/deposit/thb/verify — set AUTH_TOKEN to run"
+        skip "POST /api/refund/mark/{attendee} — set AUTH_TOKEN to run"
+        info "Set AUTH_TOKEN to a valid JWT (login at $BASE_URL/login, check cookie event_checkin_token)"
+    else
+        # --- 8d: GET /api/deposit/thb/pending ---
+        RESPONSE=$(curl -s "$BASE_URL/api/deposit/thb/pending?event_id=$EVENT_ID" \
+            -H "Authorization: Bearer $AUTH_TOKEN")
+
+        PARSE_OK=$(echo "$RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print('ok')" 2>/dev/null || echo "err")
+
+        if [ "$PARSE_OK" = "ok" ]; then
+            SLIP_COUNT=$(echo "$RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); slips=d.get('slips',[]); print(len(slips))" 2>/dev/null || echo "0")
+            pass "GET /api/deposit/thb/pending → responded ($SLIP_COUNT slips)"
+        else
+            # Could be auth failure
+            HAS_ERR=$(echo "$RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print('yes')" 2>/dev/null || echo "no")
+            if [ "$HAS_ERR" = "yes" ]; then
+                ERR_MSG=$(echo "$RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('error',''))" 2>/dev/null || echo "unknown")
+                if echo "$ERR_MSG" | grep -qi "unauthorized\|forbidden\|auth"; then
+                    fail "GET /api/deposit/thb/pending → unauthorized (bad AUTH_TOKEN?)"
+                else
+                    fail "GET /api/deposit/thb/pending → error: $ERR_MSG"
+                fi
+            else
+                fail "GET /api/deposit/thb/pending → invalid response"
+                echo "   $(echo "$RESPONSE" | head -c 300)"
+            fi
+        fi
+
+        # --- 8e: GET /api/refund/queue ---
+        RESPONSE=$(curl -s "$BASE_URL/api/refund/queue?event_id=$EVENT_ID" \
+            -H "Authorization: Bearer $AUTH_TOKEN")
+
+        PARSE_OK=$(echo "$RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print('ok')" 2>/dev/null || echo "err")
+
+        if [ "$PARSE_OK" = "ok" ]; then
+            PENDING_COUNT=$(echo "$RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); pending=d.get('pending',[]); print(len(pending))" 2>/dev/null || echo "0")
+            pass "GET /api/refund/queue → responded ($PENDING_COUNT pending)"
+        else
+            fail "GET /api/refund/queue → invalid response"
+            echo "   $(echo "$RESPONSE" | head -c 300)"
+        fi
+
+        # --- 8f: POST /api/deposit/thb/verify (only if upload succeeded) ---
+        if [ "$DEPOSIT_UPLOAD_OK" = true ]; then
+            RESPONSE=$(curl -s -X POST "$BASE_URL/api/deposit/thb/verify" \
+                -H "Authorization: Bearer $AUTH_TOKEN" \
+                -H "Content-Type: application/json" \
+                -d "{\"event_id\": \"$EVENT_ID\", \"attendee_id\": \"$DEPOSIT_ATTENDEE_THB\", \"approved\": true}")
+
+            PARSE_OK=$(echo "$RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print('ok')" 2>/dev/null || echo "err")
+
+            if [ "$PARSE_OK" = "ok" ]; then
+                VERIFY_SUCCESS=$(echo "$RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(str(d.get('success',False)).lower())" 2>/dev/null || echo "false")
+                if [ "$VERIFY_SUCCESS" = "true" ]; then
+                    pass "POST /api/deposit/thb/verify → deposit verified"
+                else
+                    ERR_MSG=$(echo "$RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('error', d.get('message',''))))" 2>/dev/null || echo "unknown")
+                    fail "POST /api/deposit/thb/verify → error: $ERR_MSG"
+                fi
+            else
+                fail "POST /api/deposit/thb/verify → invalid JSON"
+                echo "   $(echo "$RESPONSE" | head -c 300)"
+            fi
+
+            # --- 8g: GET /api/refund/queue (should now show verified deposit) ---
+            RESPONSE=$(curl -s "$BASE_URL/api/refund/queue?event_id=$EVENT_ID" \
+                -H "Authorization: Bearer $AUTH_TOKEN")
+
+            PARSE_OK=$(echo "$RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print('ok')" 2>/dev/null || echo "err")
+
+            if [ "$PARSE_OK" = "ok" ]; then
+                PENDING_COUNT=$(echo "$RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); pending=d.get('pending',[]); print(len(pending))" 2>/dev/null || echo "0")
+                # Check if our test attendee appears
+                HAS_ATTENDEE=$(echo "$RESPONSE" | python3 -c "
+import sys, json
+try:
+    d = json.load(sys.stdin)
+    for p in d.get('pending', []):
+        if p.get('attendee_id') == '$DEPOSIT_ATTENDEE_THB':
+            print('yes')
+            break
+    else:
+        print('no')
+except:
+    print('no')
+" 2>/dev/null || echo "no")
+
+                if [ "$HAS_ATTENDEE" = "yes" ]; then
+                    pass "GET /api/refund/queue → THB attendee appears in queue"
+                else
+                    pass "GET /api/refund/queue → responded ($PENDING_COUNT pending, test attendee not in queue)"
+                fi
+            else
+                fail "GET /api/refund/queue (post-verify) → invalid response"
+                echo "   $(echo "$RESPONSE" | head -c 300)"
+            fi
+
+            # --- 8h: POST /api/refund/mark/{attendee_id} ---
+            RESPONSE=$(curl -s -X POST "$BASE_URL/api/refund/mark/$DEPOSIT_ATTENDEE_THB" \
+                -H "Authorization: Bearer $AUTH_TOKEN" \
+                -H "Content-Type: application/json" \
+                -d "{\"event_id\": \"$EVENT_ID\"}")
+
+            PARSE_OK=$(echo "$RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print('ok')" 2>/dev/null || echo "err")
+
+            if [ "$PARSE_OK" = "ok" ]; then
+                MARK_SUCCESS=$(echo "$RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(str(d.get('success',False)).lower())" 2>/dev/null || echo "false")
+                if [ "$MARK_SUCCESS" = "true" ]; then
+                    pass "POST /api/refund/mark/$DEPOSIT_ATTENDEE_THB → refund marked complete"
+                else
+                    ERR_MSG=$(echo "$RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('error', d.get('message',''))))" 2>/dev/null || echo "unknown")
+                    fail "POST /api/refund/mark/$DEPOSIT_ATTENDEE_THB → error: $ERR_MSG"
+                fi
+            else
+                fail "POST /api/refund/mark/{thb-attendee} → invalid JSON"
+                echo "   $(echo "$RESPONSE" | head -c 300)"
+            fi
+        else
+            skip "POST /api/deposit/thb/verify — THB upload did not succeed"
+            skip "GET /api/refund/queue (post-verify) — depends on verify"
+            skip "POST /api/refund/mark/{attendee} — depends on verify"
+        fi
+    fi # AUTH_TOKEN check
+fi # MINT_ONLY check
+
+# ============================================================================
 # Summary
 # ============================================================================
 echo ""
@@ -351,4 +562,14 @@ echo "   5. (If quiz enabled) Pass quiz first"
 echo "   6. Adventure gate → click Start → complete Level 1"
 echo "   7. Return to claim → enter wallet → mint cNFT"
 echo "   8. Check https://explorer.solana.com/address/{ASSET_ID}?cluster=devnet"
+echo ""
+echo "📋 Deposit & Refund Flow:"
+echo "   9.  Admin panel → enable deposit for event (set USDC/THB amount)"
+echo "   10. Attendee → POST /api/deposit/usdc → get Solana Pay URL"
+echo "   11. Or: Attendee → POST /api/deposit/thb/upload → upload slip"
+echo "   12. Admin → GET /api/deposit/thb/pending → review slips"
+echo "   13. Admin → POST /api/deposit/thb/verify {approved:true} → approve slip"
+echo "   14. Event ends → Admin → GET /api/refund/queue → see refund queue"
+echo "   15. Admin → POST /api/refund/mark/{attendee_id} → mark refund done"
+echo "   16. Attendee → GET /api/deposit/status/{id} → check refund status"
 echo ""

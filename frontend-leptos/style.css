@@ -32,6 +32,10 @@
     --radius: 10px;
     --radius-sm: 6px;
     --shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    --text-heading: #fff;
+    --bg-void: #000;
+    --border-hover: #333;
+    --header-height: 80px;
 }
 
 html {
@@ -43,7 +47,7 @@ html {
 #features,
 #how-it-works,
 #organizers {
-    scroll-margin-top: 80px;
+    scroll-margin-top: var(--header-height);
 }
 
 body {
@@ -145,14 +149,14 @@ body {
 h1 {
     font-size: 1.75rem;
     font-weight: 700;
-    color: #fff;
+    color: var(--text-heading);
     margin-bottom: 0.5rem;
 }
 
 h2 {
     font-size: 1.25rem;
     font-weight: 600;
-    color: #fff;
+    color: var(--text-heading);
     margin-bottom: 0.75rem;
 }
 
@@ -242,7 +246,7 @@ h3 {
     justify-content: center;
     gap: 0.75rem;
     padding: 0.85rem 1.75rem;
-    background: #fff;
+    background: var(--text-heading);
     color: #1a1a1a;
     border: none;
     border-radius: var(--radius);
@@ -277,7 +281,7 @@ h3 {
 
 .btn-primary {
     background: linear-gradient(135deg, #6366f1 0%, #818cf8 100%);
-    color: #fff;
+    color: var(--text-heading);
     box-shadow: 0 2px 12px rgba(99, 102, 241, 0.25);
 }
 
@@ -293,7 +297,7 @@ h3 {
 
 .btn-success {
     background: var(--success);
-    color: #fff;
+    color: var(--text-heading);
 }
 
 .btn-success:hover {
@@ -302,7 +306,7 @@ h3 {
 
 .btn-danger {
     background: var(--danger);
-    color: #fff;
+    color: var(--text-heading);
 }
 
 .btn-danger:hover {
@@ -324,6 +328,12 @@ h3 {
     font-size: 0.8rem;
 }
 
+.btn-xs {
+    padding: 0.15rem 0.4rem;
+    font-size: 0.7rem;
+    line-height: 1;
+}
+
 .btn-block {
     width: 100%;
 }
@@ -342,7 +352,7 @@ h3 {
 }
 
 .card:hover {
-    border-color: #333;
+    border-color: var(--border-hover);
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
     transform: translateY(-1px);
 }
@@ -357,7 +367,7 @@ h3 {
 .card-title {
     font-size: 1rem;
     font-weight: 600;
-    color: #fff;
+    color: var(--text-heading);
 }
 
 /* ===== Stats ===== */
@@ -384,7 +394,7 @@ h3 {
 }
 
 .stat-card:hover {
-    border-color: #333;
+    border-color: var(--border-hover);
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
 }
 
@@ -418,7 +428,7 @@ h3 {
 .stat-value {
     font-size: 1.75rem;
     font-weight: 700;
-    color: #fff;
+    color: var(--text-heading);
     line-height: 1.2;
 }
 
@@ -541,7 +551,7 @@ h3 {
     height: 30px;
     border-radius: 50%;
     background: linear-gradient(135deg, #6366f1 0%, #818cf8 100%);
-    color: #fff;
+    color: var(--text-heading);
     font-size: 0.75rem;
     font-weight: 700;
     display: flex;
@@ -569,7 +579,7 @@ h3 {
 nav a[aria-current="page"],
 nav a.active {
     background: var(--accent);
-    color: #fff;
+    color: var(--text-heading);
     border-color: var(--accent);
 }
 
@@ -622,7 +632,7 @@ nav a.active {
 
 .attendee-name {
     font-weight: 600;
-    color: #fff;
+    color: var(--text-heading);
     font-size: 0.95rem;
     white-space: nowrap;
     overflow: hidden;
@@ -678,6 +688,29 @@ nav a.active {
     border: 1px solid var(--info-border);
 }
 
+/* Small badge variants for event list indicators */
+.badge-warning-xs {
+    background: var(--warning-bg);
+    color: var(--warning);
+    border: 1px solid var(--warning-border);
+    font-size: 0.65rem;
+    padding: 0.15rem 0.45rem;
+    border-radius: 16px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.badge-success-xs {
+    background: var(--success-bg);
+    color: var(--success);
+    border: 1px solid var(--success-border);
+    font-size: 0.65rem;
+    padding: 0.15rem 0.45rem;
+    border-radius: 16px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
 /* Enhanced pill variant for participation type badges (scanner) */
 .badge-pill {
     text-transform: uppercase;
@@ -697,7 +730,7 @@ nav a.active {
     aspect-ratio: 1;
     border-radius: var(--radius);
     overflow: hidden;
-    background: #000;
+    background: var(--bg-void);
 }
 
 .scanner-area video {
@@ -958,7 +991,7 @@ nav a.active {
     max-width: 256px;
     max-height: 256px;
     border-radius: var(--radius);
-    border: 4px solid #fff;
+    border: 4px solid var(--text-heading);
 }
 
 /* ===== Footer ===== */
@@ -1031,7 +1064,7 @@ nav a.active {
 .claim-title {
     font-size: 1.75rem;
     font-weight: 700;
-    color: #fff;
+    color: var(--text-heading);
     margin-bottom: 0.25rem;
 }
 
@@ -1046,6 +1079,47 @@ nav a.active {
     font-size: 0.8rem;
     color: var(--text-muted);
     margin-top: 0.25rem;
+}
+
+/* ===== Deposit Page: Event Context Header ===== */
+.event-context-header {
+    margin: 0.5rem auto 1rem;
+    padding: 0.75rem 1.25rem;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    text-align: center;
+    max-width: 480px;
+    width: 100%;
+}
+
+.event-context-name {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--accent);
+}
+
+.event-context-tagline {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-top: 0.2rem;
+}
+
+/* ===== Landing Page: Event Card ===== */
+.event-card-link {
+    text-decoration: none;
+}
+
+.event-card {
+    cursor: pointer;
+    transition:
+        transform 0.15s,
+        border-color 0.15s;
+}
+
+.event-card:hover {
+    transform: translateY(-2px);
+    border-color: var(--accent);
 }
 
 /* ===== Claim Page: Event Info Card ===== */
@@ -1064,7 +1138,7 @@ nav a.active {
 }
 
 .claim-welcome-card h3 {
-    color: #fff;
+    color: var(--text-heading);
     font-size: 1.1rem;
     font-weight: 700;
     margin-bottom: 0.25rem;
@@ -1131,7 +1205,7 @@ nav a.active {
 .nft-preview-title {
     font-size: 0.9rem;
     font-weight: 700;
-    color: #fff;
+    color: var(--text-heading);
     margin-bottom: 0.25rem;
 }
 
@@ -1280,7 +1354,7 @@ nav a.active {
     background: rgba(99, 102, 241, 0.15);
     border: 1px solid rgba(99, 102, 241, 0.3);
     border-radius: 8px;
-    color: #fff;
+    color: var(--text-heading);
     font-size: 0.85rem;
     font-weight: 600;
     cursor: pointer;
@@ -1300,7 +1374,7 @@ nav a.active {
 /* ===== Claim Page: Claim Button ===== */
 .claim-btn-mint {
     background: linear-gradient(135deg, #6366f1 0%, #818cf8 100%);
-    color: #fff;
+    color: var(--text-heading);
     border: none;
     border-radius: var(--radius-sm);
     padding: 0.9rem 1.5rem;
@@ -1596,7 +1670,7 @@ nav a.active {
 .success-check svg {
     width: 24px;
     height: 24px;
-    stroke: #fff;
+    stroke: var(--text-heading);
     stroke-width: 3;
     fill: none;
 }
@@ -1821,7 +1895,7 @@ nav a.active {
 
 .attendee-item:hover {
     background: var(--bg-hover);
-    border-color: #333;
+    border-color: var(--border-hover);
 }
 
 /* Attendee checkbox */
@@ -1851,7 +1925,7 @@ nav a.active {
 .attendee-checkbox.checked {
     background: var(--accent);
     border-color: var(--accent);
-    color: #fff;
+    color: var(--text-heading);
 }
 
 .attendee-checkbox:disabled {
@@ -2720,6 +2794,113 @@ nav a.active {
     font-weight: 500;
 }
 
+/* ===== Claim Progress Stepper ===== */
+.claim-stepper {
+    width: 100%;
+    max-width: 320px;
+    margin: 0.75rem auto;
+}
+
+.claim-stepper-track {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    position: relative;
+}
+
+.claim-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex: 1;
+    position: relative;
+}
+
+.claim-step-circle {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.85rem;
+    transition: all 0.3s ease;
+    margin-bottom: 0.35rem;
+    z-index: 1;
+}
+
+.claim-step-circle.completed {
+    background: var(--success);
+    color: #fff;
+    box-shadow: 0 0 12px rgba(34, 197, 94, 0.3);
+}
+
+.claim-step-circle.current {
+    background: var(--accent);
+    color: #fff;
+    box-shadow: 0 0 12px rgba(99, 102, 241, 0.4);
+    animation: claim-step-pulse 2s infinite;
+}
+
+.claim-step-circle.upcoming {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--muted);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.claim-step-label {
+    font-size: 0.72rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    transition: color 0.3s ease;
+}
+
+.claim-step-label.active {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+/* Connector lines between steps */
+.claim-step:not(:last-child)::after {
+    content: "";
+    position: absolute;
+    top: 16px;
+    left: calc(50% + 16px);
+    width: calc(100% - 32px);
+    height: 2px;
+    background: rgba(255, 255, 255, 0.08);
+    z-index: 0;
+}
+
+.claim-step:not(:last-child)::before {
+    content: "";
+    position: absolute;
+    top: 16px;
+    left: calc(50% + 16px);
+    height: 2px;
+    background: var(--accent);
+    z-index: 0;
+    width: 0;
+    transition: width 0.5s ease;
+}
+
+.claim-step-circle.completed
+    + .claim-step-label
+    ~ .claim-step:not(:last-child)::before {
+    width: calc(100% - 32px);
+}
+
+@keyframes claim-step-pulse {
+    0%,
+    100% {
+        box-shadow: 0 0 12px rgba(99, 102, 241, 0.4);
+    }
+    50% {
+        box-shadow: 0 0 20px rgba(99, 102, 241, 0.6);
+    }
+}
+
 /* ===== Participant Pixel Avatar ===== */
 .participant-avatar-pixel {
     width: 72px;
@@ -2885,7 +3066,7 @@ nav a.active {
     right: 0;
     bottom: 0;
     z-index: 30;
-    background: #000;
+    background: var(--bg-void);
 }
 
 .scanner-fullscreen video {
@@ -3111,7 +3292,7 @@ nav a.active {
 
 .scanner-attendee-name {
     font-weight: 600;
-    color: #fff;
+    color: var(--text-heading);
     font-size: 1rem;
     margin-bottom: 0.25rem;
 }
@@ -3150,7 +3331,7 @@ nav a.active {
     display: inline-flex;
     flex-direction: column;
     align-items: center;
-    background: #fff;
+    background: var(--text-heading);
     border-radius: var(--radius);
     padding: 1rem;
 }
@@ -3237,7 +3418,7 @@ nav a.active {
 }
 
 .landing-nav-links a:hover {
-    color: #fff;
+    color: var(--text-heading);
 }
 
 .solana-pill {
@@ -3356,7 +3537,7 @@ nav a.active {
 }
 
 .filter-pill.active {
-    color: #fff;
+    color: var(--text-heading);
     background: var(--accent);
     border-color: var(--accent);
 }
@@ -3767,6 +3948,10 @@ nav a.active {
     .admin-sidebar-stats {
         display: none;
     }
+
+    .admin-sidebar-section:first-child {
+        display: none;
+    }
 }
 
 /* ===== Admin Inline Style Classes ===== */
@@ -3813,6 +3998,15 @@ nav a.active {
     text-align: center;
     padding: 2rem;
     color: var(--text-muted);
+}
+
+.admin-load-more {
+    text-align: center;
+    padding: 1rem 0 1.5rem;
+}
+
+.admin-load-more .btn {
+    min-width: 200px;
 }
 
 .admin-empty-state-sm {
@@ -3963,7 +4157,7 @@ nav a.active {
 }
 
 .landing-nav-hamburger:hover {
-    color: #fff;
+    color: var(--text-heading);
     border-color: var(--text-secondary);
 }
 
@@ -3991,7 +4185,7 @@ nav a.active {
 }
 
 .landing-nav-mobile-menu a:hover {
-    color: #fff;
+    color: var(--text-heading);
 }
 
 @media (max-width: 640px) {
@@ -4155,6 +4349,10 @@ nav a.active {
 
 .quiz-number-input:focus {
     border-color: var(--accent);
+}
+
+.quiz-number-input[type="datetime-local"] {
+    color-scheme: dark;
 }
 
 .quiz-setting-hint {
@@ -4832,7 +5030,7 @@ nav a.active {
     display: inline-block;
     width: 44px;
     height: 24px;
-    background: var(--bg-tertiary, #333);
+    background: var(--bg-tertiary, var(--border-hover));
     border-radius: 12px;
     transition: background 0.2s ease;
     flex-shrink: 0;
@@ -5355,12 +5553,12 @@ nav a.active {
 
 /* === Claim Button (golden) === */
 .adventure-claim-btn {
-    background: linear-gradient(135deg, #f59e0b, #d97706) !important;
-    border: none !important;
-    color: white !important;
-    font-weight: 700 !important;
-    font-size: 1rem !important;
-    padding: 0.65rem 1.5rem !important;
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+    border: none;
+    color: white;
+    font-weight: 700;
+    font-size: 1rem;
+    padding: 0.65rem 1.5rem;
     text-decoration: none;
     display: inline-block;
     border-radius: 8px;
@@ -5379,7 +5577,7 @@ nav a.active {
 }
 
 .adventure-claim-btn:hover {
-    background: linear-gradient(135deg, #fbbf24, #f59e0b) !important;
+    background: linear-gradient(135deg, #fbbf24, #f59e0b);
     transform: translateY(-1px);
 }
 
@@ -5803,9 +6001,9 @@ nav a.active {
     gap: 0.5rem;
     flex: 1;
     padding: 0.75rem 1rem;
-    background: #000;
-    color: #fff;
-    border: 1px solid #333;
+    background: var(--bg-void);
+    color: var(--text-heading);
+    border: 1px solid var(--border-hover);
     border-radius: 8px;
     font-weight: 600;
     font-size: 0.9rem;
@@ -5858,4 +6056,1674 @@ nav a.active {
 
 .claim-share-copied.visible {
     opacity: 1;
+}
+
+/* ===== Deposit Page & Admin Deposit Section ===== */
+
+.admin-deposits {
+    padding: 0;
+}
+
+.admin-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+}
+
+.admin-section-header h3 {
+    font-size: 1rem;
+    font-weight: 600;
+    margin: 0;
+    color: var(--text-primary, var(--text-heading));
+}
+
+/* Deposit page inputs */
+.deposit-page {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 2rem 1rem;
+}
+
+.deposit-amount-display {
+    font-size: 1.5rem;
+    font-weight: 700;
+    text-align: center;
+    margin: 0.5rem 0;
+}
+
+.deposit-method-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+    width: 100%;
+    max-width: 480px;
+}
+
+.deposit-method-card {
+    background: var(--card-bg, rgba(255, 255, 255, 0.03));
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+    border-radius: 12px;
+    padding: 1.25rem;
+    transition:
+        border-color 0.2s ease,
+        box-shadow 0.2s ease;
+}
+
+.deposit-method-card:hover {
+    border-color: var(--border-hover, rgba(255, 255, 255, 0.15));
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2);
+}
+
+.deposit-method-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.75rem;
+}
+
+.deposit-method-title {
+    font-size: 1.05rem;
+    font-weight: 600;
+    margin: 0;
+}
+
+.deposit-method-desc {
+    font-size: 0.85rem;
+    color: var(--text-secondary, rgba(255, 255, 255, 0.6));
+    margin-bottom: 0.75rem;
+    line-height: 1.4;
+}
+
+.deposit-pay-url-box {
+    background: var(--bg-secondary, #1a1a2e);
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.12));
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    margin: 0.75rem 0;
+    word-break: break-all;
+    font-size: 0.8rem;
+    color: var(--text-secondary, rgba(255, 255, 255, 0.6));
+    font-family: monospace;
+    text-align: left;
+    line-height: 1.5;
+}
+
+.deposit-actions {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: center;
+    margin-top: 0.75rem;
+}
+
+.deposit-status-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.6rem 0;
+    border-bottom: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+}
+
+.deposit-status-row:last-child {
+    border-bottom: none;
+}
+
+.deposit-status-label {
+    color: var(--text-secondary, rgba(255, 255, 255, 0.6));
+    font-size: 0.9rem;
+}
+
+.deposit-status-value {
+    font-weight: 500;
+    font-size: 0.9rem;
+}
+
+/* Admin deposit slip card */
+.admin-slip-card {
+    background: var(--card-bg, rgba(255, 255, 255, 0.03));
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+    border-radius: 12px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 0.75rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    transition: border-color 0.2s ease;
+}
+
+.admin-slip-card:hover {
+    border-color: var(--border-hover, rgba(255, 255, 255, 0.15));
+}
+
+.admin-slip-info {
+    flex: 1;
+    min-width: 200px;
+}
+
+.admin-slip-attendee {
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+    font-size: 0.95rem;
+}
+
+.admin-slip-amount {
+    font-size: 0.9rem;
+    margin-bottom: 0.25rem;
+}
+
+.admin-slip-meta {
+    color: var(--text-muted, rgba(255, 255, 255, 0.5));
+    font-size: 0.8rem;
+}
+
+.admin-slip-link {
+    color: var(--accent, #9945ff);
+    font-size: 0.85rem;
+    text-decoration: none;
+}
+
+.admin-slip-link:hover {
+    text-decoration: underline;
+}
+
+.admin-slip-actions {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+/* Deposit QR hint text */
+.deposit-qr-hint {
+    font-size: 0.8rem;
+    color: var(--text-secondary, rgba(255, 255, 255, 0.5));
+    text-align: center;
+    margin-top: 0.75rem;
+}
+
+/* Form input for deposit page */
+.form-input {
+    width: 100%;
+    padding: 0.6rem 0.8rem;
+    border-radius: 6px;
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.15));
+    background: var(--bg-secondary, #1a1a2e);
+    color: var(--text-primary, var(--text-heading));
+    font-size: 0.9rem;
+    font-family: inherit;
+    transition:
+        border-color 0.2s ease,
+        box-shadow 0.2s ease;
+    outline: none;
+    box-sizing: border-box;
+}
+
+.form-input:focus {
+    border-color: var(--accent, #9945ff);
+    box-shadow: 0 0 0 2px rgba(153, 69, 255, 0.15);
+}
+
+.form-input::placeholder {
+    color: var(--text-muted, rgba(255, 255, 255, 0.35));
+}
+
+/* ===== Collapsible Form Sections ===== */
+.form-section {
+    margin-bottom: 1.5rem;
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.form-section-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+    cursor: pointer;
+    user-select: none;
+    background: var(--bg-secondary, rgba(255, 255, 255, 0.03));
+    transition: background 0.15s ease;
+}
+
+.form-section-header:hover {
+    background: var(--bg-hover, rgba(255, 255, 255, 0.06));
+}
+
+.form-section-icon {
+    font-size: 1rem;
+    flex-shrink: 0;
+}
+
+.form-section-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-secondary, #aaa);
+    flex: 1;
+}
+
+.form-section-badge {
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    line-height: 1.4;
+}
+
+.form-section-badge-required {
+    background: rgba(239, 68, 68, 0.15);
+    color: #f87171;
+    border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+.form-section-badge-optional {
+    background: rgba(107, 114, 128, 0.15);
+    color: #9ca3af;
+    border: 1px solid rgba(107, 114, 128, 0.2);
+}
+
+.form-section-badge-recommended {
+    background: rgba(20, 241, 149, 0.12);
+    color: #14f195;
+    border: 1px solid rgba(20, 241, 149, 0.25);
+}
+
+.form-section-toggle {
+    font-size: 0.7rem;
+    color: var(--text-secondary, #888);
+    transition: transform 0.2s ease;
+    flex-shrink: 0;
+}
+
+.form-section-toggle-open {
+    transform: rotate(180deg);
+}
+
+.form-section-body {
+    padding: 0.75rem 1rem 1rem;
+    border-top: 1px solid var(--border, rgba(255, 255, 255, 0.06));
+}
+
+.form-section-body-hidden {
+    display: none;
+}
+
+/* ===== Field Priority Badges ===== */
+.field-required-badge {
+    display: inline-block;
+    font-size: 0.65rem;
+    font-weight: 700;
+    padding: 0.1rem 0.35rem;
+    border-radius: 3px;
+    margin-left: 0.35rem;
+    vertical-align: middle;
+    background: rgba(239, 68, 68, 0.12);
+    color: #f87171;
+    border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.field-optional-badge {
+    display: inline-block;
+    font-size: 0.65rem;
+    font-weight: 600;
+    padding: 0.1rem 0.35rem;
+    border-radius: 3px;
+    margin-left: 0.35rem;
+    vertical-align: middle;
+    background: rgba(107, 114, 128, 0.12);
+    color: #9ca3af;
+    border: 1px solid rgba(107, 114, 128, 0.15);
+}
+
+/* ===== Advanced Toggle ===== */
+.advanced-toggle-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+    padding: 0.4rem 0;
+    cursor: pointer;
+    user-select: none;
+}
+
+.advanced-toggle-row:hover {
+    opacity: 0.85;
+}
+
+.advanced-toggle-icon {
+    font-size: 0.75rem;
+    color: var(--text-secondary, #888);
+    transition: transform 0.2s ease;
+}
+
+.advanced-toggle-icon-open {
+    transform: rotate(90deg);
+}
+
+.advanced-toggle-label {
+    font-size: 0.8rem;
+    color: var(--text-secondary, #888);
+    font-style: italic;
+}
+
+.advanced-fields-hidden {
+    display: none;
+}
+
+/* ===== Deposit Section Conditional ===== */
+.deposit-config-body-hidden {
+    display: none;
+}
+
+/* ===== Events Search Input ===== */
+.events-search-input {
+    font-size: 0.85rem;
+    padding: 0.4rem 0.75rem;
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+    border-radius: 6px;
+    background: var(--bg-secondary, rgba(255, 255, 255, 0.03));
+    color: var(--text-primary, #eee);
+    outline: none;
+    width: 200px;
+    transition:
+        border-color 0.15s ease,
+        box-shadow 0.15s ease;
+}
+
+.events-search-input:focus {
+    border-color: var(--accent, #6366f1);
+    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
+}
+
+.events-search-input::placeholder {
+    color: var(--text-secondary, #888);
+}
+
+/* ===== Section Icons (emoji-free) ===== */
+.form-section-icon-basic::before {
+    content: "";
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+    background: var(--accent, #6366f1);
+    opacity: 0.7;
+    vertical-align: middle;
+}
+.form-section-icon-schedule::before {
+    content: "";
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 2px solid var(--text-secondary, #888);
+    vertical-align: middle;
+}
+.form-section-icon-sheets::before {
+    content: "";
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border-radius: 2px;
+    background: #22c55e;
+    opacity: 0.6;
+    vertical-align: middle;
+}
+.form-section-icon-nft::before {
+    content: "";
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 2px solid #f59e0b;
+    vertical-align: middle;
+}
+.form-section-icon-settings::before {
+    content: "";
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border-radius: 2px;
+    border: 2px solid var(--text-secondary, #888);
+    vertical-align: middle;
+}
+.form-section-icon-deposit::before {
+    content: "";
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border-radius: 2px;
+    background: #3b82f6;
+    opacity: 0.6;
+    vertical-align: middle;
+}
+.form-section-icon-people::before {
+    content: "";
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--text-secondary, #888);
+    opacity: 0.4;
+    vertical-align: middle;
+}
+
+/* ===== Events Empty Icon ===== */
+.events-empty-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    border: 2px dashed var(--border, rgba(255, 255, 255, 0.15));
+    margin-bottom: 0.5rem;
+}
+
+/* ===== Escrow Solscan Link (inline with label) ===== */
+.escrow-solscan-link {
+    font-size: 0.65rem;
+    font-weight: 600;
+    color: var(--accent, #6366f1);
+    margin-left: 0.5rem;
+    text-decoration: none;
+    padding: 0.1rem 0.3rem;
+    border: 1px solid var(--accent, #6366f1);
+    border-radius: 3px;
+    vertical-align: middle;
+    transition: background 0.15s ease;
+}
+
+.escrow-solscan-link:hover {
+    background: rgba(99, 102, 241, 0.1);
+}
+
+/* ===== Escrow Result Banners ===== */
+.escrow-result {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.5rem;
+    padding: 0.4rem 0.75rem;
+    border-radius: 6px;
+    font-size: 0.8rem;
+}
+
+.escrow-result-success {
+    border: 1px solid var(--success, green);
+    background: rgba(0, 128, 0, 0.05);
+    color: var(--success, green);
+}
+
+.escrow-result-error {
+    border: 1px solid var(--error, red);
+    background: rgba(255, 0, 0, 0.05);
+    color: var(--error, red);
+}
+
+.escrow-result-text {
+    font-weight: 600;
+}
+
+.escrow-result-link a {
+    color: var(--accent, #6366f1);
+    font-size: 0.7rem;
+    text-decoration: none;
+    border: 1px solid var(--accent, #6366f1);
+    border-radius: 3px;
+    padding: 0.15rem 0.35rem;
+    transition: background 0.15s ease;
+}
+
+.escrow-result-link a:hover {
+    background: rgba(99, 102, 241, 0.1);
+}
+
+/* ===== Phase 9e: UI Polish & Visual Refresh ===== */
+
+/* --- Utility Layout Classes (replacing inline styles) --- */
+.flex-row-center {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.flex-row-gap {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.flex-row-wrap {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+/* --- Panel Container (replaces inline border/padding styles in escrow panels) --- */
+.panel-box {
+    margin-bottom: 1rem;
+    padding: 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg-secondary);
+}
+
+.panel-box-dashed {
+    margin-bottom: 1rem;
+    padding: 0.75rem;
+    border: 1px dashed var(--border);
+    border-radius: 8px;
+    background: var(--bg-secondary);
+}
+
+.panel-label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 0.5rem;
+}
+
+.panel-hint {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 0.25rem;
+}
+
+/* --- Wallet Bar (connected wallet display) --- */
+.wallet-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg-secondary);
+    margin-bottom: 0.75rem;
+}
+
+.wallet-bar-address {
+    font-family: monospace;
+    font-size: 0.8rem;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 200px;
+}
+
+/* --- Step Card (escrow lifecycle steps) --- */
+.step-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg-primary);
+    margin-bottom: 0.5rem;
+    transition:
+        border-color 0.2s ease,
+        opacity 0.2s ease;
+}
+
+.step-card-done {
+    opacity: 0.6;
+    border-color: var(--success);
+}
+
+.step-card-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.step-card-title {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.step-card-desc {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 0.15rem;
+}
+
+/* --- Badge additions (Completed, Archived) --- */
+.badge-completed {
+    background: rgba(59, 130, 246, 0.15);
+    color: #3b82f6;
+    border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.badge-archived {
+    background: rgba(107, 114, 128, 0.15);
+    color: #9ca3af;
+    border: 1px solid rgba(107, 114, 128, 0.3);
+}
+
+/* --- Success/Error panels (escrow init done/error states) --- */
+.panel-success {
+    margin-top: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--success);
+    border-radius: 6px;
+    background: var(--success-bg);
+}
+
+.panel-error {
+    margin-top: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--danger);
+    border-radius: 6px;
+    background: var(--danger-bg);
+}
+
+/* --- Events Header Row (search + create) --- */
+.events-header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.events-header-row h2 {
+    margin-bottom: 0;
+}
+
+.events-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+/* --- Events Search (responsive width transition) --- */
+.events-search-input {
+    width: 200px;
+    transition:
+        width 0.2s ease,
+        border-color 0.15s ease,
+        box-shadow 0.15s ease;
+}
+
+.events-search-input:focus {
+    width: 260px;
+}
+
+/* --- Form Action Row (bottom buttons) --- */
+.form-actions-row {
+    display: flex;
+    gap: 0.75rem;
+    padding-top: 0.5rem;
+    align-items: center;
+}
+
+/* --- Info Note (dashed border note box) --- */
+.info-note {
+    border: 1px dashed var(--border);
+    border-radius: 6px;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-top: 0.5rem;
+}
+
+/* --- Keyboard Shortcut Badge --- */
+.kbd {
+    display: inline-block;
+    padding: 0.1rem 0.4rem;
+    font-size: 0.7rem;
+    font-family: monospace;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-muted);
+    line-height: 1.4;
+}
+
+/* --- Focus visible for keyboard navigation (WCAG) --- */
+.btn:focus-visible,
+.filter-pill:focus-visible,
+.tab:focus-visible,
+.admin-sidebar-item:focus-visible,
+.form-input:focus-visible,
+.events-search-input:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+/* --- Reduced motion --- */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.01ms !important;
+    }
+}
+
+/* Responsive */
+@media (max-width: 480px) {
+    .deposit-method-cards {
+        max-width: 100%;
+    }
+    .admin-slip-card {
+        flex-direction: column;
+    }
+    .admin-slip-actions {
+        width: 100%;
+        justify-content: flex-end;
+    }
+    .events-header-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .events-header-actions {
+        flex-wrap: wrap;
+    }
+    .events-search-input {
+        width: 100%;
+    }
+    .events-search-input:focus {
+        width: 100%;
+    }
+    .wallet-bar {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+    }
+    .wallet-bar-address {
+        max-width: 100%;
+    }
+    .step-card {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+}
+
+/* ===== Phase 9f: Inline Style Migration Classes ===== */
+
+/*
+ * Component and utility classes to replace recurring inline styles across:
+ *   deposit.rs, claim.rs, escrow_init.rs, events_page.rs,
+ *   admin_escrow.rs, admin_deposit.rs, adventure_config.rs, admin.rs, lib.rs
+ *
+ * NAMING CONVENTION:
+ *   .dep-*   — Deposit flow component classes
+ *   .tx-*    — Transaction / on-chain display classes
+ *   .wallet-* — Wallet connect / display classes
+ *   .hint-*  — Hint / description text classes
+ *   .badge-* — Additional badge variants
+ *   .u-*     — Generic utility (spacing, layout, text)
+ */
+
+/* ---------- Deposit Flow Card ---------- */
+
+/* Main card wrapper for deposit steps (repeats ~8x in deposit.rs)
+ * Replaces: style="margin-top:1.5rem;text-align:center;width:100%;max-width:480px;" */
+.dep-card {
+    margin-top: 1.5rem;
+    text-align: center;
+    width: 100%;
+    max-width: 480px;
+}
+
+/* Error/unavailable card variant (top margin only)
+ * Replaces: style="margin-top:2rem;text-align:center;" */
+.dep-card-error {
+    margin-top: 2rem;
+    text-align: center;
+}
+
+/* ---------- Deposit Info Note Box ---------- */
+
+/* Dashed-border info note (repeats ~6x)
+ * Replaces: style="margin-top:0.75rem;padding:0.75rem;background:var(--bg-secondary);border-radius:8px;border:1px dashed var(--border-color);" */
+.dep-info-note {
+    margin-top: 0.75rem;
+    padding: 0.75rem;
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    border: 1px dashed var(--border);
+}
+
+/* Variant with top=1rem spacing */
+.dep-info-note-lg {
+    margin-top: 1rem;
+    padding: 0.75rem;
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    border: 1px dashed var(--border);
+}
+
+/* ---------- Wallet Connected Info Bar ---------- */
+
+/* Connected wallet display bar (repeats ~4x)
+ * Replaces: style="background:var(--bg-secondary);border-radius:8px;padding:1rem;margin-bottom:1rem;display:flex;align-items:center;justify-content:center;gap:0.75rem;" */
+.wallet-connected-bar {
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+}
+
+/* Wallet icon (emoji) inside connected bar
+ * Replaces: style="font-size:1.5rem;" */
+.wallet-icon-lg {
+    font-size: 1.5rem;
+}
+
+/* Wallet info block (left-aligned text inside flex bar)
+ * Replaces: style="text-align:left;" */
+.wallet-info-left {
+    text-align: left;
+}
+
+/* "Connected via ..." label
+ * Replaces: style="font-size:0.8rem;color:var(--text-secondary);" */
+.wallet-label {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+/* Wallet address display (monospace bold)
+ * Replaces: style="font-weight:600;font-family:monospace;" */
+.wallet-address-bold {
+    font-weight: 600;
+    font-family: monospace;
+}
+
+/* Push-right utility (margin-left:auto inside flex)
+ * Replaces: style="margin-left:auto;" */
+.u-ml-auto {
+    margin-left: auto;
+}
+
+/* ---------- Deposit Detail Rows ---------- */
+
+/* Detail row with bottom border (repeats ~4x)
+ * Replaces: style="display:flex;justify-content:space-between;padding:0.5rem 0;border-bottom:1px solid var(--border-color);" */
+.dep-detail-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--border);
+}
+
+/* Detail row with center alignment + bottom border
+ * Replaces: style="display:flex;justify-content:space-between;align-items:center;padding:0.5rem 0;border-bottom:1px solid var(--border-color);" */
+.dep-detail-row-center {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--border);
+}
+
+/* Last detail row (no border)
+ * Replaces: style="display:flex;justify-content:space-between;padding:0.5rem 0;" */
+.dep-detail-row-last {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.5rem 0;
+}
+
+/* Label text in detail rows
+ * Replaces: style="color:var(--text-secondary);" */
+.dep-label {
+    color: var(--text-secondary);
+}
+
+/* Detail rows wrapper (left-aligned)
+ * Replaces: style="text-align:left;margin:1rem 0;" */
+.dep-details-block {
+    text-align: left;
+    margin: 1rem 0;
+}
+
+/* ---------- TX Hash Display ---------- */
+
+/* TX hash display box (repeats ~6x)
+ * Replaces: style="background:var(--bg-secondary);border-radius:8px;padding:0.75rem;margin-bottom:1rem;font-family:monospace;font-size:0.75rem;color:var(--text-secondary);word-break:break-all;" */
+.tx-hash-box {
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    padding: 0.75rem;
+    margin-bottom: 1rem;
+    font-family: monospace;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    word-break: break-all;
+}
+
+/* Variant with margin-top instead of margin-bottom (confirming state) */
+.tx-hash-box-top {
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    padding: 0.75rem;
+    margin-top: 0.75rem;
+    font-family: monospace;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    word-break: break-all;
+}
+
+/* Solscan explorer link
+ * Replaces: style="color:var(--accent);font-size:0.85rem;" */
+.tx-explorer-link {
+    color: var(--accent);
+    font-size: 0.85rem;
+}
+
+.tx-explorer-link:hover {
+    color: var(--accent-hover);
+}
+
+/* Pay URL display box (shows the full Solana Pay URL)
+ * Replaces: style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:8px;padding:1rem;margin-bottom:1rem;word-break:break-all;font-size:0.8rem;color:var(--text-secondary);text-align:left;" */
+.tx-pay-url-box {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    word-break: break-all;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    text-align: left;
+}
+
+/* ---------- Wallet Connect Buttons ---------- */
+
+/* Flex inner content on wallet connect buttons
+ * Replaces: style="display:flex;align-items:center;justify-content:center;gap:0.5rem;" */
+.wallet-btn-inner {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+}
+
+/* Wallet list container
+ * Replaces: style="display:flex;flex-direction:column;gap:0.5rem;margin-bottom:1rem;" */
+.wallet-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+/* Wallet prompt text ("Connect your Solana wallet:")
+ * Replaces: style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:0.25rem;" */
+.wallet-prompt {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.25rem;
+}
+
+/* ---------- No Wallet Fallback ---------- */
+
+/* No wallet detected box
+ * Replaces: style="padding:1rem;background:var(--bg-secondary);border-radius:8px;margin-bottom:1rem;" */
+.wallet-fallback-box {
+    padding: 1rem;
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    margin-bottom: 1rem;
+}
+
+/* No wallet text
+ * Replaces: style="color:var(--text-secondary);font-size:0.85rem;margin:0;" */
+.wallet-fallback-text {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    margin: 0;
+}
+
+/* ---------- Loading / Spinner States ---------- */
+
+/* Loading wrapper with top margin
+ * Replaces: style="margin-top:2rem;" on .loading.visible */
+.loading-top {
+    margin-top: 2rem;
+}
+
+/* Spinner centered wrapper
+ * Replaces: style="margin:1.5rem 0;" */
+.spinner-wrap {
+    margin: 1.5rem 0;
+}
+
+/* Large spinner override (used on spinner-lg)
+ * Replaces: style="width:48px;height:48px;border-width:3px;" */
+.spinner-xl {
+    width: 48px;
+    height: 48px;
+    border-width: 3px;
+}
+
+/* ---------- Action Buttons ---------- */
+
+/* Large action button (primary CTA in deposit flows)
+ * Replaces: style="font-size:1.1rem;padding:0.8rem;" on .btn-primary/.btn-success */
+.btn-action-lg {
+    font-size: 1.1rem;
+    padding: 0.8rem;
+}
+
+/* Secondary action button with top margin
+ * Replaces: style="margin-top:0.75rem;" on .btn-outline */
+.btn-action-secondary {
+    margin-top: 0.75rem;
+}
+
+/* Small action button
+ * Replaces: style="margin-top:0.5rem;font-size:0.9rem;padding:0.6rem;" */
+.btn-action-sm {
+    margin-top: 0.5rem;
+    font-size: 0.9rem;
+    padding: 0.6rem;
+}
+
+/* ---------- Back to Home Link ---------- */
+
+/* Back-to-home text link (repeats ~3x)
+ * Replaces: style="color:var(--text-secondary);font-size:0.85rem;margin-top:1.5rem;text-decoration:none;" */
+.link-back-home {
+    display: inline-block;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    margin-top: 1.5rem;
+    text-decoration: none;
+}
+
+.link-back-home:hover {
+    color: var(--text-primary);
+    text-decoration: underline;
+}
+
+/* ---------- Success / Celebration States ---------- */
+
+/* Large emoji celebration (repeats ~4x)
+ * Replaces: style="font-size:3rem;margin:1rem 0;" */
+.celebration-emoji {
+    font-size: 3rem;
+    margin: 1rem 0;
+}
+
+/* Success title text
+ * Replaces: style="font-size:1.1rem;font-weight:600;margin-bottom:0.5rem;" */
+.success-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+}
+
+/* "Go Home" button wrapper with top margin
+ * Replaces: style="margin-top:1rem;" or style="margin-top:1.25rem;" */
+.action-row-top {
+    margin-top: 1rem;
+}
+
+.action-row-top-lg {
+    margin-top: 1.25rem;
+}
+
+/* ---------- QR Code Display ---------- */
+
+/* QR wrapper (white bg, rounded)
+ * Replaces: style="background:white;border-radius:12px;padding:1rem;display:inline-block;margin-bottom:1rem;" */
+.qr-wrapper {
+    background: white;
+    border-radius: 12px;
+    padding: 1rem;
+    display: inline-block;
+    margin-bottom: 1rem;
+}
+
+/* QR image — large (256px, Solana Pay)
+ * Replaces: style="width:256px;height:256px;" */
+.qr-img-lg {
+    width: 256px;
+    height: 256px;
+}
+
+/* QR image — medium (220px, PromptPay)
+ * Replaces: style="width:220px;height:220px;" */
+.qr-img-md {
+    width: 220px;
+    height: 220px;
+}
+
+/* ---------- Deposit Input Fields ---------- */
+
+/* Deposit text input (URL / wallet address)
+ * Replaces: style="width:100%;padding:0.6rem 0.8rem;border-radius:6px;border:1px solid var(--border);background:var(--bg-secondary);color:var(--text-primary);font-size:0.9rem;" */
+.dep-input {
+    width: 100%;
+    padding: 0.6rem 0.8rem;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    font-size: 0.9rem;
+}
+
+.dep-input:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+}
+
+/* ---------- Payment Method Layout ---------- */
+
+/* Payment methods container
+ * Replaces: style="width:100%;max-width:480px;display:flex;flex-direction:column;gap:1.5rem;" */
+.dep-methods {
+    width: 100%;
+    max-width: 480px;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+/* Badge row / flex wrap row for status badges
+ * Replaces: style="display:flex;gap:1rem;justify-content:center;flex-wrap:wrap;margin-bottom:1rem;" */
+.badge-row {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+}
+
+/* ---------- Hint / Description Text ---------- */
+
+/* Description text (repeats ~20x)
+ * Replaces: style="color:var(--text-secondary);font-size:0.9rem;margin-bottom:1rem;" */
+.hint-desc {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    margin-bottom: 1rem;
+}
+
+/* Hint text (slightly smaller)
+ * Replaces: style="color:var(--text-secondary);font-size:0.85rem;margin-bottom:0.5rem;" */
+.hint-sm {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    margin-bottom: 0.5rem;
+}
+
+/* Note text (no margin)
+ * Replaces: style="font-size:0.85rem;color:var(--text-secondary);margin:0;" */
+.hint-note {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin: 0;
+}
+
+/* Small hint text
+ * Replaces: style="font-size:0.75rem;color:var(--text-secondary);margin-top:0.75rem;" */
+.hint-xs {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-top: 0.75rem;
+}
+
+/* Small text only (no margin)
+ * Replaces: style="font-size:0.8rem;color:var(--text-secondary);" */
+.hint-2xs {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+/* PromptPay amount text
+ * Replaces: style="font-size:0.95rem;font-weight:600;margin-bottom:0.75rem;" */
+.text-amount {
+    font-size: 0.95rem;
+    font-weight: 600;
+    margin-bottom: 0.75rem;
+}
+
+/* ---------- 404 Page ---------- */
+
+/* 404 page layout
+ * Replaces: style="display:flex;flex-direction:column;align-items:center;" */
+.layout-col-center {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+/* ---------- Admin Escrow Lifecycle ---------- */
+
+/* Step list (column with gap)
+ * Replaces: style="display:flex;flex-direction:column;gap:0.5rem" */
+.step-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+/* Done badge (green)
+ * Replaces: style="font-size:0.8rem;color:var(--success,green)" */
+.badge-done {
+    font-size: 0.8rem;
+    color: var(--success);
+}
+
+/* Warning badge (orange)
+ * Replaces: style="font-size:0.75rem;color:var(--warning,orange)" */
+.badge-warn-text {
+    font-size: 0.75rem;
+    color: var(--warning);
+}
+
+/* Panel hint bottom spacing
+ * Replaces: style="margin-bottom:0.75rem" */
+.u-mb-sm {
+    margin-bottom: 0.75rem;
+}
+
+/* ---------- Escrow Init ---------- */
+
+/* Flex wrap row
+ * Replaces: style="display:flex;flex-wrap:wrap;gap:0.5rem" */
+.flex-wrap-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+/* Zero margin
+ * Replaces: style="margin-bottom:0" */
+.u-mb-0 {
+    margin-bottom: 0;
+}
+
+/* Tiny top margin
+ * Replaces: style="margin-top:0.2rem" */
+.u-mt-xs {
+    margin-top: 0.2rem;
+}
+
+/* Small top margin (0.25rem)
+ * Replaces: style="margin-top:0.25rem" */
+.u-mt-2xs {
+    margin-top: 0.25rem;
+}
+
+/* Nowrap
+ * Replaces: style="white-space:nowrap" */
+.u-nowrap {
+    white-space: nowrap;
+}
+
+/* Flex gap override (1rem)
+ * Replaces: style="gap:1rem" */
+.u-gap-lg {
+    gap: 1rem;
+}
+
+/* Escrow address code display
+ * Replaces: style="font-size:0.7rem" on <code> */
+.code-xs {
+    font-size: 0.7rem;
+}
+
+/* Inline label for escrow result fields
+ * Replaces: style="color:var(--text-secondary)" inline on spans */
+.text-label {
+    color: var(--text-secondary);
+}
+
+/* ---------- Events Page ---------- */
+
+/* Search wrapper (relative, flex center)
+ * Replaces: style="position:relative;display:flex;align-items:center" */
+.search-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+/* Keyboard hint badge (absolute positioned)
+ * Replaces: style="position:absolute;right:8px;pointer-events:none;opacity:0.5" */
+.search-kbd-hint {
+    position: absolute;
+    right: 8px;
+    pointer-events: none;
+    opacity: 0.5;
+}
+
+/* Setting value text
+ * Replaces: style="font-size:0.85rem" */
+.setting-value {
+    font-size: 0.85rem;
+}
+
+/* Monospace setting value
+ * Replaces: style="font-size:0.85rem;font-family:monospace" */
+.setting-value-mono {
+    font-size: 0.85rem;
+    font-family: monospace;
+}
+
+/* ---------- Adventure Config ---------- */
+
+/* Select full width
+ * Replaces: style="width: 100%; padding: 0.5rem 0.75rem;" */
+.select-full {
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+}
+
+/* Dirty hint text
+ * Replaces: style="color: var(--warning); font-size: 0.8rem; margin-left: 0.5rem;" */
+.hint-dirty {
+    color: var(--warning);
+    font-size: 0.8rem;
+    margin-left: 0.5rem;
+}
+
+/* Clean hint text
+ * Replaces: style="color: var(--text-muted); font-size: 0.8rem; margin-left: 0.5rem;" */
+.hint-clean {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    margin-left: 0.5rem;
+}
+
+/* ---------- Admin ---------- */
+
+/* Extra-small button variant (overrides)
+ * Replaces: style="margin-left:0.5rem;padding:0.15rem 0.4rem;font-size:0.7rem;" */
+.btn-xs-override {
+    margin-left: 0.5rem;
+    padding: 0.15rem 0.4rem;
+    font-size: 0.7rem;
+}
+
+/* ---------- Deposit Section Dividers ---------- */
+
+/* Border-top divider section
+ * Replaces: style="border-top:1px solid var(--border-color);padding-top:1rem;margin-top:0.5rem;" */
+.dep-divider-section {
+    border-top: 1px solid var(--border);
+    padding-top: 1rem;
+    margin-top: 0.5rem;
+}
+
+/* ---------- File Upload / Slip Upload ---------- */
+
+/* File input wrapper
+ * Replaces: style="margin-bottom:0.75rem;" */
+.upload-field {
+    margin-bottom: 0.75rem;
+}
+
+/* Upload label
+ * Replaces: style="display:block;font-size:0.85rem;color:var(--text-secondary);margin-bottom:0.3rem;" */
+.upload-label {
+    display: block;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.3rem;
+}
+
+/* File input styling
+ * Replaces: style="width:100%;font-size:0.85rem;color:var(--text-secondary);margin-bottom:0.5rem;" */
+.upload-input {
+    width: 100%;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.5rem;
+}
+
+/* ---------- Details/Summary Toggle ---------- */
+
+/* Details wrapper
+ * Replaces: style="margin-bottom:0.75rem;" on <details> */
+.details-toggle {
+    margin-bottom: 0.75rem;
+}
+
+/* Summary text
+ * Replaces: style="font-size:0.8rem;color:var(--text-secondary);cursor:pointer;margin-bottom:0.3rem;" */
+.details-summary-text {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+    margin-bottom: 0.3rem;
+}
+
+/* ---------- Deposit QR Hint ---------- */
+
+/* QR pay instruction text
+ * Replaces: style="font-size:0.75rem;color:var(--text-secondary);margin-top:0.3rem;" */
+.qr-hint-text {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-top: 0.3rem;
+}
+
+/* ---------- Events Deposit Config Inline Styles ---------- */
+
+/* Deposit config row (flex with gap)
+ * Replaces: style="margin-bottom:0.75rem;display:flex;align-items:center;gap:0.75rem" */
+.dep-config-row {
+    margin-bottom: 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+/* Deposit config label
+ * Replaces: style="font-size:0.95rem;font-weight:600;color:var(--text-secondary)" */
+.dep-config-label {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+/* Escrow initialized badge (inline success panel)
+ * Replaces: style="margin-top:0.75rem;padding:0.5rem 0.75rem;border:1px solid var(--success);border-radius:6px;background:rgba(0,128,0,0.05)" */
+.escrow-initialized-badge {
+    margin-top: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--success);
+    border-radius: 6px;
+    background: var(--success-bg);
+}
+
+/* Escrow initialized label
+ * Replaces: style="font-size:0.8rem;color:var(--success)" */
+.escrow-badge-text {
+    font-size: 0.8rem;
+    color: var(--success);
+}
+
+/* Wallet locked hint
+ * Replaces: style="color:var(--success,green)" */
+.hint-success-sm {
+    color: var(--success);
+}
+
+/* ---------- Admin Deposit Slip Styles ---------- */
+
+/* Attendee name bold
+ * Replaces: style="font-weight:600;margin-bottom:0.25rem" */
+.admin-attendee-name {
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+}
+
+/* Amount line
+ * Replaces: style="margin-bottom:0.25rem" */
+.admin-amount-line {
+    margin-bottom: 0.25rem;
+}
+
+/* Slip URL link
+ * Replaces: style="color:var(--accent)" */
+.link-accent {
+    color: var(--accent);
+}
+
+.link-accent:hover {
+    color: var(--accent-hover);
+}
+
+/* ---------- Admin Events Warning / Error ---------- */
+
+/* Name length warning
+ * Replaces: style="color:var(--warning);font-size:0.75rem;margin-top:0.25rem" */
+.hint-warning-xs {
+    color: var(--warning);
+    font-size: 0.75rem;
+    margin-top: 0.25rem;
+}
+
+.hint-info {
+    color: var(--text-secondary, #888);
+    font-size: 0.8rem;
+    line-height: 1.5;
+}
+
+/* ---------- Readonly locked fields (escrow address, wallet, event ID) ---------- */
+.readonly-field {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.45rem 0.65rem;
+    background: var(--bg-secondary, #1a1a2e);
+    border: 1px solid var(--border, #2a2a3e);
+    border-radius: 6px;
+    min-height: 2.25rem;
+}
+
+.readonly-value {
+    font-size: 0.85rem;
+    color: var(--text-primary, #e0e0e0);
+    word-break: break-all;
+}
+
+.readonly-value-mono {
+    font-size: 0.78rem;
+    color: var(--text-primary, #e0e0e0);
+    font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+    word-break: break-all;
+    line-height: 1.3;
+}
+
+.readonly-badge {
+    font-size: 0.65rem;
+    color: var(--success, #22c55e);
+    background: rgba(34, 197, 94, 0.1);
+    border: 1px solid rgba(34, 197, 94, 0.25);
+    border-radius: 4px;
+    padding: 0.1rem 0.4rem;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+/* Archive button (outline with warning color)
+ * Replaces: style="margin-left:auto;color:var(--warning)" */
+.btn-archive {
+    margin-left: auto;
+    color: var(--warning);
+}
+
+.btn-archive:hover {
+    color: var(--warning-border);
+}
+
+/* ---------- Admin Stats ---------- */
+
+/* Admin header weight
+ * Replaces: style="font-weight:600;margin-bottom:0.25rem" in admin_deposit */
+.admin-item-title {
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+}
+
+/* ---------- Remaining edge-case utilities ---------- */
+
+/* Subtitle with larger bottom margin
+ * Replaces: style="margin-bottom:1.5rem" on subtitle */
+.subtitle-lg {
+    margin-bottom: 1.5rem;
+}
+
+/* Bottom margin 1rem override for layout containers */
+.u-mb-1rem {
+    margin-bottom: 1rem;
+}
+
+/* Bottom margin 0.5rem override */
+.u-mb-half {
+    margin-bottom: 0.5rem;
+}
+
+/* Top margin 1rem override */
+.u-mt-1rem {
+    margin-top: 1rem;
+}
+
+/* Note with different bottom margin
+ * Replaces: style="margin:0 0 0.5rem" on hint-note */
+.hint-note-sm {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    margin: 0 0 0.5rem;
+}
+
+/* File input styling */
+.file-input-styled {
+    width: 100%;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.5rem;
+}
+
+/* ---------- Responsive overrides for Phase 9f ---------- */
+
+@media (max-width: 480px) {
+    .dep-card {
+        max-width: 100%;
+    }
+    .wallet-connected-bar {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+    .dep-detail-row,
+    .dep-detail-row-center,
+    .dep-detail-row-last {
+        flex-direction: column;
+        gap: 0.25rem;
+    }
+    .qr-img-lg {
+        width: 220px;
+        height: 220px;
+    }
+    .badge-row {
+        flex-direction: column;
+        align-items: center;
+    }
+    .dep-config-row {
+        flex-wrap: wrap;
+    }
 }

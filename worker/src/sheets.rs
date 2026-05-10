@@ -6,6 +6,7 @@
 
 use base64::Engine;
 use chrono::Utc;
+use std::collections::HashMap;
 
 use event_checkin_domain::models::attendee::{Attendee, AttendeeRow};
 use event_checkin_domain::models::auth::ServiceAccountClaim;
@@ -270,7 +271,42 @@ pub async fn get_attendees(
     Ok(attendees)
 }
 
-/// Get a single attendee by their api_id.
+// ---------------------------------------------------------------------------
+// HashMap helpers for O(1) lookups
+// ---------------------------------------------------------------------------
+
+/// Build a HashMap of attendees keyed by `api_id`.
+/// Internally calls `get_attendees()` so KV caching is preserved.
+async fn get_attendees_map(
+    state: &AppState,
+    sheet_id: &str,
+    sheet_name: &str,
+    kv: Option<&KvStore>,
+) -> Result<HashMap<String, Attendee>, String> {
+    let attendees: Vec<Attendee> = get_attendees(state, sheet_id, sheet_name, kv).await?;
+    Ok(attendees
+        .into_iter()
+        .map(|a| (a.api_id.clone(), a))
+        .collect())
+}
+
+/// Build a HashMap of attendees keyed by `claim_token`.
+/// Only attendees with `Some(token)` are included.
+/// Internally calls `get_attendees()` so KV caching is preserved.
+async fn get_attendees_by_claim_map(
+    state: &AppState,
+    sheet_id: &str,
+    sheet_name: &str,
+    kv: Option<&KvStore>,
+) -> Result<HashMap<String, Attendee>, String> {
+    let attendees: Vec<Attendee> = get_attendees(state, sheet_id, sheet_name, kv).await?;
+    Ok(attendees
+        .into_iter()
+        .filter_map(|a| a.claim_token.clone().map(|token| (token, a)))
+        .collect())
+}
+
+/// Get a single attendee by their api_id — O(1) via HashMap lookup.
 pub async fn get_attendee_by_id(
     api_id: &str,
     state: &AppState,
@@ -278,12 +314,11 @@ pub async fn get_attendee_by_id(
     sheet_name: &str,
     kv: Option<&KvStore>,
 ) -> Result<Option<Attendee>, String> {
-    let attendees: Vec<Attendee> = get_attendees(state, sheet_id, sheet_name, kv).await?;
-    Ok(attendees.into_iter().find(|a| a.api_id == api_id))
+    let map = get_attendees_map(state, sheet_id, sheet_name, kv).await?;
+    Ok(map.get(api_id).cloned())
 }
 
-/// Find an attendee by their claim token (column L).
-/// Scans all attendees and returns the first matching claim_token.
+/// Find an attendee by their claim token (column L) — O(1) via HashMap lookup.
 /// Returns `None` if no attendee has the given token.
 pub async fn get_attendee_by_claim_token(
     claim_token: &str,
@@ -292,14 +327,13 @@ pub async fn get_attendee_by_claim_token(
     sheet_name: &str,
     kv: Option<&KvStore>,
 ) -> Result<Option<Attendee>, String> {
-    let attendees: Vec<Attendee> = get_attendees(state, sheet_id, sheet_name, kv).await?;
-    Ok(attendees
-        .into_iter()
-        .find(|a| a.claim_token.as_deref() == Some(claim_token)))
+    let map = get_attendees_by_claim_map(state, sheet_id, sheet_name, kv).await?;
+    Ok(map.get(claim_token).cloned())
 }
 
 /// Look up an attendee by claim token and return claim counts in a single Sheets API call.
 /// Returns `(attendee, total_checked_in, total_claimed)`.
+/// Attendee lookup is O(1) via HashMap; counts iterate the full Vec.
 pub async fn get_attendee_with_claim_counts(
     claim_token: &str,
     state: &AppState,
@@ -313,9 +347,17 @@ pub async fn get_attendee_with_claim_counts(
         .filter(|a| a.checked_in_at.is_some())
         .count();
     let total_claimed = attendees.iter().filter(|a| a.claimed_at.is_some()).count();
-    let attendee = attendees
+
+    // O(1) lookup by claim token
+    let claim_map: HashMap<String, Attendee> = attendees
         .into_iter()
-        .find(|a| a.claim_token.as_deref() == Some(claim_token));
+        .filter_map(|a| {
+            let token = a.claim_token.clone()?;
+            Some((token, a))
+        })
+        .collect();
+    let attendee = claim_map.get(claim_token).cloned();
+
     Ok((attendee, total_checked_in, total_claimed))
 }
 
@@ -493,6 +535,49 @@ pub async fn mark_checked_in(
     Ok(timestamp)
 }
 
+/// Mark an online attendee as virtually checked in.
+/// Writes checked_in_at (column I) and checked_in_by="virtual" (column J).
+/// Does NOT overwrite claim_token (column R) — already set during registration.
+pub async fn mark_virtual_checked_in(
+    row_index: usize,
+    state: &AppState,
+    sheet_id: &str,
+    sheet_name: &str,
+    kv: Option<&KvStore>,
+) -> Result<String, String> {
+    let access_token = get_cached_access_token(state, kv).await?;
+    let timestamp = Utc::now().to_rfc3339();
+
+    let data = vec![
+        ValueRange {
+            range: format!("{sheet_name}!I{row_index}"),
+            values: vec![vec![timestamp.clone()]],
+        },
+        ValueRange {
+            range: format!("{sheet_name}!J{row_index}"),
+            values: vec![vec!["virtual".to_string()]],
+        },
+    ];
+
+    let url =
+        format!("https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values:batchUpdate");
+
+    let body = BatchUpdateRequest {
+        data,
+        value_input_option: "USER_ENTERED".to_string(),
+    };
+
+    batch_update_sheet(&url, &body, &access_token).await?;
+
+    tracing::info!(
+        row_index = row_index,
+        "marked row as virtually checked in (online attendee)"
+    );
+
+    invalidate_attendee_cache(kv, sheet_id, sheet_name).await;
+    Ok(timestamp)
+}
+
 /// Mark an attendee as claimed by writing wallet to column P and claimed_at to column S.
 /// Called after a successful cNFT mint to persist the claim on the Google Sheet.
 pub async fn mark_claimed(
@@ -572,6 +657,69 @@ pub async fn update_qr_urls(
 
     invalidate_attendee_cache(kv, sheet_id, sheet_name).await;
     Ok(updated)
+}
+
+// ---------------------------------------------------------------------------
+// Self-registration append
+// ---------------------------------------------------------------------------
+
+/// Append a full attendee row to the event's Google Sheet.
+///
+/// Columns A–Y (25 columns), unused slots filled with empty strings:
+/// A[0]=api_id, B[1]=name, C[2]=first_name, D[3]=last_name, E[4]=email,
+/// F[5]="Self-Registered", G[6]=registration_date, H[7]="Approved",
+/// R[17]=claim_token, Y[24]=participation_type.
+#[allow(clippy::too_many_arguments)]
+pub async fn append_attendee_row(
+    api_id: &str,
+    name: &str,
+    first_name: &str,
+    last_name: &str,
+    email: &str,
+    claim_token: &str,
+    participation_type: &str,
+    registration_date: &str,
+    state: &AppState,
+    sheet_id: &str,
+    sheet_name: &str,
+    kv: Option<&KvStore>,
+) -> Result<(), String> {
+    let access_token = get_cached_access_token(state, kv).await?;
+
+    // 25 columns: A(0)..Y(24)
+    let mut row = vec![String::new(); 25];
+    row[0] = api_id.to_string(); // A — api_id
+    row[1] = name.to_string(); // B — name
+    row[2] = first_name.to_string(); // C — first_name
+    row[3] = last_name.to_string(); // D — last_name
+    row[4] = email.to_string(); // E — email
+    row[5] = "Self-Registered".to_string(); // F — ticket_name
+    row[6] = registration_date.to_string(); // G — registration_date
+    row[7] = "Approved".to_string(); // H — approval_status
+    row[17] = claim_token.to_string(); // R — claim_token
+    row[24] = participation_type.to_string(); // Y — participation_type
+
+    let url = format!(
+        "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{}!A:Y:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS",
+        urlencoding::encode(sheet_name)
+    );
+
+    let body = crate::http::ValueRange {
+        range: format!("{sheet_name}!A:Y"),
+        values: vec![row],
+    };
+
+    crate::http::post_json::<serde_json::Value>(&url, &body, Some(&access_token)).await?;
+
+    tracing::info!(
+        %api_id,
+        %email,
+        %participation_type,
+        "appended self-registration row to google sheet"
+    );
+
+    invalidate_attendee_cache(kv, sheet_id, sheet_name).await;
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------

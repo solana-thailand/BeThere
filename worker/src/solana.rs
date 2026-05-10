@@ -211,6 +211,20 @@ pub async fn mint_compressed_nft(req: &MintRequest<'_>) -> Result<MintResult, St
 // ---------------------------------------------------------------------------
 
 /// Validate a Solana wallet address (base58, 32-44 characters).
+/// Const lookup table for base58 alphabet — zero heap allocation.
+const BASE58_TABLE: &[u8; 128] = &{
+    let mut table = [0u8; 128];
+    let alphabet = b"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+    let mut i = 0;
+    while i < alphabet.len() {
+        table[alphabet[i] as usize] = 1;
+        i += 1;
+    }
+    table
+};
+
+/// Validate a Solana wallet address (base58, 32-44 chars).
+///
 /// Returns `Ok(())` if valid, `Err` with a description otherwise.
 pub fn validate_wallet_address(address: &str) -> Result<(), String> {
     let len = address.len();
@@ -220,15 +234,9 @@ pub fn validate_wallet_address(address: &str) -> Result<(), String> {
         ));
     }
 
-    // Base58 alphabet: 123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz
-    let base58_chars: std::collections::HashSet<char> =
-        "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
-            .chars()
-            .collect();
-
     let invalid: Vec<char> = address
         .chars()
-        .filter(|c| !base58_chars.contains(c))
+        .filter(|c| (*c as usize) >= 128 || BASE58_TABLE[*c as usize] == 0)
         .collect();
     if !invalid.is_empty() {
         return Err(format!(

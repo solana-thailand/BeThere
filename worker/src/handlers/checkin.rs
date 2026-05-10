@@ -17,9 +17,19 @@ use event_checkin_domain::models::attendee::Attendee;
 use event_checkin_domain::models::auth::Claims;
 use event_checkin_domain::models::error::AppError;
 
-use super::ext::{EventIdQuery, resolve_event_with_access, resolve_kv};
+use super::ext::{resolve_event_with_access, resolve_kv};
 use crate::sheets;
 use crate::state::AppState;
+
+/// Query parameters for check-in.
+#[derive(Debug, serde::Deserialize)]
+pub struct CheckInQuery {
+    pub event_id: Option<String>,
+    /// Allow checking in online attendees (virtual check-in for hybrid events).
+    /// Default: false — only In-Person attendees can be checked in.
+    #[serde(default)]
+    pub online: bool,
+}
 
 /// POST /api/checkin/:id
 /// Check in an attendee by their api_id.
@@ -36,9 +46,9 @@ pub async fn check_in(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
     Path(id): Path<String>,
-    Query(query): Query<EventIdQuery>,
+    Query(query): Query<CheckInQuery>,
 ) -> Result<ApiOk<CheckInResponse>, crate::error::WorkerError> {
-    tracing::info!(attendee_id = %id, staff_email = %claims.email, "check-in request");
+    tracing::info!(attendee_id = %id, staff_email = %claims.email, online = query.online, "check-in request");
 
     let event = resolve_event_with_access(&state, &claims, query.event_id.as_deref()).await?;
 
@@ -75,18 +85,38 @@ pub async fn check_in(
         .into());
     }
 
-    // Check if attendee is In-Person (not Online)
+    // Check if attendee is In-Person (not Online).
+    // Online attendees can only be checked in if `?online=true` and the event is Hybrid.
     if !attendee.is_in_person() {
-        tracing::warn!(
+        if !query.online {
+            tracing::warn!(
+                attendee_id = %attendee.api_id,
+                participation_type = %attendee.participation_type,
+                "check-in denied: attendee not In-Person",
+            );
+            return Err(AppError::Validation(format!(
+                "attendee is not In-Person (participation type: {})",
+                attendee.participation_type
+            ))
+            .into());
+        }
+        // online=true: verify event supports online track
+        if !event.event_format.has_online() {
+            tracing::warn!(
+                attendee_id = %attendee.api_id,
+                event_format = %event.event_format,
+                "online check-in denied: event has no online track",
+            );
+            return Err(AppError::Validation(
+                "online check-in not available for this event format".to_string(),
+            )
+            .into());
+        }
+        tracing::info!(
             attendee_id = %attendee.api_id,
             participation_type = %attendee.participation_type,
-            "check-in denied: attendee not In-Person",
+            "virtual check-in for online attendee",
         );
-        return Err(AppError::Validation(format!(
-            "attendee is not In-Person (participation type: {})",
-            attendee.participation_type
-        ))
-        .into());
     }
 
     // Check if already checked in

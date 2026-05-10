@@ -294,35 +294,39 @@ Image storage: Cloudflare R2 (free tier: 10 GB storage, 10M reads/month).
 
 ### Phase 1 — Quasar Escrow Program (~3 days)
 
-- [ ] Install Quasar CLI: `cargo install quasar-cli`
-- [ ] `quasar init bethere-escrow --toolchain solana --framework quasarsvm-rust --template full`
-- [ ] `EventEscrow` + `AttendeeDeposit` account structs (zero-copy, `#[account(discriminator = N)]`)
-- [ ] `create_event` instruction — init escrow PDA + vault token account
-- [ ] `deposit` instruction — USDC SPL token transfer to vault via `quasar-spl`
-- [ ] `mark_checked_in` instruction — organizer authority, set `checked_in = true`
-- [ ] `refund` instruction — attendee claims USDC after event_end + checked_in (PDA-signed CPI)
-- [ ] `claim_forfeited` instruction — organizer claims unclaimed USDC after refund_deadline
-- [ ] `close_event` instruction — close escrow + vault, reclaim rent
-- [ ] Unit tests with Mollusk (no validator needed, pure Rust)
-- [ ] Deploy to devnet: `quasar deploy --url devnet`
-- [ ] Note: fallback to Anchor is mechanical if Quasar beta blocks us
+- [x] Install Quasar CLI: `cargo install --path cli` (from source)
+- [x] `quasar init bethere-escrow --toolchain solana --framework quasarsvm-rust --template full`
+- [x] `EventEscrow` + `AttendeeDeposit` account structs (zero-copy, `#[account(discriminator = N, set_inner)]`, `#[seeds(...)]`)
+- [x] `create_event` instruction — init escrow PDA + vault token account
+- [x] `deposit` instruction — USDC SPL token transfer to vault via `quasar-spl`
+- [x] `mark_checked_in` instruction — organizer authority, set `checked_in = true`
+- [x] `refund` instruction — attendee claims USDC after event_end + checked_in (PDA-signed CPI)
+- [x] `claim_forfeited` instruction — organizer claims unclaimed USDC after refund_deadline
+- [x] `close_event` instruction — close escrow + vault, reclaim rent
+- [x] Unit tests with QuasarSVM (no validator needed, pure Rust) — 16/16 passing
+- [ ] Deploy to devnet: `quasar deploy --url devnet` — deployed to `2TGfNNXNez2NgopffDnYYhLNYmndUBBwg5SvpD5XQeLo`
+- [x] Note: fallback to Anchor is mechanical if Quasar beta blocks us — Quasar compiles clean (58KB .so)
 
 ### Phase 2 — Worker Deposit/Refund API (~3 days)
 
-- [ ] Add deposit config fields to `EventConfig`
-- [ ] `GET /api/deposit/status/{attendee_id}` — check deposit status
-- [ ] `POST /api/deposit/usdc` — build Solana Pay deposit TX
-- [ ] Slip upload endpoint (R2 storage)
-- [ ] Slip verify/reject endpoint (admin only)
-- [ ] Refund queue endpoints
-- [ ] KV schema for THB deposit tracking
+- [x] Add deposit config fields to `EventConfig`
+- [x] `GET /api/deposit/status/{attendee_id}` — check deposit status
+- [x] `POST /api/deposit/usdc` — build Solana Pay deposit TX
+- [x] Slip upload endpoint (KV storage)
+- [x] Slip verify/reject endpoint (admin only)
+- [x] Refund queue endpoints
+- [x] KV schema for THB deposit tracking
 
 ### Phase 3 — Frontend Deposit/Refund Flow (~3 days)
 
-- [ ] Deposit page (`/deposit/{attendee_id}`)
-- [ ] Solana Pay QR generation (USDC path)
+- [x] Deposit page (`/deposit/{attendee_id}`)
+- [x] Solana Pay QR generation (USDC path)
+- [x] Wallet adapter frontend (Phantom/Backpack/Solflare/Coinbase) — Phase 5.3
+- [x] Direct TX signing + sending via connected wallet — Phase 5.3
+- [x] Deposit status polling + confirmation (2s interval, 30 attempts) — Phase 5.4
+- [x] On-chain deposit verification via Solana RPC (`getSignatureStatuses`) — Phase 5.4
+- [x] Deposit confirmed view with Solscan TX link — Phase 5.4
 - [ ] PromptPay QR display + slip upload (THB path)
-- [ ] Deposit status polling
 - [ ] Claim page: "Claim Refund" button (USDC auto-refund)
 - [ ] Admin: Deposits tab (all deposit statuses)
 - [ ] Admin: Refund Queue tab (THB refund management)
@@ -380,4 +384,27 @@ Image storage: Cloudflare R2 (free tier: 10 GB storage, 10M reads/month).
 
 ## Status
 
-🔵 Not started
+🟢 Phase 1–2 complete — escrow program on devnet, worker API done.
+🟢 Phase 3 complete — USDC wallet adapter + on-chain confirmation + PromptPay QR + slip upload + admin deposit/refund UI.
+🟢 Phase 4 complete — Full 5-step escrow flow validated on devnet (create_vault_ata → create_event → deposit → mark_checked_in → refund). 37/37 unit tests pass, clippy clean.
+🟢 Phase 5a — Security audit + hardening complete (22/22 tests, all HIGH findings fixed).
+🟡 Phase 5b — Deploy hardened program to devnet, then mainnet.
+
+### Key Commits
+| Commit | Description |
+|--------|-------------|
+| `69d0f0d` | PromptPay QR + file upload for THB + USDC refund TX builder (Phase 3/4) |
+| `a813585` | Deposit info on claim page — show deposit status + link after NFT claim |
+| `a64f3f2` | Dev-mode auth bypass (DEV_MODE=1) + docs update |
+| `42a1bd7` | Fix `find_program_address` — add missing `ProgramDerivedAddress` suffix |
+| `44025d9` | Fix `is_on_ed25519_curve` — replace hand-rolled field arithmetic with `curve25519-dalek` |
+| `325b737` | Wallet adapter frontend + on-chain deposit confirmation (Phase 5.3-5.4) |
+| `21eb1b2` | E2E auth fixes, separate USDC/THB attendee IDs, correct devnet USDC mint |
+| `d2a5b3e` | Fix refund TX builder 6-account ordering bug + E2E script fixes (Phase 4) |
+| `18685a1` | Fix verify_tx_on_chain: add searchTransactionHistory + debug logging |
+| `3b2fdab` | Reject USDC deposits after event has ended |
+| `4670d6a` | Refactor: extract build_message_accounts helper (-257 lines) |
+
+See `.handovers/035_fix_refund_tx_builder_account_ordering.md` for Phase 4 E2E validation details.
+See `.handovers/034_fix_illegal_owner_dual_instruction_bug.md` for create_vault_ata/create_event fixes.
+See `.handovers/033_complete_escrow_tx_builders.md` for all TX builder implementations.

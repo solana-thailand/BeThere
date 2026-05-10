@@ -1,9 +1,14 @@
 pub mod admin;
+pub mod admin_deposit;
+pub mod admin_escrow;
 pub mod adventure;
 pub mod adventure_config;
 pub mod claim;
+pub mod deposit;
+pub mod escrow_init;
 pub mod events_page;
 pub mod landing;
 pub mod login;
+pub mod public_event;
 pub mod quiz_editor;
 pub mod scanner;

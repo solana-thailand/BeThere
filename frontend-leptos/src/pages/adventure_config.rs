@@ -133,8 +133,7 @@ pub fn AdventureConfigEditor(
                                     </label>
                                     <div class="quiz-setting-input-row">
                                         <select
-                                            class="quiz-number-input"
-                                            style="width: 100%; padding: 0.5rem 0.75rem;"
+                                            class="quiz-number-input select-full"
                                             on:change=move |ev| {
                                                 let val = event_target_value(&ev);
                                                 let level = val.parse::<usize>().ok();
@@ -175,9 +174,9 @@ pub fn AdventureConfigEditor(
                             {move || if saving.get() { "Saving..." } else { "Save Adventure Config" }}
                         </button>
                         {move || if dirty.get() {
-                            view! { <span style="color: var(--warning); font-size: 0.8rem; margin-left: 0.5rem;">"Unsaved changes"</span> }.into_any()
+                            view! { <span class="hint-dirty">"Unsaved changes"</span> }.into_any()
                         } else {
-                            view! { <span style="color: var(--text-muted); font-size: 0.8rem; margin-left: 0.5rem;">"Up to date"</span> }.into_any()
+                            view! { <span class="hint-clean">"Up to date"</span> }.into_any()
                         }}
                     </div>
 

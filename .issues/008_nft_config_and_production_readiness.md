@@ -17,9 +17,45 @@ Before the BeThere event platform can go to production, the NFT config must be s
 
 ## NFT Config Checklist
 
-### 1. Design & Upload NFT Badge Image
+### Option A: Self-Hosted (Recommended — No External Upload Needed)
 
-- [ ] Design attendance badge image (PNG, recommended 400x400 or 1000x1000)
+The worker serves its own badge and metadata. No Arweave/IPFS required.
+
+**Badge image** (production 1000x1000 SVG):
+```
+https://bethere.solana-thailand.workers.dev/api/badge-hd.svg
+```
+
+**Metadata JSON** (dynamic per-event):
+```
+https://bethere.solana-thailand.workers.dev/api/metadata/{event_id}
+```
+
+The metadata endpoint loads per-event fields from KV (name, symbol, description, image)
+and falls back to global config. It automatically includes Event name and Date traits.
+
+**Admin UI configuration:**
+1. Login as SuperAdmin at `/admin`
+2. Go to **Events** → Edit event
+3. Fill in:
+   - **NFT Image URL** — `https://bethere.solana-thailand.workers.dev/api/badge-hd.svg`
+   - **NFT Metadata URI** — `https://bethere.solana-thailand.workers.dev/api/metadata/{event_id}`
+   - **NFT Name Template** — `BeThere - {event_name}`
+   - **NFT Symbol** — `BETHERE`
+   - **NFT Description Template** — `Proof of attendance at {event_name}`
+   - **NFT Collection Mint** — leave empty (Helius managed)
+
+- [x] Production badge SVG (1000x1000) — `worker/src/badge_production.svg`
+- [x] Dynamic metadata endpoint — `worker/src/handlers/metadata.rs`
+- [x] HD badge route — `GET /api/badge-hd.svg`
+- [ ] Configure `HELIUS_API_KEY` worker secret
+- [ ] Set NFT fields in admin UI for first event
+
+### Option B: Custom Arweave/IPFS Upload
+
+For permanent, immutable storage (survives even if the platform goes down):
+
+- [ ] Design attendance badge image (PNG, recommended 1000x1000)
 - [ ] Upload to Arweave (permanent) or IPFS/CDN
 - [ ] Record the URL as `nft_image_url`
 
@@ -28,33 +64,9 @@ Before the BeThere event platform can go to production, the NFT config must be s
 - `npx arweave-deploy` — CLI upload
 - IRYS (formerly Bundlr) — `npx @irys/sdk upload <file>`
 
-### 2. Create Metadata JSON
+Create a Metaplex-compliant metadata JSON, upload to Arweave/IPFS, record as `nft_metadata_uri`.
 
-Create a Metaplex-compliant metadata JSON:
-
-```json
-{
-  "name": "BeThere - {Event Name}",
-  "symbol": "BETHERE",
-  "description": "Proof of attendance at {Event Name}",
-  "image": "<nft_image_url from step 1>",
-  "external_url": "https://bethere.solana-thailand.workers.dev",
-  "attributes": [
-    { "trait_type": "Event", "value": "{Event Name}" },
-    { "trait_type": "Type", "value": "Attendance Badge" },
-    { "trait_type": "Date", "value": "{Event Date}" }
-  ],
-  "properties": {
-    "category": "image",
-    "files": [{ "uri": "<nft_image_url>", "type": "image/png" }]
-  }
-}
-```
-
-- [ ] Upload metadata JSON to Arweave/IPFS
-- [ ] Record the URL as `nft_metadata_uri`
-
-### 3. Collection Mint (Optional)
+### Collection Mint (Optional)
 
 Helius `mintCompressedNft` can mint without a collection mint. If you want NFTs grouped under a collection:
 
@@ -67,7 +79,7 @@ spl-token create-token --url devnet
 - [ ] Decide: use Helius managed (no collection) or own collection mint
 - [ ] If own collection: create and record as `nft_collection_mint`
 
-### 4. Configure Worker Secrets
+### Configure Worker Secrets
 
 ```bash
 cd worker
@@ -79,19 +91,7 @@ npx wrangler secret put HELIUS_API_KEY
 npx wrangler secret list
 ```
 
-### 5. Configure Event via Admin UI
-
-1. Login as SuperAdmin at `/admin`
-2. Go to **Events** → Edit event
-3. Fill in:
-   - **NFT Collection Mint** — from step 3 (or leave empty)
-   - **NFT Metadata URI** — from step 2
-   - **NFT Image URL** — from step 1
-   - **NFT Name Template** — e.g. `BeThere - {event_name}`
-   - **NFT Symbol** — e.g. `BETHERE`
-4. Save
-
-### 6. Verify on Devnet
+### Verify on Devnet
 
 ```bash
 # Start dev server
