@@ -224,7 +224,7 @@ fn swimlane_mockup(role: SwimlaneRole, step: usize) -> impl IntoView {
                 <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:1.25rem;font-size:0.8rem;">
                     <div style="font-weight:600;color:#fff;margin-bottom:0.75rem;">"New Event"</div>
                     <div style="display:flex;flex-direction:column;gap:0.5rem;">
-                        <div style="background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:6px;padding:0.5rem 0.65rem;color:var(--text-secondary);">"Solana Bangkok Meetup 2025"</div>
+                        <div style="background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:6px;padding:0.5rem 0.65rem;color:var(--text-secondary);">"Solana Bangkok Meetup 2026"</div>
                         <div style="display:flex;gap:0.5rem;">
                             <div style="flex:1;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:6px;padding:0.5rem 0.65rem;color:var(--text-secondary);">"\u{1f4cd} Bangkok"</div>
                             <div style="flex:1;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:6px;padding:0.5rem 0.65rem;color:var(--text-secondary);">"Cap: 200"</div>
@@ -321,7 +321,7 @@ fn swimlane_mockup(role: SwimlaneRole, step: usize) -> impl IntoView {
                     <div style="width:2.5rem;height:2.5rem;border-radius:50%;background:rgba(34,197,94,0.15);display:inline-flex;align-items:center;justify-content:center;font-size:1.25rem;margin-bottom:0.5rem;">"\u{2705}"</div>
                     <div style="font-weight:700;color:#22c55e;margin-bottom:0.25rem;">"Checked In!"</div>
                     <div style="color:#fff;font-weight:600;">"Alex Chen"</div>
-                    <div style="color:var(--text-secondary);font-size:0.7rem;">"Solana Bangkok 2025"</div>
+                    <div style="color:var(--text-secondary);font-size:0.7rem;">"Solana Bangkok 2026"</div>
                     <div style="color:var(--text-secondary);font-size:0.7rem;margin-top:0.25rem;">"Jul 15 \u{00b7} 2:03 PM"</div>
                 </div>
             }.into_any(),
@@ -348,7 +348,7 @@ fn swimlane_mockup(role: SwimlaneRole, step: usize) -> impl IntoView {
             // Register & Deposit
             0 => view! {
                 <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:1.25rem;font-size:0.8rem;">
-                    <div style="font-weight:600;color:#fff;margin-bottom:0.5rem;">"Solana Bangkok Meetup 2025"</div>
+                    <div style="font-weight:600;color:#fff;margin-bottom:0.5rem;">"Solana Bangkok Meetup 2026"</div>
                     <div style="color:var(--text-secondary);font-size:0.7rem;margin-bottom:0.75rem;">"Jul 15 \u{00b7} Bangkok, Thailand"</div>
                     <div style="display:flex;align-items:center;gap:0.4rem;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:9999px;padding:0.3rem 0.65rem;margin-bottom:0.65rem;">
                         <span style="color:#ab9ff2;">"\u{25cf}"</span>
@@ -370,7 +370,7 @@ fn swimlane_mockup(role: SwimlaneRole, step: usize) -> impl IntoView {
                         </div>
                     </div>
                     <div style="color:#fff;font-weight:600;">"Alex Chen"</div>
-                    <div style="color:var(--text-secondary);font-size:0.7rem;">"Solana Bangkok 2025"</div>
+                    <div style="color:var(--text-secondary);font-size:0.7rem;">"Solana Bangkok 2026"</div>
                 </div>
             }.into_any(),
             // Get Scanned
@@ -378,7 +378,7 @@ fn swimlane_mockup(role: SwimlaneRole, step: usize) -> impl IntoView {
                 <div style="background:var(--bg-secondary);border:1px solid rgba(34,197,94,0.3);border-radius:var(--radius);padding:1.25rem;font-size:0.8rem;text-align:center;">
                     <div style="width:2.5rem;height:2.5rem;border-radius:50%;background:rgba(34,197,94,0.15);display:inline-flex;align-items:center;justify-content:center;font-size:1.25rem;margin-bottom:0.5rem;">"\u{2705}"</div>
                     <div style="font-weight:700;color:#22c55e;margin-bottom:0.25rem;">"Checked In!"</div>
-                    <div style="color:var(--text-secondary);font-size:0.7rem;">"Jul 15, 2025 \u{00b7} 2:03 PM"</div>
+                    <div style="color:var(--text-secondary);font-size:0.7rem;">"Jul 15, 2026 \u{00b7} 2:03 PM"</div>
                     <div style="color:var(--text-secondary);font-size:0.7rem;margin-top:0.15rem;">"Solana Bangkok Meetup"</div>
                 </div>
             }.into_any(),
@@ -900,7 +900,7 @@ pub fn Landing() -> impl IntoView {
 
                 // Bottom row
                 <div class="landing-footer-bottom">
-                    <span class="landing-footer-copy">"© 2025 BeThere. All rights reserved."</span>
+                    <span class="landing-footer-copy">"© 2026 BeThere. All rights reserved."</span>
                     <span class="landing-footer-powered">
                         <svg viewBox="0 0 397 311" xmlns="http://www.w3.org/2000/svg">
                             <path d="M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1l62.7-62.7z" fill="currentColor"/>
