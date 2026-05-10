@@ -46,7 +46,8 @@ Add a top-level `EventFormat` enum that controls which subsystems are active: de
 🟢 Complete — domain model, worker logic, frontend UI, combined TX, docs all done.
 🟢 Complete — Self-registration API (POST /api/public/register) with Google Sheets append.
 🟢 Complete — "Reserve Spot" registration form on public event page.
-🟡 Remaining: online attendee claim path, scanner online check-in button.
+🟢 Complete — Scanner virtual check-in button for online attendees in hybrid events.
+🟡 Remaining: online attendee claim path (quest completion as virtual check-in).
 
 ## Remaining Roadmap
 
@@ -55,12 +56,13 @@ Add a top-level `EventFormat` enum that controls which subsystems are active: de
 | 3 | Self-registration API | `POST /api/public/register` | ✅ Done | ~2h |
 | 4 | "Reserve Spot" on `/e/{slug}` | Registration form on public event page | ✅ Done | ~2h |
 | 5 | Online attendee claim path | Quest completion as virtual check-in, KV-based claim tokens | ❌ Todo | ~3h |
-| 6 | Scanner "Online Check-In" for staff | Button for staff to trigger online check-in for online attendees | ❌ Todo | ~1h |
+| 6 | Scanner "Online Check-In" for staff | Button for staff to trigger virtual check-in for online attendees | ✅ Done | ~1h |
 
 ## Refs
 
 - `c494efd` — feat: event format model + combined refund+close TX
 - `f0fc2a7` — feat: self-registration API + Reserve Spot form on public event page
+- `949cedd` — feat: scanner virtual check-in for online attendees (hybrid events)
 - `.issues/010_deposit_refund_escrow.md` — parent issue
 - `docs/business_flows_event_page.md` — updated with format model
 - `docs/escrow_protocol.md` — updated with combined TX
