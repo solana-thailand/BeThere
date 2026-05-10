@@ -486,9 +486,29 @@ pub async fn seed_from_config(
         .events
         .iter()
         .find(|e| e.status == EventStatus::Active)
-        && let Some(config) = get_event_config(kv, &meta.id).await?
+        && let Some(mut config) = get_event_config(kv, &meta.id).await?
     {
-        tracing::info!(event_id = %config.id, "seed: already have active event");
+        // Fix legacy seed events that used hardcoded slug "default"
+        let expected_slug = slugify(&global.event_defaults.name);
+        if config.slug == "default" && expected_slug != "default" {
+            tracing::info!(
+                event_id = %config.id,
+                old_slug = %config.slug,
+                new_slug = %expected_slug,
+                "seed: migrating legacy slug"
+            );
+            config.slug = expected_slug.clone();
+            save_event_config(kv, &config).await?;
+
+            // Update index meta too
+            let mut index = index;
+            if let Some(m) = index.events.iter_mut().find(|e| e.id == config.id) {
+                m.slug = expected_slug;
+            }
+            save_event_index(kv, &index).await?;
+        }
+
+        tracing::info!(event_id = %config.id, slug = %config.slug, "seed: already have active event");
         return Ok(config);
     }
 
@@ -498,7 +518,7 @@ pub async fn seed_from_config(
     let config = EventConfig {
         id: "default".to_string(),
         name: defaults.name.clone(),
-        slug: "default".to_string(),
+        slug: slugify(&defaults.name),
         tagline: defaults.tagline.clone(),
         link: defaults.link.clone(),
         status: EventStatus::Active,

@@ -72,7 +72,19 @@ pub async fn get_public_event(
         .as_ref()
         .ok_or_else(|| AppError::Internal("events KV namespace not configured".into()))?;
 
-    let config = crate::event_store::get_event_config(kv, &slug)
+    // Resolve slug → event ID via the index
+    let index = crate::event_store::get_event_index(kv)
+        .await
+        .map_err(AppError::Internal)?;
+
+    let event_id = index
+        .events
+        .iter()
+        .find(|e| e.slug == slug)
+        .map(|e| e.id.clone())
+        .ok_or_else(|| AppError::NotFound(format!("event '{slug}' not found")))?;
+
+    let config = crate::event_store::get_event_config(kv, &event_id)
         .await
         .map_err(AppError::Internal)?;
 
