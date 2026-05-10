@@ -605,11 +605,14 @@ pub async fn get_attendee(id: &str, event_id: Option<&str>) -> Result<AttendeeDa
 
 /// POST /api/checkin/:id
 /// Check in an attendee by their api_id.
-pub async fn check_in(id: &str, event_id: Option<&str>) -> Result<CheckInData, ApiError> {
-    let path = match event_id {
+pub async fn check_in(id: &str, event_id: Option<&str>, online: bool) -> Result<CheckInData, ApiError> {
+    let mut path = match event_id {
         Some(eid) if !eid.is_empty() => format!("/checkin/{id}?event_id={eid}"),
         _ => format!("/checkin/{id}"),
     };
+    if online {
+        path = format!("{path}&online=true");
+    }
     let response = api_post(&path).await?;
 
     if !response.ok() {

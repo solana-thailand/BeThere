@@ -428,7 +428,7 @@ pub fn Scanner() -> impl IntoView {
             let set_t = set_toast;
             let set_s_success = set_session_success;
             leptos::task::spawn_local(async move {
-                match api::check_in(&id, None).await {
+                match api::check_in(&id, None, false).await {
                     Ok(result) => {
                         log::info!("[scanner] check-in successful: {}", result.name);
                         feedback_success_js(); // Success — vibration + beep
@@ -448,6 +448,49 @@ pub fn Scanner() -> impl IntoView {
                         components::show_toast(
                             &set_t,
                             "Check-in failed. Please try again.",
+                            ToastType::Error,
+                        );
+                    }
+                }
+            });
+        }
+    };
+
+    // Handle virtual check-in for online attendees (hybrid events).
+    // Uses ?online=true to bypass the in-person check on the backend.
+    let handle_online_check_in = move |_: web_sys::MouseEvent| {
+        let state = check_in_state.get();
+        if let CheckInState::NotInPerson(data) = &state {
+            let id = data.attendee.api_id.clone();
+            let name = data.attendee.name.clone();
+            set_check_in_state.set(CheckInState::CheckingIn {
+                name: name.clone(),
+                _id: id.clone(),
+            });
+            let set_state = set_check_in_state;
+            let set_t = set_toast;
+            let set_s_success = set_session_success;
+            leptos::task::spawn_local(async move {
+                match api::check_in(&id, None, true).await {
+                    Ok(result) => {
+                        log::info!("[scanner] virtual check-in successful: {}", result.name);
+                        feedback_success_js();
+                        set_state.set(CheckInState::Success(Box::new(result)));
+                        set_s_success.update(|c| *c += 1);
+                        api::invalidate_attendee_cache();
+                        components::show_toast(
+                            &set_t,
+                            &format!("{name} virtually checked in!"),
+                            ToastType::Success,
+                        );
+                    }
+                    Err(err) => {
+                        log::error!("[scanner] virtual check-in failed: {err}");
+                        feedback_error_js();
+                        set_state.set(CheckInState::Error);
+                        components::show_toast(
+                            &set_t,
+                            "Virtual check-in failed. Please try again.",
                             ToastType::Error,
                         );
                     }
@@ -964,6 +1007,7 @@ pub fn Scanner() -> impl IntoView {
                                     handle_escrow_sign,
                                     escrow_enabled.get(),
                                     detected_wallets.get(),
+                                    handle_online_check_in,
                                 )
                             }}
                         </Show>
@@ -1219,7 +1263,7 @@ fn AttendeeInfoCard(name: String, email: String) -> impl IntoView {
 // ===== State View Rendering =====
 
 /// Render the current check-in state as a view.
-fn render_check_in_state<E1, E2, E3>(
+fn render_check_in_state<E1, E2, E3, E4>(
     state: CheckInState,
     on_check_in: impl Fn(web_sys::MouseEvent) + 'static,
     on_reset: impl Fn(web_sys::MouseEvent) + Clone + 'static,
@@ -1228,11 +1272,13 @@ fn render_check_in_state<E1, E2, E3>(
     on_escrow_sign: E3,
     escrow_enabled: bool,
     wallets: Vec<String>,
+    on_online_check_in: E4,
 ) -> AnyView
 where
     E1: Fn(web_sys::MouseEvent) + Clone + 'static,
     E2: Fn(String) + Clone + 'static,
     E3: Fn(web_sys::MouseEvent) + Clone + 'static,
+    E4: Fn(web_sys::MouseEvent) + Clone + 'static,
 {
     match state {
         CheckInState::Idle => view! { <div></div> }.into_any(),
@@ -1358,16 +1404,27 @@ where
             let name = data.attendee.name.clone();
             let email = data.attendee.email.clone();
             let badge = utils::get_participation_badge(&data.participation_type);
+            let on_online = on_online_check_in.clone();
             view! {
                 <div>
                     <div class="result-warning">
-                        <h2>"Not In-Person"</h2>
+                        <h2>"Online Attendee"</h2>
                         <AttendeeInfoCard name=name email=email />
                         <div class="scanner-attendee-badges">
                             <span class=format!("badge badge-pill {}", badge.css_class)>{badge.label}</span>
                         </div>
+                        <p class="scanner-hint" style="margin-top:0.75rem;">
+                            "This attendee registered for the online track. You can perform a virtual check-in to generate their claim link."
+                        </p>
                     </div>
-                    <button class="btn btn-outline btn-block" style="margin-top:1rem;" on:click=on_reset>
+                    <button
+                        class="btn btn-primary btn-block"
+                        style="margin-top:1rem;"
+                        on:click=on_online
+                    >
+                        "🌐 Virtual Check-In"
+                    </button>
+                    <button class="btn btn-outline btn-block" style="margin-top:0.5rem;" on:click=on_reset>
                         "Scan Another"
                     </button>
                 </div>

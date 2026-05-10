@@ -405,7 +405,7 @@ pub fn Admin() -> impl IntoView {
             let mut failed = 0u32;
 
             for id in ids {
-                match api::check_in(&id, eid.as_deref()).await {
+                match api::check_in(&id, eid.as_deref(), false).await {
                     Ok(_) => succeeded += 1,
                     Err(e) => {
                         failed += 1;
