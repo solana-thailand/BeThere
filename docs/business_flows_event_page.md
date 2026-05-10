@@ -415,6 +415,191 @@ These are enforced by the backend but the frontend does not have inline warnings
 | No wallet network detection | Medium | User could sign on wrong cluster. Add `connection.getGenesisHash()` check. |
 | ~~No concurrent edit protection~~ (✅ Fixed) | ~~Low~~ | Optimistic concurrency implemented: backend checks `expected_updated_at` against stored `updated_at`, returns conflict error on mismatch. Frontend detects `"conflict"` in error message and shows a user-friendly toast prompting refresh. |
 | No duplicate slug pre-check | Low | Backend catches it, but could check on slug input blur for better UX. |
-| NFT fields have no format validation | Low | `nft_collection_mint` could validate base58, URLs could validate format. |
+| ~~NFT fields have no format validation~~ (✅ Fixed) | ~~Low~~ | `nft_collection_mint` validates base58, URLs validate format. Added in `a0ca1b5`.
 | ~~No event end → refund deadline visual timeline~~ (✅ Fixed) | ~~Low~~ | Events page now shows a computed refund deadline datetime below the `refund_deadline_hours` input. Calculation: `event_end_ms + (hours × 3_600_000)`, displayed with a human-friendly duration label. |
 | ~~Schedule section defaults to collapsed~~ (✅ Fixed) | ~~Medium~~ | `sec_schedule_open` now initialized to `true`; schedule section defaults to expanded on Create. |
+| ~~No NFT badge preview~~ (✅ Fixed) | ~~Low~~ | Events page shows live badge preview + "Use default badge" auto-fill button. `30a23e0`.
+| ~~No walk-in attendee registration~~ (✅ Fixed) | ~~Medium~~ | Staff can register walk-ins via scanner UI → KV record → same deposit/NFT/refund flow. `ef70bca`.
+
+---
+
+## 13. Behavioral Economics UX Patterns
+
+The deposit page and events form incorporate behavioral science patterns to increase attendance and deposit uptake.
+
+### 13A. Loss Aversion — Deposit Toggle Nudge (Events Page)
+
+**Location:** `events_page.rs` — Deposit toggle section
+
+When an organizer toggles deposits **OFF**, a yellow hint appears:
+
+> "Events without deposits often see 30-40% no-shows. Deposits reduce no-shows by making attendance the default — attendees get 100% back just by showing up."
+
+**Pattern:** Loss aversion (Kahneman & Tversky) — framing the cost of NOT having deposits as a loss.
+
+### 13B. Loss Aversion — Refund CTA Language (Deposit Page)
+
+**Location:** `deposit.rs` — `Deposited` state, `RefundChooseWallet` state
+
+After deposit is verified, the refund button uses loss-framed language:
+
+- Button: `"💸 Don't lose your {X} USDC — claim it now"`
+- After event: `"💰 Refund window: {duration} after event ends ({deadline})."`
+- Refund button: `"💸 Claim {X} USDC — Don't lose it"`
+
+**Pattern:** Loss aversion — phrasing the refund as "don't lose" (loss frame) rather than "get back" (gain frame). Users are ~2x more sensitive to losses than equivalent gains.
+
+### 13C. Endowment Effect — Deposit Confirmation (Deposit Page)
+
+**Location:** `deposit.rs` — `Deposited` state header
+
+The deposit confirmation card uses:
+
+- Title: `"🎫 Spot Reserved!"`
+- Message: `"Your {X} USDC is secured on-chain. Show up → get it all back."`
+- Rent reclamation: `"♻️ You have ~0.002 SOL waiting — reclaim it"`
+
+**Pattern:** Endowment effect — making the attendee feel ownership of the reserved spot and deposited funds. "Your USDC is secured" (not "the deposit is held").
+
+### 13D. Commitment Device — Deposit Flow Architecture
+
+The entire deposit architecture acts as a commitment device:
+
+1. Attendee deposits USDC → psychological commitment to attend
+2. NFT badge is the reward for showing up (commitment + endowment)
+3. Full refund on attendance = zero cost for following through
+4. Loss of deposit = cost of not following through
+
+The NFT section on the events page is labeled **"Recommended"** (green badge) because NFTs complete the commitment device loop: deposit → show up → get NFT + refund.
+
+### 13E. Refund Success — Positive Reinforcement (Deposit Page)
+
+**Location:** `deposit.rs` — `RefundConfirmed` state
+
+On successful refund:
+
+- Title: `"🎉 Refund Recovered!"`
+- Celebration emoji: 💰
+- Message: `"Your refund has been confirmed on Solana."`
+
+**Pattern:** Positive reinforcement with "recovered" language — emphasizes regaining what was theirs, reinforcing the commitment device for future events.
+
+### Pattern Summary
+
+| Pattern | Location | Technique | Behavioral Principle |
+|---------|----------|-----------|---------------------|
+| Deposit nudge | Events form | Yellow hint when deposit OFF | Loss aversion |
+| Refund CTA | Deposit page | "Don't lose your X USDC" | Loss aversion |
+| Spot reserved | Deposit page | "Your USDC is secured" | Endowment effect |
+| NFT = Recommended | Events form | Green badge on NFT section | Commitment device |
+| Refund deadline | Deposit page | Countdown + urgency framing | Scarcity/urgency |
+| Refund recovered | Deposit page | "🎉 Refund Recovered!" | Positive reinforcement |
+
+---
+
+## 14. Walk-in Attendee Flow
+
+Walk-in attendees (people who show up without pre-registering) are handled via a hybrid KV-based approach.
+
+### 14A. Walk-in Registration (Staff → Scanner UI)
+
+**Endpoint:** `POST /api/walkin/register` (staff-only, requires auth)
+
+```
+Staff taps "Register Walk-in" in scanner UI
+  → Form: name (required), email (required), phone (optional)
+  → Backend creates KV record: walkin:{event_id}:{email_lower}
+  → Generates UUID v7 claim token
+  → Creates reverse mapping: claim_walkin:{token} → {event_id}:{email_lower}
+  → Returns claim token + claim URL to staff UI
+  → Staff shows QR code of claim URL to walk-in
+```
+
+### 14B. Walk-in Claim Flow (Attendee Side)
+
+Walk-ins follow the same deposit/NFT/refund loop as pre-registered attendees:
+
+```
+Walk-in scans claim QR
+  → lookup_claim() checks claim_walkin:{token} reverse mapping
+  → Loads walkin:{event_id}:{email} KV record
+  → execute_walkin_claim() mints NFT + updates KV (no Sheet write)
+  → Walk-in gets NFT badge
+```
+
+Deposit and refund are wallet-based (on-chain PDA linked to wallet address) — independent of attendee records.
+
+### 14C. Walk-in KV Key Patterns
+
+| Purpose | Key | Value | TTL |
+|---------|-----|-------|-----|
+| Walk-in record | `walkin:{event_id}:{email_lower}` | `WalkinAttendee` JSON | 90 days |
+| Reverse mapping | `claim_walkin:{claim_token}` | `{event_id}:{email_lower}` | 90 days |
+
+### 14D. Walk-in vs Pre-registered Differences
+
+| Aspect | Pre-registered | Walk-in |
+|--------|---------------|---------|
+| Data source | Google Sheet sync | KV (staff-entered) |
+| Quiz/Adventure gates | Subject to gates | **Skipped** (auto check-in) |
+| Check-in | Staff scans QR | **Automatic** at registration |
+| Sheet record | Yes | No (Phase 4: optional sync) |
+| Claim token source | Sheet sync generates | Registration endpoint generates |
+| NFT minting | Same | Same |
+| Deposit/Refund | Same (wallet-based) | Same (wallet-based) |
+
+### 14E. Scanner UI States (Walk-in)
+
+```
+Idle → "Register Walk-in" button
+  → WalkinForm (name, email, phone inputs)
+  → WalkinRegistering (spinner)
+  → WalkinSuccess (QR code of claim URL + "Scan Another" button)
+  → Idle (loop)
+```
+
+### Files
+
+| File | Role |
+|------|------|
+| `domain/src/models/attendee.rs` | `WalkinAttendee` struct |
+| `worker/src/handlers/walkin.rs` | `POST /api/walkin/register` handler |
+| `worker/src/claim.rs` | Walk-in claim lookup + execution |
+| `frontend-leptos/src/api.rs` | `register_walkin()` + request/response types |
+| `frontend-leptos/src/pages/scanner.rs` | Walk-in form, QR display, state management |
+
+---
+
+## 15. Self-Hosted NFT Badge System
+
+The worker serves its own badge image and dynamic metadata — no Arweave/IPFS upload required for basic minting.
+
+### Endpoints
+
+| Route | Purpose |
+|-------|---------|
+| `GET /api/badge-hd.svg` | 1000×1000 production SVG (hexagonal shield + checkmark + Solana gradient) |
+| `GET /api/metadata/{event_id}` | Dynamic Metaplex-compliant metadata JSON (loads from KV, falls back to global config) |
+
+### Configuration
+
+Organizers set these in the admin UI event form:
+
+```
+nft_image_url      = https://bethere.solana-thailand.workers.dev/api/badge-hd.svg
+nft_metadata_uri   = https://bethere.solana-thailand.workers.dev/api/metadata/{event_id}
+nft_name_template  = BeThere - {event_name}
+nft_symbol         = BETHERE
+```
+
+The events page provides a **"Use default badge"** button that auto-fills these URLs. A live badge preview is shown next to the image URL input.
+
+### Dynamic Metadata
+
+The metadata endpoint loads per-event configuration from KV:
+
+- **Falls back** to global worker config if event-specific fields aren't set
+- **Auto-includes** event name and date as NFT traits
+- **Metaplex-compliant** — `name`, `symbol`, `description`, `image`, `attributes` fields
+
+Organizers can override with any custom URL (Arweave, IPFS, CDN) for permanent storage.

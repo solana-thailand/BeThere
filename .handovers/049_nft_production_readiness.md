@@ -76,6 +76,10 @@ The metadata endpoint dynamically includes event name, date, and description in 
 - `.issues/013_escrow_rug_pull_prevention.md` — All 11 findings fixed
 - `.issues/014_walkin_attendee_flow.md` — IN PROGRESS (Phase 1-3 done, Phase 4 optional)
 
+## Session Notes
+
+- **Port 8787 conflict** — If `wrangler dev` fails with "Address already in use (127.0.0.1:8787)", kill the stale process: `kill -9 $(lsof -ti:8787)` or use `--port 8788`.
+
 ## How to Verify
 
 ```bash
