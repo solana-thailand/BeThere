@@ -74,8 +74,8 @@ pub fn routes(state: AppState) -> Router<()> {
             "/deposit/thb/upload",
             post(deposit::upload_thb_slip_handler),
         )
-        // Escrow refund (public — attendee claims refund with wallet signature)
-        .route("/escrow/refund", post(deposit::refund_tx_handler))
+        // Escrow refund + close deposit (combined atomic TX — attendee claims refund and reclaims rent)
+        .route("/escrow/refund", post(deposit::refund_and_close_tx_handler))
         // Escrow close deposit (public — attendee closes deposit PDA to reclaim rent)
         .route(
             "/escrow/close-deposit",

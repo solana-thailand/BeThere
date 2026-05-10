@@ -46,6 +46,7 @@ pub struct EventForm {
     organizer_emails: String,
     staff_emails: String,
     status: api::EventStatus,
+    event_format: api::EventFormat,
     pub deposit_enabled: bool,
     pub deposit_amount_usdc: String,
     pub deposit_amount_thb: String,
@@ -144,6 +145,7 @@ fn default_form() -> EventForm {
     EventForm {
         sheet_name: "checkin".to_string(),
         staff_sheet_name: "staff".to_string(),
+        event_format: api::EventFormat::InPerson,
         deposit_enabled: false,
         deposit_amount_usdc: String::new(),
         deposit_amount_thb: String::new(),
@@ -196,6 +198,7 @@ fn form_from_detail(detail: &api::EventDetail) -> EventForm {
         organizer_emails: detail.organizer_emails.join(", "),
         staff_emails: detail.staff_emails.join(", "),
         status: detail.status.clone(),
+        event_format: detail.event_format.clone(),
         deposit_enabled: detail.deposit_enabled,
         deposit_amount_usdc: if detail.deposit_amount_usdc > 0 { format!("{:.6}", detail.deposit_amount_usdc as f64 / 1_000_000.0).trim_end_matches('0').trim_end_matches('.').to_string() } else { String::new() },
         deposit_amount_thb: if detail.deposit_amount_thb > 0 { detail.deposit_amount_thb.to_string() } else { String::new() },
@@ -515,6 +518,7 @@ pub fn EventsPage(
                 organizer_wallet: current_form.organizer_wallet.trim().to_string(),
                 on_chain_event_id: current_form.on_chain_event_id.parse::<u64>().unwrap_or(0),
                 refund_deadline_hours: current_form.refund_deadline_hours.parse::<u32>().unwrap_or(0),
+                event_format: current_form.event_format.clone(),
             };
 
             // Determine if we should also initialize escrow after creating the event.
@@ -648,6 +652,7 @@ pub fn EventsPage(
                 on_chain_event_id: Some(current_form.on_chain_event_id.parse::<u64>().unwrap_or(0)),
                 refund_deadline_hours: Some(current_form.refund_deadline_hours.parse::<u32>().unwrap_or(0)),
                 expected_updated_at: if current_form.updated_at.is_empty() { None } else { Some(current_form.updated_at.clone()) },
+                event_format: Some(current_form.event_format.clone()),
             };
 
             leptos::task::spawn_local(async move {
@@ -764,6 +769,12 @@ pub fn EventsPage(
                             let can_manage = components::can_manage_events(&user_role.get());
                             let needs_escrow = event.deposit_enabled && event.escrow_address.is_empty();
                             let has_escrow = event.deposit_enabled && !event.escrow_address.is_empty();
+                            let fmt_label = event.event_format.label();
+                            let fmt_badge_class = match event.event_format {
+                                api::EventFormat::InPerson => "badge badge-info-xs",
+                                api::EventFormat::Online => "badge badge-warning-xs",
+                                api::EventFormat::Hybrid => "badge badge-success-xs",
+                            };
 
                             view! {
                                 <div class="card">
@@ -771,6 +782,7 @@ pub fn EventsPage(
                                         <div class="flex-row-gap" style="flex-wrap:wrap">
                                             <span class="card-title">{ename}</span>
                                             <span class=badge_class>{status_text}</span>
+                                            <span class=fmt_badge_class>{fmt_label}</span>
                                             {if needs_escrow {
                                                 view! {
                                                     <span class="badge badge-warning-xs">"No Escrow"</span>
@@ -1313,34 +1325,41 @@ pub fn EventsPage(
                                 </div>
                             </div>
 
-                            // ── Deposit Configuration ──
-                            // Deposit toggle always visible
+                            // ── Event Format ──
                             <div class="dep-config-row">
-                                <span class="dep-config-label">"Deposit"</span>
-                                <label class="quiz-toggle-label" style="cursor:pointer">
-                                    <input
-                                        type="checkbox"
-                                        class="quiz-toggle-checkbox"
-                                        prop:checked=move || form.get().deposit_enabled
-                                        on:change=move |ev| {
-                                            let checked = event_target_checked(&ev);
-                                            set_form.update(|f| f.deposit_enabled = checked);
-                                        }
-                                    />
-                                    <span class="quiz-toggle-switch"></span>
-                                    <span class="quiz-toggle-text">
-                                        {move || if form.get().deposit_enabled { "Enabled" } else { "Disabled" }}
-                                    </span>
-                                </label>
+                                <span class="dep-config-label">"Format"</span>
+                                <select
+                                    class="form-select form-select-sm"
+                                    on:change=move |ev| {
+                                        let val = event_target_value(&ev);
+                                        let fmt = match val.as_str() {
+                                            "online" => api::EventFormat::Online,
+                                            "hybrid" => api::EventFormat::Hybrid,
+                                            _ => api::EventFormat::InPerson,
+                                        };
+                                        set_form.update(|f| {
+                                            f.event_format = fmt.clone();
+                                            // Auto-sync deposit: in-person/hybrid = enabled
+                                            f.deposit_enabled = fmt.has_in_person();
+                                        });
+                                    }
+                                    prop:value=move || form.get().event_format.as_str()
+                                >
+                                    <option value="in_person">"In-Person"</option>
+                                    <option value="online">"Online"</option>
+                                    <option value="hybrid">"Hybrid"</option>
+                                </select>
                             </div>
-                            // Loss-aversion nudge: show when deposit is disabled
-                            <Show when=move || !form.get().deposit_enabled fallback=|| view! { <div></div> }>
-                                <div class="dep-info-note">
-                                    <p class="hint-note">
-                                        "Events without deposits often see 30-40% no-shows. Deposits reduce no-shows by making attendance the default — attendees get 100% back just by showing up."
-                                    </p>
-                                </div>
-                            </Show>
+                            // Format description
+                            <div class="dep-info-note">
+                                <p class="hint-note">
+                                    {move || match form.get().event_format {
+                                        api::EventFormat::InPerson => "Physical event with deposit commitment. Attendees get 100% refund at check-in.",
+                                        api::EventFormat::Online => "Virtual event. No deposit — quest completion serves as virtual check-in.",
+                                        api::EventFormat::Hybrid => "Both in-person and online tracks. In-person attendees deposit; online attendees complete quests.",
+                                    }}
+                                </p>
+                            </div>
 
                             // Deposit config section — only when enabled
                             <Show when=move || form.get().deposit_enabled fallback=|| view! { <div></div> }>

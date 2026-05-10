@@ -8,6 +8,47 @@
 
 use serde::{Deserialize, Serialize};
 
+/// Event format — controls deposit, check-in, claim, and escrow paths.
+///
+/// - `InPerson`: Physical event, deposit auto-enabled, physical check-in required.
+/// - `Online`: Virtual event, no deposit, quest completion = virtual check-in.
+/// - `Hybrid`: Both tracks in one event, one Google Sheet with participation_type column.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+#[derive(Default)]
+pub enum EventFormat {
+    #[default]
+    InPerson,
+    Online,
+    Hybrid,
+}
+
+impl EventFormat {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::InPerson => "in_person",
+            Self::Online => "online",
+            Self::Hybrid => "hybrid",
+        }
+    }
+
+    /// Whether this format includes an in-person track (requires deposit, physical check-in).
+    pub fn has_in_person(&self) -> bool {
+        matches!(self, Self::InPerson | Self::Hybrid)
+    }
+
+    /// Whether this format includes an online track (quest-based virtual check-in).
+    pub fn has_online(&self) -> bool {
+        matches!(self, Self::Online | Self::Hybrid)
+    }
+}
+
+impl std::fmt::Display for EventFormat {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
 /// Lifecycle status of an event.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -64,6 +105,9 @@ pub struct EventMeta {
     /// On-chain escrow PDA address. Empty string if not yet initialized.
     #[serde(default)]
     pub escrow_address: String,
+    /// Event format — controls deposit, check-in, and claim paths.
+    #[serde(default)]
+    pub event_format: EventFormat,
 }
 
 /// Top-level index of all events, stored under KV key "events".
@@ -185,6 +229,12 @@ pub struct EventConfig {
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub location: String,
 
+    // ── Event format ───────────────────────────────────────────────────
+    /// Event format — In-Person, Online, or Hybrid.
+    /// Controls deposit, check-in, escrow, and claim paths.
+    #[serde(default)]
+    pub event_format: EventFormat,
+
     // ── Timestamps ────────────────────────────────────────────────────
     /// ISO 8601 creation timestamp.
     pub created_at: String,
@@ -207,6 +257,7 @@ impl EventConfig {
             organizer_emails: self.organizer_emails.clone(),
             deposit_enabled: self.deposit_enabled,
             escrow_address: self.escrow_address.clone(),
+            event_format: self.event_format.clone(),
         }
     }
 
@@ -310,6 +361,7 @@ impl EventConfig {
             refund_deadline_hours: 168,
             description: String::new(),
             location: String::new(),
+            event_format: EventFormat::InPerson,
             created_at: String::new(),
             updated_at: String::new(),
         }
@@ -411,6 +463,9 @@ pub struct CreateEventRequest {
     /// Event location (venue name, address, or "Online").
     #[serde(default)]
     pub location: String,
+    /// Event format — In-Person, Online, or Hybrid.
+    #[serde(default)]
+    pub event_format: EventFormat,
 }
 
 /// Request body for updating an existing event.
@@ -517,6 +572,9 @@ pub struct UpdateEventRequest {
     /// New event location.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub location: Option<String>,
+    /// New event format.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub event_format: Option<EventFormat>,
 }
 
 /// Response for GET /api/events — list all events.

@@ -1242,7 +1242,6 @@ pub fn Deposit() -> impl IntoView {
                                     </div>
                                     {if info.verified && info.method == "usdc" {
                                         let data_clone_for_refund = data.clone();
-                                        let data_clone_for_close = data.clone();
                                         let refund_info_clone = refund_info.clone();
                                         view! {
                                             <div class="dep-info-note">
@@ -1268,14 +1267,6 @@ pub fn Deposit() -> impl IntoView {
                                                 }
                                             >
                                                 {format!("💸 Don't lose your {usdc_fmt} USDC — claim it now")}
-                                            </button>
-                                            <button
-                                                class="btn btn-outline btn-block btn-action-sm"
-                                                on:click=move |_| {
-                                                    set_state.set(DepositPageState::CloseDepositChooseWallet(data_clone_for_close.clone()));
-                                                }
-                                            >
-                                                "♻️ You have ~0.002 SOL waiting — reclaim it"
                                             </button>
                                         }.into_any()
                                     } else {
@@ -1880,20 +1871,19 @@ pub fn Deposit() -> impl IntoView {
                                 tx_sig.clone()
                             };
                             let solscan_url = solscan_tx_url(&tx_sig, &get_cluster());
-                            let data_clone_for_close = data.clone();
                             let usdc_fmt = format!("{:.2}", data.deposit_amount_usdc as f64 / 1_000_000.0);
                             view! {
                                 <div class="card dep-card">
                                     <div class="card-header">
-                                        <h2 class="card-title">"🎉 Refund Recovered!"</h2>
+                                        <h2 class="card-title">"🎉 Refund Recovered & Rent Reclaimed!"</h2>
                                         <span class="badge badge-success">"On-chain verified"</span>
                                     </div>
-                                    <div class="celebration-emoji">"💰"</div>
+                                    <div class="celebration-emoji">"💰♻️"</div>
                                     <p class="success-title">
-                                        {format!("{usdc_fmt} USDC returned to your wallet")}
+                                        {format!("{usdc_fmt} USDC + ~0.002 SOL returned to your wallet")}
                                     </p>
                                     <p class="hint-desc">
-                                        "Your refund has been confirmed on Solana. The funds should appear in your wallet shortly."
+                                        "Your refund has been confirmed on Solana and your deposit account has been closed. Both the USDC refund and rent lamports should appear in your wallet shortly."
                                     </p>
                                     <div class="tx-hash-box">
                                         {format!("TX: {}", &sig_display)}
@@ -1901,19 +1891,6 @@ pub fn Deposit() -> impl IntoView {
                                     <a href=&solscan_url target="_blank" class="tx-explorer-link">
                                         "View on Solscan ↗"
                                     </a>
-                                    <div class="dep-info-note-lg">
-                                        <p class="hint-note-sm">
-                                            "You have ~0.002 SOL waiting in your deposit account."
-                                        </p>
-                                        <button
-                                            class="btn btn-outline btn-block btn-action-sm"
-                                            on:click=move |_| {
-                                                set_state.set(DepositPageState::CloseDepositChooseWallet(data_clone_for_close.clone()));
-                                            }
-                                        >
-                                            "♻️ Reclaim your ~0.002 SOL"
-                                        </button>
-                                    </div>
                                     <div class="action-row-top-lg">
                                         <a href="/" class="btn btn-primary">"Go Home"</a>
                                     </div>

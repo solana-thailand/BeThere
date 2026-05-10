@@ -1,7 +1,7 @@
 # Business Flow Scenarios — Create/Edit Event Page
 
 > All scenarios for what happens when a user (organizer/admin) interacts with the Create/Edit Event page,
-> including deposit configuration, escrow initialization, and error paths.
+> including event format selection, deposit configuration, escrow initialization, and error paths.
 
 ---
 
@@ -22,72 +22,73 @@
 
 Each event card shows:
 
+### Format Badge (always visible)
+
+| Badge | Condition | Meaning |
+|-------|-----------|---------|
+| `📍 In-Person` | `event_format = "in_person"` | Physical event, deposit required, check-in via scanner |
+| `💻 Online` | `event_format = "online"` | Virtual event, no deposit, NFT claim via quiz/adventure |
+| `🔄 Hybrid` | `event_format = "hybrid"` | Both physical + virtual tracks, see escrow badge for deposit status |
+
+### Escrow Badge (only for in-person / hybrid)
+
 | Indicator | Condition | Meaning |
 |-----------|-----------|---------|
-| `No Escrow` badge (yellow, CSS-only) | `deposit_enabled=true` AND `escrow_address=""` | Deposit is enabled but on-chain escrow PDA not yet created. Organizer must Edit → Init Escrow. |
-| `Escrow` badge (green, CSS-only) | `deposit_enabled=true` AND `escrow_address≠""` | On-chain escrow is active and ready to accept deposits. |
-| No badge | `deposit_enabled=false` | No deposit feature — standard event. |
+| `No Escrow` badge (yellow) | Format includes in-person AND `escrow_address=""` | Deposit required but on-chain escrow PDA not yet created. Organizer must Edit → Init Escrow. |
+| `Escrow` badge (green) | Format includes in-person AND `escrow_address≠""` | On-chain escrow is active and ready to accept deposits. |
+| No escrow badge | Format = online | No deposit feature — escrow not applicable. |
 
 ---
 
 ## 3. Create Event Scenarios
 
-### 3A. Create Event WITHOUT Deposit
+### Event Format Selector (required field)
+
+```
+Form loads with Event Format dropdown:
+  - 📍 In-Person
+  - 💻 Online
+  - 🔄 Hybrid
+
+Selecting a format controls which sections appear/disappear:
+  - In-Person → Deposit section (required), Escrow Setup panel, Scanner/Check-in enabled
+  - Online → No deposit section, Quiz/Adventure config section, No escrow
+  - Hybrid → Deposit section (for in-person track), Quiz/Adventure config, Both claim paths
+```
+
+### 3A. Create Event — In-Person (replaces "WITH Deposit")
+
+> **Format = In-Person** → deposit is **REQUIRED**, not optional. The deposit section auto-appears and cannot be dismissed.
 
 ```
 User clicks "+ Create Event"
-  → Form loads with default values
-  → Deposit toggle = OFF
+  → Form loads with Event Format dropdown
+  → User selects "📍 In-Person"
+  → Deposit Details section appears (required)
+  → Escrow Setup panel appears
 
 User fills:
   - Name* (slug auto-generated)
   - Sheet ID* (required)
+  - Event Format* = "In-Person" (already selected)
   - Schedule, NFT, People (optional sections, collapsed by default)
-
-User clicks "Create Event"
-  → Validate: name, slug, sheet_id not empty
-  → POST /api/events → backend creates event
-  → Toast: "Event 'X' created"
-  → Return to events list
-```
-
-**Validations:**
-- Name must not be empty
-- Slug must not be empty
-- Sheet ID must not be empty
-- No deposit validations run (deposit_enabled=false)
-
-### 3B. Create Event WITH Deposit — Wallet NOT Connected
-
-```
-User clicks "+ Create Event"
-User enables Deposit toggle
-  → Deposit Details section appears
-  → "Escrow Setup" panel appears in Create mode
-  → Shows wallet connect buttons (or "No wallets detected")
-
-User fills deposit fields:
-  - USDC Amount (optional, min 0.01 if > 0)
+  - USDC Amount (required, min 0.01)
   - THB Amount (optional)
-  - PromptPay ID (optional)
+  - PromptPay ID (required if THB > 0)
   - Refund Deadline (min 1 hour)
 
-User does NOT connect wallet
+--- Sub-path 1: Wallet NOT Connected ---
+
 User clicks "Create Event"
   → Validate: name, slug, sheet_id + deposit fields
   → POST /api/events → backend creates event (escrow_address = "")
-  → Toast: "Event 'X' created"
-  → Events list shows: ⚠ No Escrow badge
-```
+  → Toast: "Event 'X' created (In-Person)"
+  → Events list shows: 📍 In-Person + ⚠ No Escrow badge
 
-**State after:** Event exists in backend with `deposit_enabled=true`, `escrow_address=""`. Organizer must Edit → Init Escrow later.
+**State after:** Event exists with `event_format="in_person"`, `deposit_enabled=true`, `escrow_address=""`. Organizer must Edit → Init Escrow later.
 
-### 3C. Create Event WITH Deposit — Wallet Connected (Combined Flow)
+--- Sub-path 2: Wallet Connected (Combined Flow) ---
 
-```
-User clicks "+ Create Event"
-User enables Deposit toggle
-User fills deposit fields
 User clicks "Connect Phantom" in Escrow Setup panel
   → Wallet popup → user approves
   → Shows "Phantom connected: ABC...XYZ" + Disconnect button
@@ -102,35 +103,35 @@ User clicks "Create Event + Initialize Escrow"
 
 **Sub-scenarios at Step 3:**
 
-#### 3C-i. User APPROVES wallet signature ✅
+#### 3A-i. User APPROVES wallet signature ✅
 
 ```
   → On-chain escrow created
   → Step 4: PUT /api/events/{id} → saves escrow_address, organizer_wallet, on_chain_event_id
   → Toast: "Event 'X' created + escrow initialized"
-  → Events list shows: 🏦 Escrow badge
+  → Events list shows: 📍 In-Person + 🏦 Escrow badge
 ```
 
-#### 3C-ii. User REJECTS wallet signature ❌
+#### 3A-ii. User REJECTS wallet signature ❌
 
 ```
   → signAndSendTransaction returns None
   → Event IS already created (backend committed, cannot rollback)
   → Toast (yellow): "Event 'X' created, but escrow TX was rejected. Edit event to retry."
-  → Events list shows: ⚠ No Escrow badge
+  → Events list shows: 📍 In-Person + ⚠ No Escrow badge
 ```
 
 **Recovery path:** Edit event → scroll to deposit section → EscrowInitPanel → connect wallet → "Create & Sign"
 
-#### 3C-iii. init_escrow API fails (e.g. backend error) ❌
+#### 3A-iii. init_escrow API fails (e.g. backend error) ❌
 
 ```
   → Event IS already created
   → Toast (yellow): "Event 'X' created, but escrow init failed: {error}. Edit event to retry."
-  → Events list shows: ⚠ No Escrow badge
+  → Events list shows: 📍 In-Person + ⚠ No Escrow badge
 ```
 
-#### 3C-iv. create_event API fails ❌
+#### 3A-iv. create_event API fails ❌
 
 ```
   → No event created
@@ -138,17 +139,108 @@ User clicks "Create Event + Initialize Escrow"
   → User stays on Create form (can retry)
 ```
 
+### 3B. Create Event — Online (NEW)
+
+> **Format = Online** → no deposit, no escrow, no check-in. NFT claim via quiz/adventure only.
+
+```
+User clicks "+ Create Event"
+  → Form loads with Event Format dropdown
+  → User selects "💻 Online"
+  → Deposit section does NOT appear
+  → Escrow Setup panel does NOT appear
+  → Quiz/Adventure config section appears (for NFT claim gating)
+
+User fills:
+  - Name* (slug auto-generated)
+  - Sheet ID* (required — one sheet for all online registrations)
+  - Event Format* = "Online" (already selected)
+  - Schedule (start/end dates required)
+  - NFT config (badge name, image, template)
+  - Quiz/Adventure config (optional — gates for NFT claim)
+
+User clicks "Create Event"
+  → Validate: name, slug, sheet_id, dates (no deposit validations)
+  → POST /api/events → backend creates event
+  → Toast: "Event 'X' created (Online)"
+  → Events list shows: 💻 Online badge
+  → Return to events list
+```
+
+**Validations:**
+- Name must not be empty
+- Slug must not be empty
+- Sheet ID must not be empty
+- Start/end dates required
+- No deposit validations (deposit not applicable)
+- Quiz/Adventure config optional (if not set, NFT claim is ungated)
+
+**State after:** Event exists with `event_format="online"`, `deposit_enabled=false`, no escrow. Attendees register via `/e/{slug}`, complete quiz/adventure, claim NFT.
+
+### 3C. Create Event — Hybrid (NEW)
+
+> **Format = Hybrid** → in-person attendees get deposit flow, online attendees get quest-based NFT claim. One Google Sheet with `participation_type` column differentiates them.
+
+```
+User clicks "+ Create Event"
+  → Form loads with Event Format dropdown
+  → User selects "🔄 Hybrid"
+  → Deposit Details section appears (for in-person track)
+  → Escrow Setup panel appears
+  → Quiz/Adventure config section appears (for online track)
+  → Sheet config note: "Ensure your Google Sheet has a 'participation_type' column (values: 'in_person' or 'online')"
+
+User fills:
+  - Name* (slug auto-generated)
+  - Sheet ID* (required — one sheet with participation_type column)
+  - Event Format* = "Hybrid" (already selected)
+  - Schedule, NFT, People (standard sections)
+  - Deposit fields (USDC Amount required, for in-person attendees)
+  - Quiz/Adventure config (for online attendees)
+  - Participation Type Column config (defaults to "participation_type")
+
+--- Sub-paths mirror In-Person for escrow setup ---
+
+User clicks "Create Event" (or "Create Event + Initialize Escrow" if wallet connected)
+  → Same escrow sub-paths as 3A (3A-i through 3A-iv)
+  → Toast: "Event 'X' created (Hybrid)"
+  → Events list shows: 🔄 Hybrid + escrow badge status
+```
+
+**Validations:**
+- Same as In-Person for deposit fields (deposit required for in-person track)
+- Quiz/Adventure config optional
+- `participation_type_column` defaults to `"participation_type"` if not specified
+
+**State after:** Event exists with `event_format="hybrid"`, `deposit_enabled=true` (for in-person), escrow pending or active. Both claim paths (deposit-based and quest-based) active.
+
+---
+
+## ~~3A. Create Event WITHOUT Deposit~~ (DEPRECATED)
+
+> ⚠️ **Deprecated** — Replaced by Event Format selector. Creating an event "without deposit" is now explicitly choosing "Online" format. See Section 3B above.
+
+## ~~3B. Create Event WITH Deposit — Wallet NOT Connected~~ (DEPRECATED)
+
+> ⚠️ **Deprecated** — Replaced by In-Person format (3A), Sub-path 1. Wallet not connected is now a sub-path of In-Person creation, not a separate scenario.
+
+## ~~3C. Create Event WITH Deposit — Wallet Connected (Combined Flow)~~ (DEPRECATED)
+
+> ⚠️ **Deprecated** — Replaced by In-Person format (3A), Sub-path 2. The combined create+escrow flow is now the default In-Person + wallet connected path.
+
 ---
 
 ## 4. Edit Event Scenarios
 
-### 4A. Edit Event — No Deposit
+### 4A. Edit Event — Online (No Deposit)
 
 ```
-User clicks "Edit" on event card
+User clicks "Edit" on 💻 Online event card
   → GET /api/events/{id} → loads full detail
   → Form populated with all fields
-  → Deposit toggle = OFF
+  → Event Format = "Online" (dropdown)
+  → No deposit section visible
+  → Quiz/Adventure config section visible
 
 User edits fields, clicks "Update Event"
   → PUT /api/events/{id} → backend updates
@@ -156,12 +248,12 @@ User edits fields, clicks "Update Event"
   → Return to events list
 ```
 
-### 4B. Edit Event — Deposit Enabled, No Escrow Yet
+### 4B. Edit Event — In-Person, No Escrow Yet
 
 ```
-User clicks "Edit" on event with ⚠ No Escrow badge
-  → Form loads, deposit toggle = ON
-  → Deposit fields filled
+User clicks "Edit" on 📍 In-Person event with ⚠ No Escrow badge
+  → Form loads, Event Format = "In-Person"
+  → Deposit fields filled (required)
   → EscrowInitPanel shows (no escrow_address)
   → Status selector visible (draft/active/completed)
 
@@ -170,7 +262,7 @@ User has two paths:
 Path 1: Just update event settings (no escrow)
   → Edit fields, click "Update Event"
   → PUT /api/events/{id}
-  → Still shows ⚠ No Escrow
+  → Still shows 📍 In-Person + ⚠ No Escrow
 
 Path 2: Initialize escrow
   → Scroll to Escrow Setup panel
@@ -190,11 +282,11 @@ Path 2: Initialize escrow
       → Can click "Retry" to try again
 ```
 
-### 4C. Edit Event — Deposit Enabled, Escrow Already Initialized
+### 4C. Edit Event — In-Person, Escrow Already Initialized
 
 ```
-User clicks "Edit" on event with 🏦 Escrow badge
-  → Form loads, deposit toggle = ON
+User clicks "Edit" on 📍 In-Person event with 🏦 Escrow badge
+  → Form loads, Event Format = "In-Person"
   → Escrow fields show as LOCKED (readonly badges):
     - Escrow Address: [base58...] 🔒 Locked
     - Organizer Wallet: [base58...] 🔒 Locked
@@ -212,39 +304,56 @@ User clicks "Update Event"
   → Toast: "Event 'X' updated"
 ```
 
-### 4D. Edit Event — Enable Deposit After Creation
+### 4D. Edit Event — Hybrid, Manage Both Tracks
 
 ```
-User edits an event that was created without deposit
-  → Deposit toggle = OFF
-  → No deposit section visible
+User clicks "Edit" on 🔄 Hybrid event card
+  → Form loads, Event Format = "Hybrid"
+  → Deposit section visible (for in-person track)
+  → Quiz/Adventure config visible (for online track)
+  → Escrow status depends on escrow_address (same as 4B/4C)
 
-User toggles Deposit ON
-  → Deposit Details section appears
-  → Escrow Setup panel appears (no escrow yet)
-  → Fields: USDC Amount, THB Amount, PromptPay ID, Refund Deadline
-
-User fills deposit fields, clicks "Update Event"
-  → Validates deposit fields (min USDC 0.01 if > 0, min deadline 1hr)
-  → PUT /api/events/{id} → saves with deposit_enabled=true
-  → Events list now shows: ⚠ No Escrow badge
-  → Organizer must Edit again → Init Escrow to complete setup
+User can edit:
+  - Deposit fields (in-person track)
+  - Quiz/Adventure config (online track)
+  - Participation type column name
+  - All standard event fields
 ```
 
-### 4E. Edit Event — Disable Deposit After Escrow Created
+### ~~4D. Edit Event — Enable Deposit After Creation~~ (DEPRECATED)
+
+> ⚠️ **Deprecated** — Deposits are no longer toggled on/off. They are automatically determined by event format. To "enable deposit" on an existing online event, change its format to In-Person or Hybrid (see 4E).
+
+### ~~4E. Edit Event — Disable Deposit After Escrow Created~~ (DEPRECATED)
+
+> ⚠️ **Deprecated** — Replaced by 4E below (Change Format).
+
+### 4E. Edit Event — Change Format
+
+> **Format transitions have constraints** to protect existing deposits, escrow, and attendee records.
+
+| Transition | Allowed? | Conditions |
+|------------|----------|------------|
+| Online → In-Person | ✅ | Only if escrow not yet needed (no in-person attendees with deposits). Must configure deposit fields + init escrow. |
+| Online → Hybrid | ✅ | Same as Online → In-Person for deposit setup. Online attendees unaffected. |
+| In-Person → Online | ⚠️ | Only if **no deposits exist** (no attendee deposits recorded). Escrow PDA remains on-chain but inactive. |
+| In-Person → Hybrid | ✅ | Always allowed. Existing in-person attendees unaffected. Must add participation_type column to sheet. |
+| Hybrid → In-Person | ⚠️ | Only if **no online attendees exist** (or all online attendees have already claimed NFTs). |
+| Hybrid → Online | ⚠️ | Only if **no in-person deposits exist**. Escrow PDA remains on-chain but inactive. |
 
 ```
-User edits event with 🏦 Escrow badge
-User toggles Deposit OFF
-  → Deposit section hides
-  → Escrow fields not visible
-
-User clicks "Update Event"
-  → PUT /api/events/{id} → saves with deposit_enabled=false
-  → Events list shows: no deposit badge (escrow still exists on-chain but inactive)
-
-Note: On-chain escrow PDA still exists but backend won't route deposits to it.
-      If deposit is re-enabled later, the existing escrow_address is preserved.
+User edits event, changes Event Format dropdown
+  → If transition is blocked:
+    → Red warning: "Cannot change to {format}: {reason} (e.g. existing deposits must be refunded first)"
+    → Format dropdown reverts to current value
+  → If transition is allowed:
+    → Sections appear/disappear based on new format
+    → If new format requires deposit: deposit section appears, escrow setup required
+    → If new format removes deposit: deposit section hides, existing escrow preserved on-chain
+    → User must fill any newly required fields before saving
+    → Click "Update Event"
+    → PUT /api/events/{id} with new event_format + required fields
+    → Toast: "Event 'X' updated (now {format})"
 ```
 
 ---
@@ -254,38 +363,40 @@ Note: On-chain escrow PDA still exists but backend won't route deposits to it.
 ### On Save (Create or Update)
 
 | Field | Rule | When | Message |
-|-------|------|------|--------|
+|-------|------|------|---------|
 | `name` | Not empty | Always | "Event name is required" |
 | `slug` | Not empty | Always | "Event slug is required" |
 | `sheet_id` | Not empty | Always | "Google Sheet ID is required" |
+| `event_format` | Must be one of: `in_person`, `online`, `hybrid` | Always (create) | "Event format is required" |
 | `event_start` | Must be set (> 0) | Always | "Event start date is required" |
 | `event_end` | Must be set (> 0) | Always | "Event end date is required" |
 | `event_end` vs `event_start` | end > start | Always | "Event end must be after event start" |
-| `deposit_amount_usdc` + `deposit_amount_thb` | At least one > 0 | `deposit_enabled=true` | "At least one deposit amount (USDC or THB) is required when deposit is enabled" |
-| `deposit_amount_usdc` | ≥ 0.01 if > 0 | `deposit_enabled=true` | "Minimum deposit is 0.01 USDC" |
-| `deposit_amount_usdc` | ≤ 1,000 (SEC-003) | `deposit_enabled=true` | "Maximum deposit is 1,000 USDC" |
-| `deposit_amount_usdc` | > 0 (required for escrow) | `deposit_enabled=true` + wallet connected | "USDC deposit amount is required to initialize on-chain escrow" |
-| `promptpay_id` | Not empty when THB > 0 | `deposit_amount_thb > 0` | "PromptPay ID is required when THB amount is set" |
-| `refund_deadline_hours` | ≥ 1 | `deposit_enabled=true` | "Refund deadline must be at least 1 hour" |
+| `deposit_amount_usdc` + `deposit_amount_thb` | At least one > 0 | Format = `in_person` or `hybrid` | "At least one deposit amount (USDC or THB) is required for in-person events" |
+| `deposit_amount_usdc` | ≥ 0.01 if > 0 | Format = `in_person` or `hybrid` | "Minimum deposit is 0.01 USDC" |
+| `deposit_amount_usdc` | ≤ 1,000 (SEC-003) | Format = `in_person` or `hybrid` | "Maximum deposit is 1,000 USDC" |
+| `deposit_amount_usdc` | > 0 (required for escrow) | Format includes in-person + wallet connected | "USDC deposit amount is required to initialize on-chain escrow" |
+| `promptpay_id` | Not empty when THB > 0 | `deposit_amount_thb > 0` (in-person/hybrid) | "PromptPay ID is required when THB amount is set" |
+| `refund_deadline_hours` | ≥ 1 | Format = `in_person` or `hybrid` | "Refund deadline must be at least 1 hour" |
 
-> **Note:** The events page displays a computed refund deadline datetime below the `refund_deadline_hours` input field. The value is calculated as `event_end_ms + (refund_deadline_hours × 3_600_000)` and rendered with a human-friendly duration label (e.g. "Refund deadline: Jan 15, 2026, 11:59 PM — 48 hours after event end").
+> **Note:** The events page displays a computed refund deadline datetime below the `refund_deadline_hours` input field. The value is calculated as `event_end_ms + (refund_deadline_hours × 3_600_000)` and rendered with a human-friendly duration label (e.g. "Refund deadline: Jan 15, 2026, 11:59 PM — 48 hours after event end"). Only shown when format = in-person or hybrid.
 
 ### Inline Warnings (Yellow Hints)
 
 | Field | Condition | Hint |
 |-------|-----------|------|
 | `event_end` | end ≤ start (both set) | "Event end must be after event start" |
-| `deposit_amount_usdc` | Both USDC = 0 and THB = 0 while deposit enabled | "At least one deposit amount (USDC or THB) is required" |
+| `deposit_amount_usdc` | Both USDC = 0 and THB = 0 while format includes in-person | "At least one deposit amount (USDC or THB) is required" |
 | `deposit_amount_usdc` | Value > 0 and < 0.01 | "Minimum deposit is 0.01 USDC" |
 | `deposit_amount_usdc` | Value > 1,000 | "Maximum deposit is 1,000 USDC (SEC-003 cap)" |
 | `promptpay_id` | THB > 0 but PromptPay ID empty | "PromptPay ID is required when THB amount is set" |
-| `refund_deadline_hours` | Value = 0 while deposit enabled | "Refund deadline must be at least 1 hour" |
+| `refund_deadline_hours` | Value = 0 while format includes in-person | "Refund deadline must be at least 1 hour" |
 | `nft_name_template` | Resolved name > 32 chars | "Resolved name exceeds 32-char limit..." |
 
 ### Locked Fields (Read-Only)
 
 | Field | When | Why |
 |-------|------|-----|
+| `event_format` | After attendees have registered | Changing format with existing attendees requires explicit migration |
 | `escrow_address` | Always (when set) | Set by on-chain escrow init, never user-editable |
 | `organizer_wallet` | Always (when set) | Set by wallet connect during escrow init |
 | `on_chain_event_id` | Always (when set & > 0) | Auto-derived from PDA seeds |
@@ -296,8 +407,8 @@ Note: On-chain escrow PDA still exists but backend won't route deposits to it.
 
 | Mode | Condition | Button Label |
 |------|-----------|-------------|
-| Create | Wallet connected + deposit enabled | "Create Event + Initialize Escrow" |
-| Create | No wallet or no deposit | "Create Event" |
+| Create | Format = in-person/hybrid + wallet connected | "Create Event + Initialize Escrow" |
+| Create | Format = online, or no wallet connected | "Create Event" |
 | Edit | Any | "Update Event" |
 
 While saving: "Saving..." (disabled)
@@ -308,27 +419,31 @@ While saving: "Saving..." (disabled)
 
 | Scenario | Type | Message |
 |----------|------|---------|
-| Event created successfully | Success | "Event 'X' created" |
+| Event created successfully (online) | Success | "Event 'X' created (Online)" |
+| Event created successfully (in-person, no escrow) | Success | "Event 'X' created (In-Person)" |
 | Event created + escrow initialized | Success | "Event 'X' created + escrow initialized" |
 | Event created, escrow TX rejected | Warning | "Event 'X' created, but escrow TX was rejected. Edit event to retry." |
 | Event created, escrow init failed | Warning | "Event 'X' created, but escrow init failed: {err}. Edit event to retry." |
 | Event create failed | Error | "Failed to create event: {err}" |
 | Event updated successfully | Success | "Event 'X' updated" |
+| Event updated + format changed | Success | "Event 'X' updated (now {format})" |
 | Event update failed | Error | "Failed to update event: {err}" |
 | Event archived | Success | "Event 'X' archived" |
 | Archive failed | Error | "Failed to archive: {err}" |
 | Validation: name empty | Error | "Event name is required" |
 | Validation: slug empty | Error | "Event slug is required" |
 | Validation: sheet_id empty | Error | "Google Sheet ID is required" |
+| Validation: event_format empty | Error | "Event format is required" |
 | Validation: start date empty | Error | "Event start date is required" |
 | Validation: end date empty | Error | "Event end date is required" |
 | Validation: end before start | Error | "Event end must be after event start" |
 | Validation: USDC too small | Error | "Minimum deposit is 0.01 USDC" |
 | Validation: USDC too large | Error | "Maximum deposit is 1,000 USDC" |
-| Validation: no deposit amount set | Error | "At least one deposit amount (USDC or THB) is required when deposit is enabled" |
+| Validation: no deposit amount set | Error | "At least one deposit amount (USDC or THB) is required for in-person events" |
 | Validation: no USDC for escrow | Error | "USDC deposit amount is required to initialize on-chain escrow" |
 | Validation: THB without PromptPay | Error | "PromptPay ID is required when THB amount is set" |
 | Validation: deadline = 0 | Error | "Refund deadline must be at least 1 hour" |
+| Validation: format change blocked | Error | "Cannot change to {format}: {reason}" |
 | Wallet connection rejected | Error | "Wallet connection rejected" |
 | No wallets detected | Info | "No Solana wallets detected. Install Phantom or another wallet extension." |
 
@@ -341,7 +456,9 @@ When an attendee accesses `/deposit/{attendee_id}?event_id=xxx`:
 ```
 GET /api/deposit/status/{attendee_id}?event_id={event_id}
 
-If deposit_enabled=false → "Deposit not required for this event"
+If event_format = "online" → "Deposit not required for this event"
+
+If format includes in-person AND deposit_enabled=false → "Deposit not configured"
 
 If already deposited → Show deposit status (amount, TX, timestamp)
 
@@ -361,10 +478,15 @@ If not deposited → Show payment options:
 Event States:
   Draft → Active → Completed → Archived
 
-Deposit States:
-  Disabled → Enabled (no escrow) → Enabled (escrow active)
-              ↑                       ↓
-              └── Can disable ────────┘ (escrow preserved on-chain)
+Event Format:
+  Online ↔ In-Person ↔ Hybrid
+    ↑         ↑          ↑
+    └─ constrained by existing deposits/attendees ─┘
+
+Deposit States (format = in-person or hybrid only):
+  Required → Escrow Pending → Escrow Active
+                                ↓
+                Escrow preserved on-chain (if format changes to online)
 
 Escrow Init States (EscrowInitPanel):
   Idle → WalletConnected → Initializing → Done
@@ -378,10 +500,11 @@ Escrow Init States (EscrowInitPanel):
 
 | Edge Case | Behavior |
 |-----------|----------|
-| Create event with deposit but wallet extension not installed | Shows "No Solana wallets detected". Button says "Create Event" (not combined). Event created without escrow. |
+| Create online event, later change to in-person | Must configure deposit fields + init escrow before saving. |
+| Create in-person event with deposit but wallet extension not installed | Shows "No Solana wallets detected". Button says "Create Event" (not combined). Event created without escrow. |
 | Wallet connected in Create mode, then disconnect before saving | Button reverts to "Create Event". Escrow init step skipped. |
 | Escrow already exists when trying to init | Backend returns "already has escrow" error → Panel reloads event detail and shows success state. |
-| Organizer enables deposit, saves, but never inits escrow | Events list shows ⚠ No Escrow. Attendee deposit page shows "Deposit not enabled" (backend checks escrow_address). |
+| Organizer changes format to online, but in-person deposits exist | Blocked with error: "Cannot change to Online: existing deposits must be refunded first" |
 | Edit event and change deposit_amount after deposits already made | New amount applies to future deposits only. Existing deposits unchanged. |
 | Network error during combined create+escrow flow | If create succeeded: event exists without escrow. If create failed: no event created. No partial state. |
 | User has multiple wallet extensions | All detected wallets shown as separate "Connect X" buttons. User picks one. |
@@ -390,6 +513,7 @@ Escrow Init States (EscrowInitPanel):
 | Two admins editing same event simultaneously | Last-write-wins. KV storage has no locking. Could lose changes. |
 | Duplicate slug on create | Backend rejects: "event with id '{slug}' already exists". Frontend has no pre-check. |
 | Wallet on wrong network (e.g. mainnet vs devnet) | TX fails on-chain with confusing error. No frontend network detection. |
+| Hybrid event with missing participation_type column | Backend defaults all attendees to "in_person" if column missing. Online attendees treated as in-person. |
 
 ---
 
@@ -402,9 +526,12 @@ These are enforced by the backend but the frontend does not have inline warnings
 | SEC-002: Lock escrow fields after init | Rejects changes to `organizer_wallet`, `on_chain_event_id`, `deposit_amount_usdc`, `refund_deadline_hours` when `escrow_address` is set | `update_event` |
 | SEC-003: Max deposit cap $1,000 | `deposit_amount_usdc > 1,000,000,000` → rejected | `create_event` + `update_event` |
 | SEC-004: Block archive with active escrow | Rejects archive if `escrow_address` is set | `archive_event` |
+| SEC-005: Format transition constraints | Rejects format change if deposits exist (→ online) or online attendees exist (→ in-person) | `update_event` |
 | Duplicate slug/ID check | `events.iter().any(\|e\| e.id == id)` | `create_event` |
 | Deposit amount not configured | `deposit_amount_usdc == 0` → rejected | `init_escrow_tx_handler` |
 | Invalid organizer_wallet | Must be valid base58 Solana address | `init_escrow_tx_handler` |
+| Invalid event_format | Must be `in_person`, `online`, or `hybrid` | `create_event` + `update_event` |
+| Deposit fields on online event | Rejects deposit fields when `event_format = "online"` | `create_event` + `update_event` |
 
 ---
 
@@ -415,12 +542,14 @@ These are enforced by the backend but the frontend does not have inline warnings
 | No wallet network detection | Medium | User could sign on wrong cluster. Add `connection.getGenesisHash()` check. |
 | ~~No concurrent edit protection~~ (✅ Fixed) | ~~Low~~ | Optimistic concurrency implemented: backend checks `expected_updated_at` against stored `updated_at`, returns conflict error on mismatch. Frontend detects `"conflict"` in error message and shows a user-friendly toast prompting refresh. |
 | No duplicate slug pre-check | Low | Backend catches it, but could check on slug input blur for better UX. |
-| ~~NFT fields have no format validation~~ (✅ Fixed) | ~~Low~~ | `nft_collection_mint` validates base58, URLs validate format. Added in `a0ca1b5`.
+| ~~NFT fields have no format validation~~ (✅ Fixed) | ~~Low~~ | `nft_collection_mint` validates base58, URLs validate format. Added in `a0ca1b5`. |
 | ~~No event end → refund deadline visual timeline~~ (✅ Fixed) | ~~Low~~ | Events page now shows a computed refund deadline datetime below the `refund_deadline_hours` input. Calculation: `event_end_ms + (hours × 3_600_000)`, displayed with a human-friendly duration label. |
 | ~~Schedule section defaults to collapsed~~ (✅ Fixed) | ~~Medium~~ | `sec_schedule_open` now initialized to `true`; schedule section defaults to expanded on Create. |
-| ~~No NFT badge preview~~ (✅ Fixed) | ~~Low~~ | Events page shows live badge preview + "Use default badge" auto-fill button. `30a23e0`.
+| ~~No NFT badge preview~~ (✅ Fixed) | ~~Low~~ | Events page shows live badge preview + "Use default badge" auto-fill button. `30a23e0`. |
 | ~~No walk-in attendee registration~~ (✅ Fixed) | ~~Medium~~ | Staff can register walk-ins via scanner UI → KV record → same deposit/NFT/refund flow. `ef70bca`. |
-| No public event page (`/e/{slug}`) | ~~**High**~~ | ✅ **Implemented** — `GET /api/public/event/{slug}` + `/e/:slug` frontend. Sanitized response (no sensitive fields). Only Active/Completed events shown. See `docs/ux_roadmap.md` P0-1. |
+| ~~No public event page (`/e/{slug}`)~~ (✅ Fixed) | ~~**High**~~ | ✅ **Implemented** — `GET /api/public/event/{slug}` + `/e/:slug` frontend. Sanitized response (no sensitive fields). Only Active/Completed events shown. See `docs/ux_roadmap.md` P0-1. |
+| No self-registration from public event page | **High** | `/e/{slug}` shows event details but attendees cannot register/reserve a spot directly. Needed for "Reserve Spot" flow for online and hybrid events. Attendee fills name + email → backend creates KV record → claim token issued. |
+| No online attendee claim path | **High** | Online/hybrid events need a quest-based NFT claim flow for online attendees. Quiz completion or adventure finish = virtual check-in. No deposit, no refund, no escrow. See Section 18. |
 | No event context on deposit page | **High** | Deposit page jumps straight to payment without showing what event the deposit is for. Needs event header with name + date. See `docs/ux_roadmap.md` P0-2. |
 | Scanner has no haptic/audio feedback | Medium | No vibration or sound on scan success/failure. Critical for throughput at real events. `navigator.vibrate()` + short beep. See `docs/ux_roadmap.md` P1-1. |
 | No progress indicator on claim flow | Medium | Multi-step flow (connect → deposit → quiz → claim) with no visible step indicator. See `docs/ux_roadmap.md` P1-2. |
@@ -432,15 +561,17 @@ These are enforced by the backend but the frontend does not have inline warnings
 
 The deposit page and events form incorporate behavioral science patterns to increase attendance and deposit uptake.
 
-### 13A. Loss Aversion — Deposit Toggle Nudge (Events Page)
+### 13A. Loss Aversion — Format Selection Nudge (Events Page)
 
-**Location:** `events_page.rs` — Deposit toggle section
+**Location:** `events_page.rs` — Event Format selector section
 
-When an organizer toggles deposits **OFF**, a yellow hint appears:
+When an organizer selects "Online" format, a yellow hint appears:
 
-> "Events without deposits often see 30-40% no-shows. Deposits reduce no-shows by making attendance the default — attendees get 100% back just by showing up."
+> "Online events without deposits often see 30-40% no-shows. Consider Hybrid format — in-person attendees commit with deposits and get 100% back just by showing up."
 
 **Pattern:** Loss aversion (Kahneman & Tversky) — framing the cost of NOT having deposits as a loss.
+
+> ⚠️ **Migration note:** Previously this was a deposit toggle nudge. Now replaced by format selection context.
 
 ### 13B. Loss Aversion — Refund CTA Language (Deposit Page)
 
@@ -468,7 +599,7 @@ The deposit confirmation card uses:
 
 ### 13D. Commitment Device — Deposit Flow Architecture
 
-The entire deposit architecture acts as a commitment device:
+The entire deposit architecture acts as a commitment device (in-person and hybrid events only):
 
 1. Attendee deposits USDC → psychological commitment to attend
 2. NFT badge is the reward for showing up (commitment + endowment)
@@ -476,6 +607,8 @@ The entire deposit architecture acts as a commitment device:
 4. Loss of deposit = cost of not following through
 
 The NFT section on the events page is labeled **"Recommended"** (green badge) because NFTs complete the commitment device loop: deposit → show up → get NFT + refund.
+
+> **Online events** use a different motivation: quest-based engagement (quiz/adventure completion) gates the NFT. This creates commitment through effort rather than financial stake.
 
 ### 13E. Refund Success — Positive Reinforcement (Deposit Page)
 
@@ -493,12 +626,13 @@ On successful refund:
 
 | Pattern | Location | Technique | Behavioral Principle |
 |---------|----------|-----------|---------------------|
-| Deposit nudge | Events form | Yellow hint when deposit OFF | Loss aversion |
+| Format selection nudge | Events form | Yellow hint when Online selected | Loss aversion |
 | Refund CTA | Deposit page | "Don't lose your X USDC" | Loss aversion |
 | Spot reserved | Deposit page | "Your USDC is secured" | Endowment effect |
 | NFT = Recommended | Events form | Green badge on NFT section | Commitment device |
 | Refund deadline | Deposit page | Countdown + urgency framing | Scarcity/urgency |
 | Refund recovered | Deposit page | "🎉 Refund Recovered!" | Positive reinforcement |
+| Quest-based engagement | Online claim flow | Quiz/adventure gates NFT | Effort justification |
 
 ---
 
@@ -608,3 +742,235 @@ The metadata endpoint loads per-event configuration from KV:
 - **Metaplex-compliant** — `name`, `symbol`, `description`, `image`, `attributes` fields
 
 Organizers can override with any custom URL (Arweave, IPFS, CDN) for permanent storage.
+
+---
+
+## 16. Event Format Model
+
+### Overview
+
+Every event has a required `event_format` field that determines which features are available. This replaces the previous deposit toggle — deposit availability is now a **consequence** of format choice, not an independent setting.
+
+### The Three Formats
+
+#### 📍 In-Person
+
+A physical event where attendees show up at a venue. Deposit is **required** to incentivize attendance and reduce no-shows.
+
+- **Deposit:** Required (not optional, auto-enabled)
+- **Escrow:** Required (on-chain PDA for holding deposits)
+- **Check-in:** Physical QR scan by staff
+- **NFT Claim:** After check-in (staff scans attendee QR)
+- **Refund:** Full refund after check-in
+- **Walk-in:** Supported (staff registers via scanner)
+
+#### 💻 Online
+
+A virtual event with no physical venue. No deposit, no escrow, no physical check-in. NFTs are earned through engagement (quiz/adventure completion).
+
+- **Deposit:** Not applicable
+- **Escrow:** Not applicable
+- **Check-in:** Virtual (quest completion = check-in)
+- **NFT Claim:** After quiz/adventure completion
+- **Refund:** Not applicable (no deposit)
+- **Walk-in:** Not applicable (self-registration instead)
+
+#### 🔄 Hybrid
+
+Combines both in-person and online tracks in one event. One Google Sheet with a `participation_type` column differentiates attendee types.
+
+- **Deposit:** Required for in-person attendees only
+- **Escrow:** Required (for in-person deposits)
+- **Check-in:** Physical scan for in-person; quest completion for online
+- **NFT Claim:** Both paths active — check-in OR quest completion
+- **Refund:** In-person attendees only
+- **Walk-in:** Supported for in-person track
+
+### Format → Feature Matrix
+
+| Feature | 📍 In-Person | 💻 Online | 🔄 Hybrid |
+|---------|-------------|-----------|-----------|
+| Deposit required | ✅ Yes | ❌ No | ✅ In-person only |
+| Escrow setup | ✅ Required | ❌ N/A | ✅ Required |
+| Physical check-in | ✅ QR scan | ❌ No | ✅ In-person track |
+| Virtual check-in (quest) | ❌ No | ✅ Quiz/Adventure | ✅ Online track |
+| NFT claim | ✅ After check-in | ✅ After quest | ✅ Both paths |
+| Refund available | ✅ After check-in | ❌ No | ✅ In-person only |
+| Walk-in registration | ✅ Yes | ❌ No | ✅ In-person track |
+| Quiz/Adventure config | ❌ Optional | ✅ Recommended | ✅ Recommended |
+| Google Sheet `participation_type` | ❌ Not needed | ❌ Not needed | ✅ Required |
+| Self-registration (`/e/{slug}`) | ❌ Reserved via deposit | ✅ Yes | ✅ Online track |
+
+### Self-Registration Flow (for Online/Hybrid)
+
+Attendees discover the event via public page `/e/{slug}` and can register directly:
+
+```
+Attendee visits /e/{event_slug}
+  → GET /api/public/event/{slug} → event details
+  → Event format = online or hybrid → shows "Reserve Spot" / "Register" button
+  → Attendee fills: name*, email* (optional: wallet address for direct NFT)
+  → POST /api/public/register
+    → Creates KV record: online_reg:{event_id}:{email_lower}
+    → Generates UUID v7 claim token
+    → Creates reverse mapping: claim_online:{token} → {event_id}:{email_lower}
+    → Returns claim token + claim URL
+  → Attendee receives claim URL (shown on page + email if configured)
+  → At event time: attendee completes quiz/adventure → NFT minted
+```
+
+**KV Key Patterns for Self-Registration:**
+
+| Purpose | Key | Value | TTL |
+|---------|-----|-------|-----|
+| Online registration | `online_reg:{event_id}:{email_lower}` | `OnlineRegistration` JSON | 90 days |
+| Claim token reverse | `claim_online:{claim_token}` | `{event_id}:{email_lower}` | 90 days |
+| Quest progress | `quest:{event_id}:{email_lower}` | Quest state JSON | 90 days |
+
+---
+
+## 17. Attendee Journey by Format
+
+### 17A. In-Person Attendee Journey
+
+```
+Discovery
+  → Organizer shares event link or event page /e/{slug}
+  → Attendee sees event details + deposit requirement
+
+Deposit (required)
+  → Connect wallet → USDC deposit → on-chain TX
+  → Or: scan Solana Pay QR → mobile wallet deposit
+  → Deposit confirmed: "🎫 Spot Reserved!"
+
+Event Day — Check-in
+  → Attendee arrives at venue
+  → Staff scans attendee's QR code (claim token)
+  → Backend verifies deposit → marks checked-in
+  → NFT badge minted automatically (or attendee claims)
+
+Refund
+  → After check-in, refund becomes available
+  → "💸 Don't lose your {X} USDC — claim it now"
+  → Connect wallet → refund TX → USDC returned
+  → "🎉 Refund Recovered!"
+
+Result: Attendee showed up → got NFT badge + full refund. Net cost: $0.
+```
+
+### 17B. Online Attendee Journey
+
+```
+Discovery
+  → Attendee finds event via /e/{slug} or shared link
+  → No deposit required — sees "Register" / "Reserve Spot" button
+
+Self-Registration
+  → Fills name + email → POST /api/public/register
+  → Receives claim URL: /claim/{token}
+  → Bookmark or save link
+
+Event Time — Quest
+  → Attendee opens claim URL at event time
+  → Quiz/Adventure loads (if configured)
+  → Completes quest → "virtual check-in" recorded
+  → Backend creates quest completion record in KV
+
+NFT Claim
+  → Quest completion triggers NFT mint
+  → Attendee connects wallet → NFT minted to their address
+  → "🎉 Badge earned!"
+  → Share CTA (future improvement)
+
+Result: Attendee engaged → completed quest → earned NFT badge. No money exchanged.
+```
+
+### 17C. Hybrid Attendee Journey
+
+Both tracks run in parallel within the same event:
+
+```
+In-Person Track:
+  → Same as 17A (deposit → check-in → NFT → refund)
+  → participation_type = "in_person" in Google Sheet
+
+Online Track:
+  → Same as 17B (register → quest → NFT)
+  → participation_type = "online" in Google Sheet
+
+One event, one Google Sheet, two experiences.
+Staff scanner shows which track the attendee is on.
+```
+
+---
+
+## 18. Online Attendee NFT Claim Flow
+
+### Overview
+
+Online attendees do not deposit funds, do not have escrow, and are not physically checked in. Instead, they earn NFT badges through **quest-based engagement** — completing a quiz or adventure serves as a "virtual check-in."
+
+### Claim Token Sources
+
+Online attendees receive claim tokens through one of two paths:
+
+1. **Self-Registration:** Attendee registers via `/e/{slug}` → `POST /api/public/register` → claim token generated → stored in KV
+2. **Auto-Generated:** Organizer pre-populates Google Sheet with online attendee emails → Sheet sync generates claim tokens → tokens shared via email/message
+
+### Quest Completion = Virtual Check-in
+
+```
+Attendee opens /claim/{token}
+  → GET /api/claim/status/{token} → returns attendee info + event details + quest config
+  → If quest not started: loads quest UI (quiz questions / adventure steps)
+  → Attendee completes quest
+    → POST /api/claim/quest/complete → validates answers/steps
+    → Creates KV record: quest_complete:{event_id}:{email_lower} → timestamp
+    → Marks "virtual check-in" in attendee record
+
+NFT Mint
+  → After quest completion, NFT claim unlocked
+  → Attendee connects wallet
+  → POST /api/claim/mint → mints NFT to attendee wallet
+  → KV updated: claim_minted:{event_id}:{email_lower} → {mint_address, timestamp}
+  → Attendee sees: "🎉 Badge earned!"
+```
+
+### Quiz/Adventure Gates
+
+| Gate Type | Config | Behavior |
+|-----------|--------|----------|
+| Quiz | Array of questions + answers | Attendee must answer X% correctly to pass |
+| Adventure | Sequence of actions/steps | Attendee must complete all steps in order |
+| None | No quest configured | NFT claim is ungated — attendee can mint immediately |
+
+### What's NOT Involved for Online Attendees
+
+| Concept | Status |
+|---------|--------|
+| Deposit | ❌ Not collected |
+| Escrow PDA | ❌ Not created |
+| Physical check-in | ❌ Not needed (quest = virtual check-in) |
+| Refund | ❌ Not applicable (no deposit to refund) |
+| Wallet requirement | Only for NFT mint (not for registration or quest) |
+
+### Online Attendee KV Key Patterns
+
+| Purpose | Key | Value | TTL |
+|---------|-----|-------|-----|
+| Registration record | `online_reg:{event_id}:{email_lower}` | `OnlineRegistration` JSON | 90 days |
+| Claim token reverse | `claim_online:{claim_token}` | `{event_id}:{email_lower}` | 90 days |
+| Quest progress | `quest:{event_id}:{email_lower}` | `{status, current_step, answers}` | 90 days |
+| Quest completion | `quest_complete:{event_id}:{email_lower}` | `{completed_at}` timestamp | 90 days |
+| NFT minted | `claim_minted:{event_id}:{email_lower}` | `{mint_address, timestamp}` | Permanent |
+
+### Error Paths
+
+| Scenario | Behavior |
+|----------|----------|
+| Invalid/expired claim token | "Invalid claim link" — token not found in KV or TTL expired |
+| Quest not yet available | "Event hasn't started yet" — event_start not reached |
+| Quest already completed | Skip quest, go directly to NFT claim |
+| NFT already minted | Show "Badge already claimed" with link to Solscan |
+| Wallet not connected at mint step | Prompt wallet connection, then retry |
+| Mint TX fails | "Minting failed, please retry" — claim_minted not set, can retry |

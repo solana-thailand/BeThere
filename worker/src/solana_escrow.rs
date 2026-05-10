@@ -85,6 +85,7 @@ pub struct DepositTransaction {
 }
 
 /// Result of building a refund transaction.
+#[allow(dead_code)]
 pub struct RefundTransaction {
     /// Base64-encoded serialized transaction (unsigned).
     pub transaction_b64: String,
@@ -126,6 +127,14 @@ pub struct ClaimForfeitedTransaction {
 
 /// Result of building a close_deposit transaction.
 pub struct CloseDepositTransaction {
+    /// Base64-encoded serialized transaction (unsigned).
+    pub transaction_b64: String,
+    /// Human-readable message for wallet confirmation.
+    pub message: String,
+}
+
+/// Response for a combined refund + close_deposit transaction.
+pub struct RefundAndCloseTransaction {
     /// Base64-encoded serialized transaction (unsigned).
     pub transaction_b64: String,
     /// Human-readable message for wallet confirmation.
@@ -997,6 +1006,7 @@ pub async fn build_deposit_transaction(
 ///   event_escrow (writable), attendee_deposit (writable), attendee (signer),
 ///   vault_ta (writable), attendee_ta (writable), organizer (readonly),
 ///   token_program (readonly), system_program (readonly)
+#[allow(dead_code)]
 pub async fn build_refund_transaction(
     rpc_url: &str,
     kv: Option<&KvStore>,
@@ -1922,6 +1932,187 @@ pub async fn build_close_deposit_transaction(
     Ok(CloseDepositTransaction {
         transaction_b64: tx_b64,
         message: "Close deposit account and reclaim rent".to_string(),
+    })
+}
+
+// ---------------------------------------------------------------------------
+// Combined Refund + Close Deposit Transaction Builder
+// ---------------------------------------------------------------------------
+
+/// Build a single transaction containing both `refund` and `close_deposit` instructions.
+///
+/// This is atomic: if either instruction fails, the whole TX reverts.
+/// Order matters — refund must run first (sets `refunded = true`), then close_deposit
+/// validates that flag before closing the PDA and reclaiming rent.
+///
+/// # Arguments
+/// * `rpc_url` — Solana RPC URL (with API key)
+/// * `kv` — Optional KV store for blockhash caching
+/// * `organizer_pubkey` — Organizer's wallet address (base58)
+/// * `event_id` — On-chain event ID for PDA derivation
+/// * `attendee_pubkey` — Attendee's wallet address (base58)
+pub async fn build_refund_and_close_transaction(
+    rpc_url: &str,
+    kv: Option<&KvStore>,
+    organizer_pubkey: &str,
+    event_id: u64,
+    attendee_pubkey: &str,
+) -> Result<RefundAndCloseTransaction, EscrowError> {
+    // Parse pubkeys
+    let organizer = pubkey_from_base58(organizer_pubkey)?;
+    let attendee = pubkey_from_base58(attendee_pubkey)?;
+    let program_id = pubkey_from_base58(ESCROW_PROGRAM_ID)?;
+    let usdc_mint = pubkey_from_base58(usdc_mint())?;
+    let token_program = pubkey_from_base58(TOKEN_PROGRAM_ID)?;
+    let system_program = pubkey_from_base58(SYSTEM_PROGRAM_ID)?;
+    let rent_sysvar = pubkey_from_base58(RENT_SYSVAR_ID)?;
+    let ata_program = pubkey_from_base58(ASSOCIATED_TOKEN_PROGRAM_ID)?;
+
+    // Derive PDAs
+    let (event_escrow, _escrow_bump) = find_program_address(
+        &[b"escrow", organizer.as_slice(), &event_id.to_le_bytes()],
+        &program_id,
+    )
+    .await?;
+
+    let (attendee_deposit, _deposit_bump) = find_program_address(
+        &[b"deposit", event_escrow.as_slice(), attendee.as_slice()],
+        &program_id,
+    )
+    .await?;
+
+    let vault = get_associated_token_address(&event_escrow, &usdc_mint).await?;
+    let attendee_ta = get_associated_token_address(&attendee, &usdc_mint).await?;
+
+    // ---- Instruction 1: Refund (discriminator 3) ----
+    let mut refund_data = vec![3u8];
+    refund_data.extend_from_slice(&event_id.to_le_bytes());
+
+    let refund_accounts = vec![
+        AccountMeta {
+            pubkey: attendee,
+            is_signer: true,
+            is_writable: true,
+        }, // 0 — attendee (Signer)
+        AccountMeta {
+            pubkey: event_escrow,
+            is_signer: false,
+            is_writable: true,
+        }, // 1 — event_escrow (mut)
+        AccountMeta {
+            pubkey: usdc_mint,
+            is_signer: false,
+            is_writable: false,
+        }, // 2 — usdc_mint
+        AccountMeta {
+            pubkey: attendee_deposit,
+            is_signer: false,
+            is_writable: true,
+        }, // 3 — attendee_deposit (mut)
+        AccountMeta {
+            pubkey: attendee_ta,
+            is_signer: false,
+            is_writable: true,
+        }, // 4 — attendee_ta (init idempotent)
+        AccountMeta {
+            pubkey: vault,
+            is_signer: false,
+            is_writable: true,
+        }, // 5 — vault (mut)
+        AccountMeta {
+            pubkey: rent_sysvar,
+            is_signer: false,
+            is_writable: false,
+        }, // 6 — rent
+        AccountMeta {
+            pubkey: token_program,
+            is_signer: false,
+            is_writable: false,
+        }, // 7 — token_program
+        AccountMeta {
+            pubkey: system_program,
+            is_signer: false,
+            is_writable: false,
+        }, // 8 — system_program
+    ];
+
+    // ---- Instruction 2: Close Deposit (discriminator 7) ----
+    let mut close_data = vec![7u8];
+    close_data.extend_from_slice(&event_id.to_le_bytes());
+
+    let close_accounts = vec![
+        AccountMeta {
+            pubkey: attendee,
+            is_signer: true,
+            is_writable: true,
+        }, // 0 — signer (attendee)
+        AccountMeta {
+            pubkey: event_escrow,
+            is_signer: false,
+            is_writable: false,
+        }, // 1 — event_escrow (readonly)
+        AccountMeta {
+            pubkey: attendee_deposit,
+            is_signer: false,
+            is_writable: true,
+        }, // 2 — attendee_deposit (mut)
+        AccountMeta {
+            pubkey: system_program,
+            is_signer: false,
+            is_writable: false,
+        }, // 3 — system_program
+    ];
+
+    // Merge accounts from both instructions into a single ordered message
+    let message_accounts = merge_message_accounts(
+        &[&refund_accounts, &close_accounts],
+        &[program_id, ata_program],
+    );
+
+    // Build index lookup
+    let get_index = |pk: &PubkeyBytes| -> u8 {
+        message_accounts
+            .iter()
+            .position(|m| &m.pubkey == pk)
+            .expect("all accounts should be in merged message") as u8
+    };
+
+    let program_id_index = get_index(&program_id);
+
+    // Resolve refund instruction indices
+    let refund_indices: Vec<u8> = refund_accounts
+        .iter()
+        .map(|m| get_index(&m.pubkey))
+        .collect();
+    let refund_ix = CompiledInstruction {
+        program_id_index,
+        accounts: refund_indices,
+        data: refund_data,
+    };
+
+    // Resolve close_deposit instruction indices
+    let close_indices: Vec<u8> = close_accounts
+        .iter()
+        .map(|m| get_index(&m.pubkey))
+        .collect();
+    let close_ix = CompiledInstruction {
+        program_id_index,
+        accounts: close_indices,
+        data: close_data,
+    };
+
+    // Fetch recent blockhash
+    let blockhash_resp = get_latest_blockhash(rpc_url, kv).await?;
+    let blockhash_bytes = pubkey_from_base58(&blockhash_resp.value)?;
+
+    // Serialize with BOTH instructions
+    let tx_bytes =
+        serialize_transaction(&message_accounts, &[refund_ix, close_ix], &blockhash_bytes);
+    let tx_b64 = base64::engine::general_purpose::STANDARD.encode(&tx_bytes);
+
+    Ok(RefundAndCloseTransaction {
+        transaction_b64: tx_b64,
+        message: "Refund USDC and reclaim deposit rent in one transaction".to_string(),
     })
 }
 

@@ -191,7 +191,9 @@ pub async fn create_event(kv: &KvStore, req: &CreateEventRequest) -> Result<Even
             .collect(),
         claim_base_url: req.claim_base_url.trim().to_string(),
         merkle_tree: req.merkle_tree.trim().to_string(),
-        deposit_enabled: req.deposit_enabled,
+        // Deposit auto-enabled when format includes in-person track.
+        // If organizer explicitly sets deposit_enabled=true for online-only, honor it.
+        deposit_enabled: req.deposit_enabled || req.event_format.has_in_person(),
         deposit_amount_usdc: req.deposit_amount_usdc,
         deposit_amount_thb: req.deposit_amount_thb,
         promptpay_id: req.promptpay_id.trim().to_string(),
@@ -201,6 +203,7 @@ pub async fn create_event(kv: &KvStore, req: &CreateEventRequest) -> Result<Even
         refund_deadline_hours: req.refund_deadline_hours,
         description: req.description.trim().to_string(),
         location: req.location.trim().to_string(),
+        event_format: req.event_format.clone(),
         created_at: now.clone(),
         updated_at: now,
     };
@@ -382,6 +385,15 @@ pub async fn update_event(
     }
     if let Some(ref v) = req.location {
         config.location = v.trim().to_string();
+    }
+    if let Some(ref v) = req.event_format {
+        config.event_format = v.clone();
+        // Re-sync deposit_enabled when format changes:
+        // - In-person/Hybrid formats always enable deposit
+        // - Online format disables auto-deposit (organizer can still set explicitly)
+        if v.has_in_person() {
+            config.deposit_enabled = true;
+        }
     }
 
     config.updated_at = chrono::Utc::now().to_rfc3339();
@@ -588,6 +600,7 @@ pub async fn seed_from_config(
         refund_deadline_hours: 168,
         description: String::new(),
         location: String::new(),
+        event_format: event_checkin_domain::models::event::EventFormat::InPerson,
         created_at: now.clone(),
         updated_at: now,
     };

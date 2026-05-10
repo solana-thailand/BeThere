@@ -275,6 +275,24 @@ pub fn Scanner() -> impl IntoView {
     let (flash_enabled, set_flash_enabled) = signal(true);
     let (audio_enabled, set_audio_enabled) = signal(is_audio_enabled_js());
 
+    // Wallet detection — pre-poll on mount like events_page.rs.
+    // Phantom injects async after page load; a single sync call returns [].
+    let (detected_wallets, set_detected_wallets) = signal(Vec::<String>::new());
+    leptos::task::spawn_local(async move {
+        let mut wallets = get_detected_wallets_js();
+        if wallets.is_empty() {
+            for _ in 0..10 {
+                gloo::timers::future::TimeoutFuture::new(300).await;
+                wallets = get_detected_wallets_js();
+                if !wallets.is_empty() {
+                    break;
+                }
+            }
+        }
+        log::info!("[scanner] detected wallets: {:?}", wallets);
+        set_detected_wallets.set(wallets);
+    });
+
     // Session tracking signals
     let (session_total, set_session_total) = signal(0u32);
     let (session_success, set_session_success) = signal(0u32);
@@ -945,6 +963,7 @@ pub fn Scanner() -> impl IntoView {
                                     handle_escrow_wallet_connect,
                                     handle_escrow_sign,
                                     escrow_enabled.get(),
+                                    detected_wallets.get(),
                                 )
                             }}
                         </Show>
@@ -1208,6 +1227,7 @@ fn render_check_in_state<E1, E2, E3>(
     on_escrow_wallet_connect: E2,
     on_escrow_sign: E3,
     escrow_enabled: bool,
+    wallets: Vec<String>,
 ) -> AnyView
 where
     E1: Fn(web_sys::MouseEvent) + Clone + 'static,
@@ -1475,7 +1495,6 @@ where
         // --- Escrow on-chain check-in states ---
         CheckInState::EscrowChooseWallet { check_in_data, .. } => {
             let name = check_in_data.name.clone();
-            let wallets = get_detected_wallets_js();
             view! {
                 <div>
                     <div class="result-success">

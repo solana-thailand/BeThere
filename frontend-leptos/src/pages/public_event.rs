@@ -36,6 +36,7 @@ pub struct PublicEventData {
     pub deposit_enabled: bool,
     pub deposit_amount_usdc: u64,
     pub deposit_amount_thb: u64,
+    pub event_format: crate::api::EventFormat,
     pub nft_image_url: String,
     pub nft_name_template: String,
     pub nft_symbol: String,

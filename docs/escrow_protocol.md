@@ -37,6 +37,20 @@ Key properties:
 - **NFT badge** is minted as proof of attendance (separate from the deposit/refund flow).
 - **Time-based refund eligibility** — after the event ends, attendees can always self-refund regardless of check-in status. This is the critical anti-rug-pull mechanism.
 
+### Event Format Determines Escrow Behavior
+
+Events now have a **format** that determines whether the escrow protocol applies:
+
+| Event Format | Deposit Required | Escrow | Check-in | Refund |
+|---|---|---|---|---|
+| **In-Person** | ✅ Yes (mandatory) | ✅ Yes | QR scan by staff | ✅ Yes (refund+close in 1 TX) |
+| **Hybrid** | ✅ Yes (in-person track only) | ✅ Yes | QR scan for in-person attendees | ✅ Yes (refund+close in 1 TX) |
+| **Online** | ❌ No | ❌ No | Quest completion = virtual check-in | N/A |
+
+- **In-person and hybrid events** use the full deposit-backed escrow protocol. Deposit is **required**, not optional.
+- **Online events** do not use this protocol at all. Attendance verification is handled via quest/quiz completion (see [Online Attendee Flow](#online-attendee-flow)).
+- **Hybrid events** have two tracks: in-person attendees deposit and check in physically; online attendees follow the quest-based flow with no deposit.
+
 ---
 
 ## 3. Win-Win-Win Model
@@ -47,6 +61,7 @@ Key properties:
 - **NFT badge** as portable, verifiable proof of attendance.
 - **Protected from rug pulls** via time-based refund eligibility. After the event ends, you can always get your money back.
 - **Transparent.** Verify escrow state on Solscan at any time. No "trust us" required.
+- **Online attendees** participate without financial commitment — no deposit, no risk.
 
 ### Organizer Wins
 
@@ -54,6 +69,7 @@ Key properties:
 - **Higher attendance rate.** A deposit — even fully refundable — creates skin in the game.
 - **Reputation builds through transparency.** Honest organizers benefit from verifiable escrow.
 - **Cannot steal from attendees who showed up.** The protocol's time-based refund mechanism makes this impossible.
+- **Hybrid events** let organizers run physical + virtual tracks from one event page.
 
 ### Platform Wins
 
@@ -61,6 +77,7 @@ Key properties:
 - **Sustainable revenue** via optional protocol fee on forfeited deposits only (e.g., 2–5%).
 - **Not a tax on honest attendees.** Only no-shows generate platform revenue.
 - **Network effects.** More trust → more events → more attendees → more trust.
+- **Broader reach** with hybrid/online events — not limited to physical venues.
 
 ---
 
@@ -115,33 +132,72 @@ This aligns incentives correctly:
 
 ```
 Organizer → Create Event (off-chain KV store)
-         → Sets title, description, location, max attendees, deposit_amount, etc.
-
-Organizer → Initialize Escrow (on-chain, 1 transaction)
-         → Sets: deposit_amount, event_end, refund_deadline, organizer_wallet
-         → All fields immutable after creation
-         → Escrow PDA: seeds = ["escrow", organizer_pubkey, event_id]
-         → Vault (ATA) created for USDC deposits
+         → Sets title, description, location, max attendees
+         → Chooses event FORMAT: In-Person | Online | Hybrid
+         → If In-Person or Hybrid:
+             → deposit_amount is REQUIRED (escrow mandatory)
+             → Initialize Escrow (on-chain, 1 transaction)
+             → Sets: deposit_amount, event_end, refund_deadline, organizer_wallet
+             → All fields immutable after creation
+             → Escrow PDA: seeds = ["escrow", organizer_pubkey, event_id]
+             → Vault (ATA) created for USDC deposits
+         → If Online:
+             → No escrow, no deposit_amount
+             → Quest/quiz gates configured for attendance verification
 ```
 
 ### Phase 2: Deposit (Attendee)
 
 ```
 Attendee → Visit event page → Connect wallet
-Attendee → Sign deposit transaction (USDC → vault)
-         → AttendeeDeposit PDA created: seeds = ["deposit", attendee_pubkey, event_id]
-         → On-chain validates: escrow is_active, correct deposit amount
-         → Attendee's RSVP confirmed on-chain
+
+For In-Person events:
+  Attendee → Sign deposit transaction (USDC → vault)
+           → AttendeeDeposit PDA created: seeds = ["deposit", attendee_pubkey, event_id]
+           → On-chain validates: escrow is_active, correct deposit amount
+           → Attendee's RSVP confirmed on-chain
+
+For Hybrid events:
+  In-person track (attendee selects in-person participation):
+    Attendee → Sign deposit transaction (USDC → vault)
+             → Same flow as in-person events above
+  
+  Online track (attendee selects online participation):
+    No deposit required
+    → RSVP confirmed off-chain
+    → Quest/quiz assigned for virtual check-in
+
+For Online events:
+  No deposit flow. RSVP is off-chain.
+  → See Online Attendee Flow section below
 ```
 
-### Phase 3: Event Day (Check-in)
+### Phase 3: Event Day — In-Person Check-in
 
 ```
-Organizer → Scan attendee QR code → Sign mark_checked_in transaction
-         → Sets attendee_deposit.checked_in = true
-         → Only organizer can sign (has_one constraint on escrow.authority)
-         → One transaction per attendee (no batch ops to prevent errors)
+For In-Person and Hybrid events (in-person track):
+  Organizer → Scan attendee QR code → Sign mark_checked_in transaction
+           → Sets attendee_deposit.checked_in = true
+           → Only organizer can sign (has_one constraint on escrow.authority)
+           → One transaction per attendee (no batch ops to prevent errors)
+
+For Online track / Online events:
+  No physical check-in.
+  → Attendance verified via quest completion (see Online Attendee Flow)
 ```
+
+### Phase 3.5: Online Track — Quest-Based Verification
+
+For **online attendees in hybrid events** and **all attendees in online-only events**, there is no physical check-in. Instead:
+
+```
+Online Attendee → Complete quest/quiz/adventure challenge
+               → Quest completion = virtual check-in
+               → Marks attendance off-chain (no on-chain escrow involved)
+               → Unlocks NFT claim gate
+```
+
+See [Online Attendee Flow](#online-attendee-flow) for the full flow.
 
 ### Phase 4: Refund Window (After Event)
 
@@ -150,11 +206,18 @@ After event_end timestamp:
   Checked-in attendees → can refund anytime
   Non-checked-in attendees → can refund anytime (anti-rug-pull)
 
-  Refund flow:
-  Attendee → Sign refund transaction (vault → attendee USDC ATA)
+  Refund flow (combined TX — refund + close_deposit in 1 transaction):
+  Attendee → Sign combined transaction:
+           1. refund instruction (vault → attendee USDC ATA)
+           2. close_deposit instruction (reclaim rent-exempt SOL)
          → On-chain validates: event_end passed, not already refunded
          → USDC transferred back to attendee
          → attendee_deposit.refunded = true
+         → AttendeeDeposit PDA closed, rent reclaimed
+         → Single TX = simpler UX (attendee signs once, gets USDC + rent back)
+
+  Note: refund and close_deposit can still be called as separate transactions
+  for backwards compatibility, but the combined path is preferred for UX.
 ```
 
 ### Phase 5: Forfeiture (After Refund Deadline)
@@ -179,8 +242,61 @@ After all funds settled (total_deposited == total_refunded + total_forfeited):
   Organizer → Sign close_event transaction
            → Reclaims rent (SOL used for PDA storage)
            → Escrow PDA closed
-           → All AttendeeDeposit PDAs for this event closed
+           → All remaining AttendeeDeposit PDAs for this event closed
 ```
+
+---
+
+## Online Attendee Flow
+
+Online attendees (in both online-only and hybrid events) follow a different path with no financial escrow:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                  Online Attendee Flow                        │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  1. RSVP (off-chain)                                        │
+│     → No deposit, no wallet required at RSVP time           │
+│     → Attendee selects "Online" participation type          │
+│                                                              │
+│  2. Quest / Quiz / Adventure (during event window)          │
+│     → Attendee completes a challenge gate                   │
+│     → Could be: quiz questions, adventure tasks, etc.       │
+│     → Quest completion = virtual check-in                   │
+│                                                              │
+│  3. Attendance Verified                                     │
+│     → Marked as attended (off-chain)                        │
+│     → Unlocks NFT claim gate                                │
+│                                                              │
+│  4. NFT Claim                                               │
+│     → Attendee connects wallet                              │
+│     → Claims attendance NFT (if quest completed)            │
+│     → Same NFT as in-person attendees (same collection)     │
+│                                                              │
+│  ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─  │
+│                                                              │
+│  What does NOT happen:                                       │
+│  ✗ No deposit                                               │
+│  ✗ No escrow PDA                                            │
+│  ✗ No refund                                                │
+│  ✗ No on-chain check-in                                     │
+│  ✗ No forfeiture                                            │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Why no deposit for online?**
+
+- Online events have near-zero marginal cost per attendee (no venue, no food).
+- The commitment mechanism for online is **quest completion**, not financial skin-in-the-game.
+- Quest gates provide engagement value (attendees learn something) rather than financial friction.
+
+**NFT claim via quest gates:**
+
+- The NFT serves as proof of participation, same as in-person events.
+- Quest completion ensures attendees actually engaged with the content.
+- For hybrid events, both tracks (in-person and online) mint from the same NFT collection, but via different verification paths.
 
 ---
 
@@ -231,6 +347,7 @@ After all funds settled (total_deposited == total_refunded + total_forfeited):
 - **Cost:** $0 if they show up (full refund guaranteed by protocol).
 - **Risk:** Deposit amount if they no-show (fair penalty for breaking commitment).
 - **Benefit:** Guaranteed spot, NFT badge as proof of attendance, trustworthy event experience.
+- **Online attendees:** $0 always. No deposit, no risk. Engagement via quests instead.
 
 ### For Platform
 
@@ -262,6 +379,9 @@ EventEscrow
 ├── immutable after creation (except total_* counters and is_active)
 └── rent: ~300 bytes
 
+Note: EventEscrow PDA is only created for In-Person and Hybrid events.
+      Online-only events have no on-chain escrow accounts.
+
 AttendeeDeposit
 ├── seeds: ["deposit", attendee_pubkey, event_id]
 ├── fields:
@@ -271,7 +391,7 @@ AttendeeDeposit
 │   ├── checked_in: bool             (Set by organizer during event)
 │   ├── refunded: bool               (Set when refund processed)
 │   └── bump: u8                     (PDA bump seed)
-├── one per attendee per event
+├── one per attendee per event (in-person depositors only)
 └── rent: ~150 bytes
 
 Vault (Token Account)
@@ -288,10 +408,11 @@ Vault (Token Account)
 | `deposit` | Attendee | Before event | USDC → vault, create AttendeeDeposit PDA |
 | `mark_checked_in` | Organizer | Event day | Set `AttendeeDeposit.checked_in = true` |
 | `refund` | Attendee | After `event_end` | Vault → attendee USDC ATA, set `refunded = true` |
+| `refund_and_close` | Attendee | After `event_end` | Combined: refund + close_deposit in 1 TX (preferred) |
 | `deactivate_event` | Organizer | Before event starts | Set `is_active = false`, stop new deposits |
 | `claim_forfeited` | Organizer | After `refund_deadline` | Transfer unclaimed deposits to organizer |
 | `close_event` | Organizer | After settlement | Reclaim rent, close all PDAs |
-| `close_deposit` | Attendee | Closes `AttendeeDeposit` PDA, reclaims rent-exempt SOL | Event deactivated OR refund completed |
+| `close_deposit` | Attendee | After refund or event deactivation | Close `AttendeeDeposit` PDA, reclaim rent-exempt SOL |
 
 ### Instruction Ordering Constraints
 
@@ -300,7 +421,7 @@ create_event → deposit (N times) → deactivate_event
                                    ↓
                               mark_checked_in (N times)
                                    ↓
-                              refund (N times, after event_end)
+                              refund | refund_and_close (N times, after event_end)
                                    ↓
                               claim_forfeited (after refund_deadline)
                                    ↓
@@ -440,8 +561,8 @@ The `refund_deadline_hours` field creates a time-bounded refund window after the
 ### Commitment Device
 
 The deposit acts as a pre-commitment mechanism. Research shows that people who pre-commit to an action are significantly more likely to follow through. The deposit + NFT claim flow creates a two-stage commitment:
-1. **Financial commitment** (deposit) — before the event
-2. **Identity commitment** (NFT claim) — after the event
+1. **Financial commitment** (deposit) — before the event (in-person/hybrid only)
+2. **Identity commitment** (NFT claim) — after the event (all formats)
 
 ### Organizer Nudge (Loss Framing)
 
@@ -459,14 +580,18 @@ When creating events, organizers who haven't enabled deposits see: "Events witho
 
 4. **Multi-organizer events.** Should multiple wallets be able to mark check-ins? Useful for large events with multiple entry points. Suggestion: future feature, not V1.
 
-5. **Deposit currency.** USDC only for V1, or should we support SOL and other SPL tokens? Suggestion: USDC only. Price stability matters for deposits.
-   **Resolution**: Implemented as USDC (on-chain) + THB/PromptPay (off-chain) dual-track in V1.
+5. ~~**Deposit currency.** USDC only for V1, or should we support SOL and other SPL tokens? Suggestion: USDC only. Price stability matters for deposits.~~
+   **✅ Resolved:** Implemented as USDC (on-chain) + THB/PromptPay (off-chain) dual-track in V1.
 
 6. **Event cancellation.** What happens if the organizer cancels the event before `event_end`? All deposits should be immediately refundable. Needs a `cancel_event` instruction.
+
+7. **Online attendees deposit in hybrid events.** Should online attendees in hybrid events also be able to optionally deposit? This would create a financial commitment for online participation (e.g., to reduce virtual no-shows for workshops with limited virtual seats). **Status:** Not in V1. Consider as Future Option B if organizers request it.
 
 ---
 
 ## 12. Implementation Checklist
+
+### On-Chain Program
 
 - [x] On-chain program: `create_event` instruction
 - [x] On-chain program: `deposit` instruction
@@ -478,15 +603,36 @@ When creating events, organizers who haven't enabled deposits see: "Events witho
 - [x] On-chain program: `close_deposit` instruction (rent reclamation)
 - [x] On-chain program: 26 SVM unit tests (quasar-svm)
 - [x] On-chain program: 13 Kani formal verification harnesses
+- [ ] On-chain program: `refund_and_close` combined instruction (refund + close_deposit in 1 TX)
+
+### Backend
+
 - [x] Backend: lock escrow-critical fields after `escrow_address` set (P1)
 - [x] Backend: enforce max deposit cap $1,000 USDC (P2)
 - [x] Backend: archive guards — check on-chain state before allowing archive (P3)
 - [x] Backend: cluster-aware explorer link generation
+- [ ] Backend: event format field on event model (`InPerson` | `Online` | `Hybrid`)
+- [ ] Backend: auto-enable deposit requirement for in-person/hybrid event formats
+- [ ] Backend: self-registration API for public event page (attendee signs up without organizer invite)
+- [ ] Backend: online attendee claim path (quest-based attendance verification)
+- [ ] Backend: participation type field for hybrid events (`in_person` | `online`)
+
+### Frontend
+
 - [x] Frontend: deposit flow (connect wallet → sign TX → confirm)
 - [x] Frontend: refund flow (after event → sign TX → confirm)
 - [x] Frontend: check-in flow (organizer QR scan → sign TX)
 - [x] Frontend: escrow state display (Solscan links)
+- [ ] Frontend: format selector on event creation form (In-Person / Online / Hybrid)
+- [ ] Frontend: hide deposit settings for online-only events
+- [ ] Frontend: participation type selector for hybrid events (in-person with deposit / online no deposit)
+- [ ] Frontend: online attendee quest/quiz UI for virtual check-in
+- [ ] Frontend: combined refund+close TX (single "Claim Refund" button, 1 signature)
+
+### Testing & Security
+
 - [x] Integration tests (devnet with real USDC faucet)
 - [x] Security review of on-chain program (11 findings, all fixed)
 - [ ] Load testing: 100+ concurrent deposits
 - [ ] External security audit submission (Audit Arena)
+- [ ] End-to-end test: hybrid event (in-person deposit + online quest paths)

@@ -1122,6 +1122,7 @@ pub async fn mark_refund_handler(
 
 /// Request body for building a refund transaction.
 #[derive(Debug, serde::Deserialize)]
+#[allow(dead_code)]
 pub struct RefundTxRequest {
     /// Event ID.
     pub event_id: String,
@@ -1133,6 +1134,7 @@ pub struct RefundTxRequest {
 
 /// Response with the serialized refund transaction.
 #[derive(Debug, serde::Serialize)]
+#[allow(dead_code)]
 pub struct RefundTxResponse {
     /// Base64-encoded serialized transaction (unsigned — wallet signs).
     pub transaction: String,
@@ -1140,19 +1142,39 @@ pub struct RefundTxResponse {
     pub message: String,
 }
 
-/// Build a refund transaction for an attendee's verified USDC deposit.
+/// Request for combined refund + close_deposit transaction.
+#[derive(serde::Deserialize)]
+pub struct RefundAndCloseTxRequest {
+    /// Event ID.
+    pub event_id: String,
+    /// Attendee API ID from Google Sheets.
+    pub attendee_id: String,
+    /// Attendee's Solana wallet address (base58).
+    pub wallet_address: String,
+}
+
+/// Response with the serialized combined refund+close_deposit transaction.
+#[derive(Debug, serde::Serialize)]
+pub struct RefundAndCloseTxResponse {
+    /// Base64-encoded serialized transaction (unsigned — wallet signs).
+    pub transaction: String,
+    /// Human-readable message for wallet confirmation.
+    pub message: String,
+}
+
+/// Build a combined refund + close_deposit transaction for an attendee's verified USDC deposit.
 ///
-/// This is a **public endpoint** — attendees call it to claim their refund.
-/// The attendee's wallet signature provides on-chain authentication.
+/// This is a **public endpoint** — attendees call it to claim their refund AND reclaim rent
+/// in a single atomic transaction. One wallet signature does both.
 ///
 /// Prerequisites:
 /// - Event has deposits enabled and escrow initialized
 /// - Attendee has a verified USDC deposit
 #[worker::send]
-pub async fn refund_tx_handler(
+pub async fn refund_and_close_tx_handler(
     State(state): State<AppState>,
-    Json(body): Json<RefundTxRequest>,
-) -> Result<ApiOk<RefundTxResponse>, WorkerError> {
+    Json(body): Json<RefundAndCloseTxRequest>,
+) -> Result<ApiOk<RefundAndCloseTxResponse>, WorkerError> {
     let kv = state
         .events_kv
         .as_ref()
@@ -1232,8 +1254,8 @@ pub async fn refund_tx_handler(
         state.config.solana.api_key
     );
 
-    // Build the refund transaction
-    let tx = crate::solana_escrow::build_refund_transaction(
+    // Build the combined refund + close_deposit transaction
+    let tx = crate::solana_escrow::build_refund_and_close_transaction(
         &rpc_url,
         Some(kv),
         organizer_pubkey,
@@ -1241,15 +1263,15 @@ pub async fn refund_tx_handler(
         &body.wallet_address,
     )
     .await
-    .map_err(|e| AppError::Internal(format!("failed to build refund TX: {e}")))?;
+    .map_err(|e| AppError::Internal(format!("failed to build refund+close TX: {e}")))?;
 
     tracing::info!(
         attendee_id = %body.attendee_id,
         event_id = %event.id,
-        "Refund TX built for attendee"
+        "Refund+Close TX built for attendee"
     );
 
-    Ok(ApiOk::new(RefundTxResponse {
+    Ok(ApiOk::new(RefundAndCloseTxResponse {
         transaction: tx.transaction_b64,
         message: tx.message,
     }))

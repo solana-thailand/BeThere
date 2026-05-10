@@ -45,6 +45,7 @@ pub async fn list_public_events(
                 "event_start_ms": e.event_start_ms,
                 "event_end_ms": e.event_end_ms,
                 "deposit_enabled": e.deposit_enabled,
+                "event_format": e.event_format.as_str(),
                 "created_at": e.created_at,
             })
         })
@@ -119,6 +120,7 @@ pub async fn get_public_event(
         "deposit_enabled": config.deposit_enabled,
         "deposit_amount_usdc": config.deposit_amount_usdc,
         "deposit_amount_thb": config.deposit_amount_thb,
+        "event_format": config.event_format.as_str(),
         "nft_image_url": config.nft_image_url,
         "nft_name_template": config.nft_name_template,
         "nft_symbol": config.nft_symbol,

@@ -937,6 +937,44 @@ pub enum EventStatus {
     Archived,
 }
 
+/// Event format (mirrors backend EventFormat).
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum EventFormat {
+    #[default]
+    InPerson,
+    Online,
+    Hybrid,
+}
+
+impl EventFormat {
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::InPerson => "In-Person",
+            Self::Online => "Online",
+            Self::Hybrid => "Hybrid",
+        }
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::InPerson => "in_person",
+            Self::Online => "online",
+            Self::Hybrid => "hybrid",
+        }
+    }
+
+    /// Whether this format includes an in-person track.
+    pub fn has_in_person(&self) -> bool {
+        matches!(self, Self::InPerson | Self::Hybrid)
+    }
+
+    /// Whether this format includes an online track.
+    pub fn has_online(&self) -> bool {
+        matches!(self, Self::Online | Self::Hybrid)
+    }
+}
+
 /// Lightweight event metadata from the events list endpoint.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct EventMeta {
@@ -962,6 +1000,8 @@ pub struct EventMeta {
     pub deposit_enabled: bool,
     #[serde(default)]
     pub escrow_address: String,
+    #[serde(default)]
+    pub event_format: EventFormat,
 }
 
 /// Full event configuration (from GET /api/events/{id}).
@@ -1027,6 +1067,8 @@ pub struct EventDetail {
     pub on_chain_event_id: u64,
     #[serde(default)]
     pub refund_deadline_hours: u32,
+    #[serde(default)]
+    pub event_format: EventFormat,
     #[serde(default)]
     pub created_at: String,
     #[serde(default)]
@@ -1105,9 +1147,9 @@ pub struct CreateEventBody {
     pub on_chain_event_id: u64,
     #[serde(default)]
     pub refund_deadline_hours: u32,
+    #[serde(default)]
+    pub event_format: EventFormat,
 }
-
-/// Request body for updating an existing event.
 /// Request body for PUT /api/events/{id} — update event.
 /// All fields optional for partial update.
 #[derive(Debug, Clone, Serialize, Default)]
@@ -1173,6 +1215,8 @@ pub struct UpdateEventBody {
     /// Optimistic concurrency: matches server `updated_at` to prevent blind overwrites.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub expected_updated_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub event_format: Option<EventFormat>,
 }
 
 /// Response from event create/update (partial data).
