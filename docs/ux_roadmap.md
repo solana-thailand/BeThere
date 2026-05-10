@@ -60,7 +60,7 @@ The single highest-leverage UX improvement. Right now, attendees receive a depos
 
 ### P0-2. Event Context Header on Deposit Page
 
-**Status**: ❌ Not started
+**Status**: ✅ Implemented (`frontend-leptos/src/pages/deposit.rs` + `worker/src/handlers/deposit.rs`)
 
 The deposit page currently jumps straight to payment options without showing what event the user is paying for. This is confusing and reduces trust.
 
@@ -87,7 +87,7 @@ The deposit page currently jumps straight to payment options without showing wha
 
 ### P1-1. Scanner Haptic/Audio Feedback
 
-**Status**: ❌ Not started
+**Status**: ✅ Implemented (`frontend-leptos/js/feedback.js` + `frontend-leptos/src/pages/scanner.rs`)
 
 Staff scanning QR codes at real events need **instant** confirmation without looking at the screen. Currently there's only a visual overlay — no vibration or sound.
 
@@ -207,7 +207,7 @@ Wallet errors are generic and provide no recovery guidance. Users see "Transacti
 
 ### P2-4. Live Event Showcase on Landing Page
 
-**Status**: ❌ Not started
+**Status**: ✅ Implemented (`frontend-leptos/src/pages/landing.rs` + `worker/src/handlers/public_event.rs`)
 
 The landing page has no evidence that the platform works. Showing real/upcoming events builds trust.
 
@@ -303,4 +303,4 @@ Submit the on-chain escrow program to a Solana audit firm (e.g., Audit Arena, Ot
 
 ---
 
-*Document created from UX audit session. Last updated: 2025-05-10.*
+*Document created from UX audit session. Last updated: 2026-05-10.*

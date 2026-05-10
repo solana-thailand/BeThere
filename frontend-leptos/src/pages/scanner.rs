@@ -145,6 +145,37 @@ async fn sign_and_send_tx_js(wallet_name: &str, transaction_b64: &str) -> Option
     }
 }
 
+// ===== Haptic & Audio Feedback JS Interop =====
+// Uses Web Audio API + Vibration API for instant scan feedback.
+// The JS module at frontend-leptos/js/feedback.js provides:
+// - feedbackSuccess()  — short vibration + high beep
+// - feedbackWarning()  — double-pulse vibration + medium tone
+// - feedbackError()    — long vibration + low tone
+// - enableAudio()      — opt in to audio beeps
+// - disableAudio()     — opt out of audio beeps
+// - isAudioFeedbackEnabled() — check session preference
+
+#[wasm_bindgen(module = "/js/feedback.js")]
+extern "C" {
+    #[wasm_bindgen(js_name = "feedbackSuccess")]
+    fn feedback_success_js();
+
+    #[wasm_bindgen(js_name = "feedbackWarning")]
+    fn feedback_warning_js();
+
+    #[wasm_bindgen(js_name = "feedbackError")]
+    fn feedback_error_js();
+
+    #[wasm_bindgen(js_name = "enableAudio")]
+    fn enable_audio_js();
+
+    #[wasm_bindgen(js_name = "disableAudio")]
+    fn disable_audio_js();
+
+    #[wasm_bindgen(js_name = "isAudioFeedbackEnabled")]
+    fn is_audio_enabled_js() -> bool;
+}
+
 // ===== State Types =====
 
 /// Current state of the check-in flow.
@@ -242,6 +273,7 @@ pub fn Scanner() -> impl IntoView {
     // Incremented on reset to restart the polling loop without leaving the tab.
     let (scan_round, set_scan_round) = signal(0u32);
     let (flash_enabled, set_flash_enabled) = signal(true);
+    let (audio_enabled, set_audio_enabled) = signal(is_audio_enabled_js());
 
     // Session tracking signals
     let (session_total, set_session_total) = signal(0u32);
@@ -381,6 +413,7 @@ pub fn Scanner() -> impl IntoView {
                 match api::check_in(&id, None).await {
                     Ok(result) => {
                         log::info!("[scanner] check-in successful: {}", result.name);
+                        feedback_success_js(); // Success — vibration + beep
                         set_state.set(CheckInState::Success(Box::new(result)));
                         set_s_success.update(|c| *c += 1);
                         api::invalidate_attendee_cache();
@@ -392,6 +425,7 @@ pub fn Scanner() -> impl IntoView {
                     }
                     Err(err) => {
                         log::error!("[scanner] check-in failed: {err}");
+                        feedback_error_js(); // Check-in failed — error tone
                         set_state.set(CheckInState::Error);
                         components::show_toast(
                             &set_t,
@@ -573,6 +607,7 @@ pub fn Scanner() -> impl IntoView {
                 match sign_and_send_tx_js(&wallet_name, &tx_resp.transaction).await {
                     Some(signature) => {
                         log::info!("[scanner] on-chain check-in TX sent: {}", signature);
+                        feedback_success_js(); // On-chain confirmed — vibration + beep
                         set_state.set(CheckInState::EscrowConfirmed {
                             check_in_data,
                             signature,
@@ -659,8 +694,9 @@ pub fn Scanner() -> impl IntoView {
             };
             match api::register_walkin(&req).await {
                 Ok(resp) => {
-                    log::info!("[scanner] walk-in registered: {}", resp.claim_url);
-                    set_state.set(CheckInState::WalkinSuccess {
+                        log::info!("[scanner] walk-in registered: {}", resp.claim_url);
+                        feedback_success_js(); // Walk-in registered — vibration + beep
+                        set_state.set(CheckInState::WalkinSuccess {
                         claim_url: resp.claim_url,
                         name: name_for_callback,
                     });
@@ -956,6 +992,23 @@ pub fn Scanner() -> impl IntoView {
                                 "⚡"
                                 {move || if flash_enabled.get() { " Flash On" } else { " Flash Off" }}
                             </button>
+                            <button
+                                class="scanner-manual-toggle"
+                                style=move || if audio_enabled.get() { "color:var(--accent);" } else { "" }
+                                on:click=move |_| {
+                                    let new_val = !audio_enabled.get();
+                                    if new_val {
+                                        enable_audio_js();
+                                    } else {
+                                        disable_audio_js();
+                                    }
+                                    set_audio_enabled.set(new_val);
+                                }
+                                title="Toggle scan audio feedback"
+                            >
+                                "🔊"
+                                {move || if audio_enabled.get() { " Sound On" } else { " Sound Off" }}
+                            </button>
                         </div>
                     </div>
                     // Session stats (shown when scans > 0)
@@ -1048,17 +1101,22 @@ fn process_attendee_id(
         match api::get_attendee(&attendee_id, None).await {
             Ok(data) => {
                 if data.is_checked_in {
+                    feedback_warning_js(); // Already checked in — warning tone
                     set_state.set(CheckInState::AlreadyCheckedIn(Box::new(data)));
                 } else if !data.is_approved {
+                    feedback_error_js(); // Not approved — error tone
                     set_state.set(CheckInState::NotApproved(Box::new(data)));
                 } else if !data.is_in_person {
+                    feedback_warning_js(); // Not in-person — warning tone
                     set_state.set(CheckInState::NotInPerson(Box::new(data)));
                 } else {
+                    // Found — no feedback yet (wait for actual check-in confirmation)
                     set_state.set(CheckInState::Found(Box::new(data)));
                 }
             }
             Err(err) => {
                 log::warn!("[scanner] attendee lookup failed for id={attendee_id}: {err}");
+                feedback_error_js(); // Not found — error tone
                 set_state.set(CheckInState::NotFound);
                 components::show_toast(&set_toast, "Attendee not found", ToastType::Error);
             }
