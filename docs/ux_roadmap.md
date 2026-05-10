@@ -133,7 +133,7 @@ The claim flow is multi-step (connect wallet → deposit → quiz → claim NFT)
 
 ### P1-3. Share CTA on NFT Mint Success
 
-**Status**: ❌ Not started
+**Status**: ✅ Already implemented (share section in `frontend-leptos/src/pages/claim.rs` — Success state)
 
 After successfully minting an NFT badge, users see a confirmation — but no way to share it. This is a free marketing opportunity.
 
