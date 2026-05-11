@@ -578,6 +578,62 @@ pub async fn mark_virtual_checked_in(
     Ok(timestamp)
 }
 
+/// Undo a check-in by clearing:
+/// - Column I: checked_in_at
+/// - Column J: checked_in_by
+/// - Column R: claim_token
+/// - Column S: claimed_at (if NFT was already claimed)
+///
+/// Reverses the effect of `mark_checked_in` so the attendee can be re-checked-in.
+pub async fn clear_checked_in(
+    row_index: usize,
+    staff_email: &str,
+    state: &AppState,
+    sheet_id: &str,
+    sheet_name: &str,
+    kv: Option<&KvStore>,
+) -> Result<(), String> {
+    let access_token = get_cached_access_token(state, kv).await?;
+
+    let data = vec![
+        ValueRange {
+            range: format!("{sheet_name}!I{row_index}"),
+            values: vec![vec![String::new()]],
+        },
+        ValueRange {
+            range: format!("{sheet_name}!J{row_index}"),
+            values: vec![vec![String::new()]],
+        },
+        ValueRange {
+            range: format!("{sheet_name}!R{row_index}"),
+            values: vec![vec![String::new()]],
+        },
+        ValueRange {
+            range: format!("{sheet_name}!S{row_index}"),
+            values: vec![vec![String::new()]],
+        },
+    ];
+
+    let url =
+        format!("https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values:batchUpdate");
+
+    let body = BatchUpdateRequest {
+        data,
+        value_input_option: "USER_ENTERED".to_string(),
+    };
+
+    batch_update_sheet(&url, &body, &access_token).await?;
+
+    tracing::info!(
+        row_index = row_index,
+        staff_email = %staff_email,
+        "cleared check-in fields (undo)"
+    );
+
+    invalidate_attendee_cache(kv, sheet_id, sheet_name).await;
+    Ok(())
+}
+
 /// Mark an attendee as claimed by writing wallet to column P and claimed_at to column S.
 /// Called after a successful cNFT mint to persist the claim on the Google Sheet.
 pub async fn mark_claimed(

@@ -9,6 +9,9 @@ use axum::{
     extract::{Path, Query, State},
 };
 
+use axum::http::StatusCode;
+use axum::response::IntoResponse;
+
 use crate::error::ApiOk;
 use uuid::Uuid;
 
@@ -173,4 +176,88 @@ pub async fn check_in(
     };
 
     Ok(ApiOk::new(response))
+}
+
+/// Query parameters for undo check-in.
+#[derive(Debug, serde::Deserialize)]
+pub struct UndoCheckInQuery {
+    pub event_id: Option<String>,
+}
+
+/// POST /api/attendees/:id/undo-checkin
+/// Undo a check-in by clearing checked_in_at, checked_in_by, claim_token columns.
+///
+/// Constraints:
+/// - Attendee must be currently checked in
+/// - Only staff/organizers can undo
+/// - No time-window restriction on server side (frontend enforces 30s UX)
+#[worker::send]
+pub async fn undo_check_in(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(id): Path<String>,
+    Query(query): Query<UndoCheckInQuery>,
+) -> Result<impl IntoResponse, crate::error::WorkerError> {
+    tracing::info!(attendee_id = %id, staff_email = %claims.email, "undo check-in request");
+
+    let event = resolve_event_with_access(&state, &claims, query.event_id.as_deref()).await?;
+
+    // Fetch the attendee
+    let kv = resolve_kv(&state);
+    let attendee: Attendee = sheets::get_attendee_by_id(
+        &id,
+        &state,
+        &event.sheet_id,
+        &event.sheet_name,
+        kv,
+    )
+    .await
+    .map_err(|e| {
+        tracing::error!(attendee_id = %id, error = %e, "undo check-in failed: could not fetch attendee");
+        AppError::Internal(format!("failed to look up attendee: {e}"))
+    })?
+    .ok_or_else(|| {
+        tracing::warn!(attendee_id = %id, "undo check-in failed: attendee not found");
+        AppError::NotFound(format!("attendee with id '{id}' not found"))
+    })?;
+
+    // Verify attendee IS checked in (reverse of check_in guard)
+    if !attendee.is_checked_in() {
+        tracing::warn!(
+            attendee_id = %attendee.api_id,
+            "undo check-in denied: attendee not checked in",
+        );
+        return Err(AppError::Validation("attendee is not checked in".to_string()).into());
+    }
+
+    // Clear check-in columns in Google Sheet
+    sheets::clear_checked_in(
+        attendee.row_index,
+        &claims.email,
+        &state,
+        &event.sheet_id,
+        &event.sheet_name,
+        kv,
+    )
+    .await
+    .map_err(|e| {
+        tracing::error!(
+            attendee_id = %attendee.api_id,
+            error = %e,
+            "undo check-in failed: could not clear sheet columns",
+        );
+        AppError::Internal(format!("failed to undo check-in: {e}"))
+    })?;
+
+    tracing::info!(
+        attendee_id = %attendee.api_id,
+        name = %attendee.display_name(),
+        staff_email = %claims.email,
+        "undo check-in successful",
+    );
+
+    Ok((
+        StatusCode::OK,
+        axum::Json(serde_json::json!({ "success": true })),
+    ))
 }
