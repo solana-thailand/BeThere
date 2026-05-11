@@ -277,7 +277,7 @@ pub async fn get_attendees(
 
 /// Build a HashMap of attendees keyed by `api_id`.
 /// Internally calls `get_attendees()` so KV caching is preserved.
-async fn get_attendees_map(
+pub async fn get_attendees_map(
     state: &AppState,
     sheet_id: &str,
     sheet_name: &str,

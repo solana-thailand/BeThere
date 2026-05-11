@@ -864,6 +864,7 @@ pub async fn upload_thb_slip_handler(
         uploaded_at: now.clone(),
         refunded: false,
         refunded_at: None,
+        attendee_name: None,
     };
 
     event_store::save_thb_deposit(kv, &thb_deposit)
@@ -1019,7 +1020,18 @@ pub async fn pending_thb_slips_handler(
         .filter(|d| !d.verified && d.slip_url.is_some())
         .collect();
 
-    Ok(ApiOk::new(PendingSlipResponse { slips: pending }))
+    // Enrich with attendee names from Google Sheets
+    let attendee_names =
+        resolve_attendee_names(&state, &event.sheet_id, &event.sheet_name, &pending).await;
+    let slips: Vec<ThbDeposit> = pending
+        .into_iter()
+        .map(|mut d| {
+            d.attendee_name = attendee_names.get(&d.attendee_id).cloned();
+            d
+        })
+        .collect();
+
+    Ok(ApiOk::new(PendingSlipResponse { slips }))
 }
 
 // ---------------------------------------------------------------------------
@@ -1051,7 +1063,18 @@ pub async fn refund_queue_handler(
         .filter(|d| d.verified && !d.refunded)
         .collect();
 
-    Ok(ApiOk::new(RefundQueueResponse { pending }))
+    // Enrich with attendee names from Google Sheets
+    let attendee_names =
+        resolve_attendee_names(&state, &event.sheet_id, &event.sheet_name, &pending).await;
+    let enriched: Vec<ThbDeposit> = pending
+        .into_iter()
+        .map(|mut d| {
+            d.attendee_name = attendee_names.get(&d.attendee_id).cloned();
+            d
+        })
+        .collect();
+
+    Ok(ApiOk::new(RefundQueueResponse { pending: enriched }))
 }
 
 // ---------------------------------------------------------------------------
@@ -2059,4 +2082,40 @@ pub async fn close_deposit_tx_handler(
         transaction: tx.transaction_b64,
         message: tx.message,
     }))
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/// Resolve attendee display names from Google Sheets for a list of deposits.
+/// Returns a map of `attendee_id → display_name`.
+/// Silently skips attendees not found — the frontend falls back to showing the raw ID.
+async fn resolve_attendee_names(
+    state: &AppState,
+    sheet_id: &str,
+    sheet_name: &str,
+    deposits: &[ThbDeposit],
+) -> std::collections::HashMap<String, String> {
+    use crate::handlers::ext::resolve_kv;
+    use crate::sheets;
+
+    if deposits.is_empty() {
+        return std::collections::HashMap::new();
+    }
+
+    let kv = resolve_kv(state);
+    match sheets::get_attendees_map(state, sheet_id, sheet_name, kv).await {
+        Ok(map) => deposits
+            .iter()
+            .filter_map(|d| {
+                map.get(&d.attendee_id)
+                    .map(|a| (d.attendee_id.clone(), a.display_name().to_string()))
+            })
+            .collect(),
+        Err(e) => {
+            tracing::warn!(error = %e, "failed to resolve attendee names for deposits");
+            std::collections::HashMap::new()
+        }
+    }
 }

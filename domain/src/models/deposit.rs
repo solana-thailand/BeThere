@@ -73,6 +73,9 @@ pub struct ThbDeposit {
     /// ISO 8601 timestamp when refund was marked complete.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub refunded_at: Option<String>,
+    /// Attendee display name (enriched from Google Sheets, not stored in KV).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub attendee_name: Option<String>,
 }
 
 /// Request body for POST /api/deposit/usdc — build a Solana Pay deposit TX.

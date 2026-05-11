@@ -543,6 +543,31 @@ pub fn Admin() -> impl IntoView {
                                     }).collect_view()}
                                 </select>
                             </div>
+                            // Compact attendance stats for selected event
+                            <Show when=move || stats.get().is_some() fallback=|| view! { <div></div> }>
+                                {move || {
+                                    let s = stats.get();
+                                    match s {
+                                        Some(st) => view! {
+                                            <div class="admin-event-stats-bar">
+                                                <div class="admin-event-stat">
+                                                    <span class="admin-event-stat-value">{format!("{}/{}", st.total_checked_in, st.total_approved)}</span>
+                                                    <span class="admin-event-stat-label">"Checked In"</span>
+                                                </div>
+                                                <div class="admin-event-stat">
+                                                    <span class="admin-event-stat-value">{format!("{:.0}%", st.check_in_percentage)}</span>
+                                                    <span class="admin-event-stat-label">"Progress"</span>
+                                                </div>
+                                                <div class="admin-event-stat">
+                                                    <span class="admin-event-stat-value">{format!("{}", st.total_remaining)}</span>
+                                                    <span class="admin-event-stat-label">"Remaining"</span>
+                                                </div>
+                                            </div>
+                                        }.into_any(),
+                                        None => view! { <div></div> }.into_any(),
+                                    }
+                                }}
+                            </Show>
                         </div>
                     </Show>
 

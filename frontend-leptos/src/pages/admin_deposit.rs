@@ -299,6 +299,7 @@ pub fn AdminDeposits(
                             let uploaded_formatted = utils::format_timestamp(&slip.uploaded_at);
                             let slip_url = slip.slip_url.clone();
                             let has_slip_url = slip_url.is_some();
+                            let display_name = slip.attendee_name.as_deref().unwrap_or(&slip.attendee_id);
 
                             let slip_for_approve = slip.clone();
                             let slip_for_reject = slip.clone();
@@ -309,7 +310,7 @@ pub fn AdminDeposits(
                                     <div class="flex-row-wrap">
                                         <div>
                                             <div class="admin-attendee-name">
-                                                {format!("Attendee: {}", utils::escape_html(&slip.attendee_id))}
+                                                {format!("Attendee: {}", utils::escape_html(display_name))}
                                             </div>
                                             <div class="admin-amount-line">
                                                 {amount}
@@ -383,6 +384,7 @@ pub fn AdminDeposits(
                             let amount = format!("{} THB", item.amount_thb);
                             let verified_by = item.verified_by.as_deref().unwrap_or("Unknown");
                             let verified_at = item.verified_at.as_deref().map(utils::format_timestamp).unwrap_or_else(|| "N/A".to_string());
+                            let display_name = item.attendee_name.as_deref().unwrap_or(&item.attendee_id);
 
                             let item_for_refund = item.clone();
 
@@ -391,7 +393,7 @@ pub fn AdminDeposits(
                                     <div class="flex-row-wrap">
                                         <div>
                                             <div class="admin-attendee-name">
-                                                {format!("Attendee: {}", utils::escape_html(&item.attendee_id))}
+                                                {format!("Attendee: {}", utils::escape_html(display_name))}
                                             </div>
                                             <div class="admin-amount-line">
                                                 {amount}

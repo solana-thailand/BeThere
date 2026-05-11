@@ -1920,6 +1920,8 @@ pub struct ThbDepositInfo {
     pub uploaded_at: String,
     pub refunded: bool,
     pub refunded_at: Option<String>,
+    #[serde(default)]
+    pub attendee_name: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, serde::Deserialize)]
