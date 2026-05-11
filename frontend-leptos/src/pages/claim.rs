@@ -1283,6 +1283,29 @@ pub fn Claim() -> impl IntoView {
     // Whether the attendee has a verified USDC deposit (fetched separately).
     let (has_usdc_deposit, set_has_usdc_deposit) = signal(false);
 
+    // Wallet adapter state — detected wallets and connected wallet info
+    let (detected_wallets, set_detected_wallets) = signal(Vec::<String>::new());
+    let (connected_wallet, set_connected_wallet) = signal(None::<(String, String)>); // (wallet_name, public_key)
+
+    // Detect installed wallets on mount (poll with delay for late injection)
+    {
+        let set_dw = set_detected_wallets;
+        leptos::task::spawn_local(async move {
+            let mut wallets = get_detected_wallets_js();
+            if wallets.is_empty() {
+                for _ in 0..10 {
+                    gloo::timers::future::TimeoutFuture::new(300).await;
+                    wallets = get_detected_wallets_js();
+                    if !wallets.is_empty() {
+                        break;
+                    }
+                }
+            }
+            log::info!("[claim] detected wallets: {:?}", wallets);
+            set_dw.set(wallets);
+        });
+    }
+
     // Extract token from URL params and fetch claim info on mount
     Effect::new(move |_| {
         let token = match params.get() {
@@ -1511,6 +1534,10 @@ pub fn Claim() -> impl IntoView {
         });
     };
 
+    // Clone signal setters for use in nested reactive closures
+    let set_w_for_connect = set_wallet_input;
+    let set_cw_for_connect = set_connected_wallet;
+
     view! {
         <div class="center-page">
             <Title text="Claim Your NFT — BeThere" />
@@ -1688,7 +1715,6 @@ pub fn Claim() -> impl IntoView {
                         ClaimState::Ready(data) => {
                             let checked_in_display = checked_in_label(&data.checked_in_at, &data.participation_type);
                             let locked_wallet = data.locked_wallet.clone();
-                            let locked_wallet_hint = data.locked_wallet.clone();
                             view! {
                                 <div class="claim-state-full">
                                     // Attendee welcome
@@ -1701,61 +1727,171 @@ pub fn Claim() -> impl IntoView {
                                     // NFT badge preview
                                     <NftBadgePreview />
 
-                                    // Wallet input
+                                    // Wallet input — wallet adapter + manual fallback
                                     <div class="card">
                                         <label class="claim-wallet-label">
                                             "Solana Wallet Address"
                                         </label>
-                                        // Locked wallet pill badge — shown when pre-registered wallet exists
+
+                                        // Locked wallet pill + wallet adapter section (single reactive closure)
                                         {move || {
-                                            match &locked_wallet {
-                                                Some(w) if !w.is_empty() => {
-                                                    let truncated = if w.len() > 12 {
-                                                        format!("{}...{}", &w[..4], &w[w.len()-4..])
-                                                    } else {
-                                                        w.clone()
-                                                    };
-                                                    view! {
-                                                        <div class="claim-wallet-locked">
-                                                            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                                                                <rect x="3" y="7" width="10" height="7" rx="1.5"></rect>
-                                                                <path d="M5 7V5a3 3 0 0 1 6 0v2"></path>
-                                                            </svg>
-                                                            <span class="locked-wallet-addr">{truncated}</span>
-                                                        </div>
-                                                    }.into_any()
+                                            // Locked wallet pill badge — shown when pre-registered wallet exists
+                                            let is_locked = matches!(&locked_wallet, Some(w) if !w.is_empty());
+                                            if is_locked {
+                                                let w = locked_wallet.as_ref().unwrap();
+                                                let truncated = if w.len() > 12 {
+                                                    format!("{}...{}", &w[..4], &w[w.len()-4..])
+                                                } else {
+                                                    w.clone()
+                                                };
+                                                view! {
+                                                    <div class="claim-wallet-locked">
+                                                        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                                                            <rect x="3" y="7" width="10" height="7" rx="1.5"></rect>
+                                                            <path d="M5 7V5a3 3 0 0 1 6 0v2"></path>
+                                                        </svg>
+                                                        <span class="locked-wallet-addr">{truncated}</span>
+                                                    </div>
+                                                }.into_any()
+                                            } else {
+                                                let cw = connected_wallet.get();
+                                                match cw {
+                                                    // Connected state: wallet icon + name + truncated address + connected badge
+                                                    Some((ref wallet_name, ref public_key)) => {
+                                                        let wallet_icon = match wallet_name.as_str() {
+                                                            "Phantom" => "👻",
+                                                            "Backpack" => "🎒",
+                                                            "Solflare" => "☀️",
+                                                            "Coinbase" => "🪙",
+                                                            _ => "💼",
+                                                        };
+                                                        let pk_short = if public_key.len() > 12 {
+                                                            format!("{}...{}", &public_key[..4], &public_key[public_key.len()-4..])
+                                                        } else {
+                                                            public_key.clone()
+                                                        };
+                                                        view! {
+                                                            <div class="wallet-connected-bar">
+                                                                <span class="wallet-icon-lg">{wallet_icon}</span>
+                                                                <div class="wallet-info-left">
+                                                                    <div class="wallet-label">"Connected via " {wallet_name.clone()}</div>
+                                                                    <div class="wallet-address-bold">{pk_short}</div>
+                                                                </div>
+                                                                <span class="badge badge-success u-ml-auto">"✅ Connected"</span>
+                                                            </div>
+                                                            <button
+                                                                class="btn btn-outline btn-sm"
+                                                                style="width:100%;margin-bottom:0.75rem;"
+                                                                on:click=move |_| { set_cw_for_connect.set(None); }
+                                                                type="button"
+                                                            >
+                                                                "Disconnect"
+                                                            </button>
+                                                        }.into_any()
+                                                    }
+                                                    // Not connected: show connect buttons + manual fallback
+                                                    None => {
+                                                        let wallets = detected_wallets.get();
+                                                        let has_wallets = !wallets.is_empty();
+                                                        view! {
+                                                            // Wallet adapter connect buttons
+                                                            {if has_wallets {
+                                                                let wallets_for_click = wallets.clone();
+                                                                view! {
+                                                                    <div class="wallet-list">
+                                                                        <p class="wallet-prompt">
+                                                                            "🔗 Connect your Solana wallet:"
+                                                                        </p>
+                                                                        {wallets_for_click.into_iter().map(|w| {
+                                                                            let w_clone = w.clone();
+                                                                            let wallet_icon = match w.as_str() {
+                                                                                "Phantom" => "👻",
+                                                                                "Backpack" => "🎒",
+                                                                                "Solflare" => "☀️",
+                                                                                "Coinbase" => "🪙",
+                                                                                _ => "💼",
+                                                                            };
+                                                                            view! {
+                                                                                <button
+                                                                                    class="btn btn-primary btn-block wallet-btn-inner"
+                                                                                    on:click={
+                                                                                        let w = w.clone();
+                                                                                        let set_w = set_w_for_connect;
+                                                                                        let set_cw = set_cw_for_connect;
+                                                                                        move |_| {
+                                                                                            let w = w.clone();
+                                                                                            let set_w = set_w;
+                                                                                            let set_cw = set_cw;
+                                                                                            leptos::task::spawn_local(async move {
+                                                                                                match connect_wallet_js(&w).await {
+                                                                                                    Some(pubkey) => {
+                                                                                                        log::info!("[claim] wallet connected: {} ({})", w, pubkey);
+                                                                                                        set_w.set(pubkey.clone());
+                                                                                                        set_cw.set(Some((w, pubkey)));
+                                                                                                    }
+                                                                                                    None => {
+                                                                                                        log::warn!("[claim] wallet connect failed for {}", w);
+                                                                                                    }
+                                                                                                }
+                                                                                            });
+                                                                                        }
+                                                                                    }
+                                                                                >
+                                                                                    <span>{wallet_icon}</span>
+                                                                                    <span>{format!("Connect {}", &w_clone)}</span>
+                                                                                </button>
+                                                                            }
+                                                                        }).collect::<Vec<_>>()}
+                                                                    </div>
+                                                                }.into_any()
+                                                            } else {
+                                                                view! { <div></div> }.into_any()
+                                                            }}
+
+                                                            // Divider — "or enter manually"
+                                                            {if has_wallets {
+                                                                view! {
+                                                                    <div class="claim-wallet-divider">
+                                                                        <span>"or enter manually"</span>
+                                                                    </div>
+                                                                }.into_any()
+                                                            } else {
+                                                                view! { <div></div> }.into_any()
+                                                            }}
+
+                                                            // Manual text input (always visible as fallback)
+                                                            <div class="claim-wallet-row">
+                                                                <input
+                                                                    class="claim-wallet-input"
+                                                                    type="text"
+                                                                    placeholder="Enter your Solana wallet address"
+                                                                    prop:value=move || wallet_input.get()
+                                                                    on:input=move |ev| {
+                                                                        let val = event_target_value(&ev);
+                                                                        set_wallet_input.set(val);
+                                                                    }
+                                                                />
+                                                                <button
+                                                                    class="claim-paste-btn"
+                                                                    on:click=handle_paste
+                                                                    type="button"
+                                                                >
+                                                                    "Paste"
+                                                                </button>
+                                                            </div>
+                                                            <p class="claim-wallet-hint">
+                                                                {
+                                                                    match &locked_wallet {
+                                                                        Some(w) if !w.is_empty() => "Use the pre-filled wallet address to claim.",
+                                                                        _ => "Tap Paste or type your Phantom, Solflare, or Backpack address.",
+                                                                    }
+                                                                }
+                                                            </p>
+                                                        }.into_any()
+                                                    }
                                                 }
-                                                _ => view! { <div></div> }.into_any(),
                                             }
                                         }}
-                                        <div class="claim-wallet-row">
-                                            <input
-                                                class="claim-wallet-input"
-                                                type="text"
-                                                placeholder="Enter your Solana wallet address"
-                                                prop:value=move || wallet_input.get()
-                                                on:input=move |ev| {
-                                                    let val = event_target_value(&ev);
-                                                    set_wallet_input.set(val);
-                                                }
-
-                                            />
-                                            <button
-                                                class="claim-paste-btn"
-                                                on:click=handle_paste
-                                                type="button"
-                                            >
-                                                "Paste"
-                                            </button>
-                                        </div>
-                                        <p class="claim-wallet-hint">
-                                            {move || {
-                                                match &locked_wallet_hint {
-                                                    Some(w) if !w.is_empty() => "Use the pre-filled wallet address to claim.".into_any(),
-                                                    _ => "Tap Paste or type your Phantom, Solflare, or Backpack address.".into_any(),
-                                                }
-                                            }}
-                                        </p>
                                     </div>
 
                                     // Claim button

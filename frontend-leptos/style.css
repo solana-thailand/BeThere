@@ -28,6 +28,11 @@
     --info: #3b82f6;
     --info-bg: rgba(59, 130, 246, 0.12);
     --info-border: rgba(59, 130, 246, 0.3);
+    --success-hover: #16a34a;
+    --danger-hover: #dc2626;
+    --text-primary-inverse: #1a1a1a;
+    --bg-google-hover: #f5f5f5;
+    --solana: #9945ff;
     --border: #2a2a2a;
     --radius: 10px;
     --radius-sm: 6px;
@@ -233,6 +238,7 @@ h3 {
 
 .btn:active {
     transform: scale(0.97) translateY(0);
+    opacity: 0.9;
 }
 
 .btn:disabled {
@@ -247,7 +253,7 @@ h3 {
     gap: 0.75rem;
     padding: 0.85rem 1.75rem;
     background: var(--text-heading);
-    color: #1a1a1a;
+    color: var(--text-primary-inverse);
     border: none;
     border-radius: var(--radius);
     font-size: 1rem;
@@ -265,7 +271,7 @@ h3 {
 }
 
 .btn-google:hover {
-    background: #f5f5f5;
+    background: var(--bg-google-hover);
     transform: translateY(-1px);
     box-shadow:
         0 4px 24px rgba(0, 0, 0, 0.25),
@@ -290,18 +296,13 @@ h3 {
     box-shadow: 0 4px 20px rgba(99, 102, 241, 0.35);
 }
 
-.btn:active {
-    transform: scale(0.97);
-    opacity: 0.9;
-}
-
 .btn-success {
     background: var(--success);
     color: var(--text-heading);
 }
 
 .btn-success:hover {
-    background: #16a34a;
+    background: var(--success-hover);
 }
 
 .btn-danger {
@@ -310,7 +311,7 @@ h3 {
 }
 
 .btn-danger:hover {
-    background: #dc2626;
+    background: var(--danger-hover);
 }
 
 .btn-outline {
@@ -906,6 +907,12 @@ nav a.active {
     border-width: 3px;
 }
 
+.spinner-sm {
+    width: 12px;
+    height: 12px;
+    border-width: 1.5px;
+}
+
 @keyframes spin {
     to {
         transform: rotate(360deg);
@@ -1464,6 +1471,23 @@ nav a.active {
     gap: 0.5rem;
 }
 
+/* Wallet divider between adapter buttons and manual input */
+.claim-wallet-divider {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin: 0.75rem 0;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+}
+.claim-wallet-divider::before,
+.claim-wallet-divider::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--border-color, #e2e8f0);
+}
+
 /* Wallet hint text */
 .claim-wallet-hint {
     font-size: 0.75rem;
@@ -1888,9 +1912,7 @@ nav a.active {
     );
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
-    transition:
-        border-color 0.2s,
-        background 0.2s;
+    transition: all 0.15s ease;
 }
 
 .attendee-item:hover {
@@ -2714,7 +2736,7 @@ nav a.active {
     gap: 0.5rem;
     cursor: pointer;
     transition: all 0.2s;
-    color: #ef4444;
+    color: var(--danger);
 }
 
 .heart-btn:hover {
@@ -2729,7 +2751,7 @@ nav a.active {
 .heart-count {
     font-size: 1rem;
     font-weight: 700;
-    color: #ef4444;
+    color: var(--danger);
     min-width: 1.5rem;
     text-align: center;
 }
@@ -3429,7 +3451,7 @@ nav a.active {
     border-radius: 20px;
     font-size: 0.75rem;
     font-weight: 600;
-    color: #9945ff;
+    color: var(--solana);
     background: rgba(153, 69, 255, 0.08);
     border: 1px solid rgba(153, 69, 255, 0.2);
     margin-bottom: 1.25rem;
@@ -3477,7 +3499,7 @@ nav a.active {
 }
 
 .landing-svg-icon.icon-chart svg {
-    stroke: #f59e0b;
+    stroke: var(--warning);
 }
 
 .landing-svg-icon.icon-proof {
@@ -3524,10 +3546,7 @@ nav a.active {
     background: var(--bg-tertiary);
     border: 1px solid var(--border);
     cursor: pointer;
-    transition:
-        color 0.2s,
-        background 0.2s,
-        border-color 0.2s;
+    transition: all 0.15s ease;
     white-space: nowrap;
 }
 
@@ -3704,7 +3723,7 @@ nav a.active {
 .landing-footer-powered svg {
     width: 14px;
     height: 14px;
-    color: #9945ff;
+    color: var(--solana);
 }
 
 .swimlane-mockup {
@@ -3799,6 +3818,28 @@ nav a.active {
     margin-bottom: 1.5rem;
 }
 
+/* Sidebar navigation group (3 groups: Event Setup, Check-in, Payments) */
+.admin-sidebar-group {
+    padding: 0 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.admin-sidebar-group-label {
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
+    padding: 0 0.75rem;
+    margin-bottom: 0.35rem;
+    opacity: 0.7;
+}
+
+.admin-sidebar-group .admin-sidebar-item {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.85rem;
+}
+
 .admin-sidebar-heading {
     font-size: 0.7rem;
     font-weight: 700;
@@ -3852,6 +3893,23 @@ nav a.active {
     height: 100%;
 }
 
+.admin-sidebar-kbd {
+    font-size: 0.65rem;
+    color: var(--text-muted, #888);
+    background: var(--bg-primary, #0d0d1a);
+    padding: 0.1rem 0.3rem;
+    border-radius: 0.2rem;
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+    margin-left: auto;
+    font-family: monospace;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+.admin-sidebar-item:hover .admin-sidebar-kbd,
+.admin-sidebar-item.active .admin-sidebar-kbd {
+    opacity: 1;
+}
+
 .admin-sidebar-stats {
     margin-top: auto;
     padding: 1rem 1rem 0.5rem;
@@ -3879,6 +3937,14 @@ nav a.active {
     text-transform: uppercase;
     letter-spacing: 0.04em;
     margin-top: 2px;
+}
+
+.admin-sidebar-stats-empty {
+    text-align: center;
+    color: var(--text-muted, #888);
+    font-size: 0.75rem;
+    padding: 0.75rem;
+    grid-column: 1 / -1;
 }
 
 .admin-content {
@@ -3917,6 +3983,8 @@ nav a.active {
         border-right: none;
         border-bottom: 1px solid var(--border);
         overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: thin;
     }
 
     .admin-sidebar-section {
@@ -3928,6 +3996,18 @@ nav a.active {
     }
 
     .admin-sidebar-heading {
+        display: none;
+    }
+
+    .admin-sidebar-group {
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+        padding: 0;
+        margin-bottom: 0;
+    }
+
+    .admin-sidebar-group-label {
         display: none;
     }
 
@@ -3950,6 +4030,10 @@ nav a.active {
     }
 
     .admin-sidebar-section:first-child {
+        display: none;
+    }
+
+    .admin-sidebar-kbd {
         display: none;
     }
 }
@@ -4082,12 +4166,12 @@ nav a.active {
 
 .admin-qr-count-success {
     font-weight: 600;
-    color: #22c55e;
+    color: var(--success);
 }
 
 .admin-qr-count-warning {
     font-weight: 600;
-    color: #f59e0b;
+    color: var(--warning);
 }
 
 .admin-qr-count-label {
@@ -5548,7 +5632,7 @@ nav a.active {
     flex-shrink: 0;
 }
 .adventure-banner b {
-    color: #f59e0b;
+    color: var(--warning);
 }
 
 /* === Claim Button (golden) === */
@@ -6192,7 +6276,7 @@ nav a.active {
     align-items: flex-start;
     flex-wrap: wrap;
     gap: 0.75rem;
-    transition: border-color 0.2s ease;
+    transition: all 0.15s ease;
 }
 
 .admin-slip-card:hover {
@@ -6221,7 +6305,7 @@ nav a.active {
 }
 
 .admin-slip-link {
-    color: var(--accent, #9945ff);
+    color: var(--accent);
     font-size: 0.85rem;
     text-decoration: none;
 }
@@ -6263,8 +6347,8 @@ nav a.active {
 }
 
 .form-input:focus {
-    border-color: var(--accent, #9945ff);
-    box-shadow: 0 0 0 2px rgba(153, 69, 255, 0.15);
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
 }
 
 .form-input::placeholder {
@@ -6471,7 +6555,7 @@ nav a.active {
     width: 14px;
     height: 14px;
     border-radius: 2px;
-    background: #22c55e;
+    background: var(--success);
     opacity: 0.6;
     vertical-align: middle;
 }
@@ -6481,7 +6565,7 @@ nav a.active {
     width: 14px;
     height: 14px;
     border-radius: 50%;
-    border: 2px solid #f59e0b;
+    border: 2px solid var(--warning);
     vertical-align: middle;
 }
 .form-section-icon-settings::before {
@@ -6745,6 +6829,46 @@ nav a.active {
     gap: 0.75rem;
 }
 
+/* --- Event Detail Card (summary for dropdown-selected event) --- */
+.event-detail-card {
+    background: var(--card-bg, var(--bg-card));
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.1));
+    border-radius: 0.75rem;
+    padding: 1.25rem;
+    margin-bottom: 1rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.event-detail-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.1));
+}
+
+.event-detail-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 1rem;
+}
+
+/* --- Compact Event Context Bar (Edit view) --- */
+.event-edit-context-bar {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.75rem 1rem;
+    margin-bottom: 0.75rem;
+    background: var(--card-bg, var(--bg-card));
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.1));
+    border-radius: 0.5rem;
+    flex-wrap: wrap;
+}
+
 /* --- Events Search (responsive width transition) --- */
 .events-search-input {
     width: 200px;
@@ -6795,7 +6919,15 @@ nav a.active {
 .tab:focus-visible,
 .admin-sidebar-item:focus-visible,
 .form-input:focus-visible,
-.events-search-input:focus-visible {
+.events-search-input:focus-visible,
+.claim-quiz-opt:focus-visible,
+.claim-paste-btn:focus-visible,
+.claim-btn-mint:focus-visible,
+.puzzle-opt:focus-visible,
+.dpad-btn:focus-visible,
+.quiz-ctrl-btn:focus-visible,
+.link-accent:focus-visible,
+.admin-tab-switch-link:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 2px;
 }
@@ -6847,6 +6979,19 @@ nav a.active {
         flex-direction: column;
         align-items: flex-start;
     }
+    .event-detail-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.75rem;
+    }
+    .event-detail-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    .event-edit-context-bar {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+    }
 }
 
 /* ===== Phase 9f: Inline Style Migration Classes ===== */
@@ -6881,6 +7026,17 @@ nav a.active {
 .dep-card-error {
     margin-top: 2rem;
     text-align: center;
+}
+
+/* QR payment polling indicator */
+.dep-qr-polling {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.25rem;
+    margin-top: 0.75rem;
+    font-size: 0.75rem;
+    color: var(--text-muted);
 }
 
 /* ---------- Deposit Info Note Box ---------- */
@@ -7650,6 +7806,20 @@ nav a.active {
 .btn-archive:hover {
     color: var(--warning-border);
 }
+.btn-confirm-danger {
+    background: var(--danger-hover);
+    color: white;
+    animation: pulse-danger 1s infinite;
+}
+@keyframes pulse-danger {
+    0%,
+    100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.7;
+    }
+}
 
 /* ---------- Admin Stats ---------- */
 
@@ -7699,6 +7869,65 @@ nav a.active {
     margin-bottom: 0.5rem;
 }
 
+/* --- Google Sheet Quick Guide --- */
+.sheet-guide-box {
+    padding: 0.75rem 1rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: rgba(99, 102, 241, 0.04);
+}
+
+.sheet-guide-heading {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 0.5rem;
+}
+
+.sheet-guide-steps {
+    margin: 0;
+    padding-left: 1.25rem;
+    font-size: 0.8rem;
+    line-height: 1.7;
+    color: var(--text-secondary);
+}
+
+.sheet-guide-steps li {
+    margin-bottom: 0.2rem;
+}
+
+.sheet-guide-link {
+    color: var(--accent);
+    text-decoration: underline;
+    text-decoration-color: rgba(99, 102, 241, 0.3);
+    text-underline-offset: 2px;
+    font-weight: 500;
+}
+
+.sheet-guide-link:hover {
+    text-decoration-color: var(--accent);
+}
+
+.sheet-guide-url {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0;
+    font-size: 0.75rem;
+    margin-top: 0.35rem;
+    padding: 0.4rem 0.6rem;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.04);
+    font-family: var(--font-mono, monospace);
+}
+
+.sheet-guide-highlight {
+    color: var(--accent);
+    background: rgba(99, 102, 241, 0.12);
+    padding: 0.1rem 0.3rem;
+    border-radius: 3px;
+    font-weight: 600;
+}
+
 /* ---------- Responsive overrides for Phase 9f ---------- */
 
 @media (max-width: 480px) {
@@ -7726,4 +7955,32 @@ nav a.active {
     .dep-config-row {
         flex-wrap: wrap;
     }
+}
+
+/* ===== Scanner Event Selector Bar ===== */
+.scanner-event-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    background: var(--bg-secondary, #1a1a24);
+    border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.1));
+    font-size: 0.85rem;
+    z-index: 10;
+    position: relative;
+}
+.scanner-event-select {
+    flex: 1;
+    padding: 0.35rem 0.5rem;
+    border-radius: 0.375rem;
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.15));
+    background: var(--bg-primary, #0d0d1a);
+    color: var(--text-primary);
+    font-size: 0.85rem;
+    max-width: 300px;
+}
+.scanner-event-label {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    white-space: nowrap;
 }

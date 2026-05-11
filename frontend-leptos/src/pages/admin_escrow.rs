@@ -91,8 +91,11 @@ impl EscrowAction {
     }
 
     fn icon(&self) -> &'static str {
-
-        ""
+        match self {
+            Self::Deactivate => "⏸",
+            Self::ClaimForfeited => "💰",
+            Self::CloseEvent => "🔒",
+        }
     }
 
     fn description(&self) -> &'static str {
@@ -108,6 +111,22 @@ impl EscrowAction {
             Self::Deactivate => "btn btn-outline",
             Self::ClaimForfeited => "btn-primary",
             Self::CloseEvent => "btn btn-outline",
+        }
+    }
+
+    fn button_label(&self) -> &'static str {
+        match self {
+            Self::Deactivate => "Deactivate Event",
+            Self::ClaimForfeited => "Claim Funds",
+            Self::CloseEvent => "Close & Reclaim",
+        }
+    }
+
+    fn loading_label(&self) -> &'static str {
+        match self {
+            Self::Deactivate => "Deactivating...",
+            Self::ClaimForfeited => "Claiming...",
+            Self::CloseEvent => "Closing...",
         }
     }
 }
@@ -135,6 +154,11 @@ pub fn AdminEscrow(
     // Per-action results — persists Solscan links across steps
     let (action_results, set_action_results) = signal(Vec::<(EscrowAction, Result<String, String>)>::new());
 
+    // Step ordering — must complete in sequence: Deactivate → Claim → Close
+    let (step1_done, set_step1_done) = signal(false);
+    let (step2_done, set_step2_done) = signal(false);
+    let (confirm_close, set_confirm_close) = signal(false);
+
     // Reset state when event changes
     Effect::new(move |_| {
         let _ = active_event_id.get();
@@ -143,6 +167,9 @@ pub fn AdminEscrow(
         set_completed_actions.set(Vec::new());
         set_signing_action.set(None);
         set_action_results.set(Vec::new());
+        set_step1_done.set(false);
+        set_step2_done.set(false);
+        set_confirm_close.set(false);
     });
 
     // Detect available wallets — poll sync detection with delays to wait
@@ -203,6 +230,8 @@ pub fn AdminEscrow(
         let set_sa = set_signing_action.clone();
         let set_ar = set_action_results.clone();
         let set_done = set_completed_actions.clone();
+        let set_s1 = set_step1_done.clone();
+        let set_s2 = set_step2_done.clone();
         let set_t = set_toast.clone();
         let set_trigger = set_action_to_execute.clone();
 
@@ -241,6 +270,11 @@ pub fn AdminEscrow(
                         Some(signature) => {
                             log::info!("[admin-escrow] {} TX confirmed: {}", action.label(), signature);
                             set_done.update(|v| v.push(action));
+                            match action {
+                                EscrowAction::Deactivate => set_s1.set(true),
+                                EscrowAction::ClaimForfeited => set_s2.set(true),
+                                EscrowAction::CloseEvent => {}
+                            }
                             set_ar.update(|v| v.push((action, Ok(signature.clone()))));
                             components::show_toast(
                                 &set_t,
@@ -397,36 +431,42 @@ pub fn AdminEscrow(
                             let done = is_done(action);
                             let signing = signing_action.get() == Some(action);
                             let border = if done { "var(--success,green)" } else { "var(--border)" };
-                            let check = "";
                             let trigger = set_action_to_execute.clone();
                             view! {
                                 <div style=format!("display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:0.5rem 0.75rem;border:1px solid {border};border-radius:6px;background:var(--bg-primary)")>
                                     <div>
                                         <div style="font-size:0.85rem;font-weight:600;color:var(--text-primary)">
-                                            {format!("{} Step 1: {}{}", action.icon(), action.label(), check)}
+                                            {format!("{} Step 1: {}", action.icon(), action.label())}
                                         </div>
                                         <div style="font-size:0.7rem;color:var(--text-secondary)">
                                             {action.description()}
                                         </div>
                                     </div>
                                     {if done {
-                                        view! { <span class="badge-done">"Done"</span> }.into_any()
+                                        view! {
+                                            <span style="display:inline-flex;align-items:center;gap:0.3rem;color:var(--success,green);font-weight:600;font-size:0.85rem">
+                                                "✓ Done"
+                                            </span>
+                                        }.into_any()
                                     } else if signing {
                                         view! {
                                             <div style="display:flex;align-items:center;gap:0.3rem">
                                                 <span class="spinner spinner-sm"></span>
-                                                <span style="font-size:0.75rem;color:var(--text-secondary)">"Signing..."</span>
+                                                <span style="font-size:0.75rem;color:var(--text-secondary)">{action.loading_label()}</span>
                                             </div>
                                         }.into_any()
                                     } else {
                                         view! {
-                                            <button
-                                                class=action.button_class()
-                                                style="white-space:nowrap;font-size:0.8rem;padding:0.4rem 0.8rem"
-                                                on:click=move |_| trigger.set(Some(action))
-                                            >
-                                                "Sign"
-                                            </button>
+                                            <div style="display:flex;align-items:center;gap:0.5rem">
+                                                <span style="font-size:1rem;opacity:0.6">"①"</span>
+                                                <button
+                                                    class=action.button_class()
+                                                    style="white-space:nowrap;font-size:0.8rem;padding:0.4rem 0.8rem"
+                                                    on:click=move |_| trigger.set(Some(action))
+                                                >
+                                                    {action.button_label()}
+                                                </button>
+                                            </div>
                                         }.into_any()
                                     }}
                                 </div>
@@ -438,37 +478,48 @@ pub fn AdminEscrow(
                             let action = EscrowAction::ClaimForfeited;
                             let done = is_done(action);
                             let signing = signing_action.get() == Some(action);
-                            let border = if done { "var(--success,green)" } else { "var(--border)" };
-                            let check = "";
+                            let ready = step1_done.get();
+                            let border = if done { "var(--success,green)" } else if ready { "var(--border)" } else { "var(--border-disabled,#ccc)" };
                             let trigger = set_action_to_execute.clone();
                             view! {
                                 <div style=format!("display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:0.5rem 0.75rem;border:1px solid {border};border-radius:6px;background:var(--bg-primary)")>
                                     <div>
                                         <div style="font-size:0.85rem;font-weight:600;color:var(--text-primary)">
-                                            {format!("{} Step 2: {}{}", action.icon(), action.label(), check)}
+                                            {format!("{} Step 2: {}", action.icon(), action.label())}
                                         </div>
                                         <div style="font-size:0.7rem;color:var(--text-secondary)">
                                             {action.description()}
                                         </div>
                                     </div>
                                     {if done {
-                                        view! { <span class="badge-done">"Done"</span> }.into_any()
+                                        view! {
+                                            <span style="display:inline-flex;align-items:center;gap:0.3rem;color:var(--success,green);font-weight:600;font-size:0.85rem">
+                                                "✓ Done"
+                                            </span>
+                                        }.into_any()
                                     } else if signing {
                                         view! {
                                             <div style="display:flex;align-items:center;gap:0.3rem">
                                                 <span class="spinner spinner-sm"></span>
-                                                <span style="font-size:0.75rem;color:var(--text-secondary)">"Signing..."</span>
+                                                <span style="font-size:0.75rem;color:var(--text-secondary)">{action.loading_label()}</span>
                                             </div>
                                         }.into_any()
                                     } else {
+                                        let disabled_style = if ready { String::new() } else { "opacity:0.4;cursor:not-allowed".to_string() };
                                         view! {
-                                            <button
-                                                class=action.button_class()
-                                                style="white-space:nowrap;font-size:0.8rem;padding:0.4rem 0.8rem"
-                                                on:click=move |_| trigger.set(Some(action))
-                                            >
-                                                "Sign"
-                                            </button>
+                                            <div style="display:flex;align-items:center;gap:0.5rem">
+                                                <span style="font-size:1rem;opacity:0.6">"②"</span>
+                                                <button
+                                                    class=action.button_class()
+                                                    style=format!("white-space:nowrap;font-size:0.8rem;padding:0.4rem 0.8rem;{disabled_style}")
+                                                    disabled=move || !ready
+                                                    on:click=move |_| {
+                                                        if ready { trigger.set(Some(action)); }
+                                                    }
+                                                >
+                                                    {action.button_label()}
+                                                </button>
+                                            </div>
                                         }.into_any()
                                     }}
                                 </div>
@@ -480,37 +531,63 @@ pub fn AdminEscrow(
                             let action = EscrowAction::CloseEvent;
                             let done = is_done(action);
                             let signing = signing_action.get() == Some(action);
-                            let border = if done { "var(--success,green)" } else { "var(--border)" };
-                            let check = "";
+                            let ready = step2_done.get();
+                            let confirming = confirm_close.get();
+                            let border = if done { "var(--success,green)" } else if ready { "var(--border)" } else { "var(--border-disabled,#ccc)" };
                             let trigger = set_action_to_execute.clone();
+                            let set_cc = set_confirm_close.clone();
                             view! {
                                 <div style=format!("display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:0.5rem 0.75rem;border:1px solid {border};border-radius:6px;background:var(--bg-primary)")>
                                     <div>
                                         <div style="font-size:0.85rem;font-weight:600;color:var(--text-primary)">
-                                            {format!("{} Step 3: {}{}", action.icon(), action.label(), check)}
+                                            {format!("{} Step 3: {}", action.icon(), action.label())}
                                         </div>
                                         <div style="font-size:0.7rem;color:var(--text-secondary)">
                                             {action.description()}
                                         </div>
                                     </div>
                                     {if done {
-                                        view! { <span class="badge-done">"Done"</span> }.into_any()
+                                        view! {
+                                            <span style="display:inline-flex;align-items:center;gap:0.3rem;color:var(--success,green);font-weight:600;font-size:0.85rem">
+                                                "✓ Done"
+                                            </span>
+                                        }.into_any()
                                     } else if signing {
                                         view! {
                                             <div style="display:flex;align-items:center;gap:0.3rem">
                                                 <span class="spinner spinner-sm"></span>
-                                                <span style="font-size:0.75rem;color:var(--text-secondary)">"Signing..."</span>
+                                                <span style="font-size:0.75rem;color:var(--text-secondary)">{action.loading_label()}</span>
                                             </div>
                                         }.into_any()
                                     } else {
+                                        let disabled_style = if ready { String::new() } else { "opacity:0.4;cursor:not-allowed".to_string() };
+                                        let btn_class = if confirming { "btn btn-confirm-danger" } else { action.button_class() };
+                                        let btn_label = if confirming { "⚠ Confirm Close?".to_string() } else { action.button_label().to_string() };
                                         view! {
-                                            <button
-                                                class=action.button_class()
-                                                style="white-space:nowrap;font-size:0.8rem;padding:0.4rem 0.8rem"
-                                                on:click=move |_| trigger.set(Some(action))
-                                            >
-                                                "Sign"
-                                            </button>
+                                            <div style="display:flex;align-items:center;gap:0.5rem">
+                                                <span style="font-size:1rem;opacity:0.6">"③"</span>
+                                                <button
+                                                    class=btn_class
+                                                    style=format!("white-space:nowrap;font-size:0.8rem;padding:0.4rem 0.8rem;{disabled_style}")
+                                                    disabled=move || !ready
+                                                    on:click=move |_| {
+                                                        if ready {
+                                                            if !confirming {
+                                                                set_cc.set(true);
+                                                                let reset = set_confirm_close.clone();
+                                                                gloo::timers::callback::Timeout::new(5000, move || {
+                                                                    reset.set(false);
+                                                                }).forget();
+                                                            } else {
+                                                                set_cc.set(false);
+                                                                trigger.set(Some(action));
+                                                            }
+                                                        }
+                                                    }
+                                                >
+                                                    {btn_label}
+                                                </button>
+                                            </div>
                                         }.into_any()
                                     }}
                                 </div>

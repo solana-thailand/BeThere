@@ -7,6 +7,7 @@ use leptos::prelude::*;
 
 use crate::api;
 use crate::components;
+use crate::utils;
 
 
 
@@ -146,7 +147,8 @@ fn default_form() -> EventForm {
         sheet_name: "checkin".to_string(),
         staff_sheet_name: "staff".to_string(),
         event_format: api::EventFormat::InPerson,
-        deposit_enabled: false,
+        quiz_enabled: true,
+        deposit_enabled: true,
         deposit_amount_usdc: String::new(),
         deposit_amount_thb: String::new(),
         promptpay_id: String::new(),
@@ -249,6 +251,7 @@ fn status_label(status: &api::EventStatus) -> &'static str {
 #[component]
 pub fn EventsPage(
     #[prop(name = "set_toast")] set_toast: WriteSignal<Option<components::ToastMessage>>,
+    #[prop(name = "active_event_id")] active_event_id: ReadSignal<Option<String>>,
 ) -> impl IntoView {
     // Get user role from ProtectedRoute context for role-based UI
     let user_role = use_context::<ReadSignal<String>>().unwrap_or_else(|| {
@@ -272,11 +275,11 @@ pub fn EventsPage(
     // Section collapse signals (true = expanded)
     let (sec_basic_open, set_sec_basic_open) = signal(true);
     let (sec_schedule_open, set_sec_schedule_open) = signal(true);
-    let (sec_sheets_open, set_sec_sheets_open) = signal(false);
-    let (sec_nft_open, set_sec_nft_open) = signal(false);
-    let (sec_settings_open, set_sec_settings_open) = signal(false);
+    let (sec_sheets_open, set_sec_sheets_open) = signal(true);
+    let (sec_nft_open, set_sec_nft_open) = signal(true);
+    let (sec_settings_open, set_sec_settings_open) = signal(true);
     let (sec_deposit_open, set_sec_deposit_open) = signal(true);
-    let (sec_people_open, set_sec_people_open) = signal(false);
+    let (sec_people_open, set_sec_people_open) = signal(true);
     let (search_query, set_search_query) = signal(String::new());
     let search_input_ref: NodeRef<leptos::html::Input> = NodeRef::new();
     let (slug_taken, set_slug_taken) = signal(false);
@@ -360,7 +363,11 @@ pub fn EventsPage(
     // Handle create button
     let handle_create = move |_: web_sys::MouseEvent| {
         set_form.set(default_form());
+        set_editing_id.set(None);
         set_slug_manually_edited.set(false);
+        // Reset wallet state so stale escrow fields don't leak from a prior Edit session
+        set_create_wallet_name.set(String::new());
+        set_create_wallet_pk.set(String::new());
         set_current_view.set(EventsView::Create);
     };
 
@@ -464,6 +471,17 @@ pub fn EventsPage(
             // THB amount set but no PromptPay ID — QR generation will fail
             if thb_val > 0 && current_form.promptpay_id.trim().is_empty() {
                 components::show_toast(&set_toast, "PromptPay ID is required when THB amount is set", components::ToastType::Error);
+                return;
+            }
+
+            // In Create mode with USDC deposit > 0, wallet connection is required
+            // so the event is created with on-chain escrow in one atomic flow.
+            if is_create && usdc_val > 0.0 && create_wallet_pk.get().is_empty() {
+                components::show_toast(
+                    &set_toast,
+                    "Connect your Solana wallet to create event with USDC deposit escrow",
+                    components::ToastType::Error,
+                );
                 return;
             }
 
@@ -684,6 +702,7 @@ pub fn EventsPage(
     // Handle cancel
     let handle_cancel = move |_: web_sys::MouseEvent| {
         set_current_view.set(EventsView::List);
+        set_editing_id.set(None);
     };
 
     // Main view
@@ -713,6 +732,127 @@ pub fn EventsPage(
                         </Show>
                     </div>
                 </div>
+
+                // Event detail summary card (shows when dropdown selects an event)
+                <Show when=move || active_event_id.get().is_some() fallback=|| view! { <div></div> }>
+                    {move || {
+                        let eid = active_event_id.get();
+                        let events_list = events.get();
+                        let selected_event = eid.and_then(|id| events_list.iter().find(|e| e.id == id).cloned());
+                        match selected_event {
+                            None => view! { <div></div> }.into_any(),
+                            Some(evt) => {
+                                let ename = utils::escape_html(&evt.name);
+                                let badge_class = status_badge_class(&evt.status);
+                                let status_text = status_label(&evt.status);
+                                let start = format_date_display(evt.event_start_ms);
+                                let end = format_date_display(evt.event_end_ms);
+                                let sheet_preview: String = evt.sheet_id.chars().take(16).collect();
+                                let organizers_count = evt.organizer_emails.len();
+                                let deposit_text = if evt.deposit_enabled { "Enabled" } else { "Disabled" };
+                                let escrow_display = if evt.escrow_address.is_empty() {
+                                    "Not set".to_string()
+                                } else {
+                                    let trunc: String = evt.escrow_address.chars().take(8).collect();
+                                    format!("{trunc}…")
+                                };
+                                let needs_escrow = evt.deposit_enabled && evt.escrow_address.is_empty();
+                                let has_escrow = evt.deposit_enabled && !evt.escrow_address.is_empty();
+                                let fmt_label = evt.event_format.label();
+                                let fmt_badge_class = match evt.event_format {
+                                    api::EventFormat::InPerson => "badge badge-info-xs",
+                                    api::EventFormat::Online => "badge badge-warning-xs",
+                                    api::EventFormat::Hybrid => "badge badge-success-xs",
+                                };
+                                let edit_id = evt.id.clone();
+                                let can_manage = components::can_manage_events(&user_role.get());
+
+                                view! {
+                                    <div class="event-detail-card">
+                                        <div class="event-detail-header">
+                                            <div class="flex-row-gap" style="flex-wrap:wrap;align-items:center">
+                                                <span class="card-title">{ename}</span>
+                                                <span class=badge_class>{status_text}</span>
+                                                <span class=fmt_badge_class>{fmt_label}</span>
+                                                {if needs_escrow {
+                                                    view! {
+                                                        <span class="badge badge-warning-xs">"No Escrow"</span>
+                                                    }.into_any()
+                                                } else if has_escrow {
+                                                    view! {
+                                                        <span class="badge badge-success-xs">"Escrow"</span>
+                                                    }.into_any()
+                                                } else {
+                                                    view! { <span></span> }.into_any()
+                                                }}
+                                            </div>
+                                            {if can_manage {
+                                                view! {
+                                                    <button class="btn btn-primary btn-sm" on:click=move |_| {
+                                                        let edit_id = edit_id.clone();
+                                                        let set_form = set_form;
+                                                        let set_editing_id = set_editing_id;
+                                                        let set_current_view = set_current_view;
+                                                        let set_toast = set_toast;
+                                                        leptos::task::spawn_local(async move {
+                                                            match api::get_event_detail(&edit_id).await {
+                                                                Ok(data) => {
+                                                                    set_form.set(form_from_detail(&data.event));
+                                                                    set_editing_id.set(Some(edit_id));
+                                                                    set_current_view.set(EventsView::Edit);
+                                                                }
+                                                                Err(e) => {
+                                                                    log::error!("[events-page] load detail failed: {e}");
+                                                                    components::show_toast(
+                                                                        &set_toast,
+                                                                        &format!("Failed to load event: {e}"),
+                                                                        components::ToastType::Error,
+                                                                    );
+                                                                }
+                                                            }
+                                                        });
+                                                    }>
+                                                        "Edit Event"
+                                                    </button>
+                                                }.into_any()
+                                            } else {
+                                                view! { <div></div> }.into_any()
+                                            }}
+                                        </div>
+                                        <div class="event-detail-grid">
+                                            <div class="quiz-setting-item">
+                                                <span class="quiz-setting-label">"Start"</span>
+                                                <span class="setting-value">{start}</span>
+                                            </div>
+                                            <div class="quiz-setting-item">
+                                                <span class="quiz-setting-label">"End"</span>
+                                                <span class="setting-value">{end}</span>
+                                            </div>
+                                            <div class="quiz-setting-item">
+                                                <span class="quiz-setting-label">"Sheet ID"</span>
+                                                <span class="setting-value-mono">{sheet_preview}"…"</span>
+                                            </div>
+                                            <div class="quiz-setting-item">
+                                                <span class="quiz-setting-label">"Deposit"</span>
+                                                <span class="setting-value">{deposit_text}</span>
+                                            </div>
+                                            <div class="quiz-setting-item">
+                                                <span class="quiz-setting-label">"Escrow"</span>
+                                                <span class="setting-value-mono">{escrow_display}</span>
+                                            </div>
+                                            <div class="quiz-setting-item">
+                                                <span class="quiz-setting-label">"Organizers"</span>
+                                                <span class="setting-value">
+                                                    {if organizers_count == 0 { "—".to_string() } else { format!("{organizers_count}") }}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                }.into_any()
+                            }
+                        }
+                    }}
+                </Show>
 
                 // Loading state
                 <Show when=move || loading.get() && events.get().is_empty() fallback=|| view! { <div></div> }>
@@ -893,6 +1033,57 @@ pub fn EventsPage(
                 </Show>
             </Show>
 
+            // Compact event context bar during Edit view
+            <Show when=move || current_view.get() == EventsView::Edit && active_event_id.get().is_some() fallback=|| view! { <div></div> }>
+                {move || {
+                    let eid = active_event_id.get();
+                    let events_list = events.get();
+                    let selected_event = eid.and_then(|id| events_list.iter().find(|e| e.id == id).cloned());
+                    match selected_event {
+                        None => view! { <div></div> }.into_any(),
+                        Some(evt) => {
+                            let ename = utils::escape_html(&evt.name);
+                            let badge_class = status_badge_class(&evt.status);
+                            let status_text = status_label(&evt.status);
+                            let fmt_label = evt.event_format.label();
+                            let fmt_badge_class = match evt.event_format {
+                                api::EventFormat::InPerson => "badge badge-info-xs",
+                                api::EventFormat::Online => "badge badge-warning-xs",
+                                api::EventFormat::Hybrid => "badge badge-success-xs",
+                            };
+                            let needs_escrow = evt.deposit_enabled && evt.escrow_address.is_empty();
+                            let has_escrow = evt.deposit_enabled && !evt.escrow_address.is_empty();
+
+                            view! {
+                                <div class="event-edit-context-bar">
+                                    <button
+                                        class="btn btn-outline btn-xs"
+                                        on:click=move |_| {
+                                            set_current_view.set(EventsView::List);
+                                            set_editing_id.set(None);
+                                        }
+                                    >
+                                        "← Back"
+                                    </button>
+                                    <div class="flex-row-gap" style="align-items:center">
+                                        <span class="card-title" style="font-size:1rem">{ename}</span>
+                                        <span class=badge_class>{status_text}</span>
+                                        <span class=fmt_badge_class>{fmt_label}</span>
+                                        {if needs_escrow {
+                                            view! { <span class="badge badge-warning-xs">"No Escrow"</span> }.into_any()
+                                        } else if has_escrow {
+                                            view! { <span class="badge badge-success-xs">"Escrow"</span> }.into_any()
+                                        } else {
+                                            view! { <span></span> }.into_any()
+                                        }}
+                                    </div>
+                                </div>
+                            }.into_any()
+                        }
+                    }
+                }}
+            </Show>
+
             // === Create / Edit Form View ===
             <Show when=move || current_view.get() != EventsView::List fallback=|| view! { <div></div> }>
                 <div class="card">
@@ -1026,13 +1217,38 @@ pub fn EventsPage(
                                     <span class="form-section-toggle" class:form-section-toggle-open=move || sec_sheets_open.get()>"▼"</span>
                                 </div>
                                 <div class="form-section-body" class:form-section-body-hidden=move || !sec_sheets_open.get()>
+                                    // ── Quick Guide: How to get Google Sheet ID ──
+                                    <div class="sheet-guide-box" style="margin-bottom:0.75rem">
+                                        <div class="sheet-guide-heading">"📋 Quick Guide"</div>
+                                        <ol class="sheet-guide-steps">
+                                            <li>
+                                                <a
+                                                    href="https://docs.google.com/forms/create"
+                                                    target="_blank"
+                                                    rel="noopener"
+                                                    class="sheet-guide-link"
+                                                >
+                                                    "Create a Google Form"
+                                                </a>
+                                                " → add your registration fields"
+                                            </li>
+                                            <li>"In the Form editor → Responses tab → click 'Link to Sheets'"</li>
+                                            <li>"Copy the Sheet ID from the URL:"</li>
+                                        </ol>
+                                        <div class="sheet-guide-url">
+                                            <code>"docs.google.com/spreadsheets/d/"</code>
+                                            <code class="sheet-guide-highlight">"YOUR_SHEET_ID"</code>
+                                            <code>"/edit"</code>
+                                        </div>
+                                    </div>
+
                                     <div class="quiz-settings-grid">
                                         <div class="quiz-setting-item">
                                             <label class="quiz-field-label">"Sheet ID"<span class="field-required-badge">"Required"</span></label>
                                         <input
                                             type="text"
                                             class="quiz-number-input"
-                                            placeholder="Google Sheet ID"
+                                            placeholder="Paste Google Sheet ID here"
                                             prop:value=move || form.get().sheet_id
                                             on:input=move |ev| set_form.update(|f| f.sheet_id = event_target_value(&ev))
                                         />
@@ -1073,7 +1289,7 @@ pub fn EventsPage(
                                     // ── Quick-fill default badge ──
                                     <div class="quiz-setting-item" style="grid-column:1/-1">
                                         <div class="hint-info" style="margin-bottom:var(--space-2xs)">
-                                            "NFT badges reward attendees for showing up. Use the default BeThere badge or enter your own custom image URL."
+                                            "NFT badges reward attendees for showing up. Use the default BeThere badge or skip if you don't need one."
                                         </div>
                                         <div style="display:flex;gap:var(--space-xs);align-items:center;flex-wrap:wrap">
                                             <button
@@ -1082,25 +1298,33 @@ pub fn EventsPage(
                                                     let (img_url, meta_prefix) = get_self_hosted_nft_urls();
                                                     let eid = editing_id.get().unwrap_or_default();
                                                     set_form.update(|f| {
-                                                        if f.nft_image_url.is_empty() {
-                                                            f.nft_image_url = img_url;
-                                                        }
-                                                        if f.nft_metadata_uri.is_empty() && !eid.is_empty() {
+                                                        f.nft_image_url = img_url;
+                                                        if !eid.is_empty() {
                                                             f.nft_metadata_uri = format!("{meta_prefix}{eid}");
                                                         }
-                                                        if f.nft_name_template.is_empty() {
-                                                            f.nft_name_template = "BeThere - {event_name}".to_string();
-                                                        }
-                                                        if f.nft_symbol.is_empty() {
-                                                            f.nft_symbol = "BETHERE".to_string();
-                                                        }
-                                                        if f.nft_description_template.is_empty() {
-                                                            f.nft_description_template = "Proof of attendance at {event_name}".to_string();
-                                                        }
+                                                        f.nft_name_template = "BeThere - {event_name}".to_string();
+                                                        f.nft_symbol = "BETHERE".to_string();
+                                                        f.nft_description_template = "Proof of attendance at {event_name}".to_string();
                                                     });
                                                 }
                                             >
-                                                "Use default badge"
+                                                "🎨 Use default badge"
+                                            </button>
+                                            <button
+                                                class="btn btn-outline btn-sm"
+                                                on:click=move |_| {
+                                                    set_form.update(|f| {
+                                                        f.nft_image_url = String::new();
+                                                        f.nft_metadata_uri = String::new();
+                                                        f.nft_name_template = String::new();
+                                                        f.nft_symbol = String::new();
+                                                        f.nft_description_template = String::new();
+                                                        f.nft_collection_mint = String::new();
+                                                        f.merkle_tree = String::new();
+                                                    });
+                                                }
+                                            >
+                                                "✕ Skip NFT"
                                             </button>
                                             // Badge preview
                                             <Show
@@ -1264,14 +1488,19 @@ pub fn EventsPage(
                                 <div class="form-section-body" class:form-section-body-hidden=move || !sec_settings_open.get()>
                                     <div class="quiz-settings-grid">
                                         <div class="quiz-setting-item">
-                                        <label class="quiz-field-label">"Claim Base URL"</label>
+                                        <label class="quiz-field-label">"Claim Base URL"<span class="field-optional-badge">"Auto"</span></label>
                                         <input
                                             type="text"
                                             class="quiz-number-input"
-                                            placeholder="https://claim.bethere.com"
+                                            placeholder="Leave empty to auto-use current domain"
                                             prop:value=move || form.get().claim_base_url
                                             on:input=move |ev| set_form.update(|f| f.claim_base_url = event_target_value(&ev))
                                         />
+                                        <span class="quiz-setting-hint">
+                                            "The base URL for attendee claim links (e.g. "
+                                            <code style="font-size:inherit">"https://bethere.solana-thailand.workers.dev/claim"</code>
+                                            "). Leave empty — the system auto-generates claim links from your current domain."
+                                        </span>
                                     </div>
                                     <div class="quiz-setting-item">
                                         <label class="quiz-field-label">"Quiz Enabled"</label>

@@ -1652,6 +1652,67 @@ pub fn Deposit() -> impl IntoView {
                             let copied = pay_url_copied.get();
                             let copy_btn_text = if copied { "✅ Copied!" } else { "📋 Copy Link" };
                             let copy_btn_class = if copied { "btn btn-success btn-sm" } else { "btn btn-outline btn-sm" };
+
+                            // Poll for payment confirmation (3s interval, 100 attempts = 5 min)
+                            let eid_poll = web_sys::Url::new(
+                                &web_sys::window()
+                                    .unwrap()
+                                    .location()
+                                    .href()
+                                    .unwrap(),
+                            )
+                            .ok()
+                            .and_then(|url| url.search_params().get("event_id"))
+                            .unwrap_or_default();
+                            let aid_poll = match params.get() {
+                                Ok(p) => p.attendee_id.unwrap_or_default(),
+                                Err(_) => String::new(),
+                            };
+                            let deposit_data_poll = data.clone();
+                            Effect::new(move |_| {
+                                let eid_c = eid_poll.clone();
+                                let aid_c = aid_poll.clone();
+                                let dd = deposit_data_poll.clone();
+                                leptos::task::spawn_local(async move {
+                                    let mut attempts = 0u32;
+                                    let max_attempts = 100u32; // 100 × 3s = 300s = 5 min
+                                    while attempts < max_attempts {
+                                        // Check if still in UsdcQrReady state
+                                        let still_qr = matches!(&state.get(), DepositPageState::UsdcQrReady(_, _));
+                                        if !still_qr {
+                                            break;
+                                        }
+                                        match api::confirm_deposit(&eid_c, &aid_c).await {
+                                            Ok(ConfirmDepositResponse {
+                                                confirmed: true,
+                                                tx_signature: Some(sig),
+                                                ..
+                                            }) => {
+                                                log::info!("[deposit] QR payment confirmed: {}", sig);
+                                                set_state.set(DepositPageState::DepositConfirmed(dd, sig));
+                                                return;
+                                            }
+                                            Ok(_) => {
+                                                attempts += 1;
+                                                if attempts < max_attempts {
+                                                    gloo::timers::future::TimeoutFuture::new(3000).await;
+                                                }
+                                            }
+                                            Err(e) => {
+                                                log::warn!("[deposit] QR poll error: {e}");
+                                                attempts += 1;
+                                                if attempts < max_attempts {
+                                                    gloo::timers::future::TimeoutFuture::new(3000).await;
+                                                }
+                                            }
+                                        }
+                                    }
+                                    if attempts >= max_attempts {
+                                        log::warn!("[deposit] QR poll timed out after 5 min");
+                                    }
+                                });
+                            });
+
                             view! {
                                 <div class="card dep-card">
                                     <div class="card-header">
@@ -1680,6 +1741,10 @@ pub fn Deposit() -> impl IntoView {
                                     >
                                         {copy_btn_text}
                                     </button>
+                                    <div class="dep-qr-polling">
+                                        <span class="spinner spinner-sm"></span>
+                                        " Checking for payment..."
+                                    </div>
                                     <p class="hint-2xs u-mt-1rem">
                                         "After payment, your deposit will be verified automatically."
                                     </p>
