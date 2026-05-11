@@ -167,7 +167,7 @@ info "Generated JWT for ratchapon.poc@gmail.com"
 ME_RESPONSE=$(curl -s "$BASE_URL/api/auth/me" \
     -H "Authorization: Bearer $AUTH_TOKEN")
 
-ME_SUCCESS=$(echo "$ME_RESPONSE" | python3 -c "import sys,json; print(str(json.load(sys.stdin).get('email','')).lower())" 2>/dev/null || echo "")
+ME_SUCCESS=$(echo "$ME_RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(str(d.get('data',{}).get('email', d.get('email',''))).lower())" 2>/dev/null || echo "")
 if [ "$ME_SUCCESS" = "ratchapon.poc@gmail.com" ]; then
     pass "GET /api/auth/me → authenticated as $ME_SUCCESS"
 else
@@ -358,6 +358,9 @@ info "Current quiz status: $QUIZ_STATUS"
 
 if [ "$QUIZ_STATUS" = "passed" ]; then
     pass "Quiz already passed — skipping"
+elif [ "$QUIZ_STATUS" = "not_required" ] || [ "$QUIZ_STATUS" = "not_configured" ]; then
+    pass "Quiz not required for this event — skipping"
+    info "Quiz status: $QUIZ_STATUS (no submission needed)"
 else
     # Submit correct answers using selected_text (exact option text strings)
     # Answers from admin quiz config: q1→Proof of History, q2→They cost significantly less..., q3→Rust, q4→An IDL..., q5→Attendees lock a deposit...
