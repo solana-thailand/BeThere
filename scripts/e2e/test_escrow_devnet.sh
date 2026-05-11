@@ -502,12 +502,13 @@ section "Step 5: Deposit Status (Pre-Deposit)"
 TEST_ATTENDEE_ID="e2e-attendee-$(date +%s)"
 DEPOSIT_STATUS=$(curl -s "$BASE_URL/api/deposit/status/$TEST_ATTENDEE_ID?event_id=$EVENT_ID")
 
-STATUS_PARSE=$(echo "$DEPOSIT_STATUS" | python3 -c "import sys,json; d=json.load(sys.stdin); print('ok')" 2>/dev/null || echo "err")
+# API wraps response in ApiOk: {"success":true,"data":{...}}
+STATUS_PARSE=$(echo "$DEPOSIT_STATUS" | python3 -c "import sys,json; d=json.load(sys.stdin).get('data',{}); print('ok')" 2>/dev/null || echo "err")
 if [ "$STATUS_PARSE" = "ok" ]; then
-    DEP_ENABLED=$(echo "$DEPOSIT_STATUS" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('deposit_enabled',False))" 2>/dev/null || echo "False")
-    DEP_AMOUNT=$(echo "$DEPOSIT_STATUS" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('deposit_amount_usdc',0))" 2>/dev/null || echo "0")
-    DEP_STATUS=$(echo "$DEPOSIT_STATUS" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('status'))" 2>/dev/null || echo "None")
-    PROMPTPAY_STATUS=$(echo "$DEPOSIT_STATUS" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('promptpay_id',''))" 2>/dev/null || echo "")
+    DEP_ENABLED=$(echo "$DEPOSIT_STATUS" | python3 -c "import sys,json; d=json.load(sys.stdin).get('data',{}); print(d.get('deposit_enabled',False))" 2>/dev/null || echo "False")
+    DEP_AMOUNT=$(echo "$DEPOSIT_STATUS" | python3 -c "import sys,json; d=json.load(sys.stdin).get('data',{}); print(d.get('deposit_amount_usdc',0))" 2>/dev/null || echo "0")
+    DEP_STATUS=$(echo "$DEPOSIT_STATUS" | python3 -c "import sys,json; d=json.load(sys.stdin).get('data',{}); print(d.get('status'))" 2>/dev/null || echo "None")
+    PROMPTPAY_STATUS=$(echo "$DEPOSIT_STATUS" | python3 -c "import sys,json; d=json.load(sys.stdin).get('data',{}); print(d.get('promptpay_id',''))" 2>/dev/null || echo "")
 
     pass "GET /api/deposit/status → deposit_enabled=$DEP_ENABLED, amount=$DEP_AMOUNT"
     info "Status: $DEP_STATUS, promptpay_id=$PROMPTPAY_STATUS"
@@ -603,7 +604,7 @@ if [ "$DEP_INIT_SUCCESS" = "true" ]; then
 
             CONFIRM_SUCCESS=$(echo "$CONFIRM_RESPONSE" | python3 -c "import sys,json; print(str(json.load(sys.stdin).get('success','')).lower())" 2>/dev/null || echo "false")
             if [ "$CONFIRM_SUCCESS" = "true" ]; then
-                CONFIRMED=$(echo "$CONFIRM_RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin).get('confirmed',False))" 2>/dev/null || echo "False")
+                CONFIRMED=$(echo "$CONFIRM_RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin).get('data',{}); print(d.get('confirmed',False))" 2>/dev/null || echo "False")
                 pass "Deposit confirmation: confirmed=$CONFIRMED"
             else
                 info "Confirm response: $(echo "$CONFIRM_RESPONSE" | head -c 200)"
@@ -643,11 +644,11 @@ section "Step 7: Deposit Status (Post-Deposit)"
 
 DEPOSIT_STATUS2=$(curl -s "$BASE_URL/api/deposit/status/$TEST_ATTENDEE_ID?event_id=$EVENT_ID")
 
-STATUS2_PARSE=$(echo "$DEPOSIT_STATUS2" | python3 -c "import sys,json; d=json.load(sys.stdin); print('ok')" 2>/dev/null || echo "err")
+STATUS2_PARSE=$(echo "$DEPOSIT_STATUS2" | python3 -c "import sys,json; d=json.load(sys.stdin).get('data',{}); print('ok')" 2>/dev/null || echo "err")
 if [ "$STATUS2_PARSE" = "ok" ]; then
     DEP_STATUS2=$(echo "$DEPOSIT_STATUS2" | python3 -c "
 import sys, json
-d = json.load(sys.stdin)
+d = json.load(sys.stdin).get('data', {})
 s = d.get('status')
 if s:
     print(f\"method={s.get('method','?')}, verified={s.get('verified',False)}, tx={s.get('tx_signature','none')[:16]}...\")

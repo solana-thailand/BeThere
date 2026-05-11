@@ -558,9 +558,18 @@ except:
         info "Mint transaction: ${MINT_SIG:0:20}..."
 
         # Get full transaction for cost analysis
-        TX_RESPONSE=$(curl -s -X POST "https://devnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}" \
-            -H "Content-Type: application/json" \
-            -d "{\"jsonrpc\":\"2.0\",\"id\":\"e2e-tx\",\"method\":\"getTransaction\",\"params\":[\"$MINT_SIG\",{\"encoding\":\"json\",\"maxSupportedTransactionVersion\":0}]}")
+        # Retry up to 3 times — devnet indexing can lag for recently confirmed TXs
+        TX_RESPONSE=""
+        for _retry in 1 2 3; do
+            TX_RESPONSE=$(curl -s -X POST "https://devnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}" \
+                -H "Content-Type: application/json" \
+                -d "{\"jsonrpc\":\"2.0\",\"id\":\"e2e-tx\",\"method\":\"getTransaction\",\"params\":[\"$MINT_SIG\",{\"encoding\":\"json\",\"maxSupportedTransactionVersion\":0}]}")
+            # Check if result is non-null
+            _is_null=$(echo "$TX_RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print('null' if d.get('result') is None else 'ok')" 2>/dev/null || echo "error")
+            if [ "$_is_null" = "ok" ]; then break; fi
+            info "Transaction not yet indexed, retry $_retry/3..."
+            sleep 3
+        done
 
         echo ""
         echo -e "  ${BOLD}${CYAN}💰 Cost Analysis${NC}"
@@ -570,8 +579,17 @@ except:
 import sys, json, time
 try:
     data = json.load(sys.stdin)
-    result = data.get('result', {})
+    result = data.get('result')
+    if result is None:
+        error_msg = data.get('error', {}).get('message', 'null result')
+        print(f'  ⚠ Transaction data unavailable: {error_msg}')
+        print(f'  Explorer: https://explorer.solana.com/tx/$MINT_SIG?cluster=devnet')
+        sys.exit(0)
+
     meta = result.get('meta', {})
+    if not meta:
+        print('  ⚠ Transaction metadata missing')
+        sys.exit(0)
 
     fee = meta.get('fee', 0)
     fee_sol = fee / 1_000_000_000
@@ -594,7 +612,8 @@ try:
     print(f'  --- Cost Comparison ---')
     print(f'  Traditional NFT:  ~0.005 SOL ≈ \${0.005 * sol_usd:.4f}')
     print(f'  Compressed NFT:   ~{fee_sol:.8f} SOL ≈ \${fee_sol * sol_usd:.6f}')
-    print(f'  Savings:          ~{0.005 / fee_sol:.0f}x cheaper')
+    if fee_sol > 0:
+        print(f'  Savings:          ~{0.005 / fee_sol:.0f}x cheaper')
     print()
     print(f'  --- Per-Event Cost (estimates) ---')
     for n in [50, 100, 500, 1000]:
