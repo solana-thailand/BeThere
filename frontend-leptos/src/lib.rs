@@ -1,6 +1,7 @@
 pub mod api;
 pub mod auth;
 pub mod components;
+pub mod icons;
 pub mod pages;
 pub mod utils;
 
@@ -10,6 +11,7 @@ use leptos_router::components::{Route, Router, Routes};
 use leptos_router::path;
 
 use crate::components::ProtectedRoute;
+use crate::icons::{Icon, IconName};
 use crate::pages::{
     admin::Admin, adventure::page::Adventure, claim::Claim, deposit::Deposit, landing::Landing,
     login::Login, public_event::PublicEvent, scanner::Scanner,
@@ -36,7 +38,7 @@ pub fn App() -> impl IntoView {
                     view! {
                         <div class="center-page">
                             <div class="container layout-col-center">
-                                <div class="logo">"🔍"</div>
+                                <div class="logo"><Icon icon=IconName::Search class="icon-xl" /></div>
                                 <h1>"Page Not Found"</h1>
                                 <p class="subtitle">"The page you're looking for doesn't exist."</p>
                                 <a href="/" class="btn btn-primary">"Go Home"</a>

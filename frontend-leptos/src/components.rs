@@ -7,6 +7,8 @@ use leptos::prelude::*;
 use leptos_router::components::A;
 use leptos_router::hooks::use_navigate;
 
+use crate::icons::{Icon, IconName};
+
 /// Whether a user has admin privileges.
 ///
 /// Returns true for "super_admin" and "organizer" roles.
@@ -116,7 +118,7 @@ pub fn Toast(toast_signal: ReadSignal<Option<ToastMessage>>) -> impl IntoView {
 /// Eliminates the duplicated header markup between Scanner and Admin pages.
 #[component]
 pub fn AppHeader(
-    /// Title text displayed in the header (e.g. "🎫 Scanner").
+    /// Title text displayed in the header (e.g. "Scanner").
     #[prop(into)]
     title: String,
     /// Reactive signal containing the current user's email.
@@ -139,7 +141,7 @@ pub fn AppHeader(
                 <div class="header-actions">
                     <nav class="header-nav">
                         <A href="/staff" attr:class="header-nav-link" attr:title="Scanner">
-                            "📷"
+                            <Icon icon=IconName::Camera class="icon-md" />
                             <span class="header-nav-label">"Scanner"</span>
                         </A>
                         {move || {
@@ -147,7 +149,7 @@ pub fn AppHeader(
                             if is_admin_role(&role) {
                                 view! {
                                     <A href="/admin" attr:class="header-nav-link" attr:title="Admin">
-                                        "📊"
+                                        <Icon icon=IconName::Chart class="icon-md" />
                                         <span class="header-nav-label">"Admin"</span>
                                     </A>
                                 }
@@ -161,7 +163,7 @@ pub fn AppHeader(
                         {move || user_email.get().chars().next().unwrap_or('?').to_uppercase().to_string()}
                     </div>
                     <button class="btn btn-outline btn-sm header-sign-out" on:click=on_sign_out>
-                        <span class="header-sign-out-icon">"↗"</span>
+                        <span class="header-sign-out-icon"><Icon icon=IconName::SignOut class="icon-sm" /></span>
                         <span class="header-sign-out-label">"Sign Out"</span>
                     </button>
                 </div>

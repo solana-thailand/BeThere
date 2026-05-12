@@ -7,6 +7,7 @@ use leptos::prelude::*;
 
 use crate::api;
 use crate::components;
+use crate::icons::{Icon, IconName};
 use crate::utils;
 
 
@@ -1219,7 +1220,7 @@ pub fn EventsPage(
                                 <div class="form-section-body" class:form-section-body-hidden=move || !sec_sheets_open.get()>
                                     // ── Quick Guide: How to get Google Sheet ID ──
                                     <div class="sheet-guide-box" style="margin-bottom:0.75rem">
-                                        <div class="sheet-guide-heading">"📋 Quick Guide"</div>
+                                        <div class="sheet-guide-heading"><Icon icon=IconName::Copy class="icon-sm"/>" Quick Guide"</div>
                                         <ol class="sheet-guide-steps">
                                             <li>
                                                 <a
@@ -1308,7 +1309,7 @@ pub fn EventsPage(
                                                     });
                                                 }
                                             >
-                                                "🎨 Use default badge"
+                                                <Icon icon=IconName::Palette class="icon-sm"/>" Use default badge"
                                             </button>
                                             <button
                                                 class="btn btn-outline btn-sm"

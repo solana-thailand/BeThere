@@ -180,9 +180,73 @@ h3 {
     text-align: center;
 }
 
-/* ===== Logo / Emoji ===== */
+/* ===== SVG Icon System ===== */
+.icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1em;
+    height: 1em;
+    vertical-align: middle;
+    flex-shrink: 0;
+}
+.icon svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+.icon-xs {
+    width: 0.75em;
+    height: 0.75em;
+}
+.icon-sm {
+    width: 0.875em;
+    height: 0.875em;
+}
+.icon-md {
+    width: 1.25em;
+    height: 1.25em;
+}
+.icon-lg {
+    width: 1.5em;
+    height: 1.5em;
+}
+.icon-xl {
+    width: 2em;
+    height: 2em;
+}
+.icon-2xl {
+    width: 2.5em;
+    height: 2.5em;
+}
+.icon-3xl {
+    width: 3em;
+    height: 3em;
+}
+.icon-success {
+    color: var(--success);
+}
+.icon-warning {
+    color: var(--warning);
+}
+.icon-danger {
+    color: var(--danger);
+}
+.icon-info {
+    color: var(--info);
+}
+.icon-muted {
+    color: var(--text-muted);
+}
+.icon-accent {
+    color: var(--accent);
+}
+.icon-white {
+    color: #fff;
+}
+
+/* ===== Logo ===== */
 .logo {
-    font-size: 3rem;
     margin-bottom: 0.5rem;
     text-align: center;
 }
@@ -369,7 +433,12 @@ h3 {
     font-size: 1rem;
     font-weight: 600;
     color: var(--text-heading);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
 }
+
+/* Finance icon accents (kept for admin/status SVG icons) */
 
 /* ===== Stats ===== */
 .stats-grid {
@@ -4797,6 +4866,11 @@ nav a.active {
     align-items: center;
     padding: 0.75rem;
     --tile-size: 36px;
+    background: linear-gradient(
+        180deg,
+        var(--bg-primary) 0%,
+        var(--bg-secondary) 100%
+    );
 }
 
 .adventure-header {
@@ -4818,6 +4892,8 @@ nav a.active {
 
 .adventure-logo {
     font-size: 1.5rem;
+    color: #f87171;
+    filter: drop-shadow(0 0 6px rgba(248, 113, 113, 0.3));
 }
 
 .adventure-title {
@@ -5181,11 +5257,29 @@ nav a.active {
 
 .adventure-overlay-card-success {
     border-color: rgba(34, 197, 94, 0.3);
+    background: linear-gradient(
+        135deg,
+        rgba(34, 197, 94, 0.08) 0%,
+        var(--bg-card) 100%
+    );
 }
 
 .adventure-success-icon {
     font-size: 3rem;
     margin-bottom: 0.5rem;
+    animation: success-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes success-pulse {
+    0%,
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+    50% {
+        transform: scale(1.1);
+        opacity: 0.85;
+    }
 }
 
 .adventure-stars {
@@ -7345,11 +7439,12 @@ nav a.active {
 
 /* ---------- Success / Celebration States ---------- */
 
-/* Large emoji celebration (repeats ~4x)
- * Replaces: style="font-size:3rem;margin:1rem 0;" */
+/* Large celebration icon
+ * Used for deposit confirmed, refund confirmed, rent reclaimed states */
 .celebration-emoji {
-    font-size: 3rem;
     margin: 1rem 0;
+    font-size: 3rem;
+    text-align: center;
 }
 
 /* Success title text
@@ -7378,8 +7473,31 @@ nav a.active {
     background: white;
     border-radius: 12px;
     padding: 1rem;
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     margin-bottom: 1rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    min-width: 140px;
+    min-height: 140px;
+}
+
+/* QR loading state — pulsing placeholder */
+.qr-loading {
+    flex-direction: column;
+    gap: 0.5rem;
+    background: var(--bg-secondary);
+    border: 2px dashed var(--border);
+    box-shadow: none;
+}
+
+.qr-loading-spinner {
+    width: 28px;
+    height: 28px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
 }
 
 /* QR image — large (256px, Solana Pay)

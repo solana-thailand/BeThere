@@ -18,6 +18,7 @@ use leptos_router::hooks::use_navigate;
 use crate::api::{self, AttendeeResponse, GenerateQrData, StatsResponse};
 use crate::auth;
 use crate::components::{self, ToastType};
+use crate::icons::{Icon, IconName};
 use crate::utils;
 
 // ===== Tab Type =====
@@ -609,7 +610,7 @@ pub fn Admin() -> impl IntoView {
                             class:active=move || active_section.get() == AdminSection::Adventure
                             on:click=move |_| set_active_section.set(AdminSection::Adventure)
                         >
-                            <span class="admin-sidebar-icon">"🦀"</span>
+                            <span class="admin-sidebar-icon"><Icon icon=IconName::Crab class="icon-sm"/></span>
                             "Adventure"
                             <span class="admin-sidebar-kbd">"Alt+3"</span>
                         </button>
@@ -679,7 +680,7 @@ pub fn Admin() -> impl IntoView {
                             class:active=move || active_section.get() == AdminSection::Escrow
                             on:click=move |_| set_active_section.set(AdminSection::Escrow)
                         >
-                            <span class="admin-sidebar-icon">"🔒"</span>
+                            <span class="admin-sidebar-icon"><Icon icon=IconName::Lock class="icon-sm"/></span>
                             "Escrow"
                             <span class="admin-sidebar-kbd">"Alt+7"</span>
                         </button>

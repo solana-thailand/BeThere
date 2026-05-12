@@ -1,13 +1,16 @@
 /**
  * PromptPay QR generation module.
  * Generates EMVCo QR string for Thai PromptPay payments.
+ *
+ * Reference: Thailand QR Payment Standard (EMVCo)
+ * Tags must be in ascending numerical order for bank apps to accept.
  */
 
 /**
  * Calculate CRC16-CCITT checksum (as required by EMVCo/Thai QR standard).
  */
 function crc16(str) {
-  let crc = 0xFFFF;
+  let crc = 0xffff;
   for (let i = 0; i < str.length; i++) {
     crc ^= str.charCodeAt(i) << 8;
     for (let j = 0; j < 8; j++) {
@@ -17,63 +20,85 @@ function crc16(str) {
         crc = crc << 1;
       }
     }
-    crc &= 0xFFFF;
+    crc &= 0xffff;
   }
-  return crc.toString(16).toUpperCase().padStart(4, '0');
+  return crc.toString(16).toUpperCase().padStart(4, "0");
 }
 
 /**
- * Build an EMVCo TLV tag.
+ * Build an EMVCo TLV (Tag-Length-Value) field.
  */
 function tlv(tag, value) {
-  const len = value.length.toString().padStart(2, '0');
+  const len = value.length.toString().padStart(2, "0");
   return tag + len + value;
 }
 
 /**
  * Generate a PromptPay QR string.
+ *
  * @param {string} promptpayId - Thai phone number (e.g., "0812345678") or national ID
  * @param {number} amount - Amount in THB (e.g., 500)
  * @returns {string|null} EMVCo QR string ready for QR encoding, or null if invalid
  */
 export function generatePromptPayQr(promptpayId, amount) {
-  if (!promptpayId || promptpayId.trim() === '') {
+  if (!promptpayId || promptpayId.trim() === "") {
     return null;
   }
 
-  // Clean the ID — remove dashes, spaces
-  const cleanId = promptpayId.replace(/[-\s]/g, '');
+  // Sanitize: keep only digits
+  const cleanId = promptpayId.replace(/\D/g, "");
 
-  // Determine sub-tag: 01 = phone, 02 = national ID (13 digits starting with 1-8)
-  let idTag = '01'; // default to phone
-  if (cleanId.length === 13 && /^[1-8]/.test(cleanId)) {
-    idTag = '02'; // national ID
-  } else if (cleanId.length === 10) {
-    idTag = '01'; // phone
+  // Format the target and determine sub-tag based on dtinth/promptpay-qr logic:
+  //   - eWallet (>=15 digits): tag 03, value as-is
+  //   - National ID (13 digits): tag 02, value as-is
+  //   - Phone (<13 digits): tag 01, strip leading 0, prepend 66, pad to 13 chars
+  let idTag;
+  let formattedId;
+
+  if (cleanId.length >= 15) {
+    // eWallet ID
+    idTag = "03";
+    formattedId = cleanId;
+  } else if (cleanId.length >= 13) {
+    // National ID (13 digits)
+    idTag = "02";
+    formattedId = cleanId;
+  } else {
+    // Phone number: strip leading 0, prepend 66, left-pad with zeros to 13 chars
+    idTag = "01";
+    formattedId = ("0000000000000" + cleanId.replace(/^0/, "66")).slice(-13);
   }
 
   // Build Merchant Account Info (Tag 29)
   const merchantAccountInfo =
-    tlv('00', '0000000000000000') + // GUI ID for PromptPay
-    tlv(idTag, cleanId);             // Phone or National ID
+    tlv("00", "A000000677010111") + // AID for PromptPay (not Bill Payment)
+    tlv(idTag, formattedId);
 
-  // Build payload without CRC
-  let payload = '';
-  payload += tlv('00', '01');        // Payload Format Indicator
-  payload += tlv('01', '12');        // Point of Initiation (12 = static if no amount, 11 = dynamic)
-  payload += tlv('29', merchantAccountInfo); // Merchant Account Info
+  // Point of Initiation: 11 = dynamic (with amount), 12 = static (no amount)
+  const hasAmount = amount && amount > 0;
+  const pointOfInitiation = hasAmount ? "11" : "12";
 
-  if (amount && amount > 0) {
-    payload += tlv('54', amount.toFixed(2)); // Transaction Amount
-    // Change point of initiation to dynamic
-    payload = payload.replace(tlv('01', '12'), tlv('01', '11'));
+  // Build payload in strict ascending tag order per EMVCo spec.
+  // Tag 00 — Payload Format Indicator
+  // Tag 01 — Point of Initiation Method
+  // Tag 29 — Merchant Account Information (PromptPay)
+  // Tag 53 — Transaction Currency (764 = THB)
+  // Tag 54 — Transaction Amount (only when amount > 0)
+  // Tag 58 — Country Code (TH)
+  let payload = "";
+  payload += tlv("00", "01"); // Payload Format Indicator
+  payload += tlv("01", pointOfInitiation); // Point of Initiation
+  payload += tlv("29", merchantAccountInfo); // Merchant Account Info
+  payload += tlv("53", "764"); // Currency: THB
+
+  if (hasAmount) {
+    payload += tlv("54", amount.toFixed(2)); // Transaction Amount
   }
 
-  payload += tlv('58', 'TH');        // Country Code
-  payload += tlv('53', '764');       // Currency (THB)
+  payload += tlv("58", "TH"); // Country Code
 
-  // Add CRC placeholder, then calculate
-  payload += '6304';                 // CRC tag + length 4
+  // Add CRC placeholder, then calculate checksum
+  payload += "6304"; // CRC tag (63) + length (04)
   const checksum = crc16(payload);
   payload += checksum;
 

@@ -10,6 +10,7 @@
 use leptos::prelude::*;
 
 use crate::api::{self, QuizConfigAdmin, QuizQuestionAdmin};
+use crate::icons::{Icon, IconName};
 use crate::components::{self, ToastType};
 
 // ---------------------------------------------------------------------------
@@ -340,7 +341,7 @@ pub fn QuizEditor(
                     let err = error.get().unwrap_or_default();
                     view! {
                         <div class="card quiz-error-card">
-                            <div class="quiz-state-icon">"⚠️"</div>
+                            <div class="quiz-state-icon"><Icon icon=IconName::Warning class="icon-lg icon-warning" /></div>
                             <h3>"Failed to Load Quiz"</h3>
                             <p class="quiz-state-desc">{err}</p>
                             <button class="btn btn-outline btn-sm" on:click=move |_| reload()>"Retry"</button>
@@ -352,7 +353,7 @@ pub fn QuizEditor(
             // Empty state (not configured)
             <Show when=show_empty fallback=|| view! { <div></div> }>
                 <div class="card quiz-empty-card">
-                    <div class="quiz-state-icon quiz-state-icon-lg">"📝"</div>
+                    <div class="quiz-state-icon quiz-state-icon-lg"><Icon icon=IconName::Copy class="icon-2xl icon-info" /></div>
                     <h3>"No Quiz Configured"</h3>
                     <p class="quiz-state-desc">
                         "Create a quiz that attendees must pass before claiming their NFT.
@@ -375,14 +376,22 @@ pub fn QuizEditor(
                                 class="btn btn-outline btn-sm"
                                 on:click=handle_toggle_preview
                             >
-                                {move || if preview.get() { "✏️ Edit" } else { "👁 Preview" }}
+                                {move || if preview.get() {
+                                    view! { <Icon icon=IconName::Palette class="icon-sm" />" Edit" }.into_any()
+                                } else {
+                                    view! { <Icon icon=IconName::Search class="icon-sm" />" Preview" }.into_any()
+                                }}
                             </button>
                             <button
                                 class="btn btn-primary btn-sm"
                                 on:click=handle_save
                                 disabled=move || saving.get() || !is_dirty.get()
                             >
-                                {move || if saving.get() { "Saving..." } else { "💾 Save" }}
+                                {move || if saving.get() {
+                                    "Saving...".into_any()
+                                } else {
+                                    view! { <Icon icon=IconName::Save class="icon-sm" />" Save" }.into_any()
+                                }}
                             </button>
                         </div>
                     </div>
@@ -418,7 +427,7 @@ pub fn QuizEditor(
 
                         view! {
                             <div class="card quiz-settings-card">
-                                <h3 class="quiz-section-heading">"⚙️ Settings"</h3>
+                                <h3 class="quiz-section-heading">"Settings"</h3>
                                 <div class="quiz-settings-grid">
                                     // Passing score
                                     <div class="quiz-setting-item">
@@ -508,7 +517,7 @@ pub fn QuizEditor(
                         view! {
                             <div class="quiz-questions-heading">
                                 <h3 class="quiz-section-heading">
-                                    {format!("📋 Questions ({total})")}
+                                    <Icon icon=IconName::Copy class="icon-sm" />{format!("Questions ({total})")}
                                 </h3>
                             </div>
 
@@ -796,7 +805,7 @@ pub fn QuizEditor(
                             on:click=handle_save
                             disabled=move || saving.get() || !is_dirty.get()
                         >
-                            {move || if saving.get() { "Saving..." } else { "💾 Save Quiz" }}
+                            {move || if saving.get() { "Saving...".into_any() } else { view! { <Icon icon=IconName::Save class="icon-sm" />" Save Quiz" }.into_any() }}
                         </button>
                         {move || if is_dirty.get() {
                             view! { <span class="hint-dirty">"Unsaved changes"</span> }.into_any()

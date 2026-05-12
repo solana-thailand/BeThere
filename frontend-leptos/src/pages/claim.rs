@@ -15,6 +15,7 @@ use leptos_router::params::Params;
 
 use crate::api::{self, AdventureStatusType, ClaimLookupData, ClaimMintData, QuizQuestionsData, QuizStatus, QuizSubmitData, RefundTxRequest};
 use crate::components::{self, Toast, ToastType};
+use crate::icons::{Icon, IconName, wallet_icon_name};
 use crate::utils::{escape_html, format_timestamp, get_cluster, solscan_tx_url};
 use wasm_bindgen::prelude::*;
 
@@ -247,12 +248,12 @@ fn ClaimStepper(current: usize, total: usize, show_quiz: bool) -> impl IntoView 
         vec![
             ("✓", "Verified", 1),
             ("?", "Quiz", 2),
-            ("🎫", "Claim", 3),
+            ("", "Claim", 3),
         ]
     } else {
         vec![
             ("✓", "Verified", 1),
-            ("🎫", "Claim", 2),
+            ("", "Claim", 2),
         ]
     };
 
@@ -707,7 +708,7 @@ fn build_quiz_action(
                 <NftBadgePreview />
 
                 <div class="card claim-quiz-adventure-check">
-                    <p class="claim-quiz-passed-msg">"✅ Quiz passed! Verifying adventure progress..."</p>
+                    <p class="claim-quiz-passed-msg"><Icon icon=IconName::Check class="icon-sm icon-success" />" Quiz passed! Verifying adventure progress..."</p>
                 </div>
 
                 <button
@@ -1094,7 +1095,7 @@ fn DepositRefundSection(
             <Toast toast_signal=toast />
             // Header
             <div class="card-header">
-                <h2 class="card-title">"💰 Deposit & Refund"</h2>
+                <h2 class="card-title"><Icon icon=IconName::Coin class="icon-md" />" Deposit & Refund"</h2>
                 {if deposit_amount_usdc > 0 {
                     view! {
                         <span class="badge badge-info">
@@ -1149,19 +1150,13 @@ fn DepositRefundSection(
                                         {wallets.into_iter().map(|w| {
                                             let w_label = w.clone();
                                             let w_click = w.clone();
-                                            let wallet_icon = match w.as_str() {
-                                                "Phantom" => "👻",
-                                                "Backpack" => "🎒",
-                                                "Solflare" => "☀️",
-                                                "Coinbase" => "🪙",
-                                                _ => "💼",
-                                            };
+                                            let wallet_icon = wallet_icon_name(&w);
                                             view! {
                                                 <button
                                                     class="btn btn-primary btn-block wallet-btn-inner"
                                                     on:click=move |_| do_refund(w_click.clone())
                                                 >
-                                                    <span>{wallet_icon}</span>
+                                                    <span><Icon icon=wallet_icon class="icon-sm" /></span>
                                                     <span>{format!("Connect {} & Claim Refund", &w_label)}</span>
                                                 </button>
                                             }
@@ -1195,7 +1190,7 @@ fn DepositRefundSection(
                             let solscan_url = solscan_tx_url(tx_sig, &cluster);
                             let usdc_fmt = format!("{:.2}", deposit_amount_usdc as f64 / 1_000_000.0);
                             view! {
-                                <div class="celebration-emoji">"💰♻️"</div>
+                                <div class="celebration-emoji"><Icon icon=IconName::Coin class="icon-3xl" /><Icon icon=IconName::Recycle class="icon-3xl" /></div>
                                 <p class="success-title">
                                     {format!("{usdc_fmt} USDC refunded to your wallet!")}
                                 </p>
@@ -1758,13 +1753,7 @@ pub fn Claim() -> impl IntoView {
                                                 match cw {
                                                     // Connected state: wallet icon + name + truncated address + connected badge
                                                     Some((ref wallet_name, ref public_key)) => {
-                                                        let wallet_icon = match wallet_name.as_str() {
-                                                            "Phantom" => "👻",
-                                                            "Backpack" => "🎒",
-                                                            "Solflare" => "☀️",
-                                                            "Coinbase" => "🪙",
-                                                            _ => "💼",
-                                                        };
+                                                        let wallet_icon = wallet_icon_name(wallet_name);
                                                         let pk_short = if public_key.len() > 12 {
                                                             format!("{}...{}", &public_key[..4], &public_key[public_key.len()-4..])
                                                         } else {
@@ -1772,12 +1761,12 @@ pub fn Claim() -> impl IntoView {
                                                         };
                                                         view! {
                                                             <div class="wallet-connected-bar">
-                                                                <span class="wallet-icon-lg">{wallet_icon}</span>
+                                                                <span class="wallet-icon-lg"><Icon icon=wallet_icon class="icon-lg" /></span>
                                                                 <div class="wallet-info-left">
                                                                     <div class="wallet-label">"Connected via " {wallet_name.clone()}</div>
                                                                     <div class="wallet-address-bold">{pk_short}</div>
                                                                 </div>
-                                                                <span class="badge badge-success u-ml-auto">"✅ Connected"</span>
+                                                                <span class="badge badge-success u-ml-auto"><Icon icon=IconName::Check class="icon-sm icon-success" />" Connected"</span>
                                                             </div>
                                                             <button
                                                                 class="btn btn-outline btn-sm"
@@ -1800,17 +1789,12 @@ pub fn Claim() -> impl IntoView {
                                                                 view! {
                                                                     <div class="wallet-list">
                                                                         <p class="wallet-prompt">
-                                                                            "🔗 Connect your Solana wallet:"
+                                                                            <Icon icon=IconName::Link class="icon-sm"/>
+                                                                            " Connect your Solana wallet:"
                                                                         </p>
                                                                         {wallets_for_click.into_iter().map(|w| {
                                                                             let w_clone = w.clone();
-                                                                            let wallet_icon = match w.as_str() {
-                                                                                "Phantom" => "👻",
-                                                                                "Backpack" => "🎒",
-                                                                                "Solflare" => "☀️",
-                                                                                "Coinbase" => "🪙",
-                                                                                _ => "💼",
-                                                                            };
+                                                                            let wallet_icon = wallet_icon_name(&w);
                                                                             view! {
                                                                                 <button
                                                                                     class="btn btn-primary btn-block wallet-btn-inner"
@@ -1837,7 +1821,7 @@ pub fn Claim() -> impl IntoView {
                                                                                         }
                                                                                     }
                                                                                 >
-                                                                                    <span>{wallet_icon}</span>
+                                                                                    <span><Icon icon=wallet_icon class="icon-sm" /></span>
                                                                                     <span>{format!("Connect {}", &w_clone)}</span>
                                                                                 </button>
                                                                             }
@@ -1926,7 +1910,7 @@ pub fn Claim() -> impl IntoView {
                             view! {
                                 <div class="claim-adventure-gate">
                                     <ParticipantAvatar name=data.name.clone() />
-                                    <h2>"🦀 Rust Adventure Required"</h2>
+                                    <h2><Icon icon=IconName::Crab class="icon-md" />" Rust Adventure Required"</h2>
                                     <p class="claim-adventure-status">{status_msg}</p>
                                     <div class="claim-adventure-info">
                                         <p>
@@ -2080,7 +2064,7 @@ pub fn Claim() -> impl IntoView {
                                         if checked_in > 0 {
                                             view! {
                                                 <div class="claim-counter">
-                                                    <span class="claim-counter-badge">"🏆"</span>
+                                                    <span class="claim-counter-badge"><Icon icon=IconName::Trophy class="icon-md icon-warning" /></span>
                                                     <span class="claim-counter-text">
                                                         <strong>{claimed}</strong>
                                                         " of "

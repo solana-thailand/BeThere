@@ -8,6 +8,7 @@ use leptos::prelude::*;
 
 use crate::api::{self, MarkRefundRequest, ThbDepositInfo, VerifySlipRequest};
 use crate::components::{self, ToastType};
+use crate::icons::{Icon, IconName};
 use crate::utils;
 
 // ---------------------------------------------------------------------------
@@ -245,7 +246,7 @@ pub fn AdminDeposits(
                     class:active=move || active_tab.get() == AdminDepositTab::RefundQueue
                     on:click=move |_| set_active_tab.set(AdminDepositTab::RefundQueue)
                 >
-                    "💸 Refund Queue"
+                    <Icon icon=IconName::MoneyWings class="icon-sm"/>" Refund Queue"
                     <Show when=move || refund_count.get() != 0 fallback=|| view! { <span></span> }>
                         <span class="badge badge-warning">
                             {move || refund_count.get()}
@@ -361,7 +362,7 @@ pub fn AdminDeposits(
                     fallback=|| view! { <div></div> }
                 >
                     <div class="admin-section-header">
-                        <h3>{format!("💸 {} pending refund{}", refund_count.get(), if refund_count.get() != 1 { "s" } else { "" })}</h3>
+                        <h3><Icon icon=IconName::MoneyWings class="icon-sm"/>{format!(" {} pending refund{}", refund_count.get(), if refund_count.get() != 1 { "s" } else { "" })}</h3>
                     </div>
 
                     <Show

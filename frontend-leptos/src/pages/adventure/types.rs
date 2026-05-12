@@ -58,11 +58,11 @@ impl Tile {
             Tile::PlayerStart => "·",
             Tile::Exit => "▶",
             Tile::Key { name, .. } => name, // show the key name
-            Tile::Npc { .. } => "🦀",
+            Tile::Npc { .. } => "🤖",
             Tile::Gate { .. } => "▓",
-            Tile::CodeBlock { .. } => "▒",
+            Tile::CodeBlock { .. } => "💻",
             Tile::Water => "~",
-            Tile::Sign { .. } => "📋",
+            Tile::Sign { .. } => "📜",
         }
     }
 

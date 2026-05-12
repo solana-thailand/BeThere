@@ -16,6 +16,7 @@ use wasm_bindgen::prelude::*;
 use crate::api::{self, AttendeeData, CheckInData, WalkinRegisterRequest};
 use crate::auth;
 use crate::components::{self, ToastType};
+use crate::icons::{Icon, IconName};
 use crate::utils;
 
 // ===== Camera QR Scanner JS Interop =====
@@ -951,7 +952,7 @@ pub fn Scanner() -> impl IntoView {
                 } else if active_events.is_empty() {
                     view! {
                         <div class="scanner-event-bar" style="background:rgba(239,68,68,0.1);border-bottom-color:rgba(239,68,68,0.3);">
-                            <span class="scanner-event-label" style="color:var(--danger);">"⚠ No active events found"</span>
+                            <span class="scanner-event-label" style="color:var(--danger);"><Icon icon=IconName::Warning class="icon-sm icon-warning" />" No active events found"</span>
                         </div>
                     }.into_any()
                 } else if active_events.len() == 1 {
@@ -1254,7 +1255,7 @@ pub fn Scanner() -> impl IntoView {
                                 on:click=move |_| set_flash_enabled.update(|e| *e = !*e)
                                 title="Toggle success flash"
                             >
-                                "⚡"
+                                <Icon icon=IconName::Flash class="icon-sm" />
                                 {move || if flash_enabled.get() { " Flash On" } else { " Flash Off" }}
                             </button>
                             <button
@@ -1271,7 +1272,7 @@ pub fn Scanner() -> impl IntoView {
                                 }
                                 title="Toggle scan audio feedback"
                             >
-                                "🔊"
+                                <Icon icon=IconName::Sound class="icon-sm" />
                                 {move || if audio_enabled.get() { " Sound On" } else { " Sound Off" }}
                             </button>
                         </div>
@@ -1444,7 +1445,7 @@ fn ClaimQrCard(qr_src: String, claim_url: String, label: &'static str) -> impl I
                 <img src=qr_src alt="Claim URL QR Code" class="scanner-qr-img" />
                 <button class="btn btn-primary btn-sm scanner-qr-copy-btn"
                     on:click=move |_| { let _ = copy_to_clipboard_js(&claim_url); }>
-                    "📋 Copy Link"
+                    <Icon icon=IconName::Copy class="icon-sm" />" Copy Link"
                 </button>
             </div>
         </div>
@@ -1522,7 +1523,7 @@ where
                     </div>
                     <div class="scanner-actions">
                         <button class="btn btn-success btn-block" on:click=on_check_in>
-                            "✓ Confirm Check-In"
+                            <Icon icon=IconName::Check class="icon-sm icon-success" />" Confirm Check-In"
                         </button>
                     </div>
                     <button class="btn btn-outline btn-block" style="margin-top:0.5rem;" on:click=on_reset>
@@ -1630,7 +1631,7 @@ where
                         style="margin-top:1rem;"
                         on:click=on_online
                     >
-                        "🌐 Virtual Check-In"
+                        <Icon icon=IconName::Globe class="icon-sm" />" Virtual Check-In"
                     </button>
                     <button class="btn btn-outline btn-block" style="margin-top:0.5rem;" on:click=on_reset>
                         "Scan Another"
@@ -1724,7 +1725,7 @@ where
                                 style="margin-top:0.75rem;border-color:var(--accent);color:var(--accent);"
                                 on:click=on_escrow_check_in
                             >
-                                "⛓ Mark Checked In On-Chain"
+                                <Icon icon=IconName::Lock class="icon-sm" />" Mark Checked In On-Chain"
                             </button>
                         }.into_any()
                     } else {
@@ -1878,7 +1879,7 @@ where
                         style="margin-top:1rem;"
                         on:click=on_escrow_sign
                     >
-                        "⛓ Sign On-Chain Check-In"
+                        <Icon icon=IconName::Lock class="icon-sm" />" Sign On-Chain Check-In"
                     </button>
 
                     <button class="btn btn-outline btn-block" style="margin-top:0.5rem;" on:click=on_reset>

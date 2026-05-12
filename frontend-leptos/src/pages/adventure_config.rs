@@ -8,6 +8,7 @@ use leptos::prelude::*;
 
 use crate::api::{self, AdventureConfigData};
 use crate::components::{self, ToastType};
+use crate::icons::{Icon, IconName};
 
 /// Level definitions matching the adventure game levels.
 /// Used to populate the "required level" dropdown.
@@ -90,7 +91,7 @@ pub fn AdventureConfigEditor(
 
     view! {
         <div class="admin-content-inner">
-            <div class="admin-section-heading">"🦀 Adventure Configuration"</div>
+            <div class="admin-section-heading"><Icon icon=IconName::Crab class="icon-md" />" Adventure Configuration"</div>
 
             // No event selected
             <Show when=move || !has_event() fallback=|| view! { <div></div> }>
@@ -205,7 +206,11 @@ pub fn AdventureConfigEditor(
                         <div class="quiz-preview-info">
                             <div class="quiz-preview-stat">
                                 <span class="quiz-preview-stat-value">
-                                    {move || if config.get().enabled { "✅ Required" } else { "⚪ Optional" }}
+                                    {move || if config.get().enabled {
+                                        view! { <span><Icon icon=IconName::Check class="icon-sm icon-success" />" Required"</span> }.into_any()
+                                    } else {
+                                        view! { <span><Icon icon=IconName::Circle class="icon-sm icon-muted" />" Optional"</span> }.into_any()
+                                    }}
                                 </span>
                                 <span class="quiz-preview-stat-label">"Adventure"</span>
                             </div>

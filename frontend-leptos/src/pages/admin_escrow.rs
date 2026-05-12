@@ -14,6 +14,7 @@ use wasm_bindgen::prelude::*;
 
 use crate::api;
 use crate::components::{self, ToastType};
+use crate::icons::{Icon, IconName};
 
 // ===== Solana Wallet JS Interop =====
 
@@ -90,11 +91,11 @@ impl EscrowAction {
         }
     }
 
-    fn icon(&self) -> &'static str {
+    fn icon(&self) -> IconName {
         match self {
-            Self::Deactivate => "⏸",
-            Self::ClaimForfeited => "💰",
-            Self::CloseEvent => "🔒",
+            Self::Deactivate => IconName::Pause,
+            Self::ClaimForfeited => IconName::Coin,
+            Self::CloseEvent => IconName::Lock,
         }
     }
 
@@ -435,8 +436,9 @@ pub fn AdminEscrow(
                             view! {
                                 <div style=format!("display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:0.5rem 0.75rem;border:1px solid {border};border-radius:6px;background:var(--bg-primary)")>
                                     <div>
-                                        <div style="font-size:0.85rem;font-weight:600;color:var(--text-primary)">
-                                            {format!("{} Step 1: {}", action.icon(), action.label())}
+                                        <div style="font-size:0.85rem;font-weight:600;color:var(--text-primary);display:flex;align-items:center;gap:0.3rem">
+                                            <Icon icon=action.icon() class="icon-sm"/>
+                                            {format!("Step 1: {}", action.label())}
                                         </div>
                                         <div style="font-size:0.7rem;color:var(--text-secondary)">
                                             {action.description()}
@@ -484,8 +486,9 @@ pub fn AdminEscrow(
                             view! {
                                 <div style=format!("display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:0.5rem 0.75rem;border:1px solid {border};border-radius:6px;background:var(--bg-primary)")>
                                     <div>
-                                        <div style="font-size:0.85rem;font-weight:600;color:var(--text-primary)">
-                                            {format!("{} Step 2: {}", action.icon(), action.label())}
+                                        <div style="font-size:0.85rem;font-weight:600;color:var(--text-primary);display:flex;align-items:center;gap:0.3rem">
+                                            <Icon icon=action.icon() class="icon-sm"/>
+                                            {format!("Step 2: {}", action.label())}
                                         </div>
                                         <div style="font-size:0.7rem;color:var(--text-secondary)">
                                             {action.description()}
@@ -539,8 +542,9 @@ pub fn AdminEscrow(
                             view! {
                                 <div style=format!("display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:0.5rem 0.75rem;border:1px solid {border};border-radius:6px;background:var(--bg-primary)")>
                                     <div>
-                                        <div style="font-size:0.85rem;font-weight:600;color:var(--text-primary)">
-                                            {format!("{} Step 3: {}", action.icon(), action.label())}
+                                        <div style="font-size:0.85rem;font-weight:600;color:var(--text-primary);display:flex;align-items:center;gap:0.3rem">
+                                            <Icon icon=action.icon() class="icon-sm"/>
+                                            {format!("Step 3: {}", action.label())}
                                         </div>
                                         <div style="font-size:0.7rem;color:var(--text-secondary)">
                                             {action.description()}
