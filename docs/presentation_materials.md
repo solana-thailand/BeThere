@@ -328,7 +328,7 @@ Rust + Solana + Cloudflare Workers + WASM
 - **100% Rust codebase** — shared types, zero serialization bugs
 
 **Traction**
-- Built for **Solana Thailand** community events
+- Originated from manual deposit/refund events — now automated on-chain
 - End-to-end tested on devnet (61 tests passing)
 - Ready for mainnet deployment (1.5 SOL cost)
 - Supports both USDC (on-chain) and PromptPay THB (fiat) deposits
@@ -342,7 +342,7 @@ Rust + Solana + Cloudflare Workers + WASM
 
 ---
 
-*Built with ❤️ by the Solana Thailand community*
+*Built with ❤️ by the BeThere team*
 
 ---
 

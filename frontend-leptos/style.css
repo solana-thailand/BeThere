@@ -3919,39 +3919,6 @@ nav a.active {
     margin-bottom: 0.5rem;
 }
 
-/* Compact attendance stats shown below event dropdown */
-.admin-event-stats-bar {
-    display: flex;
-    gap: 0.25rem;
-    margin-top: 0.5rem;
-    padding: 0.4rem 0.5rem;
-    background: var(--card, #1a1a2e);
-    border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
-    border-radius: 6px;
-}
-
-.admin-event-stat {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.1rem;
-}
-
-.admin-event-stat-value {
-    font-size: 0.8rem;
-    font-weight: 700;
-    color: var(--text-primary, #fff);
-    font-variant-numeric: tabular-nums;
-}
-
-.admin-event-stat-label {
-    font-size: 0.6rem;
-    color: var(--text-muted, #888);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-}
-
 .admin-sidebar-item {
     display: flex;
     align-items: center;
@@ -7354,6 +7321,13 @@ nav a.active {
     font-size: 0.85rem;
     color: var(--text-secondary);
     margin-bottom: 0.25rem;
+}
+
+/* Wallet brand logos rendered as white (for dark button backgrounds).
+ * Uses CSS filter to convert any brand color to white.
+ * Works with Phantom (purple), Backpack (red), Solflare (yellow), Jupiter (gradient). */
+.wallet-icon-white {
+    filter: brightness(0) invert(1);
 }
 
 /* ---------- No Wallet Fallback ---------- */

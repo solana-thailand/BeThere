@@ -63,6 +63,17 @@ pub fn solscan_address_url(address: &str, cluster: &str) -> String {
     format!("https://solscan.io/address/{address}{cluster_param}")
 }
 
+/// Build a Metaplex Core Explorer URL for verifying compressed NFT assets.
+/// Pattern: https://core.metaplex.com/explorer/{asset_id}?env={cluster}
+pub fn metaplex_explorer_url(asset_id: &str, cluster: &str) -> String {
+    let env = if cluster == "mainnet-beta" {
+        "mainnet-beta"
+    } else {
+        "devnet"
+    };
+    format!("https://core.metaplex.com/explorer/{asset_id}?env={env}")
+}
+
 /// Result of parsing a participation type string into a display badge.
 #[derive(Debug, Clone)]
 pub struct ParticipationBadge {

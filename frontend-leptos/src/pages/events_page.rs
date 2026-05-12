@@ -1367,7 +1367,22 @@ pub fn EventsPage(
                                                 "Invalid base58 characters detected (expected Solana address format)"
                                             </div>
                                         </Show>
-                                        <span class="quiz-setting-hint">"Solana mint address (base58)"</span>
+                                        <div class="quiz-setting-hint" style="display:flex;justify-content:space-between;align-items:center;">
+                                            <span>"Solana mint address (base58)"</span>
+                                            <Show
+                                                when=move || !form.get().nft_collection_mint.trim().is_empty()
+                                                fallback=|| view! { <span></span> }
+                                            >
+                                                <a
+                                                    href=move || crate::utils::metaplex_explorer_url(&form.get().nft_collection_mint.trim(), &crate::utils::get_cluster())
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    style="font-size:0.75rem;color:var(--info);text-decoration:none;"
+                                                >
+                                                    "Verify on Metaplex ↗"
+                                                </a>
+                                            </Show>
+                                        </div>
                                     </div>
                                         <div class="quiz-setting-item">
                                             <label class="quiz-field-label">"Merkle Tree"</label>

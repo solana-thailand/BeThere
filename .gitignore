@@ -52,6 +52,8 @@ worker/.dev.vars
 # Brand assets (logos embedded inline in icons/mod.rs)
 Nov 2024 2/
 solflare-brand-kit/
+Backpack Media Kit/
+jupiter-brand-kit/
 .DS_Store
 
 # cNFT scripts (standalone Rust project)
