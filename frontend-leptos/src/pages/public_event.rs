@@ -8,6 +8,8 @@ use leptos_meta::Title;
 use leptos_router::hooks::use_params;
 use leptos_router::params::Params;
 
+use crate::icons::{Icon, IconName};
+
 // ---------------------------------------------------------------------------
 // Registration API types
 // ---------------------------------------------------------------------------
@@ -374,7 +376,7 @@ pub fn PublicEvent() -> impl IntoView {
                         PublicEventState::Loading => {
                             view! {
                                 <div style="text-align:center;padding:3rem 0;">
-                                    <div style="font-size:2rem;margin-bottom:1rem;">"🎫"</div>
+                                    <div style="margin-bottom:1rem;"><Icon icon=IconName::Ticket class="icon-2xl" /></div>
                                     <p style="color:var(--text-secondary);">"Loading event..."</p>
                                 </div>
                             }.into_any()
@@ -382,7 +384,7 @@ pub fn PublicEvent() -> impl IntoView {
                         PublicEventState::NotFound => {
                             view! {
                                 <div style="text-align:center;padding:3rem 0;">
-                                    <div style="font-size:2rem;margin-bottom:1rem;">"🔍"</div>
+                                    <div style="margin-bottom:1rem;"><Icon icon=IconName::Search class="icon-2xl" /></div>
                                     <h1 style="font-size:1.5rem;color:var(--text-primary);margin-bottom:0.5rem;">"Event Not Found"</h1>
                                     <p style="color:var(--text-secondary);margin-bottom:1.5rem;">
                                         "This event doesn't exist or is not publicly available."
@@ -394,7 +396,7 @@ pub fn PublicEvent() -> impl IntoView {
                         PublicEventState::Error(msg) => {
                             view! {
                                 <div style="text-align:center;padding:3rem 0;">
-                                    <div style="font-size:2rem;margin-bottom:1rem;">"⚠️"</div>
+                                    <div style="margin-bottom:1rem;"><Icon icon=IconName::Warning class="icon-md icon-danger" /></div>
                                     <h1 style="font-size:1.5rem;color:var(--text-primary);margin-bottom:0.5rem;">"Something went wrong"</h1>
                                     <p style="color:var(--text-secondary);margin-bottom:1.5rem;">{msg}</p>
                                     <a href="/" class="btn btn-primary">"Go Home"</a>
@@ -479,7 +481,7 @@ fn render_loaded_event(
             } else {
                 view! {
                     <div style="text-align:center;margin-bottom:1.5rem;">
-                        <span style="font-size:3rem;">"🎫"</span>
+                        <span><Icon icon=IconName::Ticket class="icon-2xl" /></span>
                     </div>
                 }.into_any()
             }
@@ -513,7 +515,7 @@ fn render_loaded_event(
                     let loc = location.clone();
                     view! {
                         <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.75rem;">
-                            <span style="font-size:1.1rem;">"📍"</span>
+                            <span><Icon icon=IconName::Pin class="icon-sm icon-muted" /></span>
                             <span style="color:var(--text-primary);font-size:0.95rem;">
                                 {loc}
                             </span>
@@ -526,7 +528,7 @@ fn render_loaded_event(
 
             // Date & Time
             <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.75rem;">
-                <span style="font-size:1.1rem;">"📅"</span>
+                <span><Icon icon=IconName::Calendar class="icon-sm icon-muted" /></span>
                 <span style="color:var(--text-primary);font-size:0.95rem;">
                     {date_str}
                 </span>
@@ -543,7 +545,7 @@ fn render_loaded_event(
                 if completed {
                     view! {
                         <div style="display:flex;align-items:center;gap:0.5rem;">
-                            <span style="font-size:1.1rem;">"🎉"</span>
+                            <span><Icon icon=IconName::Party class="icon-sm icon-success" /></span>
                             <span style="color:#34d399;font-weight:600;font-size:0.95rem;">
                                 "Event Completed"
                             </span>
@@ -556,7 +558,7 @@ fn render_loaded_event(
                     } else {
                         view! {
                             <div style="display:flex;align-items:center;gap:0.5rem;">
-                                <span style="font-size:1.1rem;">"⏱️"</span>
+                                <span><Icon icon=IconName::Timer class="icon-sm icon-muted" /></span>
                                 <span style="color:var(--accent);font-weight:600;font-size:0.95rem;">
                                     "Starts in "{cd}
                                 </span>
@@ -595,7 +597,7 @@ fn render_loaded_event(
                 view! {
                     <div style="width:100%;background:var(--bg-card);border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;box-shadow:var(--shadow);">
                         <h2 style="font-size:1.1rem;font-weight:600;color:#fff;margin-bottom:0.75rem;">
-                            "💰 Deposit Commitment"
+                            <Icon icon=IconName::Coin class="icon-md" />" Deposit Commitment"
                         </h2>
                         <div style="margin-bottom:0.75rem;">
                             <span style="color:var(--text-primary);font-size:1.1rem;font-weight:600;">
@@ -652,7 +654,7 @@ fn render_loaded_event(
                     view! {
                         <div style="width:100%;background:var(--bg-card);border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;box-shadow:var(--shadow);">
                             <div style="text-align:center;">
-                                <div style="font-size:2rem;margin-bottom:0.5rem;">"✅"</div>
+                                <div style="font-size:2rem;margin-bottom:0.5rem;"><Icon icon=IconName::Check class="icon-2xl icon-success" /></div>
                                 <h2 style="font-size:1.1rem;font-weight:600;color:#34d399;margin-bottom:0.5rem;">
                                     "You're registered!"
                                 </h2>
@@ -674,7 +676,7 @@ fn render_loaded_event(
                     view! {
                         <div style="width:100%;background:var(--bg-card);border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;box-shadow:var(--shadow);">
                             <h2 style="font-size:1.1rem;font-weight:600;color:#fff;margin-bottom:0.75rem;">
-                                "🎫 Reserve Your Spot"
+                                <Icon icon=IconName::Ticket class="icon-md" />" Reserve Your Spot"
                             </h2>
                             <div style="padding:0.75rem;background:rgba(239,68,68,0.1);border-radius:var(--radius);margin-bottom:1rem;color:#f87171;font-size:0.85rem;">
                                 {msg_clone}
@@ -691,7 +693,7 @@ fn render_loaded_event(
                 RegState::Submitting => {
                     view! {
                         <div style="width:100%;background:var(--bg-card);border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;box-shadow:var(--shadow);text-align:center;">
-                            <div style="font-size:1.5rem;margin-bottom:0.5rem;">"⏳"</div>
+                            <div style="margin-bottom:0.5rem;"><Icon icon=IconName::Hourglass class="icon-md" /></div>
                             <p style="color:var(--text-secondary);font-size:0.9rem;">"Registering..."</p>
                         </div>
                     }.into_any()
@@ -702,7 +704,7 @@ fn render_loaded_event(
                     view! {
                         <div style="width:100%;background:var(--bg-card);border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;box-shadow:var(--shadow);">
                             <h2 style="font-size:1.1rem;font-weight:600;color:#fff;margin-bottom:0.75rem;">
-                                "🎫 Reserve Your Spot"
+                                <Icon icon=IconName::Ticket class="icon-md" />" Reserve Your Spot"
                             </h2>
                             <div style="display:flex;flex-direction:column;gap:0.75rem;">
                                 // Name
@@ -826,7 +828,7 @@ fn render_loaded_event(
                 view! {
                     <div style="width:100%;background:var(--bg-card);border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;box-shadow:var(--shadow);">
                         <h2 style="font-size:1.1rem;font-weight:600;color:#fff;margin-bottom:0.5rem;">
-                            "🎫 NFT Badge"
+                            <Icon icon=IconName::Ticket class="icon-md" />" NFT Badge"
                         </h2>
                         <p style="color:var(--text-secondary);font-size:0.85rem;margin-bottom:0.75rem;">
                             "Earn a commemorative NFT badge when you attend."
@@ -850,7 +852,7 @@ fn render_loaded_event(
                 view! {
                     <div style="width:100%;background:var(--bg-card);border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;box-shadow:var(--shadow);">
                         <h2 style="font-size:1.1rem;font-weight:600;color:#fff;margin-bottom:0.75rem;">
-                            "🔗 External Link"
+                            <Icon icon=IconName::Link class="icon-sm" />" External Link"
                         </h2>
                         <a
                             href=href

@@ -10,6 +10,7 @@
 use leptos::prelude::*;
 
 use crate::api::{self, QuizConfigAdmin, QuizQuestionAdmin};
+use crate::icons::{Icon, IconName};
 use crate::components::{self, ToastType};
 
 // ---------------------------------------------------------------------------
@@ -75,16 +76,35 @@ pub fn QuizEditor(
 ) -> impl IntoView {
     // State
     let (config, set_config) = signal(None::<QuizConfigAdmin>);
+    let (original_config, set_original_config) = signal(None::<QuizConfigAdmin>);
     let (configured, set_configured) = signal(false);
     let (loading, set_loading) = signal(true);
     let (saving, set_saving) = signal(false);
     let (preview, set_preview) = signal(false);
     let (error, set_error) = signal(None::<String>);
+    let (confirm_delete_q, set_confirm_delete_q) = signal(None::<String>);
+
+    // Dirty tracking: compare serialized current config vs original
+    let is_dirty = Memo::new(move |_| {
+        let current = config.get();
+        let original = original_config.get();
+        match (current, original) {
+            (Some(c), Some(o)) => serde_json::to_string(&c).ok() != serde_json::to_string(&o).ok(),
+            (Some(_), None) => true,
+            _ => false,
+        }
+    });
 
     // Load quiz config on mount
     Effect::new(move |_| {
         set_loading.set(true);
         set_error.set(None);
+
+        // Skip when no event selected
+        if active_event_id.get().is_none() {
+            set_loading.set(false);
+            return;
+        }
 
         let set_configured = set_configured;
         let set_config = set_config;
@@ -98,12 +118,14 @@ pub fn QuizEditor(
                 Ok(data) => {
                     set_configured.set(data.configured);
                     if data.configured {
-                        set_config.set(Some(QuizConfigAdmin {
+                        let cfg = QuizConfigAdmin {
                             questions: data.questions,
                             passing_score_percent: data.passing_score_percent,
                             max_attempts: data.max_attempts,
                             time_limit_seconds: data.time_limit_seconds,
-                        }));
+                        };
+                        set_config.set(Some(cfg.clone()));
+                        set_original_config.set(Some(cfg));
                     }
                 }
                 Err(e) => {
@@ -135,12 +157,14 @@ pub fn QuizEditor(
                 Ok(data) => {
                     set_configured.set(data.configured);
                     if data.configured {
-                        set_config.set(Some(QuizConfigAdmin {
+                        let cfg = QuizConfigAdmin {
                             questions: data.questions,
                             passing_score_percent: data.passing_score_percent,
                             max_attempts: data.max_attempts,
                             time_limit_seconds: data.time_limit_seconds,
-                        }));
+                        };
+                        set_config.set(Some(cfg.clone()));
+                        set_original_config.set(Some(cfg));
                     }
                 }
                 Err(e) => {
@@ -153,7 +177,9 @@ pub fn QuizEditor(
 
     // Handle create quiz (from empty state)
     let handle_create = move |_: web_sys::MouseEvent| {
-        set_config.set(Some(default_config()));
+        let cfg = default_config();
+        set_original_config.set(Some(cfg.clone()));
+        set_config.set(Some(cfg));
         set_configured.set(true);
     };
 
@@ -255,6 +281,8 @@ pub fn QuizEditor(
             let eid = active_event_id.get();
             match api::put_admin_quiz(&cfg_clone, eid.as_deref()).await {
                 Ok(result) => {
+                    // Update original to the saved state — resets dirty flag
+                    set_original_config.set(Some(cfg_clone));
                     components::show_toast(
                         &set_toast,
                         &format!("Quiz saved: {} questions", result.questions_count),
@@ -284,13 +312,21 @@ pub fn QuizEditor(
     };
 
     // Computed flags
-    let show_loading = move || loading.get();
-    let show_error = move || !loading.get() && error.get().is_some();
-    let show_empty = move || !loading.get() && !configured.get() && error.get().is_none();
+    let has_event = move || active_event_id.get().is_some();
+    let show_loading = move || loading.get() && has_event();
+    let show_error = move || !loading.get() && error.get().is_some() && has_event();
+    let show_empty = move || !loading.get() && !configured.get() && error.get().is_none() && has_event();
     let show_content = move || !loading.get() && configured.get() && config.get().is_some();
 
     view! {
         <div class="quiz-editor">
+            // No event selected
+            <Show when=move || !has_event() fallback=|| view! { <div></div> }>
+                <div class="admin-empty-state">
+                    "Select an event to configure its quiz."
+                </div>
+            </Show>
+
             // Loading state
             <Show when=show_loading fallback=|| view! { <div></div> }>
                 <div class="page-loading">
@@ -305,7 +341,7 @@ pub fn QuizEditor(
                     let err = error.get().unwrap_or_default();
                     view! {
                         <div class="card quiz-error-card">
-                            <div class="quiz-state-icon">"⚠️"</div>
+                            <div class="quiz-state-icon"><Icon icon=IconName::Warning class="icon-lg icon-warning" /></div>
                             <h3>"Failed to Load Quiz"</h3>
                             <p class="quiz-state-desc">{err}</p>
                             <button class="btn btn-outline btn-sm" on:click=move |_| reload()>"Retry"</button>
@@ -317,7 +353,7 @@ pub fn QuizEditor(
             // Empty state (not configured)
             <Show when=show_empty fallback=|| view! { <div></div> }>
                 <div class="card quiz-empty-card">
-                    <div class="quiz-state-icon quiz-state-icon-lg">"📝"</div>
+                    <div class="quiz-state-icon quiz-state-icon-lg"><Icon icon=IconName::Copy class="icon-2xl icon-info" /></div>
                     <h3>"No Quiz Configured"</h3>
                     <p class="quiz-state-desc">
                         "Create a quiz that attendees must pass before claiming their NFT.
@@ -340,14 +376,22 @@ pub fn QuizEditor(
                                 class="btn btn-outline btn-sm"
                                 on:click=handle_toggle_preview
                             >
-                                {move || if preview.get() { "✏️ Edit" } else { "👁 Preview" }}
+                                {move || if preview.get() {
+                                    view! { <Icon icon=IconName::Palette class="icon-sm" />" Edit" }.into_any()
+                                } else {
+                                    view! { <Icon icon=IconName::Search class="icon-sm" />" Preview" }.into_any()
+                                }}
                             </button>
                             <button
                                 class="btn btn-primary btn-sm"
                                 on:click=handle_save
-                                disabled=move || saving.get()
+                                disabled=move || saving.get() || !is_dirty.get()
                             >
-                                {move || if saving.get() { "Saving..." } else { "💾 Save" }}
+                                {move || if saving.get() {
+                                    "Saving...".into_any()
+                                } else {
+                                    view! { <Icon icon=IconName::Save class="icon-sm" />" Save" }.into_any()
+                                }}
                             </button>
                         </div>
                     </div>
@@ -383,7 +427,7 @@ pub fn QuizEditor(
 
                         view! {
                             <div class="card quiz-settings-card">
-                                <h3 class="quiz-section-heading">"⚙️ Settings"</h3>
+                                <h3 class="quiz-section-heading">"Settings"</h3>
                                 <div class="quiz-settings-grid">
                                     // Passing score
                                     <div class="quiz-setting-item">
@@ -473,7 +517,7 @@ pub fn QuizEditor(
                         view! {
                             <div class="quiz-questions-heading">
                                 <h3 class="quiz-section-heading">
-                                    {format!("📋 Questions ({total})")}
+                                    <Icon icon=IconName::Copy class="icon-sm" />{format!("Questions ({total})")}
                                 </h3>
                             </div>
 
@@ -535,20 +579,40 @@ pub fn QuizEditor(
                                                         }
                                                         title="Move down"
                                                     >"↓"</button>
-                                                    <button
-                                                        class="quiz-ctrl-btn quiz-ctrl-delete"
-                                                        disabled=total <= 1
-                                                        on:click=move |_| {
-                                                            sc.update(|c| {
-                                                                if let Some(c) = c
-                                                                    && c.questions.len() > 1
-                                                                {
-                                                                    c.questions.remove(idx);
+                                                    {
+                                                        let q_id = config.get()
+                                                            .and_then(|c| c.questions.get(idx).map(|q| q.id.clone()))
+                                                            .unwrap_or_default();
+                                                        let is_confirming = confirm_delete_q.get().as_deref() == Some(&q_id);
+                                                        let q_id_clone = q_id.clone();
+                                                        let sc_del = sc;
+                                                        let set_cq = set_confirm_delete_q;
+                                                        view! {
+                                                            <button
+                                                                class=if is_confirming { "quiz-ctrl-btn quiz-ctrl-delete btn-confirm-danger" } else { "quiz-ctrl-btn quiz-ctrl-delete" }
+                                                                disabled=total <= 1
+                                                                on:click=move |_| {
+                                                                    if !is_confirming {
+                                                                        set_cq.set(Some(q_id_clone.clone()));
+                                                                        let set_reset = set_confirm_delete_q;
+                                                                        gloo::timers::callback::Timeout::new(3000, move || {
+                                                                            set_reset.set(None);
+                                                                        }).forget();
+                                                                    } else {
+                                                                        set_cq.set(None);
+                                                                        sc_del.update(|c| {
+                                                                            if let Some(c) = c
+                                                                                && c.questions.len() > 1
+                                                                            {
+                                                                                c.questions.remove(idx);
+                                                                            }
+                                                                        });
+                                                                    }
                                                                 }
-                                                            });
+                                                                title="Delete question"
+                                                            >{if is_confirming { "⚠?" } else { "✕" }}</button>
                                                         }
-                                                        title="Delete question"
-                                                    >"✕"</button>
+                                                    }
                                                 </div>
                                             </div>
 
@@ -739,10 +803,15 @@ pub fn QuizEditor(
                         <button
                             class="btn btn-primary"
                             on:click=handle_save
-                            disabled=move || saving.get()
+                            disabled=move || saving.get() || !is_dirty.get()
                         >
-                            {move || if saving.get() { "Saving..." } else { "💾 Save Quiz" }}
+                            {move || if saving.get() { "Saving...".into_any() } else { view! { <Icon icon=IconName::Save class="icon-sm" />" Save Quiz" }.into_any() }}
                         </button>
+                        {move || if is_dirty.get() {
+                            view! { <span class="hint-dirty">"Unsaved changes"</span> }.into_any()
+                        } else {
+                            view! { <span class="hint-clean">"Up to date"</span> }.into_any()
+                        }}
                     </div>
                 </Show>
             </Show>

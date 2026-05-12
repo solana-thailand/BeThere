@@ -4,12 +4,19 @@
 # ============================================================================
 # Tests the full on-chain escrow flow end-to-end on Solana devnet:
 #   1. Health check + event setup
-#   2. Build & submit `create_vault_ata` TX → pre-creates vault ATA (skipped by default)
-#   3. Build & submit `create_event` TX → creates EventEscrow PDA
-#   4. Build & submit `deposit` TX → USDC → vault
-#   5. Build & submit `mark_checked_in` TX → marks attendee checked-in
-#   6. Build & submit `refund` TX → USDC back to attendee
-#   7. Verify all PDAs and token balances on-chain
+#   2. Build & submit init escrow TX (combined ATA + CreateEvent)
+#   3. Update event_end_ms to future (server-side only, for deposits)
+#   4. Verify escrow on-chain
+#   5. Check deposit status (pre-deposit)
+#   6. Build & submit deposit TX → USDC → vault
+#   7. Check deposit status (post-deposit)
+#   8. Build & submit mark_checked_in TX
+#   9. Build & submit refund TX → USDC back to attendee
+#  10. Verify final on-chain state
+#  11. THB deposit flow test
+#  12. Deactivate event
+#  13. Claim forfeited deposits
+#  14. Close event & reclaim rent
 #
 # Prerequisites:
 #   - `cd worker && npx wrangler dev --port 8787` running
@@ -215,9 +222,12 @@ else
     # Uses dev-token auth (DEV_MODE=1)
     info "Creating event '$EVENT_ID' with deposit config..."
 
-    # IMPORTANT: event_end_ms is set to 1 hour in the past so that the
-    # on-chain refund instruction can succeed (it checks clock > event_end).
-    # refund_deadline_hours=168 means refund deadline = event_end + 7 days.
+    # IMPORTANT: event_end_ms is set to ~2 minutes in the future so that:
+    #   1. The on-chain create_event instruction accepts it (event_end must be in the future)
+    #   2. The server-side deposit handler allows deposits
+    # After deposit, we wait for event_end to pass, then refunds work.
+    # refund_deadline_hours=168 means refund_deadline = event_end + 7 days.
+    # Step 3b extends event_end_ms further (server-side only) for deposit time buffer.
     EVENT_RESPONSE=$(curl -s -X POST "$BASE_URL/api/events" \
         -H "Authorization: Bearer dev-token" \
         -H "Content-Type: application/json" \
@@ -228,7 +238,7 @@ else
             \"link\": \"https://example.com/e2e-test\",
             \"sheet_id\": \"e2e-test-dummy\",
             \"event_start_ms\": $(($(date +%s) - 7200))000,
-            \"event_end_ms\": $(($(date +%s) - 3600))000,
+            \"event_end_ms\": $(($(date +%s) + 120))000,
             \"status\": \"active\",
             \"deposit_enabled\": true,
             \"deposit_amount_usdc\": $DEPOSIT_AMOUNT_USDC,
@@ -308,6 +318,10 @@ if [ "$EVENT_SUCCESS" = "true" ]; then
     info "on_chain_event_id=$ON_CHAIN_ID"
     info "promptpay_id=$PROMPTPAY"
 
+    # Store the original event_end_ms (before Step 3b modifies it) for the refund wait
+    ORIGINAL_EVENT_END_MS=$(echo "$EVENT_DETAIL" | python3 -c "import sys,json; d=json.load(sys.stdin)['data']['event']; print(d.get('event_end_ms',0))" 2>/dev/null || echo "0")
+    info "Original event_end_ms=$ORIGINAL_EVENT_END_MS (baked into on-chain PDA)"
+
     if [ "$DEPOSIT_ENABLED" != "True" ]; then
         fail "Deposit not enabled — cannot proceed"
         exit 1
@@ -323,84 +337,33 @@ else
 fi
 
 # ============================================================================
-# Step 3: Build `create_vault_ata` Transaction
+# Step 3: Init Escrow (Combined: ATA + CreateEvent in one TX)
 # ============================================================================
-section "Step 3: Build create_vault_ata Transaction"
+section "Step 3: Init Escrow (POST /api/escrow/init)"
 
-# REQUIRED: The escrow program's init(idempotent) CPI to the ATA program fails
-# with "signer privilege escalated". The workaround is to pre-create the vault ATA
-# before calling create_event. The init(idempotent) will then be a no-op.
 if [ -n "$ESCROW_ADDR" ] && [ "$ESCROW_ADDR" != "" ]; then
-    skip "create_vault_ata TX — escrow already initialized at $ESCROW_ADDR"
+    skip "Init escrow TX — escrow already initialized at $ESCROW_ADDR"
 else
-    info "Requesting create_vault_ata TX from worker..."
+    info "Requesting combined init escrow TX from worker..."
 
-    VAULT_ATA_RESPONSE=$(curl -s -X POST "$BASE_URL/api/escrow/create-vault-ata" \
+    INIT_RESPONSE=$(curl -s -X POST "$BASE_URL/api/escrow/init" \
         -H "Authorization: Bearer dev-token" \
         -H "Content-Type: application/json" \
         -d "{\"event_id\": \"$EVENT_ID\"}")
 
-    VAULT_ATA_SUCCESS=$(echo "$VAULT_ATA_RESPONSE" | python3 -c "import sys,json; print(str(json.load(sys.stdin).get('success','')).lower())" 2>/dev/null || echo "false")
+    INIT_SUCCESS=$(echo "$INIT_RESPONSE" | python3 -c "import sys,json; print(str(json.load(sys.stdin).get('success','')).lower())" 2>/dev/null || echo "false")
 
-    if [ "$VAULT_ATA_SUCCESS" = "true" ]; then
-        VAULT_ATA_TX=$(echo "$VAULT_ATA_RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['transaction'])" 2>/dev/null || echo "")
-        VAULT_ATA_ADDR=$(echo "$VAULT_ATA_RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['vault_address'])" 2>/dev/null || echo "")
-        VAULT_ATA_MSG=$(echo "$VAULT_ATA_RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['message'])" 2>/dev/null || echo "")
+    if [ "$INIT_SUCCESS" = "true" ]; then
+        TX_B64=$(echo "$INIT_RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['transaction'])" 2>/dev/null || echo "")
+        ESCROW_ADDR=$(echo "$INIT_RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['escrow_address'])" 2>/dev/null || echo "")
+        VAULT_ADDR=$(echo "$INIT_RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['vault_address'])" 2>/dev/null || echo "")
+        ON_CHAIN_ID=$(echo "$INIT_RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['on_chain_event_id'])" 2>/dev/null || echo "")
+        TX_MSG=$(echo "$INIT_RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['message'])" 2>/dev/null || echo "")
 
-        pass "create_vault_ata TX built"
-        info "Message: $VAULT_ATA_MSG"
-        info "Vault ATA: $VAULT_ATA_ADDR"
-
-        # Submit TX with organizer keypair
-        ORG_KEYPAIR_JSON=$(cat ~/.config/solana/id.json)
-        VAULT_ATA_SUBMIT=$(sign_and_submit_tx "$VAULT_ATA_TX" "$ORG_KEYPAIR_JSON")
-        info "Vault ATA submit: $VAULT_ATA_SUBMIT"
-
-        if echo "$VAULT_ATA_SUBMIT" | grep -q "SIGNATURE="; then
-            VAULT_ATA_SIG=$(echo "$VAULT_ATA_SUBMIT" | grep "SIGNATURE=" | cut -d= -f2)
-            pass "create_vault_ata TX submitted!"
-            info "Signature: $VAULT_ATA_SIG"
-            info "View: https://explorer.solana.com/tx/$VAULT_ATA_SIG?cluster=devnet"
-            sleep 5
-        else
-            fail "create_vault_ata TX submission failed"
-            echo "   $VAULT_ATA_SUBMIT" | head -c 500
-            # The vault ATA may already exist (idempotent), continue anyway
-            warn "Continuing — vault ATA may already exist"
-        fi
-    else
-        ERR=$(echo "$VAULT_ATA_RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('error', d.get('message', str(d)[:200])))" 2>/dev/null || echo "unknown")
-        warn "create_vault_ata TX build failed: $ERR"
-        warn "Continuing — vault ATA may already exist or will be created manually"
-    fi
-fi
-
-# ============================================================================
-# Step 4: Build `create_event` Transaction
-# ============================================================================
-section "Step 4: Build create_event Transaction"
-
-if [ -n "$ESCROW_ADDR" ] && [ "$ESCROW_ADDR" != "" ]; then
-    skip "create_event TX — escrow already initialized at $ESCROW_ADDR"
-else
-    info "Requesting create_event TX from worker..."
-
-    CREATE_TX_RESPONSE=$(curl -s -X POST "$BASE_URL/api/escrow/create-event" \
-        -H "Authorization: Bearer dev-token" \
-        -H "Content-Type: application/json" \
-        -d "{\"event_id\": \"$EVENT_ID\"}")
-
-    CREATE_SUCCESS=$(echo "$CREATE_TX_RESPONSE" | python3 -c "import sys,json; print(str(json.load(sys.stdin).get('success','')).lower())" 2>/dev/null || echo "false")
-
-    if [ "$CREATE_SUCCESS" = "true" ]; then
-        TX_B64=$(echo "$CREATE_TX_RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['transaction'])" 2>/dev/null || echo "")
-        ESCROW_ADDR=$(echo "$CREATE_TX_RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['escrow_address'])" 2>/dev/null || echo "")
-        ON_CHAIN_ID=$(echo "$CREATE_TX_RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['on_chain_event_id'])" 2>/dev/null || echo "")
-        TX_MSG=$(echo "$CREATE_TX_RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['message'])" 2>/dev/null || echo "")
-
-        pass "create_event TX built"
+        pass "Init escrow TX built (combined ATA + CreateEvent)"
         info "Message: $TX_MSG"
         info "Escrow PDA: $ESCROW_ADDR"
+        info "Vault ATA: $VAULT_ADDR"
         info "On-chain event ID: $ON_CHAIN_ID"
 
         # Submit TX with organizer keypair
@@ -411,25 +374,22 @@ else
         info "Submit output: $SUBMIT_OUTPUT"
 
         if echo "$SUBMIT_OUTPUT" | grep -q "SIGNATURE="; then
-            CREATE_SIG=$(echo "$SUBMIT_OUTPUT" | grep "SIGNATURE=" | cut -d= -f2)
-            pass "create_event TX submitted!"
-            info "Signature: $CREATE_SIG"
-            info "View: https://explorer.solana.com/tx/$CREATE_SIG?cluster=devnet"
+            INIT_SIG=$(echo "$SUBMIT_OUTPUT" | grep "SIGNATURE=" | cut -d= -f2)
+            pass "Init escrow TX submitted!"
+            info "Signature: $INIT_SIG"
+            info "View: https://explorer.solana.com/tx/$INIT_SIG?cluster=devnet"
 
             # Wait for confirmation
             info "Waiting for confirmation..."
             sleep 5
-            solana confirm "$CREATE_SIG" --url devnet 2>&1 || warn "Confirmation check failed (may still be processing)"
+            solana confirm "$INIT_SIG" --url devnet 2>&1 || warn "Confirmation check failed (may still be processing)"
 
             # Update event config with escrow address
             info "Updating event with escrow_address=$ESCROW_ADDR, on_chain_event_id=$ON_CHAIN_ID..."
             UPDATE_ESCROW=$(curl -s -X PUT "$BASE_URL/api/events/$EVENT_ID" \
                 -H "Authorization: Bearer dev-token" \
                 -H "Content-Type: application/json" \
-                -d "{
-                    \"escrow_address\": \"$ESCROW_ADDR\",
-                    \"on_chain_event_id\": $ON_CHAIN_ID
-                }")
+                -d "{\"escrow_address\": \"$ESCROW_ADDR\", \"on_chain_event_id\": $ON_CHAIN_ID}")
             UPDATE_OK=$(echo "$UPDATE_ESCROW" | python3 -c "import sys,json; print(str(json.load(sys.stdin).get('success','')).lower())" 2>/dev/null || echo "false")
             if [ "$UPDATE_OK" = "true" ]; then
                 pass "Event updated with escrow_address"
@@ -437,7 +397,7 @@ else
                 warn "Failed to update escrow_address: $(echo "$UPDATE_ESCROW" | head -c 200)"
             fi
         else
-            fail "create_event TX submission failed"
+            fail "Init escrow TX submission failed"
             echo "   $SUBMIT_OUTPUT" | head -c 500
 
             # Fallback: verify escrow account directly
@@ -447,20 +407,40 @@ else
                 pass "Escrow PDA exists on-chain (may have been created despite error)"
             else
                 warn "Escrow PDA not found: $ESCROW_ADDR"
-                warn "Manual step: use Phantom/Backpack wallet to sign the create_event TX"
             fi
         fi
     else
-        ERR=$(echo "$CREATE_TX_RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('error', d.get('message', str(d)[:200])))" 2>/dev/null || echo "unknown")
-        fail "create_event TX build failed: $ERR"
-        echo "   Full: $(echo "$CREATE_TX_RESPONSE" | head -c 400)"
+        ERR=$(echo "$INIT_RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('error', d.get('message', str(d)[:200])))" 2>/dev/null || echo "unknown")
+        fail "Init escrow TX build failed: $ERR"
+        echo "   Full: $(echo "$INIT_RESPONSE" | head -c 400)"
     fi
 fi
 
 # ============================================================================
-# Step 5: Verify Escrow On-Chain
+# Step 3b: Update event_end_ms to Future (server-side only — for deposit acceptance)
 # ============================================================================
-section "Step 5: Verify Escrow On-Chain"
+section "Step 3b: Set Event End to Future for Deposits"
+
+# The event was created with event_end_ms 2 minutes in the future (for on-chain init).
+# We extend it further into the future (2 hours) for the server-side deposit handler.
+# The on-chain event_end is baked into the PDA at init time (~2 min from now).
+# After the deposit succeeds, we wait for the on-chain event_end to pass, then refund.
+if [ "$SKIP_SETUP" = true ]; then
+    skip "Event end time update — reusing existing event"
+else
+    FUTURE_MS=$(($(date +%s) + 7200))000
+    info "Updating event_end_ms to $FUTURE_MS (2 hours from now) for deposit acceptance..."
+    UPDATE_END_FUTURE=$(curl -s -X PUT "$BASE_URL/api/events/$EVENT_ID" \
+        -H "Authorization: Bearer dev-token" \
+        -H "Content-Type: application/json" \
+        -d "{\"event_end_ms\": $FUTURE_MS}")
+    UPDATE_END_OK=$(echo "$UPDATE_END_FUTURE" | python3 -c "import sys,json; print(str(json.load(sys.stdin).get('success','')).lower())" 2>/dev/null || echo "false")
+    if [ "$UPDATE_END_OK" = "true" ]; then
+        pass "event_end_ms set to future (server-side only — on-chain PDA unchanged)"
+    else
+        warn "Failed to update event_end_ms: $(echo "$UPDATE_END_FUTURE" | head -c 200)"
+    fi
+fi
 
 if [ -n "$ESCROW_ADDR" ] && [ "$ESCROW_ADDR" != "" ]; then
     info "Checking escrow account: $ESCROW_ADDR"
@@ -515,19 +495,20 @@ else
 fi
 
 # ============================================================================
-# Step 6: Deposit Status Check (pre-deposit)
+# Step 5: Deposit Status Check (pre-deposit)
 # ============================================================================
-section "Step 6: Deposit Status (Pre-Deposit)"
+section "Step 5: Deposit Status (Pre-Deposit)"
 
 TEST_ATTENDEE_ID="e2e-attendee-$(date +%s)"
 DEPOSIT_STATUS=$(curl -s "$BASE_URL/api/deposit/status/$TEST_ATTENDEE_ID?event_id=$EVENT_ID")
 
-STATUS_PARSE=$(echo "$DEPOSIT_STATUS" | python3 -c "import sys,json; d=json.load(sys.stdin); print('ok')" 2>/dev/null || echo "err")
+# API wraps response in ApiOk: {"success":true,"data":{...}}
+STATUS_PARSE=$(echo "$DEPOSIT_STATUS" | python3 -c "import sys,json; d=json.load(sys.stdin).get('data',{}); print('ok')" 2>/dev/null || echo "err")
 if [ "$STATUS_PARSE" = "ok" ]; then
-    DEP_ENABLED=$(echo "$DEPOSIT_STATUS" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('deposit_enabled',False))" 2>/dev/null || echo "False")
-    DEP_AMOUNT=$(echo "$DEPOSIT_STATUS" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('deposit_amount_usdc',0))" 2>/dev/null || echo "0")
-    DEP_STATUS=$(echo "$DEPOSIT_STATUS" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('status'))" 2>/dev/null || echo "None")
-    PROMPTPAY_STATUS=$(echo "$DEPOSIT_STATUS" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('promptpay_id',''))" 2>/dev/null || echo "")
+    DEP_ENABLED=$(echo "$DEPOSIT_STATUS" | python3 -c "import sys,json; d=json.load(sys.stdin).get('data',{}); print(d.get('deposit_enabled',False))" 2>/dev/null || echo "False")
+    DEP_AMOUNT=$(echo "$DEPOSIT_STATUS" | python3 -c "import sys,json; d=json.load(sys.stdin).get('data',{}); print(d.get('deposit_amount_usdc',0))" 2>/dev/null || echo "0")
+    DEP_STATUS=$(echo "$DEPOSIT_STATUS" | python3 -c "import sys,json; d=json.load(sys.stdin).get('data',{}); print(d.get('status'))" 2>/dev/null || echo "None")
+    PROMPTPAY_STATUS=$(echo "$DEPOSIT_STATUS" | python3 -c "import sys,json; d=json.load(sys.stdin).get('data',{}); print(d.get('promptpay_id',''))" 2>/dev/null || echo "")
 
     pass "GET /api/deposit/status → deposit_enabled=$DEP_ENABLED, amount=$DEP_AMOUNT"
     info "Status: $DEP_STATUS, promptpay_id=$PROMPTPAY_STATUS"
@@ -537,9 +518,9 @@ else
 fi
 
 # ============================================================================
-# Step 7: Build Deposit TX (Solana Pay)
+# Step 6: Build Deposit TX (Solana Pay)
 # ============================================================================
-section "Step 7: Build Deposit Transaction"
+section "Step 6: Build Deposit Transaction"
 
 info "Requesting deposit TX for attendee $ATTENDEE_WALLET..."
 
@@ -623,7 +604,7 @@ if [ "$DEP_INIT_SUCCESS" = "true" ]; then
 
             CONFIRM_SUCCESS=$(echo "$CONFIRM_RESPONSE" | python3 -c "import sys,json; print(str(json.load(sys.stdin).get('success','')).lower())" 2>/dev/null || echo "false")
             if [ "$CONFIRM_SUCCESS" = "true" ]; then
-                CONFIRMED=$(echo "$CONFIRM_RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin).get('confirmed',False))" 2>/dev/null || echo "False")
+                CONFIRMED=$(echo "$CONFIRM_RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin).get('data',{}); print(d.get('confirmed',False))" 2>/dev/null || echo "False")
                 pass "Deposit confirmation: confirmed=$CONFIRMED"
             else
                 info "Confirm response: $(echo "$CONFIRM_RESPONSE" | head -c 200)"
@@ -657,17 +638,17 @@ else
 fi
 
 # ============================================================================
-# Step 8: Deposit Status Check (post-deposit)
+# Step 7: Deposit Status Check (post-deposit)
 # ============================================================================
-section "Step 8: Deposit Status (Post-Deposit)"
+section "Step 7: Deposit Status (Post-Deposit)"
 
 DEPOSIT_STATUS2=$(curl -s "$BASE_URL/api/deposit/status/$TEST_ATTENDEE_ID?event_id=$EVENT_ID")
 
-STATUS2_PARSE=$(echo "$DEPOSIT_STATUS2" | python3 -c "import sys,json; d=json.load(sys.stdin); print('ok')" 2>/dev/null || echo "err")
+STATUS2_PARSE=$(echo "$DEPOSIT_STATUS2" | python3 -c "import sys,json; d=json.load(sys.stdin).get('data',{}); print('ok')" 2>/dev/null || echo "err")
 if [ "$STATUS2_PARSE" = "ok" ]; then
     DEP_STATUS2=$(echo "$DEPOSIT_STATUS2" | python3 -c "
 import sys, json
-d = json.load(sys.stdin)
+d = json.load(sys.stdin).get('data', {})
 s = d.get('status')
 if s:
     print(f\"method={s.get('method','?')}, verified={s.get('verified',False)}, tx={s.get('tx_signature','none')[:16]}...\")
@@ -680,9 +661,9 @@ else
 fi
 
 # ============================================================================
-# Step 9: Mark Attendee Checked-In
+# Step 8: Mark Attendee Checked-In
 # ============================================================================
-section "Step 9: Mark Attendee Checked-In"
+section "Step 8: Mark Attendee Checked-In"
 
 # The organizer must mark the attendee as checked in before a refund can be claimed.
 # This is a protected endpoint (organizer signs the TX).
@@ -728,12 +709,40 @@ else
 fi
 
 # ============================================================================
-# Step 10: Build Refund TX
+# Step 8b: Wait for On-Chain Event End
 # ============================================================================
-section "Step 10: Build Refund Transaction"
+section "Step 8b: Wait for Event End (for refund eligibility)"
 
-# The on-chain refund instruction requires: clock.unix_timestamp > event_end.
-# We set event_end_ms to 1 hour in the past in Step 1, so this should pass.
+# The on-chain refund instruction requires clock > event_end.
+# The escrow PDA was initialized with event_end = ~2 min from creation.
+# We need to wait for that time to pass before the refund will work.
+info "Checking if on-chain event_end has passed..."
+ONCHAIN_EVENT_END_TS=$((ORIGINAL_EVENT_END_MS / 1000))
+info "On-chain event_end (unix seconds): $ONCHAIN_EVENT_END_TS"
+WAIT_SECONDS=0
+MAX_WAIT=180  # Maximum 3 minutes to wait
+while [ $WAIT_SECONDS -lt $MAX_WAIT ]; do
+    NOW_TS=$(date +%s)
+    if [ "$NOW_TS" -ge "$ONCHAIN_EVENT_END_TS" ]; then
+        pass "Event end has passed (now=$NOW_TS, event_end=$ONCHAIN_EVENT_END_TS) — refunds enabled"
+        break
+    fi
+    info "Waiting for event_end to pass... (now=$NOW_TS, event_end=$ONCHAIN_EVENT_END_TS, waited=${WAIT_SECONDS}s)"
+    sleep 10
+    WAIT_SECONDS=$((WAIT_SECONDS + 10))
+done
+if [ $WAIT_SECONDS -ge $MAX_WAIT ]; then
+    warn "Timeout waiting for event_end — refund may fail with EventEndInPast check"
+fi
+
+# ============================================================================
+# Step 9: Build Refund TX
+# ============================================================================
+section "Step 9: Build Refund Transaction"
+
+# The on-chain refund instruction requires clock.unix_timestamp > event_end.
+# We created the event with event_end_ms ~2 min in the future.
+# Step 8b waited for that time to pass. Now refunds should work.
 # The refund also requires the attendee to be marked as checked-in first.
 info "Requesting refund TX for attendee $ATTENDEE_WALLET..."
 
@@ -833,9 +842,9 @@ else
 fi
 
 # ============================================================================
-# Step 11: Verify Final State
+# Step 10: Verify Final State
 # ============================================================================
-section "Step 11: Verify Final On-Chain State"
+section "Step 10: Verify Final On-Chain State"
 
 info "Checking final vault balance..."
 if [ -n "$ESCROW_ADDR" ] && [ "$ESCROW_ADDR" != "" ]; then
@@ -850,9 +859,9 @@ ATT_SOL_FINAL=$(solana balance "$ATTENDEE_WALLET" --url devnet 2>&1 | awk '{prin
 info "Attendee SOL (final): $ATT_SOL_FINAL"
 
 # ============================================================================
-# Step 12: THB Deposit Flow Test
+# Step 11: THB Deposit Flow Test
 # ============================================================================
-section "Step 12: THB Deposit Flow"
+section "Step 11: THB Deposit Flow"
 
 # Test THB slip upload
 info "Testing THB slip upload..."
@@ -891,9 +900,9 @@ else
 fi
 
 # ===========================================================================
-# Step 13: Deactivate Event
+# Step 12: Deactivate Event
 # ===========================================================================
-section "Step 13: Deactivate Event"
+section "Step 12: Deactivate Event"
 
 if [ -z "$ESCROW_ADDR" ] || [ "$ESCROW_ADDR" = "" ]; then
     skip "deactivate_event TX — no escrow_address"
@@ -936,9 +945,9 @@ else
 fi
 
 # ===========================================================================
-# Step 14: Claim Forfeited (no-show deposits)
+# Step 13: Claim Forfeited (no-show deposits)
 # ===========================================================================
-section "Step 14: Claim Forfeited Deposits"
+section "Step 13: Claim Forfeited Deposits"
 
 if [ -z "$ESCROW_ADDR" ] || [ "$ESCROW_ADDR" = "" ]; then
     skip "claim_forfeited TX — no escrow_address"
@@ -986,9 +995,9 @@ else
 fi
 
 # ===========================================================================
-# Step 15: Close Event (reclaim rent)
+# Step 14: Close Event (reclaim rent)
 # ===========================================================================
-section "Step 15: Close Event & Reclaim Rent"
+section "Step 14: Close Event & Reclaim Rent"
 
 if [ -z "$ESCROW_ADDR" ] || [ "$ESCROW_ADDR" = "" ]; then
     skip "close_event TX — no escrow_address"

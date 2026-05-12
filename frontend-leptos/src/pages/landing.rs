@@ -8,6 +8,8 @@ use leptos::prelude::*;
 use leptos_router::components::A;
 use serde::Deserialize;
 
+use crate::icons::{Icon, IconName};
+
 /// Waitlist signup form component.
 #[component]
 fn WaitlistForm() -> impl IntoView {
@@ -92,7 +94,7 @@ fn WaitlistForm() -> impl IntoView {
             fallback=|| view! { <div></div> }
         >
             <div style="padding:1.5rem;background:var(--success-bg);border:1px solid var(--success-border);border-radius:var(--radius);text-align:center;">
-                <div style="font-size:1.25rem;margin-bottom:0.5rem;">"✓"</div>
+                <div style="font-size:1.25rem;margin-bottom:0.5rem;"><Icon icon=IconName::Check class="icon-md"/></div>
                 <div style="font-weight:600;color:var(--success);margin-bottom:0.25rem;">
                     {move || if already_registered.get() { "You're already on the list!" } else { "You're on the list!" }}
                 </div>
@@ -151,11 +153,11 @@ impl SwimlaneRole {
         }
     }
 
-    fn emoji(self) -> &'static str {
+    fn icon_name(self) -> IconName {
         match self {
-            Self::Organizer => "\u{1f3af}",
-            Self::Staff => "\u{1f4f1}",
-            Self::Attendee => "\u{1f3ab}",
+            Self::Organizer => IconName::Target,
+            Self::Staff => IconName::Phone,
+            Self::Attendee => IconName::Ticket,
         }
     }
 
@@ -185,22 +187,22 @@ impl SwimlaneRole {
 
     fn steps(self) -> &'static [SwimlaneStep] {
         static ORG: &[SwimlaneStep] = &[
-            SwimlaneStep { icon: "\u{1f4cb}", title: "Create Event", desc: "Set name, capacity, and deposit" },
-            SwimlaneStep { icon: "\u{1f4b0}", title: "150 Registered", desc: "Deposits pool to 1.5 SOL + $1,950" },
-            SwimlaneStep { icon: "\u{1f4ca}", title: "Live Dashboard", desc: "Track check-ins & no-shows" },
-            SwimlaneStep { icon: "\u{1f4b8}", title: "Auto Payout", desc: "Refund attendees, keep no-shows" },
+            SwimlaneStep { icon: IconName::Copy, title: "Create Event", desc: "Set name, capacity, and deposit" },
+            SwimlaneStep { icon: IconName::Coin, title: "150 Registered", desc: "Deposits pool to 1.5 SOL + $1,950" },
+            SwimlaneStep { icon: IconName::Chart, title: "Live Dashboard", desc: "Track check-ins & no-shows" },
+            SwimlaneStep { icon: IconName::MoneyWings, title: "Auto Payout", desc: "Refund attendees, keep no-shows" },
         ];
         static STAFF: &[SwimlaneStep] = &[
-            SwimlaneStep { icon: "\u{1f4f7}", title: "Open Scanner", desc: "Point camera at attendee QR" },
-            SwimlaneStep { icon: "\u{2705}", title: "Instant Confirm", desc: "Verified in < 2 seconds" },
-            SwimlaneStep { icon: "\u{1f389}", title: "Session Done", desc: "142 checked in, all smooth" },
+            SwimlaneStep { icon: IconName::Camera, title: "Open Scanner", desc: "Point camera at attendee QR" },
+            SwimlaneStep { icon: IconName::Check, title: "Instant Confirm", desc: "Verified in < 2 seconds" },
+            SwimlaneStep { icon: IconName::Party, title: "Session Done", desc: "142 checked in, all smooth" },
         ];
         static ATT: &[SwimlaneStep] = &[
-            SwimlaneStep { icon: "\u{1f3ab}", title: "Register & Deposit", desc: "Lock 0.01 SOL + $13 USDC" },
-            SwimlaneStep { icon: "\u{1f4f1}", title: "Show QR Code", desc: "At venue, display check-in code" },
-            SwimlaneStep { icon: "\u{2705}", title: "Get Scanned", desc: "Staff scans — instant confirm" },
-            SwimlaneStep { icon: "\u{1f9e0}", title: "Quick Quiz", desc: "Prove you paid attention" },
-            SwimlaneStep { icon: "\u{1f4b0}", title: "Claim Refund + Badge", desc: "Deposit back + cNFT forever" },
+            SwimlaneStep { icon: IconName::Ticket, title: "Register & Deposit", desc: "Lock 0.01 SOL + $13 USDC" },
+            SwimlaneStep { icon: IconName::Phone, title: "Show QR Code", desc: "At venue, display check-in code" },
+            SwimlaneStep { icon: IconName::Check, title: "Get Scanned", desc: "Staff scans — instant confirm" },
+            SwimlaneStep { icon: IconName::Brain, title: "Quick Quiz", desc: "Prove you paid attention" },
+            SwimlaneStep { icon: IconName::Coin, title: "Claim Refund + Badge", desc: "Deposit back + cNFT forever" },
         ];
         match self {
             Self::Organizer => ORG,
@@ -211,7 +213,7 @@ impl SwimlaneRole {
 }
 
 struct SwimlaneStep {
-    icon: &'static str,
+    icon: IconName,
     title: &'static str,
     desc: &'static str,
 }
@@ -227,7 +229,7 @@ fn swimlane_mockup(role: SwimlaneRole, step: usize) -> impl IntoView {
                     <div style="display:flex;flex-direction:column;gap:0.5rem;">
                         <div style="background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:6px;padding:0.5rem 0.65rem;color:var(--text-secondary);">"Solana Bangkok Meetup 2026"</div>
                         <div style="display:flex;gap:0.5rem;">
-                            <div style="flex:1;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:6px;padding:0.5rem 0.65rem;color:var(--text-secondary);">"\u{1f4cd} Bangkok"</div>
+                            <div style="flex:1;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:6px;padding:0.5rem 0.65rem;color:var(--text-secondary);display:flex;align-items:center;gap:0.25rem;"><Icon icon=IconName::Pin class="icon-xs"/>" Bangkok"</div>
                             <div style="flex:1;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:6px;padding:0.5rem 0.65rem;color:var(--text-secondary);">"Cap: 200"</div>
                         </div>
                         <div style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.25);border-radius:6px;padding:0.5rem 0.65rem;color:#818cf8;font-weight:500;">"Deposit: 0.01 SOL + $13 USDC"</div>
@@ -239,7 +241,7 @@ fn swimlane_mockup(role: SwimlaneRole, step: usize) -> impl IntoView {
             1 => view! {
                 <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:1.25rem;font-size:0.8rem;">
                     <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.75rem;">
-                        <span style="font-size:1rem;">"\u{1f4b0}"</span>
+                        <span style="font-size:1rem;"><Icon icon=IconName::Coin class="icon-sm"/></span>
                         <span style="font-weight:600;color:#fff;">"Deposit Pool"</span>
                     </div>
                     <div style="display:flex;gap:1rem;margin-bottom:0.75rem;">
@@ -262,7 +264,7 @@ fn swimlane_mockup(role: SwimlaneRole, step: usize) -> impl IntoView {
             // Dashboard — live stats
             2 => view! {
                 <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:1.25rem;font-size:0.8rem;">
-                    <div style="font-weight:600;color:#fff;margin-bottom:0.75rem;">"\u{1f4ca} Live Dashboard"</div>
+                    <div style="font-weight:600;color:#fff;margin-bottom:0.75rem;display:flex;align-items:center;gap:0.3rem;"><Icon icon=IconName::Chart class="icon-sm"/>" Live Dashboard"</div>
                     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.5rem;margin-bottom:0.75rem;">
                         <div style="text-align:center;background:rgba(99,102,241,0.08);border-radius:8px;padding:0.5rem;">
                             <div style="font-size:1.1rem;font-weight:700;color:#818cf8;">"150"</div>
@@ -286,15 +288,15 @@ fn swimlane_mockup(role: SwimlaneRole, step: usize) -> impl IntoView {
             // Payout — refund + received
             _ => view! {
                 <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:1.25rem;font-size:0.8rem;">
-                    <div style="font-weight:600;color:#fff;margin-bottom:0.75rem;">"\u{1f4b8} Payout Summary"</div>
+                    <div style="font-weight:600;color:#fff;margin-bottom:0.75rem;display:flex;align-items:center;gap:0.3rem;"><Icon icon=IconName::MoneyWings class="icon-sm"/>" Payout Summary"</div>
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;">
                         <div style="background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.2);border-radius:8px;padding:0.65rem;">
-                            <div style="color:#22c55e;font-weight:600;font-size:0.7rem;margin-bottom:0.35rem;">"\u{2705} Refunded"</div>
+                            <div style="color:#22c55e;font-weight:600;font-size:0.7rem;margin-bottom:0.35rem;display:flex;align-items:center;gap:0.25rem;"><Icon icon=IconName::Check class="icon-xs"/>" Refunded"</div>
                             <div style="color:#fff;font-weight:700;">"142"</div>
                             <div style="color:var(--text-secondary);font-size:0.7rem;">"1.42 SOL + $1,846"</div>
                         </div>
                         <div style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2);border-radius:8px;padding:0.65rem;">
-                            <div style="color:#f59e0b;font-weight:600;font-size:0.7rem;margin-bottom:0.35rem;">"\u{1f4b0} You Received"</div>
+                            <div style="color:#f59e0b;font-weight:600;font-size:0.7rem;margin-bottom:0.35rem;display:flex;align-items:center;gap:0.25rem;"><Icon icon=IconName::Coin class="icon-xs"/>" You Received"</div>
                             <div style="color:#fff;font-weight:700;">"8"</div>
                             <div style="color:var(--text-secondary);font-size:0.7rem;">"0.08 SOL + $104"</div>
                         </div>
@@ -311,7 +313,7 @@ fn swimlane_mockup(role: SwimlaneRole, step: usize) -> impl IntoView {
                         <div style="position:absolute;top:8px;right:8px;width:24px;height:24px;border-top:3px solid #f59e0b;border-right:3px solid #f59e0b;border-radius:0 4px 0 0;"></div>
                         <div style="position:absolute;bottom:8px;left:8px;width:24px;height:24px;border-bottom:3px solid #f59e0b;border-left:3px solid #f59e0b;border-radius:0 0 0 4px;"></div>
                         <div style="position:absolute;bottom:8px;right:8px;width:24px;height:24px;border-bottom:3px solid #f59e0b;border-right:3px solid #f59e0b;border-radius:0 0 4px 0;"></div>
-                        <div style="color:var(--text-secondary);font-size:0.75rem;">"\u{1f4f7} Point at attendee QR code"</div>
+                        <div style="color:var(--text-secondary);font-size:0.75rem;display:flex;align-items:center;justify-content:center;gap:0.25rem;"><Icon icon=IconName::Camera class="icon-xs"/>" Point at attendee QR code"</div>
                     </div>
                     <div style="color:#f59e0b;font-size:0.75rem;font-weight:600;">"Scanning..."</div>
                 </div>
@@ -319,7 +321,7 @@ fn swimlane_mockup(role: SwimlaneRole, step: usize) -> impl IntoView {
             // Confirmed — success card
             1 => view! {
                 <div style="background:var(--bg-secondary);border:1px solid rgba(34,197,94,0.3);border-radius:var(--radius);padding:1.25rem;font-size:0.8rem;text-align:center;">
-                    <div style="width:2.5rem;height:2.5rem;border-radius:50%;background:rgba(34,197,94,0.15);display:inline-flex;align-items:center;justify-content:center;font-size:1.25rem;margin-bottom:0.5rem;">"\u{2705}"</div>
+                    <div style="width:2.5rem;height:2.5rem;border-radius:50%;background:rgba(34,197,94,0.15);display:inline-flex;align-items:center;justify-content:center;font-size:1.25rem;margin-bottom:0.5rem;"><Icon icon=IconName::Check class="icon-md"/></div>
                     <div style="font-weight:700;color:#22c55e;margin-bottom:0.25rem;">"Checked In!"</div>
                     <div style="color:#fff;font-weight:600;">"Alex Chen"</div>
                     <div style="color:var(--text-secondary);font-size:0.7rem;">"Solana Bangkok 2026"</div>
@@ -329,7 +331,7 @@ fn swimlane_mockup(role: SwimlaneRole, step: usize) -> impl IntoView {
             // Done — summary
             _ => view! {
                 <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:1.25rem;font-size:0.8rem;text-align:center;">
-                    <div style="font-size:1.25rem;margin-bottom:0.5rem;">"\u{1f389}"</div>
+                    <div style="font-size:1.25rem;margin-bottom:0.5rem;"><Icon icon=IconName::Party class="icon-md"/></div>
                     <div style="font-weight:700;color:#fff;margin-bottom:0.25rem;">"Session Complete"</div>
                     <div style="display:flex;justify-content:center;gap:1rem;margin-bottom:0.5rem;">
                         <div>
@@ -377,7 +379,7 @@ fn swimlane_mockup(role: SwimlaneRole, step: usize) -> impl IntoView {
             // Get Scanned
             2 => view! {
                 <div style="background:var(--bg-secondary);border:1px solid rgba(34,197,94,0.3);border-radius:var(--radius);padding:1.25rem;font-size:0.8rem;text-align:center;">
-                    <div style="width:2.5rem;height:2.5rem;border-radius:50%;background:rgba(34,197,94,0.15);display:inline-flex;align-items:center;justify-content:center;font-size:1.25rem;margin-bottom:0.5rem;">"\u{2705}"</div>
+                    <div style="width:2.5rem;height:2.5rem;border-radius:50%;background:rgba(34,197,94,0.15);display:inline-flex;align-items:center;justify-content:center;font-size:1.25rem;margin-bottom:0.5rem;"><Icon icon=IconName::Check class="icon-md"/></div>
                     <div style="font-weight:700;color:#22c55e;margin-bottom:0.25rem;">"Checked In!"</div>
                     <div style="color:var(--text-secondary);font-size:0.7rem;">"Jul 15, 2026 \u{00b7} 2:03 PM"</div>
                     <div style="color:var(--text-secondary);font-size:0.7rem;margin-top:0.15rem;">"Solana Bangkok Meetup"</div>
@@ -386,7 +388,7 @@ fn swimlane_mockup(role: SwimlaneRole, step: usize) -> impl IntoView {
             // Quiz
             3 => view! {
                 <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:1.25rem;font-size:0.8rem;">
-                    <div style="font-weight:600;color:#fff;margin-bottom:0.5rem;">"\u{1f9e0} Event Quiz"</div>
+                    <div style="font-weight:600;color:#fff;margin-bottom:0.5rem;display:flex;align-items:center;gap:0.3rem;"><Icon icon=IconName::Brain class="icon-sm"/>" Event Quiz"</div>
                     <div style="color:var(--text-secondary);font-size:0.75rem;margin-bottom:0.65rem;">"What does BeThere use to prove attendance?"</div>
                     <div style="display:flex;flex-direction:column;gap:0.35rem;">
                         <div style="background:rgba(255,255,255,0.03);border:1px solid var(--border);border-radius:6px;padding:0.4rem 0.6rem;color:var(--text-secondary);font-size:0.7rem;">"\u{25cb} PDF certificate"</div>
@@ -400,10 +402,10 @@ fn swimlane_mockup(role: SwimlaneRole, step: usize) -> impl IntoView {
             _ => view! {
                 <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:1.25rem;font-size:0.8rem;text-align:center;">
                     <div style="display:inline-block;background:linear-gradient(135deg,#22c55e,#4ade80);border-radius:12px;padding:0.65rem 1rem;margin-bottom:0.65rem;">
-                        <div style="font-weight:700;color:#fff;font-size:0.9rem;">"\u{1f3ab} BeThere"</div>
+                        <div style="font-weight:700;color:#fff;font-size:0.9rem;display:flex;align-items:center;gap:0.25rem;"><Icon icon=IconName::Ticket class="icon-sm"/>" BeThere"</div>
                         <div style="color:rgba(255,255,255,0.8);font-size:0.6rem;">"cNFT \u{00b7} Solana"</div>
                     </div>
-                    <div style="color:#fff;font-weight:600;margin-bottom:0.25rem;">"\u{1f4b0} Refund Claimed!"</div>
+                    <div style="color:#fff;font-weight:600;margin-bottom:0.25rem;display:flex;align-items:center;justify-content:center;gap:0.3rem;"><Icon icon=IconName::Coin class="icon-sm"/>" Refund Claimed!"</div>
                     <div style="color:var(--text-secondary);font-size:0.7rem;">"0.01 SOL + $13 USDC returned"</div>
                     <div style="margin-top:0.65rem;background:#22c55e;color:#fff;border-radius:6px;padding:0.5rem;font-weight:600;font-size:0.75rem;">"Claim to Wallet"</div>
                 </div>
@@ -479,7 +481,7 @@ fn UpcomingEvents() -> impl IntoView {
                     <section style="max-width:960px;margin:0 auto;padding:1rem 1.5rem 3rem;">
                         <div style="text-align:center;margin-bottom:1.5rem;">
                             <h2 style="font-size:1.5rem;font-weight:700;color:#fff;margin-bottom:0.5rem;">
-                                "🎉 Upcoming Events"
+                                <Icon icon=IconName::Party class="icon-sm"/>" Upcoming Events"
                             </h2>
                             <p style="color:var(--text-secondary);font-size:0.95rem;">
                                 "Reserve your spot with a deposit. Show up. Get refunded."
@@ -496,9 +498,9 @@ fn UpcomingEvents() -> impl IntoView {
                                     "TBA".to_string()
                                 };
                                 let deposit_badge = if evt.deposit_enabled {
-                                    "💰 Deposit required"
+                                    view! { <span style="display:inline-flex;align-items:center;gap:0.25rem;"><Icon icon=IconName::Coin class="icon-xs"/>" Deposit required"</span> }.into_any()
                                 } else {
-                                    "🎟️ Free entry"
+                                    view! { <span style="display:inline-flex;align-items:center;gap:0.25rem;"><Icon icon=IconName::TicketFree class="icon-xs"/>" Free entry"</span> }.into_any()
                                 };
                                 view! {
                                     <a
@@ -514,7 +516,7 @@ fn UpcomingEvents() -> impl IntoView {
                                                 {evt.name}
                                             </h3>
                                             <p style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:0.35rem;">
-                                                "📅 " {date_str}
+                                                <span style="display:inline-flex;align-items:center;gap:0.25rem;"><Icon icon=IconName::Calendar class="icon-xs"/>" "{date_str}</span>
                                             </p>
                                             <p style="font-size:0.8rem;color:var(--text-muted);">
                                                 {deposit_badge}
@@ -749,7 +751,7 @@ pub fn Landing() -> impl IntoView {
                                     )
                                     on:click=move |_| set_active_role.set(r)
                                 >
-                                    <span>{r.emoji()}</span>
+                                    <Icon icon=r.icon_name() class="icon-sm"/>
                                     <span>{r.label()}</span>
                                 </button>
                             }
@@ -778,7 +780,7 @@ pub fn Landing() -> impl IntoView {
                                         if is_active { accent } else if is_past { accent } else { "var(--border)" },
                                         if is_active { role.accent_bg().to_string() } else if is_past { "rgba(255,255,255,0.04)".to_string() } else { "transparent".to_string() }
                                     )>
-                                        <span style=format!("color:{};", if is_active || is_past { accent } else { "var(--text-secondary)" })>{s.icon}</span>
+                                        <span style=format!("color:{};display:flex;align-items:center;justify-content:center;", if is_active || is_past { accent } else { "var(--text-secondary)" })><Icon icon=s.icon class="icon-sm"/></span>
                                     </div>
                                     <span style=format!(
                                         "font-size:0.65rem;font-weight:{};color:{};max-width:4.5rem;text-align:center;line-height:1.2;",
@@ -839,7 +841,7 @@ pub fn Landing() -> impl IntoView {
                                         set_active_step.set(0);
                                     }
                                 >
-                                    <span style="font-size:0.75rem;font-weight:600;color:var(--text-secondary);min-width:5.5rem;">{format!("{} {}", r.emoji(), r.label())}</span>
+                                    <span style="display:flex;align-items:center;gap:0.3rem;font-size:0.75rem;font-weight:600;color:var(--text-secondary);min-width:5.5rem;"><Icon icon=r.icon_name() class="icon-sm"/><span>{r.label()}</span></span>
                                     <div style="display:flex;align-items:center;gap:0.25rem;">
                                         {steps.iter().enumerate().map(|(i, s)| {
                                             view! {
@@ -997,7 +999,7 @@ pub fn Landing() -> impl IntoView {
                         </div>
                         <div class="landing-footer-brand-tagline" style="margin-top:0.5rem;">
                             "Built with "
-                            <span style="color:var(--accent);">"🦀"</span>
+                            <span style="color:var(--accent);display:inline-flex;align-items:center;"><Icon icon=IconName::Crab class="icon-sm"/></span>
                             " Rust & Solana"
                         </div>
                     </div>

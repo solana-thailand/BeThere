@@ -13,6 +13,7 @@ use leptos_router::hooks::use_navigate;
 
 use crate::api;
 use crate::auth::get_url_error;
+use crate::icons::{Icon, IconName};
 
 /// Google SVG icon markup.
 ///
@@ -128,6 +129,8 @@ pub fn Login() -> impl IntoView {
                     fallback=|| view! { <div></div> }
                 >
                     <div class="error-msg visible" role="alert" aria-live="assertive">
+                        <Icon icon=IconName::Denied class="icon-md icon-danger" />
+                        " "
                         {move || error_msg.get().unwrap_or_default()}
                     </div>
                 </Show>

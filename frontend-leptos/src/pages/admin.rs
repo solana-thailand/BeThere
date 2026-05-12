@@ -18,6 +18,7 @@ use leptos_router::hooks::use_navigate;
 use crate::api::{self, AttendeeResponse, GenerateQrData, StatsResponse};
 use crate::auth;
 use crate::components::{self, ToastType};
+use crate::icons::{Icon, IconName};
 use crate::utils;
 
 // ===== Tab Type =====
@@ -213,8 +214,8 @@ pub fn Admin() -> impl IntoView {
     let (qr_result, set_qr_result) = signal(None::<GenerateQrData>);
     let (toast, set_toast) = signal(None::<components::ToastMessage>);
 
-    // Active section — Attendance by default
-    let (active_section, set_active_section) = signal(AdminSection::Attendance);
+    // Active section — Events by default (organizers create event first)
+    let (active_section, set_active_section) = signal(AdminSection::Events);
 
     // Active tab — In-Person by default
     let (active_tab, set_active_tab) = signal(DashboardTab::InPerson);
@@ -311,6 +312,30 @@ pub fn Admin() -> impl IntoView {
         set_visible_count.set(PAGE_SIZE);
     });
 
+    // Keyboard shortcuts for sidebar navigation (Alt+1…Alt+7)
+    Effect::new(move |_| {
+        let handler = wasm_bindgen::closure::Closure::<dyn Fn(web_sys::KeyboardEvent)>::new(
+            move |ev: web_sys::KeyboardEvent| {
+                if ev.alt_key() {
+                    match ev.key().as_str() {
+                        "1" => { ev.prevent_default(); set_active_section.set(AdminSection::Events); }
+                        "2" => { ev.prevent_default(); set_active_section.set(AdminSection::Quiz); }
+                        "3" => { ev.prevent_default(); set_active_section.set(AdminSection::Adventure); }
+                        "4" => { ev.prevent_default(); set_active_section.set(AdminSection::Attendance); set_active_tab.set(DashboardTab::InPerson); }
+                        "5" => { ev.prevent_default(); set_active_section.set(AdminSection::Attendance); set_active_tab.set(DashboardTab::Online); }
+                        "6" => { ev.prevent_default(); set_active_section.set(AdminSection::Deposits); }
+                        "7" => { ev.prevent_default(); set_active_section.set(AdminSection::Escrow); }
+                        _ => {}
+                    }
+                }
+            },
+        );
+        let window = web_sys::window().expect("no window");
+        use wasm_bindgen::JsCast;
+        let _ = window.add_event_listener_with_callback("keydown", handler.as_ref().unchecked_ref());
+        handler.forget();
+    });
+
     // Data loading effect — triggered by refresh_counter or active_event_id changes.
     // Skips the initial mount when active_event_id is still None (events not loaded yet),
     // avoiding a duplicate call that would resolve to the same default event.
@@ -334,6 +359,10 @@ pub fn Admin() -> impl IntoView {
                 }
                 Err(err) => {
                     log::error!("[admin] failed to load dashboard: {err}");
+                    // Clear stale attendees from the previously selected event
+                    // so the user doesn't see another event's data.
+                    set_attendees.set(Vec::new());
+                    set_stats.set(None);
                     components::show_toast(
                         &set_toast,
                         &format!("Failed to load dashboard: {err}"),
@@ -483,14 +512,10 @@ pub fn Admin() -> impl IntoView {
             <div class="admin-layout">
                 // Sidebar
                 <aside class="admin-sidebar">
-                    <div class="admin-sidebar-section">
-                        <div class="admin-sidebar-heading">"Dashboard"</div>
-                    </div>
-
                     // Event selector dropdown (always visible at top of sidebar)
                     <Show when=move || !events_loading.get() && !events_list.get().is_empty() fallback=|| view! { <div></div> }>
                         <div class="admin-sidebar-section">
-                            <div class="admin-sidebar-heading">"Active Event"</div>
+                            <div class="admin-sidebar-heading">"Event"</div>
                             <div class="admin-event-selector">
                                 <select
                                     class="admin-event-select"
@@ -501,27 +526,99 @@ pub fn Admin() -> impl IntoView {
                                     }
                                     prop:value=move || active_event_id.get().unwrap_or_default()
                                 >
-                                    <option value="">"— all events —"</option>
-                                    {move || events_list.get().iter().map(|e| {
+                                    <option value="">"— select event —"</option>
+                                    {move || events_list.get().iter()
+                                        .filter(|e| e.status != api::EventStatus::Archived)
+                                        .map(|e| {
                                         let id = e.id.clone();
                                         let name = e.name.clone();
-                                        let status = match e.status {
-                                            api::EventStatus::Active => "",
-                                            api::EventStatus::Draft => "",
-                                            api::EventStatus::Completed => "",
-                                            api::EventStatus::Archived => "",
+                                        let status_badge = match e.status {
+                                            api::EventStatus::Active => "●",
+                                            api::EventStatus::Draft => "○",
+                                            api::EventStatus::Completed => "✓",
+                                            api::EventStatus::Archived => "—",
                                         };
                                         view! {
-                                            <option value=id>{format!("{status} {name}")}</option>
+                                            <option value=id>{format!("{status_badge} {name}")}</option>
                                         }
                                     }).collect_view()}
                                 </select>
                             </div>
+                            // Compact attendance stats for selected event
+                            <Show when=move || stats.get().is_some() fallback=|| view! { <div></div> }>
+                                {move || {
+                                    let s = stats.get();
+                                    match s {
+                                        Some(st) => view! {
+                                            <div class="admin-event-stats-bar">
+                                                <div class="admin-event-stat">
+                                                    <span class="admin-event-stat-value">{format!("{}/{}", st.total_checked_in, st.total_approved)}</span>
+                                                    <span class="admin-event-stat-label">"Checked In"</span>
+                                                </div>
+                                                <div class="admin-event-stat">
+                                                    <span class="admin-event-stat-value">{format!("{:.0}%", st.check_in_percentage)}</span>
+                                                    <span class="admin-event-stat-label">"Progress"</span>
+                                                </div>
+                                                <div class="admin-event-stat">
+                                                    <span class="admin-event-stat-value">{format!("{}", st.total_remaining)}</span>
+                                                    <span class="admin-event-stat-label">"Remaining"</span>
+                                                </div>
+                                            </div>
+                                        }.into_any(),
+                                        None => view! { <div></div> }.into_any(),
+                                    }
+                                }}
+                            </Show>
                         </div>
                     </Show>
 
-                    <div class="admin-sidebar-section">
-                        <div class="admin-sidebar-heading">"Attendance"</div>
+                    // ── Group 1: Event Setup (most important) ──
+                    <div class="admin-sidebar-group">
+                        <div class="admin-sidebar-group-label">"Event Setup"</div>
+                        <button
+                            class="admin-sidebar-item"
+                            class:active=move || active_section.get() == AdminSection::Events
+                            on:click=move |_| set_active_section.set(AdminSection::Events)
+                        >
+                            <span class="admin-sidebar-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                                    <line x1="16" y1="2" x2="16" y2="6"></line>
+                                    <line x1="8" y1="2" x2="8" y2="6"></line>
+                                    <line x1="3" y1="10" x2="21" y2="10"></line>
+                                </svg>
+                            </span>
+                            "Manage Events"
+                            <span class="admin-sidebar-kbd">"Alt+1"</span>
+                        </button>
+                        <button
+                            class="admin-sidebar-item"
+                            class:active=move || active_section.get() == AdminSection::Quiz
+                            on:click=move |_| set_active_section.set(AdminSection::Quiz)
+                        >
+                            <span class="admin-sidebar-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
+                                    <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
+                                </svg>
+                            </span>
+                            "Quiz"
+                            <span class="admin-sidebar-kbd">"Alt+2"</span>
+                        </button>
+                        <button
+                            class="admin-sidebar-item"
+                            class:active=move || active_section.get() == AdminSection::Adventure
+                            on:click=move |_| set_active_section.set(AdminSection::Adventure)
+                        >
+                            <span class="admin-sidebar-icon"><Icon icon=IconName::Crab class="icon-sm"/></span>
+                            "Adventure"
+                            <span class="admin-sidebar-kbd">"Alt+3"</span>
+                        </button>
+                    </div>
+
+                    // ── Group 2: Check-in (day-of-event) ──
+                    <div class="admin-sidebar-group">
+                        <div class="admin-sidebar-group-label">"Check-in"</div>
                         <button
                             class="admin-sidebar-item"
                             class:active=move || active_section.get() == AdminSection::Attendance && active_tab.get() == DashboardTab::InPerson
@@ -539,6 +636,7 @@ pub fn Admin() -> impl IntoView {
                                 </svg>
                             </span>
                             "In-Person"
+                            <span class="admin-sidebar-kbd">"Alt+4"</span>
                         </button>
                         <button
                             class="admin-sidebar-item"
@@ -556,10 +654,13 @@ pub fn Admin() -> impl IntoView {
                                 </svg>
                             </span>
                             "Online"
+                            <span class="admin-sidebar-kbd">"Alt+5"</span>
                         </button>
                     </div>
-                    <div class="admin-sidebar-section">
-                        <div class="admin-sidebar-heading">"Deposits"</div>
+
+                    // ── Group 3: Payments (deposit & escrow) ──
+                    <div class="admin-sidebar-group">
+                        <div class="admin-sidebar-group-label">"Payments"</div>
                         <button
                             class="admin-sidebar-item"
                             class:active=move || active_section.get() == AdminSection::Deposits
@@ -572,93 +673,51 @@ pub fn Admin() -> impl IntoView {
                                 </svg>
                             </span>
                             "Deposits & Refunds"
+                            <span class="admin-sidebar-kbd">"Alt+6"</span>
                         </button>
-                    </div>
-                    <div class="admin-sidebar-section">
-                        <div class="admin-sidebar-heading">"Escrow"</div>
                         <button
                             class="admin-sidebar-item"
                             class:active=move || active_section.get() == AdminSection::Escrow
                             on:click=move |_| set_active_section.set(AdminSection::Escrow)
                         >
-                            <span class="admin-sidebar-icon">
-                                ""
-                            </span>
-                            "Escrow Management"
-                        </button>
-                    </div>
-                    <div class="admin-sidebar-section">
-                        <div class="admin-sidebar-heading">"Quiz"</div>
-                        <button
-                            class="admin-sidebar-item"
-                            class:active=move || active_section.get() == AdminSection::Quiz
-                            on:click=move |_| set_active_section.set(AdminSection::Quiz)
-                        >
-                            <span class="admin-sidebar-icon">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
-                                    <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
-                                </svg>
-                            </span>
-                            "Quiz Editor"
-                        </button>
-                    </div>
-                    <div class="admin-sidebar-section">
-                        <div class="admin-sidebar-heading">"Adventure"</div>
-                        <button
-                            class="admin-sidebar-item"
-                            class:active=move || active_section.get() == AdminSection::Adventure
-                            on:click=move |_| set_active_section.set(AdminSection::Adventure)
-                        >
-                            <span class="admin-sidebar-icon">
-                                "🦀"
-                            </span>
-                            "Adventure Config"
-                        </button>
-                    </div>
-                    <div class="admin-sidebar-section">
-                        <div class="admin-sidebar-heading">"Events"</div>
-                        <button
-                            class="admin-sidebar-item"
-                            class:active=move || active_section.get() == AdminSection::Events
-                            on:click=move |_| set_active_section.set(AdminSection::Events)
-                        >
-                            <span class="admin-sidebar-icon">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-                                    <line x1="16" y1="2" x2="16" y2="6"></line>
-                                    <line x1="8" y1="2" x2="8" y2="6"></line>
-                                    <line x1="3" y1="10" x2="21" y2="10"></line>
-                                </svg>
-                            </span>
-                            "Manage Events"
+                            <span class="admin-sidebar-icon"><Icon icon=IconName::Lock class="icon-sm"/></span>
+                            "Escrow"
+                            <span class="admin-sidebar-kbd">"Alt+7"</span>
                         </button>
                     </div>
 
                     // Quick stats at bottom of sidebar
                     <div class="admin-sidebar-stats">
                         {move || {
-                            let attendees_list = attendees.get();
-                            let tab_attendees: Vec<_> = attendees_list.iter()
-                                .filter(|a| active_tab.get().matches(&a.participation_type))
-                                .collect();
-                            let total = tab_attendees.len();
-                            let checked_in = tab_attendees.iter().filter(|a| a.checked_in_at.is_some()).count();
-                            let remaining = total.saturating_sub(checked_in);
-                            view! {
-                                <div class="admin-sidebar-stat">
-                                    <span class="admin-sidebar-stat-value">{total}</span>
-                                    <span class="admin-sidebar-stat-label">"Total"</span>
-                                </div>
-                                <div class="admin-sidebar-stat">
-                                    <span class="admin-sidebar-stat-value admin-stat-value-success">{checked_in}</span>
-                                    <span class="admin-sidebar-stat-label">"Checked In"</span>
-                                </div>
-                                <div class="admin-sidebar-stat">
-                                    <span class="admin-sidebar-stat-value admin-stat-value-warning">{remaining}</span>
-                                    <span class="admin-sidebar-stat-label">"Remaining"</span>
-                                </div>
-                            }.into_any()
+                            if active_event_id.get().is_none() {
+                                view! {
+                                    <div class="admin-sidebar-stats-empty">
+                                        "Select an event to see stats"
+                                    </div>
+                                }.into_any()
+                            } else {
+                                let attendees_list = attendees.get();
+                                let tab_attendees: Vec<_> = attendees_list.iter()
+                                    .filter(|a| active_tab.get().matches(&a.participation_type))
+                                    .collect();
+                                let total = tab_attendees.len();
+                                let checked_in = tab_attendees.iter().filter(|a| a.checked_in_at.is_some()).count();
+                                let remaining = total.saturating_sub(checked_in);
+                                view! {
+                                    <div class="admin-sidebar-stat">
+                                        <span class="admin-sidebar-stat-value">{total}</span>
+                                        <span class="admin-sidebar-stat-label">"Total"</span>
+                                    </div>
+                                    <div class="admin-sidebar-stat">
+                                        <span class="admin-sidebar-stat-value admin-stat-value-success">{checked_in}</span>
+                                        <span class="admin-sidebar-stat-label">"Checked In"</span>
+                                    </div>
+                                    <div class="admin-sidebar-stat">
+                                        <span class="admin-sidebar-stat-value admin-stat-value-warning">{remaining}</span>
+                                        <span class="admin-sidebar-stat-label">"Remaining"</span>
+                                    </div>
+                                }.into_any()
+                            }
                         }}
                     </div>
                 </aside>
@@ -944,7 +1003,7 @@ pub fn Admin() -> impl IntoView {
 
                 // Events section
                 <Show when=move || active_section.get() == AdminSection::Events fallback=|| view! { <div></div> }>
-                    <crate::pages::events_page::EventsPage set_toast=set_toast />
+                    <crate::pages::events_page::EventsPage set_toast=set_toast active_event_id=active_event_id />
                 </Show>
                 </main>
             </div>

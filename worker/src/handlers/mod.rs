@@ -92,6 +92,7 @@ pub fn routes(state: AppState) -> Router<()> {
         .route("/attendees", get(attendee::list_attendees))
         .route("/attendee/{id}", get(attendee::get_attendee))
         .route("/checkin/{id}", post(checkin::check_in))
+        .route("/attendee/{id}/undo-checkin", post(checkin::undo_check_in))
         .route("/generate-qrs", post(qr::generate_qrs))
         // Walk-in attendee registration (protected — staff registers on-the-spot)
         .route("/walkin/register", post(walkin::register_walkin))

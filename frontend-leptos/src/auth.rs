@@ -166,7 +166,7 @@ pub fn get_url_error() -> Option<String> {
 
     let message = match error.as_str() {
         "not_authorized" => {
-            "⛔ Access Denied — This system is for authorized staff only. Only approved staff members can sign in.".to_string()
+            "Access Denied — This system is for authorized staff only. Only approved staff members can sign in.".to_string()
         }
         "auth_failed" => {
             let msg = url.search_params().get("message").unwrap_or_default();

@@ -733,10 +733,15 @@ You need a valid `attendee_id` from your Google Sheet. The attendee must be regi
 ### Steps: THB Payment (PromptPay)
 
 1. On the deposit page, click **"Pay with THB"** tab/section
-2. Upload a slip image (or paste a URL)
-3. Click **"Upload Slip"**
-4. Page shows: **"Slip uploaded, waiting for verification"**
-5. Admin must verify in **Admin → Deposits** tab
+2. If the event has a `promptpay_id` configured, a PromptPay QR code is displayed with the exact THB amount
+3. Scan the QR code with any Thai banking app (K Plus, SCB EASY, TrueMoney, etc.)
+4. Confirm the payment in your bank app
+5. Back on the deposit page, upload a screenshot of the payment slip
+6. Click **"Upload Slip"**
+7. Page shows: **"Slip uploaded, waiting for verification"**
+8. Admin must verify in **Admin → Deposits** tab
+
+> **Note:** The PromptPay QR uses EMVCo standard encoding with the correct AID (`A000000677010112`). Tags are in strict ascending order (53 → 54 → 58) per Thai QR Payment standard. It should work with all Thai bank apps.
 
 ### What to Verify
 - [ ] Deposit page loads with correct event info

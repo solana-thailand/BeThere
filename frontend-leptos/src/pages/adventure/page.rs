@@ -14,6 +14,7 @@ use serde_json;
 
 use super::{default_levels, engine, types::*};
 use crate::api::{self, AdventureLevelScore};
+use crate::icons::{Icon, IconName};
 
 /// localStorage key for casual (no-token) progress.
 const LS_COMPLETED_KEY: &str = "adventure_completed_levels";
@@ -323,7 +324,7 @@ pub fn Adventure() -> impl IntoView {
 
             match &result {
                 MoveResult::CollectedKey { name, description } => {
-                    set_notification.set(Some(format!("🔑 Collected: {name} — {description}")));
+                    set_notification.set(Some(format!("Collected: {name} — {description}")));
                     auto_dismiss_notification();
                 }
                 MoveResult::ExitReached => {
@@ -340,7 +341,7 @@ pub fn Adventure() -> impl IntoView {
                         set_completed_levels.update(|c| {
                             c.insert(completed_idx);
                         });
-                        set_notification.set(Some("🎉 Level Complete!".to_string()));
+                        set_notification.set(Some("Level Complete!".to_string()));
                         return;
                     }
                 }
@@ -349,7 +350,7 @@ pub fn Adventure() -> impl IntoView {
                     set_game.update(|g| {
                         *g = engine::open_puzzle_by_id(g.clone(), puzzle_id, &levels);
                     });
-                    set_notification.set(Some("🔒 Gate locked! Solve the puzzle to open it.".to_string()));
+                    set_notification.set(Some("Gate locked! Solve the puzzle to open it.".to_string()));
                     auto_dismiss_notification();
                     return;
                 }
@@ -378,7 +379,7 @@ pub fn Adventure() -> impl IntoView {
         let (new_state, result) = engine::apply_move(g, dir);
         match &result {
             MoveResult::CollectedKey { name, description } => {
-                set_notification.set(Some(format!("🔑 Collected: {name} — {description}")));
+                set_notification.set(Some(format!("Collected: {name} — {description}")));
                 auto_dismiss_notification();
             }
             MoveResult::ExitReached => {
@@ -395,7 +396,7 @@ pub fn Adventure() -> impl IntoView {
                     set_completed_levels.update(|c| {
                         c.insert(completed_idx);
                     });
-                    set_notification.set(Some("🎉 Level Complete!".to_string()));
+                    set_notification.set(Some("Level Complete!".to_string()));
                     return;
                 }
             }
@@ -404,7 +405,7 @@ pub fn Adventure() -> impl IntoView {
                 set_game.update(|g| {
                     *g = engine::open_puzzle_by_id(g.clone(), puzzle_id, &levels);
                 });
-                set_notification.set(Some("🔒 Gate locked! Solve the puzzle to open it.".to_string()));
+                set_notification.set(Some("Gate locked! Solve the puzzle to open it.".to_string()));
                 auto_dismiss_notification();
                 return;
             }
@@ -551,7 +552,7 @@ pub fn Adventure() -> impl IntoView {
                     view! {
                         <div class="adventure-overlay" on:click=move |_| set_show_level_select.set(false)>
                             <div class="adventure-overlay-card adventure-level-select-card" on:click=move |ev| ev.stop_propagation()>
-                                <h2>"🗺️ Select Level"</h2>
+                                <h2><Icon icon=IconName::Map class="icon-sm" />" Select Level"</h2>
                                 <div class="level-select-list">
                                     {levels_vec.into_iter().map(|(idx, name, concept, is_current, is_completed)| {
                                         let load_idx = idx;
@@ -644,11 +645,17 @@ pub fn Adventure() -> impl IntoView {
                         _ => "⭐☆☆".to_string(),
                     };
                     let save_msg = save_status.get();
-                    let saving_indicator = match save_msg.as_deref() {
-                        Some("saving") => "💾 Saving...".to_string(),
-                        Some("saved") => "✅ Progress saved!".to_string(),
-                        Some(msg) if msg.starts_with("error") => "⚠️ Save failed (offline mode)".to_string(),
-                        _ => String::new(),
+                    let save_status_view = match save_msg.as_deref() {
+                        Some("saving") => Some(view! {
+                            <div class="adventure-save-status"><Icon icon=IconName::Save class="icon-sm" />" Saving..."</div>
+                        }.into_any()),
+                        Some("saved") => Some(view! {
+                            <div class="adventure-save-status"><Icon icon=IconName::Check class="icon-sm icon-success" />" Progress saved!"</div>
+                        }.into_any()),
+                        Some(msg) if msg.starts_with("error") => Some(view! {
+                            <div class="adventure-save-status"><Icon icon=IconName::Warning class="icon-sm icon-danger" />" Save failed (offline mode)"</div>
+                        }.into_any()),
+                        _ => None,
                     };
                     view! {
                         <div class="adventure-overlay adventure-overlay-success">
@@ -671,12 +678,10 @@ pub fn Adventure() -> impl IntoView {
                                         <span class="stat-value">{g.collected_keys.len()}</span>
                                     </div>
                                 </div>
-                                {if saving_indicator.is_empty() {
-                                    view! { <div></div> }.into_any()
+                                {if let Some(sv) = save_status_view {
+                                    sv
                                 } else {
-                                    view! {
-                                        <div class="adventure-save-status">{saving_indicator}</div>
-                                    }.into_any()
+                                    view! { <div></div> }.into_any()
                                 }}
                                 <div class="adventure-success-actions">
                                     {if has_next {
@@ -711,7 +716,7 @@ pub fn Adventure() -> impl IntoView {
                                                             set_game.set(state);
                                                         }
                                                     }>
-                                                        "🔄 Play Again"
+                                                        <Icon icon=IconName::Refresh class="icon-sm" />" Play Again"
                                                     </button>
                                                 }.into_any()
                                             }}
@@ -969,7 +974,7 @@ pub fn Adventure() -> impl IntoView {
                                                                     let g = game.get();
                                                                     if let Some(ps) = &g.active_puzzle {
                                                                         if ps.matched_pairs.len() == pairs_count {
-                                                                            set_notification.set(Some("🧩 All pairs matched!".to_string()));
+                                                                            set_notification.set(Some("All pairs matched!".to_string()));
                                                                         }
                                                                     }
                                                                 } else {
@@ -1002,13 +1007,13 @@ pub fn Adventure() -> impl IntoView {
                                         if correct {
                                             view! {
                                                 <div class="puzzle-feedback puzzle-correct">
-                                                    "✅ Correct!"
+                                                    <Icon icon=IconName::Check class="icon-sm icon-success" />" Correct!"
                                                 </div>
                                             }.into_any()
                                         } else {
                                             view! {
                                                 <div class="puzzle-feedback puzzle-wrong">
-                                                    "❌ Not quite. Try again!"
+                                                    <Icon icon=IconName::Cross class="icon-sm icon-danger" />" Not quite. Try again!"
                                                 </div>
                                             }.into_any()
                                         }
@@ -1040,7 +1045,7 @@ pub fn Adventure() -> impl IntoView {
                                             }
                                             set_game.set(new_state);
                                             set_puzzle_feedback.set(None);
-                                            set_notification.set(Some("🧩 Puzzle solved! Gate opened.".to_string()));
+                                            set_notification.set(Some("Puzzle solved! Gate opened.".to_string()));
                                             auto_dismiss_notification();
                                         } else {
                                             set_game.set(new_state);
@@ -1116,7 +1121,7 @@ pub fn Adventure() -> impl IntoView {
                                     match tile {
                                         Tile::Floor | Tile::PlayerStart => String::new(),
                                         Tile::Wall => String::new(),
-                                        Tile::Exit => "▶".to_string(),
+                                        Tile::Exit => "🚪".to_string(),
                                         Tile::Key { name, .. } if !collected.contains(name) => name.clone(),
                                         Tile::Gate { puzzle_id } if !solved.contains(puzzle_id) => "🔒".to_string(),
                                         _ => tile.display_char().to_string(),

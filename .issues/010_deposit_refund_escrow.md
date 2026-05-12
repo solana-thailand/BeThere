@@ -326,11 +326,11 @@ Image storage: Cloudflare R2 (free tier: 10 GB storage, 10M reads/month).
 - [x] Deposit status polling + confirmation (2s interval, 30 attempts) — Phase 5.4
 - [x] On-chain deposit verification via Solana RPC (`getSignatureStatuses`) — Phase 5.4
 - [x] Deposit confirmed view with Solscan TX link — Phase 5.4
-- [ ] PromptPay QR display + slip upload (THB path)
-- [ ] Claim page: "Claim Refund" button (USDC auto-refund)
-- [ ] Admin: Deposits tab (all deposit statuses)
-- [ ] Admin: Refund Queue tab (THB refund management)
-- [ ] Admin: Slip verification UI
+- [x] PromptPay QR display + slip upload (THB path)
+- [x] Claim page: "Claim Refund" button (USDC auto-refund)
+- [x] Admin: Deposits tab (all deposit statuses)
+- [x] Admin: Refund Queue tab (THB refund management)
+- [x] Admin: Slip verification UI
 
 ### Phase 4 — Integration + Devnet E2E (~2 days)
 
@@ -385,7 +385,7 @@ Image storage: Cloudflare R2 (free tier: 10 GB storage, 10M reads/month).
 ## Status
 
 🟢 Phase 1–2 complete — escrow program on devnet, worker API done.
-🟢 Phase 3 complete — USDC wallet adapter + on-chain confirmation + PromptPay QR + slip upload + admin deposit/refund UI.
+🟢 Phase 3 complete — USDC wallet adapter + on-chain confirmation + PromptPay QR + slip upload + admin deposit/refund UI + claim page inline refund button.
 🟢 Phase 4 complete — Full 5-step escrow flow validated on devnet (create_vault_ata → create_event → deposit → mark_checked_in → refund). 37/37 unit tests pass, clippy clean.
 🟢 Phase 5a — Security audit + hardening complete (22/22 tests, all HIGH findings fixed).
 🟡 Phase 5b — Deploy hardened program to devnet, then mainnet.

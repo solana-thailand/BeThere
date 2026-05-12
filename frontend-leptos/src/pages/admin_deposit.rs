@@ -8,6 +8,7 @@ use leptos::prelude::*;
 
 use crate::api::{self, MarkRefundRequest, ThbDepositInfo, VerifySlipRequest};
 use crate::components::{self, ToastType};
+use crate::icons::{Icon, IconName};
 use crate::utils;
 
 // ---------------------------------------------------------------------------
@@ -40,6 +41,7 @@ pub fn AdminDeposits(
     let (loading, set_loading) = signal(true);
     let (refresh_counter, set_refresh_counter) = signal(0u32);
     let (action_pending, set_action_pending) = signal(None::<String>);
+    let (confirm_reject_id, set_confirm_reject_id) = signal(None::<String>);
 
     // Load data on mount and when active_event_id / refresh_counter changes
     let tracked_event_id = active_event_id;
@@ -131,11 +133,24 @@ pub fn AdminDeposits(
         });
     };
 
-    // Reject a slip
+    // Reject a slip (two-step confirmation)
     let handle_reject = move |slip: ThbDepositInfo| {
         let attendee_id = slip.attendee_id.clone();
+
+        // First click: enter confirm state
+        if confirm_reject_id.get().as_deref() != Some(&attendee_id) {
+            set_confirm_reject_id.set(Some(attendee_id.clone()));
+            let set_confirm = set_confirm_reject_id;
+            gloo::timers::callback::Timeout::new(3000, move || {
+                set_confirm.set(None);
+            }).forget();
+            return;
+        }
+
+        // Second click: execute the actual reject
         let event_id = slip.event_id.clone();
         let key = format!("reject-{attendee_id}");
+        set_confirm_reject_id.set(None);
         set_action_pending.set(Some(key));
 
         leptos::task::spawn_local(async move {
@@ -199,8 +214,19 @@ pub fn AdminDeposits(
     let pending_count = Memo::new(move |_| slips.get().len());
     let refund_count = Memo::new(move |_| refunds.get().len());
 
+    let has_event = move || active_event_id.get().is_some();
+
     view! {
         <div class="admin-deposits">
+            // No event selected
+            <Show when=move || !has_event() fallback=|| view! { <div></div> }>
+                <div class="admin-empty-state">
+                    "Select an event to manage deposits and refunds."
+                </div>
+            </Show>
+
+            // Event selected — show full content
+            <Show when=move || has_event() fallback=|| view! { <div></div> }>
             // Sub-tab navigation
             <div class="tabs">
                 <button
@@ -220,7 +246,7 @@ pub fn AdminDeposits(
                     class:active=move || active_tab.get() == AdminDepositTab::RefundQueue
                     on:click=move |_| set_active_tab.set(AdminDepositTab::RefundQueue)
                 >
-                    "💸 Refund Queue"
+                    <Icon icon=IconName::MoneyWings class="icon-sm"/>" Refund Queue"
                     <Show when=move || refund_count.get() != 0 fallback=|| view! { <span></span> }>
                         <span class="badge badge-warning">
                             {move || refund_count.get()}
@@ -274,16 +300,18 @@ pub fn AdminDeposits(
                             let uploaded_formatted = utils::format_timestamp(&slip.uploaded_at);
                             let slip_url = slip.slip_url.clone();
                             let has_slip_url = slip_url.is_some();
+                            let display_name = slip.attendee_name.as_deref().unwrap_or(&slip.attendee_id);
 
                             let slip_for_approve = slip.clone();
                             let slip_for_reject = slip.clone();
+                            let is_confirming = confirm_reject_id.get().as_deref() == Some(&slip_id);
 
                             view! {
                                 <div class="card">
                                     <div class="flex-row-wrap">
                                         <div>
                                             <div class="admin-attendee-name">
-                                                {format!("Attendee: {}", utils::escape_html(&slip.attendee_id))}
+                                                {format!("Attendee: {}", utils::escape_html(display_name))}
                                             </div>
                                             <div class="admin-amount-line">
                                                 {amount}
@@ -314,11 +342,11 @@ pub fn AdminDeposits(
                                                 {if approve_loading { "Approving..." } else { "✓ Approve" }}
                                             </button>
                                             <button
-                                                class="btn btn-danger btn-sm"
+                                                class=if is_confirming { "btn btn-confirm-danger btn-sm" } else { "btn btn-danger btn-sm" }
                                                 disabled=reject_disabled
                                                 on:click=move |_| handle_reject(slip_for_reject.clone())
                                             >
-                                                {if reject_loading { "Rejecting..." } else { "✗ Reject" }}
+                                                {if reject_loading { "Rejecting..." } else if is_confirming { "⚠ Confirm Reject?" } else { "✗ Reject" }}
                                             </button>
                                         </div>
                                     </div>
@@ -334,7 +362,7 @@ pub fn AdminDeposits(
                     fallback=|| view! { <div></div> }
                 >
                     <div class="admin-section-header">
-                        <h3>{format!("💸 {} pending refund{}", refund_count.get(), if refund_count.get() != 1 { "s" } else { "" })}</h3>
+                        <h3><Icon icon=IconName::MoneyWings class="icon-sm"/>{format!(" {} pending refund{}", refund_count.get(), if refund_count.get() != 1 { "s" } else { "" })}</h3>
                     </div>
 
                     <Show
@@ -357,6 +385,7 @@ pub fn AdminDeposits(
                             let amount = format!("{} THB", item.amount_thb);
                             let verified_by = item.verified_by.as_deref().unwrap_or("Unknown");
                             let verified_at = item.verified_at.as_deref().map(utils::format_timestamp).unwrap_or_else(|| "N/A".to_string());
+                            let display_name = item.attendee_name.as_deref().unwrap_or(&item.attendee_id);
 
                             let item_for_refund = item.clone();
 
@@ -365,7 +394,7 @@ pub fn AdminDeposits(
                                     <div class="flex-row-wrap">
                                         <div>
                                             <div class="admin-attendee-name">
-                                                {format!("Attendee: {}", utils::escape_html(&item.attendee_id))}
+                                                {format!("Attendee: {}", utils::escape_html(display_name))}
                                             </div>
                                             <div class="admin-amount-line">
                                                 {amount}
@@ -393,6 +422,7 @@ pub fn AdminDeposits(
                     }}
                 </Show>
 
+            </Show>
             </Show>
         </div>
     }

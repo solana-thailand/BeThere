@@ -21,6 +21,7 @@ use crate::api::{
     ThbSlipUploadRequest, UsdcDepositRequest,
 };
 use crate::components::{self, Toast, ToastType};
+use crate::icons::{Icon, IconName, wallet_icon_name};
 use crate::utils::{format_timestamp, solscan_tx_url, get_cluster};
 use wasm_bindgen::prelude::*;
 
@@ -346,11 +347,16 @@ pub fn Deposit() -> impl IntoView {
     // File input ref for slip image upload
     let file_input_ref = NodeRef::<leptos::html::Input>::new();
 
+    // Track QR library loading state so QR rendering can retry.
+    let (qr_ready, set_qr_ready) = signal(false);
+
     // Preload jsQR + QRious libraries on mount.
     // The deposit page renders PromptPay/USDC payment QR codes,
     // so libraries should be loaded before the payment view appears.
-    leptos::task::spawn_local(async {
+    leptos::task::spawn_local(async move {
         preload_qr_libraries_js().await;
+        set_qr_ready.set(true);
+        log::info!("[deposit] QR libraries loaded, qr_ready = true");
     });
 
     // Extract attendee_id from URL path and event_id from query params, then fetch status
@@ -1160,7 +1166,7 @@ pub fn Deposit() -> impl IntoView {
                             view! {
                                 <div class="card dep-card-error">
                                     <div class="card-header">
-                                        <h2 class="card-title">"⚠️ Error"</h2>
+                                        <h2 class="card-title"><Icon icon=IconName::Warning class="icon-sm icon-danger" />" Error"</h2>
                                     </div>
                                     <p class="hint-desc">
                                         {msg}
@@ -1176,7 +1182,7 @@ pub fn Deposit() -> impl IntoView {
                             view! {
                                 <div class="card dep-card-error">
                                     <div class="card-header">
-                                        <h2 class="card-title">"💳 Deposits Not Available"</h2>
+                                        <h2 class="card-title"><Icon icon=IconName::CreditCard class="icon-sm" />" Deposits Not Available"</h2>
                                     </div>
                                     <p class="hint-desc">
                                         "Deposits are not enabled for this event."
@@ -1190,15 +1196,15 @@ pub fn Deposit() -> impl IntoView {
                         // ===== Already Deposited =====
                         DepositPageState::AlreadyDeposited(data) => {
                             let info = data.status.as_ref().unwrap();
-                            let method_label = match info.method.as_str() {
-                                "usdc" => "🪙 USDC (Solana)",
-                                "thb" => "฿ THB (PromptPay)",
-                                _ => &info.method,
+                            let (method_icon, method_label) = match info.method.as_str() {
+                                "usdc" => (IconName::Coin, "USDC (Solana)"),
+                                "thb" => (IconName::Baht, "THB (PromptPay)"),
+                                _ => (IconName::Circle, info.method.as_str()),
                             };
-                            let verified_badge = if info.verified {
-                                "✅ Verified"
+                            let (verified_icon, verified_text) = if info.verified {
+                                (IconName::Check, "Verified")
                             } else {
-                                "⏳ Pending Verification"
+                                (IconName::Hourglass, "Pending Verification")
                             };
                             let verified_class = if info.verified {
                                 "badge badge-success"
@@ -1223,7 +1229,7 @@ pub fn Deposit() -> impl IntoView {
                                     <div class="dep-details-block">
                                         <div class="dep-detail-row">
                                             <span class="dep-label">"Method"</span>
-                                            <span>{method_label}</span>
+                                            <span><Icon icon=method_icon class="icon-sm" />" "{method_label}</span>
                                         </div>
                                         <div class="dep-detail-row">
                                             <span class="dep-label">"Amount"</span>
@@ -1233,7 +1239,7 @@ pub fn Deposit() -> impl IntoView {
                                         </div>
                                         <div class="dep-detail-row-center">
                                             <span class="dep-label">"Status"</span>
-                                            <span class=verified_class>{verified_badge}</span>
+                                            <span class=verified_class><Icon icon=verified_icon class="icon-sm" />" "{verified_text}</span>
                                         </div>
                                         <div class="dep-detail-row-last">
                                             <span class="dep-label">"Date"</span>
@@ -1246,7 +1252,7 @@ pub fn Deposit() -> impl IntoView {
                                         view! {
                                             <div class="dep-info-note">
                                                 <p class="hint-note">
-                                                    {format!("💰 Your {usdc_fmt} USDC is secured on-chain. Show up → get it all back.")}
+                                                    "🪙 "{format!("Your {usdc_fmt} USDC is secured on-chain. Show up → get it all back.")}
                                                 </p>
                                             </div>
                                             // Refund deadline urgency (loss aversion)
@@ -1254,7 +1260,7 @@ pub fn Deposit() -> impl IntoView {
                                                 Some((deadline_date, duration_label)) => view! {
                                                     <div class="dep-info-note">
                                                         <p class="hint-note">
-                                                            {format!("⏰ Refund window: {duration_label} after event ends ({deadline_date}).")}
+                                                            {format!("Refund window: {duration_label} after event ends ({deadline_date}).")}
                                                         </p>
                                                     </div>
                                                 }.into_any(),
@@ -1266,14 +1272,14 @@ pub fn Deposit() -> impl IntoView {
                                                     set_state.set(DepositPageState::RefundChooseWallet(data_clone_for_refund.clone()));
                                                 }
                                             >
-                                                {format!("💸 Don't lose your {usdc_fmt} USDC — claim it now")}
+                                                "💰 "{format!("Don't lose your {usdc_fmt} USDC — claim it now")}
                                             </button>
                                         }.into_any()
                                     } else {
                                         view! {
                                             <div class="dep-info-note">
                                                 <p class="hint-note">
-                                                    {format!("💰 Your {usdc_fmt} USDC deposit is secured. Refund will be available after the event.")}
+                                                    "🪙 "{format!("Your {usdc_fmt} USDC deposit is secured. Refund will be available after the event.")}
                                                 </p>
                                             </div>
                                         }.into_any()
@@ -1313,17 +1319,11 @@ pub fn Deposit() -> impl IntoView {
                                             view! {
                                                 <div class="wallet-list">
                                                     <p class="wallet-prompt">
-                                                        "🔗 Connect your Solana wallet:"
+                                                        <Icon icon=IconName::Link class="icon-sm" />" Connect your Solana wallet:"
                                                     </p>
                                                     {wallets_for_click.into_iter().map(|w| {
                                                         let w_clone = w.clone();
-                                                        let wallet_icon = match w.as_str() {
-                                                            "Phantom" => "👻",
-                                                            "Backpack" => "🎒",
-                                                            "Solflare" => "☀️",
-                                                            "Coinbase" => "🪙",
-                                                            _ => "💼",
-                                                        };
+                                                        let wallet_icon = wallet_icon_name(&w);
                                                         view! {
                                                             <button
                                                                 class="btn btn-primary btn-block wallet-btn-inner"
@@ -1332,7 +1332,7 @@ pub fn Deposit() -> impl IntoView {
                                                                     move |_| handle_connect_wallet(w.clone())
                                                                 }
                                                             >
-                                                                <span>{wallet_icon}</span>
+                                                                <Icon icon=wallet_icon class="icon-sm" />
                                                                 <span>{format!("Connect {}", &w_clone)}</span>
                                                             </button>
                                                         }
@@ -1346,7 +1346,7 @@ pub fn Deposit() -> impl IntoView {
                                         // QR fallback section
                                         <div class="dep-divider-section">
                                             <p class="hint-sm">
-                                                "📱 No wallet? Use QR code instead:"
+                                                <Icon icon=IconName::Phone class="icon-sm" />" No wallet? Use QR code instead:"
                                             </p>
                                             <div class="u-mb-sm">
                                                 <input
@@ -1372,7 +1372,7 @@ pub fn Deposit() -> impl IntoView {
                                     // THB Card
                                     <div class="card">
                                         <div class="card-header">
-                                            <h2 class="card-title">"฿ Pay with THB"</h2>
+                                            <h2 class="card-title">"💱 Pay with THB"</h2>
                                             <span class="badge badge-warning">
                                                 {format!("{} THB", data_clone.deposit_amount_thb)}
                                             </span>
@@ -1382,27 +1382,39 @@ pub fn Deposit() -> impl IntoView {
                                         </p>
 
                                         // PromptPay QR — only shown when promptpay_id is configured
+                                        // Reactive: re-evaluates when qr_ready changes (library loads async)
                                         {if !data_clone.promptpay_id.is_empty() && data_clone.deposit_amount_thb > 0 {
-                                            let pp_qr_string = generate_promptpay_qr_js(
-                                                &data_clone.promptpay_id,
-                                                data_clone.deposit_amount_thb as f64,
-                                            );
-                                            let pp_qr_image = pp_qr_string.as_ref().and_then(|s| generate_qr_data_url_js(s, 256));
+                                            let pp_id = data_clone.promptpay_id.clone();
+                                            let pp_amount = data_clone.deposit_amount_thb as f64;
+                                            let pp_amount_display = data_clone.deposit_amount_thb;
                                             view! {
                                                 <div class="layout-col-center u-mb-1rem">
                                                     <p class="text-amount">
-                                                        {format!("Scan to pay {} THB", data_clone.deposit_amount_thb)}
+                                                        {format!("Scan to pay {} THB", pp_amount_display)}
                                                     </p>
-                                                    {match pp_qr_image {
-                                                        Some(url) => view! {
-                                                            <div class="qr-wrapper u-mb-half">
-                                                                <img src=url alt="PromptPay QR" class="qr-img-md" />
-                                                            </div>
-                                                        }.into_any(),
-                                                        None => view! {
-                                                            <p class="hint-2xs">"QR generation failed — please pay manually."
-                                                            </p>
-                                                        }.into_any(),
+                                                    {move || {
+                                                        if qr_ready.get() {
+                                                            let pp_qr_string = generate_promptpay_qr_js(&pp_id, pp_amount);
+                                                            let pp_qr_image = pp_qr_string.as_ref().and_then(|s| generate_qr_data_url_js(s, 256));
+                                                            match pp_qr_image {
+                                                                Some(url) => view! {
+                                                                    <div class="qr-wrapper u-mb-half">
+                                                                        <img src=url alt="PromptPay QR" class="qr-img-md" />
+                                                                    </div>
+                                                                }.into_any(),
+                                                                None => view! {
+                                                                    <p class="hint-2xs">"QR generation failed — please pay manually."
+                                                                    </p>
+                                                                }.into_any(),
+                                                            }
+                                                        } else {
+                                                            view! {
+                                                                <div class="qr-wrapper u-mb-half qr-loading">
+                                                                    <div class="qr-loading-spinner"></div>
+                                                                    <p class="hint-2xs">"Loading QR generator..."</p>
+                                                                </div>
+                                                            }.into_any()
+                                                        }
                                                     }}
                                                     <p class="qr-hint-text">
                                                         "Open your banking app → Scan QR → Pay"
@@ -1416,7 +1428,7 @@ pub fn Deposit() -> impl IntoView {
                                         // File upload for slip image
                                         <div class="u-mb-sm">
                                             <label class="upload-label">
-                                                "📎 Upload payment slip image:"
+                                                <Icon icon=IconName::Clip class="icon-sm" />" Upload payment slip image:"
                                             </label>
                                             <input
                                                 type="file"
@@ -1465,13 +1477,7 @@ pub fn Deposit() -> impl IntoView {
                         DepositPageState::WalletConnected(data, wallet_name, public_key) => {
                             let wallet_name_send = wallet_name.clone();
                             let pk_send = public_key.clone();
-                            let wallet_icon = match wallet_name.as_str() {
-                                "Phantom" => "👻",
-                                "Backpack" => "🎒",
-                                "Solflare" => "☀️",
-                                "Coinbase" => "🪙",
-                                _ => "💼",
-                            };
+                            let wallet_icon = wallet_icon_name(&wallet_name);
                             let pk_short = if public_key.len() > 12 {
                                 format!("{}...{}", &public_key[..4], &public_key[public_key.len()-4..])
                             } else {
@@ -1480,19 +1486,18 @@ pub fn Deposit() -> impl IntoView {
                             view! {
                                 <div class="card dep-card">
                                     <div class="card-header">
-                                        <h2 class="card-title">"🪙 USDC Deposit"
-                                        </h2>
+                                        <h2 class="card-title">"🪙 USDC Deposit"</h2>
                                         <span class="badge badge-info">
                                             {format!("{:.2} USDC", data.deposit_amount_usdc as f64 / 1_000_000.0)}
                                         </span>
                                     </div>
                                     <div class="wallet-connected-bar">
-                                        <span class="wallet-icon-lg">{wallet_icon}</span>
+                                        <span class="wallet-icon-lg"><Icon icon=wallet_icon class="icon-lg" /></span>
                                         <div class="wallet-info-left">
                                             <div class="wallet-label">"Connected via " {wallet_name.clone()}</div>
                                             <div class="wallet-address-bold">{pk_short}</div>
                                         </div>
-                                        <span class="badge badge-success u-ml-auto">"✅ Connected"</span>
+                                        <span class="badge badge-success u-ml-auto"><Icon icon=IconName::Check class="icon-sm icon-success" />" Connected"</span>
                                     </div>
                                     <p class="hint-desc">
                                         "Click below to send your deposit transaction. You'll be asked to approve the transaction in your wallet."
@@ -1553,7 +1558,7 @@ pub fn Deposit() -> impl IntoView {
                             view! {
                                 <div class="card dep-card">
                                     <div class="card-header">
-                                        <h2 class="card-title">"⏳ Confirming Deposit..."</h2>
+                                        <h2 class="card-title"><Icon icon=IconName::Hourglass class="icon-sm icon-warning" />" Confirming Deposit..."</h2>
                                         <span class="badge badge-info">
                                             {format!("{:.2} USDC", data.deposit_amount_usdc as f64 / 1_000_000.0)}
                                         </span>
@@ -1623,14 +1628,14 @@ pub fn Deposit() -> impl IntoView {
                                         Some((deadline_date, duration_label)) => view! {
                                             <div class="dep-info-note">
                                                 <p class="hint-note">
-                                                    {format!("💰 Refund window: {duration_label} after the event ends ({deadline_date}). Don't lose your deposit — claim it back.")}
+                                                    "🪙 "{format!("Refund window: {duration_label} after the event ends ({deadline_date}). Don't lose your deposit — claim it back.")}
                                                 </p>
                                             </div>
                                         }.into_any(),
                                         None => view! {
                                             <div class="dep-info-note">
                                                 <p class="hint-note">
-                                                    "💰 Refund will be available after the event."
+                                                    "🪙 Refund will be available after the event."
                                                 </p>
                                             </div>
                                         }.into_any(),
@@ -1648,10 +1653,71 @@ pub fn Deposit() -> impl IntoView {
                             let pay_url_display = pay_url.clone();
                             let pay_url_copy = pay_url.clone();
                             let pay_url_qr = pay_url.clone();
-                            let qr_data_url = generate_qr_data_url_js(&pay_url_qr, 256);
                             let copied = pay_url_copied.get();
-                            let copy_btn_text = if copied { "✅ Copied!" } else { "📋 Copy Link" };
+                            let copy_btn_text = if copied { "Copied!" } else { "Copy Link" };
                             let copy_btn_class = if copied { "btn btn-success btn-sm" } else { "btn btn-outline btn-sm" };
+                            let copy_btn_icon = if copied { IconName::Check } else { IconName::Copy };
+
+                            // Poll for payment confirmation (3s interval, 100 attempts = 5 min)
+                            let eid_poll = web_sys::Url::new(
+                                &web_sys::window()
+                                    .unwrap()
+                                    .location()
+                                    .href()
+                                    .unwrap(),
+                            )
+                            .ok()
+                            .and_then(|url| url.search_params().get("event_id"))
+                            .unwrap_or_default();
+                            let aid_poll = match params.get() {
+                                Ok(p) => p.attendee_id.unwrap_or_default(),
+                                Err(_) => String::new(),
+                            };
+                            let deposit_data_poll = data.clone();
+                            Effect::new(move |_| {
+                                let eid_c = eid_poll.clone();
+                                let aid_c = aid_poll.clone();
+                                let dd = deposit_data_poll.clone();
+                                leptos::task::spawn_local(async move {
+                                    let mut attempts = 0u32;
+                                    let max_attempts = 100u32; // 100 × 3s = 300s = 5 min
+                                    while attempts < max_attempts {
+                                        // Check if still in UsdcQrReady state
+                                        let still_qr = matches!(&state.get(), DepositPageState::UsdcQrReady(_, _));
+                                        if !still_qr {
+                                            break;
+                                        }
+                                        match api::confirm_deposit(&eid_c, &aid_c).await {
+                                            Ok(ConfirmDepositResponse {
+                                                confirmed: true,
+                                                tx_signature: Some(sig),
+                                                ..
+                                            }) => {
+                                                log::info!("[deposit] QR payment confirmed: {}", sig);
+                                                set_state.set(DepositPageState::DepositConfirmed(dd, sig));
+                                                return;
+                                            }
+                                            Ok(_) => {
+                                                attempts += 1;
+                                                if attempts < max_attempts {
+                                                    gloo::timers::future::TimeoutFuture::new(3000).await;
+                                                }
+                                            }
+                                            Err(e) => {
+                                                log::warn!("[deposit] QR poll error: {e}");
+                                                attempts += 1;
+                                                if attempts < max_attempts {
+                                                    gloo::timers::future::TimeoutFuture::new(3000).await;
+                                                }
+                                            }
+                                        }
+                                    }
+                                    if attempts >= max_attempts {
+                                        log::warn!("[deposit] QR poll timed out after 5 min");
+                                    }
+                                });
+                            });
+
                             view! {
                                 <div class="card dep-card">
                                     <div class="card-header">
@@ -1663,13 +1729,23 @@ pub fn Deposit() -> impl IntoView {
                                     <p class="hint-desc">
                                         "Scan this QR code with a Solana wallet, or copy the link below:"
                                     </p>
-                                    {match qr_data_url {
-                                        Some(url) => view! {
-                                            <div class="qr-wrapper">
-                                                <img src=url alt="Solana Pay QR" class="qr-img-lg" />
-                                            </div>
-                                        }.into_any(),
-                                        None => view! { <div></div> }.into_any(),
+                                    {move || {
+                                        if qr_ready.get() {
+                                            match generate_qr_data_url_js(&pay_url_qr, 256) {
+                                                Some(url) => view! {
+                                                    <div class="qr-wrapper">
+                                                        <img src=url alt="Solana Pay QR" class="qr-img-lg" />
+                                                    </div>
+                                                }.into_any(),
+                                                None => view! { <div></div> }.into_any(),
+                                            }
+                                        } else {
+                                            view! {
+                                                <div class="qr-wrapper qr-loading">
+                                                    <div class="qr-loading-spinner"></div>
+                                                </div>
+                                            }.into_any()
+                                        }
                                     }}
                                     <div class="tx-pay-url-box">
                                         {pay_url_display}
@@ -1678,8 +1754,12 @@ pub fn Deposit() -> impl IntoView {
                                         class=copy_btn_class
                                         on:click=move |_| handle_copy_url(pay_url_copy.clone())
                                     >
-                                        {copy_btn_text}
+                                        <Icon icon=copy_btn_icon class="icon-sm" />" "{copy_btn_text}
                                     </button>
+                                    <div class="dep-qr-polling">
+                                        <span class="spinner spinner-sm"></span>
+                                        " Checking for payment..."
+                                    </div>
                                     <p class="hint-2xs u-mt-1rem">
                                         "After payment, your deposit will be verified automatically."
                                     </p>
@@ -1708,12 +1788,12 @@ pub fn Deposit() -> impl IntoView {
                             view! {
                                 <div class="card dep-card-error">
                                     <div class="card-header">
-                                        <h2 class="card-title">"✅ Slip Uploaded"</h2>
+                                        <h2 class="card-title"><Icon icon=IconName::Check class="icon-sm icon-success" />" Slip Uploaded"</h2>
                                     </div>
                                     <p class="hint-desc">
                                         "Your payment slip has been submitted for verification. You'll be notified once it's confirmed."
                                     </p>
-                                    <span class="badge badge-warning">"⏳ Pending Verification"</span>
+                                    <span class="badge badge-warning"><Icon icon=IconName::Hourglass class="icon-sm icon-warning" />" Pending Verification"</span>
                                     <div class="action-row-top">
                                         <a href="/" class="btn btn-primary">"Go Home"</a>
                                     </div>
@@ -1729,7 +1809,7 @@ pub fn Deposit() -> impl IntoView {
                             view! {
                                 <div class="card dep-card">
                                     <div class="card-header">
-                                        <h2 class="card-title">"💸 Claim Refund"</h2>
+                                        <h2 class="card-title">"💰 Claim Refund"</h2>
                                         <span class="badge badge-info">
                                             {format!("{:.2} USDC", data.deposit_amount_usdc as f64 / 1_000_000.0)}
                                         </span>
@@ -1751,13 +1831,7 @@ pub fn Deposit() -> impl IntoView {
                                             <div class="wallet-list">
                                                 {wallets_for_click.into_iter().map(|w| {
                                                     let w_clone = w.clone();
-                                                    let wallet_icon = match w.as_str() {
-                                                        "Phantom" => "👻",
-                                                        "Backpack" => "🎒",
-                                                        "Solflare" => "☀️",
-                                                        "Coinbase" => "🪙",
-                                                        _ => "💼",
-                                                    };
+                                                    let wallet_icon = wallet_icon_name(&w);
                                                     view! {
                                                         <button
                                                             class="btn btn-primary btn-block wallet-btn-inner"
@@ -1766,7 +1840,7 @@ pub fn Deposit() -> impl IntoView {
                                                                 move |_| handle_refund_connect_wallet(w.clone())
                                                             }
                                                         >
-                                                            <span>{wallet_icon}</span>
+                                                            <Icon icon=wallet_icon class="icon-sm" />
                                                             <span>{format!("Connect {}", &w_clone)}</span>
                                                         </button>
                                                     }
@@ -1791,13 +1865,7 @@ pub fn Deposit() -> impl IntoView {
                         DepositPageState::RefundWalletConnected(data, wallet_name, public_key) => {
                             let wallet_name_send = wallet_name.clone();
                             let pk_send = public_key.clone();
-                            let wallet_icon = match wallet_name.as_str() {
-                                "Phantom" => "👻",
-                                "Backpack" => "🎒",
-                                "Solflare" => "☀️",
-                                "Coinbase" => "🪙",
-                                _ => "💼",
-                            };
+                            let wallet_icon = wallet_icon_name(&wallet_name);
                             let pk_short = if public_key.len() > 12 {
                                 format!("{}...{}", &public_key[..4], &public_key[public_key.len()-4..])
                             } else {
@@ -1807,18 +1875,18 @@ pub fn Deposit() -> impl IntoView {
                             view! {
                                 <div class="card dep-card">
                                     <div class="card-header">
-                                        <h2 class="card-title">"💸 Claim Refund"</h2>
+                                        <h2 class="card-title">"💰 Claim Refund"</h2>
                                         <span class="badge badge-info">
                                             {format!("{:.2} USDC", data.deposit_amount_usdc as f64 / 1_000_000.0)}
                                         </span>
                                     </div>
                                     <div class="wallet-connected-bar">
-                                        <span class="wallet-icon-lg">{wallet_icon}</span>
+                                        <span class="wallet-icon-lg"><Icon icon=wallet_icon class="icon-lg" /></span>
                                         <div class="wallet-info-left">
                                             <div class="wallet-label">"Connected via " {wallet_name.clone()}</div>
                                             <div class="wallet-address-bold">{pk_short}</div>
                                         </div>
-                                        <span class="badge badge-success u-ml-auto">"✅ Connected"</span>
+                                        <span class="badge badge-success u-ml-auto"><Icon icon=IconName::Check class="icon-sm icon-success" />" Connected"</span>
                                     </div>
                                     <p class="hint-desc">
                                         "Your deposit is waiting to be returned. Click below to claim it."
@@ -1827,7 +1895,7 @@ pub fn Deposit() -> impl IntoView {
                                         class="btn btn-success btn-block btn-action-lg"
                                         on:click=move |_| handle_claim_refund(wallet_name_send.clone(), pk_send.clone())
                                     >
-                                        "💸 Claim " {format!("{:.2} USDC", data.deposit_amount_usdc as f64 / 1_000_000.0)} " — Don't lose it"
+                                        "💰 Claim "{format!("{:.2} USDC", data.deposit_amount_usdc as f64 / 1_000_000.0)}" — Don't lose it"
                                     </button>
                                     <button
                                         class="btn btn-outline btn-sm btn-action-secondary"
@@ -1847,7 +1915,7 @@ pub fn Deposit() -> impl IntoView {
                             view! {
                                 <div class="card dep-card">
                                     <div class="card-header">
-                                        <h2 class="card-title">"⏳ Processing Refund..."</h2>
+                                        <h2 class="card-title"><Icon icon=IconName::Hourglass class="icon-sm icon-warning" />" Processing Refund..."</h2>
                                         <span class="badge badge-info">
                                             {format!("{:.2} USDC", data.deposit_amount_usdc as f64 / 1_000_000.0)}
                                         </span>
@@ -1878,7 +1946,7 @@ pub fn Deposit() -> impl IntoView {
                                         <h2 class="card-title">"🎉 Refund Recovered & Rent Reclaimed!"</h2>
                                         <span class="badge badge-success">"On-chain verified"</span>
                                     </div>
-                                    <div class="celebration-emoji">"💰♻️"</div>
+                                    <div class="celebration-emoji">"🪙♻️"</div>
                                     <p class="success-title">
                                         {format!("{usdc_fmt} USDC + ~0.002 SOL returned to your wallet")}
                                     </p>
@@ -1926,13 +1994,7 @@ pub fn Deposit() -> impl IntoView {
                                             <div class="wallet-list">
                                                 {wallets_for_click.into_iter().map(|w| {
                                                     let w_clone = w.clone();
-                                                    let wallet_icon = match w.as_str() {
-                                                        "Phantom" => "👻",
-                                                        "Backpack" => "🎒",
-                                                        "Solflare" => "☀️",
-                                                        "Coinbase" => "🪙",
-                                                        _ => "💼",
-                                                    };
+                                                    let wallet_icon = wallet_icon_name(&w);
                                                     view! {
                                                         <button
                                                             class="btn btn-primary btn-block wallet-btn-inner"
@@ -1941,7 +2003,7 @@ pub fn Deposit() -> impl IntoView {
                                                                 move |_| handle_close_deposit_connect_wallet(w.clone())
                                                             }
                                                         >
-                                                            <span>{wallet_icon}</span>
+                                                            <Icon icon=wallet_icon class="icon-sm" />
                                                             <span>{format!("Connect {}", &w_clone)}</span>
                                                         </button>
                                                     }
@@ -1966,13 +2028,7 @@ pub fn Deposit() -> impl IntoView {
                         DepositPageState::CloseDepositWalletConnected(data, wallet_name, public_key) => {
                             let wallet_name_send = wallet_name.clone();
                             let pk_send = public_key.clone();
-                            let wallet_icon = match wallet_name.as_str() {
-                                "Phantom" => "👻",
-                                "Backpack" => "🎒",
-                                "Solflare" => "☀️",
-                                "Coinbase" => "🪙",
-                                _ => "💼",
-                            };
+                            let wallet_icon = wallet_icon_name(&wallet_name);
                             let pk_short = if public_key.len() > 12 {
                                 format!("{}...{}", &public_key[..4], &public_key[public_key.len()-4..])
                             } else {
@@ -1986,12 +2042,12 @@ pub fn Deposit() -> impl IntoView {
                                         <span class="badge badge-info">"~0.002 SOL"</span>
                                     </div>
                                     <div class="wallet-connected-bar">
-                                        <span class="wallet-icon-lg">{wallet_icon}</span>
+                                        <span class="wallet-icon-lg"><Icon icon=wallet_icon class="icon-lg" /></span>
                                         <div class="wallet-info-left">
                                             <div class="wallet-label">"Connected via " {wallet_name.clone()}</div>
                                             <div class="wallet-address-bold">{pk_short}</div>
                                         </div>
-                                        <span class="badge badge-success u-ml-auto">"✅ Connected"</span>
+                                        <span class="badge badge-success u-ml-auto"><Icon icon=IconName::Check class="icon-sm icon-success" />" Connected"</span>
                                     </div>
                                     <p class="hint-desc">
                                         "Click below to close your deposit account and reclaim the rent-exempt SOL."
@@ -2020,7 +2076,7 @@ pub fn Deposit() -> impl IntoView {
                             view! {
                                 <div class="card dep-card">
                                     <div class="card-header">
-                                        <h2 class="card-title">"⏳ Closing Deposit..."</h2>
+                                        <h2 class="card-title"><Icon icon=IconName::Hourglass class="icon-sm icon-warning" />" Closing Deposit..."</h2>
                                         <span class="badge badge-info">"~0.002 SOL"</span>
                                     </div>
                                     <div class="spinner-wrap">

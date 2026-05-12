@@ -149,7 +149,7 @@ pub fn apply_move(mut game: GameState, direction: Direction) -> (GameState, Move
     // Handle sign
     if let MoveResult::SignText { text } = &result {
         game.active_dialog = Some(DialogState {
-            npc_name: "📋 Sign".to_string(),
+            npc_name: "Sign".to_string(),
             text: text.clone(),
         });
     }

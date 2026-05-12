@@ -638,6 +638,37 @@ pub async fn check_in(id: &str, event_id: Option<&str>, online: bool) -> Result<
     })
 }
 
+/// Undo (revert) a recent check-in for an attendee.
+///
+/// Calls `POST /api/attendees/{id}/undo-checkin?event_id=...`.
+/// Returns `Ok(())` on success. On 404 the backend may not support undo yet —
+/// the caller should handle that gracefully.
+pub async fn undo_check_in(attendee_id: &str, event_id: Option<&str>) -> Result<(), ApiError> {
+    let mut path = format!("/attendees/{attendee_id}/undo-checkin");
+    if let Some(eid) = event_id {
+        if !eid.is_empty() {
+            path = format!("{path}?event_id={eid}");
+        }
+    }
+
+    let response = api_post(&path).await?;
+
+    if !response.ok() {
+        let status = response.status();
+        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
+            success: false,
+            data: None,
+            error: Some("Undo check-in failed".to_string()),
+        });
+        return Err(ApiError {
+            message: body.error.unwrap_or_default(),
+            status,
+        });
+    }
+
+    Ok(())
+}
+
 // ===== Walk-in Registration =====
 
 /// Request body for POST /api/walkin/register
@@ -1889,6 +1920,8 @@ pub struct ThbDepositInfo {
     pub uploaded_at: String,
     pub refunded: bool,
     pub refunded_at: Option<String>,
+    #[serde(default)]
+    pub attendee_name: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, serde::Deserialize)]

@@ -16,6 +16,7 @@ use wasm_bindgen::prelude::*;
 use crate::api::{self, AttendeeData, CheckInData, WalkinRegisterRequest};
 use crate::auth;
 use crate::components::{self, ToastType};
+use crate::icons::{Icon, IconName};
 use crate::utils;
 
 // ===== Camera QR Scanner JS Interop =====
@@ -275,6 +276,12 @@ pub fn Scanner() -> impl IntoView {
     let (flash_enabled, set_flash_enabled) = signal(true);
     let (audio_enabled, set_audio_enabled) = signal(is_audio_enabled_js());
 
+    // Event selector state — signals declared early because handlers below reference active_event_id.
+    let (events_list, set_events_list) = signal(Vec::<api::EventMeta>::new());
+    let (active_event_id, set_active_event_id) = signal(None::<String>);
+    let (escrow_enabled, set_escrow_enabled) = signal(false);
+    let (events_loading, set_events_loading) = signal(false);
+
     // Wallet detection — pre-poll on mount like events_page.rs.
     // Phantom injects async after page load; a single sync call returns [].
     let (detected_wallets, set_detected_wallets) = signal(Vec::<String>::new());
@@ -297,6 +304,11 @@ pub fn Scanner() -> impl IntoView {
     let (session_total, set_session_total) = signal(0u32);
     let (session_success, set_session_success) = signal(0u32);
     let (_session_started_at, _set_session_started_at) = signal(Some(js_sys::Date::now()));
+
+    // Undo check-in signals — two-click confirmation with 30s availability window.
+    let (undo_confirm, set_undo_confirm) = signal(false);
+    let (undo_timer_secs, set_undo_timer_secs) = signal(30u32);
+    let (undo_expired, set_undo_expired) = signal(false);
 
     // Stop camera when component unmounts (e.g. navigating to /admin).
     // Without this, window.__scannerActive remains true and startCamera()
@@ -424,11 +436,12 @@ pub fn Scanner() -> impl IntoView {
                 name: name.clone(),
                 _id: id.clone(),
             });
+            let eid = active_event_id.get();
             let set_state = set_check_in_state;
             let set_t = set_toast;
             let set_s_success = set_session_success;
             leptos::task::spawn_local(async move {
-                match api::check_in(&id, None, false).await {
+                match api::check_in(&id, eid.as_deref(), false).await {
                     Ok(result) => {
                         log::info!("[scanner] check-in successful: {}", result.name);
                         feedback_success_js(); // Success — vibration + beep
@@ -467,11 +480,12 @@ pub fn Scanner() -> impl IntoView {
                 name: name.clone(),
                 _id: id.clone(),
             });
+            let eid = active_event_id.get();
             let set_state = set_check_in_state;
             let set_t = set_toast;
             let set_s_success = set_session_success;
             leptos::task::spawn_local(async move {
-                match api::check_in(&id, None, true).await {
+                match api::check_in(&id, eid.as_deref(), true).await {
                     Ok(result) => {
                         log::info!("[scanner] virtual check-in successful: {}", result.name);
                         feedback_success_js();
@@ -512,46 +526,172 @@ pub fn Scanner() -> impl IntoView {
         set_scan_round.update(|r| *r += 1);
     };
 
-    // ===== Escrow on-chain check-in state =====
-
-    // Load event config on mount to determine escrow status.
-    // We load the events list, pick the first one, then load its detail.
-    let (escrow_event_id, set_escrow_event_id) = signal(None::<String>);
-    let (escrow_enabled, set_escrow_enabled) = signal(false);
-
+    // Undo timer: countdown from 30s when Success state is entered.
+    // Resets confirm + expired signals when leaving Success.
     Effect::new(move |_| {
-        let set_eid = set_escrow_event_id;
+        if matches!(check_in_state.get(), CheckInState::Success(_)) {
+            set_undo_confirm.set(false);
+            set_undo_expired.set(false);
+            set_undo_timer_secs.set(30);
+
+            let set_secs = set_undo_timer_secs;
+            let set_exp = set_undo_expired;
+            let state_check = check_in_state;
+            let secs_reader = undo_timer_secs;
+            let _interval = leptos::task::spawn_local(async move {
+                loop {
+                    gloo::timers::future::TimeoutFuture::new(1000).await;
+                    // Stop if we're no longer in Success (e.g. user clicked Scan Next)
+                    if !matches!(state_check.get(), CheckInState::Success(_)) {
+                        break;
+                    }
+                    let remaining = secs_reader.get();
+                    if remaining == 0 {
+                        set_exp.set(true);
+                        break;
+                    }
+                    set_secs.set(remaining - 1);
+                }
+            });
+
+            // When leaving Success, the interval will eventually notice
+            // the state change (it doesn't re-check, but the expired
+            // flag will prevent the button from showing).
+        }
+    });
+
+    // Handle undo check-in (called from Success state).
+    // First click: show confirmation prompt. Second click: execute undo.
+    let handle_undo = move |_: web_sys::MouseEvent| {
+        if undo_expired.get() {
+            return;
+        }
+        if !undo_confirm.get() {
+            // First click — ask for confirmation
+            set_undo_confirm.set(true);
+            return;
+        }
+
+        // Second click — execute undo
+        let state = check_in_state.get();
+        if let CheckInState::Success(data) = &state {
+            let attendee_id = data.api_id.clone();
+            let name = data.name.clone();
+            let eid = active_event_id.get();
+            let set_state = set_check_in_state;
+            let set_t = set_toast;
+            let set_s_success = set_session_success;
+
+            set_check_in_state.set(CheckInState::CheckingIn {
+                name: format!("Undoing {name}..."),
+                _id: attendee_id.clone(),
+            });
+
+            leptos::task::spawn_local(async move {
+                match api::undo_check_in(&attendee_id, eid.as_deref()).await {
+                    Ok(()) => {
+                        log::info!("[scanner] check-in undone for: {attendee_id}");
+                        feedback_warning_js();
+                        set_state.set(CheckInState::Idle);
+                        set_scan_round.update(|r| *r += 1);
+                        set_s_success.update(|c| *c = c.saturating_sub(1));
+                        api::invalidate_attendee_cache();
+                        components::show_toast(
+                            &set_t,
+                            &format!("Check-in undone for {name}"),
+                            ToastType::Warning,
+                        );
+                    }
+                    Err(err) => {
+                        log::warn!("[scanner] undo failed: {err}");
+                        // Restore Success state so staff can see the result
+                        // Re-lookup is too complex; show error and let them scan again
+                        set_state.set(CheckInState::Error);
+                        let msg = if err.status == 404 {
+                            "Undo not available on this server".to_string()
+                        } else {
+                            format!("Undo failed: {err}")
+                        };
+                        components::show_toast(&set_t, &msg, ToastType::Error);
+                    }
+                }
+            });
+        }
+    };
+
+    // ===== Event selector Effects =====
+
+    // Load events on mount — populate events_list, auto-select first active event,
+    // and check escrow status for the selected event.
+    Effect::new(move |_| {
+        set_events_loading.set(true);
+        let set_eid = set_active_event_id;
         let set_ee = set_escrow_enabled;
+        let set_el = set_events_list;
+        let set_el_loading = set_events_loading;
         leptos::task::spawn_local(async move {
-            // Load events list
-            let events = match api::list_events().await {
-                Ok(data) => data.events,
+            let data = match api::list_events().await {
+                Ok(data) => data,
                 Err(e) => {
-                    log::warn!("[scanner] failed to load events for escrow check: {e}");
+                    log::warn!("[scanner] failed to load events: {e}");
+                    set_el_loading.set(false);
                     return;
                 }
             };
-            // Pick the first active event
-            let first = match events.first() {
-                Some(e) => e,
-                None => return,
-            };
-            let event_id = first.id.clone();
-            // Load event detail to check escrow status
-            match api::get_event_detail(&event_id).await {
-                Ok(detail) => {
-                    let enabled = detail.event.deposit_enabled
-                        && !detail.event.escrow_address.is_empty();
-                    log::info!(
-                        "[scanner] event '{}' escrow_enabled={}",
-                        event_id,
-                        enabled
-                    );
-                    set_eid.set(Some(event_id));
-                    set_ee.set(enabled);
+            let events = data.events;
+            // Auto-select the first active event
+            let first_active = events
+                .iter()
+                .find(|e| e.status == api::EventStatus::Active);
+            let selected_id = first_active.map(|e| e.id.clone());
+            set_el.set(events);
+            set_eid.set(selected_id.clone());
+            set_el_loading.set(false);
+
+            // Load event detail for escrow status
+            if let Some(ref event_id) = selected_id {
+                match api::get_event_detail(event_id).await {
+                    Ok(detail) => {
+                        let enabled = detail.event.deposit_enabled
+                            && !detail.event.escrow_address.is_empty();
+                        log::info!(
+                            "[scanner] event '{}' escrow_enabled={}",
+                            event_id,
+                            enabled
+                        );
+                        set_ee.set(enabled);
+                    }
+                    Err(e) => {
+                        log::warn!("[scanner] failed to load event detail: {e}");
+                    }
                 }
-                Err(e) => {
-                    log::warn!("[scanner] failed to load event detail: {e}");
+            }
+        });
+    });
+
+    // When active_event_id changes, reload escrow status for the new event.
+    Effect::new(move |_| {
+        let eid = active_event_id.get();
+        let set_ee = set_escrow_enabled;
+        leptos::task::spawn_local(async move {
+            if let Some(ref event_id) = eid {
+                if event_id.is_empty() {
+                    return;
+                }
+                match api::get_event_detail(event_id).await {
+                    Ok(detail) => {
+                        let enabled = detail.event.deposit_enabled
+                            && !detail.event.escrow_address.is_empty();
+                        log::info!(
+                            "[scanner] event '{}' escrow_enabled={}",
+                            event_id,
+                            enabled
+                        );
+                        set_ee.set(enabled);
+                    }
+                    Err(e) => {
+                        log::warn!("[scanner] failed to load event detail for escrow: {e}");
+                    }
                 }
             }
         });
@@ -562,7 +702,7 @@ pub fn Scanner() -> impl IntoView {
         let state = check_in_state.get();
         if let CheckInState::Success(data) = &state {
             let attendee_id = data.api_id.clone();
-            let event_id = escrow_event_id.get().unwrap_or_default();
+            let event_id = active_event_id.get().unwrap_or_default();
             if event_id.is_empty() {
                 components::show_toast(
                     &set_toast,
@@ -728,7 +868,7 @@ pub fn Scanner() -> impl IntoView {
             return;
         }
 
-        let event_id = match escrow_event_id.get() {
+        let event_id = match active_event_id.get() {
             Some(eid) if !eid.is_empty() => eid,
             _ => {
                 components::show_toast(
@@ -793,6 +933,65 @@ pub fn Scanner() -> impl IntoView {
                 user_role=user_role
                 on_sign_out=handle_sign_out
             />
+
+            // Event selector bar — shows dropdown when multiple active events exist.
+            // Hidden when only 0 or 1 active event. Shows warning when no active events.
+            {move || {
+                let all_events = events_list.get();
+                let active_events: Vec<_> = all_events
+                    .iter()
+                    .filter(|e| e.status == api::EventStatus::Active)
+                    .collect();
+
+                if events_loading.get() {
+                    view! {
+                        <div class="scanner-event-bar">
+                            <span class="scanner-event-label">"Loading events…"</span>
+                        </div>
+                    }.into_any()
+                } else if active_events.is_empty() {
+                    view! {
+                        <div class="scanner-event-bar" style="background:rgba(239,68,68,0.1);border-bottom-color:rgba(239,68,68,0.3);">
+                            <span class="scanner-event-label" style="color:var(--danger);"><Icon icon=IconName::Warning class="icon-sm icon-warning" />" No active events found"</span>
+                        </div>
+                    }.into_any()
+                } else if active_events.len() == 1 {
+                    // Only one active event — no need for dropdown, but show name
+                    let name = active_events[0].name.clone();
+                    view! {
+                        <div class="scanner-event-bar">
+                            <span class="scanner-event-label">"Event:"</span>
+                            <span style="font-size:0.85rem;">{name}</span>
+                        </div>
+                    }.into_any()
+                } else {
+                    // Multiple active events — show dropdown
+                    let options = active_events.clone();
+                    view! {
+                        <div class="scanner-event-bar">
+                            <span class="scanner-event-label">"Event:"</span>
+                            <select
+                                class="scanner-event-select"
+                                on:change=move |ev| {
+                                    let val = event_target_value(&ev);
+                                    set_active_event_id.set(
+                                        if val.is_empty() { None } else { Some(val) }
+                                    );
+                                }
+                                prop:value=move || active_event_id.get().unwrap_or_default()
+                            >
+                                {options.into_iter().map(|e| {
+                                    let id = e.id.clone();
+                                    let name = e.name.clone();
+                                    view! {
+                                        <option value=id>{name}</option>
+                                    }
+                                }).collect::<Vec<_>>()}
+                            </select>
+                        </div>
+                    }.into_any()
+                }
+            }}
 
             // Fullscreen camera — always in DOM, never conditionally rendered.
             <div class="scanner-fullscreen">
@@ -1008,6 +1207,10 @@ pub fn Scanner() -> impl IntoView {
                                     escrow_enabled.get(),
                                     detected_wallets.get(),
                                     handle_online_check_in,
+                                    handle_undo,
+                                    undo_confirm,
+                                    undo_timer_secs,
+                                    undo_expired,
                                 )
                             }}
                         </Show>
@@ -1052,7 +1255,7 @@ pub fn Scanner() -> impl IntoView {
                                 on:click=move |_| set_flash_enabled.update(|e| *e = !*e)
                                 title="Toggle success flash"
                             >
-                                "⚡"
+                                <Icon icon=IconName::Flash class="icon-sm" />
                                 {move || if flash_enabled.get() { " Flash On" } else { " Flash Off" }}
                             </button>
                             <button
@@ -1069,7 +1272,7 @@ pub fn Scanner() -> impl IntoView {
                                 }
                                 title="Toggle scan audio feedback"
                             >
-                                "🔊"
+                                <Icon icon=IconName::Sound class="icon-sm" />
                                 {move || if audio_enabled.get() { " Sound On" } else { " Sound Off" }}
                             </button>
                         </div>
@@ -1242,7 +1445,7 @@ fn ClaimQrCard(qr_src: String, claim_url: String, label: &'static str) -> impl I
                 <img src=qr_src alt="Claim URL QR Code" class="scanner-qr-img" />
                 <button class="btn btn-primary btn-sm scanner-qr-copy-btn"
                     on:click=move |_| { let _ = copy_to_clipboard_js(&claim_url); }>
-                    "📋 Copy Link"
+                    <Icon icon=IconName::Copy class="icon-sm" />" Copy Link"
                 </button>
             </div>
         </div>
@@ -1263,7 +1466,7 @@ fn AttendeeInfoCard(name: String, email: String) -> impl IntoView {
 // ===== State View Rendering =====
 
 /// Render the current check-in state as a view.
-fn render_check_in_state<E1, E2, E3, E4>(
+fn render_check_in_state<E1, E2, E3, E4, E5>(
     state: CheckInState,
     on_check_in: impl Fn(web_sys::MouseEvent) + 'static,
     on_reset: impl Fn(web_sys::MouseEvent) + Clone + 'static,
@@ -1273,12 +1476,18 @@ fn render_check_in_state<E1, E2, E3, E4>(
     escrow_enabled: bool,
     wallets: Vec<String>,
     on_online_check_in: E4,
+    // Undo check-in
+    on_undo: E5,
+    undo_confirm: ReadSignal<bool>,
+    undo_timer_secs: ReadSignal<u32>,
+    undo_expired: ReadSignal<bool>,
 ) -> AnyView
 where
     E1: Fn(web_sys::MouseEvent) + Clone + 'static,
     E2: Fn(String) + Clone + 'static,
     E3: Fn(web_sys::MouseEvent) + Clone + 'static,
     E4: Fn(web_sys::MouseEvent) + Clone + 'static,
+    E5: Fn(web_sys::MouseEvent) + Clone + Send + 'static,
 {
     match state {
         CheckInState::Idle => view! { <div></div> }.into_any(),
@@ -1314,7 +1523,7 @@ where
                     </div>
                     <div class="scanner-actions">
                         <button class="btn btn-success btn-block" on:click=on_check_in>
-                            "✓ Confirm Check-In"
+                            <Icon icon=IconName::Check class="icon-sm icon-success" />" Confirm Check-In"
                         </button>
                     </div>
                     <button class="btn btn-outline btn-block" style="margin-top:0.5rem;" on:click=on_reset>
@@ -1422,7 +1631,7 @@ where
                         style="margin-top:1rem;"
                         on:click=on_online
                     >
-                        "🌐 Virtual Check-In"
+                        <Icon icon=IconName::Globe class="icon-sm" />" Virtual Check-In"
                     </button>
                     <button class="btn btn-outline btn-block" style="margin-top:0.5rem;" on:click=on_reset>
                         "Scan Another"
@@ -1516,7 +1725,7 @@ where
                                 style="margin-top:0.75rem;border-color:var(--accent);color:var(--accent);"
                                 on:click=on_escrow_check_in
                             >
-                                "⛓ Mark Checked In On-Chain"
+                                <Icon icon=IconName::Lock class="icon-sm" />" Mark Checked In On-Chain"
                             </button>
                         }.into_any()
                     } else {
@@ -1526,6 +1735,42 @@ where
                     <button class="btn btn-success btn-block" style="margin-top:0.5rem;" on:click=on_reset>
                         "Scan Next"
                     </button>
+
+                    // Undo check-in button — available for 30 seconds after check-in
+                    {move || {
+                        let expired = undo_expired.get();
+                        let confirmed = undo_confirm.get();
+                        let secs = undo_timer_secs.get();
+                        if expired {
+                            view! { <div></div> }.into_any()
+                        } else if confirmed {
+                            view! {
+                                <button
+                                    class="btn btn-danger btn-block"
+                                    style="margin-top:0.5rem;font-size:0.85rem;"
+                                    on:click=on_undo.clone()
+                                >
+                                    "\u{26a0} Confirm Undo?"
+                                </button>
+                                <p class="scanner-hint" style="margin-top:0.25rem;">
+                                    {format!("Undo available for {}s", secs)}
+                                </p>
+                            }.into_any()
+                        } else {
+                            view! {
+                                <button
+                                    class="btn btn-danger btn-sm btn-block"
+                                    style="margin-top:0.5rem;font-size:0.8rem;opacity:0.8;"
+                                    on:click=on_undo.clone()
+                                >
+                                    "\u{21a9} Undo Check-In"
+                                </button>
+                                <p class="scanner-hint" style="margin-top:0.25rem;">
+                                    {format!("Undo available for {}s", secs)}
+                                </p>
+                            }.into_any()
+                        }
+                    }}
                 </div>
             }
             .into_any()
@@ -1634,7 +1879,7 @@ where
                         style="margin-top:1rem;"
                         on:click=on_escrow_sign
                     >
-                        "⛓ Sign On-Chain Check-In"
+                        <Icon icon=IconName::Lock class="icon-sm" />" Sign On-Chain Check-In"
                     </button>
 
                     <button class="btn btn-outline btn-block" style="margin-top:0.5rem;" on:click=on_reset>
