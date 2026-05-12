@@ -49,6 +49,11 @@ worker/.dev.vars
 # Wrangler local state (root level)
 .wrangler/
 
+# Brand assets (logos embedded inline in icons/mod.rs)
+Nov 2024 2/
+solflare-brand-kit/
+.DS_Store
+
 # cNFT scripts (standalone Rust project)
 scripts/cnft/target/
 scripts/cnft/Cargo.lock
