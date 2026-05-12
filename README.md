@@ -6,7 +6,7 @@
 [![Rust](https://img.shields.io/badge/Rust-100%25-000000?logo=rust)](https://www.rust-lang.org/)
 [![Cloudflare Workers](https://img.shields.io/badge/Edge-Cloudflare-F38020?logo=cloudflare)](https://workers.cloudflare.com/)
 [![Tests](https://img.shields.io/badge/tests-61%20passing-success)](./scripts/e2e/)
-[![License](https://img.shields.io/badge/license-MIT-blue)](./LICENSE)
+
 
 > Free events have **30-40% no-show rates**. BeThere fixes this with **USDC deposit commitments** — attendees get their money back when they show up, forfeit if they don't. Built on Solana for **$0.001 NFT badges**, **$0.00087 on-chain costs**, and **< 500ms check-in** at the edge.
 
