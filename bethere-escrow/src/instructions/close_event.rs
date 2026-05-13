@@ -28,6 +28,8 @@ pub struct CloseEvent {
 impl CloseEvent {
     #[inline(always)]
     pub fn close_event(&self, bumps: &CloseEventBumps) -> Result<(), ProgramError> {
+        self.event_escrow.validate_version()?;
+
         // Safety: vault must be empty before closing.
         // SPL token close_account zeros the data — remaining tokens would be
         // permanently lost.

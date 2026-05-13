@@ -2206,3 +2206,174 @@ fn test_close_deposit_gc_after_event_closed() {
         result.compute_units_consumed
     );
 }
+
+// ===========================================================================
+// TEST: Version mismatch — v0 EventEscrow should be rejected
+// ===========================================================================
+
+#[test]
+fn test_deposit_escrow_version_mismatch() {
+    let mut svm = setup();
+
+    let token_program = quasar_svm::SPL_TOKEN_PROGRAM_ID;
+    let system_program = quasar_svm::system_program::ID;
+    let rent = RENT;
+    let (escrow, escrow_bump) = find_event_escrow(&ORGANIZER, EVENT_ID);
+    let (deposit, _deposit_bump) = find_attendee_deposit(&escrow, &ATTENDEE);
+
+    // Create a v0 EventEscrow (version = 0 instead of ESCROW_VERSION = 1)
+    let escrow_data = EventEscrowData {
+        version: 0, // v0 — should be rejected
+        organizer: ORGANIZER,
+        event_id: EVENT_ID,
+        usdc_mint: USDC_MINT,
+        vault: VAULT,
+        deposit_amount: DEPOSIT_AMOUNT,
+        event_end: EVENT_END,
+        refund_deadline: REFUND_DEADLINE,
+        total_deposited: 0,
+        total_refunded: 0,
+        total_forfeited: 0,
+        is_active: true,
+        bump: escrow_bump,
+        _padding: [0; 36],
+    };
+    let mut escrow_account_data = vec![1]; // discriminator
+    escrow_account_data.extend(wincode::serialize(&escrow_data).unwrap());
+    let v0_escrow = Account {
+        address: escrow,
+        lamports: 2_000_000,
+        data: escrow_account_data,
+        owner: crate::ID,
+        executable: false,
+    };
+
+    let ix = with_writable(
+        with_signers(
+            DepositInstruction {
+                attendee: ATTENDEE,
+                event_escrow: escrow,
+                usdc_mint: USDC_MINT,
+                attendee_deposit: deposit,
+                attendee_ta: ATTENDEE_TA,
+                vault: VAULT,
+                rent,
+                token_program,
+                system_program,
+                _event_id: EVENT_ID,
+            }
+            .into(),
+            &[0], // attendee is signer
+        ),
+        &[4, 5], // attendee_ta, vault writable
+    );
+
+    let result = svm.process_instruction(
+        &ix,
+        &[
+            signer(ATTENDEE),
+            v0_escrow,
+            mint_account(USDC_MINT),
+            empty(deposit),
+            token_account(ATTENDEE_TA, USDC_MINT, ATTENDEE, DEPOSIT_AMOUNT),
+            token_account(VAULT, USDC_MINT, escrow, 0),
+        ],
+    );
+
+    assert!(result.is_err(), "deposit should fail with version mismatch");
+    let err_code = result.raw_result.unwrap_err();
+    // EscrowVersionMismatch = 20 (Quasar SVM uses raw error code)
+    assert_eq!(
+        err_code,
+        quasar_svm::InstructionError::Custom(20),
+        "expected EscrowVersionMismatch (20), got {err_code:?}"
+    );
+    println!(
+        "  DEPOSIT_ESCROW_VERSION_MISMATCH CU: {}",
+        result.compute_units_consumed
+    );
+}
+
+// ===========================================================================
+// TEST: Version mismatch — v0 AttendeeDeposit should be rejected
+// ===========================================================================
+
+#[test]
+fn test_mark_checked_in_deposit_version_mismatch() {
+    let mut svm = setup();
+
+    let (escrow, escrow_bump) = find_event_escrow(&ORGANIZER, EVENT_ID);
+    let (deposit, deposit_bump) = find_attendee_deposit(&escrow, &ATTENDEE);
+
+    // Create a v0 AttendeeDeposit (version = 0)
+    let deposit_data = AttendeeDepositData {
+        version: 0, // v0 — should be rejected
+        attendee: ATTENDEE,
+        event: escrow,
+        amount: DEPOSIT_AMOUNT,
+        deposited_at: 1_699_900_000,
+        checked_in: false,
+        refunded: false,
+        bump: deposit_bump,
+        _padding: [0; 11],
+    };
+    let mut deposit_account_data = vec![2]; // discriminator
+    deposit_account_data.extend(wincode::serialize(&deposit_data).unwrap());
+    let v0_deposit = Account {
+        address: deposit,
+        lamports: 1_500_000,
+        data: deposit_account_data,
+        owner: crate::ID,
+        executable: false,
+    };
+
+    let ix = with_signers(
+        MarkCheckedInInstruction {
+            organizer: ORGANIZER,
+            event_escrow: escrow,
+            attendee_deposit: deposit,
+            _event_id: EVENT_ID,
+        }
+        .into(),
+        &[0], // organizer is signer
+    );
+
+    let result = svm.process_instruction(
+        &ix,
+        &[
+            signer(ORGANIZER),
+            event_escrow_account(
+                escrow,
+                ORGANIZER,
+                EVENT_ID,
+                USDC_MINT,
+                VAULT,
+                DEPOSIT_AMOUNT,
+                EVENT_END,
+                REFUND_DEADLINE,
+                DEPOSIT_AMOUNT,
+                0,
+                0,
+                true,
+                escrow_bump,
+            ),
+            v0_deposit,
+        ],
+    );
+
+    assert!(
+        result.is_err(),
+        "mark_checked_in should fail with version mismatch"
+    );
+    let err_code = result.raw_result.unwrap_err();
+    // DepositVersionMismatch = 21 (Quasar SVM uses raw error code)
+    assert_eq!(
+        err_code,
+        quasar_svm::InstructionError::Custom(21),
+        "expected DepositVersionMismatch (21), got {err_code:?}"
+    );
+    println!(
+        "  MARK_CHECKED_IN_DEPOSIT_VERSION_MISMATCH CU: {}",
+        result.compute_units_consumed
+    );
+}

@@ -4,7 +4,7 @@
 > **Deployment (devnet)**: `https://bethere.solana-thailand.workers.dev`
 > **Localhost**: `http://localhost:8787` (run `cd worker && ./deploy.sh dev`)
 > **Cluster**: Solana Devnet
-> **Escrow Program**: `2TGfNNXNez2NgopffDnYYhLNYmndUBBwg5SvpD5XQeLo`
+> **Escrow Program**: `C6HDeZES9aPpNwe3UvS9ecmfcRhH1XeJb8PGJmLG3z3T`
 > **USDC Mint (Devnet)**: `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU`
 
 ---
@@ -933,7 +933,7 @@ This is the recommended order for a complete end-to-end test:
 | "has_one constraint" | Wrong signer (not organizer) | Use the organizer's wallet |
 | "is_active=false" | Event deactivated | Expected after deactivate step |
 | "refund_deadline not passed" | Too early for claim_forfeited | Wait for deadline to pass |
-| Program not found | Program not deployed | Verify: `solana program show 2TGfNNXNez2NgopffDnYYhLNYmndUBBwg5SvpD5XQeLo --url devnet` |
+| Program not found | Program not deployed | Verify: `solana program show C6HDeZES9aPpNwe3UvS9ecmfcRhH1XeJb8PGJmLG3z3T --url devnet` |
 
 ### Useful Devnet Links
 
@@ -944,7 +944,7 @@ This is the recommended order for a complete end-to-end test:
 | **Phantom Devnet Faucet** | Phantom Settings → Devnet Faucet |
 | **Solana Faucet** | `https://faucet.solana.com` |
 | **Health Check** | `https://bethere.solana-thailand.workers.dev/api/health` |
-| **Escrow Program** | `2TGfNNXNez2NgopffDnYYhLNYmndUBBwg5SvpD5XQeLo` |
+| **Escrow Program** | `C6HDeZES9aPpNwe3UvS9ecmfcRhH1XeJb8PGJmLG3z3T` |
 
 ### Quick Debug Commands
 
@@ -953,7 +953,7 @@ This is the recommended order for a complete end-to-end test:
 curl -s https://bethere.solana-thailand.workers.dev/api/health | jq .
 
 # Verify escrow program on devnet
-solana program show 2TGfNNXNez2NgopffDnYYhLNYmndUBBwg5SvpD5XQeLo --url devnet
+solana program show C6HDeZES9aPpNwe3UvS9ecmfcRhH1XeJb8PGJmLG3z3T --url devnet
 
 # Check your devnet balance
 solana balance --url devnet

@@ -134,7 +134,7 @@ info "Keypair path:     $ATTENDEE_KEYPAIR"
 
 # USDC devnet constants
 USDC_MINT="4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"
-ESCROW_PROGRAM="2TGfNNXNez2NgopffDnYYhLNYmndUBBwg5SvpD5XQeLo"
+ESCROW_PROGRAM="C6HDeZES9aPpNwe3UvS9ecmfcRhH1XeJb8PGJmLG3z3T"
 
 # ============================================================================
 # Step 0: Prerequisites Check

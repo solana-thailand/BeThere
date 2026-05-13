@@ -28,6 +28,9 @@ pub struct MarkCheckedIn {
 impl MarkCheckedIn {
     #[inline(always)]
     pub fn mark_checked_in(&mut self) -> Result<(), ProgramError> {
+        self.event_escrow.validate_version()?;
+        self.attendee_deposit.validate_version()?;
+
         // SEC-011: Prevent check-ins after event ends
         let clock = <Clock as quasar_lang::sysvars::Sysvar>::get()?;
         if clock.unix_timestamp.get() > self.event_escrow.event_end() {

@@ -28,6 +28,7 @@ pub struct CloseDeposit {
 impl CloseDeposit {
     #[inline(always)]
     pub fn close_deposit(&self) -> Result<(), ProgramError> {
+        self.attendee_deposit.validate_version()?;
         let event_escrow_closed = self.event_escrow.to_account_view().data_len() == 0;
 
         if !event_escrow_closed {

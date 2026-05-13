@@ -34,8 +34,8 @@
 | NFT mint cost | **$0.001** per badge |
 | Transaction cost | **$0.00087** (at $172/SOL) |
 | Check-in latency | **< 500ms** (edge worker) |
-| Tests | **61 passing** (39 worker + 22 on-chain) |
-| Program ID (devnet) | `2TGfNNXNez2NgopffDnYYhLNYmndUBBwg5SvpD5XQeLo` |
+| Tests | **66 passing** (39 worker + 27 on-chain) |
+| Program ID (devnet) | `C6HDeZES9aPpNwe3UvS9ecmfcRhH1XeJb8PGJmLG3z3T` |
 
 ### 🎮 Live Demo Flow (Devnet)
 
@@ -249,7 +249,7 @@ frontend-leptos/src/
 
 ### Solana Escrow Architecture
 
-The escrow system uses PDAs (Program Derived Addresses) to hold attendee USDC deposits on-chain. The escrow program is deployed on devnet at `2TGfNNXNez2NgopffDnYYhLNYmndUBBwg5SvpD5XQeLo`.
+The escrow system uses PDAs (Program Derived Addresses) to hold attendee USDC deposits on-chain. The escrow program is deployed on devnet at `C6HDeZES9aPpNwe3UvS9ecmfcRhH1XeJb8PGJmLG3z3T`.
 
 **Escrow Flow (5 steps, all validated on devnet):**
 
@@ -278,7 +278,7 @@ The escrow system uses PDAs (Program Derived Addresses) to hold attendee USDC de
 **Constants:**
 | Constant | Devnet | Mainnet |
 |----------|--------|--------|
-| Program ID | `2TGfNNXNez2NgopffDnYYhLNYmndUBBwg5SvpD5XQeLo` | TBD |
+| Program ID | `C6HDeZES9aPpNwe3UvS9ecmfcRhH1XeJb8PGJmLG3z3T` | TBD |
 | USDC Mint | `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU` | `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1m` |
 
 **Transaction building:** All TX builders are in `worker/src/solana_escrow.rs`. They use a shared `build_message_accounts()` helper for Solana's canonical 4-pass account ordering.

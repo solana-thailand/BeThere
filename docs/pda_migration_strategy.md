@@ -31,7 +31,7 @@ BeThere is in a **privileged position**: the program is on devnet, not mainnet. 
 
 | Property | Value |
 |----------|-------|
-| Program ID | `2TGfNNXNez2NgopffDnYYhLNYmndUBBwg5SvpD5XQeLo` |
+| Program ID | `C6HDeZES9aPpNwe3UvS9ecmfcRhH1XeJb8PGJmLG3z3T` |
 | Framework | Quasar (`quasar-lang`) |
 | Cluster | Devnet |
 | Discriminator type | Single byte (`#[account(discriminator = N)]`) |
@@ -499,7 +499,7 @@ Expected lifecycle: most events close within 2-4 weeks of creation. The window w
 
 - [x] **Add `version: u8` field to both account structs** — first data field after discriminator (v1 implemented)
 - [x] **Set `CURRENT_VERSION = 1`** — `ESCROW_VERSION` / `DEPOSIT_VERSION` constants, written in `set_inner()` calls
-- [ ] **Add version-aware deserialization** — at minimum, log a warning if version < current
+- [x] **Add version-aware deserialization** — `validate_version()` on every instruction that reads existing accounts, rejects v0 accounts
 - [x] **Allocate padding bytes** — EventEscrow: 36 bytes, AttendeeDeposit: 11 bytes (total sizes: 192B / 96B)
 - [ ] **Write a `migrate_event_escrow` instruction** (even if unused initially) that can upgrade v0 → vN
 - [ ] **Write a `migrate_attendee_deposit` instruction** (even if unused initially)

@@ -16,7 +16,7 @@
 
 | Item | Address |
 |---|---|
-| Escrow Program | `2TGfNNXNez2NgopffDnYYhLNYmndUBBwg5SvpD5XQeLo` |
+| Escrow Program | `C6HDeZES9aPpNwe3UvS9ecmfcRhH1XeJb8PGJmLG3z3T` |
 | USDC Mint (devnet) | `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU` |
 | Solscan (devnet) | `https://solscan.io/tx/{SIG}?cluster=devnet` |
 | Solana Explorer (devnet) | `https://explorer.solana.com/tx/{SIG}?cluster=devnet` |
@@ -84,7 +84,7 @@ Open Solana Explorer and check:
 
 ```bash
 # Alternative: CLI verification
-solana program show 2TGfNNXNez2NgopffDnYYhLNYmndUBBwg5SvpD5XQeLo --url devnet
+solana program show C6HDeZES9aPpNwe3UvS9ecmfcRhH1XeJb8PGJmLG3z3T --url devnet
 ```
 
 ---
@@ -253,7 +253,7 @@ If you've already refunded and return to the deposit page later:
 
 ```bash
 # Check program is deployed
-solana program show 2TGfNNXNez2NgopffDnYYhLNYmndUBBwg5SvpD5XQeLo --url devnet
+solana program show C6HDeZES9aPpNwe3UvS9ecmfcRhH1XeJb8PGJmLG3z3T --url devnet
 
 # Check your wallet balance
 solana balance <YOUR_WALLET> --url devnet

@@ -38,6 +38,7 @@ pub struct ClaimForfeited {
 impl ClaimForfeited {
     #[inline(always)]
     pub fn validate_and_claim(&mut self, bumps: &ClaimForfeitedBumps) -> Result<(), ProgramError> {
+        self.event_escrow.validate_version()?;
         let clock = <Clock as quasar_lang::sysvars::Sysvar>::get()?;
 
         // Verify refund deadline has passed

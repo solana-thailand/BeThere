@@ -42,4 +42,8 @@ pub enum EscrowError {
     EventEscrowStillActive = 18,
     /// Refund deadline has passed — organizer may claim forfeited.
     RefundDeadlinePassed = 19,
+    /// EventEscrow schema version is not supported by this program.
+    EscrowVersionMismatch = 20,
+    /// AttendeeDeposit schema version is not supported by this program.
+    DepositVersionMismatch = 21,
 }

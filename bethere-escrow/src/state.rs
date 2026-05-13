@@ -1,5 +1,7 @@
 use quasar_lang::prelude::*;
 
+use crate::errors::EscrowError;
+
 /// Current schema version for EventEscrow.
 pub const ESCROW_VERSION: u8 = 1;
 
@@ -70,4 +72,30 @@ pub struct AttendeeDeposit {
     pub bump: u8,
     /// Reserved padding for future fields (11 bytes).
     pub _padding: [u8; 11],
+}
+
+impl EventEscrow {
+    /// Validate the schema version of this account.
+    /// Returns an error if the version is not supported.
+    /// Currently only v1 is supported.
+    #[inline(always)]
+    pub fn validate_version(&self) -> Result<(), ProgramError> {
+        if self.version() != ESCROW_VERSION {
+            return Err(EscrowError::EscrowVersionMismatch.into());
+        }
+        Ok(())
+    }
+}
+
+impl AttendeeDeposit {
+    /// Validate the schema version of this account.
+    /// Returns an error if the version is not supported.
+    /// Currently only v1 is supported.
+    #[inline(always)]
+    pub fn validate_version(&self) -> Result<(), ProgramError> {
+        if self.version() != DEPOSIT_VERSION {
+            return Err(EscrowError::DepositVersionMismatch.into());
+        }
+        Ok(())
+    }
 }

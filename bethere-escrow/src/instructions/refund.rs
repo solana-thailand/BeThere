@@ -48,6 +48,9 @@ pub struct Refund {
 impl Refund {
     #[inline(always)]
     pub fn validate_and_update(&mut self) -> Result<(), ProgramError> {
+        self.event_escrow.validate_version()?;
+        self.attendee_deposit.validate_version()?;
+
         let clock = <Clock as quasar_lang::sysvars::Sysvar>::get()?;
 
         // Verify event has ended

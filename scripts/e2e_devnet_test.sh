@@ -34,7 +34,7 @@ set -euo pipefail
 # ---------------------------------------------------------------------------
 WORKER_URL="${WORKER_URL:-https://bethere.solana-thailand.workers.dev}"
 PUBLIC_RPC="https://api.devnet.solana.com"
-ESCROW_PROGRAM="2TGfNNXNez2NgopffDnYYhLNYmndUBBwg5SvpD5XQeLo"
+ESCROW_PROGRAM="C6HDeZES9aPpNwe3UvS9ecmfcRhH1XeJb8PGJmLG3z3T"
 USDC_MINT="4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"
 TIMESTAMP=$(date +%s)
 EVENT_SLUG="e2e-escrow-${TIMESTAMP}"

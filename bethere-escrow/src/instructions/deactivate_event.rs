@@ -29,6 +29,7 @@ pub struct DeactivateEvent {
 impl DeactivateEvent {
     #[inline(always)]
     pub fn deactivate(&mut self) -> Result<(), ProgramError> {
+        self.event_escrow.validate_version()?;
         self.event_escrow.is_active = false.into();
 
         emit!(EventDeactivated {

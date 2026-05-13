@@ -44,6 +44,7 @@ pub struct Deposit {
 impl Deposit {
     #[inline(always)]
     pub fn create_deposit(&mut self, bumps: &DepositBumps) -> Result<(), ProgramError> {
+        self.event_escrow.validate_version()?;
         let clock = <Clock as quasar_lang::sysvars::Sysvar>::get()?;
         let amount = self.event_escrow.deposit_amount();
 
