@@ -31,6 +31,7 @@ impl IntoResponse for WorkerError {
             success: false,
             data: None,
             error: Some(message),
+            correlation_id: None,
         };
 
         (

@@ -238,6 +238,7 @@ pub async fn require_auth(
                     success: false,
                     data: None,
                     error: Some(e),
+                    correlation_id: None,
                 }),
             )
                 .into_response();
@@ -255,6 +256,7 @@ pub async fn require_auth(
                 success: false,
                 data: None,
                 error: Some("user is not in staff allowlist".to_string()),
+                correlation_id: None,
             }),
         )
             .into_response();

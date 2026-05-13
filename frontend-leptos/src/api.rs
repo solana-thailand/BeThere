@@ -100,6 +100,7 @@ async fn cached_get(path: &str) -> Result<String, ApiError> {
             success: false,
             data: None,
             error: Some("Request failed".to_string()),
+            correlation_id: None,
         });
         return Err(ApiError {
             message: body.error.unwrap_or_default(),
@@ -286,6 +287,8 @@ pub struct ApiResponse<T> {
     pub data: Option<T>,
     #[serde(default)]
     pub error: Option<String>,
+    #[serde(default)]
+    pub correlation_id: Option<String>,
 }
 
 // ===== Base URL helper =====
@@ -327,6 +330,7 @@ async fn api_get(path: &str) -> Result<gloo::net::http::Response, ApiError> {
             success: false,
             data: None,
             error: Some("Access denied".to_string()),
+            correlation_id: None,
         });
         return Err(ApiError {
             message: body.error.unwrap_or("Access denied".to_string()),
@@ -402,6 +406,7 @@ async fn api_post_json<T: serde::de::DeserializeOwned + Default>(
             success: false,
             data: None,
             error: Some("Request failed".to_string()),
+            correlation_id: None,
         });
         return Err(ApiError {
             message: body
@@ -470,6 +475,7 @@ async fn api_put_json<T: serde::de::DeserializeOwned + Default>(
             success: false,
             data: None,
             error: Some("Request failed".to_string()),
+            correlation_id: None,
         });
         return Err(ApiError {
             message: body
@@ -620,6 +626,7 @@ pub async fn check_in(id: &str, event_id: Option<&str>, online: bool) -> Result<
             success: false,
             data: None,
             error: Some("Check-in failed".to_string()),
+            correlation_id: None,
         });
         return Err(ApiError {
             message: body.error.unwrap_or_default(),
@@ -659,6 +666,7 @@ pub async fn undo_check_in(attendee_id: &str, event_id: Option<&str>) -> Result<
             success: false,
             data: None,
             error: Some("Undo check-in failed".to_string()),
+            correlation_id: None,
         });
         return Err(ApiError {
             message: body.error.unwrap_or_default(),
@@ -713,6 +721,7 @@ pub async fn generate_qrs(force: bool, event_id: Option<&str>) -> Result<Generat
             success: false,
             data: None,
             error: Some("QR generation failed".to_string()),
+            correlation_id: None,
         });
         return Err(ApiError {
             message: body.error.unwrap_or_default(),
@@ -1309,6 +1318,7 @@ pub async fn get_quiz() -> Result<QuizQuestionsData, ApiError> {
             success: false,
             data: None,
             error: Some("Quiz fetch failed".to_string()),
+            correlation_id: None,
         });
         return Err(ApiError {
             message: body.error.unwrap_or_default(),
@@ -1425,6 +1435,7 @@ pub async fn archive_event(id: &str) -> Result<EventMutationData, ApiError> {
             success: false,
             data: None,
             error: Some("Archive failed".to_string()),
+            correlation_id: None,
         });
         return Err(ApiError {
             message: body.error.unwrap_or_default(),
@@ -1507,6 +1518,7 @@ pub async fn submit_quiz(
             success: false,
             data: None,
             error: Some("Quiz submit failed".to_string()),
+            correlation_id: None,
         });
         return Err(ApiError {
             message: body.error.unwrap_or_default(),
@@ -1539,6 +1551,7 @@ pub async fn get_quiz_status(token: &str) -> Result<QuizStatusData, ApiError> {
             success: false,
             data: None,
             error: Some("Quiz status fetch failed".to_string()),
+            correlation_id: None,
         });
         return Err(ApiError {
             message: body.error.unwrap_or_default(),
@@ -1582,6 +1595,7 @@ pub async fn post_claim(token: &str, wallet_address: &str) -> Result<ClaimMintDa
             success: false,
             data: None,
             error: Some("Claim mint failed".to_string()),
+            correlation_id: None,
         });
         return Err(ApiError {
             message: body.error.unwrap_or_default(),
@@ -1678,6 +1692,7 @@ pub async fn get_adventure_status(token: &str) -> Result<AdventureStatusData, Ap
             success: false,
             data: None,
             error: Some("Adventure status fetch failed".to_string()),
+            correlation_id: None,
         });
         return Err(ApiError {
             message: body.error.unwrap_or_default(),
@@ -1728,6 +1743,7 @@ pub async fn save_adventure_progress(
             success: false,
             data: None,
             error: Some("Adventure save failed".to_string()),
+            correlation_id: None,
         });
         return Err(ApiError {
             message: body.error.unwrap_or_default(),
@@ -1783,6 +1799,7 @@ pub async fn get_admin_adventure_config(
             success: false,
             data: None,
             error: Some("Failed to fetch adventure config".to_string()),
+            correlation_id: None,
         });
         return Err(ApiError {
             message: body.error.unwrap_or("Failed to fetch adventure config".to_string()),
@@ -1835,6 +1852,7 @@ pub async fn put_admin_adventure_config(
             success: false,
             data: None,
             error: Some("Failed to save adventure config".to_string()),
+            correlation_id: None,
         });
         return Err(ApiError {
             message: body.error.unwrap_or("Failed to save adventure config".to_string()),
@@ -1964,6 +1982,7 @@ pub async fn get_deposit_status(
             success: false,
             data: None,
             error: Some("Failed to get deposit status".to_string()),
+            correlation_id: None,
         });
         return Err(ApiError {
             message: body.error.unwrap_or_default(),
@@ -2015,6 +2034,7 @@ pub async fn confirm_deposit(
             success: false,
             data: None,
             error: Some("Failed to check deposit confirmation".to_string()),
+            correlation_id: None,
         });
         return Err(ApiError {
             message: body.error.unwrap_or_default(),
@@ -2057,6 +2077,7 @@ pub async fn get_pending_slips(event_id: Option<&str>) -> Result<PendingSlipResp
             success: false,
             data: None,
             error: Some("Failed to get pending slips".to_string()),
+            correlation_id: None,
         });
         return Err(ApiError {
             message: body.error.unwrap_or_default(),
@@ -2089,6 +2110,7 @@ pub async fn get_refund_queue(event_id: Option<&str>) -> Result<RefundQueueRespo
             success: false,
             data: None,
             error: Some("Failed to get refund queue".to_string()),
+            correlation_id: None,
         });
         return Err(ApiError {
             message: body.error.unwrap_or_default(),

@@ -25,6 +25,8 @@ pub struct ApiResponse<T: Serialize> {
     pub data: Option<T>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub correlation_id: Option<String>,
 }
 
 impl<T: Serialize> ApiResponse<T> {
@@ -34,6 +36,7 @@ impl<T: Serialize> ApiResponse<T> {
             success: true,
             data: Some(data),
             error: None,
+            correlation_id: None,
         }
     }
 }
@@ -45,6 +48,7 @@ impl ApiResponse<()> {
             success: true,
             data: Some(serde_json::json!({ "message": msg })),
             error: None,
+            correlation_id: None,
         }
     }
 }
