@@ -16,7 +16,7 @@ use leptos_router::params::Params;
 use crate::api::{self, AdventureStatusType, ClaimLookupData, ClaimMintData, QuizQuestionsData, QuizStatus, QuizSubmitData, RefundTxRequest};
 use crate::components::{self, Toast, ToastType};
 use crate::icons::{Icon, IconName, wallet_icon_name};
-use crate::utils::{escape_html, format_timestamp, get_cluster, solscan_tx_url};
+use crate::utils::{escape_html, format_timestamp, get_cluster, metaplex_explorer_url, solscan_tx_url};
 use wasm_bindgen::prelude::*;
 
 // ---------------------------------------------------------------------------
@@ -1955,7 +1955,7 @@ pub fn Claim() -> impl IntoView {
                         // ---- Success! ----
                         ClaimState::Success(data) => {
                             let explorer_url = solscan_tx_url(&data.signature, &data.cluster);
-                            let asset_url = crate::utils::solscan_address_url(&data.asset_id, &data.cluster);
+                            let metaplex_url = metaplex_explorer_url(&data.asset_id, &data.cluster);
                             let asset_id_display = {
                                 let id = &data.asset_id;
                                 if id.len() > 12 {
@@ -2048,12 +2048,12 @@ pub fn Claim() -> impl IntoView {
                                             "View on Solscan"
                                         </a>
                                         <a
-                                            href=asset_url
+                                            href=metaplex_url
                                             target="_blank"
                                             rel="noopener noreferrer"
                                             class="btn btn-outline btn-block"
                                         >
-                                            "View NFT Asset"
+                                            "Verify NFT on Metaplex"
                                         </a>
                                     </div>
 

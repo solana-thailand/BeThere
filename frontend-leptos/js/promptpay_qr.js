@@ -38,9 +38,12 @@ function tlv(tag, value) {
  *
  * @param {string} promptpayId - Thai phone number (e.g., "0812345678") or national ID
  * @param {number} amount - Amount in THB (e.g., 500)
+ * @param {string} [reference] - Optional reference label (e.g., event name, attendee ID).
+ *   Encoded as EMVCo Tag 62 sub-tag 01 (Bill Number). Max 25 chars recommended.
+ *   Displayed as "Reference" in most Thai banking apps when scanning the QR.
  * @returns {string|null} EMVCo QR string ready for QR encoding, or null if invalid
  */
-export function generatePromptPayQr(promptpayId, amount) {
+export function generatePromptPayQr(promptpayId, amount, reference) {
   if (!promptpayId || promptpayId.trim() === "") {
     return null;
   }
@@ -96,6 +99,15 @@ export function generatePromptPayQr(promptpayId, amount) {
   }
 
   payload += tlv("58", "TH"); // Country Code
+
+  // Tag 62 — Additional Data Field Template (optional reference/note)
+  // Sub-tag 01: Bill Number / Reference Label (shown as "Reference" in banking apps)
+  // Must appear before Tag 63 (CRC) for ascending tag order.
+  if (reference && reference.trim() !== "") {
+    // Truncate to 25 chars for broad bank compatibility
+    const ref = reference.trim().substring(0, 25);
+    payload += tlv("62", tlv("01", ref));
+  }
 
   // Add CRC placeholder, then calculate checksum
   payload += "6304"; // CRC tag (63) + length (04)

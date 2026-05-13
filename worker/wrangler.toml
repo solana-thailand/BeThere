@@ -45,9 +45,9 @@ SERVER_URL = "https://bethere.solana-thailand.workers.dev"
 CLAIM_BASE_URL = "https://bethere.solana-thailand.workers.dev/claim"
 GOOGLE_SHEET_NAME = "checkin"
 GOOGLE_STAFF_SHEET_NAME = "staff"
-DEV_MODE = "1"
+DEV_MODE = "0"
 DEV_EMAIL = "ratchapon.poc@gmail.com"
-SUPER_ADMIN_EMAILS = "ratchapon.poc@gmail.com"
+SUPER_ADMIN_EMAILS = "ratchapon.poc@gmail.com,hackathon@colosseum.org"
 
 # Phase 3: Event config (change per event without WASM rebuild)
 EVENT_NAME = "Solana x AI Builders: The Road to Mainnet #1 (Bangkok)"

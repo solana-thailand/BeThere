@@ -57,7 +57,7 @@ cd worker && npx wrangler dev --port 8787
 
 ### 7. Wrap-Up (10 sec)
 - Cost comparison: $0.87 for 1000 attendees vs $500+ on Ethereum
-- "Built by Solana Thailand community"
+- "We started with manual deposits — now it's on-chain"
 - "100% Rust, open source, ready for mainnet"
 
 ## Key Talking Points
