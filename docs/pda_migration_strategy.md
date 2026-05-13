@@ -45,7 +45,7 @@ BeThere is in a **privileged position**: the program is on devnet, not mainnet. 
 |----------|--------|
 | Discriminator | `1` |
 | Seeds | `["escrow", organizer: Address, event_id: u64]` |
-| Account size | 157 bytes (8 discriminator + 149 data) |
+| Account size | v0: 149 bytes (1 disc + 148 fields), v1: 192 bytes (1 disc + 1 ver + 148 fields + 36 pad) |
 
 ```
 Byte Layout:
@@ -80,7 +80,7 @@ Field inventory:
 |----------|--------|
 | Discriminator | `2` |
 | Seeds | `["deposit", event: Address, attendee: Address]` |
-| Account size | 84 bytes (8 discriminator + 76 data) |
+| Account size | v0: 84 bytes (1 discriminator + 83 data), v1: 96 bytes (1 disc + 1 ver + 82 fields + 1 bump + 11 pad) |
 
 ```
 Byte Layout:
@@ -497,23 +497,23 @@ Expected lifecycle: most events close within 2-4 weeks of creation. The window w
 
 ### Must-Do Before First Mainnet Deployment
 
-- [ ] **Add `version: u8` field to both account structs** (appended at end, before bump)
-- [ ] **Set `CURRENT_VERSION = 1`** and write to all new accounts during initialization
+- [x] **Add `version: u8` field to both account structs** — first data field after discriminator (v1 implemented)
+- [x] **Set `CURRENT_VERSION = 1`** — `ESCROW_VERSION` / `DEPOSIT_VERSION` constants, written in `set_inner()` calls
 - [ ] **Add version-aware deserialization** — at minimum, log a warning if version < current
-- [ ] **Allocate 16-32 bytes of padding** on EventEscrow for near-term additions (costs ~$1.50 extra rent per event at current SOL prices — negligible)
+- [x] **Allocate padding bytes** — EventEscrow: 36 bytes, AttendeeDeposit: 11 bytes (total sizes: 192B / 96B)
 - [ ] **Write a `migrate_event_escrow` instruction** (even if unused initially) that can upgrade v0 → vN
 - [ ] **Write a `migrate_attendee_deposit` instruction** (even if unused initially)
 - [ ] **Test migration path** on devnet: create v0 accounts, deploy upgraded program, migrate, verify
-- [ ] **Document the version history** in code comments and this document
+- [x] **Document the version history** in code comments and this document
 - [ ] **Verify upgrade authority** is set correctly (multi-sig recommended for mainnet)
 - [ ] **Consider upgrade authority revocation** after initial deployment if no changes are planned
 
 ### Account Size Planning
 
-| Account Type | Current Size | Recommended Pre-Mainnet Size | Overhead |
-|-------------|-------------|------------------------------|----------|
-| EventEscrow | 157 bytes | 192 bytes (+35 bytes padding) | ~$0.25/event |
-| AttendeeDeposit | 84 bytes | 96 bytes (+12 bytes padding) | ~$0.08/deposit |
+| Account Type | v0 Size | v1 Size (Current) | Padding | Total |
+|-------------|---------|-------------------|---------|-------|
+| EventEscrow | 149 bytes (1 disc + 148 fields) | 192 bytes | +36 bytes | 1(disc) + 1(ver) + 148(fields) + 36(pad) = 192 |
+| AttendeeDeposit | 84 bytes (1 disc + 83 fields) | 96 bytes | +11 bytes | 1(disc) + 1(ver) + 83(fields) + 11(pad) = 96 |
 
 The padding allows 3-4 field additions without requiring reallocation. If we hit the ceiling, we use the Resize instruction or sidecars.
 
@@ -549,8 +549,8 @@ Predicted schema changes, their expected timeline, and the planned migration pat
 
 | Version | Date | Changes | Migration Required |
 |---------|------|---------|-------------------|
-| 0 | Current (devnet) | Initial struct layout, no version field | N/A |
-| 1 | Pre-mainnet | Add `version: u8`, add padding | Fresh deploy, no migration |
+| 0 | Devnet (pre-v1) | Initial struct layout, no version field | N/A |
+| 1 | Pre-mainnet (current) | Add `version: u8` (first field), add `_padding: [u8; N]` (last field), EventEscrow → 192B, AttendeeDeposit → 96B | Fresh deploy, no migration needed |
 | 2 | TBD | (reserved for first field addition) | Append-only, "let it close" |
 
 ---

@@ -26,7 +26,7 @@ use wasm_bindgen_futures::JsFuture;
 // ---------------------------------------------------------------------------
 
 /// Bethere-escrow program ID on devnet.
-const ESCROW_PROGRAM_ID: &str = "2TGfNNXNez2NgopffDnYYhLNYmndUBBwg5SvpD5XQeLo";
+const ESCROW_PROGRAM_ID: &str = "C6HDeZES9aPpNwe3UvS9ecmfcRhH1XeJb8PGJmLG3z3T";
 
 /// Devnet USDC mint.
 /// Mainnet: EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1m
@@ -2234,7 +2234,7 @@ mod tests {
     }
 
     /// Verify EventEscrow PDA derivation matches @solana/web3.js reference.
-    /// Expected: PawcSqdjb66SKp1utWraYZJDcMQfYBwwpK9QSb3EY5a (bump=255)
+    /// Expected: 3CzSgvftMgjQE1Du9uyamJe6xVCMmu1tvEhHc172Z4JD (bump=255)
     #[tokio::test]
     async fn test_find_event_escrow_pda() {
         let program_id = pubkey_from_base58(ESCROW_PROGRAM_ID).unwrap();
@@ -2248,13 +2248,13 @@ mod tests {
         .await
         .unwrap();
 
-        let expected = "PawcSqdjb66SKp1utWraYZJDcMQfYBwwpK9QSb3EY5a";
+        let expected = "3CzSgvftMgjQE1Du9uyamJe6xVCMmu1tvEhHc172Z4JD";
         assert_eq!(pubkey_to_base58(&pda), expected, "EventEscrow PDA mismatch");
         assert_eq!(bump, 255, "EventEscrow bump mismatch");
     }
 
     /// Verify AttendeeDeposit PDA derivation matches @solana/web3.js reference.
-    /// Expected: Cm8bAdgASHKBYehSBxC8YeVmUw2oT7sB2zVu8VQmfqcn (bump=255)
+    /// Expected: EwGrFaXTJdY8cv3T4d93shtASJZdp1t34Y7rGtbf5Fhi (bump=255)
     #[tokio::test]
     async fn test_find_attendee_deposit_pda() {
         let program_id = pubkey_from_base58(ESCROW_PROGRAM_ID).unwrap();
@@ -2278,17 +2278,17 @@ mod tests {
         .await
         .unwrap();
 
-        let expected = "Cm8bAdgASHKBYehSBxC8YeVmUw2oT7sB2zVu8VQmfqcn";
+        let expected = "EwGrFaXTJdY8cv3T4d93shtASJZdp1t34Y7rGtbf5Fhi";
         assert_eq!(
             pubkey_to_base58(&pda),
             expected,
             "AttendeeDeposit PDA mismatch"
         );
-        assert_eq!(bump, 255, "AttendeeDeposit bump mismatch");
+        assert_eq!(bump, 252, "AttendeeDeposit bump mismatch");
     }
 
     /// Verify Vault ATA derivation matches @solana/web3.js reference.
-    /// Expected: 5exYHTcLvUbKPd3V8jxpkXn4RJL337URHM38kM2K6zbS (bump=255)
+    /// Expected: DXiJimCs3Rzv1i3W93oeRSoxcT8Coeo2YqA7iUaQKndQ (bump=255)
     #[tokio::test]
     async fn test_find_vault_ata() {
         let program_id = pubkey_from_base58(ESCROW_PROGRAM_ID).unwrap();
@@ -2309,7 +2309,7 @@ mod tests {
                 .await
                 .unwrap();
 
-        let expected = "5exYHTcLvUbKPd3V8jxpkXn4RJL337URHM38kM2K6zbS";
+        let expected = "DXiJimCs3Rzv1i3W93oeRSoxcT8Coeo2YqA7iUaQKndQ";
         assert_eq!(pubkey_to_base58(&vault), expected, "Vault ATA mismatch");
     }
 

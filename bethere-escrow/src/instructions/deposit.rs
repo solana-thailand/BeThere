@@ -2,7 +2,7 @@ use {
     crate::{
         errors::EscrowError,
         events::Deposited,
-        state::{AttendeeDeposit, AttendeeDepositInner, EventEscrow},
+        state::{AttendeeDeposit, AttendeeDepositInner, EventEscrow, DEPOSIT_VERSION},
     },
     quasar_lang::prelude::*,
     quasar_spl::prelude::*,
@@ -48,6 +48,7 @@ impl Deposit {
         let amount = self.event_escrow.deposit_amount();
 
         self.attendee_deposit.set_inner(AttendeeDepositInner {
+            version: DEPOSIT_VERSION,
             attendee: *self.attendee.address(),
             event: *self.event_escrow.address(),
             amount,
@@ -55,6 +56,7 @@ impl Deposit {
             checked_in: false,
             refunded: false,
             bump: bumps.attendee_deposit,
+            _padding: [0; 11],
         });
 
         // Update escrow totals (checked arithmetic)
@@ -71,7 +73,14 @@ impl Deposit {
     pub fn transfer_usdc(&self) -> Result<(), ProgramError> {
         let amount = self.event_escrow.deposit_amount();
         self.token_program
-            .transfer_checked(&self.attendee_ta, &self.usdc_mint, &self.vault, &self.attendee, amount, 6)
+            .transfer_checked(
+                &self.attendee_ta,
+                &self.usdc_mint,
+                &self.vault,
+                &self.attendee,
+                amount,
+                6,
+            )
             .invoke()
     }
 

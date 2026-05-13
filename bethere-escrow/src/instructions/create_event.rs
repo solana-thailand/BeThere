@@ -2,7 +2,7 @@ use {
     crate::{
         errors::EscrowError,
         events::EventCreated,
-        state::{EventEscrow, EventEscrowInner},
+        state::{EventEscrow, EventEscrowInner, ESCROW_VERSION},
     },
     quasar_lang::prelude::*,
     quasar_spl::prelude::*,
@@ -55,6 +55,7 @@ impl CreateEvent {
         }
 
         self.event_escrow.set_inner(EventEscrowInner {
+            version: ESCROW_VERSION,
             organizer: *self.organizer.address(),
             event_id,
             usdc_mint: *self.usdc_mint.address(),
@@ -67,6 +68,7 @@ impl CreateEvent {
             total_forfeited: 0,
             is_active: true,
             bump: bumps.event_escrow,
+            _padding: [0; 36],
         });
         Ok(())
     }

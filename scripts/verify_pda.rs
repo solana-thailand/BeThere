@@ -8,7 +8,7 @@
 ///   or: `rustc scripts/verify_pda.rs --edition 2021 -o /tmp/verify_pda && /tmp/verify_pda`
 use solana_sdk::pubkey::Pubkey;
 
-const ESCROW_PROGRAM_ID: &str = "2TGfNNXNez2NgopffDnYYhLNYmndUBBwg5SvpD5XQeLo";
+const ESCROW_PROGRAM_ID: &str = "C6HDeZES9aPpNwe3UvS9ecmfcRhH1XeJb8PGJmLG3z3T";
 const USDC_MINT_DEVNET: &str = "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU";
 const TOKEN_PROGRAM_ID: &str = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
 /// Correct ATA program ID from https://github.com/solana-program/associated-token-account

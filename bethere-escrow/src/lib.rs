@@ -15,7 +15,7 @@ mod tests;
 #[cfg(kani)]
 mod kani;
 
-declare_id!("2TGfNNXNez2NgopffDnYYhLNYmndUBBwg5SvpD5XQeLo");
+declare_id!("C6HDeZES9aPpNwe3UvS9ecmfcRhH1XeJb8PGJmLG3z3T");
 
 #[program]
 mod bethere_escrow {

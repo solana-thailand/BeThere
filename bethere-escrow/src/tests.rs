@@ -97,6 +97,7 @@ fn event_escrow_account(
     bump: u8,
 ) -> Account {
     let escrow_data = EventEscrowData {
+        version: crate::state::ESCROW_VERSION,
         organizer,
         event_id,
         usdc_mint,
@@ -109,6 +110,7 @@ fn event_escrow_account(
         total_forfeited,
         is_active,
         bump,
+        _padding: [0; 36],
     };
     let mut data = vec![1]; // discriminator for EventEscrow
     data.extend(wincode::serialize(&escrow_data).unwrap());
@@ -132,6 +134,7 @@ fn attendee_deposit_account(
     bump: u8,
 ) -> Account {
     let deposit_data = AttendeeDepositData {
+        version: crate::state::DEPOSIT_VERSION,
         attendee,
         event,
         amount,
@@ -139,6 +142,7 @@ fn attendee_deposit_account(
         checked_in,
         refunded,
         bump,
+        _padding: [0; 11],
     };
     let mut data = vec![2]; // discriminator for AttendeeDeposit
     data.extend(wincode::serialize(&deposit_data).unwrap());
@@ -190,6 +194,7 @@ fn with_writable(mut ix: Instruction, indices: &[usize]) -> Instruction {
 
 #[derive(wincode::SchemaWrite)]
 struct EventEscrowData {
+    version: u8,
     organizer: Pubkey,
     event_id: u64,
     usdc_mint: Pubkey,
@@ -202,10 +207,12 @@ struct EventEscrowData {
     total_forfeited: u64,
     is_active: bool,
     bump: u8,
+    _padding: [u8; 36],
 }
 
 #[derive(wincode::SchemaWrite)]
 struct AttendeeDepositData {
+    version: u8,
     attendee: Pubkey,
     event: Pubkey,
     amount: u64,
@@ -213,6 +220,7 @@ struct AttendeeDepositData {
     checked_in: bool,
     refunded: bool,
     bump: u8,
+    _padding: [u8; 11],
 }
 
 // ===========================================================================
@@ -272,10 +280,11 @@ fn test_create_event() {
     let data = &escrow_account.data;
     // discriminator at [0] should be 1
     assert_eq!(data[0], 1, "discriminator should be 1 for EventEscrow");
-    // organizer at [1..33]
-    assert_eq!(&data[1..33], ORGANIZER.as_ref(), "organizer mismatch");
-    // bump at last byte
-    assert_eq!(*data.last().unwrap(), escrow_bump, "bump mismatch");
+    // organizer at [2..34] (1 disc + 1 version)
+    assert_eq!(&data[2..34], ORGANIZER.as_ref(), "organizer mismatch");
+    // bump at offset: 1(disc) + 1(version) + 32(org) + 8(event_id) + 32(mint) + 32(vault) + 8(deposit_amount) + 8(event_end) + 8(refund_deadline) + 8(total_deposited) + 8(total_refunded) + 8(total_forfeited) + 1(is_active)
+    let bump_offset = 1 + 1 + 32 + 8 + 32 + 32 + 8 + 8 + 8 + 8 + 8 + 8 + 1;
+    assert_eq!(data[bump_offset], escrow_bump, "bump mismatch");
 
     println!("  CREATE_EVENT CU: {}", result.compute_units_consumed);
 }
@@ -408,8 +417,8 @@ fn test_deposit() {
     // Verify escrow total_deposited updated
     let escrow_account = result.account(&escrow).unwrap();
     let escrow_data = &escrow_account.data;
-    // total_deposited at offset: 1(disc) + 32(org) + 8(event_id) + 32(mint) + 32(vault) + 8(deposit_amount) + 8(event_end) + 8(refund_deadline)
-    let total_deposited_offset = 1 + 32 + 8 + 32 + 32 + 8 + 8 + 8;
+    // total_deposited at offset: 1(disc) + 1(version) + 32(org) + 8(event_id) + 32(mint) + 32(vault) + 8(deposit_amount) + 8(event_end) + 8(refund_deadline)
+    let total_deposited_offset = 1 + 1 + 32 + 8 + 32 + 32 + 8 + 8 + 8;
     let total_deposited = u64::from_le_bytes(
         escrow_data[total_deposited_offset..total_deposited_offset + 8]
             .try_into()
@@ -547,10 +556,10 @@ fn test_mark_checked_in() {
     );
     result.print_logs();
 
-    // Verify checked_in flag set (offset: 1 disc + 32 attendee + 32 event + 8 amount + 8 deposited_at)
+    // Verify checked_in flag set (offset: 1 disc + 1 version + 32 attendee + 32 event + 8 amount + 8 deposited_at)
     let deposit_account = result.account(&deposit).unwrap();
     let data = &deposit_account.data;
-    let checked_in_offset = 1 + 32 + 32 + 8 + 8;
+    let checked_in_offset = 1 + 1 + 32 + 32 + 8 + 8;
     assert_eq!(data[checked_in_offset], 1, "checked_in should be true");
 
     println!("  MARK_CHECKED_IN CU: {}", result.compute_units_consumed);
@@ -1382,8 +1391,8 @@ fn test_full_happy_path() {
     let escrow_data_for_close = {
         let raw = &escrow_after_refund.data;
         let mut modified = raw.clone();
-        // is_active offset: 1 + 32 + 8 + 32 + 32 + 8 + 8 + 8 + 8 + 8 + 8 = 148
-        let is_active_offset = 1 + 32 + 8 + 32 + 32 + 8 + 8 + 8 + 8 + 8 + 8;
+        // is_active offset: 1(disc) + 1(version) + 32 + 8 + 32 + 32 + 8 + 8 + 8 + 8 + 8 + 8
+        let is_active_offset = 1 + 1 + 32 + 8 + 32 + 32 + 8 + 8 + 8 + 8 + 8 + 8;
         modified[is_active_offset] = 0; // set is_active = false
         Account {
             address: escrow,
@@ -1549,9 +1558,9 @@ fn test_deactivate_event() {
         result.raw_result
     );
 
-    // Verify is_active set to false (offset: 1 + 32 + 8 + 32 + 32 + 8 + 8 + 8 + 8 + 8 + 8 = 148)
+    // Verify is_active set to false (offset: 1(disc) + 1(version) + 32 + 8 + 32 + 32 + 8 + 8 + 8 + 8 + 8 + 8)
     let escrow_account = result.account(&escrow).unwrap();
-    let is_active_offset = 1 + 32 + 8 + 32 + 32 + 8 + 8 + 8 + 8 + 8 + 8;
+    let is_active_offset = 1 + 1 + 32 + 8 + 32 + 32 + 8 + 8 + 8 + 8 + 8 + 8;
     assert_eq!(
         escrow_account.data[is_active_offset], 0,
         "is_active should be false"
@@ -1878,8 +1887,8 @@ fn test_full_lifecycle_with_deactivate() {
 
     let escrow_after_deactivate = result.account(&escrow).unwrap().clone();
 
-    // Verify is_active = false
-    let is_active_offset = 1 + 32 + 8 + 32 + 32 + 8 + 8 + 8 + 8 + 8 + 8;
+    // Verify is_active = false (offset: 1(disc) + 1(version) + 32 + 8 + 32 + 32 + 8 + 8 + 8 + 8 + 8 + 8)
+    let is_active_offset = 1 + 1 + 32 + 8 + 32 + 32 + 8 + 8 + 8 + 8 + 8 + 8;
     assert_eq!(
         escrow_after_deactivate.data[is_active_offset], 0,
         "is_active should be false after deactivate"
