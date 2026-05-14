@@ -1272,6 +1272,19 @@ pub fn EventsPage(
                             };
                             let needs_escrow = evt.deposit_enabled && evt.escrow_address.is_empty();
                             let has_escrow = evt.deposit_enabled && !evt.escrow_address.is_empty();
+                            let (ctx_escrow_label, ctx_escrow_cls) = if needs_escrow {
+                                ("No Escrow".to_string(), "badge badge-warning-xs".to_string())
+                            } else if has_escrow {
+                                match evt.escrow_status {
+                                    api::EscrowStatus::Initialized => ("Escrow: Active".to_string(), "badge badge-success-xs".to_string()),
+                                    api::EscrowStatus::Deactivated => ("Escrow: Deactivated".to_string(), "badge badge-warning-xs".to_string()),
+                                    api::EscrowStatus::Closed => ("Escrow: Closed".to_string(), "badge badge-info-xs".to_string()),
+                                    _ => ("Escrow".to_string(), "badge badge-success-xs".to_string()),
+                                }
+                            } else {
+                                (String::new(), String::new())
+                            };
+                            let ctx_show_escrow = !ctx_escrow_label.is_empty();
 
                             view! {
                                 <div class="event-edit-context-bar">
@@ -1288,10 +1301,8 @@ pub fn EventsPage(
                                         <span class="card-title" style="font-size:1rem">{ename}</span>
                                         <span class=badge_class>{status_text}</span>
                                         <span class=fmt_badge_class>{fmt_label}</span>
-                                        {if needs_escrow {
-                                            view! { <span class="badge badge-warning-xs">"No Escrow"</span> }.into_any()
-                                        } else if has_escrow {
-                                            view! { <span class="badge badge-success-xs">"Escrow"</span> }.into_any()
+                                        {if ctx_show_escrow {
+                                            view! { <span class=ctx_escrow_cls>{ctx_escrow_label}</span> }.into_any()
                                         } else {
                                             view! { <span></span> }.into_any()
                                         }}
@@ -1310,6 +1321,21 @@ pub fn EventsPage(
                     match eid {
                         None => view! { <div></div> }.into_any(),
                         Some(id) => view! { <crate::pages::audit_panel::AuditPanel event_id=id /> }.into_any(),
+                    }
+                }}
+            </Show>
+
+            // On-chain events panel (collapsible, loads on demand, only if escrow exists)
+            <Show when=move || current_view.get() == EventsView::Edit && active_event_id.get().is_some() fallback=|| view! { <div></div> }>
+                {move || {
+                    let eid = active_event_id.get();
+                    let events_list = events.get();
+                    let has_escrow = eid.as_ref().and_then(|id| events_list.iter().find(|e| &e.id == id))
+                        .map(|e| !e.escrow_address.is_empty())
+                        .unwrap_or(false);
+                    match (eid, has_escrow) {
+                        (Some(id), true) => view! { <crate::pages::onchain_events_panel::OnchainEventsPanel event_id=id /> }.into_any(),
+                        _ => view! { <div></div> }.into_any(),
                     }
                 }}
             </Show>

@@ -8,6 +8,7 @@
 use axum::{
     Extension, Json,
     extract::{Path, State},
+    http::HeaderMap,
 };
 use event_checkin_domain::models::auth::Claims;
 use event_checkin_domain::models::error::AppError;
@@ -35,13 +36,34 @@ pub struct OnchainWebhookRequest {
 /// Called by Helius when a transaction involves the escrow program.
 /// Parses each transaction, resolves the event ID, and stores in KV.
 ///
-/// **Authentication**: The webhook URL includes a secret path segment
-/// (set in Helius dashboard) to prevent unauthorized calls.
+/// **Authentication**: Validates `Authorization: Bearer <token>` header
+/// against the `WEBHOOK_SECRET` env var. If the var is not set or empty,
+/// validation is skipped for backward compatibility.
 #[worker::send]
 pub async fn onchain_webhook_handler(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(body): Json<OnchainWebhookRequest>,
 ) -> Result<ApiOk<IndexSummary>, WorkerError> {
+    // Validate Bearer token if webhook secret is configured
+    if !state.webhook_secret.is_empty() {
+        let expected = format!("Bearer {}", state.webhook_secret);
+        let auth_header = headers
+            .get("authorization")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+
+        if auth_header != expected {
+            tracing::warn!(
+                auth = %auth_header,
+                "webhook rejected: invalid or missing Authorization header"
+            );
+            return Err(AppError::Unauthorized(
+                "invalid or missing Authorization header".to_string(),
+            )
+            .into());
+        }
+    }
     let kv = state
         .events_kv
         .as_ref()

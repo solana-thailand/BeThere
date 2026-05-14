@@ -2469,3 +2469,116 @@ pub async fn get_event_audit(event_id: &str) -> Result<AuditResponse, ApiError> 
         status: 0,
     })
 }
+
+// ---------------------------------------------------------------------------
+// On-Chain Escrow Events
+// ---------------------------------------------------------------------------
+
+/// On-chain escrow instruction type.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum EscrowInstruction {
+    CreateEvent,
+    Deposit,
+    MarkCheckedIn,
+    Refund,
+    ClaimForfeited,
+    CloseEvent,
+    DeactivateEvent,
+    CloseDeposit,
+    Unknown,
+}
+
+impl EscrowInstruction {
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::CreateEvent => "Create Event",
+            Self::Deposit => "Deposit",
+            Self::MarkCheckedIn => "Check In",
+            Self::Refund => "Refund",
+            Self::ClaimForfeited => "Claim Forfeited",
+            Self::CloseEvent => "Close Event",
+            Self::DeactivateEvent => "Deactivate",
+            Self::CloseDeposit => "Close Deposit",
+            Self::Unknown => "Unknown",
+        }
+    }
+
+    pub fn color(&self) -> &'static str {
+        match self {
+            Self::CreateEvent => "#6366f1",    // indigo
+            Self::Deposit => "#3b82f6",       // blue
+            Self::MarkCheckedIn => "#22c55e",  // green
+            Self::Refund => "#eab308",        // yellow
+            Self::ClaimForfeited => "#f97316", // orange
+            Self::CloseEvent => "#ef4444",     // red
+            Self::DeactivateEvent => "#a855f7", // purple
+            Self::CloseDeposit => "#64748b",   // slate
+            Self::Unknown => "#94a3b8",        // gray
+        }
+    }
+}
+
+/// A single on-chain escrow event.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OnChainEvent {
+    pub signature: String,
+    pub slot: u64,
+    pub block_time: i64,
+    pub instruction: EscrowInstruction,
+    pub escrow_address: String,
+    #[serde(default)]
+    pub organizer: Option<String>,
+    #[serde(default)]
+    pub attendee: Option<String>,
+    #[serde(default)]
+    pub amount: Option<u64>,
+    pub indexed_at: String,
+}
+
+/// Response for GET /api/escrow/events/{event_id}
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct OnchainEventsResponse {
+    #[serde(default)]
+    pub event_id: String,
+    #[serde(default)]
+    pub escrow_address: String,
+    #[serde(default)]
+    pub events: Vec<OnChainEvent>,
+}
+
+/// GET /api/escrow/events/{event_id} — fetch indexed on-chain events
+pub async fn get_onchain_events(event_id: &str) -> Result<OnchainEventsResponse, ApiError> {
+    let path = format!("/escrow/events/{event_id}");
+    let response = api_get(&path).await?;
+
+    if !response.ok() {
+        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
+            success: false,
+            data: None,
+            error: Some("Failed to fetch on-chain events".to_string()),
+            correlation_id: None,
+        });
+        return Err(ApiError {
+            message: body.error.unwrap_or_default(),
+            status: 0,
+        });
+    }
+
+    let result: ApiResponse<OnchainEventsResponse> = response.json().await.map_err(|e| ApiError {
+        message: format!("Failed to parse on-chain events: {e}"),
+        status: 0,
+    })?;
+
+    if !result.success {
+        return Err(ApiError {
+            message: result.error.unwrap_or("Unknown error".to_string()),
+            status: 0,
+        });
+    }
+
+    result.data.ok_or_else(|| ApiError {
+        message: "No data in response".to_string(),
+        status: 0,
+    })
+}

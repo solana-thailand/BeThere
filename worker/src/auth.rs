@@ -508,6 +508,7 @@ mod tests {
             config: std::sync::Arc::new(config),
             quiz_kv: None,
             events_kv: None,
+            webhook_secret: String::new(),
         }
     }
 

@@ -20,6 +20,9 @@ pub struct AppState {
     /// KV namespace for event registry and per-event config (Issue 004).
     /// `None` if the `EVENTS` binding is not configured in `wrangler.toml`.
     pub events_kv: Option<KvStore>,
+    /// Shared secret for validating webhook `Authorization: Bearer <token>` header.
+    /// If empty, webhook auth validation is skipped (backward compatible).
+    pub webhook_secret: String,
 }
 
 impl AppState {
@@ -150,10 +153,16 @@ impl AppState {
         // Events KV namespace — optional, multi-event disabled if not bound
         let events_kv = env.kv("EVENTS").ok();
 
+        let webhook_secret = get_var(env, "WEBHOOK_SECRET").unwrap_or_default();
+        if webhook_secret.is_empty() {
+            tracing::warn!("WEBHOOK_SECRET not set — webhook auth validation is disabled");
+        }
+
         Ok(Self {
             config: Arc::new(config),
             quiz_kv,
             events_kv,
+            webhook_secret,
         })
     }
 
