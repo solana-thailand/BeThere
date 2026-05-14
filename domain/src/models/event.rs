@@ -240,6 +240,9 @@ pub struct EventConfig {
     pub created_at: String,
     /// ISO 8601 last-update timestamp.
     pub updated_at: String,
+    /// Email of the user who last updated this event (set from JWT claims).
+    #[serde(default)]
+    pub updated_by: String,
 }
 
 impl EventConfig {
@@ -364,6 +367,7 @@ impl EventConfig {
             event_format: EventFormat::InPerson,
             created_at: String::new(),
             updated_at: String::new(),
+            updated_by: String::new(),
         }
     }
 }

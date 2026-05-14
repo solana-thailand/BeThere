@@ -2363,3 +2363,64 @@ pub struct ClaimForfeitedResponse {
 pub async fn claim_forfeited(body: &ClaimForfeitedRequest) -> Result<ClaimForfeitedResponse, ApiError> {
     api_post_json("/escrow/claim-forfeited", body).await
 }
+
+// ---------------------------------------------------------------------------
+// Audit Trail
+// ---------------------------------------------------------------------------
+
+/// A single audit log entry.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuditEntry {
+    pub timestamp: String,
+    pub actor: String,
+    pub action: String,
+    pub target: String,
+    pub description: String,
+    #[serde(default)]
+    pub metadata: Option<serde_json::Value>,
+}
+
+/// Response from GET /api/events/{id}/audit.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct AuditResponse {
+    #[serde(default)]
+    pub event_id: String,
+    #[serde(default)]
+    pub entries: Vec<AuditEntry>,
+}
+
+/// GET /api/events/{id}/audit — fetch audit trail for an event.
+pub async fn get_event_audit(event_id: &str) -> Result<AuditResponse, ApiError> {
+    let path = format!("/events/{event_id}/audit");
+    let response = api_get(&path).await?;
+
+    if !response.ok() {
+        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
+            success: false,
+            data: None,
+            error: Some("Failed to fetch audit trail".to_string()),
+            correlation_id: None,
+        });
+        return Err(ApiError {
+            message: body.error.unwrap_or_default(),
+            status: 0,
+        });
+    }
+
+    let result: ApiResponse<AuditResponse> = response.json().await.map_err(|e| ApiError {
+        message: format!("Failed to parse audit response: {e}"),
+        status: 0,
+    })?;
+
+    if !result.success {
+        return Err(ApiError {
+            message: result.error.unwrap_or("Unknown error".to_string()),
+            status: 0,
+        });
+    }
+
+    result.data.ok_or_else(|| ApiError {
+        message: "No data in response".to_string(),
+        status: 0,
+    })
+}

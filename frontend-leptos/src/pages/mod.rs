@@ -3,6 +3,7 @@ pub mod admin_deposit;
 pub mod admin_escrow;
 pub mod adventure;
 pub mod adventure_config;
+pub mod audit_panel;
 pub mod claim;
 pub mod deposit;
 pub mod escrow_init;

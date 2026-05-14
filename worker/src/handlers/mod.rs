@@ -123,6 +123,7 @@ pub fn routes(state: AppState) -> Router<()> {
         .route("/events/{id}/restore", post(events::restore_event))
         .route("/events/{id}/delete", delete(events::hard_delete_event))
         .route("/events/{id}/audit", get(events::get_event_audit))
+        .route("/audit/global", get(events::get_global_audit))
         // Admin deposit management (protected — organizer verifies slips, manages refunds)
         .route(
             "/deposit/thb/verify",

@@ -224,7 +224,7 @@ pub async fn create_event(
         )
     })?;
 
-    let config = crate::event_store::create_event(kv, &body)
+    let config = crate::event_store::create_event(kv, &body, &claims.email)
         .await
         .map_err(|e| {
             let err_msg = e.to_string();
@@ -353,7 +353,7 @@ pub async fn update_event(
         .into());
     }
 
-    let config = crate::event_store::update_event(kv, &id, &body)
+    let config = crate::event_store::update_event(kv, &id, &body, &claims.email)
         .await
         .map_err(|e| {
             tracing::error!(event_id = %id, error = %e, "failed to update event");
@@ -617,6 +617,41 @@ pub async fn get_event_audit(
 
     Ok(ApiOk::new(serde_json::json!({
         "event_id": id,
+        "entries": entries,
+    })))
+}
+
+/// GET /api/audit/global — Get system-wide audit trail.
+/// Returns the last 200 global audit entries, newest first.
+/// SuperAdmin only.
+#[worker::send]
+pub async fn get_global_audit(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+) -> Result<ApiOk<serde_json::Value>, crate::error::WorkerError> {
+    let kv = state
+        .events_kv
+        .as_ref()
+        .ok_or_else(|| AppError::Internal("events KV namespace not configured".into()))?;
+
+    // Role check: SuperAdmin only for global audit
+    let role = crate::auth::resolve_user_role(&claims.email, &state, None).await;
+    if role != crate::auth::UserRole::SuperAdmin {
+        return Err(
+            AppError::Forbidden("only super admins can view global audit logs".into()).into(),
+        );
+    }
+
+    let entries = crate::audit_store::get_global_audit(kv, 200)
+        .await
+        .map_err(|e| {
+            tracing::error!(error = %e, "failed to get global audit log");
+            AppError::Internal(e.to_string())
+        })?;
+
+    tracing::info!(count = entries.len(), "global audit log retrieved");
+
+    Ok(ApiOk::new(serde_json::json!({
         "entries": entries,
     })))
 }

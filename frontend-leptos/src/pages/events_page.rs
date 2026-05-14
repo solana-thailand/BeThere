@@ -1269,6 +1269,17 @@ pub fn EventsPage(
                 }}
             </Show>
 
+            // Audit trail (collapsible, loads on demand)
+            <Show when=move || current_view.get() == EventsView::Edit && active_event_id.get().is_some() fallback=|| view! { <div></div> }>
+                {move || {
+                    let eid = active_event_id.get();
+                    match eid {
+                        None => view! { <div></div> }.into_any(),
+                        Some(id) => view! { <crate::pages::audit_panel::AuditPanel event_id=id /> }.into_any(),
+                    }
+                }}
+            </Show>
+
             // === Create / Edit Form View ===
             <Show when=move || current_view.get() != EventsView::List fallback=|| view! { <div></div> }>
                 <div class="card">

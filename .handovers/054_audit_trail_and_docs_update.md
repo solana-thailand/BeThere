@@ -61,14 +61,14 @@ AuditEntry: { timestamp, actor, action, target, description, metadata? }
 - **`_claims` underscore prefix**: Some escrow handlers had `_claims` to suppress unused warnings. Had to rename to `claims` when adding audit logging that uses `claims.email`.
 
 ## Remain Work
-- [ ] **Audit UI viewer** — Frontend component to display audit trail in admin panel
+- [x] ~~**`updated_by` field on EventConfig**~~ — Done (commit ef6efcf)
+- [x] ~~**Global audit API endpoint**~~ — Done: `GET /api/audit/global` (SuperAdmin)
+- [x] ~~**Audit retention/cleanup policy**~~ — Done: orphaned cleanup + 90-day pruning in cron
+- [x] ~~**Audit UI viewer**~~ — Done: `AuditPanel` component in edit view
 - [ ] **On-chain CPI event indexing** — Subscribe to escrow program events via Helius websocket/geyser
-- [ ] **`updated_by` field on EventConfig** — Attribute config changes to specific users
-- [ ] **Global audit API endpoint** — `GET /api/audit/global` for super admin
-- [ ] **Audit retention/cleanup policy** — Integrate with existing cleanup cron
 - [ ] **Build & deploy** — `cd frontend-leptos && bash build.sh` + `cd worker && npx wrangler deploy`
 - [ ] **Test full cleanup workflow on devnet** — deactivate → close → archive → delete
-- [ ] **E2E with audit verification** — After operations, verify audit entries exist
+- [ ] **E2E with audit verification** — After operations, verify audit entries show in UI
 
 ## Issues Ref
 - Related to security findings SEC-004 (archive guards escrow) and general audit gap

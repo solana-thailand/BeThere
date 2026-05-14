@@ -201,6 +201,7 @@ The frontend is served from `frontend-leptos/dist/` via Workers Assets with SPA 
 | POST | `/api/escrow/refund` | No | Build refund TX for attendee's wallet to sign |
 | DELETE | `/api/events/{id}/delete` | Cookie + SuperAdmin | Permanently delete event (`?force=true` for devnet cleanup) |
 | GET | `/api/events/{id}/audit` | Cookie + Organizer | Get audit trail for event |
+| GET | `/api/audit/global` | Cookie + SuperAdmin | Get system-wide audit trail |
 | POST | `/api/escrow/deactivate-event` | Cookie + Organizer | Build deactivate escrow TX |
 | POST | `/api/escrow/close-event` | Cookie + Organizer | Build close escrow TX (reclaim rent) |
 | GET | `/api/public/events` | Public | List upcoming active events (nearest first) |

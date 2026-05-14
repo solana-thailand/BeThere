@@ -107,7 +107,11 @@ pub async fn get_event(kv: &KvStore, id: &str) -> Result<Option<EventConfig>, St
 ///
 /// Generates a unique ID from the slug, validates required fields,
 /// saves the full config, and updates the event index.
-pub async fn create_event(kv: &KvStore, req: &CreateEventRequest) -> Result<EventConfig, String> {
+pub async fn create_event(
+    kv: &KvStore,
+    req: &CreateEventRequest,
+    updated_by: &str,
+) -> Result<EventConfig, String> {
     // Validate required fields
     if req.name.trim().is_empty() {
         return Err("event name is required".to_string());
@@ -203,6 +207,7 @@ pub async fn create_event(kv: &KvStore, req: &CreateEventRequest) -> Result<Even
         event_format: req.event_format.clone(),
         created_at: now.clone(),
         updated_at: now,
+        updated_by: updated_by.to_string(),
     };
 
     // Save full config
@@ -231,6 +236,7 @@ pub async fn update_event(
     kv: &KvStore,
     id: &str,
     req: &UpdateEventRequest,
+    updated_by: &str,
 ) -> Result<EventConfig, String> {
     let mut config = get_event_config(kv, id)
         .await?
@@ -394,6 +400,7 @@ pub async fn update_event(
     }
 
     config.updated_at = chrono::Utc::now().to_rfc3339();
+    config.updated_by = updated_by.to_string();
 
     // Save updated config
     save_event_config(kv, &config).await?;
@@ -662,6 +669,7 @@ pub async fn seed_from_config(
         event_format: event_checkin_domain::models::event::EventFormat::InPerson,
         created_at: now.clone(),
         updated_at: now,
+        updated_by: String::new(), // seeded from config, no user context
     };
 
     // Save full config
