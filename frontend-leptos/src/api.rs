@@ -1168,6 +1168,8 @@ pub struct EventDetail {
     #[serde(default)]
     pub refund_deadline_hours: u32,
     #[serde(default)]
+    pub max_refundable_deposits: u32,
+    #[serde(default)]
     pub event_format: EventFormat,
     #[serde(default)]
     pub created_at: String,
@@ -1248,6 +1250,8 @@ pub struct CreateEventBody {
     #[serde(default)]
     pub refund_deadline_hours: u32,
     #[serde(default)]
+    pub max_refundable_deposits: u32,
+    #[serde(default)]
     pub event_format: EventFormat,
 }
 /// Request body for PUT /api/events/{id} — update event.
@@ -1314,6 +1318,8 @@ pub struct UpdateEventBody {
     pub on_chain_event_id: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub refund_deadline_hours: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_refundable_deposits: Option<u32>,
     /// Optimistic concurrency: matches server `updated_at` to prevent blind overwrites.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub expected_updated_at: Option<String>,
@@ -1998,6 +2004,12 @@ pub struct DepositStatusInfo {
     pub deposited_at: String,
     #[serde(default)]
     pub wallet_address: Option<String>,
+    /// Deposit order within this event (1-based).
+    #[serde(default)]
+    pub deposit_order: u32,
+    /// Whether this deposit is in the refundable tier.
+    #[serde(default = "default_true")]
+    pub refundable: bool,
 }
 
 #[derive(Debug, Clone, Default, serde::Deserialize)]

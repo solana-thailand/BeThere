@@ -140,6 +140,10 @@ pub struct EventMeta {
     /// Whether deposit is enabled for this event.
     #[serde(default)]
     pub deposit_enabled: bool,
+    /// Maximum number of refundable deposits (0 = unlimited). Deposits beyond
+    /// this count are non-refundable — they pay to attend but get no refund.
+    #[serde(default)]
+    pub max_refundable_deposits: u32,
     /// On-chain escrow PDA address. Empty string if not yet initialized.
     #[serde(default)]
     pub escrow_address: String,
@@ -264,6 +268,9 @@ pub struct EventConfig {
     /// Hours after event_end for refund deadline (default: 168 = 7 days).
     #[serde(default)]
     pub refund_deadline_hours: u32,
+    /// Maximum number of refundable deposits (0 = unlimited).
+    #[serde(default)]
+    pub max_refundable_deposits: u32,
 
     // ── Public details ───────────────────────────────────────────────
     /// Event description (markdown or plain text).
@@ -303,6 +310,7 @@ impl EventConfig {
             created_at: self.created_at.clone(),
             organizer_emails: self.organizer_emails.clone(),
             deposit_enabled: self.deposit_enabled,
+            max_refundable_deposits: self.max_refundable_deposits,
             escrow_address: self.escrow_address.clone(),
             escrow_status: self.escrow_status.clone(),
             event_format: self.event_format.clone(),
@@ -408,6 +416,7 @@ impl EventConfig {
             organizer_wallet: String::new(),
             on_chain_event_id: 0,
             refund_deadline_hours: 168,
+            max_refundable_deposits: 0,
             description: String::new(),
             location: String::new(),
             event_format: EventFormat::InPerson,
@@ -507,6 +516,9 @@ pub struct CreateEventRequest {
     /// Hours after event_end for refund deadline (default: 168 = 7 days).
     #[serde(default)]
     pub refund_deadline_hours: u32,
+    /// Maximum number of refundable deposits (0 = unlimited).
+    #[serde(default)]
+    pub max_refundable_deposits: u32,
     /// Event description (markdown or plain text).
     #[serde(default)]
     pub description: String,
@@ -615,6 +627,9 @@ pub struct UpdateEventRequest {
     /// Hours after event_end for refund deadline.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub refund_deadline_hours: Option<u32>,
+    /// Maximum number of refundable deposits (0 = unlimited).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_refundable_deposits: Option<u32>,
     /// Optimistic concurrency: if provided, update only succeeds when this
     /// matches the stored `updated_at` timestamp. Prevents blind overwrites.
     #[serde(skip_serializing_if = "Option::is_none")]

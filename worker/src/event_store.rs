@@ -204,6 +204,7 @@ pub async fn create_event(
         organizer_wallet: req.organizer_wallet.trim().to_string(),
         on_chain_event_id: req.on_chain_event_id,
         refund_deadline_hours: req.refund_deadline_hours,
+        max_refundable_deposits: req.max_refundable_deposits,
         description: req.description.trim().to_string(),
         location: req.location.trim().to_string(),
         event_format: req.event_format.clone(),
@@ -400,6 +401,9 @@ pub async fn update_event(
     }
     if let Some(v) = req.refund_deadline_hours {
         config.refund_deadline_hours = v;
+    }
+    if let Some(v) = req.max_refundable_deposits {
+        config.max_refundable_deposits = v;
     }
     if let Some(ref v) = req.description {
         config.description = v.trim().to_string();
@@ -685,6 +689,7 @@ pub async fn seed_from_config(
         organizer_wallet: String::new(),
         on_chain_event_id: 0,
         refund_deadline_hours: 168,
+        max_refundable_deposits: 0,
         description: String::new(),
         location: String::new(),
         event_format: event_checkin_domain::models::event::EventFormat::InPerson,

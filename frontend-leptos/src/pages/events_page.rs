@@ -58,6 +58,7 @@ pub struct EventForm {
     pub organizer_wallet: String,
     pub on_chain_event_id: String,
     pub refund_deadline_hours: String,
+    pub max_refundable_deposits: String,
     /// Server-side `updated_at` captured at load time for optimistic concurrency.
     pub updated_at: String,
 }
@@ -159,6 +160,7 @@ fn default_form() -> EventForm {
         organizer_wallet: String::new(),
         on_chain_event_id: String::new(),
         refund_deadline_hours: String::new(),
+        max_refundable_deposits: String::new(),
         ..Default::default()
     }
 }
@@ -213,6 +215,7 @@ fn form_from_detail(detail: &api::EventDetail) -> EventForm {
         organizer_wallet: detail.organizer_wallet.clone(),
         on_chain_event_id: if detail.on_chain_event_id > 0 { detail.on_chain_event_id.to_string() } else { String::new() },
         refund_deadline_hours: if detail.refund_deadline_hours > 0 { detail.refund_deadline_hours.to_string() } else { String::new() },
+        max_refundable_deposits: if detail.max_refundable_deposits > 0 { detail.max_refundable_deposits.to_string() } else { String::new() },
         updated_at: detail.updated_at.clone(),
     }
 }
@@ -546,6 +549,7 @@ pub fn EventsPage(
                 },
                 on_chain_event_id: current_form.on_chain_event_id.parse::<u64>().unwrap_or(0),
                 refund_deadline_hours: current_form.refund_deadline_hours.parse::<u32>().unwrap_or(0),
+                max_refundable_deposits: current_form.max_refundable_deposits.parse::<u32>().unwrap_or(0),
                 event_format: current_form.event_format.clone(),
             };
 
@@ -682,6 +686,7 @@ pub fn EventsPage(
                 organizer_wallet: Some(current_form.organizer_wallet.trim().to_string()),
                 on_chain_event_id: Some(current_form.on_chain_event_id.parse::<u64>().unwrap_or(0)),
                 refund_deadline_hours: Some(current_form.refund_deadline_hours.parse::<u32>().unwrap_or(0)),
+                max_refundable_deposits: Some(current_form.max_refundable_deposits.parse::<u32>().unwrap_or(0)),
                 expected_updated_at: if current_form.updated_at.is_empty() { None } else { Some(current_form.updated_at.clone()) },
                 event_format: Some(current_form.event_format.clone()),
             };
@@ -1994,6 +1999,19 @@ pub fn EventsPage(
                                                 }}
                                             </div>
                                         </Show>
+                                    </div>
+                                    <div class="quiz-setting-item">
+                                        <label class="quiz-field-label">"Max Refundable Deposits"</label>
+                                        <input
+                                            type="number"
+                                            class="quiz-number-input"
+                                            placeholder="e.g., 18"
+                                            min="0"
+                                            step="1"
+                                            prop:value=move || form.get().max_refundable_deposits
+                                            on:input=move |ev| set_form.update(|f| f.max_refundable_deposits = event_target_value(&ev))
+                                        />
+                                        <span class="quiz-setting-hint">"First N deposits get refund on check-in. Leave 0 or empty for unlimited. Deposits beyond this count are non-refundable."</span>
                                     </div>
                                 </div>
 

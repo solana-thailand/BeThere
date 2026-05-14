@@ -130,6 +130,14 @@ pub async fn deposit_usdc_handler(
         return Err(AppError::Validation("attendee already has a deposit".to_string()).into());
     }
 
+    // Count existing deposits for this event to determine tier
+    let existing_deposits = event_store::list_deposit_statuses(kv, &event.id)
+        .await
+        .map_err(AppError::Internal)?;
+    let deposit_order = (existing_deposits.len() as u32) + 1;
+    let refundable =
+        event.max_refundable_deposits == 0 || deposit_order <= event.max_refundable_deposits;
+
     // Record a pending deposit status
     let deposit_status = DepositStatus {
         attendee_id: body.attendee_id.clone(),
@@ -141,6 +149,8 @@ pub async fn deposit_usdc_handler(
         verified: false,
         deposited_at: Utc::now().to_rfc3339(),
         wallet_address: Some(body.wallet_address.clone()),
+        deposit_order,
+        refundable,
     };
 
     event_store::save_deposit_status(kv, &deposit_status)
@@ -162,6 +172,9 @@ pub async fn deposit_usdc_handler(
         attendee_id = %body.attendee_id,
         event_id = %event.id,
         amount = event.deposit_amount_usdc,
+        deposit_order,
+        refundable,
+        tier = if refundable { "refundable" } else { "non-refundable" },
         "USDC deposit initiated"
     );
 
@@ -914,6 +927,14 @@ pub async fn upload_thb_slip_handler(
         .await
         .map_err(AppError::Internal)?;
 
+    // Count existing deposits for this event to determine tier
+    let existing_deposits = event_store::list_deposit_statuses(kv, &event.id)
+        .await
+        .map_err(AppError::Internal)?;
+    let deposit_order = (existing_deposits.len() as u32) + 1;
+    let refundable =
+        event.max_refundable_deposits == 0 || deposit_order <= event.max_refundable_deposits;
+
     // Create deposit status
     let deposit_status = DepositStatus {
         attendee_id: body.attendee_id.clone(),
@@ -925,6 +946,8 @@ pub async fn upload_thb_slip_handler(
         verified: false,
         deposited_at: now,
         wallet_address: None,
+        deposit_order,
+        refundable,
     };
 
     event_store::save_deposit_status(kv, &deposit_status)
@@ -1328,6 +1351,14 @@ pub async fn refund_and_close_tx_handler(
         .into());
     }
 
+    // Check if this deposit is in the refundable tier
+    if !status.refundable {
+        return Err(AppError::Validation(
+            "your deposit is non-refundable (overflow tier) — refunds are only available for the first N depositors".to_string(),
+        )
+        .into());
+    }
+
     // Determine organizer pubkey for PDA derivation
     let organizer_pubkey = if event.organizer_wallet.is_empty() {
         return Err(
@@ -1463,7 +1494,26 @@ pub async fn mark_checked_in_tx_handler(
     // Validate attendee wallet
     crate::solana::validate_wallet_address(&attendee_wallet).map_err(AppError::Validation)?;
 
-    // Determine organizer pubkey
+    // Check if attendee is in the refundable tier
+    let deposit_status = event_store::get_deposit_status(kv, &event.id, &body.attendee_id)
+        .await
+        .map_err(AppError::Internal)?;
+
+    let is_refundable = deposit_status
+        .as_ref()
+        .map(|d| d.refundable)
+        .unwrap_or(true); // default to refundable if no record
+
+    if !is_refundable {
+        // Non-refundable tier: don't build on-chain check-in TX.
+        // Check-in is tracked off-chain only — their deposit is automatically forfeited.
+        return Err(AppError::Validation(
+            "attendee is in non-refundable tier — no on-chain check-in needed. Deposit is automatically forfeited.".to_string(),
+        )
+        .into());
+    }
+
+    // Determine organizer pubkey for PDA derivation
     let organizer_pubkey = if event.organizer_wallet.is_empty() {
         return Err(
             AppError::Internal("event has no organizer wallet configured".to_string()).into(),

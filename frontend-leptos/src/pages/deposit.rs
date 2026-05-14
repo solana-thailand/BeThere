@@ -1613,6 +1613,23 @@ pub fn Deposit() -> impl IntoView {
                                     <p class="hint-desc">
                                         "You're confirmed! Your spot is secured on Solana."
                                     </p>
+                                    // Tier badge
+                                    {
+                                        let status = &data.status;
+                                        match status {
+                                            Some(s) if !s.refundable => view! {
+                                                <div class="badge badge-warning" style="margin-top:0.5rem">
+                                                    "Non-refundable (#" {s.deposit_order} ") — no refund on check-in"
+                                                </div>
+                                            }.into_any(),
+                                            Some(s) => view! {
+                                                <div class="badge badge-success" style="margin-top:0.5rem">
+                                                    "Refundable (#" {s.deposit_order} ") — check in to get your deposit back"
+                                                </div>
+                                            }.into_any(),
+                                            _ => view! { <div></div> }.into_any(),
+                                        }
+                                    }
                                     <div class="tx-hash-box">
                                         {format!("TX: {}", &sig_display)}
                                     </div>
@@ -1819,6 +1836,16 @@ pub fn Deposit() -> impl IntoView {
                                     <p class="hint-desc">
                                         "Connect the wallet you used to deposit. Your refund will be sent to the same wallet."
                                     </p>
+                                    // Non-refundable check
+                                    {if data.status.as_ref().map(|s| s.refundable).unwrap_or(true) {
+                                        view! { <div></div> }.into_any()
+                                    } else {
+                                        view! {
+                                            <div class="badge badge-warning" style="margin-bottom:0.75rem">
+                                                "Non-refundable deposit — no refund available"
+                                            </div>
+                                        }.into_any()
+                                    }}
                                     {if wallets.is_empty() {
                                         view! {
                                             <div class="wallet-fallback-box">

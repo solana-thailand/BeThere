@@ -2,6 +2,10 @@
 
 use serde::{Deserialize, Serialize};
 
+fn default_true() -> bool {
+    true
+}
+
 /// Payment method for event deposit.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -44,6 +48,12 @@ pub struct DepositStatus {
     /// Attendee's Solana wallet address (USDC deposits only).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub wallet_address: Option<String>,
+    /// Deposit order within this event (1-based, assigned on deposit creation).
+    #[serde(default)]
+    pub deposit_order: u32,
+    /// Whether this deposit is in the refundable tier (order <= max_refundable_deposits).
+    #[serde(default = "default_true")]
+    pub refundable: bool,
 }
 
 /// THB deposit record (stored in KV, no on-chain record).
