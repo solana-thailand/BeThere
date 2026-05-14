@@ -153,6 +153,8 @@ pub enum EscrowError {
     HashFailed(String),
     /// RPC call failed.
     RpcFailed(String),
+    /// On-chain escrow account not found or has wrong state.
+    AccountNotFound(String),
 }
 
 impl std::fmt::Display for EscrowError {
@@ -162,6 +164,7 @@ impl std::fmt::Display for EscrowError {
             Self::PdaDerivationFailed => write!(f, "PDA derivation failed — no valid bump found"),
             Self::HashFailed(s) => write!(f, "SHA-256 hash failed: {s}"),
             Self::RpcFailed(s) => write!(f, "RPC call failed: {s}"),
+            Self::AccountNotFound(s) => write!(f, "escrow account check failed: {s}"),
         }
     }
 }
@@ -622,6 +625,92 @@ async fn cache_blockhash(kv: &KvStore, blockhash: &str) -> Result<(), EscrowErro
         .await
         .map_err(|e| EscrowError::RpcFailed(format!("blockhash cache execute: {e:?}")))?;
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// On-chain escrow verification
+// ---------------------------------------------------------------------------
+
+/// Verify that an escrow account exists on-chain by calling getAccountInfo.
+/// Returns Ok(()) if the account exists and is owned by the escrow program,
+/// Err if not found or wrong owner.
+pub async fn verify_escrow_account_exists(
+    rpc_url: &str,
+    organizer_pubkey: &str,
+    event_id: u64,
+) -> Result<(), EscrowError> {
+    let organizer = pubkey_from_base58(organizer_pubkey)?;
+    let program_id = pubkey_from_base58(ESCROW_PROGRAM_ID)?;
+
+    let (event_escrow, _) = find_program_address(
+        &[b"escrow", organizer.as_slice(), &event_id.to_le_bytes()],
+        &program_id,
+    )
+    .await?;
+
+    let escrow_b58 = pubkey_to_base58(&event_escrow);
+
+    let body = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": "bethere-verify-escrow",
+        "method": "getAccountInfo",
+        "params": [
+            escrow_b58,
+            { "encoding": "base64", "commitment": "confirmed" }
+        ]
+    });
+
+    let json_body = serde_json::to_string(&body)
+        .map_err(|e| EscrowError::RpcFailed(format!("serialize: {e}")))?;
+
+    let headers = worker::Headers::new();
+    headers
+        .set("Content-Type", "application/json")
+        .map_err(|e| EscrowError::RpcFailed(format!("headers: {e:?}")))?;
+
+    let mut init = worker::RequestInit::new();
+    init.with_method(worker::Method::Post)
+        .with_headers(headers)
+        .with_body(Some(wasm_bindgen::JsValue::from_str(&json_body)));
+
+    let request = worker::Request::new_with_init(rpc_url, &init)
+        .map_err(|e| EscrowError::RpcFailed(format!("request: {e:?}")))?;
+
+    let mut response = worker::Fetch::Request(request)
+        .send()
+        .await
+        .map_err(|e| EscrowError::RpcFailed(format!("fetch: {e:?}")))?;
+
+    let status = response.status_code();
+    if !(200..300).contains(&status) {
+        let text = response.text().await.unwrap_or_default();
+        return Err(EscrowError::RpcFailed(format!("HTTP {status}: {text}")));
+    }
+
+    let text = response
+        .text()
+        .await
+        .map_err(|e| EscrowError::RpcFailed(format!("read body: {e:?}")))?;
+
+    let json: serde_json::Value = serde_json::from_str(&text)
+        .map_err(|e| EscrowError::RpcFailed(format!("parse json: {e}")))?;
+
+    let account_info = json.get("result").and_then(|v| v.get("value"));
+
+    match account_info {
+        None | Some(serde_json::Value::Null) => Err(EscrowError::AccountNotFound(
+            "escrow account does not exist on-chain — it may have already been closed".to_string(),
+        )),
+        Some(info) => {
+            let owner = info.get("owner").and_then(|v| v.as_str()).unwrap_or("");
+            if owner != ESCROW_PROGRAM_ID {
+                return Err(EscrowError::AccountNotFound(format!(
+                    "account exists but is not owned by escrow program (owner: {owner})"
+                )));
+            }
+            Ok(())
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------

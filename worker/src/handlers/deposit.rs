@@ -1838,6 +1838,19 @@ pub async fn deactivate_event_tx_handler(
         state.config.solana.api_key
     );
 
+    // Verify escrow exists on-chain (catches stale KV state)
+    crate::solana_escrow::verify_escrow_account_exists(
+        &rpc_url,
+        organizer_pubkey,
+        on_chain_event_id,
+    )
+    .await
+    .map_err(|e| {
+        AppError::Validation(format!(
+            "escrow account verification failed: {e} — refresh page and try again"
+        ))
+    })?;
+
     let tx = crate::solana_escrow::build_deactivate_event_transaction(
         &rpc_url,
         Some(kv),
@@ -1953,6 +1966,19 @@ pub async fn close_event_tx_handler(
         state.config.solana.api_key
     );
 
+    // Verify escrow exists on-chain (catches stale KV state)
+    crate::solana_escrow::verify_escrow_account_exists(
+        &rpc_url,
+        organizer_pubkey,
+        on_chain_event_id,
+    )
+    .await
+    .map_err(|e| {
+        AppError::Validation(format!(
+            "escrow account verification failed: {e} — refresh page and try again"
+        ))
+    })?;
+
     let tx = crate::solana_escrow::build_close_event_transaction(
         &rpc_url,
         Some(kv),
@@ -2066,6 +2092,19 @@ pub async fn claim_forfeited_tx_handler(
         },
         state.config.solana.api_key
     );
+
+    // Verify escrow exists on-chain (catches stale KV state)
+    crate::solana_escrow::verify_escrow_account_exists(
+        &rpc_url,
+        organizer_pubkey,
+        on_chain_event_id,
+    )
+    .await
+    .map_err(|e| {
+        AppError::Validation(format!(
+            "escrow account verification failed: {e} — refresh page and try again"
+        ))
+    })?;
 
     let tx = crate::solana_escrow::build_claim_forfeited_transaction(
         &rpc_url,

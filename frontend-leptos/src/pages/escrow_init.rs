@@ -626,11 +626,25 @@ pub fn EscrowInitPanel(
                                                             Some(sig) => {
                                                                 log::info!("[escrow] deactivate TX confirmed: {}", sig);
                                                                 // Persist escrow_status=deactivated server-side
-                                                                let _ = api::update_event(&eid.clone(), &api::UpdateEventBody {
+                                                                let sync_ok = match api::update_event(&eid.clone(), &api::UpdateEventBody {
                                                                     escrow_status: Some(api::EscrowStatus::Deactivated),
                                                                     expected_updated_at: None,
                                                                     ..Default::default()
-                                                                }).await;
+                                                                }).await {
+                                                                    Ok(_) => {
+                                                                        log::info!("[escrow] escrow_status persisted as Deactivated");
+                                                                        true
+                                                                    }
+                                                                    Err(e) => {
+                                                                        log::error!("[escrow] FAILED to persist escrow_status=Deactivated: {e}");
+                                                                        components::show_toast(
+                                                                            &set_t,
+                                                                            "Escrow deactivated on-chain but state sync failed — refresh to verify",
+                                                                            components::ToastType::Warning,
+                                                                        );
+                                                                        false
+                                                                    }
+                                                                };
                                                                 set_f.update(|f| {
                                                                     f.escrow_status = api::EscrowStatus::Deactivated;
                                                                 });
@@ -638,11 +652,13 @@ pub fn EscrowInitPanel(
                                                                     escrow_address: String::new(),
                                                                     on_chain_event_id: 0,
                                                                 });
-                                                                components::show_toast(
-                                                                    &set_t,
-                                                                    "Event escrow deactivated — no more deposits accepted",
-                                                                    components::ToastType::Success,
-                                                                );
+                                                                if sync_ok {
+                                                                    components::show_toast(
+                                                                        &set_t,
+                                                                        "Event escrow deactivated — no more deposits accepted",
+                                                                        components::ToastType::Success,
+                                                                    );
+                                                                }
                                                             }
                                                             None => {
                                                                 log::error!("[escrow] deactivate TX rejected");
@@ -777,11 +793,25 @@ pub fn EscrowInitPanel(
                                                     Some(sig) => {
                                                         log::info!("[escrow] close_event TX confirmed: {}", sig);
                                                         // Persist escrow_status=closed server-side
-                                                        let _ = api::update_event(&eid.clone(), &api::UpdateEventBody {
+                                                        let sync_ok = match api::update_event(&eid.clone(), &api::UpdateEventBody {
                                                             escrow_status: Some(api::EscrowStatus::Closed),
                                                             expected_updated_at: None,
                                                             ..Default::default()
-                                                        }).await;
+                                                        }).await {
+                                                            Ok(_) => {
+                                                                log::info!("[escrow] escrow_status persisted as Closed");
+                                                                true
+                                                            }
+                                                            Err(e) => {
+                                                                log::error!("[escrow] FAILED to persist escrow_status=Closed: {e}");
+                                                                components::show_toast(
+                                                                    &set_t,
+                                                                    "Escrow closed on-chain but state sync failed — refresh to verify",
+                                                                    components::ToastType::Warning,
+                                                                );
+                                                                false
+                                                            }
+                                                        };
                                                         // Clear escrow fields from form
                                                         set_f.update(|f| {
                                                             f.escrow_address = String::new();
@@ -789,11 +819,13 @@ pub fn EscrowInitPanel(
                                                             f.escrow_status = api::EscrowStatus::Closed;
                                                         });
                                                         set_s.set(EscrowInitState::Closed { signature: sig });
-                                                        components::show_toast(
-                                                            &set_t,
-                                                            "Event escrow closed — rent SOL reclaimed!",
-                                                            components::ToastType::Success,
-                                                        );
+                                                        if sync_ok {
+                                                            components::show_toast(
+                                                                &set_t,
+                                                                "Event escrow closed — rent SOL reclaimed!",
+                                                                components::ToastType::Success,
+                                                            );
+                                                        }
                                                     }
                                                     None => {
                                                         log::error!("[escrow] close_event TX rejected");
