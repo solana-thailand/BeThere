@@ -209,15 +209,33 @@ pub fn EscrowInitPanel(
     // If event already has escrow, start in Done state
     let initial_state = {
         let f = form.get();
-        if !f.escrow_address.is_empty() {
-            EscrowInitState::Done {
+        match f.escrow_status {
+            api::EscrowStatus::Initialized => EscrowInitState::Done {
                 escrow_address: f.escrow_address.clone(),
                 vault_address: String::new(),
                 on_chain_event_id: f.on_chain_event_id.parse::<u64>().unwrap_or(0),
                 signature: String::new(),
+            },
+            api::EscrowStatus::Deactivated => EscrowInitState::Deactivated {
+                escrow_address: f.escrow_address.clone(),
+                on_chain_event_id: f.on_chain_event_id.parse::<u64>().unwrap_or(0),
+            },
+            api::EscrowStatus::Closed => EscrowInitState::Closed {
+                signature: String::new(),
+            },
+            _ => {
+                if !f.escrow_address.is_empty() {
+                    // Legacy: escrow_address set but no status — treat as Initialized
+                    EscrowInitState::Done {
+                        escrow_address: f.escrow_address.clone(),
+                        vault_address: String::new(),
+                        on_chain_event_id: f.on_chain_event_id.parse::<u64>().unwrap_or(0),
+                        signature: String::new(),
+                    }
+                } else {
+                    EscrowInitState::Idle
+                }
             }
-        } else {
-            EscrowInitState::Idle
         }
     };
     let (state, set_state) = signal(initial_state);
@@ -445,6 +463,7 @@ pub fn EscrowInitPanel(
                                                                     f.on_chain_event_id = resp.on_chain_event_id.to_string();
                                                                 }
                                                                 f.organizer_wallet = pk.clone();
+                                                                f.escrow_status = api::EscrowStatus::Initialized;
                                                             });
                                                             set_s.set(EscrowInitState::Done {
                                                                 escrow_address: resp.escrow_address,
@@ -482,6 +501,7 @@ pub fn EscrowInitPanel(
                                                                         f.on_chain_event_id.clone()
                                                                     };
                                                                     f.organizer_wallet = d.organizer_wallet.clone();
+                                                                    f.escrow_status = d.escrow_status.clone();
                                                                 });
                                                                 set_s.set(EscrowInitState::Done {
                                                                     escrow_address: d.escrow_address.clone(),
@@ -605,6 +625,15 @@ pub fn EscrowInitPanel(
                                                         match sign_and_send_tx_js(&wn, &resp.transaction).await {
                                                             Some(sig) => {
                                                                 log::info!("[escrow] deactivate TX confirmed: {}", sig);
+                                                                // Persist escrow_status=deactivated server-side
+                                                                let _ = api::update_event(&eid.clone(), &api::UpdateEventBody {
+                                                                    escrow_status: Some(api::EscrowStatus::Deactivated),
+                                                                    expected_updated_at: None,
+                                                                    ..Default::default()
+                                                                }).await;
+                                                                set_f.update(|f| {
+                                                                    f.escrow_status = api::EscrowStatus::Deactivated;
+                                                                });
                                                                 set_s.set(EscrowInitState::Deactivated {
                                                                     escrow_address: String::new(),
                                                                     on_chain_event_id: 0,
@@ -747,10 +776,17 @@ pub fn EscrowInitPanel(
                                                 match sign_and_send_tx_js(&wn, &resp.transaction).await {
                                                     Some(sig) => {
                                                         log::info!("[escrow] close_event TX confirmed: {}", sig);
+                                                        // Persist escrow_status=closed server-side
+                                                        let _ = api::update_event(&eid.clone(), &api::UpdateEventBody {
+                                                            escrow_status: Some(api::EscrowStatus::Closed),
+                                                            expected_updated_at: None,
+                                                            ..Default::default()
+                                                        }).await;
                                                         // Clear escrow fields from form
                                                         set_f.update(|f| {
                                                             f.escrow_address = String::new();
                                                             f.on_chain_event_id = String::new();
+                                                            f.escrow_status = api::EscrowStatus::Closed;
                                                         });
                                                         set_s.set(EscrowInitState::Closed { signature: sig });
                                                         components::show_toast(

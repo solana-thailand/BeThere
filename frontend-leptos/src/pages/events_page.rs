@@ -54,6 +54,7 @@ pub struct EventForm {
     pub deposit_amount_thb: String,
     promptpay_id: String,
     pub escrow_address: String,
+    pub escrow_status: api::EscrowStatus,
     pub organizer_wallet: String,
     pub on_chain_event_id: String,
     pub refund_deadline_hours: String,
@@ -154,6 +155,7 @@ fn default_form() -> EventForm {
         deposit_amount_thb: String::new(),
         promptpay_id: String::new(),
         escrow_address: String::new(),
+        escrow_status: api::EscrowStatus::None,
         organizer_wallet: String::new(),
         on_chain_event_id: String::new(),
         refund_deadline_hours: String::new(),
@@ -207,6 +209,7 @@ fn form_from_detail(detail: &api::EventDetail) -> EventForm {
         deposit_amount_thb: if detail.deposit_amount_thb > 0 { detail.deposit_amount_thb.to_string() } else { String::new() },
         promptpay_id: detail.promptpay_id.clone(),
         escrow_address: detail.escrow_address.clone(),
+        escrow_status: detail.escrow_status.clone(),
         organizer_wallet: detail.organizer_wallet.clone(),
         on_chain_event_id: if detail.on_chain_event_id > 0 { detail.on_chain_event_id.to_string() } else { String::new() },
         refund_deadline_hours: if detail.refund_deadline_hours > 0 { detail.refund_deadline_hours.to_string() } else { String::new() },
@@ -600,6 +603,7 @@ pub fn EventsPage(
                                     // Update the event with escrow fields from the response
                                     let update_body = api::UpdateEventBody {
                                         escrow_address: Some(resp.escrow_address.clone()),
+                                        escrow_status: Some(api::EscrowStatus::Initialized),
                                         organizer_wallet: Some(pk.clone()),
                                         on_chain_event_id: Some(resp.on_chain_event_id),
                                         expected_updated_at: if created.updated_at.is_empty() { None } else { Some(created.updated_at.clone()) },
@@ -674,6 +678,7 @@ pub fn EventsPage(
                 deposit_amount_thb: Some(current_form.deposit_amount_thb.parse::<u64>().unwrap_or(0)),
                 promptpay_id: Some(current_form.promptpay_id.trim().to_string()),
                 escrow_address: Some(current_form.escrow_address.trim().to_string()),
+                escrow_status: None, // not updated via general form — escrow panel manages this
                 organizer_wallet: Some(current_form.organizer_wallet.trim().to_string()),
                 on_chain_event_id: Some(current_form.on_chain_event_id.parse::<u64>().unwrap_or(0)),
                 refund_deadline_hours: Some(current_form.refund_deadline_hours.parse::<u32>().unwrap_or(0)),

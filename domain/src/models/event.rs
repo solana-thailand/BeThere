@@ -49,6 +49,44 @@ impl std::fmt::Display for EventFormat {
     }
 }
 
+/// On-chain escrow lifecycle status.
+/// Tracks the state machine: None → Initialized → Deactivated → Closed.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum EscrowStatus {
+    /// No escrow initialized on-chain (or never set).
+    #[default]
+    None,
+    /// Escrow PDA created on-chain, accepting deposits.
+    Initialized,
+    /// Escrow deactivated — no new deposits, refunds still allowed.
+    Deactivated,
+    /// Escrow closed — all on-chain accounts reclaimed, rent refunded.
+    Closed,
+}
+
+impl EscrowStatus {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::None => "none",
+            Self::Initialized => "initialized",
+            Self::Deactivated => "deactivated",
+            Self::Closed => "closed",
+        }
+    }
+
+    /// Whether the escrow is considered "active" (blocking archive/delete).
+    pub fn is_active(&self) -> bool {
+        matches!(self, Self::Initialized | Self::Deactivated)
+    }
+}
+
+impl std::fmt::Display for EscrowStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
 /// Lifecycle status of an event.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -105,6 +143,9 @@ pub struct EventMeta {
     /// On-chain escrow PDA address. Empty string if not yet initialized.
     #[serde(default)]
     pub escrow_address: String,
+    /// On-chain escrow lifecycle status (none → initialized → deactivated → closed).
+    #[serde(default)]
+    pub escrow_status: EscrowStatus,
     /// Event format — controls deposit, check-in, and claim paths.
     #[serde(default)]
     pub event_format: EventFormat,
@@ -209,6 +250,9 @@ pub struct EventConfig {
     /// EventEscrow PDA address (set after on-chain create_event). Empty if not yet created.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub escrow_address: String,
+    /// On-chain escrow lifecycle status (none → initialized → deactivated → closed).
+    #[serde(default)]
+    pub escrow_status: EscrowStatus,
     /// Organizer's Solana wallet address (base58). Required for PDA derivation.
     /// Set when event is created on-chain via the escrow program.
     #[serde(default, skip_serializing_if = "String::is_empty")]
@@ -260,6 +304,7 @@ impl EventConfig {
             organizer_emails: self.organizer_emails.clone(),
             deposit_enabled: self.deposit_enabled,
             escrow_address: self.escrow_address.clone(),
+            escrow_status: self.escrow_status.clone(),
             event_format: self.event_format.clone(),
         }
     }
@@ -359,6 +404,7 @@ impl EventConfig {
             deposit_amount_thb: 0,
             promptpay_id: String::new(),
             escrow_address: String::new(),
+            escrow_status: EscrowStatus::None,
             organizer_wallet: String::new(),
             on_chain_event_id: 0,
             refund_deadline_hours: 168,
@@ -557,6 +603,9 @@ pub struct UpdateEventRequest {
     /// EventEscrow PDA address.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub escrow_address: Option<String>,
+    /// On-chain escrow lifecycle status.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub escrow_status: Option<EscrowStatus>,
     /// Organizer's Solana wallet address (base58).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub organizer_wallet: Option<String>,

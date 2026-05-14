@@ -1006,6 +1006,33 @@ pub enum EventStatus {
     Archived,
 }
 
+/// On-chain escrow lifecycle status (mirrors backend EscrowStatus).
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum EscrowStatus {
+    #[default]
+    None,
+    Initialized,
+    Deactivated,
+    Closed,
+}
+
+impl EscrowStatus {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::None => "none",
+            Self::Initialized => "initialized",
+            Self::Deactivated => "deactivated",
+            Self::Closed => "closed",
+        }
+    }
+
+    /// Whether the escrow is considered "active" (blocking archive/delete).
+    pub fn is_active(&self) -> bool {
+        matches!(self, Self::Initialized | Self::Deactivated)
+    }
+}
+
 /// Event format (mirrors backend EventFormat).
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 #[serde(rename_all = "snake_case")]
@@ -1070,6 +1097,8 @@ pub struct EventMeta {
     #[serde(default)]
     pub escrow_address: String,
     #[serde(default)]
+    pub escrow_status: EscrowStatus,
+    #[serde(default)]
     pub event_format: EventFormat,
 }
 
@@ -1130,6 +1159,8 @@ pub struct EventDetail {
     pub promptpay_id: String,
     #[serde(default)]
     pub escrow_address: String,
+    #[serde(default)]
+    pub escrow_status: EscrowStatus,
     #[serde(default)]
     pub organizer_wallet: String,
     #[serde(default)]
@@ -1275,6 +1306,8 @@ pub struct UpdateEventBody {
     pub promptpay_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub escrow_address: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub escrow_status: Option<EscrowStatus>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub organizer_wallet: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]

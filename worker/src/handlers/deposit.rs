@@ -1799,6 +1799,16 @@ pub async fn deactivate_event_tx_handler(
         return Err(AppError::Validation("deposit not enabled for this event".to_string()).into());
     }
 
+    // Check escrow status — only initialized escrows can be deactivated
+    use event_checkin_domain::models::event::EscrowStatus;
+    if event.escrow_status != EscrowStatus::Initialized {
+        return Err(AppError::Validation(format!(
+            "escrow is not in initialized state (current: {}) — cannot deactivate",
+            event.escrow_status
+        ))
+        .into());
+    }
+
     // Validate organizer wallet
     let organizer_pubkey = if event.organizer_wallet.is_empty() {
         return Err(AppError::Validation(
@@ -1904,6 +1914,16 @@ pub async fn close_event_tx_handler(
         return Err(AppError::Validation("deposit not enabled for this event".to_string()).into());
     }
 
+    // Check escrow status — only deactivated escrows can be closed
+    use event_checkin_domain::models::event::EscrowStatus;
+    if event.escrow_status != EscrowStatus::Deactivated {
+        return Err(AppError::Validation(format!(
+            "escrow is not in deactivated state (current: {}) — deactivate first before closing",
+            event.escrow_status
+        ))
+        .into());
+    }
+
     // Validate organizer wallet
     let organizer_pubkey = if event.organizer_wallet.is_empty() {
         return Err(AppError::Validation(
@@ -2006,6 +2026,16 @@ pub async fn claim_forfeited_tx_handler(
 
     if !event.deposit_enabled {
         return Err(AppError::Validation("deposit not enabled for this event".to_string()).into());
+    }
+
+    // Check escrow status — forfeited claims only allowed in deactivated state
+    use event_checkin_domain::models::event::EscrowStatus as Es;
+    if event.escrow_status != Es::Deactivated {
+        return Err(AppError::Validation(format!(
+            "escrow must be deactivated before claiming forfeited (current: {})",
+            event.escrow_status
+        ))
+        .into());
     }
 
     // Validate organizer wallet

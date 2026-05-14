@@ -13,7 +13,8 @@
 use worker::KvStore;
 
 use event_checkin_domain::models::event::{
-    CreateEventRequest, EventConfig, EventIndex, EventMeta, EventStatus, UpdateEventRequest,
+    CreateEventRequest, EscrowStatus, EventConfig, EventIndex, EventMeta, EventStatus,
+    UpdateEventRequest,
 };
 
 // ---------------------------------------------------------------------------
@@ -199,6 +200,7 @@ pub async fn create_event(
         deposit_amount_thb: req.deposit_amount_thb,
         promptpay_id: req.promptpay_id.trim().to_string(),
         escrow_address: req.escrow_address.trim().to_string(),
+        escrow_status: EscrowStatus::None,
         organizer_wallet: req.organizer_wallet.trim().to_string(),
         on_chain_event_id: req.on_chain_event_id,
         refund_deadline_hours: req.refund_deadline_hours,
@@ -374,6 +376,22 @@ pub async fn update_event(
     if let Some(ref v) = req.escrow_address {
         config.escrow_address = v.trim().to_string();
     }
+    if let Some(ref v) = req.escrow_status {
+        // Validate state transition
+        let valid = matches!(
+            (&config.escrow_status, v),
+            (EscrowStatus::None, EscrowStatus::Initialized)
+                | (EscrowStatus::Initialized, EscrowStatus::Deactivated)
+                | (EscrowStatus::Deactivated, EscrowStatus::Closed)
+        );
+        if !valid {
+            return Err(format!(
+                "invalid escrow status transition: {} → {}",
+                config.escrow_status, v
+            ));
+        }
+        config.escrow_status = v.clone();
+    }
     if let Some(ref v) = req.organizer_wallet {
         config.organizer_wallet = v.trim().to_string();
     }
@@ -427,10 +445,11 @@ pub async fn archive_event(kv: &KvStore, id: &str) -> Result<(), String> {
         .ok_or_else(|| format!("event '{id}' not found"))?;
 
     // SEC-004: Block archive if escrow is active on-chain
-    if !config.escrow_address.is_empty() {
-        return Err(
-            "cannot archive event with active on-chain escrow — close escrow first".to_string(),
-        );
+    if config.escrow_status.is_active() {
+        return Err(format!(
+            "cannot archive event with active on-chain escrow (status: {}) — close escrow first",
+            config.escrow_status
+        ));
     }
 
     config.status = EventStatus::Archived;
@@ -517,10 +536,11 @@ pub async fn hard_delete_event(kv: &KvStore, id: &str, force: bool) -> Result<()
         }
 
         // SEC-004: Block delete if escrow is active on-chain
-        if !config.escrow_address.is_empty() {
-            return Err(
-                "cannot delete event with active on-chain escrow — close escrow first".to_string(),
-            );
+        if config.escrow_status.is_active() {
+            return Err(format!(
+                "cannot delete event with active on-chain escrow (status: {}) — close escrow first",
+                config.escrow_status
+            ));
         }
     }
 
@@ -661,6 +681,7 @@ pub async fn seed_from_config(
         deposit_amount_thb: 0,
         promptpay_id: String::new(),
         escrow_address: String::new(),
+        escrow_status: EscrowStatus::None,
         organizer_wallet: String::new(),
         on_chain_event_id: 0,
         refund_deadline_hours: 168,
