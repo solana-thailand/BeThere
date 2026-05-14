@@ -74,6 +74,9 @@ pub enum AuditAction {
 
     // Admin
     ForceDeleteUsed,
+
+    // On-chain indexing
+    OnChainEventIndexed,
 }
 
 // ---------------------------------------------------------------------------

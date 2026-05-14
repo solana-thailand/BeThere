@@ -45,6 +45,12 @@ const RETENTION_CONFIG_SECS: i64 = 365 * 86_400; // 31_536_000
 /// Default 90 days from event end.
 const RETENTION_AUDIT_SECS: i64 = 90 * 86_400; // 7_776_000
 
+/// On-chain event dedup key retention: remove `onchain:sig:*` keys older than this.
+/// Aligned with financial data retention (90 days after event end).
+/// Note: dedup keys are cleaned up by `cleanup_onchain_dedup_keys` in daily cron.
+#[allow(dead_code)]
+const RETENTION_ONCHAIN_DEDUP_SECS: i64 = 90 * 86_400; // 7_776_000
+
 // ---------------------------------------------------------------------------
 // Cleanup entry point
 // ---------------------------------------------------------------------------
@@ -138,6 +144,22 @@ pub async fn run_cleanup(kv: &KvStore) -> CleanupSummary {
             summary.audit_entries_pruned +=
                 prune_old_audit_entries(kv, event_id, audit_cutoff).await;
         }
+
+        // Phase 4b: Delete on-chain event data when financial data expires
+        if now_ms / 1000 > financial_cutoff {
+            let key = format!("event:{event_id}:onchain");
+            if kv.delete(&key).await.is_ok() {
+                summary.onchain_events_deleted += 1;
+            }
+
+            // Clean up polling cursor
+            if let Ok(Some(config)) = crate::event_store::get_event_config(kv, event_id).await {
+                if !config.escrow_address.is_empty() {
+                    let cursor_key = format!("onchain:cursor:{}", config.escrow_address);
+                    let _ = kv.delete(&cursor_key).await;
+                }
+            }
+        }
     }
 
     // Persist updated index if events were removed
@@ -155,6 +177,9 @@ pub async fn run_cleanup(kv: &KvStore) -> CleanupSummary {
         index.events.iter().map(|e| e.id.clone()).collect();
     summary.orphaned_audit_deleted = cleanup_orphaned_audit_logs(kv, &known_ids).await;
 
+    // Phase 6: Clean up on-chain dedup keys (onchain:sig:*)
+    summary.onchain_dedup_deleted = cleanup_onchain_dedup_keys(kv).await;
+
     tracing::info!(
         quiz_progress = summary.quiz_progress_deleted,
         adventure_progress = summary.adventure_progress_deleted,
@@ -165,6 +190,8 @@ pub async fn run_cleanup(kv: &KvStore) -> CleanupSummary {
         events_removed = summary.events_removed,
         audit_entries_pruned = summary.audit_entries_pruned,
         orphaned_audit_deleted = summary.orphaned_audit_deleted,
+        onchain_events_deleted = summary.onchain_events_deleted,
+        onchain_dedup_deleted = summary.onchain_dedup_deleted,
         "cleanup: daily pass complete"
     );
 
@@ -344,6 +371,19 @@ async fn prune_old_audit_entries(kv: &KvStore, event_id: &str, cutoff_epoch_secs
 }
 
 // ---------------------------------------------------------------------------
+// On-chain event cleanup
+// ---------------------------------------------------------------------------
+
+/// Clean up on-chain event dedup keys (`onchain:sig:*`).
+///
+/// These keys don't have timestamps, so we simply delete all of them
+/// during the daily cron. They're short-lived markers used to prevent
+/// duplicate indexing — they're recreated as needed.
+pub async fn cleanup_onchain_dedup_keys(kv: &KvStore) -> usize {
+    delete_keys_by_prefix(kv, "onchain:sig:").await
+}
+
+// ---------------------------------------------------------------------------
 // Summary
 // ---------------------------------------------------------------------------
 
@@ -359,6 +399,8 @@ pub struct CleanupSummary {
     pub events_removed: usize,
     pub audit_entries_pruned: usize,
     pub orphaned_audit_deleted: usize,
+    pub onchain_events_deleted: usize,
+    pub onchain_dedup_deleted: usize,
 }
 
 // ---------------------------------------------------------------------------
@@ -379,6 +421,8 @@ mod tests {
         assert_eq!(RETENTION_CONFIG_SECS, 31_536_000);
         // 90 days (audit)
         assert_eq!(RETENTION_AUDIT_SECS, 7_776_000);
+        // 90 days (onchain dedup)
+        assert_eq!(RETENTION_ONCHAIN_DEDUP_SECS, 7_776_000);
     }
 
     #[test]
@@ -393,5 +437,7 @@ mod tests {
         assert_eq!(summary.events_removed, 0);
         assert_eq!(summary.audit_entries_pruned, 0);
         assert_eq!(summary.orphaned_audit_deleted, 0);
+        assert_eq!(summary.onchain_events_deleted, 0);
+        assert_eq!(summary.onchain_dedup_deleted, 0);
     }
 }

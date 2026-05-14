@@ -333,7 +333,7 @@ async fn sha256_wasm(data: &[u8]) -> Result<[u8; 32], EscrowError> {
 const BASE58_ALPHABET: &[u8; 58] = b"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 
 /// Decode a base58 string into bytes (big-endian).
-fn base58_decode(input: &str) -> Result<Vec<u8>, EscrowError> {
+pub fn base58_decode(input: &str) -> Result<Vec<u8>, EscrowError> {
     let mut decoded: Vec<u8> = Vec::new();
 
     for c in input.bytes() {
@@ -369,7 +369,7 @@ fn base58_decode(input: &str) -> Result<Vec<u8>, EscrowError> {
 }
 
 /// Decode a base58 string into a 32-byte pubkey.
-fn pubkey_from_base58(s: &str) -> Result<PubkeyBytes, EscrowError> {
+pub fn pubkey_from_base58(s: &str) -> Result<PubkeyBytes, EscrowError> {
     let bytes = base58_decode(s)?;
     if bytes.len() != 32 {
         return Err(EscrowError::InvalidPubkey(format!(
@@ -383,7 +383,7 @@ fn pubkey_from_base58(s: &str) -> Result<PubkeyBytes, EscrowError> {
 }
 
 /// Encode bytes into a base58 string.
-fn base58_encode(data: &[u8]) -> String {
+pub fn base58_encode(data: &[u8]) -> String {
     // Count leading zero bytes
     let leading_zeros = data.iter().take_while(|&&b| b == 0).count();
 
@@ -411,7 +411,7 @@ fn base58_encode(data: &[u8]) -> String {
 }
 
 /// Encode a 32-byte pubkey into base58.
-fn pubkey_to_base58(pk: &PubkeyBytes) -> String {
+pub fn pubkey_to_base58(pk: &PubkeyBytes) -> String {
     base58_encode(pk)
 }
 

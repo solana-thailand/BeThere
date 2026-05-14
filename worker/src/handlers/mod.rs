@@ -4,6 +4,7 @@ pub mod auth;
 pub mod checkin;
 pub mod claim;
 pub mod deposit;
+pub mod escrow_index;
 pub mod events;
 pub mod ext;
 pub mod health;
@@ -83,6 +84,11 @@ pub fn routes(state: AppState) -> Router<()> {
         .route(
             "/escrow/close-deposit",
             post(deposit::close_deposit_tx_handler),
+        )
+        // On-chain event indexing webhook (public — called by Helius)
+        .route(
+            "/escrow/onchain-webhook",
+            post(escrow_index::onchain_webhook_handler),
         );
 
     // Protected routes — require staff auth
@@ -156,6 +162,12 @@ pub fn routes(state: AppState) -> Router<()> {
         .route(
             "/escrow/claim-forfeited",
             post(deposit::claim_forfeited_tx_handler),
+        )
+        // On-chain event indexing (protected — manual sync + query)
+        .route("/escrow/sync", post(escrow_index::escrow_sync_handler))
+        .route(
+            "/escrow/events/{event_id}",
+            get(escrow_index::get_onchain_events_handler),
         )
         .layer(middleware::from_fn_with_state(
             state.clone(),
