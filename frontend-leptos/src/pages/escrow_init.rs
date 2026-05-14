@@ -132,7 +132,7 @@ pub async fn check_wallet_cluster(wallet_name: &str, expected_cluster: &str) -> 
 
 // ===== State Machine =====
 
-/// State machine for the single-TX escrow initialization flow.
+/// State machine for the escrow lifecycle (init → deactivate → close).
 #[derive(Debug, Clone, PartialEq)]
 pub enum EscrowInitState {
     /// No wallet connected yet.
@@ -142,15 +142,32 @@ pub enum EscrowInitState {
         wallet_name: String,
         public_key: String,
     },
-    /// Escrow TX being signed.
+    /// Escrow init TX being signed.
     Initializing {
         wallet_name: String,
     },
-    /// Escrow initialized on-chain.
+    /// Escrow initialized on-chain — can deactivate.
     Done {
         escrow_address: String,
         vault_address: String,
         on_chain_event_id: u64,
+        signature: String,
+    },
+    /// Deactivate TX being signed.
+    Deactivating {
+        wallet_name: String,
+    },
+    /// Escrow deactivated — vault still exists, can close.
+    Deactivated {
+        escrow_address: String,
+        on_chain_event_id: u64,
+    },
+    /// Close event TX being signed.
+    Closing {
+        wallet_name: String,
+    },
+    /// Escrow closed — rent reclaimed, all on-chain accounts gone.
+    Closed {
         signature: String,
     },
     /// Error during any step.
@@ -189,7 +206,21 @@ pub fn EscrowInitPanel(
     #[prop(name = "set_toast")]
     set_toast: WriteSignal<Option<components::ToastMessage>>,
 ) -> impl IntoView {
-    let (state, set_state) = signal(EscrowInitState::Idle);
+    // If event already has escrow, start in Done state
+    let initial_state = {
+        let f = form.get();
+        if !f.escrow_address.is_empty() {
+            EscrowInitState::Done {
+                escrow_address: f.escrow_address.clone(),
+                vault_address: String::new(),
+                on_chain_event_id: f.on_chain_event_id.parse::<u64>().unwrap_or(0),
+                signature: String::new(),
+            }
+        } else {
+            EscrowInitState::Idle
+        }
+    };
+    let (state, set_state) = signal(initial_state);
     let (detected_wallets, set_detected_wallets) = signal(Vec::<String>::new());
 
     // Wallet detection — poll with delays for late-injecting wallet extensions.
@@ -217,10 +248,18 @@ pub fn EscrowInitPanel(
     let is_initializing =
         move || matches!(state.get(), EscrowInitState::Initializing { .. });
     let is_done = move || matches!(state.get(), EscrowInitState::Done { .. });
+    let is_deactivating =
+        move || matches!(state.get(), EscrowInitState::Deactivating { .. });
+    let is_deactivated =
+        move || matches!(state.get(), EscrowInitState::Deactivated { .. });
+    let is_closing = move || matches!(state.get(), EscrowInitState::Closing { .. });
+    let is_closed = move || matches!(state.get(), EscrowInitState::Closed { .. });
     let is_error = move || matches!(state.get(), EscrowInitState::Error { .. });
 
     // Store event_id in a signal so reactive closures can clone it repeatedly.
     let (event_id_sig, _set_event_id) = signal(event_id.clone());
+    // Persist wallet name across state transitions for deactivate/close flows.
+    let (wallet_name_sig, set_wallet_name) = signal(String::new());
     let set_t = set_toast;
     let set_f = set_form;
 
@@ -245,6 +284,7 @@ pub fn EscrowInitPanel(
                             let set_s = set_state;
                             let set_t = set_t;
                             let set_f = set_f;
+                            let set_wn = set_wallet_name;
                             view! {
                                 <button
                                     class="btn btn-outline btn-sm"
@@ -253,6 +293,7 @@ pub fn EscrowInitPanel(
                                         let set_s = set_s;
                                         let set_t = set_t;
                                         let set_f = set_f;
+                                        let set_wn = set_wn;
                                         leptos::task::spawn_local(async move {
                                             match connect_wallet_js(&wn).await {
                                                 Some(pk) => {
@@ -265,6 +306,7 @@ pub fn EscrowInitPanel(
                                                             f.organizer_wallet = pk.clone();
                                                         }
                                                     });
+                                                    set_wn.set(wn.clone());
                                                     set_s.set(EscrowInitState::WalletConnected {
                                                         wallet_name: wn,
                                                         public_key: pk,
@@ -355,16 +397,28 @@ pub fn EscrowInitPanel(
                                                 deposit_amount_usdc: Some((f.deposit_amount_usdc.parse::<f64>().unwrap_or(0.0) * 1_000_000.0) as u64),
                                                 deposit_amount_thb: Some(f.deposit_amount_thb.parse::<u64>().unwrap_or(0)),
                                                 refund_deadline_hours: Some(f.refund_deadline_hours.parse::<u32>().unwrap_or(0)),
+                                                // Include expected_updated_at for optimistic concurrency.
+                                                // Prevents conflict if user later clicks Save on the main form.
+                                                expected_updated_at: if f.updated_at.is_empty() { None } else { Some(f.updated_at.clone()) },
                                                 ..Default::default()
                                             };
-                                            if let Err(e) = api::update_event(&eid, &save_body).await {
-                                                log::error!("[escrow-init] failed to save event: {e}");
-                                                set_s.set(EscrowInitState::Error {
-                                                    message: format!("Failed to save event: {e}"),
-                                                });
-                                                return;
+                                            match api::update_event(&eid, &save_body).await {
+                                                Ok(updated) => {
+                                                    // Sync form updated_at so subsequent Save clicks
+                                                    // don't hit a stale-version conflict.
+                                                    set_f.update(|f| {
+                                                        f.updated_at = updated.updated_at.clone();
+                                                    });
+                                                    log::info!("[escrow-init] event saved, building escrow TX...");
+                                                }
+                                                Err(e) => {
+                                                    log::error!("[escrow-init] failed to save event: {e}");
+                                                    set_s.set(EscrowInitState::Error {
+                                                        message: format!("Failed to save event: {e}"),
+                                                    });
+                                                    return;
+                                                }
                                             }
-                                            log::info!("[escrow-init] event saved, building escrow TX...");
 
                                             let req = api::InitEscrowRequest {
                                                 event_id: eid.clone(),
@@ -492,7 +546,7 @@ pub fn EscrowInitPanel(
             }}
         </Show>
 
-        // ===== Done: success panel =====
+        // ===== Done: escrow initialized — show info + Deactivate button =====
         <Show when=is_done>
             {move || {
                 let s = state.get();
@@ -503,6 +557,13 @@ pub fn EscrowInitPanel(
                     _ => (String::new(), String::new(), 0u64, String::new()),
                 };
                 let solscan = crate::utils::solscan_tx_url(&sig, &crate::utils::get_cluster());
+                let eid = event_id_sig.get();
+                let wn = wallet_name_sig.get();
+                let set_s = set_state;
+                let set_t = set_t;
+                let set_wn = set_wallet_name;
+                let dw = detected_wallets.get();
+                let has_wallet = !wn.is_empty();
                 view! {
                     <div class="panel-success" style="margin-top:0.75rem">
                         <div class="step-card-title badge-done">
@@ -519,6 +580,251 @@ pub fn EscrowInitPanel(
                         <div class="panel-hint u-mt-xs">
                             <span class="text-label">"On-chain event ID: "</span>
                             <code class="code-xs">{oeid}</code>
+                        </div>
+                        <div class="code-xs u-mt-2xs">
+                            <a href=solscan target="_blank" rel="noopener" class="link-accent">
+                                "View on Solscan ↗"
+                            </a>
+                        </div>
+                        // Wallet connect or Deactivate button
+                        {if has_wallet {
+                            view! {
+                                <div class="flex-wrap-row u-mt-sm" style="gap:0.5rem">
+                                    <button
+                                        class="btn btn-outline btn-sm btn-danger"
+                                        on:click=move |_| {
+                                            let eid = eid.clone();
+                                            let wn = wn.clone();
+                                            let set_s = set_s;
+                                            let set_t = set_t;
+                                            set_s.set(EscrowInitState::Deactivating { wallet_name: wn.clone() });
+                                            leptos::task::spawn_local(async move {
+                                                let req = api::DeactivateEventRequest { event_id: eid.clone() };
+                                                match api::deactivate_event(&req).await {
+                                                    Ok(resp) => {
+                                                        match sign_and_send_tx_js(&wn, &resp.transaction).await {
+                                                            Some(sig) => {
+                                                                log::info!("[escrow] deactivate TX confirmed: {}", sig);
+                                                                set_s.set(EscrowInitState::Deactivated {
+                                                                    escrow_address: String::new(),
+                                                                    on_chain_event_id: 0,
+                                                                });
+                                                                components::show_toast(
+                                                                    &set_t,
+                                                                    "Event escrow deactivated — no more deposits accepted",
+                                                                    components::ToastType::Success,
+                                                                );
+                                                            }
+                                                            None => {
+                                                                log::error!("[escrow] deactivate TX rejected");
+                                                                set_s.set(EscrowInitState::Error {
+                                                                    message: "Deactivate transaction rejected or failed".to_string(),
+                                                                });
+                                                            }
+                                                        }
+                                                    }
+                                                    Err(e) => {
+                                                        log::error!("[escrow] deactivate failed: {e}");
+                                                        set_s.set(EscrowInitState::Error {
+                                                            message: format!("Failed to deactivate: {e}"),
+                                                        });
+                                                    }
+                                                }
+                                            });
+                                        }
+                                    >
+                                        "Deactivate Event"
+                                    </button>
+                                </div>
+                            }.into_any()
+                        } else {
+                            // No wallet connected — show connect buttons
+                            view! {
+                                <div class="u-mt-sm">
+                                    <div class="panel-hint u-mb-xs" style="color:var(--text-muted)">
+                                        "Connect wallet to deactivate or close this escrow."
+                                    </div>
+                                    <div class="flex-wrap-row" style="gap:0.5rem">
+                                        {dw.iter().map(|w| {
+                                            let wname = w.clone();
+                                            let set_wn = set_wn;
+                                            let set_t2 = set_t;
+                                            view! {
+                                                <button
+                                                    class="btn btn-outline btn-sm"
+                                                    on:click=move |_| {
+                                                        let wn = wname.clone();
+                                                        let set_wn = set_wn;
+                                                        let set_t2 = set_t2;
+                                                        leptos::task::spawn_local(async move {
+                                                            match connect_wallet_js(&wn).await {
+                                                                Some(_pk) => {
+                                                                    log::info!("[escrow] connected {} for deactivate", wn);
+                                                                    set_wn.set(wn);
+                                                                }
+                                                                None => {
+                                                                    components::show_toast(
+                                                                        &set_t2,
+                                                                        "Wallet connection rejected",
+                                                                        components::ToastType::Error,
+                                                                    );
+                                                                }
+                                                            }
+                                                        });
+                                                    }
+                                                >
+                                                    {format!("Connect {}", wname)}
+                                                </button>
+                                            }
+                                        }).collect_view()}
+                                    </div>
+                                </div>
+                            }.into_any()
+                        }}
+                        <div class="panel-hint u-mt-xs" style="color:var(--text-muted)">
+                            "Deactivate stops new deposits. Refunds still allowed. Then close to reclaim rent SOL."
+                        </div>
+                    </div>
+                }.into_any()
+            }}
+        </Show>
+
+        // ===== Deactivating: spinner =====
+        <Show when=is_deactivating>
+            {move || {
+                let s = state.get();
+                let wn = match &s {
+                    EscrowInitState::Deactivating { wallet_name } => wallet_name.clone(),
+                    _ => String::new(),
+                };
+                view! {
+                    <div class="panel-box-dashed" style="margin-top:1rem">
+                        <div class="flex-row-gap">
+                            <span class="spinner spinner-sm"></span>
+                            <span class="panel-label u-mb-0">
+                                {format!("Deactivating escrow via {}...", wn)}
+                            </span>
+                        </div>
+                        <div class="panel-hint u-mt-2xs">
+                            "Approve the deactivate transaction in your wallet."
+                        </div>
+                    </div>
+                }.into_any()
+            }}
+        </Show>
+
+        // ===== Deactivated: escrow inactive — show Close Event button =====
+        <Show when=is_deactivated>
+            {move || {
+                let eid = event_id_sig.get();
+                let wn = wallet_name_sig.get();
+                let set_s = set_state;
+                let set_t = set_t;
+                view! {
+                    <div class="panel-warning" style="margin-top:0.75rem">
+                        <div class="step-card-title" style="color:var(--warning,orange)">
+                            "Escrow deactivated"
+                        </div>
+                        <div class="panel-hint u-mt-2xs">
+                            "Event escrow is no longer accepting deposits. Refunds are still allowed."
+                        </div>
+                        <div class="panel-hint u-mt-xs" style="color:var(--warning,orange)">
+                            "Vault must be empty (all USDC refunded/claimed) before closing."
+                        </div>
+                        <div class="flex-wrap-row u-mt-sm" style="gap:0.5rem">
+                            <button
+                                class="btn btn-primary btn-sm"
+                                on:click=move |_| {
+                                    let eid = eid.clone();
+                                    let wn = wn.clone();
+                                    let set_s = set_s;
+                                    let set_t = set_t;
+                                    set_s.set(EscrowInitState::Closing { wallet_name: wn.clone() });
+                                    leptos::task::spawn_local(async move {
+                                        let req = api::CloseEventRequest { event_id: eid.clone() };
+                                        match api::close_event(&req).await {
+                                            Ok(resp) => {
+                                                match sign_and_send_tx_js(&wn, &resp.transaction).await {
+                                                    Some(sig) => {
+                                                        log::info!("[escrow] close_event TX confirmed: {}", sig);
+                                                        // Clear escrow fields from form
+                                                        set_f.update(|f| {
+                                                            f.escrow_address = String::new();
+                                                            f.on_chain_event_id = String::new();
+                                                        });
+                                                        set_s.set(EscrowInitState::Closed { signature: sig });
+                                                        components::show_toast(
+                                                            &set_t,
+                                                            "Event escrow closed — rent SOL reclaimed!",
+                                                            components::ToastType::Success,
+                                                        );
+                                                    }
+                                                    None => {
+                                                        log::error!("[escrow] close_event TX rejected");
+                                                        set_s.set(EscrowInitState::Error {
+                                                            message: "Close event transaction rejected or failed".to_string(),
+                                                        });
+                                                    }
+                                                }
+                                            }
+                                            Err(e) => {
+                                                log::error!("[escrow] close_event failed: {e}");
+                                                set_s.set(EscrowInitState::Error {
+                                                    message: format!("Failed to close event: {e}"),
+                                                });
+                                            }
+                                        }
+                                    });
+                                }
+                            >
+                                "Close Event & Reclaim Rent"
+                            </button>
+                        </div>
+                    </div>
+                }.into_any()
+            }}
+        </Show>
+
+        // ===== Closing: spinner =====
+        <Show when=is_closing>
+            {move || {
+                let s = state.get();
+                let wn = match &s {
+                    EscrowInitState::Closing { wallet_name } => wallet_name.clone(),
+                    _ => String::new(),
+                };
+                view! {
+                    <div class="panel-box-dashed" style="margin-top:1rem">
+                        <div class="flex-row-gap">
+                            <span class="spinner spinner-sm"></span>
+                            <span class="panel-label u-mb-0">
+                                {format!("Closing escrow via {}...", wn)}
+                            </span>
+                        </div>
+                        <div class="panel-hint u-mt-2xs">
+                            "Approve the close transaction. Rent SOL will be returned to your wallet."
+                        </div>
+                    </div>
+                }.into_any()
+            }}
+        </Show>
+
+        // ===== Closed: escrow gone, rent reclaimed =====
+        <Show when=is_closed>
+            {move || {
+                let s = state.get();
+                let sig = match &s {
+                    EscrowInitState::Closed { signature } => signature.clone(),
+                    _ => String::new(),
+                };
+                let solscan = crate::utils::solscan_tx_url(&sig, &crate::utils::get_cluster());
+                view! {
+                    <div class="panel-success" style="margin-top:0.75rem">
+                        <div class="step-card-title badge-done">
+                            "Escrow closed — rent reclaimed!"
+                        </div>
+                        <div class="panel-hint u-mt-2xs">
+                            "The event escrow and vault have been closed on-chain. Rent SOL has been returned to your wallet."
                         </div>
                         <div class="code-xs u-mt-2xs">
                             <a href=solscan target="_blank" rel="noopener" class="link-accent">

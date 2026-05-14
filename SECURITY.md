@@ -44,6 +44,10 @@ We aim to acknowledge reports within 48 hours and provide a substantive response
 
 The BeThere escrow has undergone an internal security audit with 11 findings. See [`docs/security_audit.md`](docs/security_audit.md) for full details.
 
+### Force Delete (Devnet Cleanup)
+
+The `DELETE /api/events/{id}/delete` endpoint with `?force=true` allows SuperAdmin to hard-delete events in Draft or Archived status, bypassing the SEC-004 escrow guard. This is intended **only for devnet cleanup** and is gated at the handler level to SuperAdmin role only. When force mode is used, an explicit warning is logged server-side. In normal mode (no `force` param), only Archived events with closed escrows can be hard-deleted.
+
 ### Critical / High (Must Fix Before Mainnet)
 
 | ID | Severity | Title | Status |
@@ -68,6 +72,8 @@ The BeThere escrow has undergone an internal security audit with 11 findings. Se
 - **Protocol design**: [`docs/escrow_protocol.md`](docs/escrow_protocol.md)
 - **Cross-reference**: [Safe Solana Builder](https://github.com/Frankcastleauditor/safe-solana-builder) by Frank Castle
 - **Community**: [Solana Audit Arena](https://github.com/Frankcastleauditor/Solana-Audit-Arena) — weekly security competitions
+- **Standards**: NIST SP 800-53 AU controls (Audit Logging) — recommended for persistent transaction history
+- **Solana safety**: [Solana Safety Guide](https://github.com/Frankcastleauditor/Solana-Safety-Guide) — secure program development practices
 
 ## Bug Bounty
 

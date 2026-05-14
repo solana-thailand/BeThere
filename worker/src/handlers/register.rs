@@ -154,7 +154,13 @@ pub async fn register_attendee(
     })?;
 
     // 9. Determine next_step based on event format
-    let next_step = build_next_step(&config.event_format, &api_id, &claim_token, &state);
+    let next_step = build_next_step(
+        &config.event_format,
+        &event_id,
+        &api_id,
+        &claim_token,
+        &state,
+    );
 
     tracing::info!(
         %api_id,
@@ -206,6 +212,7 @@ fn split_name(name: &str) -> (String, String) {
 /// Build the next_step response based on event format.
 fn build_next_step(
     format: &EventFormat,
+    event_id: &str,
     api_id: &str,
     claim_token: &str,
     state: &AppState,
@@ -215,7 +222,7 @@ fn build_next_step(
     if format.has_in_person() {
         NextStep {
             step_type: "deposit".to_string(),
-            url: format!("/deposit?attendee_id={api_id}"),
+            url: format!("/deposit/{api_id}?event_id={event_id}"),
         }
     } else {
         NextStep {

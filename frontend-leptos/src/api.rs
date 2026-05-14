@@ -365,6 +365,29 @@ async fn api_post(path: &str) -> Result<gloo::net::http::Response, ApiError> {
     Ok(response)
 }
 
+/// Make an authenticated DELETE request to the API.
+async fn api_delete(path: &str) -> Result<gloo::net::http::Response, ApiError> {
+    let url = format!("{}{path}", api_base());
+    let token = get_token();
+
+    let mut req = gloo::net::http::Request::delete(&url);
+    if let Some(ref t) = token {
+        req = req.header("Authorization", &format!("Bearer {t}"));
+    }
+
+    let response = req.send().await?;
+
+    if response.status() == 401 {
+        clear_token();
+        return Err(ApiError {
+            message: "Session expired".to_string(),
+            status: 401,
+        });
+    }
+
+    Ok(response)
+}
+
 /// Make an authenticated POST request with JSON body to the API.
 async fn api_post_json<T: serde::de::DeserializeOwned + Default>(
     path: &str,
@@ -1428,7 +1451,7 @@ pub async fn init_escrow(body: &InitEscrowRequest) -> Result<InitEscrowResponse,
 /// DELETE /api/events/{id} — archive an event.
 pub async fn archive_event(id: &str) -> Result<EventMutationData, ApiError> {
     let path = format!("/events/{id}");
-    let response = api_post(&path).await?;
+    let response = api_delete(&path).await?;
 
     if !response.ok() {
         let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
@@ -1446,6 +1469,70 @@ pub async fn archive_event(id: &str) -> Result<EventMutationData, ApiError> {
     let wrapper: ApiResponse<EventMutationData> =
         response.json().await.map_err(|e| ApiError {
             message: format!("Failed to parse archive response: {e}"),
+            status: 0,
+        })?;
+
+    wrapper.data.ok_or_else(|| ApiError {
+        message: wrapper.error.unwrap_or("No data".to_string()),
+        status: 0,
+    })
+}
+
+/// DELETE /api/events/{id}/delete — permanently delete an archived event.
+pub async fn hard_delete_event(id: &str, force: bool) -> Result<EventMutationData, ApiError> {
+    let path = if force {
+        format!("/events/{id}/delete?force=true")
+    } else {
+        format!("/events/{id}/delete")
+    };
+    let response = api_delete(&path).await?;
+
+    if !response.ok() {
+        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
+            success: false,
+            data: None,
+            error: Some("Delete failed".to_string()),
+            correlation_id: None,
+        });
+        return Err(ApiError {
+            message: body.error.unwrap_or_default(),
+            status: 0,
+        });
+    }
+
+    let wrapper: ApiResponse<EventMutationData> =
+        response.json().await.map_err(|e| ApiError {
+            message: format!("Failed to parse delete response: {e}"),
+            status: 0,
+        })?;
+
+    wrapper.data.ok_or_else(|| ApiError {
+        message: wrapper.error.unwrap_or("No data".to_string()),
+        status: 0,
+    })
+}
+
+/// POST /api/events/{id}/restore — restore an archived event back to Draft.
+pub async fn restore_event(id: &str) -> Result<EventMutationData, ApiError> {
+    let path = format!("/events/{id}/restore");
+    let response = api_post(&path).await?;
+
+    if !response.ok() {
+        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
+            success: false,
+            data: None,
+            error: Some("Restore failed".to_string()),
+            correlation_id: None,
+        });
+        return Err(ApiError {
+            message: body.error.unwrap_or_default(),
+            status: 0,
+        });
+    }
+
+    let wrapper: ApiResponse<EventMutationData> =
+        response.json().await.map_err(|e| ApiError {
+            message: format!("Failed to parse restore response: {e}"),
             status: 0,
         })?;
 

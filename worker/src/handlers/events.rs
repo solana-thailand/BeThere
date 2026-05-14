@@ -227,8 +227,15 @@ pub async fn create_event(
     let config = crate::event_store::create_event(kv, &body)
         .await
         .map_err(|e| {
-            tracing::error!(error = %e, "failed to create event");
-            AppError::Internal(e.to_string())
+            let err_msg = e.to_string();
+            // Duplicate slug is a validation error (409), not internal (500)
+            if err_msg.contains("already exists") {
+                tracing::warn!(error = %err_msg, "create event rejected: duplicate slug");
+                AppError::Validation(err_msg)
+            } else {
+                tracing::error!(error = %err_msg, "failed to create event");
+                AppError::Internal(err_msg)
+            }
         })?;
 
     tracing::info!(
@@ -243,6 +250,7 @@ pub async fn create_event(
         "name": config.name,
         "slug": config.slug,
         "status": config.status.as_str(),
+        "updated_at": config.updated_at,
     })))
 }
 
@@ -454,5 +462,46 @@ pub async fn restore_event(
     Ok(ApiOk::new(json!({
         "id": id,
         "status": "draft",
+    })))
+}
+
+/// DELETE /api/events/{id}/delete — permanently delete an archived event.
+///
+/// Only works on Archived events. This is irreversible and frees the slug.
+#[worker::send]
+pub async fn hard_delete_event(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(id): Path<String>,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> Result<ApiOk<serde_json::Value>, crate::error::WorkerError> {
+    let force = params.get("force").map(|v| v == "true").unwrap_or(false);
+    tracing::info!(event_id = %id, staff_email = %claims.email, force, "hard delete event requested");
+
+    let kv = state
+        .events_kv
+        .as_ref()
+        .ok_or_else(|| AppError::Internal("events KV namespace not configured".into()))?;
+
+    // Role check: SuperAdmin only for permanent deletion
+    let role = crate::auth::resolve_user_role(&claims.email, &state, None).await;
+    if role != crate::auth::UserRole::SuperAdmin {
+        return Err(
+            AppError::Forbidden("only super admins can permanently delete events".into()).into(),
+        );
+    }
+
+    crate::event_store::hard_delete_event(kv, &id, force)
+        .await
+        .map_err(|e| {
+            tracing::error!(event_id = %id, error = %e, "failed to hard-delete event");
+            AppError::Validation(e.to_string())
+        })?;
+
+    tracing::info!(event_id = %id, staff_email = %claims.email, force, "event permanently deleted");
+
+    Ok(ApiOk::new(json!({
+        "id": id,
+        "status": "deleted",
     })))
 }

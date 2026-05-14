@@ -239,11 +239,20 @@ After refund_deadline timestamp:
 
 ```
 After all funds settled (total_deposited == total_refunded + total_forfeited):
-  Organizer → Sign close_event transaction
-           → Reclaims rent (SOL used for PDA storage)
-           → Escrow PDA closed
-           → All remaining AttendeeDeposit PDAs for this event closed
+
+  Step 1: Deactivate
+    Organizer → Sign deactivate_event transaction
+             → Sets is_active = false on-chain
+             → Escrow enters Deactivated state
+
+  Step 2: Close
+    Organizer → Sign close_event transaction
+             → Reclaims rent (SOL used for PDA storage)
+             → Escrow PDA closed
+             → All remaining AttendeeDeposit PDAs for this event closed
 ```
+
+**UI Flow:** The admin panel shows Deactivate and Close buttons when an escrow exists. After close, `escrow_address` and `on_chain_event_id` are cleared from the event form.
 
 ---
 

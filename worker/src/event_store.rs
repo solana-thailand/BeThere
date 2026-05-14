@@ -137,16 +137,13 @@ pub async fn create_event(kv: &KvStore, req: &CreateEventRequest) -> Result<Even
         slugify(&req.slug)
     };
 
-    // Generate ID from slug
-    let id = slug.clone();
-
-    // Check for duplicate ID
+    // Auto-deduplicate slug on collision (e.g. "my-event" → "my-event-1" → "my-event-2")
+    // Supports recurring events with the same name.
     let index = get_event_index(kv).await?;
-    if index.events.iter().any(|e| e.id == id) {
-        return Err(format!(
-            "event with id '{id}' already exists — use a different name or slug"
-        ));
-    }
+    let (id, slug) = {
+        let existing_ids: Vec<&str> = index.events.iter().map(|e| e.id.as_str()).collect();
+        deduplicate_slug(&slug, &existing_ids)
+    };
 
     let now = chrono::Utc::now().to_rfc3339();
 
@@ -474,6 +471,68 @@ pub async fn restore_event(kv: &KvStore, id: &str) -> Result<(), String> {
     save_event_index(kv, &index).await?;
 
     tracing::info!(event_id = %id, "event restored from archive");
+
+    Ok(())
+}
+
+/// Hard-delete an event: remove config from KV and remove from index.
+/// This frees up the slug for reuse.
+///
+/// When `force` is true, allows deleting Draft events and bypasses the escrow guard.
+/// Intended for devnet cleanup of test events. SuperAdmin-gated at the handler level.
+pub async fn hard_delete_event(kv: &KvStore, id: &str, force: bool) -> Result<(), String> {
+    let config = get_event_config(kv, id)
+        .await?
+        .ok_or_else(|| format!("event '{id}' not found"))?;
+
+    if force {
+        // Force mode: allow Draft + Archived, skip escrow guard
+        if !matches!(config.status, EventStatus::Archived | EventStatus::Draft) {
+            return Err(format!(
+                "event '{id}' must be Draft or Archived to force-delete (current status: {}) — deactivate/close event first",
+                config.status.as_str()
+            ));
+        }
+        if !config.escrow_address.is_empty() {
+            tracing::warn!(
+                event_id = %id,
+                escrow = %config.escrow_address,
+                "force-deleting event with active escrow — on-chain account will be orphaned"
+            );
+        }
+    } else {
+        // Normal mode: Archived only, escrow guard enforced
+        if config.status != EventStatus::Archived {
+            return Err(format!(
+                "event '{id}' must be archived before deletion (current status: {}) — archive it first",
+                config.status.as_str()
+            ));
+        }
+
+        // SEC-004: Block delete if escrow is active on-chain
+        if !config.escrow_address.is_empty() {
+            return Err(
+                "cannot delete event with active on-chain escrow — close escrow first".to_string(),
+            );
+        }
+    }
+
+    // Remove config from KV
+    let config_key = format!("event:{id}");
+    kv.delete(&config_key)
+        .await
+        .map_err(|e| format!("failed to delete event config: {e:?}"))?;
+
+    // Remove from index
+    let mut index = get_event_index(kv).await?;
+    let before = index.events.len();
+    index.events.retain(|e| e.id != id);
+    if index.events.len() == before {
+        tracing::warn!(event_id = %id, "event was in KV but not in index");
+    }
+    save_event_index(kv, &index).await?;
+
+    tracing::info!(event_id = %id, "event hard-deleted");
 
     Ok(())
 }
@@ -825,6 +884,30 @@ fn slugify(input: &str) -> String {
         .filter(|s| !s.is_empty())
         .collect::<Vec<_>>()
         .join("-")
+}
+
+/// Resolve slug collisions by appending an incrementing suffix.
+///
+/// If `base_slug` is not in `existing_ids`, returns it unchanged.
+/// Otherwise tries `base_slug-1`, `base_slug-2`, ... until a free ID is found.
+/// Both `id` and `slug` are returned (they are always equal).
+fn deduplicate_slug(base_slug: &str, existing_ids: &[&str]) -> (String, String) {
+    let existing_set: std::collections::HashSet<&str> = existing_ids.iter().copied().collect();
+
+    if !existing_set.contains(base_slug) {
+        return (base_slug.to_string(), base_slug.to_string());
+    }
+
+    for i in 1..=1000u32 {
+        let candidate = format!("{base_slug}-{i}");
+        if !existing_set.contains(candidate.as_str()) {
+            return (candidate.clone(), candidate);
+        }
+    }
+
+    // Extremely unlikely fallback — use timestamp suffix
+    let fallback = format!("{base_slug}-{}", chrono::Utc::now().timestamp());
+    (fallback.clone(), fallback)
 }
 
 // ---------------------------------------------------------------------------

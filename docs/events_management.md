@@ -153,6 +153,8 @@ All protected (require admin auth):
 | `GET` | `/api/events/{id}` | Get event details | Admin/Organizer |
 | `PUT` | `/api/events/{id}` | Update event config | Admin/Organizer |
 | `DELETE` | `/api/events/{id}` | Archive (soft-delete) event | Admin only |
+| `DELETE` | `/api/events/{id}/delete` | Hard delete — permanently remove archived event, frees slug | SuperAdmin only |
+| `DELETE` | `/api/events/{id}/delete?force=true` | Force delete — Draft/Archived, bypasses SEC-004 escrow guard | SuperAdmin only (devnet cleanup) |
 
 ### Event-Scoped Endpoints
 
@@ -160,6 +162,8 @@ All protected (require admin auth):
 |--------|-------|---------|
 | `POST` | `/api/events/{id}/init-escrow-tx` | Build on-chain escrow init transaction |
 | `POST` | `/api/events/{id}/escrow-info` | Get on-chain escrow state |
+| `POST` | `/api/escrow/deactivate-event` | Deactivate escrow (sets `is_active=false` on-chain) |
+| `POST` | `/api/escrow/close-event` | Close escrow (reclaim rent SOL) |
 | `GET` | `/api/metadata/{event_id}` | Dynamic Metaplex metadata JSON |
 | `POST` | `/api/walkin/register` | Register walk-in attendee (staff-only) |
 
@@ -171,6 +175,25 @@ All protected (require admin auth):
 Draft → Active → Completed → Archived
   │                                ↑
   └── Can go directly to Active ───┘
+```
+
+### On-Chain Escrow Lifecycle
+
+```
+create_event → deposit → mark_checked_in → refund/claim_forfeited → deactivate_event → close_event (rent reclaimed)
+```
+
+The escrow state machine follows these on-chain transitions:
+
+```
+Idle → WalletConnected → Initializing → Done → Deactivating → Deactivated → Closing → Closed
+```
+
+### Force Delete Flow
+
+```
+Archived → Hard Delete (force=false) — requires escrow closed first, SEC-004 enforced
+Draft/Archived → Hard Delete (force=true) — irreversible, frees slug, bypasses escrow guard (SuperAdmin only, devnet cleanup)
 ```
 
 ### State Transitions

@@ -26,15 +26,17 @@ pub async fn list_public_events(
         .await
         .map_err(AppError::Internal)?;
 
-    let public_events: Vec<Value> = index
+    // Only show Active events whose end time is in the future (upcoming).
+    // Sort nearest-first so the soonest event appears at the top.
+    let now_ms = chrono::Utc::now().timestamp_millis();
+    let mut public_events: Vec<Value> = index
         .events
         .into_iter()
         .filter(|e| {
             matches!(
                 e.status,
                 event_checkin_domain::models::event::EventStatus::Active
-                    | event_checkin_domain::models::event::EventStatus::Completed
-            )
+            ) && e.event_end_ms > now_ms
         })
         .map(|e| {
             json!({
@@ -51,7 +53,17 @@ pub async fn list_public_events(
         })
         .collect();
 
-    tracing::info!(count = public_events.len(), "public events listed");
+    // Sort by event_start_ms ascending (nearest first)
+    public_events.sort_by_key(|e| {
+        e.get("event_start_ms")
+            .and_then(|v| v.as_i64())
+            .unwrap_or(i64::MAX)
+    });
+
+    tracing::info!(
+        count = public_events.len(),
+        "public events listed (upcoming only)"
+    );
 
     Ok(ApiOk::new(json!({
         "events": public_events,

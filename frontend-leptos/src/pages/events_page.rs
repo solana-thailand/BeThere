@@ -534,7 +534,13 @@ pub fn EventsPage(
                 deposit_amount_thb: current_form.deposit_amount_thb.parse::<u64>().unwrap_or(0),
                 promptpay_id: current_form.promptpay_id.trim().to_string(),
                 escrow_address: current_form.escrow_address.trim().to_string(),
-                organizer_wallet: current_form.organizer_wallet.trim().to_string(),
+                // In Create mode, wallet PK lives in create_wallet_pk signal (not form field).
+                // Use it when available so backend has organizer_wallet for escrow init.
+                organizer_wallet: if create_wallet_pk.get().is_empty() {
+                    current_form.organizer_wallet.trim().to_string()
+                } else {
+                    create_wallet_pk.get()
+                },
                 on_chain_event_id: current_form.on_chain_event_id.parse::<u64>().unwrap_or(0),
                 refund_deadline_hours: current_form.refund_deadline_hours.parse::<u32>().unwrap_or(0),
                 event_format: current_form.event_format.clone(),
@@ -596,6 +602,7 @@ pub fn EventsPage(
                                         escrow_address: Some(resp.escrow_address.clone()),
                                         organizer_wallet: Some(pk.clone()),
                                         on_chain_event_id: Some(resp.on_chain_event_id),
+                                        expected_updated_at: if created.updated_at.is_empty() { None } else { Some(created.updated_at.clone()) },
                                         ..Default::default()
                                     };
                                     if let Err(e) = api::update_event(&created.id, &update_body).await {
@@ -766,13 +773,18 @@ pub fn EventsPage(
                                     api::EventFormat::Hybrid => "badge badge-success-xs",
                                 };
                                 let edit_id = evt.id.clone();
+                                let restore_id = evt.id.clone();
+                                let delete_id = evt.id.clone();
                                 let can_manage = components::can_manage_events(&user_role.get());
+                                let is_draft = evt.status == api::EventStatus::Draft;
+                                let is_archived = evt.status == api::EventStatus::Archived;
+                                let event_has_escrow_addr = !evt.escrow_address.is_empty();
 
                                 view! {
                                     <div class="event-detail-card">
                                         <div class="event-detail-header">
                                             <div class="flex-row-gap" style="flex-wrap:wrap;align-items:center">
-                                                <span class="card-title">{ename}</span>
+                                                <span class="card-title">{ename.clone()}</span>
                                                 <span class=badge_class>{status_text}</span>
                                                 <span class=fmt_badge_class>{fmt_label}</span>
                                                 {if needs_escrow {
@@ -817,10 +829,92 @@ pub fn EventsPage(
                                                     </button>
                                                 }.into_any()
                                             } else {
-                                                view! { <div></div> }.into_any()
+                                                view! { <span></span> }.into_any()
                                             }}
-                                        </div>
-                                        <div class="event-detail-grid">
+                                            {if is_archived {
+                                                let rid = restore_id.clone();
+                                                view! {
+                                                    <button
+                                                        class="btn btn-outline btn-sm"
+                                                        on:click=move |_| {
+                                                            let rid = rid.clone();
+                                                            let set_toast = set_toast;
+                                                            let reload = do_reload;
+                                                            leptos::task::spawn_local(async move {
+                                                                match api::restore_event(&rid).await {
+                                                                    Ok(data) => {
+                                                                        components::show_toast(
+                                                                            &set_toast,
+                                                                            &format!("Event '{}' restored", data.name),
+                                                                            components::ToastType::Success,
+                                                                        );
+                                                                        reload();
+                                                                    }
+                                                                    Err(e) => {
+                                                                        log::error!("[events-page] restore failed: {e}");
+                                                                        components::show_toast(
+                                                                            &set_toast,
+                                                                            &format!("Failed to restore: {e}"),
+                                                                            components::ToastType::Error,
+                                                                        );
+                                                                    }
+                                                                }
+                                                            });
+                                                        }
+                                                    >
+                                                        "Restore"
+                                                    </button>
+                                                }.into_any()
+                                            } else {
+                                                view! { <span></span> }.into_any()
+                                            }}
+                                            // Delete button — Draft or Archived, with force for escrow bypass
+                                            {if is_draft || is_archived {
+                                                let did = delete_id.clone();
+                                                let dname = ename.clone();
+                                                let force_delete = is_draft || event_has_escrow_addr;
+                                                view! {
+                                                    <button
+                                                        class="btn btn-outline btn-sm btn-danger"
+                                                        on:click=move |_| {
+                                                            let did = did.clone();
+                                                            let set_toast = set_toast;
+                                                            let reload = do_reload;
+                                                            let escrow_note = if force_delete { "\\n\\nWARNING: Event has an on-chain escrow that will be orphaned." } else { "" };
+                                                            let confirm_msg = format!("Permanently delete '{dname}'? This cannot be undone.{escrow_note}");
+                                                            if !web_sys::window().unwrap().confirm_with_message(&confirm_msg).unwrap_or(false) {
+                                                                return;
+                                                            }
+                                                            leptos::task::spawn_local(async move {
+                                                                match api::hard_delete_event(&did, force_delete).await {
+                                                                    Ok(data) => {
+                                                                        components::show_toast(
+                                                                            &set_toast,
+                                                                            &format!("Event '{}' permanently deleted", data.id),
+                                                                            components::ToastType::Success,
+                                                                        );
+                                                                        reload();
+                                                                    }
+                                                                    Err(e) => {
+                                                                        log::error!("[events-page] delete failed: {e}");
+                                                                        components::show_toast(
+                                                                            &set_toast,
+                                                                            &format!("Failed to delete: {e}"),
+                                                                            components::ToastType::Error,
+                                                                        );
+                                                                    }
+                                                                }
+                                                            });
+                                                        }
+                                                    >
+                                                        "Delete"
+                                                    </button>
+                                                }.into_any()
+                                            } else {
+                                                view! { <span></span> }.into_any()
+                                            }}
+                                            </div>
+                                            <div class="event-detail-grid">
                                             <div class="quiz-setting-item">
                                                 <span class="quiz-setting-label">"Start"</span>
                                                 <span class="setting-value">{start}</span>
@@ -899,17 +993,20 @@ pub fn EventsPage(
                         filtered.iter().map(|event| {
                             let edit_id = event.id.clone();
                             let archive_id = event.id.clone();
+                            let event_slug = event.slug.clone();
                             let badge_class = status_badge_class(&event.status);
                             let status_text = status_label(&event.status);
                             let start = format_date_display(event.event_start_ms);
                             let end = format_date_display(event.event_end_ms);
                             let sheet_preview: String = event.sheet_id.chars().take(16).collect();
                             let is_archived = event.status == api::EventStatus::Archived;
+                            let is_draft = event.status == api::EventStatus::Draft;
                             let organizers_count = event.organizer_emails.len();
                             let ename = event.name.clone();
                             let can_manage = components::can_manage_events(&user_role.get());
                             let needs_escrow = event.deposit_enabled && event.escrow_address.is_empty();
                             let has_escrow = event.deposit_enabled && !event.escrow_address.is_empty();
+                            let event_has_escrow_addr = !event.escrow_address.is_empty();
                             let fmt_label = event.event_format.label();
                             let fmt_badge_class = match event.event_format {
                                 api::EventFormat::InPerson => "badge badge-info-xs",
@@ -921,7 +1018,7 @@ pub fn EventsPage(
                                 <div class="card">
                                     <div class="card-header">
                                         <div class="flex-row-gap" style="flex-wrap:wrap">
-                                            <span class="card-title">{ename}</span>
+                                            <span class="card-title">{ename.clone()}</span>
                                             <span class=badge_class>{status_text}</span>
                                             <span class=fmt_badge_class>{fmt_label}</span>
                                             {if needs_escrow {
@@ -938,6 +1035,14 @@ pub fn EventsPage(
                                         </div>
                                         {if can_manage { view! {
                                         <div class="flex-row-gap" style="gap:0.5rem">
+                                            <a
+                                                class="btn btn-outline btn-sm"
+                                                href=format!("/e/{}", event_slug)
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                            >
+                                                "Public Link"
+                                            </a>
                                             <button
                                                 class="btn btn-outline btn-sm"
                                                 on:click=move |_| {
@@ -1002,7 +1107,86 @@ pub fn EventsPage(
                                                     </button>
                                                 }.into_any()
                                             } else {
-                                                view! { <div></div> }.into_any()
+                                                // Archived event — show Restore button
+                                                let rid = archive_id.clone();
+                                                view! {
+                                                    <button
+                                                        class="btn btn-outline btn-sm"
+                                                        on:click=move |_| {
+                                                            let rid = rid.clone();
+                                                            let set_toast = set_toast;
+                                                            let reload = do_reload;
+                                                            leptos::task::spawn_local(async move {
+                                                                match api::restore_event(&rid).await {
+                                                                    Ok(data) => {
+                                                                        components::show_toast(
+                                                                            &set_toast,
+                                                                            &format!("Event '{}' restored", data.name),
+                                                                            components::ToastType::Success,
+                                                                        );
+                                                                        reload();
+                                                                    }
+                                                                    Err(e) => {
+                                                                        log::error!("[events-page] restore failed: {e}");
+                                                                        components::show_toast(
+                                                                            &set_toast,
+                                                                            &format!("Failed to restore: {e}"),
+                                                                            components::ToastType::Error,
+                                                                        );
+                                                                    }
+                                                                }
+                                                            });
+                                                        }
+                                                    >
+                                                        "Restore"
+                                                    </button>
+                                                }.into_any()
+                                            }}
+                                            // Delete button — available for Draft and Archived events
+                                            // Uses force=true to bypass escrow guard on devnet
+                                            {if is_draft || is_archived {
+                                                let did = archive_id.clone();
+                                                let dname = ename.clone();
+                                                let force_delete = is_draft || event_has_escrow_addr;
+                                                view! {
+                                                    <button
+                                                        class="btn btn-outline btn-sm btn-danger"
+                                                        on:click=move |_| {
+                                                            let did = did.clone();
+                                                            let set_toast = set_toast;
+                                                            let reload = do_reload;
+                                                            let escrow_note = if force_delete { "\\n\\nWARNING: Event has an on-chain escrow that will be orphaned." } else { "" };
+                                                            let confirm_msg = format!("Permanently delete '{dname}'? This cannot be undone.{escrow_note}");
+                                                            if !web_sys::window().unwrap().confirm_with_message(&confirm_msg).unwrap_or(false) {
+                                                                return;
+                                                            }
+                                                            leptos::task::spawn_local(async move {
+                                                                match api::hard_delete_event(&did, force_delete).await {
+                                                                    Ok(data) => {
+                                                                        components::show_toast(
+                                                                            &set_toast,
+                                                                            &format!("Event '{}' permanently deleted", data.id),
+                                                                            components::ToastType::Success,
+                                                                        );
+                                                                        reload();
+                                                                    }
+                                                                    Err(e) => {
+                                                                        log::error!("[events-page] delete failed: {e}");
+                                                                        components::show_toast(
+                                                                            &set_toast,
+                                                                            &format!("Failed to delete: {e}"),
+                                                                            components::ToastType::Error,
+                                                                        );
+                                                                    }
+                                                                }
+                                                            });
+                                                        }
+                                                    >
+                                                        "Delete"
+                                                    </button>
+                                                }.into_any()
+                                            } else {
+                                                view! { <span></span> }.into_any()
                                             }}
                                         </div>
                                         }.into_any() } else { view! { <div></div> }.into_any() }}
@@ -1883,7 +2067,7 @@ pub fn EventsPage(
                                     </div>
                                 </Show>
 
-                                // ── Escrow Initialization (Edit Mode Only) ──
+                                // ── Escrow Management (Edit Mode Only) ──
                                 // Uses Show instead of {move ||} so the EscrowInitPanel
                                 // is NOT re-created when form fields update (e.g. organizer_wallet).
                                 // Show only mounts/unmounts when the `when` result changes.
@@ -1894,27 +2078,14 @@ pub fn EventsPage(
                                     f.deposit_enabled && !editing_id.get().unwrap_or_default().is_empty()
                                 }>
 
-                                    // Already initialized — show success badge
-                                    <Show when=move || !form.get().escrow_address.is_empty()>
-                                        {move || view! {
-                                            <div style="margin-top:0.75rem;padding:0.5rem 0.75rem;border:1px solid var(--success,green);border-radius:6px;background:rgba(0,128,0,0.05)">
-                                                <span style="font-size:0.8rem;color:var(--success,green)">
-                                                    "Escrow initialized: "
-                                                    <code class="code-xs">{form.get().escrow_address}</code>
-                                                </span>
-                                            </div>
-                                        }}
-                                    </Show>
-
-                                    // Not yet initialized — show escrow init panel
-                                    <Show when=move || form.get().escrow_address.is_empty()>
-                                        <super::escrow_init::EscrowInitPanel
-                                            event_id=editing_id.get().unwrap_or_default()
-                                            form=form
-                                            set_form=set_form
-                                            set_toast=set_toast
-                                        />
-                                    </Show>
+                                    // Always show the escrow panel — it handles both init and lifecycle
+                                    // (deactivate/close) based on whether escrow_address is set.
+                                    <super::escrow_init::EscrowInitPanel
+                                        event_id=editing_id.get().unwrap_or_default()
+                                        form=form
+                                        set_form=set_form
+                                        set_toast=set_toast
+                                    />
 
                                 </Show>
                                 </div>

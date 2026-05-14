@@ -59,7 +59,7 @@ static CONTENT_SECURITY_POLICY: LazyLock<HeaderValue> = LazyLock::new(|| {
          style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; \
          img-src 'self' data: blob:; \
          media-src 'self' blob:; \
-         connect-src 'self'; \
+         connect-src 'self' https://cloudflareinsights.com; \
          font-src 'self' https://fonts.gstatic.com; \
          frame-ancestors 'none'; \
          base-uri 'self'; \
