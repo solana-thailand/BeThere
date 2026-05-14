@@ -259,15 +259,26 @@ pub async fn update_event(
     // SEC-002: Lock escrow-critical fields after on-chain init.
     // If escrow_address is set (escrow initialized on-chain), reject changes to
     // fields that are baked into the on-chain EventEscrow PDA.
-    if !config.escrow_address.is_empty()
-        && (req.organizer_wallet.is_some()
-            || req.on_chain_event_id.is_some()
-            || req.deposit_amount_usdc.is_some()
-            || req.refund_deadline_hours.is_some())
-    {
-        return Err(
-            "cannot change organizer_wallet, on_chain_event_id, deposit_amount_usdc, or refund_deadline_hours after escrow is initialized on-chain".to_string()
-        );
+    // Compare actual values — only reject if the values actually changed.
+    if !config.escrow_address.is_empty() {
+        let wallet_changed = req
+            .organizer_wallet
+            .as_ref()
+            .is_some_and(|w| w.trim() != config.organizer_wallet.trim());
+        let event_id_changed = req
+            .on_chain_event_id
+            .is_some_and(|id| id != config.on_chain_event_id);
+        let deposit_changed = req
+            .deposit_amount_usdc
+            .is_some_and(|d| d != config.deposit_amount_usdc);
+        let deadline_changed = req
+            .refund_deadline_hours
+            .is_some_and(|h| h != config.refund_deadline_hours);
+        if wallet_changed || event_id_changed || deposit_changed || deadline_changed {
+            return Err(
+                "cannot change organizer_wallet, on_chain_event_id, deposit_amount_usdc, or refund_deadline_hours after escrow is initialized on-chain".to_string()
+            );
+        }
     }
 
     // SEC-003: Max deposit cap in update path

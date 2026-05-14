@@ -772,7 +772,13 @@ pub fn EventsPage(
                                     "Not set".to_string()
                                 } else {
                                     let trunc: String = evt.escrow_address.chars().take(8).collect();
-                                    format!("{trunc}…")
+                                    let status_suffix = match evt.escrow_status {
+                                        api::EscrowStatus::Initialized => "",
+                                        api::EscrowStatus::Deactivated => " (deactive)",
+                                        api::EscrowStatus::Closed => " (closed)",
+                                        _ => "",
+                                    };
+                                    format!("{trunc}…{status_suffix}")
                                 };
                                 let needs_escrow = evt.deposit_enabled && evt.escrow_address.is_empty();
                                 let has_escrow = evt.deposit_enabled && !evt.escrow_address.is_empty();
@@ -782,6 +788,19 @@ pub fn EventsPage(
                                     api::EventFormat::Online => "badge badge-warning-xs",
                                     api::EventFormat::Hybrid => "badge badge-success-xs",
                                 };
+                                let (escrow_label, escrow_cls) = if needs_escrow {
+                                    ("No Escrow".to_string(), "badge badge-warning-xs".to_string())
+                                } else if has_escrow {
+                                    match evt.escrow_status {
+                                        api::EscrowStatus::Initialized => ("Escrow: Active".to_string(), "badge badge-success-xs".to_string()),
+                                        api::EscrowStatus::Deactivated => ("Escrow: Deactivated".to_string(), "badge badge-warning-xs".to_string()),
+                                        api::EscrowStatus::Closed => ("Escrow: Closed".to_string(), "badge badge-info-xs".to_string()),
+                                        _ => ("Escrow".to_string(), "badge badge-success-xs".to_string()),
+                                    }
+                                } else {
+                                    (String::new(), String::new())
+                                };
+                                let show_escrow_badge = !escrow_label.is_empty();
                                 let edit_id = evt.id.clone();
                                 let restore_id = evt.id.clone();
                                 let delete_id = evt.id.clone();
@@ -797,13 +816,9 @@ pub fn EventsPage(
                                                 <span class="card-title">{ename.clone()}</span>
                                                 <span class=badge_class>{status_text}</span>
                                                 <span class=fmt_badge_class>{fmt_label}</span>
-                                                {if needs_escrow {
+                                                {if show_escrow_badge {
                                                     view! {
-                                                        <span class="badge badge-warning-xs">"No Escrow"</span>
-                                                    }.into_any()
-                                                } else if has_escrow {
-                                                    view! {
-                                                        <span class="badge badge-success-xs">"Escrow"</span>
+                                                        <span class=escrow_cls.clone()>{escrow_label.clone()}</span>
                                                     }.into_any()
                                                 } else {
                                                     view! { <span></span> }.into_any()
@@ -1023,6 +1038,19 @@ pub fn EventsPage(
                                 api::EventFormat::Online => "badge badge-warning-xs",
                                 api::EventFormat::Hybrid => "badge badge-success-xs",
                             };
+                            let (escrow_label, escrow_cls) = if needs_escrow {
+                                ("No Escrow".to_string(), "badge badge-warning-xs".to_string())
+                            } else if has_escrow {
+                                match event.escrow_status {
+                                    api::EscrowStatus::Initialized => ("Escrow: Active".to_string(), "badge badge-success-xs".to_string()),
+                                    api::EscrowStatus::Deactivated => ("Escrow: Deactivated".to_string(), "badge badge-warning-xs".to_string()),
+                                    api::EscrowStatus::Closed => ("Escrow: Closed".to_string(), "badge badge-info-xs".to_string()),
+                                    _ => ("Escrow".to_string(), "badge badge-success-xs".to_string()),
+                                }
+                            } else {
+                                (String::new(), String::new())
+                            };
+                            let show_escrow_badge = !escrow_label.is_empty();
 
                             view! {
                                 <div class="card">
@@ -1031,13 +1059,9 @@ pub fn EventsPage(
                                             <span class="card-title">{ename.clone()}</span>
                                             <span class=badge_class>{status_text}</span>
                                             <span class=fmt_badge_class>{fmt_label}</span>
-                                            {if needs_escrow {
+                                            {if show_escrow_badge {
                                                 view! {
-                                                    <span class="badge badge-warning-xs">"No Escrow"</span>
-                                                }.into_any()
-                                            } else if has_escrow {
-                                                view! {
-                                                    <span class="badge badge-success-xs">"Escrow"</span>
+                                                    <span class=escrow_cls.clone()>{escrow_label.clone()}</span>
                                                 }.into_any()
                                             } else {
                                                 view! { <span></span> }.into_any()
