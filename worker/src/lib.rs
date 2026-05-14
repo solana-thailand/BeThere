@@ -1,4 +1,5 @@
 mod adventure;
+mod audit_store;
 mod auth;
 mod claim;
 mod cleanup;

@@ -245,6 +245,19 @@ pub async fn create_event(
         "event created",
     );
 
+    // Audit log
+    let _ = crate::audit_store::append_event_audit(
+        kv,
+        &config.id,
+        crate::audit_store::create_entry(
+            &claims.email,
+            crate::audit_store::AuditAction::EventCreated,
+            &config.id,
+            &format!("event '{}' created", config.name),
+        ),
+    )
+    .await;
+
     Ok(ApiOk::new(json!({
         "id": config.id,
         "name": config.name,
@@ -354,6 +367,19 @@ pub async fn update_event(
         "event updated",
     );
 
+    // Audit log
+    let _ = crate::audit_store::append_event_audit(
+        kv,
+        &config.id,
+        crate::audit_store::create_entry(
+            &claims.email,
+            crate::audit_store::AuditAction::EventUpdated,
+            &config.id,
+            &format!("event '{}' updated", config.name),
+        ),
+    )
+    .await;
+
     Ok(ApiOk::new(json!({
         "id": config.id,
         "name": config.name,
@@ -409,6 +435,19 @@ pub async fn archive_event(
 
     tracing::info!(event_id = %id, staff_email = %claims.email, "event archived");
 
+    // Audit log
+    let _ = crate::audit_store::append_event_audit(
+        kv,
+        &id,
+        crate::audit_store::create_entry(
+            &claims.email,
+            crate::audit_store::AuditAction::EventArchived,
+            &id,
+            "event archived",
+        ),
+    )
+    .await;
+
     Ok(ApiOk::new(json!({
         "id": id,
         "status": "archived",
@@ -459,6 +498,19 @@ pub async fn restore_event(
 
     tracing::info!(event_id = %id, staff_email = %claims.email, "event restored from archive");
 
+    // Audit log
+    let _ = crate::audit_store::append_event_audit(
+        kv,
+        &id,
+        crate::audit_store::create_entry(
+            &claims.email,
+            crate::audit_store::AuditAction::EventRestored,
+            &id,
+            "event restored from archive",
+        ),
+    )
+    .await;
+
     Ok(ApiOk::new(json!({
         "id": id,
         "status": "draft",
@@ -500,8 +552,71 @@ pub async fn hard_delete_event(
 
     tracing::info!(event_id = %id, staff_email = %claims.email, force, "event permanently deleted");
 
+    // Audit log — use global log since event KV entry is gone
+    let action = if force {
+        crate::audit_store::AuditAction::ForceDeleteUsed
+    } else {
+        crate::audit_store::AuditAction::EventHardDeleted
+    };
+    let _ = crate::audit_store::append_global_audit(
+        kv,
+        crate::audit_store::create_entry_with_meta(
+            &claims.email,
+            action,
+            &id,
+            "event permanently deleted",
+            serde_json::json!({"force": force}),
+        ),
+    )
+    .await;
+
     Ok(ApiOk::new(json!({
         "id": id,
         "status": "deleted",
+    })))
+}
+
+/// GET /api/events/{id}/audit — Get audit trail for an event.
+/// Returns the last 100 audit entries for the event, newest first.
+#[worker::send]
+pub async fn get_event_audit(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(id): Path<String>,
+) -> Result<ApiOk<serde_json::Value>, crate::error::WorkerError> {
+    // Role check: must be admin or organizer of this event
+    let kv = state
+        .events_kv
+        .as_ref()
+        .ok_or_else(|| AppError::Internal("events KV namespace not configured".into()))?;
+
+    let existing_event = crate::event_store::get_event(kv, &id)
+        .await
+        .map_err(|e| {
+            tracing::error!(event_id = %id, error = %e, "failed to fetch event for role check");
+            AppError::Internal(format!("failed to read event: {e}"))
+        })?
+        .ok_or_else(|| AppError::NotFound(format!("event '{id}' not found")))?;
+
+    let role = crate::auth::resolve_user_role(&claims.email, &state, Some(&existing_event)).await;
+
+    if role == crate::auth::UserRole::Staff {
+        return Err(
+            AppError::Forbidden("only admins and organizers can view audit logs".into()).into(),
+        );
+    }
+
+    let entries = crate::audit_store::get_event_audit(kv, &id, 100)
+        .await
+        .map_err(|e| {
+            tracing::error!(event_id = %id, error = %e, "failed to get audit log");
+            AppError::Internal(e.to_string())
+        })?;
+
+    tracing::info!(event_id = %id, count = entries.len(), "audit log retrieved");
+
+    Ok(ApiOk::new(serde_json::json!({
+        "event_id": id,
+        "entries": entries,
     })))
 }

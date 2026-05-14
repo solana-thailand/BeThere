@@ -195,6 +195,21 @@ pub async fn register_walkin(
         "walk-in registered"
     );
 
+    // Audit log
+    if let Some(kv) = &state.events_kv {
+        let _ = crate::audit_store::append_event_audit(
+            kv,
+            &event.id,
+            crate::audit_store::create_entry(
+                &claims.email,
+                crate::audit_store::AuditAction::WalkinRegistered,
+                &email_lower,
+                "walk-in attendee registered",
+            ),
+        )
+        .await;
+    }
+
     Ok(ApiOk::new(WalkinRegisterResponse {
         claim_token,
         claim_url,

@@ -199,7 +199,8 @@ The frontend is served from `frontend-leptos/dist/` via Workers Assets with SPA 
 | POST | `/api/escrow/create-vault-ata` | Cookie + Organizer | Create vault's Associated Token Account |
 | POST | `/api/escrow/mark-checked-in` | Cookie + Organizer | Mark attendee as checked-in on-chain (prerequisite for refund) |
 | POST | `/api/escrow/refund` | No | Build refund TX for attendee's wallet to sign |
-| DELETE | `/api/events/{id}/delete` | Cookie + SuperAdmin | Permanently delete event (supports `?force=true` for devnet cleanup) |
+| DELETE | `/api/events/{id}/delete` | Cookie + SuperAdmin | Permanently delete event (`?force=true` for devnet cleanup) |
+| GET | `/api/events/{id}/audit` | Cookie + Organizer | Get audit trail for event |
 | POST | `/api/escrow/deactivate-event` | Cookie + Organizer | Build deactivate escrow TX |
 | POST | `/api/escrow/close-event` | Cookie + Organizer | Build close escrow TX (reclaim rent) |
 | GET | `/api/public/events` | Public | List upcoming active events (nearest first) |
@@ -228,6 +229,7 @@ worker/src/             — Cloudflare Worker
   auth.rs               — Google OAuth + JWT + role resolution (super_admin/organizer/staff)
   error.rs              — Typed AppError → Axum IntoResponse integration
   event_store.rs        — KV event registry CRUD, seed, migration, hard_delete_event
+  audit_store.rs        — Append-only audit trail (per-event + global, 27 action types)
   quiz.rs               — Quiz business logic (scoring, KV interaction)
   sheets.rs             — Google Sheets read/write (worker::Fetch) + KV attendee cache + token cache
   solana.rs             — Helius cNFT minting (mintCompressedNft RPC, MintRequest struct)
@@ -356,6 +358,7 @@ See `scripts/e2e/test_escrow_devnet.sh` for the complete test flow. All 24 tests
 - **Escrow lifecycle management** — Full deactivate → close flow in admin UI, rent reclamation
 - **Force delete for devnet cleanup** — SuperAdmin can hard-delete events with `?force=true`
 - **Slug auto-deduplication** — Recurring events get auto-incremented suffix on name collision
+- **Audit trail** — Append-only event log tracking all state-changing operations (CRUD, escrow, deposits, check-ins) with actor attribution
 
 ## Security
 
@@ -371,7 +374,7 @@ See `scripts/e2e/test_escrow_devnet.sh` for the complete test flow. All 24 tests
 | Escrow (business logic) | ✅ Secure | SEC-001/002/003/004 all fixed — refunds don't require check-in, fields locked after escrow init, $1K deposit cap, archive guards escrow |
 | Escrow (Token-2022) | ✅ Secure | SEC-009 fixed — all transfers use `transfer_checked()` with 6-decimal USDC |
 | Double-claim | ⚠️ Deferred | KV dedup lock recommended before high-traffic events |
-| Audit logging | ⚠️ Deferred | No persistent transaction history yet — recommended NIST SP 800-53 AU controls |
+| Audit logging | 🟡 Basic | Append-only audit trail per event (CRUD + escrow + check-in + deposits). Global audit for deletions. Missing: on-chain CPI event indexing, UI viewer |
 | JWT revocation | ⚠️ Deferred | KV blacklist recommended for compromised tokens |
 | Dev mode | ⚠️ Local only | `DEV_MODE=1` bypasses JWT verification — only for `.dev.vars`, never production |
 

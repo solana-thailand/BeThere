@@ -165,6 +165,22 @@ pub async fn deposit_usdc_handler(
         "USDC deposit initiated"
     );
 
+    // Audit log
+    let _ = crate::audit_store::append_event_audit(
+        kv,
+        &event.id,
+        crate::audit_store::create_entry(
+            "attendee",
+            crate::audit_store::AuditAction::DepositSubmitted,
+            &body.attendee_id,
+            &format!(
+                "USDC deposit initiated: {} lamports",
+                event.deposit_amount_usdc
+            ),
+        ),
+    )
+    .await;
+
     Ok(ApiOk::new(UsdcDepositResponse {
         transaction: String::new(), // Transaction is built on-demand by the callback endpoint
         solana_pay_url,
@@ -651,6 +667,20 @@ pub async fn deposit_webhook_handler(
         .await
         .map_err(AppError::Internal)?;
 
+    // Audit log
+    let _ = crate::audit_store::append_event_audit(
+        kv,
+        &body.event_id,
+        crate::audit_store::create_entry_with_meta(
+            "system",
+            crate::audit_store::AuditAction::DepositConfirmed,
+            &body.attendee_id,
+            "USDC deposit confirmed on-chain",
+            serde_json::json!({"tx_signature": body.tx_signature, "confirmed": confirmed}),
+        ),
+    )
+    .await;
+
     Ok(ApiOk::new(serde_json::json!({
         "success": true,
         "confirmed": confirmed,
@@ -706,7 +736,7 @@ pub struct InitEscrowTxResponse {
 #[worker::send]
 pub async fn init_escrow_tx_handler(
     State(state): State<AppState>,
-    Extension(_claims): Extension<Claims>,
+    Extension(claims): Extension<Claims>,
     Json(body): Json<InitEscrowTxRequest>,
 ) -> Result<ApiOk<InitEscrowTxResponse>, WorkerError> {
     let kv = state
@@ -800,6 +830,19 @@ pub async fn init_escrow_tx_handler(
         on_chain_event_id,
         "Combined init escrow TX built for organizer"
     );
+
+    // Audit log
+    let _ = crate::audit_store::append_event_audit(
+        kv,
+        &event.id,
+        crate::audit_store::create_entry(
+            &claims.email,
+            crate::audit_store::AuditAction::EscrowInitialized,
+            &event.id,
+            "escrow PDA initialization TX built",
+        ),
+    )
+    .await;
 
     Ok(ApiOk::new(InitEscrowTxResponse {
         transaction: tx.transaction_b64,
@@ -985,6 +1028,31 @@ pub async fn verify_thb_slip_handler(
         "deposit rejected"
     };
 
+    // Audit log
+    let action = if body.approved {
+        crate::audit_store::AuditAction::DepositVerified
+    } else {
+        crate::audit_store::AuditAction::DepositRejected
+    };
+    let _ = crate::audit_store::append_event_audit(
+        kv,
+        &event.id,
+        crate::audit_store::create_entry(
+            &claims.email,
+            action,
+            &body.attendee_id,
+            &format!(
+                "THB slip {}",
+                if body.approved {
+                    "verified"
+                } else {
+                    "rejected"
+                }
+            ),
+        ),
+    )
+    .await;
+
     Ok(ApiOk::new(serde_json::json!({
         "success": true,
         "message": msg
@@ -1132,6 +1200,19 @@ pub async fn mark_refund_handler(
         marker = %claims.email,
         "THB refund marked complete"
     );
+
+    // Audit log
+    let _ = crate::audit_store::append_event_audit(
+        kv,
+        &event.id,
+        crate::audit_store::create_entry(
+            &claims.email,
+            crate::audit_store::AuditAction::RefundMarked,
+            &attendee_id,
+            "refund marked complete",
+        ),
+    )
+    .await;
 
     Ok(ApiOk::new(serde_json::json!({
         "success": true,
@@ -1701,7 +1782,7 @@ pub struct DeactivateEventTxResponse {
 #[worker::send]
 pub async fn deactivate_event_tx_handler(
     State(state): State<AppState>,
-    Extension(_claims): Extension<Claims>,
+    Extension(claims): Extension<Claims>,
     Json(body): Json<DeactivateEventTxRequest>,
 ) -> Result<ApiOk<DeactivateEventTxResponse>, WorkerError> {
     let kv = state
@@ -1762,6 +1843,19 @@ pub async fn deactivate_event_tx_handler(
         "Deactivate event TX built for organizer"
     );
 
+    // Audit log
+    let _ = crate::audit_store::append_event_audit(
+        kv,
+        &event.id,
+        crate::audit_store::create_entry(
+            &claims.email,
+            crate::audit_store::AuditAction::EscrowDeactivated,
+            &event.id,
+            "escrow deactivation TX built",
+        ),
+    )
+    .await;
+
     Ok(ApiOk::new(DeactivateEventTxResponse {
         transaction: tx.transaction_b64,
         message: tx.message,
@@ -1793,7 +1887,7 @@ pub struct CloseEventTxResponse {
 #[worker::send]
 pub async fn close_event_tx_handler(
     State(state): State<AppState>,
-    Extension(_claims): Extension<Claims>,
+    Extension(claims): Extension<Claims>,
     Json(body): Json<CloseEventTxRequest>,
 ) -> Result<ApiOk<CloseEventTxResponse>, WorkerError> {
     let kv = state
@@ -1854,6 +1948,19 @@ pub async fn close_event_tx_handler(
         "Close event TX built for organizer"
     );
 
+    // Audit log
+    let _ = crate::audit_store::append_event_audit(
+        kv,
+        &event.id,
+        crate::audit_store::create_entry(
+            &claims.email,
+            crate::audit_store::AuditAction::EscrowClosed,
+            &event.id,
+            "escrow close TX built",
+        ),
+    )
+    .await;
+
     Ok(ApiOk::new(CloseEventTxResponse {
         transaction: tx.transaction_b64,
         message: tx.message,
@@ -1884,7 +1991,7 @@ pub struct ClaimForfeitedTxResponse {
 #[worker::send]
 pub async fn claim_forfeited_tx_handler(
     State(state): State<AppState>,
-    Extension(_claims): Extension<Claims>,
+    Extension(claims): Extension<Claims>,
     Json(body): Json<ClaimForfeitedTxRequest>,
 ) -> Result<ApiOk<ClaimForfeitedTxResponse>, WorkerError> {
     let kv = state
@@ -1944,6 +2051,19 @@ pub async fn claim_forfeited_tx_handler(
         on_chain_event_id,
         "Claim forfeited TX built for organizer"
     );
+
+    // Audit log
+    let _ = crate::audit_store::append_event_audit(
+        kv,
+        &event.id,
+        crate::audit_store::create_entry(
+            &claims.email,
+            crate::audit_store::AuditAction::ClaimForfeited,
+            &event.id,
+            "claim forfeited TX built",
+        ),
+    )
+    .await;
 
     Ok(ApiOk::new(ClaimForfeitedTxResponse {
         transaction: tx.transaction_b64,

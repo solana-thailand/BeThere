@@ -175,6 +175,24 @@ pub async fn check_in(
         message: format!("Successfully checked in {}", attendee.display_name()),
     };
 
+    // Audit log
+    if let Some(kv) = &state.events_kv {
+        let _ = crate::audit_store::append_event_audit(
+            kv,
+            &event.id,
+            crate::audit_store::create_entry(
+                &claims.email,
+                crate::audit_store::AuditAction::AttendeeCheckedIn,
+                &id,
+                &format!(
+                    "attendee checked in ({})",
+                    if query.online { "online" } else { "in-person" }
+                ),
+            ),
+        )
+        .await;
+    }
+
     Ok(ApiOk::new(response))
 }
 
@@ -255,6 +273,21 @@ pub async fn undo_check_in(
         staff_email = %claims.email,
         "undo check-in successful",
     );
+
+    // Audit log
+    if let Some(kv) = &state.events_kv {
+        let _ = crate::audit_store::append_event_audit(
+            kv,
+            &event.id,
+            crate::audit_store::create_entry(
+                &claims.email,
+                crate::audit_store::AuditAction::AttendeeCheckinUndone,
+                &id,
+                "check-in undone",
+            ),
+        )
+        .await;
+    }
 
     Ok((
         StatusCode::OK,
