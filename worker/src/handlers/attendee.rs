@@ -16,7 +16,7 @@ use event_checkin_domain::models::api::{AttendeeResponse, RecentCheckIn, StatsRe
 use event_checkin_domain::models::auth::Claims;
 use event_checkin_domain::models::error::AppError;
 
-use super::ext::{EventIdQuery, resolve_event_with_access, resolve_kv};
+use super::ext::{EventIdQuery, resolve_event, resolve_event_with_access, resolve_kv};
 use crate::sheets;
 use crate::state::AppState;
 
@@ -129,4 +129,63 @@ pub async fn get_attendee(
         "participation_type": attendee.participation_type,
     });
     Ok(ApiOk::new(data))
+}
+
+/// GET /api/public/ticket/:id
+/// Public — no auth required. Returns attendee ticket data with QR image.
+/// Masks email for privacy (e.g. "j***@example.com").
+#[worker::send]
+pub async fn get_public_ticket(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Query(query): Query<EventIdQuery>,
+) -> Result<ApiOk<serde_json::Value>, crate::error::WorkerError> {
+    tracing::info!(attendee_id = %id, "public ticket requested");
+
+    let event = resolve_event(&state, query.event_id.as_deref()).await?;
+
+    let kv = resolve_kv(&state);
+    let attendee = sheets::get_attendee_by_id(&id, &state, &event.sheet_id, &event.sheet_name, kv)
+        .await
+        .map_err(|e| {
+            tracing::error!(attendee_id = %id, error = %e, "failed to fetch attendee for public ticket");
+            AppError::Internal(format!("failed to fetch attendee: {e}"))
+        })?
+        .ok_or_else(|| AppError::NotFound(format!("attendee with id '{id}' not found")))?;
+
+    let mut response = AttendeeResponse::from_attendee(&attendee);
+
+    // Mask email for privacy: "john@example.com" → "j***@example.com"
+    response.email = mask_email(&response.email);
+
+    // Generate QR code image from the check-in URL
+    let qr_image = attendee
+        .qr_code_url
+        .as_ref()
+        .and_then(|url| event_checkin_domain::qr::generate_qr_base64(url).ok());
+
+    // Also try generating QR from the attendee api_id directly if no qr_code_url
+    let qr_image = qr_image.or_else(|| event_checkin_domain::qr::generate_qr_base64(&id).ok());
+
+    let data = json!({
+        "attendee": response,
+        "qr_image": qr_image,
+        "is_checked_in": attendee.is_checked_in(),
+        "is_approved": attendee.is_approved(),
+        "is_in_person": attendee.is_in_person(),
+        "participation_type": attendee.participation_type,
+    });
+    Ok(ApiOk::new(data))
+}
+
+/// Mask an email address for privacy: "john@example.com" → "j***@example.com".
+fn mask_email(email: &str) -> String {
+    let Some((local, domain)) = email.split_once('@') else {
+        return "***".to_string();
+    };
+    if local.is_empty() {
+        return format!("***@{domain}");
+    }
+    let first = local.chars().next().unwrap_or('*');
+    format!("{first}***@{domain}")
 }

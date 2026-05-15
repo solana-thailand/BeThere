@@ -59,6 +59,8 @@ pub fn routes(state: AppState) -> Router<()> {
         .route("/waitlist", post(waitlist::join_waitlist))
         // Self-registration (public — attendees register from public event page)
         .route("/public/register", post(register::register_attendee))
+        // Public ticket view (no auth — attendees view their QR slip)
+        .route("/public/ticket/{id}", get(attendee::get_public_ticket))
         // Deposit routes (public — attendee checks/initiates deposit)
         .route(
             "/deposit/status/{attendee_id}",

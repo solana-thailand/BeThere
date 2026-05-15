@@ -14,3 +14,4 @@ pub mod onchain_events_panel;
 pub mod public_event;
 pub mod quiz_editor;
 pub mod scanner;
+pub mod ticket;

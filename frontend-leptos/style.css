@@ -8109,3 +8109,195 @@ nav a.active {
     font-size: 0.8rem;
     white-space: nowrap;
 }
+
+/* ===== Ticket Page ===== */
+.ticket-card {
+    max-width: 420px;
+    width: 100%;
+    margin: 0 auto;
+    padding: 1.5rem;
+}
+.ticket-header {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+}
+.ticket-title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    margin: 0;
+    color: var(--text-primary);
+}
+.ticket-qr-section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-bottom: 1.5rem;
+}
+.ticket-qr-wrapper {
+    background: #fff;
+    border-radius: 1rem;
+    padding: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 0.5rem;
+}
+.ticket-qr-img {
+    width: 256px;
+    height: 256px;
+    display: block;
+}
+.ticket-qr-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 2rem;
+    color: var(--text-muted);
+}
+.ticket-fullscreen-btn {
+    margin-top: 0.25rem;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+.ticket-info {
+    border-top: 1px solid var(--border, rgba(255, 255, 255, 0.1));
+    padding-top: 1rem;
+    margin-bottom: 1rem;
+}
+.ticket-info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 0.375rem 0;
+}
+.ticket-info-label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    flex-shrink: 0;
+    margin-right: 1rem;
+}
+.ticket-info-value {
+    font-size: 0.9rem;
+    color: var(--text-primary);
+    text-align: right;
+    word-break: break-word;
+}
+.ticket-email-masked {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+}
+.ticket-id {
+    font-family: monospace;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+.ticket-status-section {
+    border-top: 1px solid var(--border, rgba(255, 255, 255, 0.1));
+    padding-top: 1rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+}
+.ticket-status-badge {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.5rem 1rem;
+    border-radius: 2rem;
+    font-weight: 600;
+    font-size: 0.85rem;
+}
+.ticket-status-checked-in {
+    background: rgba(34, 197, 94, 0.15);
+    color: #22c55e;
+}
+.ticket-status-pending {
+    background: rgba(234, 179, 8, 0.15);
+    color: #eab308;
+}
+.ticket-status-ready {
+    background: rgba(59, 130, 246, 0.15);
+    color: #3b82f6;
+}
+.ticket-status-detail {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    text-align: center;
+    margin: 0;
+}
+.ticket-claim-btn {
+    margin-top: 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+}
+.ticket-footer-hint {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    text-align: center;
+    margin-top: 1rem;
+}
+
+/* Ticket fullscreen QR overlay */
+.ticket-fullscreen-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    background: rgba(0, 0, 0, 0.9);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+.ticket-fullscreen-card {
+    cursor: default;
+    background: #fff;
+    border-radius: 1.5rem;
+    padding: 2rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    max-width: 90vw;
+    max-height: 90vh;
+}
+.ticket-fullscreen-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+}
+.ticket-fullscreen-name {
+    font-weight: 700;
+    color: #111;
+    font-size: 1.1rem;
+}
+.ticket-fullscreen-close {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+    color: #666;
+    padding: 0 0.25rem;
+}
+.ticket-fullscreen-close:hover {
+    color: #111;
+}
+.ticket-fullscreen-qr {
+    width: min(70vw, 70vh);
+    height: min(70vw, 70vh);
+    display: block;
+}
+.ticket-fullscreen-hint {
+    color: #666;
+    font-size: 0.85rem;
+    margin: 0;
+}

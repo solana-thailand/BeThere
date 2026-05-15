@@ -632,6 +632,33 @@ pub async fn get_attendee(id: &str, event_id: Option<&str>) -> Result<AttendeeDa
     })
 }
 
+/// GET /api/public/ticket/:id?event_id=xxx
+/// Public — no auth required. Returns attendee ticket data with QR image.
+pub async fn get_public_ticket(
+    attendee_id: &str,
+    event_id: Option<&str>,
+) -> Result<AttendeeData, ApiError> {
+    let path = match event_id {
+        Some(eid) if !eid.is_empty() => {
+            format!("/public/ticket/{attendee_id}?event_id={eid}")
+        }
+        _ => format!("/public/ticket/{attendee_id}"),
+    };
+
+    let json = cached_get(&path).await?;
+
+    let wrapper: ApiResponse<AttendeeData> =
+        serde_json::from_str(&json).map_err(|e| ApiError {
+            message: format!("Failed to parse ticket data: {e}"),
+            status: 0,
+        })?;
+
+    wrapper.data.ok_or_else(|| ApiError {
+        message: wrapper.error.unwrap_or("No data".to_string()),
+        status: 0,
+    })
+}
+
 /// POST /api/checkin/:id
 /// Check in an attendee by their api_id.
 pub async fn check_in(id: &str, event_id: Option<&str>, online: bool) -> Result<CheckInData, ApiError> {

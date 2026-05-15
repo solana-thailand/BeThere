@@ -71,24 +71,28 @@ pub enum IconName {
     SignOut, // ↗
 
     // Objects
-    Ticket,     // 🎫
-    Trophy,     // 🏆
-    Gift,       // 🎁
-    Search,     // 🔍
-    Chart,      // 📊
-    Phone,      // 📱
-    Lightbulb,  // 💡
-    Calendar,   // 📅
-    Pin,        // 📍
-    Timer,      // ⏱️
-    Map,        // 🗺️
-    Star,       // ⭐
-    CreditCard, // 💳
-    Target,     // 🎯
-    Palette,    // 🎨
-    Puzzle,     // 🧩
-    Brain,      // 🧠
-    TicketFree, // 🎟️
+    Ticket,        // 🎫
+    Trophy,        // 🏆
+    Gift,          // 🎁
+    Search,        // 🔍
+    Chart,         // 📊
+    Phone,         // 📱
+    Lightbulb,     // 💡
+    Calendar,      // 📅
+    Pin,           // 📍
+    Timer,         // ⏱️
+    Map,           // 🗺️
+    Star,          // ⭐
+    CreditCard,    // 💳
+    Target,        // 🎯
+    Palette,       // 🎨
+    Puzzle,        // 🧩
+    Brain,         // 🧠
+    TicketFree,    // 🎟️
+    QrCode,        // 📱
+    Expand,        // ⤢
+    AlertTriangle, // ⚠️
+    Clock,         // 🕐
 
     // Nature/Mascot
     Crab, // 🦀
@@ -256,7 +260,19 @@ impl IconName {
                 r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a7 7 0 017 7c0 2.38-1.19 4.47-3 5.74V17a2 2 0 01-2 2h-4a2 2 0 01-2-2v-2.26C6.19 13.47 5 11.38 5 9a7 7 0 017-7z"/><line x1="9" y1="21" x2="15" y2="21"/></svg>"#
             }
             IconName::TicketFree => {
-                r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9a3 3 0 013-3h14a3 3 0 013 3v0"/><path d="M2 9v6a3 3 0 003 3h14a3 3 0 003-3V9"/><line x1="9" y1="6" x2="9" y2="18"/><text x="14" y="14" font-size="7" fill="currentColor" stroke="none" font-weight="bold" font-family="sans-serif">FREE</text></svg>"#
+                r#"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M2 9a3 3 0 013-3h14a3 3 0 013 3v0\"/><path d=\"M2 9v6a3 3 0 003 3h14a3 3 0 003-3V9\"/><line x1=\"9\" y1=\"6\" x2=\"9\" y2=\"18\"/><text x=\"14\" y=\"14\" font-size=\"7\" fill=\"currentColor\" stroke=\"none\" font-weight=\"bold\" font-family=\"sans-serif\">FREE</text></svg>\"#
+            }
+            IconName::QrCode => {
+                r#"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"2\" y=\"2\" width=\"8\" height=\"8\" rx=\"1\"/><rect x=\"14\" y=\"2\" width=\"8\" height=\"8\" rx=\"1\"/><rect x=\"2\" y=\"14\" width=\"8\" height=\"8\" rx=\"1\"/><rect x=\"14\" y=\"14\" width=\"4\" height=\"4\" rx=\"0.5\"/><rect x=\"20\" y=\"14\" width=\"2\" height=\"2\"/><rect x=\"14\" y=\"20\" width=\"2\" height=\"2\"/><rect x=\"20\" y=\"20\" width=\"2\" height=\"2\"/></svg>\"#
+            }
+            IconName::Expand => {
+                r#"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><polyline points=\"15 3 21 3 21 9\"/><polyline points=\"9 21 3 21 3 15\"/><line x1=\"21\" y1=\"3\" x2=\"14\" y2=\"10\"/><line x1=\"3\" y1=\"21\" x2=\"10\" y2=\"14\"/></svg>\"#
+            }
+            IconName::AlertTriangle => {
+                r#"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z\"/><line x1=\"12\" y1=\"9\" x2=\"12\" y2=\"13\"/><line x1=\"12\" y1=\"17\" x2=\"12.01\" y2=\"17\"/></svg>\"#
+            }
+            IconName::Clock => {
+                r#"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"10\"/><polyline points=\"12 6 12 12 16 14\"/></svg>\"#
             }
 
             // ── Mascot ─────────────────────────────────────────────

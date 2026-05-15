@@ -756,7 +756,7 @@ pub async fn get_active_event(kv: &KvStore) -> Result<Option<EventConfig>, Strin
 /// Returns an error if no matching event is found.
 pub async fn resolve_event(kv: &KvStore, event_id: Option<&str>) -> Result<EventConfig, String> {
     match event_id {
-        Some(id) if !id.is_empty() && id != "default" => get_event_config(kv, id)
+        Some(id) if !id.is_empty() => get_event_config(kv, id)
             .await?
             .ok_or_else(|| format!("event '{id}' not found")),
         _ => {
