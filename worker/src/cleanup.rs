@@ -153,12 +153,11 @@ pub async fn run_cleanup(kv: &KvStore) -> CleanupSummary {
             }
 
             // Clean up polling cursor
-            if let Ok(Some(config)) = crate::event_store::get_event_config(kv, event_id).await {
-                if !config.escrow_address.is_empty() {
+            if let Ok(Some(config)) = crate::event_store::get_event_config(kv, event_id).await
+                && !config.escrow_address.is_empty() {
                     let cursor_key = format!("onchain:cursor:{}", config.escrow_address);
                     let _ = kv.delete(&cursor_key).await;
                 }
-            }
         }
     }
 
@@ -268,15 +267,14 @@ pub async fn cleanup_orphaned_audit_logs(
                         if maybe_id.contains(':') {
                             continue;
                         }
-                        if !known_ids.contains(maybe_id) {
-                            if kv.delete(name).await.is_ok() {
+                        if !known_ids.contains(maybe_id)
+                            && kv.delete(name).await.is_ok() {
                                 deleted += 1;
                                 tracing::info!(
                                     event_id = %maybe_id,
                                     "cleanup: deleted orphaned audit log"
                                 );
                             }
-                        }
                     }
                 }
                 if resp.list_complete {

@@ -26,6 +26,15 @@ pub struct RegisterRequest {
     /// Optional for InPerson/Online events. Required for Hybrid to choose track.
     /// Defaults based on event format if omitted.
     pub participation_type: Option<String>,
+    /// Preferred contact channel (Telegram, Line, Facebook, X (Twitter)).
+    /// Required when event has `require_contact_info` enabled.
+    pub contact_channel: Option<String>,
+    /// Username or profile link for the selected contact channel.
+    /// Required when event has `require_contact_info` enabled.
+    pub contact_handle: Option<String>,
+    /// Whether the attendee agreed to the deposit commitment.
+    /// Required when event has `deposit_enabled` enabled.
+    pub deposit_agreed: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -103,6 +112,42 @@ pub async fn register_attendee(
         );
     }
 
+    // 3b. Validate contact info if required by event
+    let contact_channel = body
+        .contact_channel
+        .as_deref()
+        .map(|v| v.trim())
+        .filter(|v| !v.is_empty());
+    let contact_handle = body
+        .contact_handle
+        .as_deref()
+        .map(|v| v.trim())
+        .filter(|v| !v.is_empty());
+
+    if config.require_contact_info {
+        if contact_channel.is_none() {
+            return Err(AppError::Validation(
+                "please select a preferred contact channel".to_string(),
+            )
+            .into());
+        }
+        if contact_handle.is_none() {
+            return Err(AppError::Validation(
+                "please provide your contact username or profile link".to_string(),
+            )
+            .into());
+        }
+    }
+
+    // 3c. Validate deposit agreement if deposit is enabled
+    if config.deposit_enabled
+        && body.deposit_agreed != Some(true) {
+            return Err(AppError::Validation(
+                "you must agree to the deposit commitment to register".to_string(),
+            )
+            .into());
+        }
+
     // 4. Determine participation_type
     let participation_type =
         resolve_participation_type(&config.event_format, body.participation_type.as_deref())?;
@@ -132,7 +177,23 @@ pub async fn register_attendee(
 
     let now = chrono::Utc::now().to_rfc3339();
 
-    // 8. Append row to Google Sheet
+    // 8. Resolve column mapping
+    let mapping = match sheets::get_column_mapping(
+        &state,
+        &config.sheet_id,
+        &config.sheet_name,
+        Some(kv),
+    )
+    .await
+    {
+        Ok(m) => m,
+        Err(e) => {
+            tracing::warn!(error = %e, "failed to get column mapping, using hardcoded fallback");
+            event_checkin_domain::models::attendee::ColumnMapping::hardcoded()
+        }
+    };
+
+    // 9. Append row to Google Sheet
     sheets::append_attendee_row(
         &api_id,
         name,
@@ -142,6 +203,10 @@ pub async fn register_attendee(
         &claim_token,
         &participation_type,
         &now,
+        contact_channel,
+        contact_handle,
+        body.deposit_agreed.unwrap_or(false),
+        &mapping,
         &state,
         &config.sheet_id,
         &config.sheet_name,
@@ -153,7 +218,7 @@ pub async fn register_attendee(
         AppError::Internal(format!("failed to register: {e}"))
     })?;
 
-    // 9. Determine next_step based on event format
+    // 10. Determine next_step based on event format
     let next_step = build_next_step(
         &config.event_format,
         &event_id,

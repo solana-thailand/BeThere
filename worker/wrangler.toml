@@ -43,7 +43,7 @@ SHIM
 [vars]
 SERVER_URL = "https://bethere.solana-thailand.workers.dev"
 CLAIM_BASE_URL = "https://bethere.solana-thailand.workers.dev/claim"
-GOOGLE_SHEET_NAME = "checkin"
+GOOGLE_SHEET_NAME = "Attendees"
 GOOGLE_STAFF_SHEET_NAME = "staff"
 DEV_MODE = "0"
 DEV_EMAIL = "ratchapon.poc@gmail.com"

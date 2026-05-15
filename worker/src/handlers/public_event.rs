@@ -139,6 +139,7 @@ pub async fn get_public_event(
         "nft_description_template": config.nft_description_template,
         "quiz_enabled": config.quiz_enabled,
         "refund_deadline_hours": config.refund_deadline_hours,
+        "require_contact_info": config.require_contact_info,
         "description": config.description,
         "location": config.location,
         "created_at": config.created_at,

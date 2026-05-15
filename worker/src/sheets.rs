@@ -8,7 +8,7 @@ use base64::Engine;
 use chrono::Utc;
 use std::collections::HashMap;
 
-use event_checkin_domain::models::attendee::{Attendee, AttendeeRow};
+use event_checkin_domain::models::attendee::{Attendee, AttendeeRow, ColumnMapping};
 use event_checkin_domain::models::auth::ServiceAccountClaim;
 
 use worker::KvStore;
@@ -37,6 +37,12 @@ const STAFF_CACHE_KEY: &str = "cache:staff_members";
 
 /// TTL for the cached staff members list (60 seconds).
 const STAFF_CACHE_TTL_SECS: u64 = 60;
+
+/// KV key prefix for caching column mappings.
+const COLUMN_MAP_CACHE_KEY_PREFIX: &str = "cache:column_map";
+
+/// TTL for the cached column mapping (1 hour — headers rarely change).
+const COLUMN_MAP_CACHE_TTL_SECS: u64 = 3600;
 
 // ---------------------------------------------------------------------------
 // Cache helpers
@@ -166,6 +172,105 @@ pub async fn get_cached_access_token(
 // Attendee queries
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Column mapping
+// ---------------------------------------------------------------------------
+
+/// KV cache key for a sheet's column mapping.
+fn column_map_cache_key(sheet_id: &str, sheet_name: &str) -> String {
+    format!("{COLUMN_MAP_CACHE_KEY_PREFIX}:{sheet_id}:{sheet_name}")
+}
+
+/// Get the column mapping for a sheet.
+///
+/// Resolution order:
+/// 1. KV cache (if available)
+/// 2. Read row 1 headers from Google Sheets, build mapping, cache in KV
+/// 3. Fall back to hardcoded mapping on any error
+pub async fn get_column_mapping(
+    state: &AppState,
+    sheet_id: &str,
+    sheet_name: &str,
+    kv: Option<&KvStore>,
+) -> Result<ColumnMapping, String> {
+    let cache_key = column_map_cache_key(sheet_id, sheet_name);
+
+    // 1. Try KV cache
+    if let Some(kv) = kv {
+        match kv.get(&cache_key).text().await {
+            Ok(Some(cached)) => {
+                if let Ok(mapping) = serde_json::from_str::<ColumnMapping>(&cached) {
+                    tracing::debug!(
+                        mapped = mapping.mapped_count(),
+                        total = mapping.total_columns,
+                        "column mapping cache hit"
+                    );
+                    return Ok(mapping);
+                }
+            }
+            Ok(None) => {
+                tracing::debug!(cache_key = %cache_key, "column mapping cache miss");
+            }
+            Err(e) => {
+                tracing::debug!(error = ?e, "column mapping cache read error");
+            }
+        }
+    }
+
+    // 2. Read row 1 headers from Google Sheets
+    let access_token = get_cached_access_token(state, kv).await?;
+    let range = format!("{sheet_name}!1:1");
+    let url = format!(
+        "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{}",
+        urlencoding::encode(&range)
+    );
+
+    match fetch_sheet_range(&url, &access_token).await {
+        Ok(header_range) => {
+            if let Some(headers) = header_range.values.first() {
+                let mapping = ColumnMapping::from_headers(headers);
+                tracing::info!(
+                    mapped = mapping.mapped_count(),
+                    total = mapping.total_columns,
+                    "built column mapping from sheet headers"
+                );
+
+                // Cache the mapping in KV
+                if let Some(kv) = kv
+                    && let Ok(json) = serde_json::to_string(&mapping)
+                    && let Ok(builder) = kv
+                        .put(&cache_key, &json)
+                        .map_err(|e| format!("failed to build column map KV put: {e:?}"))
+                    && let Err(e) = builder
+                        .expiration_ttl(COLUMN_MAP_CACHE_TTL_SECS)
+                        .execute()
+                        .await
+                {
+                    tracing::debug!(error = ?e, "failed to cache column mapping");
+                }
+
+                return Ok(mapping);
+            }
+
+            // Empty header row — fall through to hardcoded
+            tracing::warn!("sheet header row is empty, using hardcoded mapping");
+        }
+        Err(e) => {
+            tracing::warn!(
+                error = %e,
+                "failed to read sheet headers, using hardcoded mapping"
+            );
+        }
+    }
+
+    // 3. Fallback to hardcoded
+    Ok(ColumnMapping::hardcoded())
+}
+
+// ---------------------------------------------------------------------------
+// Attendee queries
+// ---------------------------------------------------------------------------
+
 /// Fetch all attendees from the Google Sheet.
 /// Returns a list of typed Attendee structs parsed from sheet rows.
 ///
@@ -207,6 +312,10 @@ pub async fn get_attendees(
 
     // Cache miss or no KV — fetch from Google Sheets
     let access_token = get_cached_access_token(state, kv).await?;
+
+    // Resolve column mapping from headers
+    let mapping = get_column_mapping(state, sheet_id, sheet_name, kv).await?;
+
     let range = format!("{sheet_name}!A2:Z");
     let url = format!(
         "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{}",
@@ -224,7 +333,7 @@ pub async fn get_attendees(
         .filter_map(|(idx, _)| {
             // row_index is 1-based in the sheet, +2 because row 1 is header and idx is 0-based
             let row_index = idx + 2;
-            AttendeeRow::from_sheet_values(&value_range.values, row_index)
+            AttendeeRow::from_sheet_values(&value_range.values, row_index, &mapping)
         })
         .map(|row| row.to_attendee())
         .collect();
@@ -487,10 +596,12 @@ pub async fn get_staff_members(
 /// - Column R: claim_token (UUID v7 for NFT/refund claim link)
 ///
 /// Uses batch update to write all columns in a single API call.
+#[allow(clippy::too_many_arguments)]
 pub async fn mark_checked_in(
     row_index: usize,
     staff_email: &str,
     claim_token: &str,
+    mapping: &ColumnMapping,
     state: &AppState,
     sheet_id: &str,
     sheet_name: &str,
@@ -499,17 +610,23 @@ pub async fn mark_checked_in(
     let access_token = get_cached_access_token(state, kv).await?;
     let timestamp = Utc::now().to_rfc3339();
 
+    use event_checkin_domain::models::attendee::ColumnKey as CK;
+
+    let col_checked_in_at = mapping.column_letter(CK::CheckedInAt);
+    let col_checked_in_by = mapping.column_letter(CK::CheckedInBy);
+    let col_claim_token = mapping.column_letter(CK::ClaimToken);
+
     let data = vec![
         ValueRange {
-            range: format!("{sheet_name}!I{row_index}"),
+            range: format!("{sheet_name}!{col_checked_in_at}{row_index}"),
             values: vec![vec![timestamp.clone()]],
         },
         ValueRange {
-            range: format!("{sheet_name}!J{row_index}"),
+            range: format!("{sheet_name}!{col_checked_in_by}{row_index}"),
             values: vec![vec![staff_email.to_string()]],
         },
         ValueRange {
-            range: format!("{sheet_name}!R{row_index}"),
+            range: format!("{sheet_name}!{col_claim_token}{row_index}"),
             values: vec![vec![claim_token.to_string()]],
         },
     ];
@@ -536,10 +653,11 @@ pub async fn mark_checked_in(
 }
 
 /// Mark an online attendee as virtually checked in.
-/// Writes checked_in_at (column I) and checked_in_by="virtual" (column J).
-/// Does NOT overwrite claim_token (column R) — already set during registration.
+/// Writes checked_in_at (column R) and checked_in_by="virtual" (column S).
+/// Does NOT overwrite claim_token (column V) — already set during registration.
 pub async fn mark_virtual_checked_in(
     row_index: usize,
+    mapping: &ColumnMapping,
     state: &AppState,
     sheet_id: &str,
     sheet_name: &str,
@@ -548,13 +666,18 @@ pub async fn mark_virtual_checked_in(
     let access_token = get_cached_access_token(state, kv).await?;
     let timestamp = Utc::now().to_rfc3339();
 
+    use event_checkin_domain::models::attendee::ColumnKey as CK;
+
+    let col_checked_in_at = mapping.column_letter(CK::CheckedInAt);
+    let col_checked_in_by = mapping.column_letter(CK::CheckedInBy);
+
     let data = vec![
         ValueRange {
-            range: format!("{sheet_name}!I{row_index}"),
+            range: format!("{sheet_name}!{col_checked_in_at}{row_index}"),
             values: vec![vec![timestamp.clone()]],
         },
         ValueRange {
-            range: format!("{sheet_name}!J{row_index}"),
+            range: format!("{sheet_name}!{col_checked_in_by}{row_index}"),
             values: vec![vec!["virtual".to_string()]],
         },
     ];
@@ -579,15 +702,16 @@ pub async fn mark_virtual_checked_in(
 }
 
 /// Undo a check-in by clearing:
-/// - Column I: checked_in_at
-/// - Column J: checked_in_by
-/// - Column R: claim_token
-/// - Column S: claimed_at (if NFT was already claimed)
+/// - checked_in_at (column R)
+/// - checked_in_by (column S)
+/// - claim_token (column V)
+/// - claimed_at (column W)
 ///
 /// Reverses the effect of `mark_checked_in` so the attendee can be re-checked-in.
 pub async fn clear_checked_in(
     row_index: usize,
     staff_email: &str,
+    mapping: &ColumnMapping,
     state: &AppState,
     sheet_id: &str,
     sheet_name: &str,
@@ -595,21 +719,28 @@ pub async fn clear_checked_in(
 ) -> Result<(), String> {
     let access_token = get_cached_access_token(state, kv).await?;
 
+    use event_checkin_domain::models::attendee::ColumnKey as CK;
+
+    let col_checked_in_at = mapping.column_letter(CK::CheckedInAt);
+    let col_checked_in_by = mapping.column_letter(CK::CheckedInBy);
+    let col_claim_token = mapping.column_letter(CK::ClaimToken);
+    let col_claimed_at = mapping.column_letter(CK::ClaimedAt);
+
     let data = vec![
         ValueRange {
-            range: format!("{sheet_name}!I{row_index}"),
+            range: format!("{sheet_name}!{col_checked_in_at}{row_index}"),
             values: vec![vec![String::new()]],
         },
         ValueRange {
-            range: format!("{sheet_name}!J{row_index}"),
+            range: format!("{sheet_name}!{col_checked_in_by}{row_index}"),
             values: vec![vec![String::new()]],
         },
         ValueRange {
-            range: format!("{sheet_name}!R{row_index}"),
+            range: format!("{sheet_name}!{col_claim_token}{row_index}"),
             values: vec![vec![String::new()]],
         },
         ValueRange {
-            range: format!("{sheet_name}!S{row_index}"),
+            range: format!("{sheet_name}!{col_claimed_at}{row_index}"),
             values: vec![vec![String::new()]],
         },
     ];
@@ -634,12 +765,14 @@ pub async fn clear_checked_in(
     Ok(())
 }
 
-/// Mark an attendee as claimed by writing wallet to column P and claimed_at to column S.
+/// Mark an attendee as claimed by writing wallet and claimed_at columns.
 /// Called after a successful cNFT mint to persist the claim on the Google Sheet.
+#[allow(clippy::too_many_arguments)]
 pub async fn mark_claimed(
     row_index: usize,
     wallet_address: &str,
     claimed_at: &str,
+    mapping: &ColumnMapping,
     state: &AppState,
     sheet_id: &str,
     sheet_name: &str,
@@ -647,13 +780,18 @@ pub async fn mark_claimed(
 ) -> Result<String, String> {
     let access_token = get_cached_access_token(state, kv).await?;
 
+    use event_checkin_domain::models::attendee::ColumnKey as CK;
+
+    let col_solana = mapping.column_letter(CK::SolanaAddress);
+    let col_claimed_at = mapping.column_letter(CK::ClaimedAt);
+
     let data = vec![
         ValueRange {
-            range: format!("{sheet_name}!P{row_index}"),
+            range: format!("{sheet_name}!{col_solana}{row_index}"),
             values: vec![vec![wallet_address.to_string()]],
         },
         ValueRange {
-            range: format!("{sheet_name}!S{row_index}"),
+            range: format!("{sheet_name}!{col_claimed_at}{row_index}"),
             values: vec![vec![claimed_at.to_string()]],
         },
     ];
@@ -678,6 +816,7 @@ pub async fn mark_claimed(
 /// Updates column Q (qr_code_url) for each attendee.
 pub async fn update_qr_urls(
     updates: &[(usize, String)],
+    mapping: &ColumnMapping,
     state: &AppState,
     sheet_id: &str,
     sheet_name: &str,
@@ -689,11 +828,14 @@ pub async fn update_qr_urls(
 
     let access_token = get_cached_access_token(state, kv).await?;
 
+    use event_checkin_domain::models::attendee::ColumnKey as CK;
+    let col_qr = mapping.column_letter(CK::QrCodeUrl);
+
     // Build batch update with individual value ranges
     let data: Vec<ValueRange> = updates
         .iter()
         .map(|(row_index, url)| ValueRange {
-            range: format!("{sheet_name}!Q{row_index}"),
+            range: format!("{sheet_name}!{col_qr}{row_index}"),
             values: vec![vec![url.clone()]],
         })
         .collect();
@@ -735,6 +877,10 @@ pub async fn append_attendee_row(
     claim_token: &str,
     participation_type: &str,
     registration_date: &str,
+    contact_channel: Option<&str>,
+    contact_handle: Option<&str>,
+    deposit_agreed: bool,
+    mapping: &ColumnMapping,
     state: &AppState,
     sheet_id: &str,
     sheet_name: &str,
@@ -742,26 +888,72 @@ pub async fn append_attendee_row(
 ) -> Result<(), String> {
     let access_token = get_cached_access_token(state, kv).await?;
 
-    // 25 columns: A(0)..Y(24)
-    let mut row = vec![String::new(); 25];
-    row[0] = api_id.to_string(); // A — api_id
-    row[1] = name.to_string(); // B — name
-    row[2] = first_name.to_string(); // C — first_name
-    row[3] = last_name.to_string(); // D — last_name
-    row[4] = email.to_string(); // E — email
-    row[5] = "Self-Registered".to_string(); // F — ticket_name
-    row[6] = registration_date.to_string(); // G — registration_date
-    row[7] = "Approved".to_string(); // H — approval_status
-    row[17] = claim_token.to_string(); // R — claim_token
-    row[24] = participation_type.to_string(); // Y — participation_type
+    use event_checkin_domain::models::attendee::ColumnKey as CK;
+
+    // Determine row width: at least enough for all mapped columns
+    let row_len = mapping.total_columns.max(23);
+    let mut row = vec![String::new(); row_len];
+
+    let set = |row: &mut Vec<String>, key: CK, val: String| {
+        let idx = mapping.get_or_default(key);
+        if idx < row.len() {
+            row[idx] = val;
+        }
+    };
+
+    set(&mut row, CK::ApiId, api_id.to_string());
+    set(&mut row, CK::Name, name.to_string());
+    set(&mut row, CK::FirstName, first_name.to_string());
+    set(&mut row, CK::LastName, last_name.to_string());
+    set(&mut row, CK::Email, email.to_string());
+    set(&mut row, CK::TicketName, "Self-Registered".to_string());
+    set(
+        &mut row,
+        CK::RegistrationDate,
+        registration_date.to_string(),
+    );
+    set(&mut row, CK::ApprovalStatus, "Approved".to_string());
+    set(&mut row, CK::ClaimToken, claim_token.to_string());
+    set(
+        &mut row,
+        CK::ParticipationType,
+        participation_type.to_string(),
+    );
+    if let Some(channel) = contact_channel {
+        set(&mut row, CK::ContactChannel, channel.to_string());
+    }
+    if let Some(handle) = contact_handle {
+        set(&mut row, CK::ContactHandle, handle.to_string());
+    }
+    if deposit_agreed {
+        set(&mut row, CK::DepositAgreed, "Yes".to_string());
+    }
+
+    // Determine the last non-empty column to build the range
+    let last_col_idx = row.iter().rposition(|v| !v.is_empty()).unwrap_or(0);
+    let last_col_letter = {
+        let mut result = String::new();
+        let mut n = last_col_idx;
+        loop {
+            result.insert(0, (b'A' + (n % 26) as u8) as char);
+            if n < 26 {
+                break;
+            }
+            n = (n / 26) - 1;
+        }
+        result
+    };
+
+    // Truncate trailing empty columns
+    row.truncate(last_col_idx + 1);
 
     let url = format!(
-        "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{}!A:Y:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS",
+        "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{}!A:{last_col_letter}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS",
         urlencoding::encode(sheet_name)
     );
 
     let body = crate::http::ValueRange {
-        range: format!("{sheet_name}!A:Y"),
+        range: format!("{sheet_name}!A:{last_col_letter}"),
         values: vec![row],
     };
 

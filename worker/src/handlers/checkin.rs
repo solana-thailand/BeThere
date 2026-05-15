@@ -137,11 +137,23 @@ pub async fn check_in(
     // Frontend constructs the full claim URL using window.location.origin + /claim/{token}.
     let claim_token = Uuid::now_v7().to_string();
 
+    // Resolve column mapping for this event's sheet
+    let mapping = match sheets::get_column_mapping(&state, &event.sheet_id, &event.sheet_name, kv)
+        .await
+    {
+        Ok(m) => m,
+        Err(e) => {
+            tracing::warn!(error = %e, "failed to get column mapping, using hardcoded fallback");
+            event_checkin_domain::models::attendee::ColumnMapping::hardcoded()
+        }
+    };
+
     // Update the Google Sheet (writes timestamp, staff email, and claim_token)
     let timestamp = sheets::mark_checked_in(
         attendee.row_index,
         &claims.email,
         &claim_token,
+        &mapping,
         &state,
         &event.sheet_id,
         &event.sheet_name,
@@ -248,10 +260,22 @@ pub async fn undo_check_in(
         return Err(AppError::Validation("attendee is not checked in".to_string()).into());
     }
 
+    // Resolve column mapping for this event's sheet
+    let mapping = match sheets::get_column_mapping(&state, &event.sheet_id, &event.sheet_name, kv)
+        .await
+    {
+        Ok(m) => m,
+        Err(e) => {
+            tracing::warn!(error = %e, "failed to get column mapping, using hardcoded fallback");
+            event_checkin_domain::models::attendee::ColumnMapping::hardcoded()
+        }
+    };
+
     // Clear check-in columns in Google Sheet
     sheets::clear_checked_in(
         attendee.row_index,
         &claims.email,
+        &mapping,
         &state,
         &event.sheet_id,
         &event.sheet_name,

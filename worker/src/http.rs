@@ -204,7 +204,9 @@ pub struct AccessTokenResponse {
 /// Google Sheets API value range for read/write.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ValueRange {
+    #[serde(default)]
     pub range: String,
+    #[serde(default)]
     pub values: Vec<Vec<String>>,
 }
 

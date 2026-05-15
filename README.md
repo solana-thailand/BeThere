@@ -108,24 +108,33 @@ The `domain/` crate contains shared types (`Attendee`, `Claims`, `AppConfig`), Q
 
 ## Google Sheet Layout
 
-The attendee sheet (tab name configurable via `GOOGLE_SHEET_NAME`, default `"checkin"`):
+The attendee sheet (tab name configurable via `GOOGLE_SHEET_NAME`, default `"Attendees"`):
 
 | Column | Index | Field | Notes |
 |--------|-------|-------|-------|
 | A | 0 | `api_id` | Unique ID (e.g. `gst-abc123`) |
-| B | 1 | `name` | First name |
-| C | 2 | `last_name` | Last name |
-| D | 3 | `display_name` | Fallback display name |
+| B | 1 | `name` | Full name |
+| C | 2 | `first_name` | First name |
+| D | 3 | `last_name` | Last name |
 | E | 4 | `email` | Attendee email |
 | F | 5 | `ticket_name` | Ticket type |
-| G | 6 | `solana_address` | Filled at claim time (attendee wallet) |
+| G | 6 | `registration_date` | ISO 8601 registration date |
 | H | 7 | `approval_status` | Approval state |
-| I | 8 | `checked_in_at` | ISO 8601 timestamp |
-| J | 9 | `checked_in_by` | Staff email who checked in |
-| K | 10 | `qr_code_url` | QR code link |
-| L | 11 | `claim_token` | UUID generated at check-in (for NFT claim) |
-| M | 12 | `claimed_at` | Timestamp when NFT + refund claimed |
-| Y | 24 | `participation_type` | In-Person / Online |
+| I | 8 | `participation_type` | In-Person / Online |
+| J | 9 | `phone` | Phone number |
+| K | 10 | `contact_channel` | Telegram / Discord / etc. |
+| L | 11 | `contact_handle` | Contact username |
+| M | 12 | `deposit_agreed` | Yes/No |
+| N | 13 | `deposit_method` | USDC / THB / etc. |
+| O | 14 | `deposit_amount` | Deposit amount |
+| P | 15 | `deposit_tx_signature` | Transaction signature |
+| Q | 16 | `deposit_verified` | Deposit verification status |
+| R | 17 | `checked_in_at` | ISO 8601 timestamp |
+| S | 18 | `checked_in_by` | Staff email who checked in |
+| T | 19 | `solana_address` | Filled at claim time (attendee wallet) |
+| U | 20 | `qr_code_url` | QR code link |
+| V | 21 | `claim_token` | UUID generated at check-in (for NFT claim) |
+| W | 22 | `claimed_at` | Timestamp when NFT + refund claimed |
 
 A separate **"staff"** sheet tab (configurable via `GOOGLE_STAFF_SHEET_NAME`) holds authorized staff emails in column A (header in row 1, emails from row 2). This is unioned with the `STAFF_EMAILS` secret — a user is staff if their email appears in either source.
 
@@ -146,7 +155,7 @@ Non-secret vars are in `worker/wrangler.toml` `[vars]`:
 | Var | Default | Purpose |
 |-----|---------|---------|
 | `SERVER_URL` | `https://event-checkin.workers.dev` | Public URL for OAuth redirect |
-| `GOOGLE_SHEET_NAME` | `checkin` | Attendee sheet tab name |
+| `GOOGLE_SHEET_NAME` | `Attendees` | Attendee sheet tab name |
 | `GOOGLE_STAFF_SHEET_NAME` | `staff` | Staff sheet tab name |
 | `EVENT_NAME` | _(none)_ | Default event name for seeding |
 | `ORGANIZER_EMAILS` | _(none)_ | Comma-separated organizer emails for seeding |

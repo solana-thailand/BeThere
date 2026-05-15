@@ -442,9 +442,26 @@ pub async fn execute_claim(
             // Verify quiz/adventure completion (at least one must be passed)
             let quest_passed = verify_online_quest_completion(state, &event.id, token).await;
             if quest_passed {
+                // Resolve column mapping
+                let mapping = match crate::sheets::get_column_mapping(
+                    state,
+                    &event.sheet_id,
+                    &event.sheet_name,
+                    kv,
+                )
+                .await
+                {
+                    Ok(m) => m,
+                    Err(e) => {
+                        tracing::warn!(error = %e, "column mapping fallback to hardcoded");
+                        event_checkin_domain::models::attendee::ColumnMapping::hardcoded()
+                    }
+                };
+
                 // Auto virtual check-in — write to Google Sheet
                 match crate::sheets::mark_virtual_checked_in(
                     attendee.row_index,
+                    &mapping,
                     state,
                     &event.sheet_id,
                     &event.sheet_name,
@@ -628,12 +645,30 @@ pub async fn execute_claim(
         }
     };
 
-    // 10. Mark as claimed in Google Sheet (column G = wallet, column M = claimed_at)
+    // 10. Mark as claimed in Google Sheet
     let claimed_at = Utc::now().to_rfc3339();
+
+    // Resolve column mapping
+    let mapping = match crate::sheets::get_column_mapping(
+        state,
+        &event.sheet_id,
+        &event.sheet_name,
+        kv,
+    )
+    .await
+    {
+        Ok(m) => m,
+        Err(e) => {
+            tracing::warn!(error = %e, "column mapping fallback to hardcoded");
+            event_checkin_domain::models::attendee::ColumnMapping::hardcoded()
+        }
+    };
+
     if let Err(ref e) = crate::sheets::mark_claimed(
         attendee.row_index,
         wallet_address,
         &claimed_at,
+        &mapping,
         state,
         &event.sheet_id,
         &event.sheet_name,

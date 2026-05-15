@@ -1171,10 +1171,17 @@ pub struct EventDetail {
     pub max_refundable_deposits: u32,
     #[serde(default)]
     pub event_format: EventFormat,
+    #[serde(default = "default_true_fn")]
+    pub require_contact_info: bool,
     #[serde(default)]
     pub created_at: String,
     #[serde(default)]
     pub updated_at: String,
+}
+
+/// Default true helper for serde.
+fn default_true_fn() -> bool {
+    true
 }
 
 /// Response for GET /api/events — list all events.
@@ -1253,6 +1260,8 @@ pub struct CreateEventBody {
     pub max_refundable_deposits: u32,
     #[serde(default)]
     pub event_format: EventFormat,
+    #[serde(default = "default_true_fn")]
+    pub require_contact_info: bool,
 }
 /// Request body for PUT /api/events/{id} — update event.
 /// All fields optional for partial update.
@@ -1325,6 +1334,8 @@ pub struct UpdateEventBody {
     pub expected_updated_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub event_format: Option<EventFormat>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub require_contact_info: Option<bool>,
 }
 
 /// Response from event create/update (partial data).

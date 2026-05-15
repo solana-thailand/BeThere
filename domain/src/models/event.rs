@@ -8,6 +8,11 @@
 
 use serde::{Deserialize, Serialize};
 
+/// Helper for serde default = true.
+fn default_true() -> bool {
+    true
+}
+
 /// Event format — controls deposit, check-in, claim, and escrow paths.
 ///
 /// - `InPerson`: Physical event, deposit auto-enabled, physical check-in required.
@@ -189,7 +194,7 @@ pub struct EventConfig {
     // ── Google Sheets ─────────────────────────────────────────────────
     /// Google Sheets spreadsheet ID (contains attendee + staff tabs).
     pub sheet_id: String,
-    /// Tab name for attendee data (e.g. "checkin").
+    /// Tab name for attendee data (e.g. "Attendees").
     pub sheet_name: String,
     /// Tab name for staff allowlist (e.g. "staff").
     pub staff_sheet_name: String,
@@ -285,6 +290,12 @@ pub struct EventConfig {
     /// Controls deposit, check-in, escrow, and claim paths.
     #[serde(default)]
     pub event_format: EventFormat,
+
+    // ── Registration settings ────────────────────────────────────────
+    /// Whether contact info (channel + handle) is required during self-registration.
+    /// Defaults to true. Organizers can disable for events that don't need it.
+    #[serde(default = "default_true")]
+    pub require_contact_info: bool,
 
     // ── Timestamps ────────────────────────────────────────────────────
     /// ISO 8601 creation timestamp.
@@ -420,6 +431,7 @@ impl EventConfig {
             description: String::new(),
             location: String::new(),
             event_format: EventFormat::InPerson,
+            require_contact_info: true,
             created_at: String::new(),
             updated_at: String::new(),
             updated_by: String::new(),
@@ -451,7 +463,7 @@ pub struct CreateEventRequest {
     pub event_end_ms: i64,
     /// Google Sheets spreadsheet ID (required).
     pub sheet_id: String,
-    /// Tab name for attendee data (defaults to "checkin").
+    /// Tab name for attendee data (defaults to "Attendees").
     #[serde(default)]
     pub sheet_name: String,
     /// Tab name for staff allowlist (defaults to "staff").
@@ -528,9 +540,10 @@ pub struct CreateEventRequest {
     /// Event format — In-Person, Online, or Hybrid.
     #[serde(default)]
     pub event_format: EventFormat,
+    /// Whether contact info is required during self-registration (defaults to true).
+    #[serde(default = "default_true")]
+    pub require_contact_info: bool,
 }
-
-/// Request body for updating an existing event.
 /// Request body for PUT /api/events/{id} — update an existing event.
 /// All fields are optional; only provided fields are updated.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -643,6 +656,9 @@ pub struct UpdateEventRequest {
     /// New event format.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub event_format: Option<EventFormat>,
+    /// Whether contact info is required during self-registration.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub require_contact_info: Option<bool>,
 }
 
 /// Response for GET /api/events — list all events.

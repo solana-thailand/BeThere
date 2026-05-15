@@ -194,13 +194,31 @@ pub async fn generate_qrs(
         })
         .collect();
 
-    // Batch update the Google Sheet
-    let updated = sheets::update_qr_urls(&updates, &state, &event.sheet_id, &event.sheet_name, kv)
+    // Resolve column mapping
+    let mapping = match sheets::get_column_mapping(&state, &event.sheet_id, &event.sheet_name, kv)
         .await
-        .map_err(|e| {
-            tracing::error!(error = ?e, "failed to update QR URLs in sheet");
-            AppError::Internal(format!("failed to write QR URLs to sheet: {e}"))
-        })?;
+    {
+        Ok(m) => m,
+        Err(e) => {
+            tracing::warn!(error = %e, "failed to get column mapping, using hardcoded fallback");
+            event_checkin_domain::models::attendee::ColumnMapping::hardcoded()
+        }
+    };
+
+    // Batch update the Google Sheet
+    let updated = sheets::update_qr_urls(
+        &updates,
+        &mapping,
+        &state,
+        &event.sheet_id,
+        &event.sheet_name,
+        kv,
+    )
+    .await
+    .map_err(|e| {
+        tracing::error!(error = ?e, "failed to update QR URLs in sheet");
+        AppError::Internal(format!("failed to write QR URLs to sheet: {e}"))
+    })?;
 
     tracing::info!(
         total_updated = updated,

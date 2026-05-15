@@ -52,6 +52,7 @@ pub struct EventForm {
     pub deposit_enabled: bool,
     pub deposit_amount_usdc: String,
     pub deposit_amount_thb: String,
+    pub require_contact_info: bool,
     promptpay_id: String,
     pub escrow_address: String,
     pub escrow_status: api::EscrowStatus,
@@ -147,13 +148,14 @@ fn get_self_hosted_nft_urls() -> (String, String) {
 /// Create a default form state with sensible defaults.
 fn default_form() -> EventForm {
     EventForm {
-        sheet_name: "checkin".to_string(),
+        sheet_name: "Attendees".to_string(),
         staff_sheet_name: "staff".to_string(),
         event_format: api::EventFormat::InPerson,
         quiz_enabled: true,
         deposit_enabled: true,
         deposit_amount_usdc: String::new(),
         deposit_amount_thb: String::new(),
+        require_contact_info: true,
         promptpay_id: String::new(),
         escrow_address: String::new(),
         escrow_status: api::EscrowStatus::None,
@@ -184,7 +186,7 @@ fn form_from_detail(detail: &api::EventDetail) -> EventForm {
         },
         sheet_id: detail.sheet_id.clone(),
         sheet_name: if detail.sheet_name.is_empty() {
-            "checkin".to_string()
+            "Attendees".to_string()
         } else {
             detail.sheet_name.clone()
         },
@@ -209,6 +211,7 @@ fn form_from_detail(detail: &api::EventDetail) -> EventForm {
         deposit_enabled: detail.deposit_enabled,
         deposit_amount_usdc: if detail.deposit_amount_usdc > 0 { format!("{:.6}", detail.deposit_amount_usdc as f64 / 1_000_000.0).trim_end_matches('0').trim_end_matches('.').to_string() } else { String::new() },
         deposit_amount_thb: if detail.deposit_amount_thb > 0 { detail.deposit_amount_thb.to_string() } else { String::new() },
+        require_contact_info: detail.require_contact_info,
         promptpay_id: detail.promptpay_id.clone(),
         escrow_address: detail.escrow_address.clone(),
         escrow_status: detail.escrow_status.clone(),
@@ -551,6 +554,7 @@ pub fn EventsPage(
                 refund_deadline_hours: current_form.refund_deadline_hours.parse::<u32>().unwrap_or(0),
                 max_refundable_deposits: current_form.max_refundable_deposits.parse::<u32>().unwrap_or(0),
                 event_format: current_form.event_format.clone(),
+                require_contact_info: current_form.require_contact_info,
             };
 
             // Determine if we should also initialize escrow after creating the event.
@@ -689,6 +693,7 @@ pub fn EventsPage(
                 max_refundable_deposits: Some(current_form.max_refundable_deposits.parse::<u32>().unwrap_or(0)),
                 expected_updated_at: if current_form.updated_at.is_empty() { None } else { Some(current_form.updated_at.clone()) },
                 event_format: Some(current_form.event_format.clone()),
+                require_contact_info: Some(current_form.require_contact_info),
             };
 
             leptos::task::spawn_local(async move {
@@ -1514,7 +1519,7 @@ pub fn EventsPage(
                                         <input
                                             type="text"
                                             class="quiz-number-input"
-                                            placeholder="checkin"
+                                            placeholder="Attendees"
                                             prop:value=move || form.get().sheet_name
                                             on:input=move |ev| set_form.update(|f| f.sheet_name = event_target_value(&ev))
                                         />
@@ -1790,6 +1795,27 @@ pub fn EventsPage(
                                                 {move || if form.get().quiz_enabled { "Yes" } else { "No" }}
                                             </span>
                                         </label>
+                                    </div>
+                                    <div class="quiz-setting-item">
+                                        <label class="quiz-field-label">"Require Contact Info"</label>
+                                        <label class="quiz-toggle-label" style="cursor:pointer;padding-top:0.3rem">
+                                            <input
+                                                type="checkbox"
+                                                class="quiz-toggle-checkbox"
+                                                prop:checked=move || form.get().require_contact_info
+                                                on:change=move |ev| {
+                                                    let checked = event_target_checked(&ev);
+                                                    set_form.update(|f| f.require_contact_info = checked);
+                                                }
+                                            />
+                                            <span class="quiz-toggle-switch"></span>
+                                            <span class="quiz-toggle-text">
+                                                {move || if form.get().require_contact_info { "Yes" } else { "No" }}
+                                            </span>
+                                        </label>
+                                        <span class="quiz-setting-hint">
+                                            "When enabled, self-registration requires attendees to provide a contact channel (Telegram/Line/Facebook/X) and username. Disable for events that don't need it."
+                                        </span>
                                     </div>
                                     // Status selector (edit only)
                                     <Show when=move || current_view.get() == EventsView::Edit fallback=|| view! { <div></div> }>

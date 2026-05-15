@@ -162,7 +162,7 @@ The response should include `"nft_available": true` when all config is set.
 |-----|---------|---------|
 | `SERVER_URL` | `https://event-checkin.workers.dev` | Public URL |
 | `HELIUS_RPC_URL` | `https://mainnet.helius-rpc.com` | Solana RPC |
-| `GOOGLE_SHEET_NAME` | `checkin` | Attendee sheet tab |
+| `GOOGLE_SHEET_NAME` | `Attendees` | Attendee sheet tab |
 | `GOOGLE_STAFF_SHEET_NAME` | `staff` | Staff sheet tab |
 
 ### Per-Event Config (Admin UI / KV)

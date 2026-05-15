@@ -163,7 +163,7 @@ pub async fn create_event(
         event_end_ms: req.event_end_ms,
         sheet_id: req.sheet_id.trim().to_string(),
         sheet_name: if req.sheet_name.is_empty() {
-            "checkin".to_string()
+            "Attendees".to_string()
         } else {
             req.sheet_name.clone()
         },
@@ -208,6 +208,7 @@ pub async fn create_event(
         description: req.description.trim().to_string(),
         location: req.location.trim().to_string(),
         event_format: req.event_format.clone(),
+        require_contact_info: req.require_contact_info,
         created_at: now.clone(),
         updated_at: now,
         updated_by: updated_by.to_string(),
@@ -430,6 +431,9 @@ pub async fn update_event(
         if v.has_in_person() {
             config.deposit_enabled = true;
         }
+    }
+    if let Some(v) = req.require_contact_info {
+        config.require_contact_info = v;
     }
 
     config.updated_at = chrono::Utc::now().to_rfc3339();
@@ -704,6 +708,7 @@ pub async fn seed_from_config(
         description: String::new(),
         location: String::new(),
         event_format: event_checkin_domain::models::event::EventFormat::InPerson,
+        require_contact_info: true,
         created_at: now.clone(),
         updated_at: now,
         updated_by: String::new(), // seeded from config, no user context

@@ -21,6 +21,9 @@ struct RegisterBody {
     name: String,
     email: String,
     participation_type: Option<String>,
+    contact_channel: Option<String>,
+    contact_handle: Option<String>,
+    deposit_agreed: Option<bool>,
 }
 
 /// Next step returned after registration.
@@ -93,6 +96,7 @@ pub struct PublicEventData {
     pub nft_description_template: String,
     pub quiz_enabled: bool,
     pub refund_deadline_hours: u64,
+    pub require_contact_info: bool,
     pub description: String,
     pub location: String,
     pub created_at: String,
@@ -455,13 +459,18 @@ fn render_loaded_event(
         None
     };
     let refund_label = format_refund_deadline(data.refund_deadline_hours);
+    let deposit_thb = data.deposit_amount_thb;
     let _show_deposit_cta = has_deposit && !event_completed.get();
     let show_reg_form = !event_completed.get();
+    let require_contact = data.require_contact_info;
 
     // Registration form signals
     let (reg_name, set_reg_name) = signal(String::new());
     let (reg_email, set_reg_email) = signal(String::new());
     let (reg_participation, set_reg_participation) = signal(String::new());
+    let (reg_contact_channel, set_reg_contact_channel) = signal(String::new());
+    let (reg_contact_handle, set_reg_contact_handle) = signal(String::new());
+    let (reg_deposit_agreed, set_reg_deposit_agreed) = signal(false);
     let (reg_state, set_reg_state) = signal(RegState::Idle);
 
     view! {
@@ -740,6 +749,54 @@ fn render_loaded_event(
                                         ().into_any()
                                     }
                                 }}
+                                // Preferred Contact Channel
+                                <div style="display:flex;flex-direction:column;gap:0.25rem;">
+                                    <label style="font-size:0.8rem;color:var(--text-secondary);">
+                                        "Preferred Contact Channel / ช่องทางที่สะดวกให้ทีมงานติดต่อกลับเพื่อยืนยันสิทธิ์ (Confirm Seat)"
+                                        {move || if require_contact {
+                                            view! { <span style="color:#f87171;">" *"</span> }.into_any()
+                                        } else {
+                                            ().into_any()
+                                        }}
+                                    </label>
+                                    <select
+                                        style="width:100%;padding:0.6rem 0.8rem;background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:0.9rem;outline:none;"
+                                        on:change=move |ev| set_reg_contact_channel.set(event_target_value(&ev))
+                                    >
+                                        <option value="">"Select channel..."</option>
+                                        <option value="Telegram">"Telegram"</option>
+                                        <option value="Line">"Line"</option>
+                                        <option value="Facebook">"Facebook"</option>
+                                        <option value="X (Twitter)">"X (Twitter)"</option>
+                                    </select>
+                                </div>
+                                // Contact Handle
+                                <input
+                                    type="text"
+                                    placeholder="Username or profile link / โปรดระบุ Username หรือลิงก์โปรไฟล์"
+                                    prop:value=move || reg_contact_handle.get()
+                                    on:input=move |ev| set_reg_contact_handle.set(event_target_value(&ev))
+                                    style="width:100%;padding:0.6rem 0.8rem;background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:0.9rem;outline:none;"
+                                />
+                                // Deposit Agreement (only when deposit enabled)
+                                {move || {
+                                    if has_deposit {
+                                        let dep_thb = deposit_thb;
+                                        view! {
+                                            <label style="display:flex;align-items:flex-start;gap:0.5rem;font-size:0.85rem;color:var(--text-secondary);cursor:pointer;">
+                                                <input
+                                                    type="checkbox"
+                                                    style="margin-top:0.2rem;accent-color:var(--accent);"
+                                                    checked=move || reg_deposit_agreed.get()
+                                                    on:change=move |ev| set_reg_deposit_agreed.set(event_target_checked(&ev))
+                                                />
+                                                <span>{format!("ยอมรับการจ่ายมัดจำ {} บาท (จะได้รับคืนภายในงาน) / I agree to pay a {} THB commitment deposit to secure my seat and understand I will receive a refund upon check-in at the venue.", dep_thb, dep_thb)}</span>
+                                            </label>
+                                        }.into_any()
+                                    } else {
+                                        ().into_any()
+                                    }
+                                }}
                                 // Submit button
                                 {
                                     let slug = slug.clone();
@@ -750,6 +807,9 @@ fn render_loaded_event(
                                                 let name_val = reg_name.get();
                                                 let email_val = reg_email.get();
                                                 let part_val = reg_participation.get();
+                                                let channel_val = reg_contact_channel.get();
+                                                let handle_val = reg_contact_handle.get();
+                                                let deposit_val = reg_deposit_agreed.get();
 
                                                 // Client-side validation
                                                 if name_val.trim().is_empty() {
@@ -760,6 +820,18 @@ fn render_loaded_event(
                                                     set_reg_state.set(RegState::Error("Please enter a valid email".to_string()));
                                                     return;
                                                 }
+                                                if require_contact && channel_val.trim().is_empty() {
+                                                    set_reg_state.set(RegState::Error("Please select a preferred contact channel".to_string()));
+                                                    return;
+                                                }
+                                                if require_contact && handle_val.trim().is_empty() {
+                                                    set_reg_state.set(RegState::Error("Please provide your contact username or profile link".to_string()));
+                                                    return;
+                                                }
+                                                if has_deposit && !deposit_val {
+                                                    set_reg_state.set(RegState::Error("You must agree to the deposit commitment to register".to_string()));
+                                                    return;
+                                                }
 
                                                 set_reg_state.set(RegState::Submitting);
                                                 let body = RegisterBody {
@@ -767,6 +839,9 @@ fn render_loaded_event(
                                                     name: name_val.trim().to_string(),
                                                     email: email_val.trim().to_lowercase(),
                                                     participation_type: if part_val.is_empty() { None } else { Some(part_val.clone()) },
+                                                    contact_channel: if channel_val.trim().is_empty() { None } else { Some(channel_val.trim().to_string()) },
+                                                    contact_handle: if handle_val.trim().is_empty() { None } else { Some(handle_val.trim().to_string()) },
+                                                    deposit_agreed: if deposit_val { Some(true) } else { None },
                                                 };
 
                                                 leptos::task::spawn_local(async move {

@@ -587,13 +587,11 @@ fn extract_amount_from_transfers(
     // Fallback: check account token balance changes
     for account in &tx.account_data {
         for change in &account.token_balance_changes {
-            if let Some(raw) = &change.raw_token_amount {
-                if let Ok(amount) = raw.token_amount.parse::<u64>() {
-                    if amount > 0 {
+            if let Some(raw) = &change.raw_token_amount
+                && let Ok(amount) = raw.token_amount.parse::<u64>()
+                    && amount > 0 {
                         return Some(amount);
                     }
-                }
-            }
         }
     }
 
@@ -871,11 +869,10 @@ fn parse_rpc_transaction(
     sig_info: &RpcSignatureInfo,
 ) -> Option<OnChainEvent> {
     // Skip if meta has error
-    if let Some(meta) = &tx.meta {
-        if meta.err.is_some() {
+    if let Some(meta) = &tx.meta
+        && meta.err.is_some() {
             return None;
         }
-    }
 
     // Find instructions targeting the escrow program
     for instr in &tx.transaction.message.instructions {
@@ -989,11 +986,10 @@ pub async fn resolve_event_by_escrow(kv: &KvStore, escrow_address: &str) -> Opti
     let index = crate::event_store::get_event_index(kv).await.ok()?;
 
     for meta in &index.events {
-        if let Ok(Some(config)) = crate::event_store::get_event_config(kv, &meta.id).await {
-            if config.escrow_address == escrow_address {
+        if let Ok(Some(config)) = crate::event_store::get_event_config(kv, &meta.id).await
+            && config.escrow_address == escrow_address {
                 return Some(config.id);
             }
-        }
     }
 
     None
