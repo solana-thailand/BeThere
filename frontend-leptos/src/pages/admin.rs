@@ -212,6 +212,7 @@ pub fn Admin() -> impl IntoView {
     let (is_loading, set_is_loading) = signal(true);
     let (qr_generating, set_qr_generating) = signal(false);
     let (qr_result, set_qr_result) = signal(None::<GenerateQrData>);
+    let (flushing_cache, set_flushing_cache) = signal(false);
     let (toast, set_toast) = signal(None::<components::ToastMessage>);
 
     // Active section — Events by default (organizers create event first)
@@ -491,6 +492,35 @@ pub fn Admin() -> impl IntoView {
         );
     };
 
+    // Handle flush cache button
+    let handle_flush_cache = move |_: web_sys::MouseEvent| {
+        if flushing_cache.get() {
+            return;
+        }
+        let event_id = get_event_id();
+        set_flushing_cache.set(true);
+        leptos::task::spawn_local(async move {
+            match api::flush_cache(event_id.as_deref()).await {
+                Ok(_) => {
+                    components::show_toast(
+                        &set_toast,
+                        "Cache flushed — attendee list & column mapping refreshed",
+                        components::ToastType::Success,
+                    );
+                    set_refresh_counter.update(|c| *c += 1);
+                }
+                Err(e) => {
+                    components::show_toast(
+                        &set_toast,
+                        &format!("Flush failed: {}", e.message),
+                        components::ToastType::Error,
+                    );
+                }
+            }
+            set_flushing_cache.set(false);
+        });
+    };
+
     // Handle sign out
     let handle_sign_out = move |_: web_sys::MouseEvent| {
         auth::logout();
@@ -718,6 +748,19 @@ pub fn Admin() -> impl IntoView {
                             "Refresh"
                         </button>
                         <button
+                            class="btn btn-outline btn-sm"
+                            on:click=handle_flush_cache
+                            disabled=move || flushing_cache.get()
+                        >
+                            {move || {
+                                if flushing_cache.get() {
+                                    "Flushing...".to_string()
+                                } else {
+                                    "Flush Cache".to_string()
+                                }
+                            }}
+                        </button>
+                        <button
                             class="btn btn-primary btn-sm"
                             on:click=handle_generate_qrs
                             disabled=move || qr_generating.get()
@@ -876,6 +919,10 @@ pub fn Admin() -> impl IntoView {
                                         Some(ref eid) => format!("/deposit/{api_id}?event_id={eid}"),
                                         None => format!("/deposit/{api_id}"),
                                     };
+                                    let ticket_link = match active_event_id.get() {
+                                        Some(ref eid) => format!("/ticket/{api_id}?event_id={eid}"),
+                                        None => format!("/ticket/{api_id}"),
+                                    };
 
                                     view! {
                                         <div class="attendee-item" class:vip=is_vip class:selected=is_selected>
@@ -913,6 +960,34 @@ pub fn Admin() -> impl IntoView {
                                                 >
                                                     "Deposit"
                                                 </a>
+                                                <button
+                                                    class="btn btn-outline btn-xs btn-xs-override"
+                                                    title="Copy ticket link"
+                                                    on:click={
+                                                        let ticket_link = ticket_link.clone();
+                                                        let set_toast = set_toast;
+                                                        move |_| {
+                                                            let full_url = format!("{}{}",
+                                                                web_sys::window()
+                                                                    .and_then(|w| w.location().origin().ok())
+                                                                    .unwrap_or_default(),
+                                                                &ticket_link
+                                                            );
+                                                            let clipboard = web_sys::window()
+                                                                .unwrap()
+                                                                .navigator()
+                                                                .clipboard();
+                                                            let _ = clipboard.write_text(&full_url);
+                                                            components::show_toast(
+                                                                &set_toast,
+                                                                "Ticket link copied!",
+                                                                ToastType::Success,
+                                                            );
+                                                        }
+                                                    }
+                                                >
+                                                    "Ticket"
+                                                </button>
                                                 <Show
                                                     when=move || has_time_ago
                                                     fallback=|| view! { <div></div> }

@@ -790,6 +790,30 @@ pub async fn generate_qrs(force: bool, event_id: Option<&str>) -> Result<Generat
     })
 }
 
+/// Flush server-side caches (attendee list + column mapping) for an event.
+pub async fn flush_cache(event_id: Option<&str>) -> Result<bool, ApiError> {
+    let path = match event_id {
+        Some(eid) if !eid.is_empty() => format!("/admin/flush-cache?event_id={eid}"),
+        _ => "/admin/flush-cache".to_string(),
+    };
+    let response = api_post(&path).await?;
+
+    if !response.ok() {
+        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
+            success: false,
+            data: None,
+            error: Some("Flush cache failed".to_string()),
+            correlation_id: None,
+        });
+        return Err(ApiError {
+            message: body.error.unwrap_or("Flush cache failed".to_string()),
+            status: response.status(),
+        });
+    }
+
+    Ok(true)
+}
+
 // ===== Claim API types (public — no auth required) =====
 
 /// Dynamic event metadata served from backend config.

@@ -64,6 +64,29 @@ async fn invalidate_attendee_cache(kv: Option<&KvStore>, sheet_id: &str, sheet_n
     }
 }
 
+/// Invalidate the column mapping cache for the given sheet.
+/// Errors are non-fatal — logged and ignored.
+async fn invalidate_column_map_cache(kv: Option<&KvStore>, sheet_id: &str, sheet_name: &str) {
+    if let Some(kv) = kv {
+        let key = column_map_cache_key(sheet_id, sheet_name);
+        if let Err(e) = kv.delete(&key).await {
+            tracing::debug!(error = ?e, "failed to invalidate column map cache");
+        }
+    }
+}
+
+/// Flush all caches (attendee list + column mapping) for a sheet.
+pub async fn flush_caches(
+    _state: &AppState,
+    sheet_id: &str,
+    sheet_name: &str,
+    kv: Option<&KvStore>,
+) {
+    invalidate_attendee_cache(kv, sheet_id, sheet_name).await;
+    invalidate_column_map_cache(kv, sheet_id, sheet_name).await;
+    tracing::info!(sheet_id = %sheet_id, sheet_name = %sheet_name, "flushed all caches");
+}
+
 // ---------------------------------------------------------------------------
 // Access token
 // ---------------------------------------------------------------------------
@@ -649,6 +672,7 @@ pub async fn mark_checked_in(
     );
 
     invalidate_attendee_cache(kv, sheet_id, sheet_name).await;
+    invalidate_column_map_cache(kv, sheet_id, sheet_name).await;
     Ok(timestamp)
 }
 
@@ -698,6 +722,7 @@ pub async fn mark_virtual_checked_in(
     );
 
     invalidate_attendee_cache(kv, sheet_id, sheet_name).await;
+    invalidate_column_map_cache(kv, sheet_id, sheet_name).await;
     Ok(timestamp)
 }
 
@@ -762,6 +787,7 @@ pub async fn clear_checked_in(
     );
 
     invalidate_attendee_cache(kv, sheet_id, sheet_name).await;
+    invalidate_column_map_cache(kv, sheet_id, sheet_name).await;
     Ok(())
 }
 
@@ -854,6 +880,7 @@ pub async fn update_qr_urls(
     tracing::info!(count = updated, "updated qr code urls in google sheets");
 
     invalidate_attendee_cache(kv, sheet_id, sheet_name).await;
+    invalidate_column_map_cache(kv, sheet_id, sheet_name).await;
     Ok(updated)
 }
 
@@ -863,10 +890,10 @@ pub async fn update_qr_urls(
 
 /// Append a full attendee row to the event's Google Sheet.
 ///
-/// Columns A–Y (25 columns), unused slots filled with empty strings:
+/// Columns A–AB (28 columns), unused slots filled with empty strings:
 /// A[0]=api_id, B[1]=name, C[2]=first_name, D[3]=last_name, E[4]=email,
 /// F[5]="Self-Registered", G[6]=registration_date, H[7]="Approved",
-/// R[17]=claim_token, Y[24]=participation_type.
+/// R[17]=claim_token, I[8]=participation_type.
 #[allow(clippy::too_many_arguments)]
 pub async fn append_attendee_row(
     api_id: &str,
@@ -891,7 +918,7 @@ pub async fn append_attendee_row(
     use event_checkin_domain::models::attendee::ColumnKey as CK;
 
     // Determine row width: at least enough for all mapped columns
-    let row_len = mapping.total_columns.max(23);
+    let row_len = mapping.total_columns.max(28);
     let mut row = vec![String::new(); row_len];
 
     let set = |row: &mut Vec<String>, key: CK, val: String| {
@@ -967,6 +994,7 @@ pub async fn append_attendee_row(
     );
 
     invalidate_attendee_cache(kv, sheet_id, sheet_name).await;
+    invalidate_column_map_cache(kv, sheet_id, sheet_name).await;
     Ok(())
 }
 

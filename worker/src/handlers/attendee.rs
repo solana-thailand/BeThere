@@ -189,3 +189,26 @@ fn mask_email(email: &str) -> String {
     let first = local.chars().next().unwrap_or('*');
     format!("{first}***@{domain}")
 }
+
+/// POST /api/admin/flush-cache
+/// Flush all server-side caches (attendee list + column mapping) for an event.
+/// Use after changing sheet structure or headers.
+#[worker::send]
+pub async fn flush_cache(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Query(query): Query<EventIdQuery>,
+) -> Result<ApiOk<serde_json::Value>, crate::error::WorkerError> {
+    tracing::info!("flushing caches (requested by: {})", claims.email);
+
+    let event = resolve_event_with_access(&state, &claims, query.event_id.as_deref()).await?;
+    let kv = resolve_kv(&state);
+
+    sheets::flush_caches(&state, &event.sheet_id, &event.sheet_name, kv).await;
+
+    Ok(ApiOk::new(json!({
+        "flushed": true,
+        "event_id": event.id,
+        "sheet_id": event.sheet_id,
+    })))
+}

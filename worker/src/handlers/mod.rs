@@ -102,6 +102,8 @@ pub fn routes(state: AppState) -> Router<()> {
         .route("/checkin/{id}", post(checkin::check_in))
         .route("/attendee/{id}/undo-checkin", post(checkin::undo_check_in))
         .route("/generate-qrs", post(qr::generate_qrs))
+        // Flush server-side caches (attendee list + column mapping)
+        .route("/admin/flush-cache", post(attendee::flush_cache))
         // Walk-in attendee registration (protected — staff registers on-the-spot)
         .route("/walkin/register", post(walkin::register_walkin))
         // Admin quiz management (protected — organizer sets questions)

@@ -82,6 +82,11 @@ mod tests {
             solana_address: None,
             claim_token: None,
             claimed_at: None,
+            bank_account: None,
+            bank_name: None,
+            account_name: None,
+            refund_status: None,
+            send_email_status: None,
             row_index: 2,
         }
     }

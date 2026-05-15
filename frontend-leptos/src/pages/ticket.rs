@@ -44,6 +44,7 @@ pub fn Ticket() -> impl IntoView {
     let params = use_params::<TicketParams>();
 
     let (state, set_state) = signal(TicketState::Loading);
+    let (fullscreen_qr, set_fullscreen_qr) = signal(false);
 
     // Extract attendee_id from URL and event_id from query, then fetch ticket data
     Effect::new(move |_| {
@@ -127,9 +128,6 @@ pub fn Ticket() -> impl IntoView {
                         let api_id = data.attendee.api_id.clone();
                         let claim_token = data.attendee.claim_token.clone();
 
-                        // Wrap QR image in a signal so it can be accessed from multiple closures
-                        let (qr_signal, _) = signal(qr_image);
-
                         // Status text (pre-computed to avoid FnOnce issues)
                         let status_detail = if is_checked_in {
                             let ts = checked_in_at.as_deref()
@@ -162,14 +160,14 @@ pub fn Ticket() -> impl IntoView {
                                         view! {
                                             <div class="ticket-qr-wrapper">
                                                 <img
-                                                    src=qr_signal.get().unwrap_or_default()
+                                                    src=qr_image.unwrap_or_default()
                                                     alt="Check-in QR Code"
                                                     class="ticket-qr-img"
                                                 />
                                             </div>
                                             <button
                                                 class="btn btn-outline btn-sm ticket-fullscreen-btn"
-                                                on:click=move |_| { /* TODO: fullscreen toggle */ }
+                                                on:click=move |_| set_fullscreen_qr.set(true)
                                             >
                                                 <Icon icon=IconName::Expand class="icon-sm" />
                                                 " Full Screen"
@@ -326,5 +324,45 @@ pub fn Ticket() -> impl IntoView {
                 }}
             </div>
         </div>
+
+        // Fullscreen QR overlay — rendered outside main layout, controlled by signal
+        <Show
+            when=move || fullscreen_qr.get()
+            fallback=|| view! { <div></div> }
+        >
+            <div
+                class="ticket-fullscreen-overlay"
+                on:click=move |_| set_fullscreen_qr.set(false)
+            >
+                <div
+                    class="ticket-fullscreen-card"
+                    on:click=move |ev| ev.stop_propagation()
+                >
+                    <div class="ticket-fullscreen-header">
+                        <span class="ticket-fullscreen-name">
+                            {move || match state.get() {
+                                TicketState::Found(d) => utils::escape_html(&d.attendee.name),
+                                _ => String::new(),
+                            }}
+                        </span>
+                        <button
+                            class="ticket-fullscreen-close"
+                            on:click=move |_| set_fullscreen_qr.set(false)
+                        >
+                            "✕"
+                        </button>
+                    </div>
+                    <img
+                        src=move || match state.get() {
+                            TicketState::Found(d) => d.qr_image.unwrap_or_default(),
+                            _ => String::new(),
+                        }
+                        alt="QR Code"
+                        class="ticket-fullscreen-qr"
+                    />
+                    <p class="ticket-fullscreen-hint">"Show this code to staff"</p>
+                </div>
+            </div>
+        </Show>
     }
 }

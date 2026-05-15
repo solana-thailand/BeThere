@@ -67,6 +67,12 @@ pub struct Attendee {
     pub qr_code_url: Option<String>,
     pub claim_token: Option<String>,
     pub claimed_at: Option<String>,
+    // Section 6: Bank & Refund (X–AB)
+    pub bank_account: Option<String>,
+    pub bank_name: Option<String>,
+    pub account_name: Option<String>,
+    pub refund_status: Option<String>,
+    pub send_email_status: Option<String>,
     pub row_index: usize,
 }
 
@@ -86,8 +92,14 @@ impl Attendee {
     /// Online attendees should not be checked in at the physical event.
     /// Uses substring matching since the sheet value may be longer
     /// (e.g. "In-Person (Physical Attendance)", "In Person", "IN-PERSON").
+    ///
+    /// Defaults to `true` when participation_type is empty — legacy events
+    /// predate this field and were all in-person.
     pub fn is_in_person(&self) -> bool {
         let lower = self.participation_type.trim().to_lowercase();
+        if lower.is_empty() {
+            return true;
+        }
         lower.contains("in-person") || lower.contains("in person")
     }
 
@@ -137,6 +149,12 @@ pub enum ColumnKey {
     QrCodeUrl,
     ClaimToken,
     ClaimedAt,
+    // Section 6: Bank & Refund (X–AB)
+    BankAccount,
+    BankName,
+    AccountName,
+    RefundStatus,
+    SendEmailStatus,
 }
 
 impl ColumnKey {
@@ -171,6 +189,12 @@ impl ColumnKey {
             ColumnKey::QrCodeUrl,
             ColumnKey::ClaimToken,
             ColumnKey::ClaimedAt,
+            // Section 6: Bank & Refund (X–AB)
+            ColumnKey::BankAccount,
+            ColumnKey::BankName,
+            ColumnKey::AccountName,
+            ColumnKey::RefundStatus,
+            ColumnKey::SendEmailStatus,
         ]
     }
 
@@ -188,9 +212,12 @@ impl ColumnKey {
             ColumnKey::TicketName => &["ticket_name", "ticket", "ticket type", "ticket_type"],
             ColumnKey::RegistrationDate => &["registration_date", "registered_at", "created_at"],
             ColumnKey::ApprovalStatus => &["approval_status", "status"],
-            ColumnKey::ParticipationType => {
-                &["participation_type", "attendance_type", "attendance"]
-            }
+            ColumnKey::ParticipationType => &[
+                "participation_type",
+                "participant_type",
+                "attendance_type",
+                "attendance",
+            ],
             // Section 3: Contact & Comms (J–L)
             ColumnKey::Phone => &["phone", "phone_number", "tel", "mobile"],
             ColumnKey::ContactChannel => {
@@ -220,6 +247,12 @@ impl ColumnKey {
             ColumnKey::QrCodeUrl => &["qr_code_url", "qr_code", "qr_url"],
             ColumnKey::ClaimToken => &["claim_token"],
             ColumnKey::ClaimedAt => &["claimed_at"],
+            // Section 6: Bank & Refund (X–AB)
+            ColumnKey::BankAccount => &["bank_account", "bank_account_number"],
+            ColumnKey::BankName => &["bank_name", "bank"],
+            ColumnKey::AccountName => &["account_name", "account_holder"],
+            ColumnKey::RefundStatus => &["refund_status", "refund_state"],
+            ColumnKey::SendEmailStatus => &["send_email_status", "email_status", "email_sent"],
         }
     }
 }
@@ -237,7 +270,7 @@ pub struct ColumnMapping {
 }
 
 impl ColumnMapping {
-    /// Hardcoded fallback mapping for the new contiguous 23-column layout (A–W).
+    /// Hardcoded fallback mapping for the 28-column layout (A–AB).
     /// Used for sheets without recognizable headers or when header reading fails.
     ///
     /// Layout:
@@ -246,6 +279,7 @@ impl ColumnMapping {
     ///   Section 3 — Contact (J–L):  phone, contact_channel, contact_handle
     ///   Section 4 — Deposit (M–Q):  deposit_agreed, deposit_method, deposit_amount, deposit_tx_signature, deposit_verified
     ///   Section 5 — Lifecycle (R–W):  checked_in_at, checked_in_by, solana_address, qr_code_url, claim_token, claimed_at
+    ///   Section 6 — Bank & Refund (X–AB):  bank_account, bank_name, account_name, refund_status, send_email_status
     pub fn hardcoded() -> Self {
         // Section 1: Attendee Identity (A–E)
         let mut map = HashMap::new();
@@ -276,9 +310,15 @@ impl ColumnMapping {
         map.insert("qr_code_url".into(), 20); // U
         map.insert("claim_token".into(), 21); // V
         map.insert("claimed_at".into(), 22); // W
+        // Section 6: Bank & Refund (X–AB)
+        map.insert("bank_account".into(), 23); // X
+        map.insert("bank_name".into(), 24); // Y
+        map.insert("account_name".into(), 25); // Z
+        map.insert("refund_status".into(), 26); // AA
+        map.insert("send_email_status".into(), 27); // AB
         Self {
             map,
-            total_columns: 23,
+            total_columns: 28,
         }
     }
 
@@ -373,19 +413,8 @@ fn column_key_name(key: ColumnKey) -> String {
 
 /// Represents a raw row from Google Sheets.
 ///
-/// Column mapping is now dynamic via `ColumnMapping`. The hardcoded indices below
-/// are the **default** layout used as fallback for legacy sheets:
-///   A[0]  = api_id              B[1]  = name
-///   C[2]  = first_name          D[3]  = last_name
-///   E[4]  = email               F[5]  = ticket_name
-///   G[6]  = registration_date   H[7]  = approval_status
-///   I[8]  = checked_in_at       J[9]  = checked_in_by
-///   K[10] = luma_url            L[11] = payment_amount
-///   M[12] = payment_fee         N[13] = payment_total
-///   O[14] = currency
-///   P[15] = solana_address      Q[16] = qr_code_url
-///   R[17] = claim_token         S[18] = claimed_at
-///   Y[24] = participation_type
+/// Column mapping is dynamic via `ColumnMapping`. The hardcoded fallback
+/// is the 28-column layout (A–AB) — see `ColumnMapping::hardcoded()`.
 #[derive(Debug, Clone)]
 pub struct AttendeeRow {
     pub api_id: String,
@@ -410,6 +439,12 @@ pub struct AttendeeRow {
     pub qr_code_url: Option<String>,
     pub claim_token: Option<String>,
     pub claimed_at: Option<String>,
+    // Section 6: Bank & Refund (X–AB)
+    pub bank_account: Option<String>,
+    pub bank_name: Option<String>,
+    pub account_name: Option<String>,
+    pub refund_status: Option<String>,
+    pub send_email_status: Option<String>,
     pub row_index: usize,
 }
 
@@ -460,6 +495,13 @@ impl AttendeeRow {
         let checked_in_at = get_opt(idx(ColumnKey::CheckedInAt));
         let checked_in_by = get_opt(idx(ColumnKey::CheckedInBy));
 
+        // Section 6: Bank & Refund
+        let bank_account = get_opt(idx(ColumnKey::BankAccount));
+        let bank_name = get_opt(idx(ColumnKey::BankName));
+        let account_name = get_opt(idx(ColumnKey::AccountName));
+        let refund_status = get_opt(idx(ColumnKey::RefundStatus));
+        let send_email_status = get_opt(idx(ColumnKey::SendEmailStatus));
+
         let first_name_col = idx(ColumnKey::FirstName);
         let name_col = idx(ColumnKey::Name);
 
@@ -493,6 +535,11 @@ impl AttendeeRow {
             qr_code_url,
             claim_token,
             claimed_at,
+            bank_account,
+            bank_name,
+            account_name,
+            refund_status,
+            send_email_status,
             row_index,
         })
     }
@@ -527,6 +574,11 @@ impl AttendeeRow {
             qr_code_url: self.qr_code_url.clone(),
             claim_token: self.claim_token.clone(),
             claimed_at: self.claimed_at.clone(),
+            bank_account: self.bank_account.clone(),
+            bank_name: self.bank_name.clone(),
+            account_name: self.account_name.clone(),
+            refund_status: self.refund_status.clone(),
+            send_email_status: self.send_email_status.clone(),
             row_index: self.row_index,
         }
     }
@@ -586,6 +638,11 @@ mod tests {
             qr_code_url: None,
             claim_token: None,
             claimed_at: None,
+            bank_account: None,
+            bank_name: None,
+            account_name: None,
+            refund_status: None,
+            send_email_status: None,
             row_index: 2,
         }
     }
@@ -631,9 +688,10 @@ mod tests {
     }
 
     #[test]
-    fn test_is_not_in_person_empty() {
-        assert!(!make_attendee("").is_in_person());
-        assert!(!make_attendee("   ").is_in_person());
+    fn test_is_in_person_empty_defaults_true() {
+        // Empty participation_type defaults to in-person (legacy events)
+        assert!(make_attendee("").is_in_person());
+        assert!(make_attendee("   ").is_in_person());
     }
 
     #[test]
@@ -667,7 +725,13 @@ mod tests {
         assert_eq!(mapping.get(ColumnKey::CheckedInAt), Some(17)); // R
         assert_eq!(mapping.get(ColumnKey::SolanaAddress), Some(19)); // T
         assert_eq!(mapping.get(ColumnKey::ClaimToken), Some(21)); // V
-        assert_eq!(mapping.total_columns, 23);
+        // Section 6: Bank & Refund
+        assert_eq!(mapping.get(ColumnKey::BankAccount), Some(23)); // X
+        assert_eq!(mapping.get(ColumnKey::BankName), Some(24)); // Y
+        assert_eq!(mapping.get(ColumnKey::AccountName), Some(25)); // Z
+        assert_eq!(mapping.get(ColumnKey::RefundStatus), Some(26)); // AA
+        assert_eq!(mapping.get(ColumnKey::SendEmailStatus), Some(27)); // AB
+        assert_eq!(mapping.total_columns, 28);
     }
 
     #[test]
@@ -852,10 +916,10 @@ mod tests {
 
     #[test]
     fn test_from_sheet_values_hardcoded_compat() {
-        // New 23-column contiguous layout using hardcoded mapping
+        // 28-column layout using hardcoded mapping
         let mapping = ColumnMapping::hardcoded();
 
-        let mut row_data = vec![String::new(); 23];
+        let mut row_data = vec![String::new(); 28];
         row_data[0] = "gst-legacy".into(); // A: api_id
         row_data[1] = "Jane Smith".into(); // B: name
         row_data[2] = "Jane".into(); // C: first_name

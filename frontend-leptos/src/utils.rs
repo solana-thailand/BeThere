@@ -218,8 +218,14 @@ pub fn escape_html(text: &str) -> String {
 ///
 /// Uses case-insensitive substring matching, matching the backend's
 /// `is_in_person()` method.
+///
+/// Defaults to `true` when empty — legacy events predate this field
+/// and were all in-person.
 pub fn is_in_person(participation_type: &str) -> bool {
     let lower = participation_type.to_lowercase();
+    if lower.is_empty() {
+        return true;
+    }
     lower.contains("in-person") || lower.contains("in person")
 }
 
@@ -292,7 +298,7 @@ mod tests {
         assert!(is_in_person("In-Person (Physical)"));
         assert!(!is_in_person("Online"));
         assert!(!is_in_person("Virtual"));
-        assert!(!is_in_person(""));
+        assert!(is_in_person(""));
         assert!(!is_in_person("Hybrid"));
     }
 
