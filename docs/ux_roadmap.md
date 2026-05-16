@@ -83,6 +83,40 @@ The deposit page currently jumps straight to payment options without showing wha
 
 ---
 
+## P0.5 — Attendee Flow Improvements
+
+### AF-1. Auto-redirect after registration
+
+**Status**: ✅ Implemented
+
+After clicking "Reserve Spot" on `/e/{slug}`, the attendee is auto-redirected to the deposit page instead of being shown a manual "Complete Deposit →" button.
+
+---
+
+### AF-2. Resume where left off
+
+**Status**: ✅ Implemented
+
+If an attendee closes the browser mid-flow, returning to `/e/{slug}` reads localStorage (`{attendee_id, event_id, event_slug}`) and redirects them to the correct page (deposit or ticket/QR).
+
+---
+
+### AF-3. Post-slip-upload redirect to ticket/QR page
+
+**Status**: ✅ Implemented
+
+After uploading a THB PromptPay slip, instead of showing a "Go Home" button, the attendee is auto-redirected to `/ticket/{attendee_id}?event_id={id}` which displays their QR code + pending approval status.
+
+---
+
+### AF-4. Dev-mode payment gating (hide Solana wallet in production)
+
+**Status**: ✅ Implemented
+
+USDC payment card on the deposit page is hidden unless the backend returns `dev_mode: true`. Health endpoint and public event endpoint now include `dev_mode`. Non-crypto attendees see only the THB option in production.
+
+---
+
 ## P1 — High Impact
 
 ### P1-1. Scanner Haptic/Audio Feedback

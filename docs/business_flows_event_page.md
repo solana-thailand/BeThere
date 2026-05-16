@@ -451,6 +451,8 @@ While saving: "Saving..." (disabled)
 
 ## 8. Attendee Deposit Flow (For Reference)
 
+Attendee arrives via **auto-redirect** after registration ("Reserve Spot" on `/e/{slug}`), or via **resume** from localStorage if they previously started the flow. If attendee already deposited, they are redirected to the ticket/QR page instead.
+
 When an attendee accesses `/deposit/{attendee_id}?event_id=xxx`:
 
 ```
@@ -466,7 +468,12 @@ If not deposited → Show payment options:
   USDC: Connect wallet → GET /api/deposit/usdc → sign TX → on-chain deposit
   USDC QR: Solana Pay QR code → scan with mobile wallet
   THB: Upload slip URL → admin verifies manually
+  → After THB slip upload: auto-redirect to `/ticket/{attendee_id}?event_id={id}` (shows QR code + pending approval status)
 ```
+
+**Resume capability**: localStorage stores `{attendee_id, event_id, event_slug}` after registration. Returning to `/e/{slug}` auto-redirects to deposit or ticket page based on current state.
+
+**Dev-mode gating**: USDC payment card is hidden unless the backend returns `dev_mode: true` (via health endpoint and public event endpoint). Non-crypto attendees see THB option only in production.
 
 **Key constraint:** Attendee deposits exactly `deposit_amount_usdc` (fixed by program). No partial deposits possible. If attendee has insufficient USDC → TX fails atomically → nothing happens.
 
@@ -554,6 +561,10 @@ These are enforced by the backend but the frontend does not have inline warnings
 | Scanner has no haptic/audio feedback | Medium | No vibration or sound on scan success/failure. Critical for throughput at real events. `navigator.vibrate()` + short beep. See `docs/ux_roadmap.md` P1-1. |
 | No progress indicator on claim flow | Medium | Multi-step flow (connect → deposit → quiz → claim) with no visible step indicator. See `docs/ux_roadmap.md` P1-2. |
 | No share CTA on NFT mint success | Low | Missing free marketing — "Share your badge" button after NFT mint. See `docs/ux_roadmap.md` P1-3. |
+| ~~No auto-redirect after registration~~ (✅ Fixed) | ~~**High**~~ | After "Reserve Spot", attendee is auto-redirected to deposit page (or ticket page if already deposited). No manual "Complete Deposit →" button. |
+| ~~No resume capability for partial flows~~ (✅ Fixed) | ~~**High**~~ | localStorage stores `{attendee_id, event_id, event_slug}` after registration. Returning to `/e/{slug}` redirects attendee to their correct step (deposit or ticket). |
+| ~~Confusing landing after slip upload~~ (✅ Fixed) | ~~**Medium**~~ | After uploading THB slip, auto-redirect to `/ticket/{attendee_id}?event_id={id}` showing QR code + pending approval status. Replaces "Go Home" button. |
+| ~~Solana wallet confusing for non-crypto attendees~~ (✅ Fixed) | ~~**Medium**~~ | USDC payment card hidden in production. Only shown when backend returns `dev_mode: true`. Health endpoint and public event endpoint include `dev_mode`. |
 
 ---
 
@@ -838,9 +849,15 @@ Discovery
   → Organizer shares event link or event page /e/{slug}
   → Attendee sees event details + deposit requirement
 
+Registration
+  → Attendee clicks "Reserve Spot" → backend creates attendee record
+  → Auto-redirect to deposit page (no manual button click)
+  → Resume: if attendee returns to /e/{slug}, localStorage redirects to deposit or ticket page
+
 Deposit (required)
-  → Connect wallet → USDC deposit → on-chain TX
-  → Or: scan Solana Pay QR → mobile wallet deposit
+  → THB: upload PromptPay slip → auto-redirect to /ticket/{attendee_id}?event_id={id}
+    → Shows QR code + pending approval status
+  → USDC (dev_mode only): Connect wallet → USDC deposit → on-chain TX
   → Deposit confirmed: "🎫 Spot Reserved!"
 
 Event Day — Check-in

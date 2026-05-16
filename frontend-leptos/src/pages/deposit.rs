@@ -301,7 +301,7 @@ enum DepositPageState {
     #[allow(dead_code)]
     ThbUploading(DepositStatusResponse),
     /// THB slip uploaded successfully.
-    ThbUploaded,
+    ThbUploaded(String, String), // (attendee_id, event_id)
     /// Refund flow — choosing wallet to connect.
     RefundChooseWallet(DepositStatusResponse),
     /// Refund flow — wallet connected, ready to claim.
@@ -775,7 +775,22 @@ pub fn Deposit() -> impl IntoView {
             match api::upload_thb_slip(&body).await {
                 Ok(_resp) => {
                     log::info!("[deposit] THB slip uploaded successfully");
-                    set_state.set(DepositPageState::ThbUploaded);
+                    // Extract attendee_id and event_id for redirect to ticket page
+                    let aid = match params.get() {
+                        Ok(p) => p.attendee_id.unwrap_or_default(),
+                        Err(_) => String::new(),
+                    };
+                    let eid = web_sys::Url::new(
+                        &web_sys::window()
+                            .unwrap()
+                            .location()
+                            .href()
+                            .unwrap(),
+                    )
+                    .ok()
+                    .and_then(|url| url.search_params().get("event_id"))
+                    .unwrap_or_default();
+                    set_state.set(DepositPageState::ThbUploaded(aid, eid));
                 }
                 Err(e) => {
                     log::error!("[deposit] THB slip upload failed: {e}");
@@ -1295,6 +1310,7 @@ pub fn Deposit() -> impl IntoView {
                         DepositPageState::ChoosePayment(data) => {
                             let data_clone = data.clone();
                             let wallets = detected_wallets.get();
+                            let is_dev_mode = data.dev_mode;
                             view! {
                                 <p class="subtitle subtitle-lg">
                                     "Choose your preferred payment method to secure your spot."
@@ -1302,75 +1318,82 @@ pub fn Deposit() -> impl IntoView {
 
                                 <div class="dep-methods">
 
-                                    // USDC Card
-                                    <div class="card">
-                                        <div class="card-header">
-                                            <h2 class="card-title">"Pay with USDC"</h2>
-                                            <span class="badge badge-info">
-                                                {format!("{:.2} USDC", data.deposit_amount_usdc as f64 / 1_000_000.0)}
-                                            </span>
-                                        </div>
-                                        <p class="hint-desc">
-                                            "Pay via Solana. Connect your wallet to send the deposit directly, or use a QR code."
-                                        </p>
-
-                                        // Wallet adapter buttons (shown if wallets detected)
-                                        {if has_wallets() {
-                                            let wallets_for_click = wallets.clone();
-                                            view! {
-                                                <div class="wallet-list">
-                                                    <p class="wallet-prompt">
-                                                        <Icon icon=IconName::Link class="icon-sm" />" Connect your Solana wallet:"
-                                                    </p>
-                                                    {wallets_for_click.into_iter().map(|w| {
-                                                        let w_clone = w.clone();
-                                                        let wallet_icon = wallet_icon_name(&w);
-                                                        view! {
-                                                            <button
-                                                                class="btn btn-primary btn-block wallet-btn-inner"
-                                                                on:click={
-                                                                    let w = w.clone();
-                                                                    move |_| handle_connect_wallet(w.clone())
-                                                                }
-                                                            >
-                                                                <Icon icon=wallet_icon class="icon-md wallet-icon-white" />
-                                                                <span>{format!("Connect {}", &w_clone)}</span>
-                                                            </button>
-                                                        }
-                                                    }).collect::<Vec<_>>()}
+                                    // USDC Card — only shown in dev mode
+                                    {if is_dev_mode {
+                                        view! {
+                                            <div class="card">
+                                                <div class="card-header">
+                                                    <h2 class="card-title">"Pay with USDC"</h2>
+                                                    <span class="badge badge-info">
+                                                        {format!("{:.2} USDC", data.deposit_amount_usdc as f64 / 1_000_000.0)}
+                                                    </span>
                                                 </div>
-                                            }.into_any()
-                                        } else {
-                                            view! { <div></div> }.into_any()
-                                        }}
+                                                <p class="hint-desc">
+                                                    "Pay via Solana. Connect your wallet to send the deposit directly, or use a QR code."
+                                                </p>
+                                                <span class="badge badge-muted" style="margin-bottom:0.5rem;">"🧪 Dev Mode"</span>
 
-                                        // QR fallback section
-                                        <div class="dep-divider-section">
-                                            <p class="hint-sm">
-                                                <Icon icon=IconName::Phone class="icon-sm" />" No wallet? Use QR code instead:"
-                                            </p>
-                                            <div class="u-mb-sm">
-                                                <input
-                                                    type="text"
-                                                    class="form-input dep-input"
-                                                    placeholder="Enter your Solana wallet address"
-                                                    prop:value=move || wallet_input.get()
-                                                    on:input=move |ev| {
-                                                        let val = event_target_value(&ev);
-                                                        set_wallet_input.set(val);
-                                                    }
-                                                />
+                                                // Wallet adapter buttons (shown if wallets detected)
+                                                {if has_wallets() {
+                                                    let wallets_for_click = wallets.clone();
+                                                    view! {
+                                                        <div class="wallet-list">
+                                                            <p class="wallet-prompt">
+                                                                <Icon icon=IconName::Link class="icon-sm" />" Connect your Solana wallet:"
+                                                            </p>
+                                                            {wallets_for_click.into_iter().map(|w| {
+                                                                let w_clone = w.clone();
+                                                                let wallet_icon = wallet_icon_name(&w);
+                                                                view! {
+                                                                    <button
+                                                                        class="btn btn-primary btn-block wallet-btn-inner"
+                                                                        on:click={
+                                                                            let w = w.clone();
+                                                                            move |_| handle_connect_wallet(w.clone())
+                                                                        }
+                                                                    >
+                                                                        <Icon icon=wallet_icon class="icon-md wallet-icon-white" />
+                                                                        <span>{format!("Connect {}", &w_clone)}</span>
+                                                                    </button>
+                                                                }
+                                                            }).collect::<Vec<_>>()}
+                                                        </div>
+                                                    }.into_any()
+                                                } else {
+                                                    view! { <div></div> }.into_any()
+                                                }}
+
+                                                // QR fallback section
+                                                <div class="dep-divider-section">
+                                                    <p class="hint-sm">
+                                                        <Icon icon=IconName::Phone class="icon-sm" />" No wallet? Use QR code instead:"
+                                                    </p>
+                                                    <div class="u-mb-sm">
+                                                        <input
+                                                            type="text"
+                                                            class="form-input dep-input"
+                                                            placeholder="Enter your Solana wallet address"
+                                                            prop:value=move || wallet_input.get()
+                                                            on:input=move |ev| {
+                                                                let val = event_target_value(&ev);
+                                                                set_wallet_input.set(val);
+                                                            }
+                                                        />
+                                                    </div>
+                                                    <button
+                                                        class="btn btn-outline btn-block"
+                                                        on:click=move |_| handle_pay_usdc_qr()
+                                                    >
+                                                        "Generate QR Code"
+                                                    </button>
+                                                </div>
                                             </div>
-                                            <button
-                                                class="btn btn-outline btn-block"
-                                                on:click=move |_| handle_pay_usdc_qr()
-                                            >
-                                                "Generate QR Code"
-                                            </button>
-                                        </div>
-                                    </div>
+                                        }.into_any()
+                                    } else {
+                                        view! { <div></div> }.into_any()
+                                    }}
 
-                                    // THB Card
+                                    // THB Card (always shown)
                                     <div class="card">
                                         <div class="card-header">
                                             <h2 class="card-title">"Pay with THB"</h2>
@@ -1803,7 +1826,17 @@ pub fn Deposit() -> impl IntoView {
                         }
 
                         // ===== THB Uploaded =====
-                        DepositPageState::ThbUploaded => {
+                        DepositPageState::ThbUploaded(attendee_id, event_id) => {
+                            // Auto-redirect to ticket/QR page after brief confirmation
+                            let aid = attendee_id.clone();
+                            let eid = event_id.clone();
+                            leptos::task::spawn_local(async move {
+                                gloo::timers::future::TimeoutFuture::new(1500).await;
+                                let _ = js_sys::eval(&format!(
+                                    "window.location.href = '/ticket/{}?event_id={}'",
+                                    aid, eid
+                                ));
+                            });
                             view! {
                                 <div class="card dep-card-error">
                                     <div class="card-header">
@@ -1813,9 +1846,9 @@ pub fn Deposit() -> impl IntoView {
                                         "Your payment slip has been submitted for verification. You'll be notified once it's confirmed."
                                     </p>
                                     <span class="badge badge-warning"><Icon icon=IconName::Hourglass class="icon-sm icon-warning" />" Pending Verification"</span>
-                                    <div class="action-row-top">
-                                        <a href="/" class="btn btn-primary">"Go Home"</a>
-                                    </div>
+                                    <p style="color:var(--text-secondary);font-size:0.8rem;margin-top:0.75rem;">
+                                        "Redirecting to your ticket..."
+                                    </p>
                                 </div>
                             }
                                 .into_any()

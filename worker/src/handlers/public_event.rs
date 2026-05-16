@@ -143,5 +143,6 @@ pub async fn get_public_event(
         "description": config.description,
         "location": config.location,
         "created_at": config.created_at,
+        "dev_mode": state.config.dev_mode,
     })))
 }

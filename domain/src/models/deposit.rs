@@ -138,6 +138,10 @@ pub struct DepositStatusResponse {
     /// Current deposit status (None if not deposited).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub status: Option<DepositStatus>,
+    /// Whether the backend is running in dev mode.
+    /// When false, Solana wallet payment options are hidden from the UI.
+    #[serde(default)]
+    pub dev_mode: bool,
 }
 
 /// Request body for POST /api/deposit/thb/verify — admin verifies/rejects a slip.

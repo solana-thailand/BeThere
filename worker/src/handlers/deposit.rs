@@ -66,6 +66,7 @@ pub async fn get_deposit_status_handler(
         event_name: event.name,
         event_tagline: event.tagline,
         status,
+        dev_mode: state.config.dev_mode,
     }))
 }
 

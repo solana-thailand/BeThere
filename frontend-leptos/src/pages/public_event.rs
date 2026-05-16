@@ -30,7 +30,7 @@ struct RegisterBody {
 #[derive(serde::Deserialize, Clone, Debug)]
 struct NextStep {
     #[serde(rename = "type")]
-    step_type: String,
+    _step_type: String,
     url: String,
 }
 
@@ -100,6 +100,7 @@ pub struct PublicEventData {
     pub description: String,
     pub location: String,
     pub created_at: String,
+    pub dev_mode: bool,
 }
 
 /// API response wrapper for public event endpoint.
@@ -473,6 +474,60 @@ fn render_loaded_event(
     let (reg_deposit_agreed, set_reg_deposit_agreed) = signal(false);
     let (reg_state, set_reg_state) = signal(RegState::Idle);
 
+    // Resume: check localStorage for saved progress on this event.
+    // If attendee already registered but didn't finish deposit, redirect them.
+    let slug_for_resume = slug_for_reg.clone();
+    leptos::task::spawn_local(async move {
+        let progress_json = js_sys::eval("localStorage.getItem('bethere_progress')")
+            .ok()
+            .and_then(|v| v.as_string());
+        if let Some(json_str) = progress_json {
+            if !json_str.is_empty() {
+                if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&json_str) {
+                    let saved_slug = parsed.get("slug").and_then(|v| v.as_str()).unwrap_or("");
+                    if saved_slug == slug_for_resume {
+                        let attendee_id = parsed.get("attendee_id").and_then(|v| v.as_str()).unwrap_or("");
+                        let event_id = parsed.get("event_id").and_then(|v| v.as_str()).unwrap_or("");
+                        if !attendee_id.is_empty() && !event_id.is_empty() {
+                            // Check deposit status to determine where to redirect
+                            let window = web_sys::window().expect("no window");
+                            let origin = window.location().origin().unwrap_or_else(|_| "http://localhost:8787".to_string());
+                            let url = format!("{origin}/api/deposit/status/{attendee_id}?event_id={event_id}");
+                            match gloo::net::http::Request::get(&url).send().await {
+                                Ok(resp) => {
+                                    if let Ok(body) = resp.text().await {
+                                        if let Ok(status_resp) = serde_json::from_str::<serde_json::Value>(&body) {
+                                            let has_deposit = status_resp
+                                                .get("data")
+                                                .and_then(|d| d.get("status"))
+                                                .is_some();
+                                            if has_deposit {
+                                                // Already deposited → go to ticket
+                                                let _ = js_sys::eval(&format!(
+                                                    "window.location.href = '/ticket/{}?event_id={}'",
+                                                    attendee_id, event_id
+                                                ));
+                                            } else {
+                                                // Not deposited → go to deposit page
+                                                let _ = js_sys::eval(&format!(
+                                                    "window.location.href = '/deposit/{}?event_id={}'",
+                                                    attendee_id, event_id
+                                                ));
+                                            }
+                                        }
+                                    }
+                                }
+                                Err(_) => {
+                                    // API failed — just show the page normally
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    });
+
     view! {
         // NFT Badge Image (hero)
         {move || {
@@ -654,12 +709,34 @@ fn render_loaded_event(
             let current_reg = reg_state.get();
             match &current_reg {
                 RegState::Success(data) => {
+                    // Auto-redirect: save progress to localStorage then navigate.
+                    // Shows a brief confirmation message while redirecting.
                     let next_url = data.next_step.url.clone();
-                    let step_label = match data.next_step.step_type.as_str() {
-                        "deposit" => "Complete Deposit →",
-                        "quest" => "Start Quest →",
-                        _ => "Continue →",
-                    };
+                    let attendee_id = data.attendee_id.clone();
+                    let _event_id = data.next_step.url.clone(); // parse event_id from URL
+                    let eid = next_url
+                        .split("event_id=")
+                        .nth(1)
+                        .map(|s| s.split('&').next().unwrap_or(s).to_string())
+                        .unwrap_or_default();
+                    let slug_for_ls = slug_for_reg.clone();
+
+                    // Persist to localStorage for resume capability
+                    let _ = js_sys::eval(&format!(
+                        "localStorage.setItem('bethere_progress', JSON.stringify({{attendee_id:'{}',event_id:'{}',slug:'{}'}}'))",
+                        attendee_id, eid, slug_for_ls
+                    ));
+
+                    // Auto-navigate after a brief moment so the user sees the confirmation
+                    let redirect_url = next_url.clone();
+                    leptos::task::spawn_local(async move {
+                        gloo::timers::future::TimeoutFuture::new(800).await;
+                        let _ = js_sys::eval(&format!(
+                            "window.location.href = '{}'",
+                            redirect_url
+                        ));
+                    });
+
                     view! {
                         <div style="width:100%;background:var(--bg-card);border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;box-shadow:var(--shadow);">
                             <div style="text-align:center;">
@@ -670,12 +747,9 @@ fn render_loaded_event(
                                 <p style="color:var(--text-secondary);font-size:0.9rem;margin-bottom:1rem;">
                                     {format!("Welcome, {}!", data.name)}
                                 </p>
-                                <a
-                                    href=next_url
-                                    style="display:inline-block;width:100%;text-align:center;padding:0.75rem 1.5rem;background:var(--accent);color:#fff;border-radius:var(--radius);font-weight:600;font-size:0.95rem;text-decoration:none;transition:opacity 0.2s;"
-                                >
-                                    {step_label}
-                                </a>
+                                <p style="color:var(--text-secondary);font-size:0.8rem;">
+                                    "Redirecting..."
+                                </p>
                             </div>
                         </div>
                     }.into_any()

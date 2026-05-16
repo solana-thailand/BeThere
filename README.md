@@ -5,7 +5,7 @@
 [![Solana](https://img.shields.io/badge/Solana-Devnet-9945FF?logo=solana)](https://solana.com)
 [![Rust](https://img.shields.io/badge/Rust-100%25-000000?logo=rust)](https://www.rust-lang.org/)
 [![Cloudflare Workers](https://img.shields.io/badge/Edge-Cloudflare-F38020?logo=cloudflare)](https://workers.cloudflare.com/)
-[![Tests](https://img.shields.io/badge/tests-61%20passing-success)](./scripts/e2e/)
+[![Tests](https://img.shields.io/badge/tests-29%20passing-success)](./scripts/e2e/)
 
 
 > Free events have **30-40% no-show rates**. BeThere fixes this with **USDC deposit commitments** — attendees get their money back when they show up, forfeit if they don't. Built on Solana for **$0.001 NFT badges**, **$0.00087 on-chain costs**, and **< 500ms check-in** at the edge.
@@ -34,17 +34,19 @@
 | NFT mint cost | **$0.001** per badge |
 | Transaction cost | **$0.00087** (at $172/SOL) |
 | Check-in latency | **< 500ms** (edge worker) |
-| Tests | **66 passing** (39 worker + 27 on-chain) |
+| Tests | **68 passing** (39 worker + 29 on-chain) |
 | Program ID (devnet) | `C6HDeZES9aPpNwe3UvS9ecmfcRhH1XeJb8PGJmLG3z3T` |
 
 ### 🎮 Live Demo Flow (Devnet)
 
 ```
 1. 📋 Organizer creates event → sets $5 USDC deposit
-2. 🪙 Attendee deposits USDC via Phantom wallet (Solana Pay QR)
-3. 📱 Staff scans QR at door → on-chain check-in
-4. 💰 Attendee gets refund + compressed NFT badge
-5. ❌ No-show? → Organizer claims forfeited deposit
+2. 📝 Attendee clicks "Reserve Spot" → auto-redirect to deposit page
+3. 🪙 Attendee deposits USDC via Phantom wallet (Solana Pay QR)
+   → Or uploads THB slip → auto-redirect to ticket/QR page
+4. 📱 Staff scans QR at door → on-chain check-in
+5. 💰 Attendee gets refund + compressed NFT badge
+6. ❌ No-show? → Organizer claims forfeited deposit
 ```
 
 ---
@@ -369,6 +371,8 @@ See `scripts/e2e/test_escrow_devnet.sh` for the complete test flow. All 24 tests
 - **Force delete for devnet cleanup** — SuperAdmin can hard-delete events with `?force=true`
 - **Slug auto-deduplication** — Recurring events get auto-incremented suffix on name collision
 - **Audit trail** — Append-only event log tracking all state-changing operations (CRUD, escrow, deposits, check-ins) with actor attribution
+- **Dev-mode payment gating** — Solana wallet options hidden in production, shown only when backend returns `dev_mode: true`
+- **Attendee flow persistence** — localStorage resume for partial registrations, auto-redirect to deposit/ticket page
 
 ## Security
 

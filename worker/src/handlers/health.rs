@@ -18,5 +18,6 @@ pub async fn health_check(State(state): State<AppState>) -> Json<Value> {
         "runtime": "cloudflare-workers",
         "version": env!("CARGO_PKG_VERSION"),
         "cluster": cluster,
+        "dev_mode": state.config.dev_mode,
     }))
 }

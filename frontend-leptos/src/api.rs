@@ -2091,6 +2091,9 @@ pub struct DepositStatusResponse {
     #[serde(default)]
     pub event_tagline: String,
     pub status: Option<DepositStatusInfo>,
+    /// Whether the backend is in dev mode (shows Solana wallet options).
+    #[serde(default)]
+    pub dev_mode: bool,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
