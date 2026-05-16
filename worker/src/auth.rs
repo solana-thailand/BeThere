@@ -24,17 +24,22 @@ use crate::state::AppState;
 
 /// Build the Google OAuth 2.0 authorization URL.
 /// This URL redirects the user to Google's consent screen.
-pub fn get_auth_url(state: &AppState) -> String {
+pub fn get_auth_url(state: &AppState, redirect: Option<&str>) -> String {
     let config = &state.config.google_oauth;
-    let params = url::form_urlencoded::Serializer::new(String::new())
+    let mut serializer = url::form_urlencoded::Serializer::new(String::new());
+    serializer
         .append_pair("client_id", &config.client_id)
         .append_pair("redirect_uri", &config.redirect_uri)
         .append_pair("response_type", "code")
         .append_pair("scope", "openid email profile")
         .append_pair("access_type", "offline")
-        .append_pair("prompt", "consent")
-        .finish();
+        .append_pair("prompt", "consent");
 
+    if let Some(redirect) = redirect {
+        serializer.append_pair("state", redirect);
+    }
+
+    let params = serializer.finish();
     format!("https://accounts.google.com/o/oauth2/v2/auth?{params}")
 }
 
@@ -261,6 +266,51 @@ pub async fn require_auth(
         )
             .into_response();
     }
+
+    // Inject claims into request extensions for downstream handlers
+    req.extensions_mut().insert(claims);
+
+    next.run(req).await
+}
+
+/// Identity-only middleware that extracts and verifies JWT without staff checks.
+///
+/// Same as `require_auth` but does NOT verify staff status. Used for attendee-facing
+/// routes where we only need a verified email (e.g. registration, my-registration).
+/// Injects `Claims` into request extensions for downstream handlers.
+#[worker::send]
+pub async fn require_identity(
+    State(state): State<AppState>,
+    mut req: Request,
+    next: Next,
+) -> axum::response::Response {
+    let path = req.uri().path();
+
+    // Skip auth for public routes
+    if is_public_route(path) {
+        return next.run(req).await;
+    }
+
+    // Extract JWT from Authorization header or cookie
+    let token = extract_token_from_request(&req);
+
+    // Verify JWT and extract claims (no staff check)
+    let claims = match verify_token(&token, &state).await {
+        Ok(claims) => claims,
+        Err(e) => {
+            tracing::debug!(path = %path, error = %e, "identity middleware rejected request");
+            return (
+                axum::http::StatusCode::UNAUTHORIZED,
+                Json(ApiResponse::<()> {
+                    success: false,
+                    data: None,
+                    error: Some(e),
+                    correlation_id: None,
+                }),
+            )
+                .into_response();
+        }
+    };
 
     // Inject claims into request extensions for downstream handlers
     req.extensions_mut().insert(claims);
@@ -515,7 +565,7 @@ mod tests {
     #[test]
     fn test_get_auth_url_contains_required_params() {
         let state = test_state();
-        let url = get_auth_url(&state);
+        let url = get_auth_url(&state, None);
 
         assert!(url.contains("accounts.google.com/o/oauth2/v2/auth"));
         assert!(url.contains("client_id=test-client-id"));

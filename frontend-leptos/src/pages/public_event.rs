@@ -1,24 +1,42 @@
-//! Public event page — displays event details to attendees (no auth required).
+//! Public event page — displays event details to attendees.
 //!
 //! Accessed via `/e/:slug`. Shows event info, countdown timer, deposit details,
-//! NFT badge preview, self-registration form, and external link.
+//! NFT badge preview, and registration form.
+//!
+//! **Auth gate**: Registration requires Google Sign-In. The page checks auth
+//! status on load. If not signed in, only event details are shown with a
+//! "Sign in with Google" prompt. After sign-in, the registration form appears
+//! with email locked to the Google account.
 
 use leptos::prelude::*;
 use leptos_meta::Title;
 use leptos_router::hooks::use_params;
 use leptos_router::params::Params;
+use wasm_bindgen::prelude::*;
 
 use crate::icons::{Icon, IconName};
+
+// ===== Navigation JS Interop =====
+// Uses wasm_bindgen module imports from /js/navigation.js instead of js_sys::eval().
+// This avoids requiring 'unsafe-eval' in the Content-Security-Policy.
+#[wasm_bindgen(module = "/js/navigation.js")]
+extern "C" {
+    fn saveProgress(attendee_id: &str, event_id: &str, slug: &str);
+    fn loadProgress() -> Option<String>;
+    fn navigateTo(path: &str);
+}
 
 // ---------------------------------------------------------------------------
 // Registration API types
 // ---------------------------------------------------------------------------
 
 /// Request body for POST /api/public/register.
+/// Note: email is ignored server-side (taken from JWT claims).
 #[derive(serde::Serialize)]
 struct RegisterBody {
     slug: String,
     name: String,
+    #[allow(dead_code)]
     email: String,
     participation_type: Option<String>,
     contact_channel: Option<String>,
@@ -58,6 +76,54 @@ enum RegState {
     Idle,
     Submitting,
     Success(RegisterData),
+    Error(String),
+}
+
+// ---------------------------------------------------------------------------
+// Auth state
+// ---------------------------------------------------------------------------
+
+/// Tracks whether the user is signed in with Google.
+#[derive(Clone, Debug)]
+enum AuthState {
+    /// Haven't checked yet.
+    Checking,
+    /// Checked and confirmed signed in. Contains email from JWT.
+    SignedIn(String),
+    /// Checked and NOT signed in (no valid JWT cookie).
+    NotSignedIn,
+}
+
+/// Response from GET /api/my-registration/:slug.
+#[derive(serde::Deserialize, Clone, Debug)]
+#[allow(dead_code)]
+struct MyRegistrationResponse {
+    success: bool,
+    data: Option<MyRegistrationData>,
+    error: Option<String>,
+}
+
+#[derive(serde::Deserialize, Clone, Debug)]
+#[allow(dead_code)]
+struct MyRegistrationData {
+    attendee_id: String,
+    name: String,
+    email: String,
+    claim_token: String,
+    participation_type: String,
+    next_step: NextStep,
+}
+
+/// Tracks existing registration lookup.
+#[derive(Clone, Debug)]
+enum RegistrationLookup {
+    /// Haven't checked yet.
+    Pending,
+    /// Checked — not registered for this event.
+    NotRegistered,
+    /// Already registered — data available.
+    Registered(MyRegistrationData),
+    /// Lookup failed (non-fatal, show form anyway).
     Error(String),
 }
 
@@ -234,7 +300,7 @@ fn format_refund_deadline(hours: u64) -> String {
 
 /// Public event page component.
 ///
-/// Displays event details for a given slug without requiring authentication.
+/// Displays event details for a given slug. Registration requires Google Sign-In.
 #[component]
 pub fn PublicEvent() -> impl IntoView {
     let params = use_params::<PublicEventParams>();
@@ -245,7 +311,18 @@ pub fn PublicEvent() -> impl IntoView {
     let (event_completed, set_event_completed) = signal(false);
     let (event_name, set_event_name) = signal(String::new());
 
+    // Auth state
+    let (auth_state, set_auth_state) = signal(AuthState::Checking);
+    let (reg_lookup, set_reg_lookup) = signal(RegistrationLookup::Pending);
+
+    // Get slug from params
+    let slug_val = match params.get() {
+        Ok(p) => p.slug.unwrap_or_default(),
+        Err(_) => String::new(),
+    };
+
     // Fetch event data on mount
+    let slug_for_event = slug_val.clone();
     Effect::new(move |_| {
         let slug = match params.get() {
             Ok(p) => p.slug.unwrap_or_default(),
@@ -352,6 +429,147 @@ pub fn PublicEvent() -> impl IntoView {
         });
     });
 
+    // Check auth status on mount — try GET /api/auth/me
+    leptos::task::spawn_local(async move {
+        let window = web_sys::window().expect("no window");
+        let origin = window
+            .location()
+            .origin()
+            .unwrap_or_else(|_| "http://localhost:8787".to_string());
+        let url = format!("{origin}/api/auth/me");
+
+        match gloo::net::http::Request::get(&url).send().await {
+            Ok(resp) => {
+                if resp.status() == 200 {
+                    if let Ok(body) = resp.text().await {
+                        if let Ok(api_resp) =
+                            serde_json::from_str::<serde_json::Value>(&body)
+                        {
+                            let email = api_resp
+                                .get("data")
+                                .and_then(|d| d.get("email"))
+                                .and_then(|e| e.as_str())
+                                .unwrap_or("")
+                                .to_string();
+                            if !email.is_empty() {
+                                log::info!(
+                                    "[public_event] user signed in: {email}"
+                                );
+                                set_auth_state.set(AuthState::SignedIn(email));
+                            } else {
+                                set_auth_state.set(AuthState::NotSignedIn);
+                            }
+                        } else {
+                            set_auth_state.set(AuthState::NotSignedIn);
+                        }
+                    } else {
+                        set_auth_state.set(AuthState::NotSignedIn);
+                    }
+                } else {
+                    log::info!(
+                        "[public_event] auth/me returned {} — not signed in",
+                        resp.status()
+                    );
+                    set_auth_state.set(AuthState::NotSignedIn);
+                }
+            }
+            Err(e) => {
+                log::warn!("[public_event] auth/me fetch error: {e}");
+                set_auth_state.set(AuthState::NotSignedIn);
+            }
+        }
+    });
+
+    // When auth becomes SignedIn, check if already registered for this event
+    let slug_for_reg_lookup = slug_val.clone();
+    Effect::new(move |_| {
+        let auth = auth_state.get();
+        match auth {
+            AuthState::SignedIn(ref email) => {
+                let email_clone = email.clone();
+                let slug = slug_for_reg_lookup.clone();
+                // Only check once
+                let current_lookup = reg_lookup.get();
+                if matches!(current_lookup, RegistrationLookup::Pending) {
+                    leptos::task::spawn_local(async move {
+                        let window = web_sys::window().expect("no window");
+                        let origin = window
+                            .location()
+                            .origin()
+                            .unwrap_or_else(|_| "http://localhost:8787".to_string());
+                        let url =
+                            format!("{origin}/api/my-registration/{slug}");
+
+                        match gloo::net::http::Request::get(&url).send().await {
+                            Ok(resp) => {
+                                if resp.status() == 404 {
+                                    log::info!(
+                                        "[public_event] {email_clone} not registered for {slug}"
+                                    );
+                                    set_reg_lookup
+                                        .set(RegistrationLookup::NotRegistered);
+                                } else if resp.status() == 200 {
+                                    if let Ok(body) = resp.text().await {
+                                        match serde_json::from_str::<MyRegistrationResponse>(
+                                            &body,
+                                        ) {
+                                            Ok(api_resp) => {
+                                                if let Some(data) = api_resp.data {
+                                                    log::info!(
+                                                        "[public_event] {email_clone} already registered for {slug}"
+                                                    );
+                                                    set_reg_lookup.set(
+                                                        RegistrationLookup::Registered(data),
+                                                    );
+                                                } else {
+                                                    set_reg_lookup.set(
+                                                        RegistrationLookup::NotRegistered,
+                                                    );
+                                                }
+                                            }
+                                            Err(e) => {
+                                                log::warn!(
+                                                    "[public_event] my-registration parse error: {e}"
+                                                );
+                                                set_reg_lookup.set(
+                                                    RegistrationLookup::NotRegistered,
+                                                );
+                                            }
+                                        }
+                                    } else {
+                                        set_reg_lookup
+                                            .set(RegistrationLookup::NotRegistered);
+                                    }
+                                } else {
+                                    // 401 or other — fallback to showing form
+                                    log::warn!(
+                                        "[public_event] my-registration returned {}",
+                                        resp.status()
+                                    );
+                                    set_reg_lookup.set(
+                                        RegistrationLookup::Error(format!(
+                                            "Status {}",
+                                            resp.status()
+                                        )),
+                                    );
+                                }
+                            }
+                            Err(e) => {
+                                log::warn!(
+                                    "[public_event] my-registration fetch error: {e}"
+                                );
+                                set_reg_lookup.set(RegistrationLookup::Error(
+                                    format!("Fetch error: {e}"),
+                                ));
+                            }
+                        }
+                    });
+                }
+            }
+            AuthState::Checking | AuthState::NotSignedIn => {}
+        }
+    });
+
     // Dynamic title
     let title_text = move || {
         let name = event_name.get();
@@ -409,7 +627,14 @@ pub fn PublicEvent() -> impl IntoView {
                             }.into_any()
                         }
                         PublicEventState::Loaded(data) => {
-                            render_loaded_event(data, countdown, event_completed)
+                            render_loaded_event(
+                                data,
+                                countdown,
+                                event_completed,
+                                auth_state,
+                                reg_lookup,
+                                slug_for_event.clone(),
+                            )
                         }
                     }
                 }}
@@ -431,6 +656,9 @@ fn render_loaded_event(
     data: PublicEventData,
     countdown: ReadSignal<String>,
     event_completed: ReadSignal<bool>,
+    auth_state: ReadSignal<AuthState>,
+    reg_lookup: ReadSignal<RegistrationLookup>,
+    current_slug: String,
 ) -> AnyView {
     let has_nft_image = !data.nft_image_url.is_empty();
     let has_description = !data.description.is_empty();
@@ -474,59 +702,8 @@ fn render_loaded_event(
     let (reg_deposit_agreed, set_reg_deposit_agreed) = signal(false);
     let (reg_state, set_reg_state) = signal(RegState::Idle);
 
-    // Resume: check localStorage for saved progress on this event.
-    // If attendee already registered but didn't finish deposit, redirect them.
-    let slug_for_resume = slug_for_reg.clone();
-    leptos::task::spawn_local(async move {
-        let progress_json = js_sys::eval("localStorage.getItem('bethere_progress')")
-            .ok()
-            .and_then(|v| v.as_string());
-        if let Some(json_str) = progress_json {
-            if !json_str.is_empty() {
-                if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&json_str) {
-                    let saved_slug = parsed.get("slug").and_then(|v| v.as_str()).unwrap_or("");
-                    if saved_slug == slug_for_resume {
-                        let attendee_id = parsed.get("attendee_id").and_then(|v| v.as_str()).unwrap_or("");
-                        let event_id = parsed.get("event_id").and_then(|v| v.as_str()).unwrap_or("");
-                        if !attendee_id.is_empty() && !event_id.is_empty() {
-                            // Check deposit status to determine where to redirect
-                            let window = web_sys::window().expect("no window");
-                            let origin = window.location().origin().unwrap_or_else(|_| "http://localhost:8787".to_string());
-                            let url = format!("{origin}/api/deposit/status/{attendee_id}?event_id={event_id}");
-                            match gloo::net::http::Request::get(&url).send().await {
-                                Ok(resp) => {
-                                    if let Ok(body) = resp.text().await {
-                                        if let Ok(status_resp) = serde_json::from_str::<serde_json::Value>(&body) {
-                                            let has_deposit = status_resp
-                                                .get("data")
-                                                .and_then(|d| d.get("status"))
-                                                .is_some();
-                                            if has_deposit {
-                                                // Already deposited → go to ticket
-                                                let _ = js_sys::eval(&format!(
-                                                    "window.location.href = '/ticket/{}?event_id={}'",
-                                                    attendee_id, event_id
-                                                ));
-                                            } else {
-                                                // Not deposited → go to deposit page
-                                                let _ = js_sys::eval(&format!(
-                                                    "window.location.href = '/deposit/{}?event_id={}'",
-                                                    attendee_id, event_id
-                                                ));
-                                            }
-                                        }
-                                    }
-                                }
-                                Err(_) => {
-                                    // API failed — just show the page normally
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    });
+    // Slug for sign-in redirect
+    let slug_for_signin = current_slug.clone();
 
     view! {
         // NFT Badge Image (hero)
@@ -700,20 +877,269 @@ fn render_loaded_event(
             }
         }}
 
-        // Registration Form Section
+        // Registration Section — auth-gated
         {move || {
             if !show_reg_form {
                 return ().into_any();
             }
 
+            let auth = auth_state.get();
+            match &auth {
+                AuthState::Checking => {
+                    // Still checking auth — show loading spinner
+                    view! {
+                        <div style="width:100%;background:var(--bg-card);border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;box-shadow:var(--shadow);text-align:center;">
+                            <p style="color:var(--text-secondary);font-size:0.9rem;">"Checking sign-in status..."</p>
+                        </div>
+                    }.into_any()
+                }
+                AuthState::NotSignedIn => {
+                    // Not signed in — show sign-in prompt
+                    let slug = slug_for_signin.clone();
+                    view! {
+                        <div style="width:100%;background:var(--bg-card);border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;box-shadow:var(--shadow);">
+                            <h2 style="font-size:1.1rem;font-weight:600;color:#fff;margin-bottom:0.75rem;">
+                                <Icon icon=IconName::Ticket class="icon-md" />" Reserve Your Spot"
+                            </h2>
+                            <p style="color:var(--text-secondary);font-size:0.9rem;margin-bottom:1rem;">
+                                "Sign in with Google to register for this event."
+                            </p>
+                            <button
+                                class="btn btn-primary btn-block"
+                                style="display:flex;align-items:center;justify-content:center;gap:0.5rem;"
+                                on:click=move |_| {
+                                    let slug = slug.clone();
+                                    leptos::task::spawn_local(async move {
+                                        let window = web_sys::window().expect("no window");
+                                        let origin = window.location().origin().unwrap_or_else(|_| "http://localhost:8787".to_string());
+                                        let redirect = format!("/e/{slug}");
+                                        let api_url = format!(
+                                            "{origin}/api/auth/url?redirect={}",
+                                            urlencoding::encode(&redirect)
+                                        );
+                                        match gloo::net::http::Request::get(&api_url).send().await {
+                                            Ok(resp) => {
+                                                if let Ok(body) = resp.text().await {
+                                                    if let Ok(json) = serde_json::from_str::<serde_json::Value>(&body) {
+                                                        if let Some(auth_url) = json.get("data").and_then(|d| d.get("auth_url")).and_then(|u| u.as_str()) {
+                                                            navigateTo(auth_url);
+                                                            return;
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            Err(e) => {
+                                                log::error!("[public_event] failed to get auth URL: {e}");
+                                            }
+                                        }
+                                        // Fallback: just navigate to login page
+                                        navigateTo("/login");
+                                    });
+                                }
+                            >
+                                <svg width="18" height="18" viewBox="0 0 48 48" style="flex-shrink:0;">
+                                    <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+                                    <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+                                    <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+                                    <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+                                </svg>
+                                "Sign in with Google"
+                            </button>
+                        </div>
+                    }.into_any()
+                }
+                AuthState::SignedIn(email) => {
+                    // Signed in — check registration status and show form or status
+                    let lookup = reg_lookup.get();
+                    match &lookup {
+                        RegistrationLookup::Pending => {
+                            view! {
+                                <div style="width:100%;background:var(--bg-card);border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;box-shadow:var(--shadow);text-align:center;">
+                                    <p style="color:var(--text-secondary);font-size:0.9rem;">"Checking registration..."</p>
+                                </div>
+                            }.into_any()
+                        }
+                        RegistrationLookup::Registered(reg_data) => {
+                            // Already registered — show status and redirect
+                            let next_url = reg_data.next_step.url.clone();
+                            let _attendee_id = reg_data.attendee_id.clone();
+                            let reg_name_display = reg_data.name.clone();
+                            let _eid = next_url
+                                .split("event_id=")
+                                .nth(1)
+                                .map(|s| s.split('&').next().unwrap_or(s).to_string())
+                                .unwrap_or_default();
+
+                            // Auto-redirect
+                            let redirect_url = next_url.clone();
+                            leptos::task::spawn_local(async move {
+                                gloo::timers::future::TimeoutFuture::new(1200).await;
+                                navigateTo(&redirect_url);
+                            });
+
+                            view! {
+                                <div style="width:100%;background:var(--bg-card);border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;box-shadow:var(--shadow);">
+                                    <div style="text-align:center;">
+                                        <div style="font-size:2rem;margin-bottom:0.5rem;"><Icon icon=IconName::Check class="icon-2xl icon-success" /></div>
+                                        <h2 style="font-size:1.1rem;font-weight:600;color:#34d399;margin-bottom:0.5rem;">
+                                            "You're already registered!"
+                                        </h2>
+                                        <p style="color:var(--text-secondary);font-size:0.9rem;margin-bottom:0.25rem;">
+                                            {format!("Welcome back, {}!", reg_name_display)}
+                                        </p>
+                                        <p style="color:var(--text-secondary);font-size:0.8rem;">
+                                            {format!("Signed in as {email}")}
+                                        </p>
+                                        <p style="color:var(--text-secondary);font-size:0.8rem;margin-top:0.5rem;">
+                                            "Redirecting..."
+                                        </p>
+                                    </div>
+                                </div>
+                            }.into_any()
+                        }
+                        RegistrationLookup::Error(err_msg) => {
+                            // Lookup failed — show form as fallback (non-fatal)
+                            log::warn!("[public_event] registration lookup failed: {err_msg}");
+                            let email_val = email.clone();
+                            render_registration_form(
+                                slug_for_reg.clone(),
+                                email_val,
+                                is_hybrid,
+                                require_contact,
+                                has_deposit,
+                                deposit_thb,
+                                reg_name,
+                                set_reg_name,
+                                reg_email,
+                                set_reg_email,
+                                reg_participation,
+                                set_reg_participation,
+                                reg_contact_channel,
+                                set_reg_contact_channel,
+                                reg_contact_handle,
+                                set_reg_contact_handle,
+                                reg_deposit_agreed,
+                                set_reg_deposit_agreed,
+                                reg_state,
+                                set_reg_state,
+                            )
+                        }
+                        RegistrationLookup::NotRegistered => {
+                            // Not registered — show the form with locked email
+                            let email_val = email.clone();
+                            render_registration_form(
+                                slug_for_reg.clone(),
+                                email_val,
+                                is_hybrid,
+                                require_contact,
+                                has_deposit,
+                                deposit_thb,
+                                reg_name,
+                                set_reg_name,
+                                reg_email,
+                                set_reg_email,
+                                reg_participation,
+                                set_reg_participation,
+                                reg_contact_channel,
+                                set_reg_contact_channel,
+                                reg_contact_handle,
+                                set_reg_contact_handle,
+                                reg_deposit_agreed,
+                                set_reg_deposit_agreed,
+                                reg_state,
+                                set_reg_state,
+                            )
+                        }
+                    }
+                }
+            }
+        }}
+
+        // NFT Badge Section
+        {move || {
+            if has_nft_image {
+                let url = nft_image_url_2.clone();
+                view! {
+                    <div style="width:100%;background:var(--bg-card);border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;box-shadow:var(--shadow);">
+                        <h2 style="font-size:1.1rem;font-weight:600;color:#fff;margin-bottom:0.5rem;">
+                            <Icon icon=IconName::Ticket class="icon-md" />" NFT Badge"
+                        </h2>
+                        <p style="color:var(--text-secondary);font-size:0.85rem;margin-bottom:0.75rem;">
+                            "Earn a commemorative NFT badge when you attend."
+                        </p>
+                        <img
+                            src=url
+                            alt="NFT Badge"
+                            style="max-width:120px;border-radius:var(--radius);"
+                        />
+                    </div>
+                }.into_any()
+            } else {
+                ().into_any()
+            }
+        }}
+
+        // External Link
+        {move || {
+            if has_link {
+                let href = link_2.clone();
+                view! {
+                    <div style="width:100%;background:var(--bg-card);border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;box-shadow:var(--shadow);">
+                        <h2 style="font-size:1.1rem;font-weight:600;color:#fff;margin-bottom:0.75rem;">
+                            <Icon icon=IconName::Link class="icon-sm" />" External Link"
+                        </h2>
+                        <a
+                            href=href
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style="color:var(--accent);text-decoration:none;font-size:0.9rem;font-weight:500;"
+                        >
+                            "View Event Page →"
+                        </a>
+                    </div>
+                }.into_any()
+            } else {
+                ().into_any()
+            }
+        }}
+    }.into_any()
+}
+
+/// Render the registration form with email locked to Google account.
+#[allow(clippy::too_many_arguments)]
+fn render_registration_form(
+    slug_for_reg: String,
+    locked_email: String,
+    is_hybrid: bool,
+    require_contact: bool,
+    has_deposit: bool,
+    deposit_thb: u64,
+    reg_name: ReadSignal<String>,
+    set_reg_name: WriteSignal<String>,
+    _reg_email: ReadSignal<String>,
+    set_reg_email: WriteSignal<String>,
+    reg_participation: ReadSignal<String>,
+    set_reg_participation: WriteSignal<String>,
+    reg_contact_channel: ReadSignal<String>,
+    set_reg_contact_channel: WriteSignal<String>,
+    reg_contact_handle: ReadSignal<String>,
+    set_reg_contact_handle: WriteSignal<String>,
+    reg_deposit_agreed: ReadSignal<bool>,
+    set_reg_deposit_agreed: WriteSignal<bool>,
+    reg_state: ReadSignal<RegState>,
+    set_reg_state: WriteSignal<RegState>,
+) -> AnyView {
+    // Pre-fill email from JWT
+    set_reg_email.set(locked_email.clone());
+
+    view! {
+        {move || {
             let current_reg = reg_state.get();
             match &current_reg {
                 RegState::Success(data) => {
-                    // Auto-redirect: save progress to localStorage then navigate.
-                    // Shows a brief confirmation message while redirecting.
+                    // Auto-redirect: save progress then navigate
                     let next_url = data.next_step.url.clone();
                     let attendee_id = data.attendee_id.clone();
-                    let _event_id = data.next_step.url.clone(); // parse event_id from URL
                     let eid = next_url
                         .split("event_id=")
                         .nth(1)
@@ -721,20 +1147,12 @@ fn render_loaded_event(
                         .unwrap_or_default();
                     let slug_for_ls = slug_for_reg.clone();
 
-                    // Persist to localStorage for resume capability
-                    let _ = js_sys::eval(&format!(
-                        "localStorage.setItem('bethere_progress', JSON.stringify({{attendee_id:'{}',event_id:'{}',slug:'{}'}}'))",
-                        attendee_id, eid, slug_for_ls
-                    ));
+                    saveProgress(&attendee_id, &eid, &slug_for_ls);
 
-                    // Auto-navigate after a brief moment so the user sees the confirmation
                     let redirect_url = next_url.clone();
                     leptos::task::spawn_local(async move {
                         gloo::timers::future::TimeoutFuture::new(800).await;
-                        let _ = js_sys::eval(&format!(
-                            "window.location.href = '{}'",
-                            redirect_url
-                        ));
+                        navigateTo(&redirect_url);
                     });
 
                     view! {
@@ -783,12 +1201,21 @@ fn render_loaded_event(
                 }
                 RegState::Idle => {
                     let slug = slug_for_reg.clone();
-                    let is_hybrid_clone = is_hybrid;
+                    let email_display = locked_email.clone();
+                    let email_for_display = locked_email.clone();
+                    let email_for_submit = locked_email.clone();
                     view! {
                         <div style="width:100%;background:var(--bg-card);border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;box-shadow:var(--shadow);">
                             <h2 style="font-size:1.1rem;font-weight:600;color:#fff;margin-bottom:0.75rem;">
                                 <Icon icon=IconName::Ticket class="icon-md" />" Reserve Your Spot"
                             </h2>
+                            // Show signed-in indicator
+                            <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.75rem;padding:0.5rem 0.75rem;background:rgba(52,211,153,0.1);border-radius:var(--radius);">
+                                <span style="color:#34d399;">"✓"</span>
+                                <span style="color:var(--text-secondary);font-size:0.85rem;">
+                                    {format!("Signed in as {email_display}")}
+                                </span>
+                            </div>
                             <div style="display:flex;flex-direction:column;gap:0.75rem;">
                                 // Name
                                 <input
@@ -798,17 +1225,16 @@ fn render_loaded_event(
                                     on:input=move |ev| set_reg_name.set(event_target_value(&ev))
                                     style="width:100%;padding:0.6rem 0.8rem;background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:0.9rem;outline:none;"
                                 />
-                                // Email
+                                // Email — locked (read-only, from Google account)
                                 <input
                                     type="email"
-                                    placeholder="Email address"
-                                    prop:value=move || reg_email.get()
-                                    on:input=move |ev| set_reg_email.set(event_target_value(&ev))
-                                    style="width:100%;padding:0.6rem 0.8rem;background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:0.9rem;outline:none;"
+                                    value=email_for_display
+                                    readonly
+                                    style="width:100%;padding:0.6rem 0.8rem;background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);color:var(--text-muted);font-size:0.9rem;outline:none;opacity:0.7;cursor:not-allowed;"
                                 />
                                 // Participation type (hybrid only)
                                 {move || {
-                                    if is_hybrid_clone {
+                                    if is_hybrid {
                                         view! {
                                             <select
                                                 style="width:100%;padding:0.6rem 0.8rem;background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:0.9rem;outline:none;"
@@ -874,24 +1300,21 @@ fn render_loaded_event(
                                 // Submit button
                                 {
                                     let slug = slug.clone();
+                                    let email_sub = email_for_submit.clone();
                                     view! {
                                         <button
                                             style="width:100%;padding:0.75rem;background:var(--accent);color:#fff;border:none;border-radius:var(--radius);font-weight:600;font-size:0.95rem;cursor:pointer;transition:opacity 0.2s;"
                                             on:click=move |_| {
                                                 let name_val = reg_name.get();
-                                                let email_val = reg_email.get();
                                                 let part_val = reg_participation.get();
                                                 let channel_val = reg_contact_channel.get();
                                                 let handle_val = reg_contact_handle.get();
                                                 let deposit_val = reg_deposit_agreed.get();
+                                                let email_val = email_sub.clone();
 
                                                 // Client-side validation
                                                 if name_val.trim().is_empty() {
                                                     set_reg_state.set(RegState::Error("Please enter your name".to_string()));
-                                                    return;
-                                                }
-                                                if email_val.trim().is_empty() || !email_val.contains('@') {
-                                                    set_reg_state.set(RegState::Error("Please enter a valid email".to_string()));
                                                     return;
                                                 }
                                                 if require_contact && channel_val.trim().is_empty() {
@@ -929,6 +1352,13 @@ fn render_loaded_event(
                                                         Ok(req) => {
                                                             match req.send().await {
                                                                 Ok(resp) => {
+                                                                    // Handle 401 — session expired
+                                                                    if resp.status() == 401 {
+                                                                        set_reg_state.set(RegState::Error(
+                                                                            "Session expired. Please sign in again.".to_string()
+                                                                        ));
+                                                                        return;
+                                                                    }
                                                                     match resp.text().await {
                                                                         Ok(text) => {
                                                                             match serde_json::from_str::<RegisterResponse>(&text) {
@@ -967,54 +1397,6 @@ fn render_loaded_event(
                         </div>
                     }.into_any()
                 }
-            }
-        }}
-
-        // NFT Badge Section
-        {move || {
-            if has_nft_image {
-                let url = nft_image_url_2.clone();
-                view! {
-                    <div style="width:100%;background:var(--bg-card);border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;box-shadow:var(--shadow);">
-                        <h2 style="font-size:1.1rem;font-weight:600;color:#fff;margin-bottom:0.5rem;">
-                            <Icon icon=IconName::Ticket class="icon-md" />" NFT Badge"
-                        </h2>
-                        <p style="color:var(--text-secondary);font-size:0.85rem;margin-bottom:0.75rem;">
-                            "Earn a commemorative NFT badge when you attend."
-                        </p>
-                        <img
-                            src=url
-                            alt="NFT Badge"
-                            style="max-width:120px;border-radius:var(--radius);"
-                        />
-                    </div>
-                }.into_any()
-            } else {
-                ().into_any()
-            }
-        }}
-
-        // External Link
-        {move || {
-            if has_link {
-                let href = link_2.clone();
-                view! {
-                    <div style="width:100%;background:var(--bg-card);border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;box-shadow:var(--shadow);">
-                        <h2 style="font-size:1.1rem;font-weight:600;color:#fff;margin-bottom:0.75rem;">
-                            <Icon icon=IconName::Link class="icon-sm" />" External Link"
-                        </h2>
-                        <a
-                            href=href
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            style="color:var(--accent);text-decoration:none;font-size:0.9rem;font-weight:500;"
-                        >
-                            "View Event Page →"
-                        </a>
-                    </div>
-                }.into_any()
-            } else {
-                ().into_any()
             }
         }}
     }.into_any()

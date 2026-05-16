@@ -57,8 +57,6 @@ pub fn routes(state: AppState) -> Router<()> {
         )
         // Waitlist signup (public)
         .route("/waitlist", post(waitlist::join_waitlist))
-        // Self-registration (public — attendees register from public event page)
-        .route("/public/register", post(register::register_attendee))
         // Public ticket view (no auth — attendees view their QR slip)
         .route("/public/ticket/{id}", get(attendee::get_public_ticket))
         // Deposit routes (public — attendee checks/initiates deposit)
@@ -93,10 +91,23 @@ pub fn routes(state: AppState) -> Router<()> {
             post(escrow_index::onchain_webhook_handler),
         );
 
+    // Attendee-authenticated routes — require JWT identity but NOT staff status.
+    // Used for endpoints where a verified email is enough (registration, my-registration).
+    let attendee_authed = Router::new()
+        // Auth route that requires session (reads Claims from middleware)
+        // Works for both staff and non-staff — only requires valid JWT.
+        .route("/auth/me", get(auth::auth_me))
+        // Self-registration (requires verified email from JWT)
+        .route("/public/register", post(register::register_attendee))
+        // Attendee's own registration lookup (requires verified email from JWT)
+        .route("/my-registration/{slug}", get(register::my_registration))
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            crate::auth::require_identity,
+        ));
+
     // Protected routes — require staff auth
     let protected = Router::new()
-        // Auth route that requires session (reads Claims from middleware)
-        .route("/auth/me", get(auth::auth_me))
         .route("/attendees", get(attendee::list_attendees))
         .route("/attendee/{id}", get(attendee::get_attendee))
         .route("/checkin/{id}", post(checkin::check_in))
@@ -179,6 +190,6 @@ pub fn routes(state: AppState) -> Router<()> {
         ));
 
     Router::new()
-        .nest("/api", public.merge(protected))
+        .nest("/api", public.merge(attendee_authed).merge(protected))
         .with_state(state)
 }

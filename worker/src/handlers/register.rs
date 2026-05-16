@@ -1,12 +1,18 @@
 //! Self-registration handler for public event sign-up.
-//!
+//
 //! POST /api/public/register — allows attendees to register from the public event page.
+//! GET /api/my-registration/:slug — returns attendee info for the authenticated user.
+//!
 //! Validates input, checks for duplicates, appends to Google Sheet, returns next step.
 
-use axum::{Json, extract::State};
+use axum::{
+    Extension, Json,
+    extract::{Path, State},
+};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use event_checkin_domain::models::auth::Claims;
 use event_checkin_domain::models::error::AppError;
 use event_checkin_domain::models::event::{EventFormat, EventStatus};
 
@@ -22,6 +28,8 @@ use crate::state::AppState;
 pub struct RegisterRequest {
     pub slug: String,
     pub name: String,
+    /// Kept for backward compatibility — email is now taken from JWT claims.
+    #[allow(dead_code)]
     pub email: String,
     /// Optional for InPerson/Online events. Required for Hybrid to choose track.
     /// Defaults based on event format if omitted.
@@ -54,16 +62,32 @@ pub struct RegisterResponse {
 }
 
 // ---------------------------------------------------------------------------
-// Handler
+// Response types
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize)]
+pub struct MyRegistrationResponse {
+    pub attendee_id: String,
+    pub name: String,
+    pub email: String,
+    pub claim_token: String,
+    pub participation_type: String,
+    pub next_step: NextStep,
+}
+
+// ---------------------------------------------------------------------------
+// Handlers
 // ---------------------------------------------------------------------------
 
 /// POST /api/public/register
 ///
-/// Public self-registration endpoint — no auth required.
+/// Self-registration endpoint — requires JWT identity (verified email).
+/// Email is taken from JWT claims, not the request body.
 /// Flow: validate → resolve event → check status → dedup email → append to sheet → return next step.
 #[worker::send]
 pub async fn register_attendee(
     State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
     Json(body): Json<RegisterRequest>,
 ) -> Result<ApiOk<RegisterResponse>, crate::error::WorkerError> {
     // 1. Validate input
@@ -72,10 +96,9 @@ pub async fn register_attendee(
         return Err(AppError::Validation("name is required (max 100 chars)".to_string()).into());
     }
 
-    let email = body.email.trim().to_lowercase();
-    if email.is_empty() || !email.contains('@') || !email.contains('.') || email.len() > 254 {
-        return Err(AppError::Validation("a valid email address is required".to_string()).into());
-    }
+    // Email comes from JWT, not request body — ensures verified identity
+    let email = claims.email.trim().to_lowercase();
+    tracing::info!("registration email from JWT: {email}");
 
     let slug = body.slug.trim();
     if slug.is_empty() {
@@ -254,6 +277,87 @@ pub async fn register_attendee(
         name: name.to_string(),
         email,
         claim_token,
+        next_step,
+    }))
+}
+
+/// GET /api/my-registration/:slug
+///
+/// Returns the authenticated attendee's registration for a given event slug.
+/// Uses JWT identity (claims.email) to find the matching attendee.
+#[worker::send]
+pub async fn my_registration(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(slug): Path<String>,
+) -> Result<ApiOk<MyRegistrationResponse>, crate::error::WorkerError> {
+    let slug = slug.trim();
+    if slug.is_empty() {
+        return Err(AppError::Validation("event slug is required".to_string()).into());
+    }
+
+    // Resolve event by slug from KV
+    let kv = state.events_kv.as_ref().ok_or_else(|| {
+        tracing::error!("EVENTS KV namespace not configured");
+        AppError::Internal("EVENTS KV namespace not configured".to_string())
+    })?;
+
+    let index = crate::event_store::get_event_index(kv)
+        .await
+        .map_err(AppError::Internal)?;
+
+    let event_entry = index
+        .events
+        .iter()
+        .find(|e| e.slug == slug)
+        .ok_or_else(|| AppError::NotFound(format!("event '{slug}' not found")))?;
+
+    let config = crate::event_store::get_event_config(kv, &event_entry.id)
+        .await
+        .map_err(AppError::Internal)?;
+
+    let config = config.ok_or_else(|| AppError::NotFound(format!("event '{slug}' not found")))?;
+
+    // Fetch attendees and find by email (case-insensitive)
+    let attendees = sheets::get_attendees(&state, &config.sheet_id, &config.sheet_name, Some(kv))
+        .await
+        .map_err(|e| {
+            tracing::warn!(error = ?e, "could not fetch attendees");
+            AppError::Internal(format!("failed to fetch attendees: {e}"))
+        })?;
+
+    let attendee = attendees
+        .iter()
+        .find(|a| a.email.eq_ignore_ascii_case(&claims.email))
+        .ok_or_else(|| {
+            AppError::NotFound(format!(
+                "no registration found for {} at event '{slug}'",
+                claims.email
+            ))
+        })?;
+
+    let claim_token = attendee.claim_token.clone().unwrap_or_default();
+    let next_step = build_next_step(
+        &config.event_format,
+        &event_entry.id,
+        &attendee.api_id,
+        &claim_token,
+        &state,
+    );
+
+    tracing::info!(
+        email = %claims.email,
+        slug = %slug,
+        attendee_id = %attendee.api_id,
+        "my-registration lookup successful"
+    );
+
+    Ok(ApiOk::new(MyRegistrationResponse {
+        attendee_id: attendee.api_id.clone(),
+        name: attendee.name.clone(),
+        email: attendee.email.clone(),
+        claim_token,
+        participation_type: attendee.participation_type.clone(),
         next_step,
     }))
 }

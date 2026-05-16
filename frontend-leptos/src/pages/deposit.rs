@@ -46,6 +46,14 @@ extern "C" {
     fn generate_qr_data_url_js(text: &str, size: u32) -> Option<String>;
 }
 
+// ===== Navigation JS Interop =====
+// Uses wasm_bindgen module imports from /js/navigation.js instead of js_sys::eval().
+// This avoids requiring 'unsafe-eval' in the Content-Security-Policy.
+#[wasm_bindgen(module = "/js/navigation.js")]
+extern "C" {
+    fn navigateTo(path: &str);
+}
+
 // ---------------------------------------------------------------------------
 // JS interop — PromptPay QR generation
 // ---------------------------------------------------------------------------
@@ -1832,8 +1840,8 @@ pub fn Deposit() -> impl IntoView {
                             let eid = event_id.clone();
                             leptos::task::spawn_local(async move {
                                 gloo::timers::future::TimeoutFuture::new(1500).await;
-                                let _ = js_sys::eval(&format!(
-                                    "window.location.href = '/ticket/{}?event_id={}'",
+                                navigateTo(&format!(
+                                    "/ticket/{}?event_id={}",
                                     aid, eid
                                 ));
                             });

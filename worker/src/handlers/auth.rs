@@ -24,13 +24,24 @@ use event_checkin_domain::models::api::ApiResponse;
 pub struct CallbackQuery {
     pub code: Option<String>,
     pub error: Option<String>,
+    /// OAuth state parameter — used to pass redirect URL for non-staff users.
+    pub state: Option<String>,
 }
 
 /// GET /api/auth/url
-/// Returns the Google OAuth 2.0 authorization URL for staff login.
+/// Returns the Google OAuth 2.0 authorization URL for login.
+/// Accepts optional `redirect` query param passed as OAuth state.
+#[derive(Debug, Deserialize)]
+pub struct AuthUrlQuery {
+    pub redirect: Option<String>,
+}
+
 #[worker::send]
-pub async fn auth_url(State(state): State<AppState>) -> ApiOk<serde_json::Value> {
-    let url = auth::get_auth_url(&state);
+pub async fn auth_url(
+    State(state): State<AppState>,
+    Query(query): Query<AuthUrlQuery>,
+) -> ApiOk<serde_json::Value> {
+    let url = auth::get_auth_url(&state, query.redirect.as_deref());
     ApiOk::new(json!({
         "auth_url": url,
     }))
@@ -40,9 +51,9 @@ pub async fn auth_url(State(state): State<AppState>) -> ApiOk<serde_json::Value>
 /// Handles the OAuth callback:
 /// 1. Exchanges the authorization code for tokens
 /// 2. Fetches user info from Google
-/// 3. Verifies the user is in the staff allowlist
-/// 4. Creates a JWT session token (async via SubtleCrypto)
-/// 5. Redirects to the staff page with the token in an HttpOnly cookie
+/// 3. Creates a JWT session token for ALL users (staff and non-staff)
+/// 4. Redirects staff to `/staff`, non-staff to the `state` param (or `/`)
+/// 5. Sets HttpOnly cookie with JWT
 #[worker::send]
 pub async fn auth_callback(
     State(state): State<AppState>,
@@ -68,13 +79,9 @@ pub async fn auth_callback(
         }
     };
 
-    // Verify user is in the staff allowlist
-    if !auth::is_staff(&user_info.email, &state).await {
-        tracing::warn!("non-staff user attempted login: {}", user_info.email);
-        return Redirect::to("/login?error=not_authorized").into_response();
-    }
+    let is_staff_user = auth::is_staff(&user_info.email, &state).await;
 
-    // Create JWT session token (async via SubtleCrypto HMAC-SHA256)
+    // Create JWT session token for ALL users (staff and non-staff)
     let token =
         match auth::create_session_jwt(&user_info.email, &user_info.id, &state.config.jwt_secret)
             .await
@@ -86,7 +93,14 @@ pub async fn auth_callback(
             }
         };
 
-    tracing::info!("staff login successful: {}", user_info.email);
+    // Determine redirect: staff → /staff, non-staff → state param or /
+    let redirect_url = if is_staff_user {
+        tracing::info!("staff login successful: {}", user_info.email);
+        "/staff".to_string()
+    } else {
+        tracing::info!("attendee login successful: {}", user_info.email);
+        query.state.clone().unwrap_or_else(|| "/".to_string())
+    };
 
     // Set HttpOnly cookie for browser-based auth. The frontend calls GET /api/auth/me
     // which reads the JWT from this cookie (no localStorage or URL token passing needed).
@@ -95,7 +109,6 @@ pub async fn auth_callback(
         "event_checkin_token={token}; HttpOnly; Secure; SameSite=Lax; Path=/api; Max-Age=86400"
     );
 
-    let redirect_url = "/staff".to_string();
     let mut response = Redirect::to(&redirect_url).into_response();
 
     if let Ok(cookie_value) = HeaderValue::from_str(&http_only_cookie) {
@@ -127,6 +140,9 @@ pub async fn auth_me(
         .any(|e| e.eq_ignore_ascii_case(&claims.email))
     {
         "super_admin".to_string()
+    } else if !auth::is_staff(&claims.email, &state).await {
+        // Non-staff user (attendee who signed in via Google)
+        "attendee".to_string()
     } else {
         match auth::get_staff_role(&claims.email, &state).await.as_deref() {
             Some("admin" | "organizer") => "organizer".to_string(),

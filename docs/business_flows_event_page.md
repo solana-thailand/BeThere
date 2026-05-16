@@ -555,9 +555,9 @@ These are enforced by the backend but the frontend does not have inline warnings
 | ~~No NFT badge preview~~ (✅ Fixed) | ~~Low~~ | Events page shows live badge preview + "Use default badge" auto-fill button. `30a23e0`. |
 | ~~No walk-in attendee registration~~ (✅ Fixed) | ~~Medium~~ | Staff can register walk-ins via scanner UI → KV record → same deposit/NFT/refund flow. `ef70bca`. |
 | ~~No public event page (`/e/{slug}`)~~ (✅ Fixed) | ~~**High**~~ | ✅ **Implemented** — `GET /api/public/event/{slug}` + `/e/:slug` frontend. Sanitized response (no sensitive fields). Only Active/Completed events shown. See `docs/ux_roadmap.md` P0-1. |
-| No self-registration from public event page | **High** | `/e/{slug}` shows event details but attendees cannot register/reserve a spot directly. Needed for "Reserve Spot" flow for online and hybrid events. Attendee fills name + email → backend creates KV record → claim token issued. |
-| No online attendee claim path | **High** | Online/hybrid events need a quest-based NFT claim flow for online attendees. Quiz completion or adventure finish = virtual check-in. No deposit, no refund, no escrow. See Section 18. |
-| No event context on deposit page | **High** | Deposit page jumps straight to payment without showing what event the deposit is for. Needs event header with name + date. See `docs/ux_roadmap.md` P0-2. |
+| ~~No self-registration from public event page~~ (✅ Fixed) | ~~**High**~~ | ✅ **Implemented** — `POST /api/public/register` + "Reserve Spot" form on `/e/{slug}`. Attendee fills name + email → backend appends to Google Sheet → claim token issued → auto-redirect to deposit. |
+| ~~No online attendee claim path~~ (✅ Fixed) | ~~**High**~~ | ✅ **Implemented** — Quiz completion or adventure finish triggers virtual check-in for online attendees. |
+| ~~No event context on deposit page~~ (✅ Fixed) | ~~**High**~~ | ✅ **Implemented** — Deposit page shows event name, date, location header. See `docs/ux_roadmap.md` P0-2. |
 | Scanner has no haptic/audio feedback | Medium | No vibration or sound on scan success/failure. Critical for throughput at real events. `navigator.vibrate()` + short beep. See `docs/ux_roadmap.md` P1-1. |
 | No progress indicator on claim flow | Medium | Multi-step flow (connect → deposit → quiz → claim) with no visible step indicator. See `docs/ux_roadmap.md` P1-2. |
 | No share CTA on NFT mint success | Low | Missing free marketing — "Share your badge" button after NFT mint. See `docs/ux_roadmap.md` P1-3. |
@@ -565,6 +565,8 @@ These are enforced by the backend but the frontend does not have inline warnings
 | ~~No resume capability for partial flows~~ (✅ Fixed) | ~~**High**~~ | localStorage stores `{attendee_id, event_id, event_slug}` after registration. Returning to `/e/{slug}` redirects attendee to their correct step (deposit or ticket). |
 | ~~Confusing landing after slip upload~~ (✅ Fixed) | ~~**Medium**~~ | After uploading THB slip, auto-redirect to `/ticket/{attendee_id}?event_id={id}` showing QR code + pending approval status. Replaces "Go Home" button. |
 | ~~Solana wallet confusing for non-crypto attendees~~ (✅ Fixed) | ~~**Medium**~~ | USDC payment card hidden in production. Only shown when backend returns `dev_mode: true`. Health endpoint and public event endpoint include `dev_mode`. |
+| **No attendee identity verification** | **🔴 Critical** | Anyone who knows an email can register as that person and access their ticket/QR. Fix: require Google Sign-In for registration and ticket access. See `.issues/016_attendee_google_auth.md`. |
+| ~~CSP blocks registration redirect~~ (✅ Fixed) | ~~**High**~~ | ~~`js_sys::eval()` blocked by CSP `script-src`. Fixed by replacing all eval calls with `wasm_bindgen` JS module imports (`navigation.js`).~~ |
 
 ---
 

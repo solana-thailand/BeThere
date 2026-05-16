@@ -117,6 +117,41 @@ USDC payment card on the deposit page is hidden unless the backend returns `dev_
 
 ---
 
+## P0.6 — Attendee Identity Verification (Google Sign-In)
+
+### AF-5. Require Google Sign-In for registration and ticket access
+
+**Status**: ❌ Not started — `.issues/016_attendee_google_auth.md`
+
+**Security vulnerability**: Anyone who knows an email can register as that person, access their deposit page, get their QR code, and check in. The duplicate-email fix (commit 2499a78) made this worse by returning the existing attendee's `claim_token`.
+
+**Fix**: Reuse the existing Google OAuth pipeline (staff login) for attendees. Dual-purpose: JWT = identity proof, roles checked per-page.
+
+**Requirements**:
+- `/e/:slug` hides registration form when not signed in, shows "Sign in with Google to register"
+- After sign-in: email locked to Google account (read-only), registration form visible
+- `POST /api/public/register` requires JWT, email taken from token (not body)
+- New endpoint: `GET /api/my-registration/:slug` (JWT-required, lookup by email in event sheet)
+- Auth callback redirects non-staff back to event page instead of rejecting
+- Staff can register as attendee with same email (roles are per-page, not mutually exclusive)
+
+**Files to create/modify**:
+- `frontend-leptos/src/pages/public_event.rs` (sign-in gate, auth-aware form)
+- `worker/src/handlers/auth.rs` (callback: redirect non-staff to event page)
+- `worker/src/handlers/register.rs` (require JWT, use token email)
+- `worker/src/auth.rs` (add `/api/public/register` to auth-required routes)
+- `frontend-leptos/src/api.rs` (new `my_registration` API call)
+
+---
+
+## P0.5 — Attendee Flow Improvements
+
+### AF-1 through AF-4
+
+(See above — all ✅ Implemented)
+
+---
+
 ## P1 — High Impact
 
 ### P1-1. Scanner Haptic/Audio Feedback

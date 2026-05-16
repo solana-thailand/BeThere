@@ -47,6 +47,14 @@ extern "C" {
     fn launch_confetti();
 }
 
+// ===== Navigation JS Interop =====
+// Uses wasm_bindgen module imports from /js/navigation.js instead of js_sys::eval().
+#[wasm_bindgen(module = "/js/navigation.js")]
+extern "C" {
+    #[wasm_bindgen(js_name = "readClipboardText")]
+    fn read_clipboard_text_js() -> js_sys::Promise;
+}
+
 // ---------------------------------------------------------------------------
 // JS interop — Solana wallet adapter (shared with deposit.rs)
 // ---------------------------------------------------------------------------
@@ -894,17 +902,13 @@ fn QuizSubmittedView(
     let handle_paste = move |_| {
         let set_w = set_wallet_input;
         leptos::task::spawn_local(async move {
-            if let Ok(promise_val) = js_sys::eval(
-                "navigator.clipboard ? navigator.clipboard.readText() : Promise.resolve('')"
-            ) {
-                let promise = js_sys::Promise::from(promise_val);
-                if let Ok(val) = js_sys::futures::JsFuture::from(promise).await
-                    && let Some(text) = val.as_string()
-                {
-                    let trimmed: String = text.trim().to_string();
-                    if !trimmed.is_empty() {
-                        set_w.set(trimmed);
-                    }
+            let promise = read_clipboard_text_js();
+            if let Ok(val) = js_sys::futures::JsFuture::from(promise).await
+                && let Some(text) = val.as_string()
+            {
+                let trimmed: String = text.trim().to_string();
+                if !trimmed.is_empty() {
+                    set_w.set(trimmed);
                 }
             }
         });
@@ -1513,17 +1517,13 @@ pub fn Claim() -> impl IntoView {
     let handle_paste = move |_| {
         let set_w = set_wallet_input;
         leptos::task::spawn_local(async move {
-            if let Ok(promise_val) = js_sys::eval(
-                "navigator.clipboard ? navigator.clipboard.readText() : Promise.resolve('')"
-            ) {
-                let promise = js_sys::Promise::from(promise_val);
-                if let Ok(val) = js_sys::futures::JsFuture::from(promise).await
-                    && let Some(text) = val.as_string()
-                {
-                    let trimmed: String = text.trim().to_string();
-                    if !trimmed.is_empty() {
-                        set_w.set(trimmed);
-                    }
+            let promise = read_clipboard_text_js();
+            if let Ok(val) = js_sys::futures::JsFuture::from(promise).await
+                && let Some(text) = val.as_string()
+            {
+                let trimmed: String = text.trim().to_string();
+                if !trimmed.is_empty() {
+                    set_w.set(trimmed);
                 }
             }
         });
