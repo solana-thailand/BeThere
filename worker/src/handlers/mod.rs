@@ -38,7 +38,7 @@ pub fn routes(state: AppState) -> Router<()> {
         // Auth routes (public)
         .route("/auth/url", get(auth::auth_url))
         .route("/auth/callback", get(auth::auth_callback))
-        .route("/auth/logout", get(auth::auth_logout))
+        .route("/auth/logout", post(auth::auth_logout))
         // Claim routes (public — attendees claim NFTs without staff login)
         .route("/claim/{token}", get(claim::get_claim))
         .route("/claim/{token}", post(claim::post_claim))

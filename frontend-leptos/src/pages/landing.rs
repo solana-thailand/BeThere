@@ -547,6 +547,9 @@ struct MyRegistrationItem {
     event_start_ms: i64,
     #[allow(dead_code)]
     attendee_id: String,
+    /// Human-readable status: "registered", "deposit pending", "deposit confirmed",
+    /// "checked in", "nft claimed".
+    status: String,
     next_step: NextStepData,
 }
 
@@ -633,7 +636,7 @@ fn MyRegistrations() -> impl IntoView {
                                 style="margin-top:0.75rem;"
                                 on:click=move |_| {
                                     leptos::task::spawn_local(async move {
-                                        let _ = gloo::net::http::Request::get("/api/auth/logout")
+                                        let _ = gloo::net::http::Request::post("/api/auth/logout")
                                             .send()
                                             .await;
                                         let window = web_sys::window().expect("no window");
@@ -660,7 +663,7 @@ fn MyRegistrations() -> impl IntoView {
                                     class="btn btn-outline btn-xs"
                                     on:click=move |_| {
                                         leptos::task::spawn_local(async move {
-                                            let _ = gloo::net::http::Request::get("/api/auth/logout")
+                                            let _ = gloo::net::http::Request::post("/api/auth/logout")
                                                 .send()
                                                 .await;
                                             let window = web_sys::window().expect("no window");
@@ -688,6 +691,13 @@ fn MyRegistrations() -> impl IntoView {
                                     "TBA".to_string()
                                 };
                                 let next_url = reg.next_step.url.clone();
+                                let status_color = match reg.status.as_str() {
+                                    "nft claimed" => "#4ade80",
+                                    "checked in" => "#4ade80",
+                                    "deposit confirmed" => "#22c55e",
+                                    "deposit pending" => "#facc15",
+                                    _ => "var(--text-secondary)",
+                                };
                                 view! {
                                     <div style="background:var(--bg-card);border-radius:var(--radius);padding:1rem 1.25rem;box-shadow:var(--shadow);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.5rem;">
                                         <div>
@@ -695,6 +705,9 @@ fn MyRegistrations() -> impl IntoView {
                                                 {reg.event_name}
                                             </a>
                                             <p style="color:var(--text-secondary);font-size:0.8rem;margin-top:0.15rem;">{date_str}</p>
+                                            <p style=format!("color:{status_color};font-size:0.75rem;margin-top:0.1rem;text-transform:capitalize;font-weight:500;")>
+                                                {reg.status.clone()}
+                                            </p>
                                         </div>
                                         <a href=next_url class="btn btn-primary btn-sm" style="text-decoration:none;font-size:0.85rem;">
                                             {step_label}" →"

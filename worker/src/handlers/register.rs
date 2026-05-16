@@ -406,6 +406,9 @@ pub struct MyRegistrationsItem {
     pub attendee_id: String,
     pub name: String,
     pub participation_type: String,
+    /// Human-readable status: "registered", "deposit pending", "deposit confirmed",
+    /// "checked in", "nft claimed".
+    pub status: String,
     pub next_step: NextStep,
 }
 
@@ -475,6 +478,31 @@ pub async fn my_registrations(
                 &state,
             );
 
+            // Derive human-readable status from attendee fields
+            let status = if attendee.claimed_at.as_ref().is_some_and(|s| !s.is_empty()) {
+                "nft claimed".to_string()
+            } else if attendee
+                .checked_in_at
+                .as_ref()
+                .is_some_and(|s| !s.is_empty())
+            {
+                "checked in".to_string()
+            } else if attendee
+                .deposit_verified
+                .as_ref()
+                .is_some_and(|s| !s.is_empty())
+            {
+                "deposit confirmed".to_string()
+            } else if attendee
+                .deposit_method
+                .as_ref()
+                .is_some_and(|s| !s.is_empty())
+            {
+                "deposit pending".to_string()
+            } else {
+                "registered".to_string()
+            };
+
             results.push(MyRegistrationsItem {
                 event_id: event_entry.id.clone(),
                 event_name: event_entry.name.clone(),
@@ -483,6 +511,7 @@ pub async fn my_registrations(
                 attendee_id: attendee.api_id.clone(),
                 name: attendee.name.clone(),
                 participation_type: attendee.participation_type.clone(),
+                status,
                 next_step,
             });
         }

@@ -890,10 +890,10 @@ fn render_loaded_event(
                                 class="btn btn-outline btn-xs"
                                 on:click=move |_| {
                                     leptos::task::spawn_local(async move {
-                                        let _ = gloo::net::http::Request::get("/api/auth/logout")
-                                            .send()
-                                            .await;
-                                        navigateTo("/");
+                                        let _ = gloo::net::http::Request::post("/api/auth/logout")
+                                                                                    .send()
+                                                                                    .await;
+                                                                                navigateTo("/");
                                     });
                                 }
                             >

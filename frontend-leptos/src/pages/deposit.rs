@@ -346,6 +346,30 @@ enum DepositPageState {
 pub fn Deposit() -> impl IntoView {
     let params = use_params::<DepositParams>();
 
+    // Auth state — check if user is signed in (for logout button visibility)
+    let (signed_in_email, set_signed_in_email) = signal(None::<String>);
+    Effect::new(move |_| {
+        leptos::task::spawn_local(async move {
+            let window = web_sys::window().expect("no window");
+            let origin = window
+                .location()
+                .origin()
+                .unwrap_or_else(|_| "http://localhost:8787".to_string());
+            let url = format!("{origin}/api/auth/me");
+            if let Ok(resp) = gloo::net::http::Request::get(&url).send().await {
+                if resp.status() == 200 {
+                    if let Ok(data) = resp.json::<serde_json::Value>().await {
+                        if let Some(email) = data["data"]["email"].as_str() {
+                            if !email.is_empty() {
+                                set_signed_in_email.set(Some(email.to_string()));
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    });
+
     // Reactive state
     let (state, set_state) = signal(DepositPageState::Loading);
     let (toast, set_toast) = signal(None::<components::ToastMessage>);
@@ -1153,22 +1177,28 @@ pub fn Deposit() -> impl IntoView {
 
                 <h1 class="claim-title">"Event Deposit"</h1>
 
-                // Logout button (small, top-right)
-                <div class="logout-btn-wrapper">
-                    <button
-                        class="btn btn-outline btn-xs"
-                        on:click=move |_| {
-                            leptos::task::spawn_local(async move {
-                                let _ = gloo::net::http::Request::get("/api/auth/logout")
-                                    .send()
-                                    .await;
-                                navigateTo("/");
-                            });
-                        }
-                    >
-                        "Sign out"
-                    </button>
-                </div>
+                // Logout button — only visible when signed in
+                {move || match signed_in_email.get() {
+                    Some(email) => view! {
+                        <div class="logout-btn-wrapper">
+                            <span style="color:var(--text-secondary);font-size:0.75rem;margin-right:0.5rem;">{format!("👤 {email}")}</span>
+                            <button
+                                class="btn btn-outline btn-xs"
+                                on:click=move |_| {
+                                    leptos::task::spawn_local(async move {
+                                        let _ = gloo::net::http::Request::post("/api/auth/logout")
+                                                                                    .send()
+                                                                                    .await;
+                                                                                navigateTo("/");
+                                    });
+                                }
+                            >
+                                "Sign out"
+                            </button>
+                        </div>
+                    }.into_any(),
+                    None => ().into_any(),
+                }}
 
                 // Event context header — shows which event this deposit is for
                 {move || {
