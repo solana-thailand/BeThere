@@ -140,13 +140,12 @@ pub async fn register_attendee(
     }
 
     // 3c. Validate deposit agreement if deposit is enabled
-    if config.deposit_enabled
-        && body.deposit_agreed != Some(true) {
-            return Err(AppError::Validation(
-                "you must agree to the deposit commitment to register".to_string(),
-            )
-            .into());
-        }
+    if config.deposit_enabled && body.deposit_agreed != Some(true) {
+        return Err(AppError::Validation(
+            "you must agree to the deposit commitment to register".to_string(),
+        )
+        .into());
+    }
 
     // 4. Determine participation_type
     let participation_type =
@@ -160,12 +159,27 @@ pub async fn register_attendee(
             AppError::Internal(format!("failed to check existing registrations: {e}"))
         })?;
 
-    if attendees.iter().any(|a| a.email.to_lowercase() == email) {
-        tracing::info!(%email, %slug, "registration duplicate");
-        return Err(AppError::Validation(
-            "this email is already registered for this event".to_string(),
-        )
-        .into());
+    // Duplicate email check: if already registered, return existing attendee info
+    // so the frontend can redirect to the correct step (deposit/ticket) instead of
+    // showing an error. This handles the case where localStorage is cleared or the
+    // attendee uses a different device.
+    if let Some(existing) = attendees.iter().find(|a| a.email.to_lowercase() == email) {
+        tracing::info!(%email, %slug, "registration duplicate — returning existing attendee");
+        let claim_token = existing.claim_token.clone().unwrap_or_default();
+        let next_step = build_next_step(
+            &config.event_format,
+            &event_id,
+            &existing.api_id,
+            &claim_token,
+            &state,
+        );
+        return Ok(ApiOk::new(RegisterResponse {
+            attendee_id: existing.api_id.clone(),
+            name: existing.name.clone(),
+            email: existing.email.clone(),
+            claim_token,
+            next_step,
+        }));
     }
 
     // 6. Generate IDs
