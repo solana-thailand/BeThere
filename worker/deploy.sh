@@ -3,8 +3,9 @@
 # Handles Yarn PnP (~/.pnp.cjs) conflict with wrangler's esbuild bundler.
 #
 # Usage:
-#   ./deploy.sh          # Deploy to production
-#   ./deploy.sh dev      # Start local dev server (port 8787)
+#   ./deploy.sh              # Deploy to production
+#   ./deploy.sh dev          # Start dev server with remote KV (production data)
+#   ./deploy.sh dev --local  # Start dev server with local SQLite KV (empty)
 
 set -uo pipefail
 cd "$(dirname "$0")"
@@ -33,8 +34,16 @@ trap restore_pnp EXIT INT TERM
 move_pnp
 
 if [ "${1:-}" = "dev" ]; then
-  echo "🔧 Starting local dev server on http://localhost:8787 ..."
-  npx wrangler dev --port 8787
+  if [ "${2:-}" = "--local" ]; then
+    echo "🔧 Starting local dev server (SQLite KV) on http://localhost:8787 ..."
+    echo "   ⚠️  Local KV is empty — use --remote for real data or seed first."
+    npx wrangler dev --port 8787 --local
+  else
+    echo "🔧 Starting dev server with remote KV on http://localhost:8787 ..."
+    echo "   Using production KV namespace (read/write!)."
+    echo "   Tip: Use bash scripts/seed_dev.sh to copy data first."
+    npx wrangler dev --port 8787 --remote
+  fi
 else
   echo "🚀 Deploying to Cloudflare Workers..."
   npx wrangler deploy
