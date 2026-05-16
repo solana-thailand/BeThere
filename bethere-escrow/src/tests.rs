@@ -85,7 +85,7 @@ fn event_escrow_account(
     address: Pubkey,
     organizer: Pubkey,
     event_id: u64,
-    usdc_mint: Pubkey,
+    deposit_mint: Pubkey,
     vault: Pubkey,
     deposit_amount: u64,
     event_end: i64,
@@ -100,7 +100,7 @@ fn event_escrow_account(
         version: crate::state::ESCROW_VERSION,
         organizer,
         event_id,
-        usdc_mint,
+        deposit_mint,
         vault,
         deposit_amount,
         event_end,
@@ -197,7 +197,7 @@ struct EventEscrowData {
     version: u8,
     organizer: Pubkey,
     event_id: u64,
-    usdc_mint: Pubkey,
+    deposit_mint: Pubkey,
     vault: Pubkey,
     deposit_amount: u64,
     event_end: i64,
@@ -241,7 +241,7 @@ fn test_create_event() {
             CreateEventInstruction {
                 organizer: ORGANIZER,
                 event_escrow: escrow,
-                usdc_mint: USDC_MINT,
+                deposit_mint: USDC_MINT,
                 vault: VAULT,
                 rent: RENT,
                 token_program,
@@ -306,7 +306,7 @@ fn test_create_event_bad_deadline() {
             CreateEventInstruction {
                 organizer: ORGANIZER,
                 event_escrow: escrow,
-                usdc_mint: USDC_MINT,
+                deposit_mint: USDC_MINT,
                 vault: VAULT,
                 rent: RENT,
                 token_program,
@@ -356,7 +356,7 @@ fn test_deposit() {
         DepositInstruction {
             attendee: ATTENDEE,
             event_escrow: escrow,
-            usdc_mint: USDC_MINT,
+            deposit_mint: USDC_MINT,
             attendee_deposit: deposit,
             attendee_ta: ATTENDEE_TA,
             vault: VAULT,
@@ -449,7 +449,7 @@ fn test_deposit_event_not_active() {
         DepositInstruction {
             attendee: ATTENDEE,
             event_escrow: escrow,
-            usdc_mint: USDC_MINT,
+            deposit_mint: USDC_MINT,
             attendee_deposit: deposit,
             attendee_ta: ATTENDEE_TA,
             vault: VAULT,
@@ -648,7 +648,7 @@ fn test_refund() {
             RefundInstruction {
                 attendee: ATTENDEE,
                 event_escrow: escrow,
-                usdc_mint: USDC_MINT,
+                deposit_mint: USDC_MINT,
                 attendee_deposit: deposit,
                 attendee_ta: ATTENDEE_TA,
                 vault: VAULT,
@@ -740,7 +740,7 @@ fn test_refund_not_checked_in() {
             RefundInstruction {
                 attendee: ATTENDEE,
                 event_escrow: escrow,
-                usdc_mint: USDC_MINT,
+                deposit_mint: USDC_MINT,
                 attendee_deposit: deposit,
                 attendee_ta: ATTENDEE_TA,
                 vault: VAULT,
@@ -816,7 +816,7 @@ fn test_refund_already_refunded() {
             RefundInstruction {
                 attendee: ATTENDEE,
                 event_escrow: escrow,
-                usdc_mint: USDC_MINT,
+                deposit_mint: USDC_MINT,
                 attendee_deposit: deposit,
                 attendee_ta: ATTENDEE_TA,
                 vault: VAULT,
@@ -884,15 +884,17 @@ fn test_claim_forfeited() {
     let token_program = quasar_svm::SPL_TOKEN_PROGRAM_ID;
     let system_program = quasar_svm::system_program::ID;
     let (escrow, escrow_bump) = find_event_escrow(&ORGANIZER, EVENT_ID);
+    let (deposit, deposit_bump) = find_attendee_deposit(&escrow, &ATTENDEE);
 
-    // organizer_ta (idx 2) needs writable for init(idempotent)
+    // Accounts that need explicit writable: event_escrow(1), attendee_deposit(2), organizer_ta(3), vault(5)
     let ix = with_writable(
         with_signers(
             ClaimForfeitedInstruction {
                 organizer: ORGANIZER,
                 event_escrow: escrow,
+                attendee_deposit: deposit,
                 organizer_ta: ORGANIZER_TA,
-                usdc_mint: USDC_MINT,
+                deposit_mint: USDC_MINT,
                 vault: VAULT,
                 rent: RENT,
                 token_program,
@@ -902,7 +904,7 @@ fn test_claim_forfeited() {
             .into(),
             &[0],
         ),
-        &[2], // organizer_ta
+        &[3], // organizer_ta
     );
 
     let result = svm.process_instruction(
@@ -923,6 +925,16 @@ fn test_claim_forfeited() {
                 0,              // total_forfeited
                 true,
                 escrow_bump,
+            ),
+            attendee_deposit_account(
+                deposit,
+                ATTENDEE,
+                escrow,
+                DEPOSIT_AMOUNT,
+                1_699_000_000,
+                false, // not checked in (no-show)
+                false, // not refunded
+                deposit_bump,
             ),
             token_account(ORGANIZER_TA, USDC_MINT, ORGANIZER, 0), // init_if_needed
             mint_account(USDC_MINT),
@@ -965,14 +977,16 @@ fn test_claim_forfeited_before_deadline() {
     let token_program = quasar_svm::SPL_TOKEN_PROGRAM_ID;
     let system_program = quasar_svm::system_program::ID;
     let (escrow, escrow_bump) = find_event_escrow(&ORGANIZER, EVENT_ID);
+    let (deposit, deposit_bump) = find_attendee_deposit(&escrow, &ATTENDEE);
 
     let ix = with_writable(
         with_signers(
             ClaimForfeitedInstruction {
                 organizer: ORGANIZER,
                 event_escrow: escrow,
+                attendee_deposit: deposit,
                 organizer_ta: ORGANIZER_TA,
-                usdc_mint: USDC_MINT,
+                deposit_mint: USDC_MINT,
                 vault: VAULT,
                 rent: RENT,
                 token_program,
@@ -982,7 +996,7 @@ fn test_claim_forfeited_before_deadline() {
             .into(),
             &[0],
         ),
-        &[2],
+        &[3],
     );
 
     let result = svm.process_instruction(
@@ -1003,6 +1017,16 @@ fn test_claim_forfeited_before_deadline() {
                 0,
                 true,
                 escrow_bump,
+            ),
+            attendee_deposit_account(
+                deposit,
+                ATTENDEE,
+                escrow,
+                DEPOSIT_AMOUNT,
+                1_699_000_000,
+                false,
+                false,
+                deposit_bump,
             ),
             token_account(ORGANIZER_TA, USDC_MINT, ORGANIZER, 0),
             mint_account(USDC_MINT),
@@ -1029,14 +1053,16 @@ fn test_claim_forfeited_nothing_to_claim() {
     let token_program = quasar_svm::SPL_TOKEN_PROGRAM_ID;
     let system_program = quasar_svm::system_program::ID;
     let (escrow, escrow_bump) = find_event_escrow(&ORGANIZER, EVENT_ID);
+    let (deposit, deposit_bump) = find_attendee_deposit(&escrow, &ATTENDEE);
 
     let ix = with_writable(
         with_signers(
             ClaimForfeitedInstruction {
                 organizer: ORGANIZER,
                 event_escrow: escrow,
+                attendee_deposit: deposit,
                 organizer_ta: ORGANIZER_TA,
-                usdc_mint: USDC_MINT,
+                deposit_mint: USDC_MINT,
                 vault: VAULT,
                 rent: RENT,
                 token_program,
@@ -1046,7 +1072,7 @@ fn test_claim_forfeited_nothing_to_claim() {
             .into(),
             &[0],
         ),
-        &[2],
+        &[3],
     );
 
     let result = svm.process_instruction(
@@ -1068,6 +1094,16 @@ fn test_claim_forfeited_nothing_to_claim() {
                 true,
                 escrow_bump,
             ),
+            attendee_deposit_account(
+                deposit,
+                ATTENDEE,
+                escrow,
+                DEPOSIT_AMOUNT,
+                1_699_000_000,
+                false,
+                true, // already refunded — AlreadyRefunded error
+                deposit_bump,
+            ),
             token_account(ORGANIZER_TA, USDC_MINT, ORGANIZER, 0),
             mint_account(USDC_MINT),
             token_account(VAULT, USDC_MINT, escrow, 0), // vault empty
@@ -1079,6 +1115,183 @@ fn test_claim_forfeited_nothing_to_claim() {
         "claim_forfeited should fail when nothing to claim"
     );
     println!("  CLAIM_FORFEITED_NOTHING: correctly rejected");
+}
+
+// ===========================================================================
+// TEST 12c: Claim forfeited REJECTED for checked-in attendee
+// ===========================================================================
+
+#[test]
+fn test_claim_forfeited_checked_in_rejected() {
+    let mut svm = setup();
+
+    let token_program = quasar_svm::SPL_TOKEN_PROGRAM_ID;
+    let system_program = quasar_svm::system_program::ID;
+    let (escrow, escrow_bump) = find_event_escrow(&ORGANIZER, EVENT_ID);
+    let (deposit, deposit_bump) = find_attendee_deposit(&escrow, &ATTENDEE);
+
+    // Warp past refund_deadline
+    svm.warp_to_timestamp(REFUND_DEADLINE + 1);
+
+    // Organizer tries to claim forfeited for an attendee who WAS checked in
+    let ix = with_writable(
+        with_signers(
+            ClaimForfeitedInstruction {
+                organizer: ORGANIZER,
+                event_escrow: escrow,
+                attendee_deposit: deposit,
+                organizer_ta: ORGANIZER_TA,
+                deposit_mint: USDC_MINT,
+                vault: VAULT,
+                rent: RENT,
+                token_program,
+                system_program,
+                _event_id: EVENT_ID,
+            }
+            .into(),
+            &[0],
+        ),
+        &[3], // organizer_ta
+    );
+
+    let result = svm.process_instruction(
+        &ix,
+        &[
+            signer(ORGANIZER),
+            event_escrow_account(
+                escrow,
+                ORGANIZER,
+                EVENT_ID,
+                USDC_MINT,
+                VAULT,
+                DEPOSIT_AMOUNT,
+                EVENT_END,
+                REFUND_DEADLINE,
+                DEPOSIT_AMOUNT, // total_deposited
+                0,              // total_refunded
+                0,              // total_forfeited
+                true,
+                escrow_bump,
+            ),
+            attendee_deposit_account(
+                deposit,
+                ATTENDEE,
+                escrow,
+                DEPOSIT_AMOUNT,
+                1_699_000_000,
+                true,  // CHECKED IN — organizer should NOT be able to claim
+                false, // not refunded
+                deposit_bump,
+            ),
+            token_account(ORGANIZER_TA, USDC_MINT, ORGANIZER, 0),
+            mint_account(USDC_MINT),
+            token_account(VAULT, USDC_MINT, escrow, DEPOSIT_AMOUNT),
+        ],
+    );
+
+    assert!(
+        result.raw_result.is_err(),
+        "claim_forfeited should FAIL for checked-in attendee — expected AttendeeCheckedIn (0x5)"
+    );
+    println!("  CLAIM_FORFEITED_CHECKED_IN: correctly rejected with AttendeeCheckedIn");
+}
+
+// ===========================================================================
+// TEST 12d: Checked-in attendee can refund AFTER refund_deadline
+// ===========================================================================
+
+#[test]
+fn test_refund_checked_in_after_deadline() {
+    let mut svm = setup();
+
+    let token_program = quasar_svm::SPL_TOKEN_PROGRAM_ID;
+    let system_program = quasar_svm::system_program::ID;
+    let (escrow, escrow_bump) = find_event_escrow(&ORGANIZER, EVENT_ID);
+    let (deposit, deposit_bump) = find_attendee_deposit(&escrow, &ATTENDEE);
+
+    // Warp past refund_deadline (not just past event_end)
+    svm.warp_to_timestamp(REFUND_DEADLINE + 1);
+
+    let ix = with_writable(
+        with_signers(
+            RefundInstruction {
+                attendee: ATTENDEE,
+                event_escrow: escrow,
+                deposit_mint: USDC_MINT,
+                attendee_deposit: deposit,
+                attendee_ta: ATTENDEE_TA,
+                vault: VAULT,
+                rent: RENT,
+                token_program,
+                system_program,
+                _event_id: EVENT_ID,
+            }
+            .into(),
+            &[0],
+        ),
+        &[4], // attendee_ta
+    );
+
+    let result = svm.process_instruction(
+        &ix,
+        &[
+            signer(ATTENDEE),
+            event_escrow_account(
+                escrow,
+                ORGANIZER,
+                EVENT_ID,
+                USDC_MINT,
+                VAULT,
+                DEPOSIT_AMOUNT,
+                EVENT_END,
+                REFUND_DEADLINE,
+                DEPOSIT_AMOUNT,
+                0,
+                0,
+                true,
+                escrow_bump,
+            ),
+            mint_account(USDC_MINT),
+            attendee_deposit_account(
+                deposit,
+                ATTENDEE,
+                escrow,
+                DEPOSIT_AMOUNT,
+                1_699_000_000,
+                true,  // CHECKED IN — should bypass refund_deadline
+                false, // not refunded
+                deposit_bump,
+            ),
+            token_account(ATTENDEE_TA, USDC_MINT, ATTENDEE, 0),
+            token_account(VAULT, USDC_MINT, escrow, DEPOSIT_AMOUNT),
+        ],
+    );
+
+    assert!(
+        result.is_ok(),
+        "checked-in attendee should be able to refund after refund_deadline: {:?}",
+        result.raw_result
+    );
+    result.print_logs();
+
+    // Verify vault is drained
+    let vault_account = result.account(&VAULT).unwrap();
+    let vault_token = spl_token_interface::state::Account::unpack(&vault_account.data).unwrap();
+    assert_eq!(vault_token.amount, 0, "vault should be empty after refund");
+
+    // Verify attendee received tokens
+    let attendee_ta_account = result.account(&ATTENDEE_TA).unwrap();
+    let attendee_token =
+        spl_token_interface::state::Account::unpack(&attendee_ta_account.data).unwrap();
+    assert_eq!(
+        attendee_token.amount, DEPOSIT_AMOUNT,
+        "checked-in attendee should receive full deposit after deadline"
+    );
+
+    println!(
+        "  REFUND_CHECKED_IN_AFTER_DEADLINE CU: {}",
+        result.compute_units_consumed
+    );
 }
 
 // ===========================================================================
@@ -1208,7 +1421,7 @@ fn test_full_happy_path() {
             CreateEventInstruction {
                 organizer: ORGANIZER,
                 event_escrow: escrow,
-                usdc_mint: USDC_MINT,
+                deposit_mint: USDC_MINT,
                 vault: VAULT,
                 rent: RENT,
                 token_program,
@@ -1248,7 +1461,7 @@ fn test_full_happy_path() {
         DepositInstruction {
             attendee: ATTENDEE,
             event_escrow: escrow,
-            usdc_mint: USDC_MINT,
+            deposit_mint: USDC_MINT,
             attendee_deposit: deposit,
             attendee_ta: ATTENDEE_TA,
             vault: VAULT,
@@ -1325,7 +1538,7 @@ fn test_full_happy_path() {
             RefundInstruction {
                 attendee: ATTENDEE,
                 event_escrow: escrow,
-                usdc_mint: USDC_MINT,
+                deposit_mint: USDC_MINT,
                 attendee_deposit: deposit,
                 attendee_ta: ATTENDEE_TA,
                 vault: VAULT,
@@ -1432,17 +1645,22 @@ fn test_no_show_path() {
     let system_program = quasar_svm::system_program::ID;
     let (escrow, escrow_bump) = find_event_escrow(&ORGANIZER, EVENT_ID);
 
+    // Two attendees: ATTENDEE (checked in + refunded), ATTENDEE2 (no-show)
+    const ATTENDEE2: Pubkey = Pubkey::new_from_array([10; 32]);
+    let (deposit2, deposit2_bump) = find_attendee_deposit(&escrow, &ATTENDEE2);
+
     // Warp past refund_deadline
     svm.warp_to_timestamp(REFUND_DEADLINE + 1);
 
-    // Organizer claims forfeited — attendee deposited but never checked in or refunded
+    // Organizer claims forfeited — ATTENDEE2 deposited but never checked in or refunded
     let ix = with_writable(
         with_signers(
             ClaimForfeitedInstruction {
                 organizer: ORGANIZER,
                 event_escrow: escrow,
+                attendee_deposit: deposit2,
                 organizer_ta: ORGANIZER_TA,
-                usdc_mint: USDC_MINT,
+                deposit_mint: USDC_MINT,
                 vault: VAULT,
                 rent: RENT,
                 token_program,
@@ -1452,7 +1670,7 @@ fn test_no_show_path() {
             .into(),
             &[0],
         ),
-        &[2], // organizer_ta
+        &[1, 2, 3, 5], // event_escrow, attendee_deposit, organizer_ta, vault
     );
 
     // 2 attendees deposited: one checked in and refunded, one no-show
@@ -1479,6 +1697,16 @@ fn test_no_show_path() {
                 0,
                 true,
                 escrow_bump,
+            ),
+            attendee_deposit_account(
+                deposit2,
+                ATTENDEE2,
+                escrow,
+                attendee2_amount,
+                1_699_000_000,
+                false, // not checked in (no-show)
+                false, // not refunded
+                deposit2_bump,
             ),
             token_account(ORGANIZER_TA, USDC_MINT, ORGANIZER, 0),
             mint_account(USDC_MINT),
@@ -1740,7 +1968,7 @@ fn test_full_lifecycle_with_deactivate() {
             CreateEventInstruction {
                 organizer: ORGANIZER,
                 event_escrow: escrow,
-                usdc_mint: USDC_MINT,
+                deposit_mint: USDC_MINT,
                 vault: VAULT,
                 rent: RENT,
                 token_program,
@@ -1777,7 +2005,7 @@ fn test_full_lifecycle_with_deactivate() {
         DepositInstruction {
             attendee: ATTENDEE,
             event_escrow: escrow,
-            usdc_mint: USDC_MINT,
+            deposit_mint: USDC_MINT,
             attendee_deposit: deposit,
             attendee_ta: ATTENDEE_TA,
             vault: VAULT,
@@ -1838,7 +2066,7 @@ fn test_full_lifecycle_with_deactivate() {
             RefundInstruction {
                 attendee: ATTENDEE,
                 event_escrow: escrow,
-                usdc_mint: USDC_MINT,
+                deposit_mint: USDC_MINT,
                 attendee_deposit: deposit,
                 attendee_ta: ATTENDEE_TA,
                 vault: VAULT,
@@ -2226,7 +2454,7 @@ fn test_deposit_escrow_version_mismatch() {
         version: 0, // v0 — should be rejected
         organizer: ORGANIZER,
         event_id: EVENT_ID,
-        usdc_mint: USDC_MINT,
+        deposit_mint: USDC_MINT,
         vault: VAULT,
         deposit_amount: DEPOSIT_AMOUNT,
         event_end: EVENT_END,
@@ -2253,7 +2481,7 @@ fn test_deposit_escrow_version_mismatch() {
             DepositInstruction {
                 attendee: ATTENDEE,
                 event_escrow: escrow,
-                usdc_mint: USDC_MINT,
+                deposit_mint: USDC_MINT,
                 attendee_deposit: deposit,
                 attendee_ta: ATTENDEE_TA,
                 vault: VAULT,

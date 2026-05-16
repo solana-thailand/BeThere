@@ -24,7 +24,7 @@ pub enum EscrowError {
     Unauthorized = 9,
     /// Vault account does not match the escrow's stored vault.
     VaultMismatch = 10,
-    /// USDC mint does not match the escrow's stored mint.
+    /// Deposit mint does not match the escrow's stored mint.
     MintMismatch = 11,
     /// Deposit amount must be greater than zero.
     InvalidDepositAmount = 12,
@@ -40,7 +40,7 @@ pub enum EscrowError {
     DepositNotRefunded = 17,
     /// Event escrow still has data and deposit not refunded.
     EventEscrowStillActive = 18,
-    /// Refund deadline has passed — organizer may claim forfeited.
+    /// Refund deadline has passed — no-show deposits may be forfeited.
     RefundDeadlinePassed = 19,
     /// EventEscrow schema version is not supported by this program.
     EscrowVersionMismatch = 20,

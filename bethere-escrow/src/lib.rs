@@ -21,7 +21,7 @@ declare_id!("C6HDeZES9aPpNwe3UvS9ecmfcRhH1XeJb8PGJmLG3z3T");
 mod bethere_escrow {
     use super::*;
 
-    /// Initialize an event escrow with USDC vault.
+    /// Initialize an event escrow with deposit vault.
     /// Called by organizer before registration opens.
     #[instruction(discriminator = 0)]
     pub fn create_event(
@@ -41,7 +41,7 @@ mod bethere_escrow {
         ctx.accounts.emit_event()
     }
 
-    /// Deposit USDC into the event escrow vault.
+    /// Deposit tokens into the event escrow vault.
     /// Called by attendee at registration time.
     #[instruction(discriminator = 1)]
     pub fn deposit(ctx: Ctx<Deposit>, _event_id: u64) -> Result<(), ProgramError> {
@@ -58,9 +58,10 @@ mod bethere_escrow {
         ctx.accounts.emit_event()
     }
 
-    /// Refund USDC to attendee after event ends (before refund_deadline).
+    /// Refund tokens to attendee after event ends.
     /// Called by attendee (signed by their wallet).
-    /// Note: refund does NOT require checked_in — anti-rug-pull (SEC-001 fix).
+    /// Checked-in attendees: can refund anytime after event_end (no deadline).
+    /// No-show attendees: must refund before refund_deadline.
     #[instruction(discriminator = 3)]
     pub fn refund(ctx: Ctx<Refund>, _event_id: u64) -> Result<(), ProgramError> {
         ctx.accounts.validate_and_update()?;
@@ -68,8 +69,9 @@ mod bethere_escrow {
         ctx.accounts.emit_event()
     }
 
-    /// Claim forfeited deposits (no-shows) after refund deadline.
-    /// Called by organizer.
+    /// Claim a single no-show's forfeited deposit after refund deadline.
+    /// Must pass the specific AttendeeDeposit account.
+    /// Checked-in attendees are protected — their deposits cannot be forfeited.
     #[instruction(discriminator = 4)]
     pub fn claim_forfeited(ctx: Ctx<ClaimForfeited>, _event_id: u64) -> Result<(), ProgramError> {
         ctx.accounts.validate_and_claim(&ctx.bumps)

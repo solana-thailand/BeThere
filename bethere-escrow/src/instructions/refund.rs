@@ -8,6 +8,14 @@ use {
     quasar_spl::prelude::*,
 };
 
+/// Refund deposit to attendee.
+///
+/// Two paths:
+/// 1. **Checked-in attendee**: Can refund anytime after `event_end`. No deadline.
+///    They earned their deposit back by showing up — they should always be able to claim it.
+/// 2. **No-show attendee (not checked in)**: Can only refund after `event_end`
+///    and before `refund_deadline`. After the deadline, the organizer can claim
+///    their deposit as forfeited.
 #[derive(Accounts)]
 #[instruction(event_id: u64)]
 pub struct Refund {
@@ -19,9 +27,9 @@ pub struct Refund {
     )]
     pub event_escrow: Account<EventEscrow>,
     #[account(
-        constraints(*usdc_mint.address() == *event_escrow.usdc_mint()) @ EscrowError::MintMismatch
+        constraints(*deposit_mint.address() == *event_escrow.deposit_mint()) @ EscrowError::MintMismatch
     )]
-    pub usdc_mint: Account<Mint>,
+    pub deposit_mint: Account<Mint>,
     #[account(
         mut,
         constraints(*attendee_deposit.attendee() == *attendee.address()) @ EscrowError::Unauthorized,
@@ -32,7 +40,7 @@ pub struct Refund {
     #[account(
         init(idempotent),
         payer = attendee,
-        token(mint = usdc_mint, authority = attendee, token_program = token_program)
+        token(mint = deposit_mint, authority = attendee, token_program = token_program)
     )]
     pub attendee_ta: Account<Token>,
     #[account(
@@ -53,25 +61,26 @@ impl Refund {
 
         let clock = <Clock as quasar_lang::sysvars::Sysvar>::get()?;
 
-        // Verify event has ended
+        // Verify event has ended.
         if clock.unix_timestamp.get() < self.event_escrow.event_end() {
             return Err(EscrowError::RefundNotYetAllowed.into());
         }
 
-        // Verify refund deadline has not passed
-        // After refund_deadline, only claim_forfeited is available.
-        // This prevents a race where organizer claims forfeited (draining vault)
-        // and then attendee refunds fail because vault is empty.
-        if clock.unix_timestamp.get() >= self.event_escrow.refund_deadline() {
+        // If attendee was NOT checked in, they must refund before the deadline.
+        // After refund_deadline, the organizer can claim no-show deposits.
+        // Checked-in attendees can refund anytime — they showed up.
+        if !self.attendee_deposit.checked_in()
+            && clock.unix_timestamp.get() >= self.event_escrow.refund_deadline()
+        {
             return Err(EscrowError::RefundDeadlinePassed.into());
         }
 
         let amount = self.attendee_deposit.amount();
 
-        // Mark as refunded
+        // Mark as refunded.
         self.attendee_deposit.refunded = true.into();
 
-        // Update escrow totals (checked arithmetic)
+        // Update escrow totals (checked arithmetic).
         let total_refunded = self.event_escrow.total_refunded();
         self.event_escrow.total_refunded = total_refunded
             .checked_add(amount)
@@ -93,14 +102,15 @@ impl Refund {
             Seed::from(bump.as_ref()),
         ];
 
+        let mint_decimals = self.deposit_mint.decimals();
         self.token_program
             .transfer_checked(
                 &self.vault,
-                &self.usdc_mint,
+                &self.deposit_mint,
                 &self.attendee_ta,
                 &self.event_escrow,
                 amount,
-                6,
+                mint_decimals,
             )
             .invoke_signed(&seeds)
     }

@@ -8,7 +8,7 @@ pub const ESCROW_VERSION: u8 = 1;
 /// Current schema version for AttendeeDeposit.
 pub const DEPOSIT_VERSION: u8 = 1;
 
-/// PDA — one per event, holds all USDC deposits in a token account.
+/// PDA — one per event, holds all deposits in a token account.
 /// Seeds: ["escrow", organizer, event_id]
 ///
 /// Space (v1):
@@ -22,21 +22,23 @@ pub struct EventEscrow {
     pub organizer: Address,
     /// Unique event identifier for PDA seed derivation.
     pub event_id: u64,
-    /// USDC mint address.
-    pub usdc_mint: Address,
-    /// Token account owned by this PDA — holds deposited USDC.
+    /// Deposit mint address (USDC, USDG, or any SPL token).
+    pub deposit_mint: Address,
+    /// Token account owned by this PDA — holds deposited tokens.
     pub vault: Address,
-    /// Fixed deposit amount in USDC smallest unit (6 decimals -> $15 = 15_000_000).
+    /// Fixed deposit amount in smallest unit (e.g., 6 decimals -> $15 = 15_000_000).
     pub deposit_amount: u64,
     /// Event end timestamp (unix seconds). Refunds allowed after this.
     pub event_end: i64,
     /// Refund deadline (event_end + grace period, e.g., +7 days).
+    /// Only applies to no-shows (checked_in == false).
+    /// Checked-in attendees can refund anytime after event_end.
     pub refund_deadline: i64,
-    /// Total USDC deposited across all attendees.
+    /// Total tokens deposited across all attendees.
     pub total_deposited: u64,
-    /// Total USDC refunded.
+    /// Total tokens refunded.
     pub total_refunded: u64,
-    /// Total USDC claimed by organizer (forfeited no-show deposits).
+    /// Total tokens claimed by organizer (forfeited no-show deposits).
     pub total_forfeited: u64,
     /// Whether the event is active (deposits accepted).
     pub is_active: bool,
@@ -60,13 +62,13 @@ pub struct AttendeeDeposit {
     pub attendee: Address,
     /// Reference to EventEscrow.
     pub event: Address,
-    /// Amount deposited (USDC smallest unit).
+    /// Amount deposited (smallest unit).
     pub amount: u64,
     /// Deposit timestamp.
     pub deposited_at: i64,
     /// Whether attendee checked in (set by organizer authority).
     pub checked_in: bool,
-    /// Whether refund has been claimed.
+    /// Whether deposit has been settled (refunded or forfeited).
     pub refunded: bool,
     /// Bump seed for PDA.
     pub bump: u8,

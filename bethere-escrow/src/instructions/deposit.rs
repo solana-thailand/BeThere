@@ -20,9 +20,9 @@ pub struct Deposit {
     )]
     pub event_escrow: Account<EventEscrow>,
     #[account(
-        constraints(*usdc_mint.address() == *event_escrow.usdc_mint()) @ EscrowError::MintMismatch
+        constraints(*deposit_mint.address() == *event_escrow.deposit_mint()) @ EscrowError::MintMismatch
     )]
-    pub usdc_mint: Account<Mint>,
+    pub deposit_mint: Account<Mint>,
     #[account(
         init,
         payer = attendee,
@@ -60,7 +60,7 @@ impl Deposit {
             _padding: [0; 11],
         });
 
-        // Update escrow totals (checked arithmetic)
+        // Update escrow totals (checked arithmetic).
         let total_deposited = self.event_escrow.total_deposited();
         self.event_escrow.total_deposited = total_deposited
             .checked_add(amount)
@@ -73,14 +73,15 @@ impl Deposit {
     #[inline(always)]
     pub fn transfer_usdc(&self) -> Result<(), ProgramError> {
         let amount = self.event_escrow.deposit_amount();
+        let mint_decimals = self.deposit_mint.decimals();
         self.token_program
             .transfer_checked(
                 &self.attendee_ta,
-                &self.usdc_mint,
+                &self.deposit_mint,
                 &self.vault,
                 &self.attendee,
                 amount,
-                6,
+                mint_decimals,
             )
             .invoke()
     }

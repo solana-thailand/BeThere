@@ -19,11 +19,11 @@ pub struct CreateEvent {
         address = EventEscrow::seeds(organizer.address(), event_id)
     )]
     pub event_escrow: Account<EventEscrow>,
-    pub usdc_mint: Account<Mint>,
+    pub deposit_mint: Account<Mint>,
     #[account(
         init(idempotent),
         payer = organizer,
-        token(mint = usdc_mint, authority = event_escrow, token_program = token_program)
+        token(mint = deposit_mint, authority = event_escrow, token_program = token_program)
     )]
     pub vault: Account<Token>,
     pub rent: Sysvar<Rent>,
@@ -58,7 +58,7 @@ impl CreateEvent {
             version: ESCROW_VERSION,
             organizer: *self.organizer.address(),
             event_id,
-            usdc_mint: *self.usdc_mint.address(),
+            deposit_mint: *self.deposit_mint.address(),
             vault: *self.vault.address(),
             deposit_amount,
             event_end,
