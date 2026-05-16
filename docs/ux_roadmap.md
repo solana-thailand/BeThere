@@ -121,7 +121,7 @@ USDC payment card on the deposit page is hidden unless the backend returns `dev_
 
 ### AF-5. Require Google Sign-In for registration and ticket access
 
-**Status**: ❌ Not started — `.issues/016_attendee_google_auth.md`
+**Status**: ✅ Implemented (commit `63bbf26` — `.issues/016_attendee_google_auth.md`, `.handovers/058_attendee_google_auth.md`)
 
 **Security vulnerability**: Anyone who knows an email can register as that person, access their deposit page, get their QR code, and check in. The duplicate-email fix (commit 2499a78) made this worse by returning the existing attendee's `claim_token`.
 
@@ -149,6 +149,28 @@ USDC payment card on the deposit page is hidden unless the backend returns `dev_
 ### AF-1 through AF-4
 
 (See above — all ✅ Implemented)
+
+---
+
+## P0.7 — Post-Auth Navigation & Logout (Issue 017)
+
+### AF-6. Deposit page "Back to event" navigation
+
+**Status**: ❌ Not started — `.issues/017_attendee_navigation_logout.md`
+
+Deposit page has "← Back to home" linking to `/`. This is a dead-end — no way back to `/e/:slug`. Fix: add `event_slug` to `DepositStatusResponse`, link back to `/e/:slug`.
+
+### AF-7. Logout button for attendees
+
+**Status**: ❌ Not started — `.issues/017_attendee_navigation_logout.md`
+
+No logout exists anywhere. JWT cookie is `HttpOnly` — needs `POST /api/auth/logout` server-side. Add logout button on deposit page + public event page.
+
+### AF-8. "My Registrations" on landing page
+
+**Status**: ❌ Not started — `.issues/017_attendee_navigation_logout.md`
+
+Signed-in attendees visiting `/` see no indication they're signed in. No list of their registered events. Add `GET /api/my-registrations` + "My Events" section on landing page.
 
 ---
 

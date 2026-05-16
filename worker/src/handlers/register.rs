@@ -392,6 +392,111 @@ fn split_name(name: &str) -> (String, String) {
     }
 }
 
+// ---------------------------------------------------------------------------
+// GET /api/my-registrations — all registrations for the signed-in user
+// ---------------------------------------------------------------------------
+
+/// A single registration summary returned by `my_registrations`.
+#[derive(Debug, Clone, Serialize)]
+pub struct MyRegistrationsItem {
+    pub event_id: String,
+    pub event_name: String,
+    pub event_slug: String,
+    pub event_start_ms: i64,
+    pub attendee_id: String,
+    pub name: String,
+    pub participation_type: String,
+    pub next_step: NextStep,
+}
+
+/// GET /api/my-registrations
+///
+/// Returns all registrations for the authenticated user across all events.
+/// Iterates active events from KV index, checks each event's attendee list for the JWT email.
+/// Uses KV-cached attendee data so this is efficient.
+#[worker::send]
+pub async fn my_registrations(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+) -> Result<ApiOk<Vec<MyRegistrationsItem>>, crate::error::WorkerError> {
+    let kv = state
+        .events_kv
+        .as_ref()
+        .ok_or_else(|| AppError::Internal("EVENTS KV not configured".to_string()))?;
+
+    let index = crate::event_store::get_event_index(kv)
+        .await
+        .map_err(AppError::Internal)?;
+
+    let mut results: Vec<MyRegistrationsItem> = Vec::new();
+
+    for event_entry in &index.events {
+        // Skip completed/archived events
+        if matches!(
+            event_entry.status,
+            EventStatus::Completed | EventStatus::Archived
+        ) {
+            continue;
+        }
+
+        // Load event config to get sheet info
+        let config = match crate::event_store::get_event_config(kv, &event_entry.id).await {
+            Ok(Some(c)) => c,
+            _ => continue,
+        };
+
+        // Fetch attendees for this event (KV-cached)
+        let attendees =
+            match sheets::get_attendees(&state, &config.sheet_id, &config.sheet_name, Some(kv))
+                .await
+            {
+                Ok(a) => a,
+                Err(e) => {
+                    tracing::warn!(
+                        event_id = %event_entry.id,
+                        error = %e,
+                        "my-registrations: failed to fetch attendees, skipping"
+                    );
+                    continue;
+                }
+            };
+
+        // Find attendee matching JWT email
+        if let Some(attendee) = attendees
+            .iter()
+            .find(|a| a.email.eq_ignore_ascii_case(&claims.email))
+        {
+            let claim_token = attendee.claim_token.clone().unwrap_or_default();
+            let next_step = build_next_step(
+                &config.event_format,
+                &event_entry.id,
+                &attendee.api_id,
+                &claim_token,
+                &state,
+            );
+
+            results.push(MyRegistrationsItem {
+                event_id: event_entry.id.clone(),
+                event_name: event_entry.name.clone(),
+                event_slug: event_entry.slug.clone(),
+                event_start_ms: event_entry.event_start_ms,
+                attendee_id: attendee.api_id.clone(),
+                name: attendee.name.clone(),
+                participation_type: attendee.participation_type.clone(),
+                next_step,
+            });
+        }
+    }
+
+    tracing::info!(
+        email = %claims.email,
+        count = results.len(),
+        "my-registrations lookup complete"
+    );
+
+    Ok(ApiOk::new(results))
+}
+
 /// Build the next_step response based on event format.
 fn build_next_step(
     format: &EventFormat,

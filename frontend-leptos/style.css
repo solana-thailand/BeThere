@@ -7411,6 +7411,15 @@ nav a.active {
     text-decoration: underline;
 }
 
+/* Logout button wrapper — top-right aligned on deposit page.
+ * Replaces: style="position:absolute;top:1rem;right:1rem;" */
+.logout-btn-wrapper {
+    display: flex;
+    justify-content: flex-end;
+    width: 100%;
+    margin-bottom: 0.5rem;
+}
+
 /* ---------- Success / Celebration States ---------- */
 
 /* Large celebration icon

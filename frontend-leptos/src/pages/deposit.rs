@@ -1153,6 +1153,23 @@ pub fn Deposit() -> impl IntoView {
 
                 <h1 class="claim-title">"Event Deposit"</h1>
 
+                // Logout button (small, top-right)
+                <div class="logout-btn-wrapper">
+                    <button
+                        class="btn btn-outline btn-xs"
+                        on:click=move |_| {
+                            leptos::task::spawn_local(async move {
+                                let _ = gloo::net::http::Request::get("/api/auth/logout")
+                                    .send()
+                                    .await;
+                                navigateTo("/");
+                            });
+                        }
+                    >
+                        "Sign out"
+                    </button>
+                </div>
+
                 // Event context header — shows which event this deposit is for
                 {move || {
                     let s = state.get();
@@ -1498,10 +1515,23 @@ pub fn Deposit() -> impl IntoView {
 
                                 </div>
 
-                                // Back to home
-                                <a href="/" class="link-back-home">
-                                    "← Back to home"
-                                </a>
+                                // Back to event
+                                {
+                                    let slug = data_clone.event_slug.clone();
+                                    if !slug.is_empty() {
+                                        view! {
+                                            <a href=format!("/e/{slug}") class="link-back-home">
+                                                "← Back to event"
+                                            </a>
+                                        }.into_any()
+                                    } else {
+                                        view! {
+                                            <a href="/" class="link-back-home">
+                                                "← Back to home"
+                                            </a>
+                                        }.into_any()
+                                    }
+                                }
                             }
                                 .into_any()
                         }
@@ -1815,9 +1845,22 @@ pub fn Deposit() -> impl IntoView {
                                     </p>
                                 </div>
 
-                                <a href="/" class="link-back-home">
-                                    "← Back to home"
-                                </a>
+                                {
+                                    let slug = data.event_slug.clone();
+                                    if !slug.is_empty() {
+                                        view! {
+                                            <a href=format!("/e/{slug}") class="link-back-home">
+                                                "← Back to event"
+                                            </a>
+                                        }.into_any()
+                                    } else {
+                                        view! {
+                                            <a href="/" class="link-back-home">
+                                                "← Back to home"
+                                            </a>
+                                        }.into_any()
+                                    }
+                                }
                             }
                                 .into_any()
                         }

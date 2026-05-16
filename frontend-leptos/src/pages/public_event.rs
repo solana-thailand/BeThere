@@ -877,6 +877,35 @@ fn render_loaded_event(
             }
         }}
 
+        // Signed-in indicator + logout (visible when signed in)
+        {move || {
+            match &auth_state.get() {
+                AuthState::SignedIn(email) => {
+                    view! {
+                        <div style="width:100%;display:flex;align-items:center;justify-content:space-between;background:var(--bg-card);border-radius:var(--radius);padding:0.6rem 1rem;margin-bottom:0.75rem;box-shadow:var(--shadow);">
+                            <span style="color:var(--text-secondary);font-size:0.8rem;">
+                                {format!("👤 {email}")}
+                            </span>
+                            <button
+                                class="btn btn-outline btn-xs"
+                                on:click=move |_| {
+                                    leptos::task::spawn_local(async move {
+                                        let _ = gloo::net::http::Request::get("/api/auth/logout")
+                                            .send()
+                                            .await;
+                                        navigateTo("/");
+                                    });
+                                }
+                            >
+                                "Sign out"
+                            </button>
+                        </div>
+                    }.into_any()
+                }
+                _ => ().into_any(),
+            }
+        }}
+
         // Registration Section — auth-gated
         {move || {
             if !show_reg_form {

@@ -2090,6 +2090,9 @@ pub struct DepositStatusResponse {
     pub event_name: String,
     #[serde(default)]
     pub event_tagline: String,
+    /// Event slug for navigation back to `/e/:slug`.
+    #[serde(default)]
+    pub event_slug: String,
     pub status: Option<DepositStatusInfo>,
     /// Whether the backend is in dev mode (shows Solana wallet options).
     #[serde(default)]

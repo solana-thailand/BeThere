@@ -8,6 +8,7 @@ use leptos::prelude::*;
 use leptos_router::components::A;
 use serde::Deserialize;
 
+use crate::api::ApiResponse;
 use crate::icons::{Icon, IconName};
 
 /// Waitlist signup form component.
@@ -533,6 +534,182 @@ fn UpcomingEvents() -> impl IntoView {
     }
 }
 
+// ---------------------------------------------------------------------------
+// My Registrations — signed-in attendees see their registered events
+// ---------------------------------------------------------------------------
+
+/// Response item from GET /api/my-registrations.
+#[derive(Clone, Deserialize)]
+struct MyRegistrationItem {
+    event_name: String,
+    event_slug: String,
+    #[serde(default)]
+    event_start_ms: i64,
+    #[allow(dead_code)]
+    attendee_id: String,
+    next_step: NextStepData,
+}
+
+#[derive(Clone, Deserialize)]
+struct NextStepData {
+    #[serde(rename = "type")]
+    step_type: String,
+    url: String,
+}
+
+/// Component that shows the user's event registrations when signed in.
+/// If not signed in, renders nothing.
+#[component]
+fn MyRegistrations() -> impl IntoView {
+    let (registrations, set_registrations) = signal(None::<Vec<MyRegistrationItem>>);
+    let (email, set_email) = signal(None::<String>);
+
+    // Check auth and fetch registrations on mount
+    Effect::new(move |_| {
+        leptos::task::spawn_local(async move {
+            let window = web_sys::window().expect("no window");
+            let origin = window
+                .location()
+                .origin()
+                .unwrap_or_else(|_| "http://localhost:8787".to_string());
+
+            // Check auth status
+            let auth_url = format!("{origin}/api/auth/me");
+            let auth_resp = match gloo::net::http::Request::get(&auth_url).send().await {
+                Ok(r) => r,
+                Err(_) => return,
+            };
+
+            if auth_resp.status() != 200 {
+                return;
+            }
+
+            let auth_data: serde_json::Value = match auth_resp.json().await {
+                Ok(d) => d,
+                Err(_) => return,
+            };
+            let user_email = auth_data["data"]["email"].as_str().unwrap_or("").to_string();
+            if user_email.is_empty() {
+                return;
+            }
+            set_email.set(Some(user_email));
+
+            // Fetch my registrations
+            let regs_url = format!("{origin}/api/my-registrations");
+            match gloo::net::http::Request::get(&regs_url).send().await {
+                Ok(resp) if resp.status() == 200 => {
+                    if let Ok(data) = resp
+                        .json::<ApiResponse<Vec<MyRegistrationItem>>>()
+                        .await
+                    {
+                        set_registrations.set(Some(data.data.unwrap_or_default()));
+                    }
+                }
+                _ => {
+                    set_registrations.set(Some(vec![]));
+                }
+            }
+        });
+    });
+
+    move || {
+        let regs = registrations.get();
+        let user_email = email.get();
+
+        match (regs, user_email) {
+            (None, _) | (Some(_), None) => ().into_any(),
+            (Some(refs), Some(user)) if refs.is_empty() => {
+                view! {
+                    <section style="max-width:960px;margin:0 auto;padding:1rem 1.5rem 2rem;">
+                        <div style="background:var(--bg-card);border-radius:var(--radius);padding:1.25rem;box-shadow:var(--shadow);text-align:center;">
+                            <p style="color:var(--text-secondary);font-size:0.9rem;margin-bottom:0.5rem;">
+                                {format!("👤 {user}")}
+                            </p>
+                            <p style="color:var(--text-secondary);font-size:0.85rem;">
+                                "You haven't registered for any events yet. Check out upcoming events above!"
+                            </p>
+                            <button
+                                class="btn btn-outline btn-xs"
+                                style="margin-top:0.75rem;"
+                                on:click=move |_| {
+                                    leptos::task::spawn_local(async move {
+                                        let _ = gloo::net::http::Request::get("/api/auth/logout")
+                                            .send()
+                                            .await;
+                                        let window = web_sys::window().expect("no window");
+                                        let _ = window.location().reload();
+                                    });
+                                }
+                            >
+                                "Sign out"
+                            </button>
+                        </div>
+                    </section>
+                }.into_any()
+            }
+            (Some(refs), Some(user)) => {
+                view! {
+                    <section style="max-width:960px;margin:0 auto;padding:1rem 1.5rem 2rem;">
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
+                            <h2 style="font-size:1.25rem;font-weight:700;color:#fff;">
+                                "Your Events"
+                            </h2>
+                            <div style="display:flex;align-items:center;gap:0.75rem;">
+                                <span style="color:var(--text-secondary);font-size:0.8rem;">{format!("👤 {user}")}</span>
+                                <button
+                                    class="btn btn-outline btn-xs"
+                                    on:click=move |_| {
+                                        leptos::task::spawn_local(async move {
+                                            let _ = gloo::net::http::Request::get("/api/auth/logout")
+                                                .send()
+                                                .await;
+                                            let window = web_sys::window().expect("no window");
+                                            let _ = window.location().reload();
+                                        });
+                                    }
+                                >
+                                    "Sign out"
+                                </button>
+                            </div>
+                        </div>
+                        <div style="display:grid;gap:0.75rem;">
+                            {refs.into_iter().map(|reg| {
+                                let event_url = format!("/e/{}", reg.event_slug);
+                                let step_label = match reg.next_step.step_type.as_str() {
+                                    "deposit" => "Complete Deposit",
+                                    "quest" => "Start Quest",
+                                    _ => "View",
+                                };
+                                let date_str = if reg.event_start_ms > 0 {
+                                    let d = js_sys::Date::new_with_year_month_day(0, 0, 0);
+                                    d.set_time(reg.event_start_ms as f64);
+                                    d.to_locale_string("en-US", &js_sys::Object::new()).as_string().unwrap_or_default()
+                                } else {
+                                    "TBA".to_string()
+                                };
+                                let next_url = reg.next_step.url.clone();
+                                view! {
+                                    <div style="background:var(--bg-card);border-radius:var(--radius);padding:1rem 1.25rem;box-shadow:var(--shadow);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.5rem;">
+                                        <div>
+                                            <a href=event_url style="color:#fff;font-weight:600;text-decoration:none;font-size:0.95rem;">
+                                                {reg.event_name}
+                                            </a>
+                                            <p style="color:var(--text-secondary);font-size:0.8rem;margin-top:0.15rem;">{date_str}</p>
+                                        </div>
+                                        <a href=next_url class="btn btn-primary btn-sm" style="text-decoration:none;font-size:0.85rem;">
+                                            {step_label}" →"
+                                        </a>
+                                    </div>
+                                }
+                            }).collect::<Vec<_>>()}
+                        </div>
+                    </section>
+                }.into_any()
+            }
+        }
+    }
+}
+
 /// Landing page component.
 #[component]
 pub fn Landing() -> impl IntoView {
@@ -640,6 +817,9 @@ pub fn Landing() -> impl IntoView {
 
             // ===== Upcoming Events =====
             <UpcomingEvents />
+
+            // ===== My Registrations (visible when signed in) =====
+            <MyRegistrations />
 
             // ===== Social Proof =====
             // Social proof — real users + CTA for organizers

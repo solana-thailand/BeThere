@@ -101,6 +101,8 @@ pub fn routes(state: AppState) -> Router<()> {
         .route("/public/register", post(register::register_attendee))
         // Attendee's own registration lookup (requires verified email from JWT)
         .route("/my-registration/{slug}", get(register::my_registration))
+        // All registrations for the signed-in user across all events
+        .route("/my-registrations", get(register::my_registrations))
         .layer(middleware::from_fn_with_state(
             state.clone(),
             crate::auth::require_identity,

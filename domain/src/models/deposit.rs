@@ -135,6 +135,9 @@ pub struct DepositStatusResponse {
     /// Event tagline (short description).
     #[serde(default)]
     pub event_tagline: String,
+    /// Event slug for navigation back to `/e/:slug`.
+    #[serde(default)]
+    pub event_slug: String,
     /// Current deposit status (None if not deposited).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub status: Option<DepositStatus>,
