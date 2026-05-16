@@ -425,6 +425,7 @@ struct PublicEventItem {
 }
 
 #[derive(Clone, Deserialize)]
+#[derive(Default)]
 struct PublicEventsResponse {
     events: Vec<PublicEventItem>,
 }
@@ -447,9 +448,11 @@ fn UpcomingEvents() -> impl IntoView {
 
             match gloo::net::http::Request::get(&url).send().await {
                 Ok(resp) if resp.status() == 200 => {
-                    match resp.json::<PublicEventsResponse>().await {
-                        Ok(data) => {
-                            set_events.set(data.events);
+                    match resp.json::<ApiResponse<PublicEventsResponse>>().await {
+                        Ok(wrapper) => {
+                            if let Some(data) = wrapper.data {
+                                set_events.set(data.events);
+                            }
                         }
                         Err(e) => {
                             log::warn!("[landing] failed to parse events: {e}");

@@ -93,13 +93,21 @@ pub async fn auth_callback(
             }
         };
 
-    // Determine redirect: staff → /staff, non-staff → state param or /
-    let redirect_url = if is_staff_user {
+    // Determine redirect: prefer explicit state param (event page redirect),
+    // fall back to role-based defaults.
+    let redirect_url = if let Some(ref state_url) = query.state {
+        tracing::info!(
+            "login successful with redirect: {} (staff={})",
+            state_url,
+            is_staff_user
+        );
+        state_url.clone()
+    } else if is_staff_user {
         tracing::info!("staff login successful: {}", user_info.email);
         "/staff".to_string()
     } else {
         tracing::info!("attendee login successful: {}", user_info.email);
-        query.state.clone().unwrap_or_else(|| "/".to_string())
+        "/".to_string()
     };
 
     // Set HttpOnly cookie for browser-based auth. The frontend calls GET /api/auth/me
