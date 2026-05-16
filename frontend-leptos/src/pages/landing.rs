@@ -471,23 +471,41 @@ fn UpcomingEvents() -> impl IntoView {
         {move || {
             let evts = events.get();
             let is_loaded = loaded.get();
+            let heading = view! {
+                <div style="text-align:center;margin-bottom:1.5rem;">
+                    <h2 style="font-size:1.5rem;font-weight:700;color:#fff;margin-bottom:0.5rem;">
+                        <Icon icon=IconName::Party class="icon-sm"/>" Upcoming Events"
+                    </h2>
+                    <p style="color:var(--text-secondary);font-size:0.95rem;">
+                        "Reserve your spot with a deposit. Show up. Get refunded."
+                    </p>
+                </div>
+            };
             if !is_loaded {
-                // Still loading — show nothing (avoid layout shift)
-                view! { <div></div> }.into_any()
+                // Still loading — show heading + spinner
+                view! {
+                    <section style="max-width:960px;margin:0 auto;padding:1rem 1.5rem 3rem;">
+                        {heading}
+                        <div style="text-align:center;padding:2rem 0;">
+                            <span class="spinner" style="display:inline-block;width:1.5rem;height:1.5rem;border:2px solid var(--border-color);border-top-color:var(--accent);border-radius:50%;animation:spin .6s linear infinite;"></span>
+                            <p style="color:var(--text-secondary);font-size:0.9rem;margin-top:0.75rem;">"Loading events..."</p>
+                        </div>
+                    </section>
+                }.into_any()
             } else if evts.is_empty() {
-                // No events — show nothing
-                view! { <div></div> }.into_any()
+                // No events — show heading + empty state message
+                view! {
+                    <section style="max-width:960px;margin:0 auto;padding:1rem 1.5rem 3rem;">
+                        {heading}
+                        <div style="text-align:center;padding:2rem 0;">
+                            <p style="color:var(--text-secondary);font-size:0.95rem;">"No upcoming events right now. Check back soon!"</p>
+                        </div>
+                    </section>
+                }.into_any()
             } else {
                 view! {
                     <section style="max-width:960px;margin:0 auto;padding:1rem 1.5rem 3rem;">
-                        <div style="text-align:center;margin-bottom:1.5rem;">
-                            <h2 style="font-size:1.5rem;font-weight:700;color:#fff;margin-bottom:0.5rem;">
-                                <Icon icon=IconName::Party class="icon-sm"/>" Upcoming Events"
-                            </h2>
-                            <p style="color:var(--text-secondary);font-size:0.95rem;">
-                                "Reserve your spot with a deposit. Show up. Get refunded."
-                            </p>
-                        </div>
+                        {heading}
                         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1rem;">
                             {evts.into_iter().map(|evt| {
                                 let event_url = format!("/e/{}", evt.slug);

@@ -1181,7 +1181,9 @@ pub fn Deposit() -> impl IntoView {
                 {move || match signed_in_email.get() {
                     Some(email) => view! {
                         <div class="logout-btn-wrapper">
-                            <span style="color:var(--text-secondary);font-size:0.75rem;margin-right:0.5rem;">{format!("👤 {email}")}</span>
+                            <span style="color:var(--text-secondary);font-size:0.85rem;">
+                                {format!("Welcome, {email}")}
+                            </span>
                             <button
                                 class="btn btn-outline btn-xs"
                                 on:click=move |_| {
