@@ -9,7 +9,65 @@ use leptos_router::components::A;
 use serde::Deserialize;
 
 use crate::api::ApiResponse;
+use crate::components::is_admin_role;
 use crate::icons::{Icon, IconName};
+
+// ---------------------------------------------------------------------------
+// Auth state (same pattern as public_event.rs)
+// ---------------------------------------------------------------------------
+
+/// Tracks whether the user is signed in on the landing page.
+#[derive(Clone, Debug)]
+enum AuthState {
+    Checking,
+    SignedIn(String),
+    NotSignedIn,
+}
+
+/// Fetches the Google OAuth URL with a redirect back to `/`, then navigates.
+fn trigger_landing_oauth() {
+    leptos::task::spawn_local(async move {
+        let window = web_sys::window().expect("no window");
+        let origin = window
+            .location()
+            .origin()
+            .unwrap_or_else(|_| "http://localhost:8787".to_string());
+        let api_url = format!(
+            "{origin}/api/auth/url?redirect={}",
+            urlencoding::encode("/")
+        );
+        match gloo::net::http::Request::get(&api_url).send().await {
+            Ok(resp) => {
+                if let Ok(body) = resp.text().await {
+                    if let Ok(json) = serde_json::from_str::<serde_json::Value>(&body) {
+                        if let Some(auth_url) =
+                            json.get("data").and_then(|d| d.get("auth_url")).and_then(|u| u.as_str())
+                        {
+                            let _ = window.location().set_href(auth_url);
+                            return;
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                log::error!("[landing] failed to get auth URL: {e}");
+            }
+        }
+        // Fallback: navigate to /login
+        let _ = window.location().set_href("/login");
+    });
+}
+
+/// Sign out: clear cookie + reload.
+fn trigger_landing_signout() {
+    leptos::task::spawn_local(async move {
+        let _ = gloo::net::http::Request::post("/api/auth/logout")
+            .send()
+            .await;
+        let window = web_sys::window().expect("no window");
+        let _ = window.location().reload();
+    });
+}
 
 /// Waitlist signup form component.
 #[component]
@@ -487,7 +545,7 @@ fn UpcomingEvents() -> impl IntoView {
             if !is_loaded {
                 // Still loading — show heading + spinner
                 view! {
-                    <section style="max-width:960px;margin:0 auto;padding:1rem 1.5rem 3rem;">
+                    <section id="events" style="max-width:960px;margin:0 auto;padding:1rem 1.5rem 3rem;">
                         {heading}
                         <div style="text-align:center;padding:2rem 0;">
                             <span class="spinner" style="display:inline-block;width:1.5rem;height:1.5rem;border:2px solid var(--border-color);border-top-color:var(--accent);border-radius:50%;animation:spin .6s linear infinite;"></span>
@@ -498,7 +556,7 @@ fn UpcomingEvents() -> impl IntoView {
             } else if evts.is_empty() {
                 // No events — show heading + empty state message
                 view! {
-                    <section style="max-width:960px;margin:0 auto;padding:1rem 1.5rem 3rem;">
+                    <section id="events" style="max-width:960px;margin:0 auto;padding:1rem 1.5rem 3rem;">
                         {heading}
                         <div style="text-align:center;padding:2rem 0;">
                             <p style="color:var(--text-secondary);font-size:0.95rem;">"No upcoming events right now. Check back soon!"</p>
@@ -507,7 +565,7 @@ fn UpcomingEvents() -> impl IntoView {
                 }.into_any()
             } else {
                 view! {
-                    <section style="max-width:960px;margin:0 auto;padding:1rem 1.5rem 3rem;">
+                    <section id="events" style="max-width:960px;margin:0 auto;padding:1rem 1.5rem 3rem;">
                         {heading}
                         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1rem;">
                             {evts.into_iter().map(|evt| {
@@ -751,6 +809,48 @@ pub fn Landing() -> impl IntoView {
     let (active_step, set_active_step) = signal(0usize);
     let (mobile_menu_open, set_mobile_menu_open) = signal(false);
 
+    // Auth state for nav bar
+    let (auth_state, set_auth_state) = signal(AuthState::Checking);
+    let (user_role, set_user_role) = signal(String::new());
+
+    // Check auth on mount
+    Effect::new(move |_| {
+        leptos::task::spawn_local(async move {
+            let window = web_sys::window().expect("no window");
+            let origin = window
+                .location()
+                .origin()
+                .unwrap_or_else(|_| "http://localhost:8787".to_string());
+            let url = format!("{origin}/api/auth/me");
+            match gloo::net::http::Request::get(&url).send().await {
+                Ok(resp) if resp.status() == 200 => {
+                    if let Ok(data) = resp.json::<serde_json::Value>().await {
+                        let email = data["data"]["email"]
+                            .as_str()
+                            .unwrap_or("")
+                            .to_string();
+                        let role = data["data"]["role"]
+                            .as_str()
+                            .unwrap_or("attendee")
+                            .to_string();
+                        if !email.is_empty() {
+                            log::info!("[landing] user signed in: {email} ({role})");
+                            set_auth_state.set(AuthState::SignedIn(email));
+                            set_user_role.set(role);
+                        } else {
+                            set_auth_state.set(AuthState::NotSignedIn);
+                        }
+                    } else {
+                        set_auth_state.set(AuthState::NotSignedIn);
+                    }
+                }
+                _ => {
+                    set_auth_state.set(AuthState::NotSignedIn);
+                }
+            }
+        });
+    });
+
     view! {
         <div style="min-height:100vh;width:100%;">
 
@@ -793,9 +893,51 @@ pub fn Landing() -> impl IntoView {
                         }}
                     </button>
                     <div style="display:flex;align-items:center;gap:0.75rem;" class="landing-nav-actions">
-                        <A href="/login" attr:class="btn btn-outline btn-sm">
-                            "Sign In"
-                        </A>
+                        {move || {
+                            let state = auth_state.get();
+                            let role = user_role.get();
+                            match state {
+                                AuthState::NotSignedIn => {
+                                    view! {
+                                        <button
+                                            class="btn btn-outline btn-sm"
+                                            on:click=move |_| trigger_landing_oauth()
+                                        >
+                                            "Sign In"
+                                        </button>
+                                    }.into_any()
+                                }
+                                AuthState::SignedIn(email) => {
+                                    view! {
+                                        <span style="color:var(--text-secondary);font-size:0.8rem;" class="hide-mobile">
+                                            {email.clone()}
+                                        </span>
+                                        {if is_admin_role(&role) {
+                                            view! {
+                                                <A href="/admin" attr:class="btn btn-outline btn-sm">
+                                                    "Dashboard"
+                                                </A>
+                                            }.into_any()
+                                        } else if role == "staff" {
+                                            view! {
+                                                <A href="/staff" attr:class="btn btn-outline btn-sm">
+                                                    "Scanner"
+                                                </A>
+                                            }.into_any()
+                                        } else {
+                                            ().into_any()
+                                        }}
+                                        <button
+                                            class="btn btn-outline btn-sm"
+                                            on:click=move |_| trigger_landing_signout()
+                                        >
+                                            "Sign Out"
+                                        </button>
+                                    }.into_any()
+                                }
+                                AuthState::Checking => ().into_any(),
+                            }
+                        }}
                     </div>
                 </div>
                 // Mobile dropdown menu
@@ -808,7 +950,51 @@ pub fn Landing() -> impl IntoView {
                                 <a href="#how-it-works" on:click=move |_| set_mobile_menu_open.set(false)>"How it works"</a>
                                 <a href="#faq" on:click=move |_| set_mobile_menu_open.set(false)>"FAQ"</a>
                                 <a href="#waitlist" on:click=move |_| set_mobile_menu_open.set(false)>"Join Waitlist"</a>
-                                <A href="/login" on:click=move |_| set_mobile_menu_open.set(false)>"Sign In"</A>
+                                {move || match auth_state.get() {
+                                    AuthState::NotSignedIn | AuthState::Checking => {
+                                        view! {
+                                            <button
+                                                class="btn btn-outline btn-sm"
+                                                style="margin-top:0.5rem;width:100%;"
+                                                on:click=move |_| {
+                                                    set_mobile_menu_open.set(false);
+                                                    trigger_landing_oauth();
+                                                }
+                                            >
+                                                "Sign In"
+                                            </button>
+                                        }.into_any()
+                                    }
+                                    AuthState::SignedIn(email) => {
+                                        let role = user_role.get();
+                                        view! {
+                                            <div style="border-top:1px solid var(--border);padding-top:0.5rem;margin-top:0.25rem;">
+                                                <span style="color:var(--text-secondary);font-size:0.8rem;">{email}</span>
+                                            </div>
+                                            {if is_admin_role(&role) {
+                                                view! {
+                                                    <A href="/admin" on:click=move |_| set_mobile_menu_open.set(false)>"Dashboard"</A>
+                                                }.into_any()
+                                            } else if role == "staff" {
+                                                view! {
+                                                    <A href="/staff" on:click=move |_| set_mobile_menu_open.set(false)>"Scanner"</A>
+                                                }.into_any()
+                                            } else {
+                                                ().into_any()
+                                            }}
+                                            <button
+                                                class="btn btn-outline btn-sm"
+                                                style="margin-top:0.5rem;width:100%;"
+                                                on:click=move |_| {
+                                                    set_mobile_menu_open.set(false);
+                                                    trigger_landing_signout();
+                                                }
+                                            >
+                                                "Sign Out"
+                                            </button>
+                                        }.into_any()
+                                    }
+                                }}
                             </div>
                         }.into_any()
                     } else {
@@ -843,9 +1029,9 @@ pub fn Landing() -> impl IntoView {
                     <a href="#waitlist" class="btn btn-primary" style="padding:0.85rem 2rem;font-size:1rem;text-decoration:none;">
                         "Join Waitlist →"
                     </a>
-                    <A href="/login" attr:class="btn btn-outline" attr:style="padding:0.85rem 2rem;font-size:1rem;">
-                        "Sign In"
-                    </A>
+                    <a href="#events" class="btn btn-outline" style="padding:0.85rem 2rem;font-size:1rem;text-decoration:none;">
+                        "Find Events ↓"
+                    </a>
                 </div>
             </section>
 
@@ -1224,7 +1410,7 @@ pub fn Landing() -> impl IntoView {
                         <a href="#features">"Features"</a>
                         <a href="#how-it-works">"How It Works"</a>
                         <a href="#faq">"FAQ"</a>
-                        <A href="/login">"Sign In"</A>
+                        <A href="/login">"Staff Portal"</A>
                     </div>
 
                     // Column 3 — Community

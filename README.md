@@ -167,68 +167,139 @@ The frontend is served from `frontend-leptos/dist/` via Workers Assets with SPA 
 
 ## API Endpoints
 
+### Auth & Users
+
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | GET | `/api/health` | No | Health check |
-| GET | `/api/auth/url` | No | Google OAuth URL |
-| GET | `/api/auth/callback` | No | OAuth callback, sets cookie |
-| GET | `/api/auth/me` | Cookie | Current user info + role |
-| GET | `/api/auth/logout` | No | Clear session cookie |
+| GET | `/api/auth/url` | No | Google OAuth URL (optional `?redirect=` param) |
+| GET | `/api/auth/callback` | No | OAuth callback, sets HttpOnly cookie, redirects based on role |
+| POST | `/api/auth/logout` | No | Clear session cookie |
+| GET | `/api/auth/me` | Cookie | Current user info + role (`super_admin`/`organizer`/`staff`/`attendee`) |
+| GET | `/api/my-registration/{slug}` | Cookie | Get signed-in user's registration for a specific event |
+| GET | `/api/my-registrations` | Cookie | List all registrations for the signed-in user |
+
+### Public Event & Registration
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/api/public/events` | No | List upcoming active events (nearest first) |
+| GET | `/api/public/event/{slug}` | No | Get public event details (no auth required) |
+| POST | `/api/public/register` | Cookie | Register for event (email from JWT, not body) |
+| GET | `/api/public/ticket/{id}` | No | Get attendee ticket/QR slip details |
+| GET | `/api/badge.svg` | No | NFT badge SVG (by claim token) |
+| GET | `/api/badge-hd.svg` | No | NFT badge HD SVG (by claim token) |
+| POST | `/api/waitlist` | No | Join waitlist (email + use case) |
+
+### Events (Admin)
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
 | GET | `/api/events` | Cookie | List all events |
 | POST | `/api/events` | Cookie + SuperAdmin | Create new event |
 | GET | `/api/events/{id}` | Cookie | Get event config |
 | PUT | `/api/events/{id}` | Cookie + SuperAdmin | Update event config |
 | DELETE | `/api/events/{id}` | Cookie + SuperAdmin | Archive event |
 | POST | `/api/events/{id}/restore` | Cookie + SuperAdmin | Restore archived event to Draft |
+| DELETE | `/api/events/{id}/delete` | Cookie + SuperAdmin | Permanently delete event (`?force=true` for devnet cleanup) |
 | POST | `/api/events/seed` | Cookie + SuperAdmin | Seed event from env vars |
 | POST | `/api/events/migrate` | Cookie + SuperAdmin | Migrate quiz KV → event KV |
+| GET | `/api/events/{id}/audit` | Cookie + Organizer | Get audit trail for event |
+| GET | `/api/audit/global` | Cookie + SuperAdmin | Get system-wide audit trail |
+
+### Attendees & Check-In
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
 | GET | `/api/attendees` | Cookie + Event Staff | List all attendees + stats |
 | GET | `/api/attendee/{id}` | Cookie + Event Staff | Single attendee details |
 | POST | `/api/checkin/{id}` | Cookie + Event Staff | Check in attendee |
+| POST | `/api/attendee/{id}/undo-checkin` | Cookie + Event Staff | Undo check-in |
 | POST | `/api/generate-qrs` | Cookie + Event Staff | Generate QR codes |
+| POST | `/api/admin/flush-cache` | Cookie + Staff | Flush server-side caches |
+
+### Walk-in Attendees
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/api/walkin/register` | Cookie + Staff | Register walk-in attendee (on-the-spot) |
+| GET | `/api/walkin/list` | Cookie + Staff | List walk-in attendees for event |
+| GET | `/api/walkin/export` | Cookie + Staff | Export walk-in attendees as CSV |
+| POST | `/api/walkin/sync` | Cookie + Staff | Sync walk-in attendees to Google Sheet |
+
+### Quiz & Adventure
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
 | GET | `/api/quiz` | No | Get quiz questions (public) |
 | POST | `/api/quiz/{token}/submit` | No | Submit quiz answers |
 | GET | `/api/quiz/{token}/status` | No | Get quiz progress |
 | PUT | `/api/admin/quiz` | Cookie + Staff | Create/update quiz config |
-| GET | `/api/claim/{token}` | No | Get claim info |
-| POST | `/api/claim/{token}` | No | Claim NFT badge + refund |
 | GET | `/api/adventure/{token}/status` | No | Get adventure progress |
 | POST | `/api/adventure/{token}/save` | No | Save adventure progress |
 | GET | `/api/admin/adventure` | Cookie + Staff | Get adventure config |
 | PUT | `/api/admin/adventure` | Cookie + Staff | Update adventure config |
+
+### Claim & NFT
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/api/claim/{token}` | No | Get claim info |
+| POST | `/api/claim/{token}` | No | Claim NFT badge + refund |
+
+### Deposits
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
 | GET | `/api/deposit/status/{attendee_id}` | No | Check deposit status for attendee |
 | POST | `/api/deposit/usdc` | No | Build Solana Pay deposit TX (USDC) |
+| GET | `/api/deposit/usdc/tx` | No | Solana Pay TX callback (wallet fetches serialized TX) |
 | GET | `/api/deposit/usdc/confirm` | No | Poll deposit TX confirmation via Solana RPC |
 | POST | `/api/deposit/usdc/webhook` | No | Record TX signature, verify on-chain |
 | POST | `/api/deposit/thb/upload` | No | Upload PromptPay slip URL (THB) |
 | GET | `/api/deposit/thb/pending` | Cookie + Staff | List pending THB slips |
 | POST | `/api/deposit/thb/verify` | Cookie + Staff | Verify/reject THB slip |
-| GET | `/api/refund/queue` | Cookie + Staff | List pending refunds |
-| POST | `/api/refund/mark/{id}` | Cookie + Staff | Mark refund as completed |
-| POST | `/api/escrow/create-event` | Cookie + Organizer | Initialize on-chain escrow PDA |
-| GET  | `/api/deposit/usdc/tx` | No | Solana Pay TX callback (wallet fetches serialized TX) |
-| POST | `/api/escrow/create-vault-ata` | Cookie + Organizer | Create vault's Associated Token Account |
-| POST | `/api/escrow/mark-checked-in` | Cookie + Organizer | Mark attendee as checked-in on-chain (prerequisite for refund) |
+
+### Escrow (On-Chain)
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/api/escrow/init` | Cookie + Organizer | Initialize on-chain escrow PDA + vault ATA (single TX) |
+| POST | `/api/escrow/mark-checked-in` | Cookie + Organizer | Mark attendee checked-in on-chain |
 | POST | `/api/escrow/refund` | No | Build refund TX for attendee's wallet to sign |
-| DELETE | `/api/events/{id}/delete` | Cookie + SuperAdmin | Permanently delete event (`?force=true` for devnet cleanup) |
-| GET | `/api/events/{id}/audit` | Cookie + Organizer | Get audit trail for event |
-| GET | `/api/audit/global` | Cookie + SuperAdmin | Get system-wide audit trail |
+| POST | `/api/escrow/claim-forfeited` | Cookie + Organizer | Claim forfeited deposit (no-show) |
 | POST | `/api/escrow/deactivate-event` | Cookie + Organizer | Build deactivate escrow TX |
 | POST | `/api/escrow/close-event` | Cookie + Organizer | Build close escrow TX (reclaim rent) |
-| GET | `/api/public/events` | Public | List upcoming active events (nearest first) |
+| POST | `/api/escrow/close-deposit` | No | Close individual deposit PDA (rent reclaim) |
+| POST | `/api/escrow/backfill-wallets` | Cookie + Organizer | Backfill wallet addresses from KV to on-chain |
+| GET | `/api/escrow/events/{event_id}` | Cookie + Organizer | Get on-chain escrow event data |
+| POST | `/api/escrow/sync` | Cookie + Organizer | Sync on-chain escrow events to KV cache |
+| POST | `/api/escrow/onchain-webhook` | No | Webhook for on-chain escrow events |
+
+### Refunds & Cancellation
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/api/refund/queue` | Cookie + Staff | List pending refunds |
+| POST | `/api/refund/mark/{id}` | Cookie + Staff | Mark refund as completed |
+| POST | `/api/refund/batch-thb` | Cookie + Staff | Batch THB refund for event cancellation |
+| GET | `/api/escrow/refund-queue` | Cookie + Staff | USDC refund queue (cancellation workflow) |
+| GET | `/api/escrow/cancel-status` | Cookie + Staff | Event cancellation status overview |
 
 ## Frontend Routes
 
 | Path | Page | Auth |
 |------|------|------|
-| `/` | Landing — public marketing page, waitlist, how-it-works swimlane | Public |
-| `/login` | Login — Google OAuth sign-in | Public |
+| `/` | Landing — marketing page, upcoming events, My Registrations (auth-aware nav) | Public |
+| `/login` | Login — Google OAuth sign-in (staff/organizer entry point) | Public |
+| `/e/{slug}` | Public Event — event details, countdown, registration with Google Sign-In | Public |
+| `/deposit/{attendee_id}` | Deposit — wallet adapter + QR for USDC/THB deposit | Public |
+| `/ticket/{attendee_id}` | Ticket — QR code slip with check-in status | Public |
 | `/claim/{token}` | Claim — quiz + NFT badge + refund | Token-gated |
-| `/staff` | Scanner — camera QR + manual lookup | Staff |
-| `/admin` | Dashboard — attendee list, stats, QR management | Staff |
+| `/staff` | Scanner — camera QR + manual lookup + walk-in registration | Staff |
+| `/admin` | Dashboard — attendee list, stats, escrow, cancellation, walk-in export/sync | Staff |
 | `/admin/events` | Events — create, edit, manage events | SuperAdmin |
 | `/adventure` | Rust Adventures — educational game | Public |
-| `/deposit/{attendee_id}` | Deposit — wallet adapter + QR for USDC/THB deposit | Public |
 
 ## Architecture
 
@@ -349,29 +420,35 @@ See `scripts/e2e/test_escrow_devnet.sh` for the complete test flow. All 24 tests
 - **Camera QR Scanner** — BarcodeDetector (Chrome) + jsQR fallback (Firefox/Safari)
 - **Staff check-in logging** — Records which staff member checked in each attendee (column J)
 - **Sheet-based staff list** — Staff emails loaded from "staff" sheet tab + env var (unioned)
-- **Participation types** — In-Person / Online badges, reject online at physical check-in
+- **Event format model** — In-Person / Online / Hybrid with participation-type badges
 - **Admin stats** — Checked-in count, In-Person vs Online breakdown
 - **Force QR regenerate** — Admin can regenerate codes per attendee
 - **CSP compliant** — Zero `eval()` calls, no `unsafe-eval` directive
 - **Edge deployment** — Cloudflare Workers with SubtleCrypto for JWT signing
 - **Multi-event support** — KV-based event registry with per-event config, staff, quiz
-- **Per-event access control** — 3-tier role system: super_admin → organizer → staff
+- **Per-event access control** — 4-tier role system: super_admin → organizer → staff → attendee
+- **Google Sign-In for attendees** — Dual-purpose OAuth for staff and attendees; email locked to Google account
+- **Self-registration** — Attendees register via public event page (`/e/{slug}`) with Google identity
+- **My Registrations** — Signed-in attendees see their events + status on landing page with auth-aware nav
 - **Quiz-gated claim** — Attendees complete quiz before claiming NFT badge
-- **Landing page** — Public marketing page with interactive swimlane (3-role walkthrough), waitlist, FAQ, social proof
+- **Landing page** — Auth-aware nav bar, upcoming events, interactive swimlane, waitlist, FAQ, social proof
 - **Rust Adventures** — Educational tile-based game teaching Solana/Rust concepts
 - **Security hardened** — Cookie Secure flag, secret redaction in Debug, attendee-validated adventure saves
-- **Automated E2E tests** — 10-step full E2E suite (`scripts/e2e/test_full_e2e.sh`) + 7-test devnet suite
+- **Automated E2E tests** — 10-step full E2E suite + 7-test devnet suite
 - **PDA escrow deposits** — USDC deposits held in on-chain PDAs, refundable after event
 - **Solana Pay integration** — Deposit via QR code scan or wallet adapter (Phantom, Backpack, Solflare)
 - **Dual-track deposits** — USDC (on-chain escrow) or THB (PromptPay QR + slip verification)
-- **Single-TX escrow init** — Admin creates vault ATA + event escrow in one transaction via wallet signing (Phantom/Solflare)
+- **Single-TX escrow init** — Admin creates vault ATA + event escrow in one transaction via wallet signing
 - **On-chain check-in** — Staff marks attendees checked in on-chain via wallet-signed TX (escrow refund gate)
 - **Wallet adapter interop** — Shared JS module for wallet detection, connection, TX signing across scanner + admin
+- **Wallet error recovery** — Structured error classification with user-friendly guidance (wrong network, insufficient funds, user rejected, program error)
 - **Escrow lifecycle management** — Full deactivate → close flow in admin UI, rent reclamation
+- **Event cancellation workflow** — THB batch refund + USDC refund queue + cancel status (organizer-initiated)
+- **Walk-in attendee management** — On-the-spot registration, CSV export, Google Sheet sync with idempotency
 - **Force delete for devnet cleanup** — SuperAdmin can hard-delete events with `?force=true`
 - **Slug auto-deduplication** — Recurring events get auto-incremented suffix on name collision
-- **Audit trail** — Append-only event log tracking all state-changing operations (CRUD, escrow, deposits, check-ins) with actor attribution
-- **Dev-mode payment gating** — Solana wallet options hidden in production, shown only when backend returns `dev_mode: true`
+- **Audit trail** — Append-only event log tracking all state-changing operations with actor attribution
+- **Dev-mode payment gating** — Solana wallet options hidden in production, shown only when `dev_mode: true`
 - **Attendee flow persistence** — localStorage resume for partial registrations, auto-redirect to deposit/ticket page
 
 ## Security
@@ -401,11 +478,12 @@ See [`docs/security_audit.md`](docs/security_audit.md) for the full escrow secur
 | `super_admin` | Create/edit/delete events, manage all events, full dashboard |
 | `organizer` | Edit assigned event config, manage quiz, view dashboard |
 | `staff` | Check in attendees, view attendee list for assigned event |
-| _(unauthenticated)_ | View landing page, play adventure, take quiz, claim NFT badge |
+| `attendee` | Register for events, view own registrations, deposit, claim NFT |
+| _(unauthenticated)_ | View landing page, public event pages, play adventure, take quiz |
 
 ## 🏆 What's Built (Devnet-Validated)
 
-✅ 9 phases complete — from check-in to escrow to security audit. Everything runs on Solana devnet with real wallets.
+✅ 10 phases complete — from check-in to escrow to attendee identity. Everything runs on Solana devnet with real wallets.
 
 | Core Flow | Status | Details |
 |-----------|--------|----------|
@@ -413,12 +491,18 @@ See [`docs/security_audit.md`](docs/security_audit.md) for the full escrow secur
 | cNFT badges | ✅ | Compressed NFTs via Helius, $0.001 mint |
 | Quiz gating | ✅ | Per-event quiz before NFT claim |
 | Adventure gating | ✅ | Rust-themed educational game (10 levels) |
-| Multi-event | ✅ | KV registry, 3-tier roles (super_admin/organizer/staff) |
+| Multi-event | ✅ | KV registry, 4-tier roles (super_admin/organizer/staff/attendee) |
 | USDC escrow | ✅ | PDA-based deposits, refund, claim forfeited |
 | Dual-track payments | ✅ | USDC (on-chain) + PromptPay THB (fiat QR) |
 | Wallet adapter | ✅ | Phantom, Solflare, Backpack, Coinbase |
+| Attendee identity | ✅ | Google Sign-In for registration, email locked to JWT |
+| Self-registration | ✅ | Public event page `/e/{slug}` with countdown + deposit CTA |
+| My Registrations | ✅ | Landing page auth-aware nav, event status tracking |
+| Walk-in management | ✅ | On-the-spot registration, CSV export, Sheet sync |
+| Event cancellation | ✅ | THB batch refund, USDC refund queue, status tracking |
+| Wallet error recovery | ✅ | Structured error classification + user-friendly guidance |
 | Security audit | ✅ | 11 findings, 8 fixed, SEC-001–011 addressed |
-| E2E tests | ✅ | 61 tests (39 worker + 22 on-chain), devnet validated |
+| E2E tests | ✅ | 68 tests (39 worker + 29 on-chain), devnet validated |
 
 ## 📈 Competitive Landscape
 

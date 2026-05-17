@@ -565,7 +565,7 @@ These are enforced by the backend but the frontend does not have inline warnings
 | ~~No resume capability for partial flows~~ (✅ Fixed) | ~~**High**~~ | localStorage stores `{attendee_id, event_id, event_slug}` after registration. Returning to `/e/{slug}` redirects attendee to their correct step (deposit or ticket). |
 | ~~Confusing landing after slip upload~~ (✅ Fixed) | ~~**Medium**~~ | After uploading THB slip, auto-redirect to `/ticket/{attendee_id}?event_id={id}` showing QR code + pending approval status. Replaces "Go Home" button. |
 | ~~Solana wallet confusing for non-crypto attendees~~ (✅ Fixed) | ~~**Medium**~~ | USDC payment card hidden in production. Only shown when backend returns `dev_mode: true`. Health endpoint and public event endpoint include `dev_mode`. |
-| **No attendee identity verification** | **🔴 Critical** | Anyone who knows an email can register as that person and access their ticket/QR. Fix: require Google Sign-In for registration and ticket access. See `.issues/016_attendee_google_auth.md`. |
+| **~~No attendee identity verification~~** (✅ Fixed) | ~~**🔴 Critical**~~ | ~~Anyone who knows an email can register as that person and access their ticket/QR.~~ Fixed: Google Sign-In required for registration and ticket access. Email locked to JWT. See `.issues/016_attendee_google_auth.md`. |
 | ~~CSP blocks registration redirect~~ (✅ Fixed) | ~~**High**~~ | ~~`js_sys::eval()` blocked by CSP `script-src`. Fixed by replacing all eval calls with `wasm_bindgen` JS module imports (`navigation.js`).~~ |
 
 ---

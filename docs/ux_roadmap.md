@@ -168,6 +168,12 @@ USDC payment card on the deposit page is hidden unless the backend returns `dev_
 
 ---
 
+### AF-9. Landing page auth-aware navigation
+
+**Status**: ✅ Implemented — `frontend-leptos/src/pages/landing.rs` unified Google Sign-In flow. Nav bar adapts to auth state: shows "Sign In" (OAuth trigger) for guests, user email + role-based links (Dashboard/Scanner) + "Sign Out" for signed-in users. Hero CTA changed from "Sign In" to "Find Events ↓". Footer link relabeled "Staff Portal". No backend changes needed — auth callback already handles non-staff redirect to `/`.
+
+---
+
 ## P1 — High Impact
 
 ### P1-1. Scanner Haptic/Audio Feedback
