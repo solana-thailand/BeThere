@@ -47,6 +47,14 @@
     --text-heading: #fff;
     --bg-void: #000;
     --border-hover: #333;
+    --accent-purple: #a78bfa;
+    --accent-light: #a5b4fc;
+    --warning-bright: #eab308;
+    --warning-dark: #d97706;
+    --code-bg: #0d1117;
+    --code-text: #c9d1d9;
+    --color-x-brand: #1da1f2;
+    --solana-green: #14f195;
     --header-height: 80px;
 }
 
@@ -249,7 +257,7 @@ h3 {
     color: var(--accent);
 }
 .icon-white {
-    color: #fff;
+    color: var(--text-heading);
 }
 
 /* ===== Logo ===== */
@@ -735,7 +743,7 @@ nav a.active {
     align-items: center;
     gap: 0.3rem;
     padding: 0.25rem 0.6rem;
-    border-radius: 20px;
+    border-radius: 9999px;
     font-size: 0.75rem;
     font-weight: 600;
     white-space: nowrap;
@@ -772,7 +780,7 @@ nav a.active {
     border: 1px solid var(--warning-border);
     font-size: 0.65rem;
     padding: 0.15rem 0.45rem;
-    border-radius: 16px;
+    border-radius: 9999px;
     font-weight: 600;
     white-space: nowrap;
 }
@@ -783,7 +791,7 @@ nav a.active {
     border: 1px solid var(--success-border);
     font-size: 0.65rem;
     padding: 0.15rem 0.45rem;
-    border-radius: 16px;
+    border-radius: 9999px;
     font-weight: 600;
     white-space: nowrap;
 }
@@ -795,7 +803,7 @@ nav a.active {
     letter-spacing: 0.05em;
     font-size: 0.65rem;
     padding: 0.3rem 0.7rem;
-    border-radius: 20px;
+    border-radius: 9999px;
 }
 
 /* ===== Scanner ===== */
@@ -829,7 +837,7 @@ nav a.active {
     width: 65%;
     aspect-ratio: 1;
     border: 3px solid rgba(99, 102, 241, 0.8);
-    border-radius: 12px;
+    border-radius: var(--radius);
     box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.4);
 }
 
@@ -926,7 +934,7 @@ nav a.active {
     background: var(--danger-bg);
     border: 1px solid var(--danger-border);
     border-radius: var(--radius);
-    color: #ff6b6b;
+    color: var(--danger-bright);
     font-size: 0.9rem;
     line-height: 1.5;
     display: none;
@@ -1170,7 +1178,7 @@ nav a.active {
     padding: 0.75rem 1.25rem;
     background: var(--bg-card);
     border: 1px solid var(--border);
-    border-radius: 12px;
+    border-radius: var(--radius);
     text-align: center;
     max-width: 480px;
     width: 100%;
@@ -1399,7 +1407,7 @@ nav a.active {
     color: var(--accent);
     background: rgba(99, 102, 241, 0.1);
     border: 1px solid rgba(99, 102, 241, 0.25);
-    border-radius: 20px;
+    border-radius: 9999px;
     padding: 0.3rem 0.65rem;
     margin-bottom: 0.5rem;
     font-weight: 600;
@@ -1436,7 +1444,7 @@ nav a.active {
     padding: 0.65rem 1rem;
     background: rgba(99, 102, 241, 0.15);
     border: 1px solid rgba(99, 102, 241, 0.3);
-    border-radius: 8px;
+    border-radius: var(--radius-sm);
     color: var(--text-heading);
     font-size: 0.85rem;
     font-weight: 600;
@@ -1520,7 +1528,7 @@ nav a.active {
 .claim-shimmer-nft {
     width: 72px;
     height: 72px;
-    border-radius: 12px;
+    border-radius: var(--radius);
     flex-shrink: 0;
 }
 
@@ -1528,7 +1536,7 @@ nav a.active {
 .claim-shimmer-input {
     width: 100%;
     height: 42px;
-    border-radius: 8px;
+    border-radius: var(--radius-sm);
     margin-bottom: 0.5rem;
 }
 
@@ -1561,7 +1569,7 @@ nav a.active {
     content: "";
     flex: 1;
     height: 1px;
-    background: var(--border-color, #e2e8f0);
+    background: var(--border);
 }
 
 /* Wallet hint text */
@@ -1645,7 +1653,7 @@ nav a.active {
 }
 
 .claim-adventure-gate h2 {
-    color: #ff6b35;
+    color: var(--warning);
     font-size: 1.25rem;
     font-weight: 700;
 }
@@ -1678,15 +1686,19 @@ nav a.active {
 
 /* Share to X button */
 .claim-share-x {
-    border-color: #1da1f2;
-    color: #1da1f2;
+    border-color: var(--color-x-brand);
+    color: var(--color-x-brand);
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 0.5rem;
 }
 
-/* Share to X SVG icon */
+.claim-share-x:hover {
+    opacity: 0.8;
+    border-color: var(--color-x-brand);
+    background: rgba(29, 161, 242, 0.08);
+}
 .claim-share-x svg {
     width: 18px;
     height: 18px;
@@ -2614,7 +2626,7 @@ nav a.active {
     width: 100%;
     padding: 0.7rem 0.9rem;
     border: 1.5px solid var(--border);
-    border-radius: 10px;
+    border-radius: var(--radius);
     background: var(--bg);
     color: var(--fg);
     font-size: 0.88rem;
@@ -2805,7 +2817,7 @@ nav a.active {
 .heart-btn {
     background: rgba(239, 68, 68, 0.1);
     border: 1px solid rgba(239, 68, 68, 0.3);
-    border-radius: 50px;
+    border-radius: 9999px;
     padding: 0.6rem 1.25rem;
     display: flex;
     align-items: center;
@@ -2872,7 +2884,7 @@ nav a.active {
     gap: 0.5rem;
     background: rgba(99, 102, 241, 0.1);
     border: 1px solid rgba(99, 102, 241, 0.25);
-    border-radius: 50px;
+    border-radius: 9999px;
     padding: 0.4rem 1rem;
     margin: 0.75rem 0;
     font-size: 0.85rem;
@@ -2929,13 +2941,13 @@ nav a.active {
 
 .claim-step-circle.completed {
     background: var(--success);
-    color: #fff;
+    color: var(--text-heading);
     box-shadow: 0 0 12px rgba(34, 197, 94, 0.3);
 }
 
 .claim-step-circle.current {
     background: var(--accent);
-    color: #fff;
+    color: var(--text-heading);
     box-shadow: 0 0 12px rgba(99, 102, 241, 0.4);
     animation: claim-step-pulse 2s infinite;
 }
@@ -3003,7 +3015,7 @@ nav a.active {
 .participant-avatar-pixel {
     width: 72px;
     height: 72px;
-    border-radius: 16px;
+    border-radius: var(--radius);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -3192,7 +3204,7 @@ nav a.active {
     letter-spacing: 0.1em;
     background: rgba(31, 31, 39, 0.8);
     padding: 0.4rem 1rem;
-    border-radius: 20px;
+    border-radius: 9999px;
     border: 1px solid var(--border);
     white-space: nowrap;
     pointer-events: none;
@@ -3207,7 +3219,7 @@ nav a.active {
     z-index: 40;
     background: rgba(26, 26, 26, 0.95);
     border-top: 1px solid var(--border);
-    border-radius: 16px 16px 0 0;
+    border-radius: var(--radius) var(--radius) 0 0;
     padding: 0.75rem 1rem 1.5rem;
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
@@ -3436,7 +3448,7 @@ nav a.active {
 
 .scanner-qr-label {
     font-size: 0.8rem;
-    color: #666;
+    color: var(--text-muted);
     margin-bottom: 0.75rem;
 }
 
@@ -3524,7 +3536,7 @@ nav a.active {
     align-items: center;
     gap: 0.4rem;
     padding: 0.3rem 0.85rem;
-    border-radius: 20px;
+    border-radius: 9999px;
     font-size: 0.75rem;
     font-weight: 600;
     color: var(--solana);
@@ -3566,7 +3578,7 @@ nav a.active {
 }
 
 .landing-svg-icon.icon-clipboard svg {
-    stroke: #3b82f6;
+    stroke: var(--info);
 }
 
 .landing-svg-icon.icon-chart {
@@ -3584,7 +3596,7 @@ nav a.active {
 }
 
 .landing-svg-icon.icon-proof svg {
-    stroke: #a78bfa;
+    stroke: var(--accent-purple);
 }
 
 .landing-footer-brand {
@@ -3615,7 +3627,7 @@ nav a.active {
 
 .filter-pill {
     padding: 0.35rem 0.85rem;
-    border-radius: 20px;
+    border-radius: 9999px;
     font-size: 0.78rem;
     font-weight: 500;
     color: var(--text-secondary);
@@ -3628,7 +3640,7 @@ nav a.active {
 
 .filter-pill:hover {
     color: var(--text-primary);
-    border-color: #444;
+    border-color: var(--border-hover);
 }
 
 .filter-pill.active {
@@ -3682,10 +3694,10 @@ nav a.active {
     align-items: center;
     gap: 0.25rem;
     padding: 0.15rem 0.5rem;
-    border-radius: 10px;
+    border-radius: var(--radius);
     font-size: 0.65rem;
     font-weight: 700;
-    color: #eab308;
+    color: var(--warning-bright);
     background: rgba(234, 179, 8, 0.12);
     border: 1px solid rgba(234, 179, 8, 0.3);
     text-transform: uppercase;
@@ -3719,7 +3731,7 @@ nav a.active {
 
 .social-proof-pill {
     padding: 0.4rem 0.85rem;
-    border-radius: 20px;
+    border-radius: 9999px;
     font-size: 0.78rem;
     color: var(--text-muted);
     border: 1px solid var(--border);
@@ -3937,7 +3949,7 @@ nav a.active {
     color: var(--text-secondary);
     font-size: 0.88rem;
     cursor: pointer;
-    border-radius: 8px;
+    border-radius: var(--radius-sm);
     border-left: 3px solid transparent;
     transition: all 0.15s ease;
     text-align: left;
@@ -4092,7 +4104,7 @@ nav a.active {
         padding: 0.4rem 0.75rem;
         border-left: none;
         border-bottom: 2px solid transparent;
-        border-radius: 6px;
+        border-radius: var(--radius-sm);
         font-size: 0.82rem;
     }
 
@@ -4866,7 +4878,7 @@ nav a.active {
 
 .adventure-logo {
     font-size: 1.5rem;
-    color: #f87171;
+    color: var(--danger-bright);
     filter: drop-shadow(0 0 6px rgba(248, 113, 113, 0.3));
 }
 
@@ -4925,7 +4937,7 @@ nav a.active {
     font-weight: 700;
     font-family: "SF Mono", "Fira Code", monospace;
     background: rgba(99, 102, 241, 0.15);
-    color: #a78bfa;
+    color: var(--accent-purple);
     border: 1px solid rgba(99, 102, 241, 0.3);
     border-radius: 4px;
     animation: keyBadgePop 0.3s ease;
@@ -4954,7 +4966,7 @@ nav a.active {
     padding: 0.6rem 1.2rem;
     background: var(--bg-card);
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: var(--radius-sm);
     color: var(--text-primary);
     font-size: 0.85rem;
     font-weight: 500;
@@ -4995,7 +5007,7 @@ nav a.active {
     max-width: 100%;
     max-height: 60vh;
     scroll-behavior: smooth;
-    border-radius: 8px;
+    border-radius: var(--radius-sm);
     /* Subtle inner shadow for depth */
     box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.15);
 }
@@ -5005,7 +5017,7 @@ nav a.active {
     gap: 1px;
     background: rgba(0, 0, 0, 0.2);
     border: 2px solid var(--border);
-    border-radius: 6px;
+    border-radius: var(--radius-sm);
     overflow: hidden;
 }
 
@@ -5062,7 +5074,7 @@ nav a.active {
 
 .tile-key {
     background: rgba(99, 102, 241, 0.12);
-    color: #a78bfa;
+    color: var(--accent-purple);
     font-family: "SF Mono", "Fira Code", monospace;
     font-size: calc(var(--tile-size) * 0.32);
     font-weight: 700;
@@ -5088,7 +5100,7 @@ nav a.active {
 
 .tile-gate {
     background: rgba(239, 68, 68, 0.12);
-    color: var(--danger, #ef4444);
+    color: var(--danger);
     font-size: calc(var(--tile-size) * 0.55);
 }
 
@@ -5153,7 +5165,7 @@ nav a.active {
 .adventure-overlay-card {
     background: var(--bg-card);
     border: 1px solid var(--border);
-    border-radius: 12px;
+    border-radius: var(--radius);
     padding: 2rem;
     max-width: 400px;
     width: 90%;
@@ -5174,7 +5186,7 @@ nav a.active {
 }
 
 .adventure-overlay-hint {
-    color: var(--text-muted, #666);
+    color: var(--text-muted);
     font-size: 0.8rem;
     margin-top: 1rem;
 }
@@ -5198,7 +5210,7 @@ nav a.active {
     width: 44px;
     height: 24px;
     background: var(--bg-tertiary, var(--border-hover));
-    border-radius: 12px;
+    border-radius: 9999px;
     transition: background 0.2s ease;
     flex-shrink: 0;
 }
@@ -5216,7 +5228,7 @@ nav a.active {
 }
 
 .quiz-toggle-checkbox:checked + .quiz-toggle-switch {
-    background: var(--accent, #6366f1);
+    background: var(--accent);
 }
 
 .quiz-toggle-checkbox:checked + .quiz-toggle-switch::after {
@@ -5279,7 +5291,7 @@ nav a.active {
 .adventure-dialog-card {
     background: var(--bg-card);
     border: 1px solid rgba(245, 158, 11, 0.3);
-    border-radius: 12px;
+    border-radius: var(--radius);
     padding: 1.5rem;
     max-width: 400px;
     width: 90%;
@@ -5309,7 +5321,7 @@ nav a.active {
 .adventure-puzzle-card {
     background: var(--bg-card);
     border: 1px solid rgba(99, 102, 241, 0.3);
-    border-radius: 12px;
+    border-radius: var(--radius);
     padding: 1.5rem;
     max-width: 480px;
     width: 92%;
@@ -5330,10 +5342,10 @@ nav a.active {
 }
 
 .puzzle-code {
-    background: #0d1117;
-    color: #c9d1d9;
+    background: var(--code-bg);
+    color: var(--code-text);
     padding: 0.75rem 1rem;
-    border-radius: 6px;
+    border-radius: var(--radius-sm);
     font-family: "SF Mono", "Fira Code", monospace;
     font-size: 0.8rem;
     line-height: 1.5;
@@ -5354,8 +5366,8 @@ nav a.active {
 }
 
 .puzzle-piece {
-    background: #0d1117;
-    color: #c9d1d9;
+    background: var(--code-bg);
+    color: var(--code-text);
     padding: 0.5rem 0.75rem;
     border-radius: 4px;
     font-family: "SF Mono", "Fira Code", monospace;
@@ -5372,10 +5384,10 @@ nav a.active {
 
 .puzzle-opt {
     padding: 0.4rem 0.75rem;
-    background: var(--bg-tertiary, #242424);
+    background: var(--bg-tertiary);
     color: var(--text-primary);
     border: 1px solid var(--border);
-    border-radius: 6px;
+    border-radius: var(--radius-sm);
     font-family: "SF Mono", "Fira Code", monospace;
     font-size: 0.8rem;
     cursor: pointer;
@@ -5389,16 +5401,16 @@ nav a.active {
 .puzzle-opt-selected {
     background: rgba(99, 102, 241, 0.15);
     border-color: var(--accent);
-    color: #a78bfa;
+    color: var(--accent-purple);
 }
 
 .puzzle-input {
     width: 100%;
     padding: 0.5rem 0.75rem;
-    background: #0d1117;
-    color: #c9d1d9;
+    background: var(--code-bg);
+    color: var(--code-text);
     border: 1px solid var(--border);
-    border-radius: 6px;
+    border-radius: var(--radius-sm);
     font-family: "SF Mono", "Fira Code", monospace;
     font-size: 0.85rem;
     outline: none;
@@ -5423,18 +5435,18 @@ nav a.active {
 }
 
 .pair-left {
-    color: #c9d1d9;
-    background: #0d1117;
+    color: var(--code-text);
+    background: var(--code-bg);
     padding: 0.25rem 0.5rem;
     border-radius: 3px;
 }
 
 .pair-arrow {
-    color: var(--text-muted, #666);
+    color: var(--text-muted);
 }
 
 .pair-right {
-    color: #a78bfa;
+    color: var(--accent-purple);
     background: rgba(99, 102, 241, 0.1);
     padding: 0.25rem 0.5rem;
     border-radius: 3px;
@@ -5448,7 +5460,7 @@ nav a.active {
 
 .puzzle-feedback {
     padding: 0.5rem 0.75rem;
-    border-radius: 6px;
+    border-radius: var(--radius-sm);
     font-size: 0.85rem;
     font-weight: 600;
     margin: 0.5rem 0;
@@ -5463,7 +5475,7 @@ nav a.active {
 
 .puzzle-wrong {
     background: rgba(239, 68, 68, 0.1);
-    color: var(--danger, #ef4444);
+    color: var(--danger);
     border: 1px solid rgba(239, 68, 68, 0.2);
     animation: feedbackShake 0.4s ease;
 }
@@ -5502,7 +5514,7 @@ nav a.active {
 }
 
 .puzzle-hint {
-    color: var(--text-muted, #666);
+    color: var(--text-muted);
     font-size: 0.8rem;
     margin-top: 0.75rem;
     font-style: italic;
@@ -5532,7 +5544,7 @@ nav a.active {
     justify-content: center;
     background: var(--bg-card);
     border: 1px solid var(--border);
-    border-radius: 10px;
+    border-radius: var(--radius);
     color: var(--text-primary);
     font-size: 1.2rem;
     cursor: pointer;
@@ -5577,7 +5589,7 @@ nav a.active {
 .adventure-controls-hint {
     margin-top: 0.75rem;
     font-size: 0.75rem;
-    color: var(--text-muted, #666);
+    color: var(--text-muted);
 }
 
 /* Footer */
@@ -5666,7 +5678,7 @@ nav a.active {
     width: 100%;
     max-width: 600px;
     font-size: 0.75rem;
-    color: var(--warning, #f59e0b);
+    color: var(--warning);
     padding: 0.2rem 0;
     margin-bottom: 0.25rem;
     font-weight: 500;
@@ -5724,9 +5736,9 @@ nav a.active {
     border-bottom: 1px solid;
 }
 .adventure-banner-info {
-    background: #1e293b;
-    color: #94a3b8;
-    border-bottom-color: #334155;
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    border-bottom-color: var(--border-hover);
 }
 .adventure-banner-icon {
     font-size: 1.1rem;
@@ -5746,7 +5758,7 @@ nav a.active {
     padding: 0.65rem 1.5rem;
     text-decoration: none;
     display: inline-block;
-    border-radius: 8px;
+    border-radius: var(--radius-sm);
     box-shadow: 0 0 16px rgba(245, 158, 11, 0.3);
     animation: claimGlow 2s ease-in-out infinite;
 }
@@ -5784,9 +5796,9 @@ nav a.active {
     align-items: center;
     gap: 0.75rem;
     padding: 0.75rem 1rem;
-    background: var(--bg-tertiary, #242424);
+    background: var(--bg-tertiary);
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: var(--radius-sm);
     cursor: pointer;
     text-align: left;
     transition: all 0.15s ease;
@@ -5819,12 +5831,12 @@ nav a.active {
 
 /* Completed level checkmark */
 .level-select-completed .level-select-num {
-    background: var(--success, #22c55e);
+    background: var(--success);
 }
 
 .level-select-check {
     font-size: 0.7rem;
-    color: var(--success, #22c55e);
+    color: var(--success);
     flex-shrink: 0;
 }
 
@@ -5871,7 +5883,7 @@ nav a.active {
     margin: 1rem 0;
     padding: 0.75rem;
     background: rgba(99, 102, 241, 0.05);
-    border-radius: 8px;
+    border-radius: var(--radius-sm);
 }
 
 .control-key-pair {
@@ -5900,7 +5912,7 @@ nav a.active {
     margin: 1rem 0;
     padding: 0.75rem;
     background: rgba(34, 197, 94, 0.05);
-    border-radius: 8px;
+    border-radius: var(--radius-sm);
 }
 
 .stat-item {
@@ -5935,8 +5947,8 @@ nav a.active {
     padding: 0.75rem 1rem;
     background: rgba(245, 158, 11, 0.1);
     border: 1px solid rgba(245, 158, 11, 0.3);
-    border-radius: 8px;
-    color: var(--warning, #f59e0b);
+    border-radius: var(--radius-sm);
+    color: var(--warning);
     font-weight: 600;
     font-size: 0.9rem;
 }
@@ -5944,7 +5956,7 @@ nav a.active {
 /* === Arrange puzzle interactive === */
 .puzzle-hint-small {
     font-size: 0.75rem;
-    color: var(--text-muted, #666);
+    color: var(--text-muted);
     margin-bottom: 0.5rem;
 }
 
@@ -5964,7 +5976,7 @@ nav a.active {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: var(--bg-tertiary, #242424);
+    background: var(--bg-tertiary);
     border: 1px solid var(--border);
     border-radius: 4px;
     color: var(--text-secondary);
@@ -5985,7 +5997,7 @@ nav a.active {
 }
 
 .puzzle-piece-num {
-    color: var(--text-muted, #666);
+    color: var(--text-muted);
     margin-right: 0.5rem;
     font-size: 0.7rem;
 }
@@ -6007,7 +6019,7 @@ nav a.active {
 
 .match-label {
     font-size: 0.7rem;
-    color: var(--text-muted, #666);
+    color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 0.05em;
     text-align: center;
@@ -6025,7 +6037,7 @@ nav a.active {
 
 .match-arrow {
     font-size: 0.75rem;
-    color: var(--text-muted, #666);
+    color: var(--text-muted);
     height: 34px;
     display: flex;
     align-items: center;
@@ -6033,9 +6045,9 @@ nav a.active {
 
 .match-item {
     padding: 0.4rem 0.75rem;
-    background: var(--bg-tertiary, #242424);
+    background: var(--bg-tertiary);
     border: 1px solid var(--border);
-    border-radius: 6px;
+    border-radius: var(--radius-sm);
     font-family: "SF Mono", "Fira Code", monospace;
     font-size: 0.75rem;
     color: var(--text-primary);
@@ -6052,7 +6064,7 @@ nav a.active {
 .match-item-selected {
     border-color: var(--accent);
     background: rgba(99, 102, 241, 0.15);
-    color: #a78bfa;
+    color: var(--accent-purple);
 }
 
 .match-item-matched {
@@ -6115,7 +6127,7 @@ nav a.active {
     padding: 0.75rem 1rem;
     background: rgba(99, 102, 241, 0.06);
     border: 1px solid rgba(99, 102, 241, 0.15);
-    border-radius: 8px;
+    border-radius: var(--radius-sm);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -6143,7 +6155,7 @@ nav a.active {
     padding: 1.25rem;
     background: rgba(255, 255, 255, 0.03);
     border: 1px solid var(--border);
-    border-radius: 12px;
+    border-radius: var(--radius);
     text-align: center;
 }
 
@@ -6159,7 +6171,7 @@ nav a.active {
 .claim-share-preview {
     background: rgba(0, 0, 0, 0.3);
     border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 8px;
+    border-radius: var(--radius-sm);
     padding: 0.75rem 1rem;
     margin-bottom: 1rem;
     text-align: left;
@@ -6189,7 +6201,7 @@ nav a.active {
     background: var(--bg-void);
     color: var(--text-heading);
     border: 1px solid var(--border-hover);
-    border-radius: 8px;
+    border-radius: var(--radius-sm);
     font-weight: 600;
     font-size: 0.9rem;
     cursor: pointer;
@@ -6198,7 +6210,7 @@ nav a.active {
 }
 
 .claim-share-x-btn:hover {
-    border-color: #1da1f2;
+    border-color: var(--color-x-brand);
     box-shadow: 0 0 20px rgba(29, 161, 242, 0.15);
 }
 
@@ -6215,7 +6227,7 @@ nav a.active {
     background: rgba(255, 255, 255, 0.05);
     color: var(--text-secondary);
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: var(--radius-sm);
     cursor: pointer;
     transition: all 0.2s;
     min-width: 44px;
@@ -6290,7 +6302,7 @@ nav a.active {
 .deposit-method-card {
     background: var(--card-bg, rgba(255, 255, 255, 0.03));
     border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
-    border-radius: 12px;
+    border-radius: var(--radius);
     padding: 1.25rem;
     transition:
         border-color 0.2s ease,
@@ -6323,9 +6335,9 @@ nav a.active {
 }
 
 .deposit-pay-url-box {
-    background: var(--bg-secondary, #1a1a2e);
+    background: var(--bg-secondary);
     border: 1px solid var(--border-color, rgba(255, 255, 255, 0.12));
-    border-radius: 8px;
+    border-radius: var(--radius-sm);
     padding: 0.75rem 1rem;
     margin: 0.75rem 0;
     word-break: break-all;
@@ -6369,7 +6381,7 @@ nav a.active {
 .admin-slip-card {
     background: var(--card-bg, rgba(255, 255, 255, 0.03));
     border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
-    border-radius: 12px;
+    border-radius: var(--radius);
     padding: 1rem 1.25rem;
     margin-bottom: 0.75rem;
     display: flex;
@@ -6434,10 +6446,10 @@ nav a.active {
 .form-input {
     width: 100%;
     padding: 0.6rem 0.8rem;
-    border-radius: 6px;
+    border-radius: var(--radius-sm);
     border: 1px solid var(--border-color, rgba(255, 255, 255, 0.15));
-    background: var(--bg-secondary, #1a1a2e);
-    color: var(--text-primary, var(--text-heading));
+    background: var(--bg-secondary);
+    color: var(--text-primary);
     font-size: 0.9rem;
     font-family: inherit;
     transition:
@@ -6460,7 +6472,7 @@ nav a.active {
 .form-section {
     margin-bottom: 1.5rem;
     border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
-    border-radius: 10px;
+    border-radius: var(--radius);
     overflow: hidden;
 }
 
@@ -6487,7 +6499,7 @@ nav a.active {
 .form-section-title {
     font-size: 0.95rem;
     font-weight: 600;
-    color: var(--text-secondary, #aaa);
+    color: var(--text-secondary);
     flex: 1;
 }
 
@@ -6503,25 +6515,25 @@ nav a.active {
 
 .form-section-badge-required {
     background: rgba(239, 68, 68, 0.15);
-    color: #f87171;
+    color: var(--danger-bright);
     border: 1px solid rgba(239, 68, 68, 0.25);
 }
 
 .form-section-badge-optional {
     background: rgba(107, 114, 128, 0.15);
-    color: #9ca3af;
+    color: var(--text-muted);
     border: 1px solid rgba(107, 114, 128, 0.2);
 }
 
 .form-section-badge-recommended {
     background: rgba(20, 241, 149, 0.12);
-    color: #14f195;
+    color: var(--solana-green);
     border: 1px solid rgba(20, 241, 149, 0.25);
 }
 
 .form-section-toggle {
     font-size: 0.7rem;
-    color: var(--text-secondary, #888);
+    color: var(--text-secondary);
     transition: transform 0.2s ease;
     flex-shrink: 0;
 }
@@ -6549,7 +6561,7 @@ nav a.active {
     margin-left: 0.35rem;
     vertical-align: middle;
     background: rgba(239, 68, 68, 0.12);
-    color: #f87171;
+    color: var(--danger-bright);
     border: 1px solid rgba(239, 68, 68, 0.2);
 }
 
@@ -6562,7 +6574,7 @@ nav a.active {
     margin-left: 0.35rem;
     vertical-align: middle;
     background: rgba(107, 114, 128, 0.12);
-    color: #9ca3af;
+    color: var(--text-muted);
     border: 1px solid rgba(107, 114, 128, 0.15);
 }
 
@@ -6583,7 +6595,7 @@ nav a.active {
 
 .advanced-toggle-icon {
     font-size: 0.75rem;
-    color: var(--text-secondary, #888);
+    color: var(--text-secondary);
     transition: transform 0.2s ease;
 }
 
@@ -6593,7 +6605,7 @@ nav a.active {
 
 .advanced-toggle-label {
     font-size: 0.8rem;
-    color: var(--text-secondary, #888);
+    color: var(--text-secondary);
     font-style: italic;
 }
 
@@ -6610,10 +6622,10 @@ nav a.active {
 .events-search-input {
     font-size: 0.85rem;
     padding: 0.4rem 0.75rem;
-    border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
-    border-radius: 6px;
-    background: var(--bg-secondary, rgba(255, 255, 255, 0.03));
-    color: var(--text-primary, #eee);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
     outline: none;
     width: 200px;
     transition:
@@ -6622,12 +6634,12 @@ nav a.active {
 }
 
 .events-search-input:focus {
-    border-color: var(--accent, #6366f1);
+    border-color: var(--accent);
     box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
 }
 
 .events-search-input::placeholder {
-    color: var(--text-secondary, #888);
+    color: var(--text-secondary);
 }
 
 /* ===== Section Icons (emoji-free) ===== */
@@ -6637,7 +6649,7 @@ nav a.active {
     width: 14px;
     height: 14px;
     border-radius: 3px;
-    background: var(--accent, #6366f1);
+    background: var(--accent);
     opacity: 0.7;
     vertical-align: middle;
 }
@@ -6647,7 +6659,7 @@ nav a.active {
     width: 14px;
     height: 14px;
     border-radius: 50%;
-    border: 2px solid var(--text-secondary, #888);
+    border: 2px solid var(--text-secondary);
     vertical-align: middle;
 }
 .form-section-icon-sheets::before {
@@ -6675,7 +6687,7 @@ nav a.active {
     width: 14px;
     height: 14px;
     border-radius: 2px;
-    border: 2px solid var(--text-secondary, #888);
+    border: 2px solid var(--text-secondary);
     vertical-align: middle;
 }
 .form-section-icon-deposit::before {
@@ -6684,7 +6696,7 @@ nav a.active {
     width: 14px;
     height: 14px;
     border-radius: 2px;
-    background: #3b82f6;
+    background: var(--info);
     opacity: 0.6;
     vertical-align: middle;
 }
@@ -6694,7 +6706,7 @@ nav a.active {
     width: 14px;
     height: 14px;
     border-radius: 50%;
-    background: var(--text-secondary, #888);
+    background: var(--text-secondary);
     opacity: 0.4;
     vertical-align: middle;
 }
@@ -6703,7 +6715,7 @@ nav a.active {
 .events-empty-icon {
     width: 40px;
     height: 40px;
-    border-radius: 8px;
+    border-radius: var(--radius-sm);
     border: 2px dashed var(--border, rgba(255, 255, 255, 0.15));
     margin-bottom: 0.5rem;
 }
@@ -6712,11 +6724,11 @@ nav a.active {
 .escrow-solscan-link {
     font-size: 0.65rem;
     font-weight: 600;
-    color: var(--accent, #6366f1);
+    color: var(--accent);
     margin-left: 0.5rem;
     text-decoration: none;
     padding: 0.1rem 0.3rem;
-    border: 1px solid var(--accent, #6366f1);
+    border: 1px solid var(--accent);
     border-radius: 3px;
     vertical-align: middle;
     transition: background 0.15s ease;
@@ -6733,7 +6745,7 @@ nav a.active {
     justify-content: space-between;
     margin-bottom: 0.5rem;
     padding: 0.4rem 0.75rem;
-    border-radius: 6px;
+    border-radius: var(--radius-sm);
     font-size: 0.8rem;
 }
 
@@ -6754,10 +6766,10 @@ nav a.active {
 }
 
 .escrow-result-link a {
-    color: var(--accent, #6366f1);
+    color: var(--accent);
     font-size: 0.7rem;
     text-decoration: none;
-    border: 1px solid var(--accent, #6366f1);
+    border: 1px solid var(--accent);
     border-radius: 3px;
     padding: 0.15rem 0.35rem;
     transition: background 0.15s ease;
@@ -6795,7 +6807,7 @@ nav a.active {
     margin-bottom: 1rem;
     padding: 0.75rem;
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: var(--radius-sm);
     background: var(--bg-secondary);
 }
 
@@ -6803,7 +6815,7 @@ nav a.active {
     margin-bottom: 1rem;
     padding: 0.75rem;
     border: 1px dashed var(--border);
-    border-radius: 8px;
+    border-radius: var(--radius-sm);
     background: var(--bg-secondary);
 }
 
@@ -6827,7 +6839,7 @@ nav a.active {
     justify-content: space-between;
     padding: 0.5rem 0.75rem;
     border: 1px solid var(--border);
-    border-radius: 6px;
+    border-radius: var(--radius-sm);
     background: var(--bg-secondary);
     margin-bottom: 0.75rem;
 }
@@ -6850,7 +6862,7 @@ nav a.active {
     gap: 1rem;
     padding: 0.5rem 0.75rem;
     border: 1px solid var(--border);
-    border-radius: 6px;
+    border-radius: var(--radius-sm);
     background: var(--bg-primary);
     margin-bottom: 0.5rem;
     transition:
@@ -6883,13 +6895,13 @@ nav a.active {
 /* --- Badge additions (Completed, Archived) --- */
 .badge-completed {
     background: rgba(59, 130, 246, 0.15);
-    color: #3b82f6;
+    color: var(--info);
     border: 1px solid rgba(59, 130, 246, 0.3);
 }
 
 .badge-archived {
     background: rgba(107, 114, 128, 0.15);
-    color: #9ca3af;
+    color: var(--text-muted);
     border: 1px solid rgba(107, 114, 128, 0.3);
 }
 
@@ -6898,7 +6910,7 @@ nav a.active {
     margin-top: 0.75rem;
     padding: 0.5rem 0.75rem;
     border: 1px solid var(--success);
-    border-radius: 6px;
+    border-radius: var(--radius-sm);
     background: var(--success-bg);
 }
 
@@ -6906,7 +6918,7 @@ nav a.active {
     margin-top: 0.75rem;
     padding: 0.5rem 0.75rem;
     border: 1px solid var(--danger);
-    border-radius: 6px;
+    border-radius: var(--radius-sm);
     background: var(--danger-bg);
 }
 
@@ -6934,7 +6946,7 @@ nav a.active {
 .event-detail-card {
     background: var(--card-bg, var(--bg-card));
     border: 1px solid var(--border, rgba(255, 255, 255, 0.1));
-    border-radius: 0.75rem;
+    border-radius: var(--radius);
     padding: 1.25rem;
     margin-bottom: 1rem;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
@@ -6966,7 +6978,7 @@ nav a.active {
     margin-bottom: 0.75rem;
     background: var(--card-bg, var(--bg-card));
     border: 1px solid var(--border, rgba(255, 255, 255, 0.1));
-    border-radius: 0.5rem;
+    border-radius: var(--radius-sm);
     flex-wrap: wrap;
 }
 
@@ -6994,7 +7006,7 @@ nav a.active {
 /* --- Info Note (dashed border note box) --- */
 .info-note {
     border: 1px dashed var(--border);
-    border-radius: 6px;
+    border-radius: var(--radius-sm);
     padding: 0.5rem 0.75rem;
     font-size: 0.8rem;
     color: var(--text-muted);
@@ -7028,7 +7040,13 @@ nav a.active {
 .dpad-btn:focus-visible,
 .quiz-ctrl-btn:focus-visible,
 .link-accent:focus-visible,
-.admin-tab-switch-link:focus-visible {
+.admin-tab-switch-link:focus-visible,
+.match-item:focus-visible,
+.quiz-option-radio:focus-visible,
+.level-select-item:focus-visible,
+.deposit-method-card:focus-visible,
+.claim-share-x:focus-visible,
+.claim-wallet-input:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 2px;
 }
@@ -7148,7 +7166,7 @@ nav a.active {
     margin-top: 0.75rem;
     padding: 0.75rem;
     background: var(--bg-secondary);
-    border-radius: 8px;
+    border-radius: var(--radius-sm);
     border: 1px dashed var(--border);
 }
 
@@ -7157,7 +7175,7 @@ nav a.active {
     margin-top: 1rem;
     padding: 0.75rem;
     background: var(--bg-secondary);
-    border-radius: 8px;
+    border-radius: var(--radius-sm);
     border: 1px dashed var(--border);
 }
 
@@ -7167,7 +7185,7 @@ nav a.active {
  * Replaces: style="background:var(--bg-secondary);border-radius:8px;padding:1rem;margin-bottom:1rem;display:flex;align-items:center;justify-content:center;gap:0.75rem;" */
 .wallet-connected-bar {
     background: var(--bg-secondary);
-    border-radius: 8px;
+    border-radius: var(--radius-sm);
     padding: 1rem;
     margin-bottom: 1rem;
     display: flex;
@@ -7256,7 +7274,7 @@ nav a.active {
  * Replaces: style="background:var(--bg-secondary);border-radius:8px;padding:0.75rem;margin-bottom:1rem;font-family:monospace;font-size:0.75rem;color:var(--text-secondary);word-break:break-all;" */
 .tx-hash-box {
     background: var(--bg-secondary);
-    border-radius: 8px;
+    border-radius: var(--radius-sm);
     padding: 0.75rem;
     margin-bottom: 1rem;
     font-family: monospace;
@@ -7268,7 +7286,7 @@ nav a.active {
 /* Variant with margin-top instead of margin-bottom (confirming state) */
 .tx-hash-box-top {
     background: var(--bg-secondary);
-    border-radius: 8px;
+    border-radius: var(--radius-sm);
     padding: 0.75rem;
     margin-top: 0.75rem;
     font-family: monospace;
@@ -7293,7 +7311,7 @@ nav a.active {
 .tx-pay-url-box {
     background: var(--bg-secondary);
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: var(--radius-sm);
     padding: 1rem;
     margin-bottom: 1rem;
     word-break: break-all;
@@ -7344,7 +7362,7 @@ nav a.active {
 .wallet-fallback-box {
     padding: 1rem;
     background: var(--bg-secondary);
-    border-radius: 8px;
+    border-radius: var(--radius-sm);
     margin-bottom: 1rem;
 }
 
@@ -7466,7 +7484,7 @@ nav a.active {
  * Replaces: style="background:white;border-radius:12px;padding:1rem;display:inline-block;margin-bottom:1rem;" */
 .qr-wrapper {
     background: white;
-    border-radius: 12px;
+    border-radius: var(--radius);
     padding: 1rem;
     display: inline-flex;
     align-items: center;
@@ -7516,7 +7534,7 @@ nav a.active {
 .dep-input {
     width: 100%;
     padding: 0.6rem 0.8rem;
-    border-radius: 6px;
+    border-radius: var(--radius-sm);
     border: 1px solid var(--border);
     background: var(--bg-secondary);
     color: var(--text-primary);
@@ -7847,7 +7865,7 @@ nav a.active {
     margin-top: 0.75rem;
     padding: 0.5rem 0.75rem;
     border: 1px solid var(--success);
-    border-radius: 6px;
+    border-radius: var(--radius-sm);
     background: var(--success-bg);
 }
 
@@ -7900,7 +7918,7 @@ nav a.active {
 }
 
 .hint-info {
-    color: var(--text-secondary, #888);
+    color: var(--text-secondary);
     font-size: 0.8rem;
     line-height: 1.5;
 }
@@ -7911,21 +7929,21 @@ nav a.active {
     align-items: center;
     gap: 0.5rem;
     padding: 0.45rem 0.65rem;
-    background: var(--bg-secondary, #1a1a2e);
-    border: 1px solid var(--border, #2a2a3e);
-    border-radius: 6px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
     min-height: 2.25rem;
 }
 
 .readonly-value {
     font-size: 0.85rem;
-    color: var(--text-primary, #e0e0e0);
+    color: var(--text-primary);
     word-break: break-all;
 }
 
 .readonly-value-mono {
     font-size: 0.78rem;
-    color: var(--text-primary, #e0e0e0);
+    color: var(--text-primary);
     font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
     word-break: break-all;
     line-height: 1.3;
@@ -7933,7 +7951,7 @@ nav a.active {
 
 .readonly-badge {
     font-size: 0.65rem;
-    color: var(--success, #22c55e);
+    color: var(--success);
     background: rgba(34, 197, 94, 0.1);
     border: 1px solid rgba(34, 197, 94, 0.25);
     border-radius: 4px;
@@ -8019,7 +8037,7 @@ nav a.active {
 .sheet-guide-box {
     padding: 0.75rem 1rem;
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: var(--radius-sm);
     background: rgba(99, 102, 241, 0.04);
 }
 
@@ -8109,7 +8127,7 @@ nav a.active {
     align-items: center;
     gap: 0.5rem;
     padding: 0.5rem 1rem;
-    background: var(--bg-secondary, #1a1a24);
+    background: var(--bg-secondary);
     border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.1));
     font-size: 0.85rem;
     z-index: 10;
@@ -8118,9 +8136,9 @@ nav a.active {
 .scanner-event-select {
     flex: 1;
     padding: 0.35rem 0.5rem;
-    border-radius: 0.375rem;
+    border-radius: var(--radius-sm);
     border: 1px solid var(--border, rgba(255, 255, 255, 0.15));
-    background: var(--bg-primary, #0d0d1a);
+    background: var(--bg-primary);
     color: var(--text-primary);
     font-size: 0.85rem;
     max-width: 300px;
@@ -8159,7 +8177,7 @@ nav a.active {
 }
 .ticket-qr-wrapper {
     background: #fff;
-    border-radius: 1rem;
+    border-radius: var(--radius);
     padding: 1rem;
     display: flex;
     align-items: center;
@@ -8232,21 +8250,21 @@ nav a.active {
     align-items: center;
     gap: 0.375rem;
     padding: 0.5rem 1rem;
-    border-radius: 2rem;
+    border-radius: 9999px;
     font-weight: 600;
     font-size: 0.85rem;
 }
 .ticket-status-checked-in {
     background: rgba(34, 197, 94, 0.15);
-    color: #22c55e;
+    color: var(--success);
 }
 .ticket-status-pending {
     background: rgba(234, 179, 8, 0.15);
-    color: #eab308;
+    color: var(--warning-bright);
 }
 .ticket-status-ready {
     background: rgba(59, 130, 246, 0.15);
-    color: #3b82f6;
+    color: var(--info);
 }
 .ticket-status-detail {
     font-size: 0.8rem;
@@ -8281,7 +8299,7 @@ nav a.active {
 .ticket-fullscreen-card {
     cursor: default;
     background: #fff;
-    border-radius: 1.5rem;
+    border-radius: var(--radius);
     padding: 2rem;
     display: flex;
     flex-direction: column;
@@ -8306,7 +8324,7 @@ nav a.active {
     border: none;
     font-size: 1.5rem;
     cursor: pointer;
-    color: #666;
+    color: var(--text-muted);
     padding: 0 0.25rem;
 }
 .ticket-fullscreen-close:hover {
@@ -8318,7 +8336,7 @@ nav a.active {
     display: block;
 }
 .ticket-fullscreen-hint {
-    color: #666;
+    color: var(--text-muted);
     font-size: 0.85rem;
     margin: 0;
 }

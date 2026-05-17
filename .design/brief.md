@@ -10,11 +10,11 @@
 ### Colors
 | Token | Value | Usage |
 |-------|-------|-------|
-| `--bg-primary` | `#0f0f0f` | Page background |
-| `--bg-secondary` | `#1a1a1a` | Cards, sections |
-| `--bg-tertiary` | `#242424` | Elevated surfaces |
-| `--bg-card` | `#1e1e1e` | Card backgrounds |
-| `--bg-hover` | `#2a2a2a` | Hover states |
+| `--bg-primary` | `#13131b` | Page background (blue-tinted dark) |
+| `--bg-secondary` | `#1a1a24` | Cards, sections |
+| `--bg-tertiary` | `#242430` | Elevated surfaces |
+| `--bg-card` | `#1e1e2a` | Card backgrounds |
+| `--bg-hover` | `#2a2a38` | Hover states |
 | `--text-primary` | `#e0e0e0` | Body text |
 | `--text-secondary` | `#999` | Descriptions |
 | `--text-muted` | `#666` | Hint text |
@@ -25,6 +25,29 @@
 | `--danger` | `#ef4444` | Errors |
 | `--info` | `#3b82f6` | Info, locked wallet |
 | `--border` | `#2a2a2a` | Subtle borders |
+| `--border-hover` | `#333` | Border hover |
+
+### Additional Tokens (added post-WCAG audit)
+| Token | Value | Usage |
+|-------|-------|-------|
+| `--success-bright` | `#4ade80` | Bright success text |
+| `--success-btn` | `#15803d` | Success button bg (WCAG AA) |
+| `--success-btn-hover` | `#166534` | Success button hover |
+| `--danger-bright` | `#f87171` | Danger badge text (WCAG AA) |
+| `--danger-btn` | `#b91c1c` | Danger button bg (WCAG AA) |
+| `--danger-btn-hover` | `#991b1b` | Danger button hover |
+| `--info-bright` | `#60a5fa` | Info badge text (WCAG AA) |
+| `--text-heading` | `#fff` | Headings |
+| `--bg-void` | `#000` | Absolute black |
+| `--solana` | `#9945ff` | Solana branding |
+| `--accent-purple` | `#a78bfa` | Purple accent (brand gradient, key badges) |
+| `--accent-light` | `#a5b4fc` | Light accent (button hover gradients) |
+| `--warning-bright` | `#eab308` | Bright warning (VIP badges, pending status) |
+| `--warning-dark` | `#d97706` | Dark warning (button backgrounds) |
+| `--code-bg` | `#0d1117` | Code block background |
+| `--code-text` | `#c9d1d9` | Code block text |
+| `--color-x-brand` | `#1da1f2` | X/Twitter brand blue (share buttons) |
+| `--solana-green` | `#14f195` | Solana green accent |
 
 ### Gradient (Brand Mark)
 ```
@@ -33,8 +56,8 @@ linear-gradient(135deg, #818cf8 0%, #6366f1 40%, #a78bfa 100%)
 Used for: logo text, hero headlines, step number circles, brand accent.
 
 ### Typography
-- Font: System stack (`-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`)
-- H1: `clamp(1.75rem, 5vw, 2.75rem)`, weight 800
+- Font: **Inter** via Google Fonts (fallback: system stack)
+- H1: `clamp(1.75rem, 5vw, 2.75rem)`, weight 700
 - H2: `1.5rem`, weight 700
 - Body: `0.9–1.1rem`, weight 400
 - Labels: `0.75–0.85rem`, weight 600
@@ -376,7 +399,7 @@ No light mode needed for now. The entire app is dark-first.
 ### Prompt 1 — Landing Page
 ```
 Design a dark-mode landing page for "BeThere" — a Solana-powered event check-in
-and NFT minting platform. Color palette: #0f0f0f background, #6366f1 indigo
+and NFT minting platform. Color palette: #13131b background (blue-tinted dark), #6366f1 indigo
 accent, gradient from #818cf8 to #a78bfa. Style: minimal, tech-forward,
 similar to Linear.app. Include: sticky nav with logo, hero section with gradient
 headline "Check in. Mint. Prove you were there.", problem section with 3 cards,
@@ -387,7 +410,7 @@ and footer. Desktop 1440px viewport, max-width 960px content.
 ### Prompt 2 — Claim Page
 ```
 Design a mobile-first claim page (375px) for BeThere event NFTs. Dark theme
-(#0f0f0f bg, #6366f1 accent). Show 4 states: (1) Loading with skeleton cards,
+(#13131b bg, #6366f1 accent). Show 4 states: (1) Loading with skeleton cards,
 (2) Ready with wallet input + locked wallet indicator, (3) Success with animated
 checkmark + asset ID + share button, (4) Error with retry. Include welcome card
 with attendee name, NFT preview with placeholder art, and "Claim NFT" button.
@@ -397,7 +420,7 @@ Style: clean cards, rounded corners, gradient accents.
 ### Prompt 3 — Scanner Flow
 ```
 Design a full-screen mobile QR scanner (375px) for BeThere event check-in.
-Dark theme (#0f0f0f bg, #6366f1 accent). Camera viewfinder with corner bracket
+Dark theme (#13131b bg, #6366f1 accent). Camera viewfinder with corner bracket
 overlay and animated scan line. Bottom panel: check-in count, recent scans,
 "Enter manually" link. Show result states: (1) Success — green flash, attendee
 name, "Checked in!", (2) Already checked in — yellow warning, (3) Not found —
@@ -407,7 +430,7 @@ red error card. Auto-dismiss success after 3 seconds.
 ### Prompt 4 — Admin Dashboard
 ```
 Design a desktop admin dashboard (1440px) for BeThere event management.
-Dark theme (#0f0f0f bg, #6366f1 accent). Two-column layout: stats sidebar +
+Dark theme (#13131b bg, #6366f1 accent). Two-column layout: stats sidebar +
 main content. Stats: Total Registered, Checked In (green), Rate (progress bar),
 Remaining (amber). Main area: attendee table with search, filter pills
 (All/Checked In/Not Checked In), pixel avatars, participation badges. Include

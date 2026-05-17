@@ -29,6 +29,8 @@ colors:
   accent-light: "#a5b4fc"
   accent-purple: "#a78bfa"
   solana: "#9945ff"
+  solana-green: "#14f195"
+  color-x-brand: "#1da1f2"
 
   # Semantic
   success: "#22c55e"
@@ -38,6 +40,8 @@ colors:
   success-bg: "#1a2e1f"
   success-border: "#2d5a3a"
   warning: "#f59e0b"
+  warning-bright: "#eab308"
+  warning-dark: "#d97706"
   warning-bg: "#2e2610"
   warning-border: "#5a4520"
   danger: "#ef4444"
@@ -54,6 +58,10 @@ colors:
   # Borders
   border: "#2a2a2a"
   border-hover: "#333333"
+
+  # Code / Special
+  code-bg: "#0d1117"
+  code-text: "#c9d1d9"
 
   # Google OAuth
   bg-google-hover: "#f5f5f5"
@@ -202,8 +210,10 @@ The palette is built on cool-toned dark backgrounds with high-contrast neutrals 
 - **Backgrounds**: Deep blue-black (`#13131b`) with subtle blue undertones — not pure black. Cards and surfaces layer progressively lighter (`#1a1a24` → `#1e1e2a` → `#242430`).
 - **Text**: Off-white (`#e0e0e0`) for body, pure white (`#ffffff`) for headings. Muted text at `#999` and `#666`.
 - **Accent (Indigo)**: `#6366f1` is the primary action color. Used for buttons, links, active states, and brand gradients. Hover shifts to `#818cf8`.
-- **Semantic**: Green (`#22c55e`) for success/check-in, Amber (`#f59e0b`) for warnings/pending, Red (`#ef4444`) for errors, Blue (`#3b82f6`) for info. Each has matching translucent `bg` and `border` variants. Button variants use darker shades (`--success-btn: #15803d`, `--danger-btn: #b91c1c`) to meet WCAG AA contrast. Badge text uses brighter variants (`--danger-bright: #f87171`, `--info-bright: #60a5fa`) for AA compliance on translucent backgrounds.
-- **Solana Purple**: `#9945ff` reserved for Solana-specific branding elements.
+- **Semantic**: Green (`#22c55e`) for success/check-in, Amber (`#f59e0b`) for warnings/pending, Red (`#ef4444`) for errors, Blue (`#3b82f6`) for info. Each has matching translucent `bg` and `border` variants. Button variants use darker shades (`--success-btn: #15803d`, `--danger-btn: #b91c1c`) to meet WCAG AA contrast. Badge text uses brighter variants (`--danger-bright: #f87171`, `--info-bright: #60a5fa`) for AA compliance on translucent backgrounds. Warning has `--warning-bright: #eab308` (VIP badges, pending status) and `--warning-dark: #d97706` (button backgrounds).
+- **Solana Purple**: `#9945ff` reserved for Solana-specific branding elements. `--solana-green: #14f195` for Solana-specific green accents.
+- **X/Twitter Brand**: `--color-x-brand: #1da1f2` for share-to-X components.
+- **Code**: `--code-bg: #0d1117`, `--code-text: #c9d1d9` for adventure puzzle code blocks.
 
 ## Typography
 

@@ -1,0 +1,60 @@
+name: Design System Lint
+
+on:
+  pull_request:
+    paths:
+      - '.design/DESIGN.md'
+      - '.design/brief.md'
+      - 'frontend-leptos/style.css'
+
+jobs:
+  lint-design:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Lint DESIGN.md
+        run: |
+          npx @google/design.md lint .design/DESIGN.md --strict 2>&1 | tee lint-output.txt
+          # Fail on errors only (warnings about orphaned tokens are expected
+          # because the spec schema can't express borderColor/gradient yet)
+          if grep -q '"errors": [1-9]' lint-output.txt; then
+            echo "::error::DESIGN.md lint found errors"
+            exit 1
+          fi
+
+      - name: Check brief ↔ CSS drift
+        run: |
+          # Extract bg tokens from CSS :root
+          css_bg_primary=$(grep -oP '(?<=--bg-primary:\s*)#[0-9a-fA-F]+' frontend-leptos/style.css)
+          css_bg_secondary=$(grep -oP '(?<=--bg-secondary:\s*)#[0-9a-fA-F]+' frontend-leptos/style.css)
+          css_bg_card=$(grep -oP '(?<=--bg-card:\s*)#[0-9a-fA-F]+' frontend-leptos/style.css)
+
+          # Extract bg tokens from brief
+          brief_bg_primary=$(grep -oP '(?<=--bg-primary.*\|\s`)#[0-9a-fA-F]+' .design/brief.md | head -1)
+          brief_bg_secondary=$(grep -oP '(?<=--bg-secondary.*\|\s`)#[0-9a-fA-F]+' .design/brief.md | head -1)
+          brief_bg_card=$(grep -oP '(?<=--bg-card.*\|\s`)#[0-9a-fA-F]+' .design/brief.md | head -1)
+
+          drift=0
+          check() {
+            local label="$1" css_val="$2" brief_val="$3"
+            if [ -n "$css_val" ] && [ -n "$brief_val" ] && [ "$css_val" != "$brief_val" ]; then
+              echo "::warning file=.design/brief.md::Drift detected: $label CSS=$css_val brief=$brief_val"
+              drift=1
+            fi
+          }
+
+          check "bg-primary" "$css_bg_primary" "$brief_bg_primary"
+          check "bg-secondary" "$css_bg_secondary" "$brief_bg_secondary"
+          check "bg-card" "$css_bg_card" "$brief_bg_card"
+
+          if [ "$drift" -eq 1 ]; then
+            echo "::error::Brief ↔ CSS drift detected. Update .design/brief.md to match style.css :root values."
+            exit 1
+          fi
+          echo "No drift detected ✓"
