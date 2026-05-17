@@ -111,37 +111,33 @@ extern "C" {
 }
 
 /// Async wrapper: connect to a Solana wallet and return the public key (base58).
-async fn connect_wallet_js(wallet_name: &str) -> Option<String> {
+async fn connect_wallet_js(wallet_name: &str) -> crate::wallet_error::WalletResult {
     if wallet_name.is_empty() {
-        log::warn!("[wasm] connect_wallet_js: empty wallet name, returning None");
-        return None;
+        log::warn!("[wasm] connect_wallet_js: empty wallet name");
+        return crate::wallet_error::WalletResult::UnknownFailure;
     }
     let promise = connect_wallet_js_raw(wallet_name);
     match wasm_bindgen_futures::JsFuture::from(promise).await {
-        Ok(val) => {
-            if val.is_null() || val.is_undefined() { None } else { val.as_string() }
-        }
+        Ok(val) => crate::wallet_error::parse_wallet_js_value(&val),
         Err(e) => {
             log::error!("[wasm] connect_wallet_js error: {:?}", e);
-            None
+            crate::wallet_error::WalletResult::UnknownFailure
         }
     }
 }
 
 /// Async wrapper: sign and send a base64-encoded serialized transaction.
-async fn sign_and_send_tx_js(wallet_name: &str, transaction_b64: &str) -> Option<String> {
+async fn sign_and_send_tx_js(wallet_name: &str, transaction_b64: &str) -> crate::wallet_error::WalletResult {
     if wallet_name.is_empty() {
-        log::warn!("[wasm] sign_and_send_tx_js: empty wallet name, returning None");
-        return None;
+        log::warn!("[wasm] sign_and_send_tx_js: empty wallet name");
+        return crate::wallet_error::WalletResult::UnknownFailure;
     }
     let promise = sign_and_send_tx_js_raw(wallet_name, transaction_b64);
     match wasm_bindgen_futures::JsFuture::from(promise).await {
-        Ok(val) => {
-            if val.is_null() || val.is_undefined() { None } else { val.as_string() }
-        }
+        Ok(val) => crate::wallet_error::parse_wallet_js_value(&val),
         Err(e) => {
             log::error!("[wasm] sign_and_send_tx_js error: {:?}", e);
-            None
+            crate::wallet_error::WalletResult::UnknownFailure
         }
     }
 }
@@ -731,24 +727,31 @@ pub fn Scanner() -> impl IntoView {
             let set_t = set_toast;
             leptos::task::spawn_local(async move {
                 match connect_wallet_js(&wn).await {
-                    Some(pk) => {
-                        log::info!("[scanner] organizer wallet connected: {} ({})", wn, pk);
-                        set_state.set(CheckInState::EscrowWalletConnected {
-                            check_in_data,
-                            attendee_id,
-                            event_id,
-                            wallet_name: wn,
-                            public_key: pk,
-                        });
+                        crate::wallet_error::WalletResult::Success(pk) => {
+                            log::info!("[scanner] organizer wallet connected: {} ({})", wn, pk);
+                            set_state.set(CheckInState::EscrowWalletConnected {
+                                check_in_data,
+                                attendee_id,
+                                event_id,
+                                wallet_name: wn,
+                                public_key: pk,
+                            });
+                        }
+                        crate::wallet_error::WalletResult::Error(e) => {
+                            components::show_toast(
+                                &set_t,
+                                &crate::wallet_error::user_friendly_message(&e),
+                                ToastType::Error,
+                            );
+                        }
+                        crate::wallet_error::WalletResult::UnknownFailure => {
+                            components::show_toast(
+                                &set_t,
+                                "Failed to connect wallet",
+                                ToastType::Error,
+                            );
+                        }
                     }
-                    None => {
-                        components::show_toast(
-                            &set_t,
-                            "Failed to connect wallet",
-                            ToastType::Error,
-                        );
-                    }
-                }
             });
         }
     };
@@ -806,7 +809,7 @@ pub fn Scanner() -> impl IntoView {
 
                 // Step 2: Sign and send the TX via the wallet
                 match sign_and_send_tx_js(&wallet_name, &tx_resp.transaction).await {
-                    Some(signature) => {
+                    crate::wallet_error::WalletResult::Success(signature) => {
                         log::info!("[scanner] on-chain check-in TX sent: {}", signature);
                         feedback_success_js(); // On-chain confirmed — vibration + beep
                         set_state.set(CheckInState::EscrowConfirmed {
@@ -819,11 +822,19 @@ pub fn Scanner() -> impl IntoView {
                             ToastType::Success,
                         );
                     }
-                    None => {
+                    crate::wallet_error::WalletResult::Error(e) => {
+                        let msg = crate::wallet_error::user_friendly_message(&e);
+                        log::error!("[scanner] wallet sign+send error: code={:?} msg={}", e.code, e.raw_message);
+                        set_state.set(CheckInState::EscrowError {
+                            check_in_data,
+                            message: msg,
+                        });
+                    }
+                    crate::wallet_error::WalletResult::UnknownFailure => {
                         log::error!("[scanner] wallet sign+send failed for on-chain check-in");
                         set_state.set(CheckInState::EscrowError {
                             check_in_data,
-                            message: "Transaction rejected or failed".to_string(),
+                            message: "Transaction failed".to_string(),
                         });
                     }
                 }

@@ -4,6 +4,7 @@ pub mod components;
 pub mod icons;
 pub mod pages;
 pub mod utils;
+pub mod wallet_error;
 
 use leptos::prelude::*;
 use leptos_meta::Title;

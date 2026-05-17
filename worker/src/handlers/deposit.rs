@@ -2326,6 +2326,198 @@ pub async fn close_deposit_tx_handler(
 }
 
 // ---------------------------------------------------------------------------
+// POST /api/refund/batch-thb (admin)
+// ---------------------------------------------------------------------------
+
+/// Request body for batch THB refund.
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct BatchThbRefundRequest {
+    pub event_id: String,
+}
+
+/// Batch-refund all THB deposits for an event.
+/// Marks every verified, non-refunded THB deposit as refunded.
+#[worker::send]
+pub async fn batch_thb_refund_handler(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Json(body): Json<BatchThbRefundRequest>,
+) -> Result<ApiOk<serde_json::Value>, WorkerError> {
+    let kv = state
+        .events_kv
+        .as_ref()
+        .ok_or_else(|| AppError::Internal("EVENTS KV not configured".to_string()))?;
+
+    let event =
+        crate::handlers::ext::resolve_event_with_access(&state, &claims, Some(&body.event_id))
+            .await?;
+
+    let deposits = event_store::list_thb_deposits(kv, &event.id)
+        .await
+        .map_err(AppError::Internal)?;
+
+    let now = Utc::now().to_rfc3339();
+    let mut refunded = 0u32;
+    let mut skipped = 0u32;
+
+    for mut dep in deposits {
+        if dep.refunded {
+            skipped += 1;
+            continue;
+        }
+        if !dep.verified {
+            skipped += 1;
+            continue;
+        }
+        dep.refunded = true;
+        dep.refunded_at = Some(now.clone());
+        event_store::save_thb_deposit(kv, &dep)
+            .await
+            .map_err(AppError::Internal)?;
+        refunded += 1;
+    }
+
+    tracing::info!(
+        event_id = %event.id,
+        refunded,
+        skipped,
+        marker = %claims.email,
+        "Batch THB refund completed"
+    );
+
+    // Audit log
+    let _ = crate::audit_store::append_event_audit(
+        kv,
+        &event.id,
+        crate::audit_store::create_entry(
+            &claims.email,
+            crate::audit_store::AuditAction::RefundMarked,
+            &event.id,
+            &format!("batch THB refund: {refunded} refunded, {skipped} skipped"),
+        ),
+    )
+    .await;
+
+    Ok(ApiOk::new(serde_json::json!({
+        "refunded": refunded,
+        "skipped": skipped,
+        "total_thb_deposits": refunded + skipped,
+    })))
+}
+
+// ---------------------------------------------------------------------------
+// GET /api/escrow/refund-queue (admin)
+// ---------------------------------------------------------------------------
+
+/// USDC deposit queue item for cancellation workflow.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct UsdcQueueItem {
+    pub attendee_id: String,
+    pub wallet_address: Option<String>,
+    pub amount: u64,
+    pub deposited_at: String,
+}
+
+/// List USDC deposits eligible for refund (cancellation workflow).
+/// These require attendee-signed refund transactions — organizer cannot force-refund.
+#[worker::send]
+pub async fn usdc_refund_queue_handler(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Query(query): Query<EventIdQuery>,
+) -> Result<ApiOk<serde_json::Value>, WorkerError> {
+    let kv = state
+        .events_kv
+        .as_ref()
+        .ok_or_else(|| AppError::Internal("EVENTS KV not configured".to_string()))?;
+
+    let event =
+        crate::handlers::ext::resolve_event_with_access(&state, &claims, query.event_id.as_deref())
+            .await?;
+
+    let deposits = event_store::list_deposit_statuses(kv, &event.id)
+        .await
+        .map_err(AppError::Internal)?;
+
+    let usdc_queue: Vec<UsdcQueueItem> = deposits
+        .iter()
+        .filter(|d| {
+            d.method == DepositMethod::Usdc
+                && d.verified
+                && d.wallet_address.is_some()
+                && d.refundable
+        })
+        .map(|d| UsdcQueueItem {
+            attendee_id: d.attendee_id.clone(),
+            wallet_address: d.wallet_address.clone(),
+            amount: d.amount,
+            deposited_at: d.deposited_at.clone(),
+        })
+        .collect();
+
+    Ok(ApiOk::new(serde_json::json!({
+        "event_id": event.id,
+        "usdc_pending": usdc_queue.len(),
+        "queue": usdc_queue,
+    })))
+}
+
+// ---------------------------------------------------------------------------
+// GET /api/escrow/cancel-status (admin)
+// ---------------------------------------------------------------------------
+
+/// Get event cancellation status — counts of deposits, refunds, etc.
+#[worker::send]
+pub async fn cancel_status_handler(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Query(query): Query<EventIdQuery>,
+) -> Result<ApiOk<serde_json::Value>, WorkerError> {
+    let kv = state
+        .events_kv
+        .as_ref()
+        .ok_or_else(|| AppError::Internal("EVENTS KV not configured".to_string()))?;
+
+    let event =
+        crate::handlers::ext::resolve_event_with_access(&state, &claims, query.event_id.as_deref())
+            .await?;
+
+    let deposits = event_store::list_deposit_statuses(kv, &event.id)
+        .await
+        .map_err(AppError::Internal)?;
+    let thb_deposits = event_store::list_thb_deposits(kv, &event.id)
+        .await
+        .map_err(AppError::Internal)?;
+
+    let usdc_total = deposits
+        .iter()
+        .filter(|d| d.method == DepositMethod::Usdc)
+        .count();
+    let usdc_verified = deposits
+        .iter()
+        .filter(|d| d.method == DepositMethod::Usdc && d.verified)
+        .count();
+    let usdc_refundable = deposits
+        .iter()
+        .filter(|d| d.method == DepositMethod::Usdc && d.verified && d.refundable)
+        .count();
+    let thb_total = thb_deposits.len();
+    let thb_refunded = thb_deposits.iter().filter(|d| d.refunded).count();
+
+    Ok(ApiOk::new(serde_json::json!({
+        "event_id": event.id,
+        "event_name": event.name,
+        "escrow_status": format!("{}", event.escrow_status),
+        "usdc_deposits": usdc_total,
+        "usdc_verified": usdc_verified,
+        "usdc_refundable": usdc_refundable,
+        "thb_deposits": thb_total,
+        "thb_refunded": thb_refunded,
+        "thb_pending_refund": thb_total.saturating_sub(thb_refunded),
+    })))
+}
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 

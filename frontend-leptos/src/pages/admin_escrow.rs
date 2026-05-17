@@ -30,44 +30,32 @@ extern "C" {
     fn sign_and_send_tx_js_raw(wallet_name: &str, transaction_b64: &str) -> js_sys::Promise;
 }
 
-async fn connect_wallet_js(wallet_name: &str) -> Option<String> {
+async fn connect_wallet_js(wallet_name: &str) -> crate::wallet_error::WalletResult {
     if wallet_name.is_empty() {
-        log::warn!("[wasm] connect_wallet_js: empty wallet name, returning None");
-        return None;
+        log::warn!("[wasm] connect_wallet_js: empty wallet name");
+        return crate::wallet_error::WalletResult::UnknownFailure;
     }
     let promise = connect_wallet_js_raw(wallet_name);
     match wasm_bindgen_futures::JsFuture::from(promise).await {
-        Ok(val) => {
-            if val.is_null() || val.is_undefined() {
-                None
-            } else {
-                val.as_string()
-            }
-        }
+        Ok(val) => crate::wallet_error::parse_wallet_js_value(&val),
         Err(e) => {
             log::error!("[wasm] connect_wallet_js error: {:?}", e);
-            None
+            crate::wallet_error::WalletResult::UnknownFailure
         }
     }
 }
 
-async fn sign_and_send_tx_js(wallet_name: &str, transaction_b64: &str) -> Option<String> {
+async fn sign_and_send_tx_js(wallet_name: &str, transaction_b64: &str) -> crate::wallet_error::WalletResult {
     if wallet_name.is_empty() {
-        log::warn!("[wasm] sign_and_send_tx_js: empty wallet name, returning None");
-        return None;
+        log::warn!("[wasm] sign_and_send_tx_js: empty wallet name");
+        return crate::wallet_error::WalletResult::UnknownFailure;
     }
     let promise = sign_and_send_tx_js_raw(wallet_name, transaction_b64);
     match wasm_bindgen_futures::JsFuture::from(promise).await {
-        Ok(val) => {
-            if val.is_null() || val.is_undefined() {
-                None
-            } else {
-                val.as_string()
-            }
-        }
+        Ok(val) => crate::wallet_error::parse_wallet_js_value(&val),
         Err(e) => {
             log::error!("[wasm] sign_and_send_tx_js error: {:?}", e);
-            None
+            crate::wallet_error::WalletResult::UnknownFailure
         }
     }
 }
@@ -207,12 +195,15 @@ pub fn AdminEscrow(
         let set_t = set_toast.clone();
         leptos::task::spawn_local(async move {
             match connect_wallet_js(&wallet_name_str).await {
-                Some(pk) => {
+                crate::wallet_error::WalletResult::Success(pk) => {
                     log::info!("[admin-escrow] wallet connected: {} ({})", wallet_name_str, pk);
                     set_wn.set(wallet_name_str);
                     set_wp.set(pk);
                 }
-                None => {
+                crate::wallet_error::WalletResult::Error(e) => {
+                    components::show_toast(&set_t, &crate::wallet_error::user_friendly_message(&e), ToastType::Error);
+                }
+                crate::wallet_error::WalletResult::UnknownFailure => {
                     components::show_toast(&set_t, "Failed to connect wallet", ToastType::Error);
                 }
             }
@@ -268,7 +259,7 @@ pub fn AdminEscrow(
                     }
                     log::info!("[admin-escrow] {} TX built, signing...", action.label());
                     match sign_and_send_tx_js(&wn, &transaction_b64).await {
-                        Some(signature) => {
+                        crate::wallet_error::WalletResult::Success(signature) => {
                             log::info!("[admin-escrow] {} TX confirmed: {}", action.label(), signature);
                             set_done.update(|v| v.push(action));
                             match action {
@@ -287,9 +278,15 @@ pub fn AdminEscrow(
                                 ToastType::Success,
                             );
                         }
-                        None => {
+                        crate::wallet_error::WalletResult::Error(e) => {
+                            let msg = crate::wallet_error::user_friendly_message(&e);
+                            log::error!("[admin-escrow] {} TX error: code={:?} msg={}", action.label(), e.code, e.raw_message);
+                            set_ar.update(|v| v.push((action, Err(msg.clone()))));
+                            components::show_toast(&set_t, &msg, ToastType::Error);
+                        }
+                        crate::wallet_error::WalletResult::UnknownFailure => {
                             log::error!("[admin-escrow] {} TX rejected", action.label());
-                            let msg = format!("{} transaction rejected or failed", action.label());
+                            let msg = format!("{} transaction failed", action.label());
                             set_ar.update(|v| v.push((action, Err(msg.clone()))));
                             components::show_toast(&set_t, &msg, ToastType::Error);
                         }

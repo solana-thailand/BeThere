@@ -68,6 +68,8 @@ pub enum EscrowStatus {
     Deactivated,
     /// Escrow closed — all on-chain accounts reclaimed, rent refunded.
     Closed,
+    /// Event cancelled — refunds in progress (organizer-initiated cancellation).
+    Cancelled,
 }
 
 impl EscrowStatus {
@@ -77,6 +79,7 @@ impl EscrowStatus {
             Self::Initialized => "initialized",
             Self::Deactivated => "deactivated",
             Self::Closed => "closed",
+            Self::Cancelled => "cancelled",
         }
     }
 

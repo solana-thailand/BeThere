@@ -999,6 +999,105 @@ pub async fn append_attendee_row(
 }
 
 // ---------------------------------------------------------------------------
+// Walk-in Sheet Append
+// ---------------------------------------------------------------------------
+
+/// Append a walk-in attendee row to the event's Google Sheet.
+///
+/// Uses the column mapping to place walk-in-specific fields (checked_in_at,
+/// checked_in_by, phone, wallet_address, claimed_at) into the correct columns.
+#[allow(clippy::too_many_arguments)]
+pub async fn append_walkin_row(
+    api_id: &str,
+    name: &str,
+    email: &str,
+    phone: Option<&str>,
+    claim_token: &str,
+    checked_in_at: &str,
+    checked_in_by: &str,
+    wallet_address: Option<&str>,
+    claimed_at: Option<&str>,
+    mapping: &ColumnMapping,
+    state: &AppState,
+    sheet_id: &str,
+    sheet_name: &str,
+    kv: Option<&KvStore>,
+) -> Result<(), String> {
+    let access_token = get_cached_access_token(state, kv).await?;
+
+    use event_checkin_domain::models::attendee::ColumnKey as CK;
+
+    let row_len = mapping.total_columns.max(28);
+    let mut row = vec![String::new(); row_len];
+
+    let set = |row: &mut Vec<String>, key: CK, val: String| {
+        let idx = mapping.get_or_default(key);
+        if idx < row.len() {
+            row[idx] = val;
+        }
+    };
+
+    set(&mut row, CK::ApiId, api_id.to_string());
+    set(&mut row, CK::Name, name.to_string());
+    set(&mut row, CK::Email, email.to_string());
+    set(&mut row, CK::TicketName, "Walk-in".to_string());
+    set(&mut row, CK::ApprovalStatus, "CheckedIn".to_string());
+    set(&mut row, CK::ParticipationType, "In-Person".to_string());
+    set(&mut row, CK::ClaimToken, claim_token.to_string());
+    set(&mut row, CK::CheckedInAt, checked_in_at.to_string());
+    set(&mut row, CK::CheckedInBy, checked_in_by.to_string());
+
+    if let Some(phone) = phone {
+        set(&mut row, CK::Phone, phone.to_string());
+    }
+    if let Some(wallet) = wallet_address {
+        set(&mut row, CK::SolanaAddress, wallet.to_string());
+    }
+    if let Some(claimed) = claimed_at {
+        set(&mut row, CK::ClaimedAt, claimed.to_string());
+    }
+
+    // Determine the last non-empty column to build the range
+    let last_col_idx = row.iter().rposition(|v| !v.is_empty()).unwrap_or(0);
+    let last_col_letter = {
+        let mut result = String::new();
+        let mut n = last_col_idx;
+        loop {
+            result.insert(0, (b'A' + (n % 26) as u8) as char);
+            if n < 26 {
+                break;
+            }
+            n = (n / 26) - 1;
+        }
+        result
+    };
+
+    row.truncate(last_col_idx + 1);
+
+    let url = format!(
+        "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{}!A:{last_col_letter}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS",
+        urlencoding::encode(sheet_name)
+    );
+
+    let body = crate::http::ValueRange {
+        range: format!("{sheet_name}!A:{last_col_letter}"),
+        values: vec![row],
+    };
+
+    crate::http::post_json::<serde_json::Value>(&url, &body, Some(&access_token)).await?;
+
+    tracing::info!(
+        %api_id,
+        %email,
+        "appended walk-in row to google sheet"
+    );
+
+    invalidate_attendee_cache(kv, sheet_id, sheet_name).await;
+    invalidate_column_map_cache(kv, sheet_id, sheet_name).await;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 

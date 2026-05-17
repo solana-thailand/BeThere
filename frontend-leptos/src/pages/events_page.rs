@@ -606,7 +606,7 @@ pub fn EventsPage(
                             }
                             log::info!("[events-page] escrow TX built, signing via {}...", wn);
                             match super::escrow_init::sign_and_send_tx_js(&wn, &resp.transaction).await {
-                                Some(signature) => {
+                                crate::wallet_error::WalletResult::Success(signature) => {
                                     log::info!("[events-page] escrow TX confirmed: {}", signature);
                                     // Update the event with escrow fields from the response
                                     let update_body = api::UpdateEventBody {
@@ -626,11 +626,20 @@ pub fn EventsPage(
                                         components::ToastType::Success,
                                     );
                                 }
-                                None => {
+                                crate::wallet_error::WalletResult::Error(e) => {
+                                    let msg = crate::wallet_error::user_friendly_message(&e);
+                                    log::error!("[events-page] escrow TX error: code={:?} msg={}", e.code, e.raw_message);
+                                    components::show_toast(
+                                        &set_toast,
+                                        &format!("Event '{}' created, but escrow failed: {}. Edit event to retry.", created.name, msg),
+                                        components::ToastType::Warning,
+                                    );
+                                }
+                                crate::wallet_error::WalletResult::UnknownFailure => {
                                     log::error!("[events-page] escrow TX rejected by wallet");
                                     components::show_toast(
                                         &set_toast,
-                                        &format!("Event '{}' created, but escrow TX was rejected. Edit event to retry.", created.name),
+                                        &format!("Event '{}' created, but escrow TX failed. Edit event to retry.", created.name),
                                         components::ToastType::Warning,
                                     );
                                 }
@@ -2129,13 +2138,16 @@ pub fn EventsPage(
                                                                     let set_t = set_t;
                                                                     leptos::task::spawn_local(async move {
                                                                         match super::escrow_init::connect_wallet_js(&wn).await {
-                                                                            Some(pk) => {
+                                                                            crate::wallet_error::WalletResult::Success(pk) => {
                                                                                 log::info!("[events-page] wallet connected: {} ({})", wn, &pk[..8.min(pk.len())]);
                                                                                 set_wn.set(wn);
                                                                                 set_wp.set(pk);
                                                                             }
-                                                                            None => {
-                                                                                components::show_toast(&set_t, "Wallet connection rejected", components::ToastType::Error);
+                                                                            crate::wallet_error::WalletResult::Error(e) => {
+                                                                                components::show_toast(&set_t, &crate::wallet_error::user_friendly_message(&e), components::ToastType::Error);
+                                                                            }
+                                                                            crate::wallet_error::WalletResult::UnknownFailure => {
+                                                                                components::show_toast(&set_t, "Wallet connection failed", components::ToastType::Error);
                                                                             }
                                                                         }
                                                                     });

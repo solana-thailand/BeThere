@@ -139,19 +139,13 @@ async fn read_file_as_data_url_js(input: &wasm_bindgen::JsValue) -> Option<Strin
 }
 
 /// Connect to a Solana wallet and return the public key (base58).
-async fn connect_wallet_js(wallet_name: &str) -> Option<String> {
+async fn connect_wallet_js(wallet_name: &str) -> crate::wallet_error::WalletResult {
     let promise = connect_wallet_js_raw(wallet_name);
     match wasm_bindgen_futures::JsFuture::from(promise).await {
-        Ok(val) => {
-            if val.is_null() || val.is_undefined() {
-                None
-            } else {
-                val.as_string()
-            }
-        }
+        Ok(val) => crate::wallet_error::parse_wallet_js_value(&val),
         Err(e) => {
             log::error!("[wasm] connect_wallet_js error: {:?}", e);
-            None
+            crate::wallet_error::WalletResult::UnknownFailure
         }
     }
 }
@@ -175,19 +169,13 @@ async fn _get_connected_public_key_js(wallet_name: &str) -> Option<String> {
 }
 
 /// Sign and send a base64-encoded serialized transaction.
-async fn sign_and_send_tx_js(wallet_name: &str, transaction_b64: &str) -> Option<String> {
+async fn sign_and_send_tx_js(wallet_name: &str, transaction_b64: &str) -> crate::wallet_error::WalletResult {
     let promise = sign_and_send_tx_js_raw(wallet_name, transaction_b64);
     match wasm_bindgen_futures::JsFuture::from(promise).await {
-        Ok(val) => {
-            if val.is_null() || val.is_undefined() {
-                None
-            } else {
-                val.as_string()
-            }
-        }
+        Ok(val) => crate::wallet_error::parse_wallet_js_value(&val),
         Err(e) => {
             log::error!("[wasm] sign_and_send_tx_js error: {:?}", e);
-            None
+            crate::wallet_error::WalletResult::UnknownFailure
         }
     }
 }
@@ -483,7 +471,7 @@ pub fn Deposit() -> impl IntoView {
         let deposit_data_for_state = deposit_data.clone();
         leptos::task::spawn_local(async move {
             match connect_wallet_js(&wallet_name_clone).await {
-                Some(pubkey) => {
+                crate::wallet_error::WalletResult::Success(pubkey) => {
                     log::info!("[deposit] wallet connected: {} ({})", wallet_name_clone, pubkey);
                     set_state.set(DepositPageState::WalletConnected(
                         deposit_data_for_state,
@@ -491,7 +479,15 @@ pub fn Deposit() -> impl IntoView {
                         pubkey,
                     ));
                 }
-                None => {
+                crate::wallet_error::WalletResult::Error(e) => {
+                    log::error!("[deposit] wallet connect error: code={:?} msg={}", e.code, e.raw_message);
+                    components::show_toast(
+                        &set_toast,
+                        &crate::wallet_error::user_friendly_message(&e),
+                        ToastType::Error,
+                    );
+                }
+                crate::wallet_error::WalletResult::UnknownFailure => {
                     components::show_toast(
                         &set_toast,
                         "Failed to connect wallet. Please try again.",
@@ -586,7 +582,7 @@ pub fn Deposit() -> impl IntoView {
 
             // Step 4: Sign and send the TX via the wallet
             match sign_and_send_tx_js(&wallet_name_for_tx, &tx_b64).await {
-                Some(signature) => {
+                crate::wallet_error::WalletResult::Success(signature) => {
                     log::info!("[deposit] TX sent, signature: {}", signature);
 
                     // Step 5: Record the TX signature with the backend
@@ -604,11 +600,19 @@ pub fn Deposit() -> impl IntoView {
                         signature.clone(),
                     ));
                 }
-                None => {
+                crate::wallet_error::WalletResult::Error(e) => {
+                    log::error!("[deposit] wallet sign+send error: code={:?} msg={}", e.code, e.raw_message);
+                    components::show_toast(
+                        &set_toast,
+                        &crate::wallet_error::user_friendly_message(&e),
+                        ToastType::Error,
+                    );
+                }
+                crate::wallet_error::WalletResult::UnknownFailure => {
                     log::error!("[deposit] wallet sign+send failed");
                     components::show_toast(
                         &set_toast,
-                        "Transaction rejected or failed. Please try again.",
+                        "Transaction failed. Please try again.",
                         ToastType::Error,
                     );
                 }
@@ -888,7 +892,7 @@ pub fn Deposit() -> impl IntoView {
         let deposit_data_for_state = deposit_data.clone();
         leptos::task::spawn_local(async move {
             match connect_wallet_js(&wallet_name_clone).await {
-                Some(pubkey) => {
+                crate::wallet_error::WalletResult::Success(pubkey) => {
                     log::info!("[deposit] refund wallet connected: {} ({})", wallet_name_clone, pubkey);
                     set_state.set(DepositPageState::RefundWalletConnected(
                         deposit_data_for_state,
@@ -896,7 +900,15 @@ pub fn Deposit() -> impl IntoView {
                         pubkey,
                     ));
                 }
-                None => {
+                crate::wallet_error::WalletResult::Error(e) => {
+                    log::error!("[deposit] refund wallet connect error: code={:?} msg={}", e.code, e.raw_message);
+                    components::show_toast(
+                        &set_toast,
+                        &crate::wallet_error::user_friendly_message(&e),
+                        ToastType::Error,
+                    );
+                }
+                crate::wallet_error::WalletResult::UnknownFailure => {
                     components::show_toast(
                         &set_toast,
                         "Failed to connect wallet. Please try again.",
@@ -998,18 +1010,31 @@ pub fn Deposit() -> impl IntoView {
 
             // Step 2: Sign and send via wallet
             match sign_and_send_tx_js(&wallet_name_for_tx, &tx_b64).await {
-                Some(signature) => {
+                crate::wallet_error::WalletResult::Success(signature) => {
                     log::info!("[deposit] refund TX sent, signature: {}", signature);
                     set_state.set(DepositPageState::RefundConfirmed(
                         deposit_data,
                         signature,
                     ));
                 }
-                None => {
+                crate::wallet_error::WalletResult::Error(e) => {
+                    log::error!("[deposit] refund wallet sign+send error: code={:?} msg={}", e.code, e.raw_message);
+                    components::show_toast(
+                        &set_toast,
+                        &crate::wallet_error::user_friendly_message(&e),
+                        ToastType::Error,
+                    );
+                    set_state.set(DepositPageState::RefundWalletConnected(
+                        deposit_data_for_state,
+                        wallet_name_for_tx,
+                        pk_for_tx,
+                    ));
+                }
+                crate::wallet_error::WalletResult::UnknownFailure => {
                     log::error!("[deposit] refund wallet sign+send failed");
                     components::show_toast(
                         &set_toast,
-                        "Refund transaction rejected or failed. Please try again.",
+                        "Refund transaction failed. Please try again.",
                         ToastType::Error,
                     );
                     set_state.set(DepositPageState::RefundWalletConnected(
@@ -1033,7 +1058,7 @@ pub fn Deposit() -> impl IntoView {
         let deposit_data_for_state = deposit_data.clone();
         leptos::task::spawn_local(async move {
             match connect_wallet_js(&wallet_name_clone).await {
-                Some(pubkey) => {
+                crate::wallet_error::WalletResult::Success(pubkey) => {
                     log::info!("[deposit] close-deposit wallet connected: {} ({})", wallet_name_clone, pubkey);
                     set_state.set(DepositPageState::CloseDepositWalletConnected(
                         deposit_data_for_state,
@@ -1041,7 +1066,15 @@ pub fn Deposit() -> impl IntoView {
                         pubkey,
                     ));
                 }
-                None => {
+                crate::wallet_error::WalletResult::Error(e) => {
+                    log::error!("[deposit] close-deposit wallet connect error: code={:?} msg={}", e.code, e.raw_message);
+                    components::show_toast(
+                        &set_toast,
+                        &crate::wallet_error::user_friendly_message(&e),
+                        ToastType::Error,
+                    );
+                }
+                crate::wallet_error::WalletResult::UnknownFailure => {
                     components::show_toast(
                         &set_toast,
                         "Failed to connect wallet. Please try again.",
@@ -1143,18 +1176,31 @@ pub fn Deposit() -> impl IntoView {
 
             // Step 2: Sign and send via wallet
             match sign_and_send_tx_js(&wallet_name_for_tx, &tx_b64).await {
-                Some(signature) => {
+                crate::wallet_error::WalletResult::Success(signature) => {
                     log::info!("[deposit] close-deposit TX sent, signature: {}", signature);
                     set_state.set(DepositPageState::CloseDepositConfirmed(
                         deposit_data,
                         signature,
                     ));
                 }
-                None => {
+                crate::wallet_error::WalletResult::Error(e) => {
+                    log::error!("[deposit] close-deposit wallet sign+send error: code={:?} msg={}", e.code, e.raw_message);
+                    components::show_toast(
+                        &set_toast,
+                        &crate::wallet_error::user_friendly_message(&e),
+                        ToastType::Error,
+                    );
+                    set_state.set(DepositPageState::CloseDepositWalletConnected(
+                        deposit_data_for_state,
+                        wallet_name_for_tx,
+                        pk_for_tx,
+                    ));
+                }
+                crate::wallet_error::WalletResult::UnknownFailure => {
                     log::error!("[deposit] close-deposit wallet sign+send failed");
                     components::show_toast(
                         &set_toast,
-                        "Close-deposit transaction rejected or failed. Please try again.",
+                        "Close-deposit transaction failed. Please try again.",
                         ToastType::Error,
                     );
                     set_state.set(DepositPageState::CloseDepositWalletConnected(

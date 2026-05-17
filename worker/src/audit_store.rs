@@ -58,6 +58,8 @@ pub enum AuditAction {
 
     // Walk-in
     WalkinRegistered,
+    WalkinSynced,
+    WalkinExported,
 
     // Auth
     UserLogin,

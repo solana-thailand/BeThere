@@ -152,7 +152,12 @@ export async function connectWallet(walletName) {
   // Prevents WASM passStringToWasm0 crash from empty strings
   if (!walletName || !walletName.trim()) {
     console.error("[solana_wallet] connectWallet: empty wallet name, ignoring");
-    return null;
+    return JSON.stringify({
+      __wallet_error__: true,
+      code: null,
+      message: "No wallet selected",
+      logs: null,
+    });
   }
 
   // Try synchronously first
@@ -192,7 +197,15 @@ export async function connectWallet(walletName) {
     "window.backpack=",
     !!window.backpack,
   );
-  return null;
+  return JSON.stringify({
+    __wallet_error__: true,
+    code: null,
+    message:
+      "Wallet not found. Please install " +
+      walletName +
+      " and refresh the page.",
+    logs: null,
+  });
 }
 
 /**
@@ -207,7 +220,12 @@ async function doConnect(provider, walletName) {
     var publicKey = response.publicKey;
     if (!publicKey) {
       console.error("[solana_wallet] No public key in response");
-      return null;
+      return JSON.stringify({
+        __wallet_error__: true,
+        code: null,
+        message: "Wallet returned no public key",
+        logs: null,
+      });
     }
 
     var pkBase58 = publicKey.toBase58();
@@ -217,7 +235,12 @@ async function doConnect(provider, walletName) {
     console.error("[solana_wallet] Connect failed:", e);
     if (e.code) console.error("[solana_wallet] Error code:", e.code);
     if (e.message) console.error("[solana_wallet] Error message:", e.message);
-    return null;
+    return JSON.stringify({
+      __wallet_error__: true,
+      code: e.code || null,
+      message: e.message || "Unknown wallet error",
+      logs: null,
+    });
   }
 }
 
@@ -272,13 +295,23 @@ export async function getConnectedPublicKey(walletName) {
 export async function signAndSendTransaction(walletName, transactionB64) {
   if (!walletName || !walletName.trim()) {
     console.error("[solana_wallet] signAndSendTransaction: empty wallet name");
-    return null;
+    return JSON.stringify({
+      __wallet_error__: true,
+      code: null,
+      message: "No wallet selected",
+      logs: null,
+    });
   }
   try {
     var provider = getProvider(walletName);
     if (!provider) {
       console.error("[solana_wallet] Wallet not found:", walletName);
-      return null;
+      return JSON.stringify({
+        __wallet_error__: true,
+        code: null,
+        message: "Wallet not found. Please connect your wallet first.",
+        logs: null,
+      });
     }
 
     // Decode base64 to Uint8Array
@@ -336,7 +369,12 @@ export async function signAndSendTransaction(walletName, transactionB64) {
     console.error(
       "[solana_wallet] Wallet does not support signAndSendTransaction or signTransaction",
     );
-    return null;
+    return JSON.stringify({
+      __wallet_error__: true,
+      code: null,
+      message: "Wallet does not support transaction signing",
+      logs: null,
+    });
   } catch (e) {
     console.error("[solana_wallet] Sign and send failed:", e);
     if (e.message) {
@@ -352,7 +390,26 @@ export async function signAndSendTransaction(walletName, transactionB64) {
     if (e.data) {
       console.error("[solana_wallet] Error data:", JSON.stringify(e.data));
     }
-    return null;
+
+    // Extract program error logs from various wallet error formats
+    var logs = e.logs || (e.error && e.error.logs) || null;
+    var errorCode = e.code || (e.error && e.error.code) || null;
+
+    // Check for instruction error in message
+    var msg = e.message || "Unknown transaction error";
+    if (e.error && e.error.message) {
+      msg = e.error.message;
+    }
+    if (e.data && e.data.err && e.data.err.InstructionError) {
+      msg = "Instruction error: " + JSON.stringify(e.data.err.InstructionError);
+    }
+
+    return JSON.stringify({
+      __wallet_error__: true,
+      code: errorCode,
+      message: msg,
+      logs: logs,
+    });
   }
 }
 

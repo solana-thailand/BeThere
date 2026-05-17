@@ -4,7 +4,10 @@
 //! Records are stored in KV only (no Google Sheets) with a reverse mapping
 //! for claim token lookup.
 
-use axum::{Extension, extract::State};
+use axum::{
+    Extension, Json,
+    extract::{Query, State},
+};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -15,7 +18,7 @@ use event_checkin_domain::models::error::AppError;
 use crate::error::ApiOk;
 use crate::state::AppState;
 
-use super::ext::resolve_event_with_access;
+use super::ext::{EventIdQuery, resolve_event_with_access};
 
 // ---------------------------------------------------------------------------
 // TTL constants
@@ -214,5 +217,339 @@ pub async fn register_walkin(
         claim_token,
         claim_url,
         attendee,
+    }))
+}
+
+// ---------------------------------------------------------------------------
+// List walk-in attendees (KV scan helper)
+// ---------------------------------------------------------------------------
+
+/// List all walk-in attendees for an event from KV.
+/// Uses cursor-based pagination to scan `walkin:{event_id}:*` prefix.
+pub async fn list_walkin_attendees(
+    kv: &worker::KvStore,
+    event_id: &str,
+) -> Result<Vec<WalkinAttendee>, AppError> {
+    let prefix = format!("walkin:{event_id}:");
+    let mut attendees = Vec::new();
+    let mut cursor: Option<String> = None;
+
+    loop {
+        let mut builder = kv.list().prefix(prefix.clone());
+        if let Some(c) = cursor.take() {
+            builder = builder.cursor(c);
+        }
+
+        let resp = builder.execute().await.map_err(|e| {
+            tracing::error!(event_id = %event_id, error = ?e, "failed to list walk-in keys");
+            AppError::Internal(format!("failed to list walk-in keys: {e:?}"))
+        })?;
+
+        for key in &resp.keys {
+            let raw: Option<String> = kv.get(&key.name).text().await.map_err(|e| {
+                tracing::error!(key = %key.name, error = ?e, "failed to read walk-in record");
+                AppError::Internal(format!("KV read failed: {e:?}"))
+            })?;
+
+            if let Some(json) = raw {
+                match serde_json::from_str::<WalkinAttendee>(&json) {
+                    Ok(a) => attendees.push(a),
+                    Err(e) => {
+                        tracing::warn!(key = %key.name, error = %e, "skipping malformed walk-in record");
+                    }
+                }
+            }
+        }
+
+        if resp.list_complete {
+            break;
+        }
+        cursor = resp.cursor;
+    }
+
+    Ok(attendees)
+}
+
+// ---------------------------------------------------------------------------
+// GET /api/walkin/list — list walk-in attendees
+// ---------------------------------------------------------------------------
+
+/// Response for listing walk-in attendees.
+#[derive(Debug, Serialize)]
+pub struct WalkinListResponse {
+    pub attendees: Vec<WalkinAttendee>,
+    pub count: usize,
+}
+
+/// GET /api/walkin/list?event_id=xxx — list all walk-in attendees for an event.
+#[worker::send]
+pub async fn list_walkin_handler(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Query(query): Query<EventIdQuery>,
+) -> Result<ApiOk<WalkinListResponse>, crate::error::WorkerError> {
+    let event_id = query
+        .event_id
+        .as_deref()
+        .ok_or_else(|| AppError::Validation("missing event_id parameter".to_string()))?;
+
+    let event = resolve_event_with_access(&state, &claims, Some(event_id)).await?;
+
+    let kv = state.events_kv.as_ref().ok_or_else(|| {
+        tracing::error!("EVENTS KV namespace not configured");
+        AppError::Internal("EVENTS KV namespace not configured".to_string())
+    })?;
+
+    let attendees = list_walkin_attendees(kv, &event.id).await?;
+    let count = attendees.len();
+
+    tracing::info!(
+        event_id = %event.id,
+        count,
+        staff = %claims.email,
+        "listed walk-in attendees"
+    );
+
+    Ok(ApiOk::new(WalkinListResponse { attendees, count }))
+}
+
+// ---------------------------------------------------------------------------
+// GET /api/walkin/export — CSV export
+// ---------------------------------------------------------------------------
+
+/// Response for walk-in CSV export.
+#[derive(Debug, Serialize)]
+pub struct WalkinExportResponse {
+    pub csv: String,
+    pub filename: String,
+    pub count: usize,
+}
+
+/// Escape a CSV field containing commas, quotes, or newlines.
+fn escape_csv(s: &str) -> String {
+    if s.contains(',') || s.contains('"') || s.contains('\n') {
+        format!("\"{}\"", s.replace('"', "\"\""))
+    } else {
+        s.to_string()
+    }
+}
+
+/// GET /api/walkin/export?event_id=xxx — export all walk-in attendees as CSV.
+#[worker::send]
+pub async fn walkin_export_csv_handler(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Query(query): Query<EventIdQuery>,
+) -> Result<ApiOk<WalkinExportResponse>, crate::error::WorkerError> {
+    let event_id = query
+        .event_id
+        .as_deref()
+        .ok_or_else(|| AppError::Validation("missing event_id parameter".to_string()))?;
+
+    let event = resolve_event_with_access(&state, &claims, Some(event_id)).await?;
+
+    let kv = state.events_kv.as_ref().ok_or_else(|| {
+        tracing::error!("EVENTS KV namespace not configured");
+        AppError::Internal("EVENTS KV namespace not configured".to_string())
+    })?;
+
+    let attendees = list_walkin_attendees(kv, &event.id).await?;
+
+    // Build CSV
+    let mut csv =
+        String::from("Name,Email,Phone,Check-in Time,Registered By,Wallet Address,NFT Claimed\n");
+    for a in &attendees {
+        let phone = a.phone.as_deref().unwrap_or("");
+        let wallet = a.wallet_address.as_deref().unwrap_or("");
+        let claimed = a.claimed_at.as_deref().unwrap_or("No");
+        csv.push_str(&format!(
+            "{},{},{},{},{},{},{}\n",
+            escape_csv(&a.name),
+            escape_csv(&a.email),
+            escape_csv(phone),
+            escape_csv(&a.checked_in_at),
+            escape_csv(&a.checked_in_by),
+            escape_csv(wallet),
+            escape_csv(claimed),
+        ));
+    }
+
+    let count = attendees.len();
+    let filename = format!("walkin-attendees-{}.csv", event.id);
+
+    tracing::info!(
+        event_id = %event.id,
+        count,
+        staff = %claims.email,
+        "walk-in CSV exported"
+    );
+
+    // Audit log
+    if let Some(kv) = &state.events_kv {
+        let _ = crate::audit_store::append_event_audit(
+            kv,
+            &event.id,
+            crate::audit_store::create_entry(
+                &claims.email,
+                crate::audit_store::AuditAction::WalkinExported,
+                &format!("{} attendees", count),
+                "walk-in CSV exported",
+            ),
+        )
+        .await;
+    }
+
+    Ok(ApiOk::new(WalkinExportResponse {
+        csv,
+        filename,
+        count,
+    }))
+}
+
+// ---------------------------------------------------------------------------
+// POST /api/walkin/sync — Google Sheet sync
+// ---------------------------------------------------------------------------
+
+/// Request body for walk-in sync.
+#[derive(Debug, Deserialize)]
+pub struct WalkinSyncRequest {
+    pub event_id: String,
+}
+
+/// Response for walk-in sync.
+#[derive(Debug, Serialize)]
+pub struct WalkinSyncResponse {
+    pub synced: u32,
+    pub skipped: u32,
+    pub errors: Vec<String>,
+    pub total_walkins: usize,
+}
+
+/// POST /api/walkin/sync — sync walk-in attendees to Google Sheet.
+#[worker::send]
+pub async fn walkin_sync_handler(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Json(body): Json<WalkinSyncRequest>,
+) -> Result<ApiOk<WalkinSyncResponse>, crate::error::WorkerError> {
+    let event = resolve_event_with_access(&state, &claims, Some(&body.event_id)).await?;
+
+    let kv = state.events_kv.as_ref().ok_or_else(|| {
+        tracing::error!("EVENTS KV namespace not configured");
+        AppError::Internal("EVENTS KV namespace not configured".to_string())
+    })?;
+
+    let attendees = list_walkin_attendees(kv, &event.id).await?;
+
+    let sheet_id = &event.sheet_id;
+    let sheet_name = if event.sheet_name.is_empty() {
+        &state.config.sheets.sheet_name
+    } else {
+        &event.sheet_name
+    };
+
+    // Get column mapping for the sheet
+    let mapping = crate::sheets::get_column_mapping(&state, sheet_id, sheet_name, Some(kv))
+        .await
+        .map_err(|e| AppError::Internal(format!("failed to get column mapping: {e}")))?;
+
+    let mut synced = 0u32;
+    let mut skipped = 0u32;
+    let mut errors = Vec::new();
+
+    for a in &attendees {
+        // Idempotency check: skip if already synced
+        let sync_key = format!("walkin_synced:{}:{}", event.id, a.email.to_lowercase());
+        let already_synced: Option<bool> = kv.get(&sync_key).json().await.ok().flatten();
+
+        if already_synced == Some(true) {
+            skipped += 1;
+            continue;
+        }
+
+        // Generate a unique API ID for this walk-in in the sheet
+        let api_id = Uuid::now_v7().to_string();
+
+        match crate::sheets::append_walkin_row(
+            &api_id,
+            &a.name,
+            &a.email,
+            a.phone.as_deref(),
+            &a.claim_token,
+            &a.checked_in_at,
+            &a.checked_in_by,
+            a.wallet_address.as_deref(),
+            a.claimed_at.as_deref(),
+            &mapping,
+            &state,
+            sheet_id,
+            sheet_name,
+            Some(kv),
+        )
+        .await
+        {
+            Ok(()) => {
+                // Mark as synced in KV (90-day TTL)
+                let sync_val = serde_json::to_string(&true).unwrap_or_default();
+                match kv
+                    .put(&sync_key, &sync_val)
+                    .map(|builder| builder.expiration_ttl(WALKIN_TTL_SECS))
+                {
+                    Ok(builder) => {
+                        if let Err(e) = builder.execute().await {
+                            tracing::warn!(key = %sync_key, error = ?e, "failed to write sync marker");
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!(key = %sync_key, error = ?e, "failed to build sync marker");
+                    }
+                }
+                synced += 1;
+            }
+            Err(e) => {
+                tracing::warn!(
+                    email = %a.email,
+                    error = %e,
+                    "failed to sync walk-in to sheet"
+                );
+                errors.push(format!("{}: {e}", a.email));
+            }
+        }
+    }
+
+    // Invalidate attendee cache so the next GET /api/attendees picks up new rows
+    let cache_key = format!("attendees_cache:{sheet_id}:{sheet_name}");
+    let _ = kv.delete(&cache_key).await;
+
+    tracing::info!(
+        event_id = %event.id,
+        synced,
+        skipped,
+        errors = errors.len(),
+        total = attendees.len(),
+        staff = %claims.email,
+        "walk-in sheet sync completed"
+    );
+
+    // Audit log
+    if let Some(kv) = &state.events_kv {
+        let _ = crate::audit_store::append_event_audit(
+            kv,
+            &event.id,
+            crate::audit_store::create_entry(
+                &claims.email,
+                crate::audit_store::AuditAction::WalkinSynced,
+                &format!("synced={synced} skipped={skipped} errors={}", errors.len()),
+                "walk-in attendees synced to Google Sheet",
+            ),
+        )
+        .await;
+    }
+
+    Ok(ApiOk::new(WalkinSyncResponse {
+        synced,
+        skipped,
+        errors,
+        total_walkins: attendees.len(),
     }))
 }

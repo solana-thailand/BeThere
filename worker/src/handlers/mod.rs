@@ -119,6 +119,10 @@ pub fn routes(state: AppState) -> Router<()> {
         .route("/admin/flush-cache", post(attendee::flush_cache))
         // Walk-in attendee registration (protected — staff registers on-the-spot)
         .route("/walkin/register", post(walkin::register_walkin))
+        // Walk-in attendee management
+        .route("/walkin/list", get(walkin::list_walkin_handler))
+        .route("/walkin/export", get(walkin::walkin_export_csv_handler))
+        .route("/walkin/sync", post(walkin::walkin_sync_handler))
         // Admin quiz management (protected — organizer sets questions)
         .route(
             "/admin/quiz",
@@ -180,6 +184,13 @@ pub fn routes(state: AppState) -> Router<()> {
             "/escrow/claim-forfeited",
             post(deposit::claim_forfeited_tx_handler),
         )
+        // Cancellation workflow (admin — batch refunds + status)
+        .route("/refund/batch-thb", post(deposit::batch_thb_refund_handler))
+        .route(
+            "/escrow/refund-queue",
+            get(deposit::usdc_refund_queue_handler),
+        )
+        .route("/escrow/cancel-status", get(deposit::cancel_status_handler))
         // On-chain event indexing (protected — manual sync + query)
         .route("/escrow/sync", post(escrow_index::escrow_sync_handler))
         .route(

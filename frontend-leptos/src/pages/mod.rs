@@ -1,4 +1,5 @@
 pub mod admin;
+pub mod admin_cancel;
 pub mod admin_deposit;
 pub mod admin_escrow;
 pub mod adventure;

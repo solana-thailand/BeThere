@@ -752,6 +752,108 @@ pub async fn register_walkin(req: &WalkinRegisterRequest) -> Result<WalkinRegist
     Ok(response)
 }
 
+// ===== Walk-in CSV Export & Sync =====
+
+/// Walk-in attendee info from GET /api/walkin/list
+#[derive(Debug, Clone, Deserialize)]
+pub struct WalkinAttendeeInfo {
+    pub event_id: String,
+    pub name: String,
+    pub email: String,
+    pub phone: Option<String>,
+    pub claim_token: String,
+    pub checked_in_at: String,
+    pub checked_in_by: String,
+    pub wallet_address: Option<String>,
+    pub claimed_at: Option<String>,
+}
+
+/// Response from GET /api/walkin/list
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct WalkinListResponse {
+    pub attendees: Vec<WalkinAttendeeInfo>,
+    pub count: usize,
+}
+
+/// GET /api/walkin/list?event_id=xxx
+/// List all walk-in attendees for an event.
+pub async fn list_walkins(event_id: &str) -> Result<WalkinListResponse, ApiError> {
+    let path = format!("/walkin/list?event_id={event_id}");
+    let cached = cached_get(&path).await?;
+    let response: ApiResponse<WalkinListResponse> = serde_json::from_str(&cached).unwrap_or(ApiResponse {
+        success: false,
+        data: None,
+        error: Some("Failed to parse response".to_string()),
+        correlation_id: None,
+    });
+    if !response.success {
+        return Err(ApiError {
+            message: response.error.unwrap_or("Unknown error".to_string()),
+            status: 0,
+        });
+    }
+    response.data.ok_or_else(|| ApiError {
+        message: "No data in response".to_string(),
+        status: 0,
+    })
+}
+
+/// Response from GET /api/walkin/export
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct WalkinExportResponse {
+    pub csv: String,
+    pub filename: String,
+    pub count: usize,
+}
+
+/// GET /api/walkin/export?event_id=xxx
+/// Export walk-in attendees as CSV.
+pub async fn export_walkin_csv(event_id: &str) -> Result<WalkinExportResponse, ApiError> {
+    let path = format!("/walkin/export?event_id={event_id}");
+    let response = api_get(&path).await?;
+    let result: ApiResponse<WalkinExportResponse> = response.json().await.map_err(|e| ApiError {
+        message: format!("Failed to parse response: {e}"),
+        status: 0,
+    })?;
+
+    if !result.success {
+        return Err(ApiError {
+            message: result.error.unwrap_or("Unknown error".to_string()),
+            status: 0,
+        });
+    }
+
+    result.data.ok_or_else(|| ApiError {
+        message: "No data in response".to_string(),
+        status: 0,
+    })
+}
+
+/// Request body for POST /api/walkin/sync
+#[derive(Debug, Clone, Serialize)]
+pub struct WalkinSyncRequest {
+    pub event_id: String,
+}
+
+/// Response from POST /api/walkin/sync
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct WalkinSyncResponse {
+    pub synced: u32,
+    pub skipped: u32,
+    pub errors: Vec<String>,
+    pub total_walkins: usize,
+}
+
+/// POST /api/walkin/sync
+/// Sync walk-in attendees to Google Sheet.
+pub async fn sync_walkins(event_id: &str) -> Result<WalkinSyncResponse, ApiError> {
+    let req = WalkinSyncRequest {
+        event_id: event_id.to_string(),
+    };
+    let response = api_post_json("/walkin/sync", &req).await?;
+    Ok(response)
+}
+
 /// POST /api/generate-qrs?force={force}
 /// Bulk generate QR codes for all approved attendees.
 ///
@@ -1066,6 +1168,7 @@ pub enum EscrowStatus {
     Initialized,
     Deactivated,
     Closed,
+    Cancelled,
 }
 
 impl EscrowStatus {
@@ -1075,6 +1178,7 @@ impl EscrowStatus {
             Self::Initialized => "initialized",
             Self::Deactivated => "deactivated",
             Self::Closed => "closed",
+            Self::Cancelled => "cancelled",
         }
     }
 
@@ -2647,6 +2751,115 @@ pub async fn get_onchain_events(event_id: &str) -> Result<OnchainEventsResponse,
 
     result.data.ok_or_else(|| ApiError {
         message: "No data in response".to_string(),
+        status: 0,
+    })
+}
+
+// ===========================================================================
+// Cancellation Workflow API
+// ===========================================================================
+
+/// Response from POST /api/refund/batch-thb — batch THB refund result.
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+pub struct BatchThbRefundResponse {
+    pub refunded: u32,
+    pub skipped: u32,
+    pub total_thb_deposits: u32,
+}
+
+/// POST /api/refund/batch-thb — batch refund all THB deposits for an event
+pub async fn batch_thb_refund(event_id: &str) -> Result<BatchThbRefundResponse, ApiError> {
+    let body = serde_json::json!({ "event_id": event_id });
+    api_post_json("/refund/batch-thb", &body).await
+}
+
+/// A USDC deposit in the refund queue (requires attendee signature).
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+pub struct UsdcQueueItem {
+    pub attendee_id: String,
+    pub wallet_address: Option<String>,
+    pub amount: u64,
+    pub deposited_at: String,
+}
+
+/// Response from GET /api/escrow/refund-queue — USDC refund queue.
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+pub struct UsdcRefundQueueResponse {
+    pub event_id: String,
+    pub usdc_pending: usize,
+    pub queue: Vec<UsdcQueueItem>,
+}
+
+/// GET /api/escrow/refund-queue?event_id=xxx — list USDC deposits for cancellation
+pub async fn get_usdc_refund_queue(event_id: &str) -> Result<UsdcRefundQueueResponse, ApiError> {
+    let path = format!("/escrow/refund-queue?event_id={event_id}");
+    let response = api_get(&path).await?;
+
+    if !response.ok() {
+        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
+            success: false,
+            data: None,
+            error: Some("Failed to get refund queue".to_string()),
+            correlation_id: None,
+        });
+        return Err(ApiError {
+            message: body.error.unwrap_or_default(),
+            status: 0,
+        });
+    }
+
+    let wrapper: ApiResponse<UsdcRefundQueueResponse> =
+        response.json().await.map_err(|e| ApiError {
+            message: format!("Failed to parse refund queue: {e}"),
+            status: 0,
+        })?;
+
+    wrapper.data.ok_or_else(|| ApiError {
+        message: wrapper.error.unwrap_or("No data".to_string()),
+        status: 0,
+    })
+}
+
+/// Response from GET /api/escrow/cancel-status — cancellation status overview.
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+pub struct CancelStatusResponse {
+    pub event_id: String,
+    pub event_name: String,
+    pub escrow_status: String,
+    pub usdc_deposits: usize,
+    pub usdc_verified: usize,
+    pub usdc_refundable: usize,
+    pub thb_deposits: usize,
+    pub thb_refunded: usize,
+    pub thb_pending_refund: usize,
+}
+
+/// GET /api/escrow/cancel-status?event_id=xxx — get cancellation status
+pub async fn get_cancel_status(event_id: &str) -> Result<CancelStatusResponse, ApiError> {
+    let path = format!("/escrow/cancel-status?event_id={event_id}");
+    let response = api_get(&path).await?;
+
+    if !response.ok() {
+        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
+            success: false,
+            data: None,
+            error: Some("Failed to get cancel status".to_string()),
+            correlation_id: None,
+        });
+        return Err(ApiError {
+            message: body.error.unwrap_or_default(),
+            status: 0,
+        });
+    }
+
+    let wrapper: ApiResponse<CancelStatusResponse> =
+        response.json().await.map_err(|e| ApiError {
+            message: format!("Failed to parse cancel status: {e}"),
+            status: 0,
+        })?;
+
+    wrapper.data.ok_or_else(|| ApiError {
+        message: wrapper.error.unwrap_or("No data".to_string()),
         status: 0,
     })
 }

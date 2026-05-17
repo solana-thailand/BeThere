@@ -29,6 +29,7 @@ enum AdminSection {
     Attendance,
     Deposits,
     Escrow,
+    Cancellation,
     Quiz,
     Adventure,
     Events,
@@ -215,6 +216,11 @@ pub fn Admin() -> impl IntoView {
     let (flushing_cache, set_flushing_cache) = signal(false);
     let (toast, set_toast) = signal(None::<components::ToastMessage>);
 
+    // Walk-in management state
+    let (walkin_exporting, set_walkin_exporting) = signal(false);
+    let (walkin_syncing, set_walkin_syncing) = signal(false);
+    let (walkin_sync_result, set_walkin_sync_result) = signal(None::<api::WalkinSyncResponse>);
+
     // Active section — Events by default (organizers create event first)
     let (active_section, set_active_section) = signal(AdminSection::Events);
 
@@ -326,6 +332,7 @@ pub fn Admin() -> impl IntoView {
                         "5" => { ev.prevent_default(); set_active_section.set(AdminSection::Attendance); set_active_tab.set(DashboardTab::Online); }
                         "6" => { ev.prevent_default(); set_active_section.set(AdminSection::Deposits); }
                         "7" => { ev.prevent_default(); set_active_section.set(AdminSection::Escrow); }
+                        "8" => { ev.prevent_default(); set_active_section.set(AdminSection::Cancellation); }
                         _ => {}
                     }
                 }
@@ -521,6 +528,93 @@ pub fn Admin() -> impl IntoView {
         });
     };
 
+    // Handle walk-in CSV export
+    let handle_walkin_export = move |_: web_sys::MouseEvent| {
+        if walkin_exporting.get() {
+            return;
+        }
+        let event_id = get_event_id();
+        let Some(eid) = event_id else {
+            components::show_toast(&set_toast, "Select an event first", ToastType::Warning);
+            return;
+        };
+        set_walkin_exporting.set(true);
+        let set_toast = set_toast;
+        let set_busy = set_walkin_exporting;
+        leptos::task::spawn_local(async move {
+            match api::export_walkin_csv(&eid).await {
+                Ok(data) => {
+                    download_csv(&data.filename, &data.csv);
+                    components::show_toast(
+                        &set_toast,
+                        &format!("Exported {} walk-in attendees", data.count),
+                        ToastType::Success,
+                    );
+                }
+                Err(e) => {
+                    components::show_toast(
+                        &set_toast,
+                        &format!("Walk-in export failed: {e}"),
+                        ToastType::Error,
+                    );
+                }
+            }
+            set_busy.set(false);
+        });
+    };
+
+    // Handle walk-in sync to Google Sheet
+    let handle_walkin_sync = move |_: web_sys::MouseEvent| {
+        if walkin_syncing.get() {
+            return;
+        }
+        let event_id = get_event_id();
+        let Some(eid) = event_id else {
+            components::show_toast(&set_toast, "Select an event first", ToastType::Warning);
+            return;
+        };
+        set_walkin_syncing.set(true);
+        set_walkin_sync_result.set(None);
+        let set_toast = set_toast;
+        let set_busy = set_walkin_syncing;
+        let set_result = set_walkin_sync_result;
+        let set_refresh = set_refresh_counter;
+        leptos::task::spawn_local(async move {
+            match api::sync_walkins(&eid).await {
+                Ok(data) => {
+                    let msg = if data.errors.is_empty() {
+                        format!(
+                            "Synced {} walk-in attendees ({} already synced)",
+                            data.synced, data.skipped
+                        )
+                    } else {
+                        format!(
+                            "Synced {} of {} walk-ins ({} errors)",
+                            data.synced, data.total_walkins, data.errors.len()
+                        )
+                    };
+                    let toast_type = if data.errors.is_empty() {
+                        ToastType::Success
+                    } else {
+                        ToastType::Warning
+                    };
+                    components::show_toast(&set_toast, &msg, toast_type);
+                    set_result.set(Some(data));
+                    api::invalidate_attendee_cache();
+                    set_refresh.update(|c| *c += 1);
+                }
+                Err(e) => {
+                    components::show_toast(
+                        &set_toast,
+                        &format!("Walk-in sync failed: {e}"),
+                        ToastType::Error,
+                    );
+                }
+            }
+            set_busy.set(false);
+        });
+    };
+
     // Handle sign out
     let handle_sign_out = move |_: web_sys::MouseEvent| {
         auth::logout();
@@ -689,6 +783,21 @@ pub fn Admin() -> impl IntoView {
                             "Escrow"
                             <span class="admin-sidebar-kbd">"Alt+7"</span>
                         </button>
+                        <button
+                            class="admin-sidebar-item"
+                            class:active=move || active_section.get() == AdminSection::Cancellation
+                            on:click=move |_| set_active_section.set(AdminSection::Cancellation)
+                        >
+                            <span class="admin-sidebar-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="12" cy="12" r="10"></circle>
+                                    <line x1="15" y1="9" x2="9" y2="15"></line>
+                                    <line x1="9" y1="9" x2="15" y2="15"></line>
+                                </svg>
+                            </span>
+                            "Cancellation"
+                            <span class="admin-sidebar-kbd">"Alt+8"</span>
+                        </button>
                     </div>
 
                     // Quick stats at bottom of sidebar
@@ -779,6 +888,33 @@ pub fn Admin() -> impl IntoView {
                         <button class="btn btn-outline btn-sm" on:click=handle_select_all>
                             "Select All Pending"
                         </button>
+                        <span class="admin-actions-divider"></span>
+                        <button
+                            class="btn btn-outline btn-sm"
+                            on:click=handle_walkin_export
+                            disabled=move || walkin_exporting.get()
+                        >
+                            {move || {
+                                if walkin_exporting.get() {
+                                    "Exporting...".to_string()
+                                } else {
+                                    "Export Walk-in CSV".to_string()
+                                }
+                            }}
+                        </button>
+                        <button
+                            class="btn btn-outline btn-sm"
+                            on:click=handle_walkin_sync
+                            disabled=move || walkin_syncing.get()
+                        >
+                            {move || {
+                                if walkin_syncing.get() {
+                                    "Syncing...".to_string()
+                                } else {
+                                    "Sync Walk-ins to Sheet".to_string()
+                                }
+                            }}
+                        </button>
                     </div>
 
                     // QR generation result
@@ -796,6 +932,46 @@ pub fn Admin() -> impl IntoView {
                                 "Overwrites existing QR URLs"
                             </span>
                         </div>
+                    </Show>
+
+                    // Walk-in sync result
+                    <Show
+                        when=move || walkin_sync_result.get().is_some()
+                        fallback=|| view! { <div></div> }
+                    >
+                        {move || {
+                            let result = walkin_sync_result.get();
+                            match result {
+                                Some(r) => {
+                                    let errors = r.errors.clone();
+                                    let has_errors = !errors.is_empty();
+                                    view! {
+                                        <div class="admin-info-card">
+                                            <div class="admin-info-card-header">"Walk-in Sync Result"</div>
+                                            <div class="admin-info-card-body">
+                                                <div>"Synced: "<strong>{r.synced}</strong></div>
+                                                <div>"Skipped (already synced): "<strong>{r.skipped}</strong></div>
+                                                <div>"Total walk-ins: "<strong>{r.total_walkins}</strong></div>
+                                                <Show
+                                                    when=move || has_errors
+                                                    fallback=|| view! { <div></div> }
+                                                >
+                                                    <div class="admin-sync-errors">
+                                                        <strong>"Errors:"</strong>
+                                                        <ul>
+                                                            {errors.iter().map(|e| view! {
+                                                                <li>{utils::escape_html(e)}</li>
+                                                            }).collect_view()}
+                                                        </ul>
+                                                    </div>
+                                                </Show>
+                                            </div>
+                                        </div>
+                                    }.into_any()
+                                }
+                                None => view! { <div></div> }.into_any(),
+                            }
+                        }}
                     </Show>
 
                     // Stats cards (tab-aware)
@@ -1039,6 +1215,11 @@ pub fn Admin() -> impl IntoView {
                 // Escrow management section
                 <Show when=move || active_section.get() == AdminSection::Escrow fallback=|| view! { <div></div> }>
                     <crate::pages::admin_escrow::AdminEscrow set_toast=set_toast active_event_id=active_event_id />
+                </Show>
+
+                // Cancellation section
+                <Show when=move || active_section.get() == AdminSection::Cancellation fallback=|| view! { <div></div> }>
+                    <crate::pages::admin_cancel::AdminCancel set_toast=set_toast active_event_id=active_event_id />
                 </Show>
 
                 // Quiz section

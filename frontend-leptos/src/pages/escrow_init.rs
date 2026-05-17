@@ -34,44 +34,32 @@ pub fn get_detected_wallets_js() -> Vec<String> {
     detected_wallets()
 }
 
-pub async fn connect_wallet_js(wallet_name: &str) -> Option<String> {
+pub async fn connect_wallet_js(wallet_name: &str) -> crate::wallet_error::WalletResult {
     if wallet_name.is_empty() {
         log::warn!("[escrow-init] connect_wallet_js: empty wallet name");
-        return None;
+        return crate::wallet_error::WalletResult::UnknownFailure;
     }
     let promise = connect_wallet_js_raw(wallet_name);
     match wasm_bindgen_futures::JsFuture::from(promise).await {
-        Ok(val) => {
-            if val.is_null() || val.is_undefined() {
-                None
-            } else {
-                val.as_string()
-            }
-        }
+        Ok(val) => crate::wallet_error::parse_wallet_js_value(&val),
         Err(e) => {
             log::error!("[escrow-init] connect_wallet_js error: {:?}", e);
-            None
+            crate::wallet_error::WalletResult::UnknownFailure
         }
     }
 }
 
-pub async fn sign_and_send_tx_js(wallet_name: &str, transaction_b64: &str) -> Option<String> {
+pub async fn sign_and_send_tx_js(wallet_name: &str, transaction_b64: &str) -> crate::wallet_error::WalletResult {
     if wallet_name.is_empty() {
         log::warn!("[escrow-init] sign_and_send_tx_js: empty wallet name");
-        return None;
+        return crate::wallet_error::WalletResult::UnknownFailure;
     }
     let promise = sign_and_send_tx_js_raw(wallet_name, transaction_b64);
     match wasm_bindgen_futures::JsFuture::from(promise).await {
-        Ok(val) => {
-            if val.is_null() || val.is_undefined() {
-                None
-            } else {
-                val.as_string()
-            }
-        }
+        Ok(val) => crate::wallet_error::parse_wallet_js_value(&val),
         Err(e) => {
             log::error!("[escrow-init] sign_and_send_tx_js error: {:?}", e);
-            None
+            crate::wallet_error::WalletResult::UnknownFailure
         }
     }
 }
@@ -314,7 +302,7 @@ pub fn EscrowInitPanel(
                                         let set_wn = set_wn;
                                         leptos::task::spawn_local(async move {
                                             match connect_wallet_js(&wn).await {
-                                                Some(pk) => {
+                                                crate::wallet_error::WalletResult::Success(pk) => {
                                                     log::info!("[escrow-init] connected {} pk={}", wn, &pk[..8.min(pk.len())]);
                                                     // Auto-fill organizer wallet in the form.
                                                     // Safe now: parent uses Show (not {move ||}), so this
@@ -330,11 +318,19 @@ pub fn EscrowInitPanel(
                                                         public_key: pk,
                                                     });
                                                 }
-                                                None => {
+                                                crate::wallet_error::WalletResult::Error(e) => {
+                                                    log::warn!("[escrow-init] wallet connect error: code={:?} msg={}", e.code, e.raw_message);
+                                                    components::show_toast(
+                                                        &set_t,
+                                                        &crate::wallet_error::user_friendly_message(&e),
+                                                        components::ToastType::Error,
+                                                    );
+                                                }
+                                                crate::wallet_error::WalletResult::UnknownFailure => {
                                                     log::warn!("[escrow-init] wallet connect failed or rejected");
                                                     components::show_toast(
                                                         &set_t,
-                                                        "Wallet connection rejected",
+                                                        "Wallet connection failed",
                                                         components::ToastType::Error,
                                                     );
                                                 }
@@ -455,7 +451,7 @@ pub fn EscrowInitPanel(
 
                                                     log::info!("[escrow-init] escrow TX built, signing...");
                                                     match sign_and_send_tx_js(&wn, &resp.transaction).await {
-                                                        Some(signature) => {
+                                                        crate::wallet_error::WalletResult::Success(signature) => {
                                                             log::info!("[escrow-init] escrow TX confirmed: {}", signature);
                                                             set_f.update(|f| {
                                                                 f.escrow_address = resp.escrow_address.clone();
@@ -477,10 +473,17 @@ pub fn EscrowInitPanel(
                                                                 components::ToastType::Success,
                                                             );
                                                         }
-                                                        None => {
+                                                        crate::wallet_error::WalletResult::Error(e) => {
+                                                            let msg = crate::wallet_error::user_friendly_message(&e);
+                                                            log::error!("[escrow-init] escrow TX error: code={:?} msg={}", e.code, e.raw_message);
+                                                            set_s.set(EscrowInitState::Error {
+                                                                message: msg,
+                                                            });
+                                                        }
+                                                        crate::wallet_error::WalletResult::UnknownFailure => {
                                                             log::error!("[escrow-init] escrow TX rejected");
                                                             set_s.set(EscrowInitState::Error {
-                                                                message: "Escrow transaction rejected or failed".to_string(),
+                                                                message: "Escrow transaction failed".to_string(),
                                                             });
                                                         }
                                                     }
@@ -623,7 +626,7 @@ pub fn EscrowInitPanel(
                                                 match api::deactivate_event(&req).await {
                                                     Ok(resp) => {
                                                         match sign_and_send_tx_js(&wn, &resp.transaction).await {
-                                                            Some(sig) => {
+                                                            crate::wallet_error::WalletResult::Success(sig) => {
                                                                 log::info!("[escrow] deactivate TX confirmed: {}", sig);
                                                                 // Persist escrow_status=deactivated server-side
                                                                 let sync_ok = match api::update_event(&eid.clone(), &api::UpdateEventBody {
@@ -660,10 +663,17 @@ pub fn EscrowInitPanel(
                                                                     );
                                                                 }
                                                             }
-                                                            None => {
+                                                            crate::wallet_error::WalletResult::Error(e) => {
+                                                                let msg = crate::wallet_error::user_friendly_message(&e);
+                                                                log::error!("[escrow] deactivate TX error: code={:?} msg={}", e.code, e.raw_message);
+                                                                set_s.set(EscrowInitState::Error {
+                                                                    message: msg,
+                                                                });
+                                                            }
+                                                            crate::wallet_error::WalletResult::UnknownFailure => {
                                                                 log::error!("[escrow] deactivate TX rejected");
                                                                 set_s.set(EscrowInitState::Error {
-                                                                    message: "Deactivate transaction rejected or failed".to_string(),
+                                                                    message: "Deactivate transaction failed".to_string(),
                                                                 });
                                                             }
                                                         }
@@ -703,14 +713,21 @@ pub fn EscrowInitPanel(
                                                         let set_t2 = set_t2;
                                                         leptos::task::spawn_local(async move {
                                                             match connect_wallet_js(&wn).await {
-                                                                Some(_pk) => {
+                                                                crate::wallet_error::WalletResult::Success(_pk) => {
                                                                     log::info!("[escrow] connected {} for deactivate", wn);
                                                                     set_wn.set(wn);
                                                                 }
-                                                                None => {
+                                                                crate::wallet_error::WalletResult::Error(e) => {
                                                                     components::show_toast(
                                                                         &set_t2,
-                                                                        "Wallet connection rejected",
+                                                                        &crate::wallet_error::user_friendly_message(&e),
+                                                                        components::ToastType::Error,
+                                                                    );
+                                                                }
+                                                                crate::wallet_error::WalletResult::UnknownFailure => {
+                                                                    components::show_toast(
+                                                                        &set_t2,
+                                                                        "Wallet connection failed",
                                                                         components::ToastType::Error,
                                                                     );
                                                                 }
@@ -790,7 +807,7 @@ pub fn EscrowInitPanel(
                                         match api::close_event(&req).await {
                                             Ok(resp) => {
                                                 match sign_and_send_tx_js(&wn, &resp.transaction).await {
-                                                    Some(sig) => {
+                                                    crate::wallet_error::WalletResult::Success(sig) => {
                                                         log::info!("[escrow] close_event TX confirmed: {}", sig);
                                                         // Persist escrow_status=closed server-side
                                                         let sync_ok = match api::update_event(&eid.clone(), &api::UpdateEventBody {
@@ -827,10 +844,17 @@ pub fn EscrowInitPanel(
                                                             );
                                                         }
                                                     }
-                                                    None => {
+                                                    crate::wallet_error::WalletResult::Error(e) => {
+                                                        let msg = crate::wallet_error::user_friendly_message(&e);
+                                                        log::error!("[escrow] close_event TX error: code={:?} msg={}", e.code, e.raw_message);
+                                                        set_s.set(EscrowInitState::Error {
+                                                            message: msg,
+                                                        });
+                                                    }
+                                                    crate::wallet_error::WalletResult::UnknownFailure => {
                                                         log::error!("[escrow] close_event TX rejected");
                                                         set_s.set(EscrowInitState::Error {
-                                                            message: "Close event transaction rejected or failed".to_string(),
+                                                            message: "Close event transaction failed".to_string(),
                                                         });
                                                     }
                                                 }

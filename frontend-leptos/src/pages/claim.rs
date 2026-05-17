@@ -74,36 +74,24 @@ extern "C" {
     fn is_wallet_available_js(wallet_name: &str) -> bool;
 }
 
-async fn connect_wallet_js(wallet_name: &str) -> Option<String> {
+async fn connect_wallet_js(wallet_name: &str) -> crate::wallet_error::WalletResult {
     let promise = connect_wallet_js_raw(wallet_name);
     match wasm_bindgen_futures::JsFuture::from(promise).await {
-        Ok(val) => {
-            if val.is_null() || val.is_undefined() {
-                None
-            } else {
-                val.as_string()
-            }
-        }
+        Ok(val) => crate::wallet_error::parse_wallet_js_value(&val),
         Err(e) => {
             log::error!("[wasm] connect_wallet_js error: {:?}", e);
-            None
+            crate::wallet_error::WalletResult::UnknownFailure
         }
     }
 }
 
-async fn sign_and_send_tx_js(wallet_name: &str, transaction_b64: &str) -> Option<String> {
+async fn sign_and_send_tx_js(wallet_name: &str, transaction_b64: &str) -> crate::wallet_error::WalletResult {
     let promise = sign_and_send_tx_js_raw(wallet_name, transaction_b64);
     match wasm_bindgen_futures::JsFuture::from(promise).await {
-        Ok(val) => {
-            if val.is_null() || val.is_undefined() {
-                None
-            } else {
-                val.as_string()
-            }
-        }
+        Ok(val) => crate::wallet_error::parse_wallet_js_value(&val),
         Err(e) => {
             log::error!("[wasm] sign_and_send_tx_js error: {:?}", e);
-            None
+            crate::wallet_error::WalletResult::UnknownFailure
         }
     }
 }
@@ -1032,8 +1020,15 @@ fn DepositRefundSection(
         leptos::task::spawn_local(async move {
             // Step 1: Connect wallet
             let pubkey = match connect_wallet_js(&wn).await {
-                Some(pk) => pk,
-                None => {
+                crate::wallet_error::WalletResult::Success(pk) => pk,
+                crate::wallet_error::WalletResult::Error(e) => {
+                    let msg = crate::wallet_error::user_friendly_message(&e);
+                    log::error!("[claim-refund] wallet connect error: code={:?} msg={}", e.code, e.raw_message);
+                    components::show_toast(&set_toast, &msg, ToastType::Error);
+                    set_refund_state.set(ClaimRefundState::Error(msg));
+                    return;
+                }
+                crate::wallet_error::WalletResult::UnknownFailure => {
                     let msg = "Failed to connect wallet. Please try again.";
                     log::error!("[claim-refund] wallet connect failed");
                     components::show_toast(&set_toast, msg, ToastType::Error);
@@ -1080,12 +1075,18 @@ fn DepositRefundSection(
 
             // Step 3: Sign and send
             match sign_and_send_tx_js(&wallet_name_for_tx, &tx_b64).await {
-                Some(signature) => {
+                crate::wallet_error::WalletResult::Success(signature) => {
                     log::info!("[claim-refund] TX sent, sig: {signature}");
                     set_refund_state.set(ClaimRefundState::Confirmed(signature));
                 }
-                None => {
-                    let msg = "Refund transaction rejected or failed.";
+                crate::wallet_error::WalletResult::Error(e) => {
+                    let msg = crate::wallet_error::user_friendly_message(&e);
+                    log::error!("[claim-refund] sign+send error: code={:?} msg={}", e.code, e.raw_message);
+                    components::show_toast(&set_toast, &msg, ToastType::Error);
+                    set_refund_state.set(ClaimRefundState::Error(msg));
+                }
+                crate::wallet_error::WalletResult::UnknownFailure => {
+                    let msg = "Refund transaction failed. Please try again.";
                     log::error!("[claim-refund] sign+send failed");
                     components::show_toast(&set_toast, msg, ToastType::Error);
                     set_refund_state.set(ClaimRefundState::Error(msg.to_string()));
@@ -1808,12 +1809,15 @@ pub fn Claim() -> impl IntoView {
                                                                                             let set_cw = set_cw;
                                                                                             leptos::task::spawn_local(async move {
                                                                                                 match connect_wallet_js(&w).await {
-                                                                                                    Some(pubkey) => {
+                                                                                                    crate::wallet_error::WalletResult::Success(pubkey) => {
                                                                                                         log::info!("[claim] wallet connected: {} ({})", w, pubkey);
                                                                                                         set_w.set(pubkey.clone());
                                                                                                         set_cw.set(Some((w, pubkey)));
                                                                                                     }
-                                                                                                    None => {
+                                                                                                    crate::wallet_error::WalletResult::Error(e) => {
+                                                                                                        log::warn!("[claim] wallet connect error for {}: code={:?} msg={}", w, e.code, e.raw_message);
+                                                                                                    }
+                                                                                                    crate::wallet_error::WalletResult::UnknownFailure => {
                                                                                                         log::warn!("[claim] wallet connect failed for {}", w);
                                                                                                     }
                                                                                                 }
