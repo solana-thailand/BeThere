@@ -210,20 +210,23 @@ See entry #9 above.
 | Rank | Paper | Relevance | Type | Actionable? |
 |------|-------|-----------|------|-------------|
 | 1 | Learning Beyond Gradients | ✅ High | Conceptual (process) | Already doing it |
-| 2 | **Event Management in Microservices** | ✅ High | Architecture validation + gaps | Pre-mainnet fixes |
-| 3 | RAVEN | ✅ Medium-High | Methodology (security) | Post-mainnet |
-| 4 | REM2.0 | ✅ Medium | Tool (refactoring) | Next branch |
-| 5 | **Hikester** | ✅ Medium | Competitive analysis | Reference only |
-| 6 | **From Event Management to Managing Events** | ❓ Unknown | Business strategy | Need full text |
-| 7 | Screening Is Enough | ❌ Medium | Conceptual | No |
-| 8 | **ESeMan** | ❌ Medium (future) | Visualization pattern | Post-mainnet Phase B |
-| 9 | TurboQuant | ❌ Low | ML compression | No |
-| 10 | FlashPrefill | ❌ Low | ML inference | No |
-| 11 | SpecPrune-VLA | ❌ None | Robotics ML | No |
+| 2 | **Awesome Leptos (ecosystem review)** | ✅ High | Frontend tooling | Phase 1 |
+| 3 | **Event Management in Microservices** | ✅ High | Architecture validation + gaps | Pre-mainnet fixes |
+| 4 | RAVEN | ✅ Medium-High | Methodology (security) | Post-mainnet |
+| 5 | REM2.0 | ✅ Medium | Tool (refactoring) | Next branch |
+| 6 | **Hikester** | ✅ Medium | Competitive analysis | Reference only |
+| 7 | **From Event Management to Managing Events** | ❓ Unknown | Business strategy | Need full text |
+| 8 | Screening Is Enough | ❌ Medium | Conceptual | No |
+| 9 | **ESeMan** | ❌ Medium (future) | Visualization pattern | Post-mainnet Phase B |
+| 10 | TurboQuant | ❌ Low | ML compression | No |
+| 11 | FlashPrefill | ❌ Low | ML inference | No |
+| 12 | SpecPrune-VLA | ❌ None | Robotics ML | No |
+| 13 | Loom (neural computer) | ❌ None | Research only | No |
 
 ## Action Items
 
 - [ ] Discuss Heuristic Learning framework with CTO — are we formalizing our dev process?
+- [ ] Add `leptos-use` + `leptos-captcha` to frontend Cargo.toml (Phase 1)
 - [ ] **Pre-mainnet: address 5 architecture gaps from microservice event paper** (PDA schema evolution = highest risk)
 - [ ] Post-mainnet: evaluate RAVEN-style security analysis for escrow program
 - [ ] Post-mainnet: evaluate REM2.0 for worker/frontend Rust refactoring
@@ -240,6 +243,8 @@ See entry #9 above.
 - [TurboQuant](https://arxiv.org/abs/2504.19874) — vector quantization
 - [FlashPrefill](https://arxiv.org/abs/2603.06199) — sparse attention
 - [Screening Is Enough](https://arxiv.org/abs/2604.01178v3) — attention alternative
+- [Awesome Leptos](https://github.com/leptos-rs/awesome-leptos) — Leptos ecosystem libraries
+- [Loom](https://arxiv.org/abs/2604.08816v1) — neural computer (reviewed, not recommended)
 
 ### 13. Les Roches — Event Planning Step-by-Step Guide (Industry)
 
@@ -288,6 +293,42 @@ Mapping the 12 industry steps to BeThere's current capabilities:
 **Summary**: BeThere excels at steps 7, 10 (partially), and 11 (attendee experience). It's weak on strategic planning (steps 1-3, 5-6, 8-9) and post-event (step 12). This is expected — BeThere is a **check-in & escrow tool**, not a full event management platform. The gaps represent potential Phase B/C features.
 
 **Action**: None required pre-mainnet. Useful for product roadmap prioritization.
+
+---
+
+### 14. Awesome Leptos — Ecosystem Library Review (GitHub)
+
+**Source**: [awesome-leptos](https://github.com/leptos-rs/awesome-leptos) — curated list of Leptos framework libraries
+
+**Scope**: 50+ libraries, templates, and tools for the Leptos Rust web framework. Cross-referenced with BeThere's `frontend-leptos/Cargo.toml` (Leptos 0.8, CSR mode, Trunk build).
+
+**BeThere Relevance: ✅ High (frontend tooling)**
+
+Current BeThere frontend gaps identified:
+1. **Hand-rolled browser API bindings** — scanner camera, clipboard, keyboard events all use raw `wasm-bindgen` + `web-sys` instead of reactive hooks
+2. **No bot protection** — public reservation and deposit flows are unprotected
+3. **No i18n** — THB deposit flow targets Thai users but UI is English-only
+4. **No real-time updates** — admin dashboard loads once, no polling or SSE
+5. **Custom CSS only** — hand-maintained `style.css` with no component library
+
+**Recommended libraries by priority:**
+
+| Priority | Library | Purpose | Effort |
+|----------|---------|---------|--------|
+| Phase 1 | `leptos-use` | Replace hand-rolled web-sys hooks (clipboard, visibility, localStorage, events) | Low |
+| Phase 1 | `leptos-captcha` | Proof-of-work captcha for registration flow | Low |
+| Phase 2 | `leptos_i18n` | Compile-time type-safe EN/TH translations | Medium |
+| Phase 2 | `leptos-hotkeys` | Scanner keyboard shortcuts (s/m/escape) | Low |
+| Phase 2 | `leptos_sse` | Server-Sent Events for real-time admin dashboard | Medium |
+| Phase 3 | `leptos_darkmode` | Dark/light toggle for outdoor events | Medium |
+| Phase 3 | `leptos-struct-table` | Auto-generated admin tables from Rust structs | Low |
+| Phase 3 | `leptos-obfuscate` | Email obfuscation in admin panel | Trivial |
+
+**Not recommended**: Thaw/leptix/shadcn (full rewrite), leptos-leaflet/maplibre (no maps), leptos-tea (architecture mismatch), leptos-image (no pipeline).
+
+**Loom (arxiv 2604.08816v1) — Also reviewed, not recommended**: Neural computer executing C programs inside analytically weighted transformers. Research-only; 10ms/step GPU latency makes it impractical for production use. No integration path with BeThere.
+
+**Action**: Add `leptos-use` + `leptos-captcha` to Phase 1 frontend work. Track in `ux_roadmap.md` Leptos Ecosystem section.
 
 ---
 

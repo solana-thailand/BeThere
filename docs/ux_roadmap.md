@@ -254,6 +254,11 @@ Admin dashboard stats (deposit count, check-in count, etc.) are loaded once on p
 
 **Approach**: Auto-poll every 30s during active events, or use Server-Sent Events (SSE) for live updates.
 
+**Leptos libraries to evaluate**:
+- `leptos_sse` — server signals synced through Server-Sent-Events, simplifies SSE integration in Leptos
+- `leptos_server_signal` — alternative using websockets for server-pushed state
+- `leptos-use` (hooks: `use_event_listener`, `use_document_visibility`) — pause/resume polling when tab is hidden
+
 **Files to modify**:
 - `worker/src/handlers/admin.rs` (add SSE endpoint or set cache headers)
 - `frontend-leptos/src/pages/admin.rs` (add polling timer)
@@ -348,17 +353,28 @@ Show "X people have secured their spot" on the deposit page. Leverages social pr
 
 Mobile scanner users (staff) often use the browser. A PWA install prompt would let them add it to their home screen for faster access and full-screen mode.
 
+**Leptos libraries to evaluate**:
+- `leptos-use` — provides `use_window_size` and browser API hooks useful for PWA detection
+
 ---
 
 ### P3-3. Light Mode Toggle
 
 Outdoor events with bright sunlight make the dark theme hard to read. A light/dark mode toggle would improve outdoor usability.
 
+**Leptos libraries to evaluate**:
+- `leptos_darkmode` — manages `dark` class for Tailwind CSS, persists preference in localStorage, respects system media query
+- Note: requires designing a light theme variant of the CSS custom properties (`--bg-primary`, `--text-primary`, etc.)
+
 ---
 
 ### P3-4. Thai i18n
 
 Translate deposit and claim pages to Thai for local adoption in Thailand. Could start with key strings only (deposit amount, confirm, refund).
+
+**Leptos libraries to evaluate**:
+- `leptos_i18n` — compile-time type-safe translations; missing keys fail at compile time
+- `leptos-fluent` — alternative using fluent-templates (Mozilla Fluent format)
 
 ---
 
@@ -382,6 +398,45 @@ Submit the on-chain escrow program to a Solana audit firm (e.g., Audit Arena, Ot
 
 ---
 
+## Leptos Ecosystem — Recommended Libraries
+
+> Source: [awesome-leptos](https://github.com/leptos-rs/awesome-leptos) review (2026-06)
+> Cross-referenced with current `frontend-leptos/Cargo.toml` dependencies.
+
+### Phase 1 — Immediate Value (Minimal Effort)
+
+| Library | Purpose | Replaces in BeThere |
+|---------|---------|-------------------|
+| `leptos-use` | Reactive hooks for browser APIs (clipboard, visibility, local storage, events, websocket) | Hand-rolled `web-sys` bindings in scanner, admin, deposit pages |
+| `leptos-captcha` | Self-hosted proof-of-work captcha (no reCAPTCHA dependency) | No bot protection exists — needed for public reservation flow |
+
+### Phase 2 — Going Public
+
+| Library | Purpose | Related Roadmap Item |
+|---------|---------|---------------------|
+| `leptos_i18n` | Compile-time type-safe translations (EN + TH) | P3-4 |
+| `leptos-captcha` | Bot protection on registration/deposit | N/A |
+| `leptos-hotkeys` | Declarative keyboard shortcuts | Scanner efficiency (staff) |
+| `leptos_sse` | Server-Sent Events integration | P2-1 |
+
+### Phase 3 — Polish
+
+| Library | Purpose | Related Roadmap Item |
+|---------|---------|---------------------|
+| `leptos_darkmode` | Dark/light mode toggle with Tailwind | P3-3 |
+| `leptos-struct-table` | Auto-generated sortable tables from structs | Admin panel tables |
+| `leptos-obfuscate` | Email obfuscation for bot protection | Admin panel emails |
+| `leptos-toaster` | Animated toast notifications (Sonner-inspired) | Existing `Toast` component in `components.rs` |
+
+### Not Recommended (skip)
+
+| Library | Reason |
+|---------|--------|
+| Thaw, leptix, shadcn/ui ports | Custom design system — full rewrite required |
+| `leptos-leaflet`, `leptos_maplibre` | No maps in BeThere |
+| `leptos-tea` (Elm Architecture) | Already using Leptos signals — migration not worth it |
+| `leptos-image` | No image optimization pipeline |
+
 ## Relationship to Other Docs
 
 | Document | Relationship |
@@ -391,7 +446,8 @@ Submit the on-chain escrow program to a Solana audit firm (e.g., Audit Arena, Ot
 | `docs/escrow_protocol.md` | Escrow instructions referenced in P3-5 |
 | `docs/devnet_e2e_walkthrough.md` | E2E testing guide — new features need test flows added |
 | `.issues/014_walkin_attendee_flow.md` | Walk-in Phase 4 (P2-5) |
+| `docs/research_technology_review.md` §14 | Leptos ecosystem library analysis and rationale |
 
 ---
 
-*Document created from UX audit session. Last updated: 2026-05-10.*
+*Document created from UX audit session. Last updated: 2026-06-12.*
