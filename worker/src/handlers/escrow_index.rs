@@ -223,16 +223,7 @@ pub async fn escrow_sync_handler(
         .into());
     }
 
-    let rpc_url = format!(
-        "{}{}{}",
-        state.config.solana.rpc_url,
-        if state.config.solana.rpc_url.contains('?') {
-            "&"
-        } else {
-            "?api-key="
-        },
-        state.config.solana.api_key
-    );
+    let rpc_url = state.config.solana.full_rpc_url();
 
     tracing::info!(
         event_id = %event.id,

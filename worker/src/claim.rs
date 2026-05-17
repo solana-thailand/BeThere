@@ -506,23 +506,39 @@ pub async fn execute_claim(
         }
     }
 
-    // 4. Quiz gate — must pass quiz before claiming (Issue 002)
-    let quiz_check = if let Some(ref kv) = state.events_kv {
+    // 4+5. Quiz and Adventure gates — run concurrently to parallelize KV reads
+    let quiz_kv = if let Some(ref kv) = state.events_kv {
         Some((kv, event.id.as_str()))
     } else {
         state.quiz_kv.as_ref().map(|kv| (kv, "default"))
     };
+    let adv_kv = if let Some(ref kv) = state.events_kv {
+        Some(kv)
+    } else {
+        state.quiz_kv.as_ref()
+    };
 
-    if let Some((kv, eid)) = quiz_check {
-        let quiz_status = match crate::quiz::get_quiz_status(kv, eid, token).await {
-            Ok(s) => s,
-            Err(e) => {
-                tracing::error!(claim_token = %token, error = %e, "claim mint: failed to check quiz status");
-                return Err(AppError::Internal(format!(
-                    "failed to verify quiz status: {e}"
-                )));
-            }
-        };
+    let quiz_fut = async {
+        if let Some((kv, eid)) = quiz_kv {
+            crate::quiz::get_quiz_status(kv, eid, token).await.ok()
+        } else {
+            None
+        }
+    };
+    let adv_fut = async {
+        if let Some(kv) = adv_kv {
+            crate::adventure::get_adventure_status(kv, &event.id, token)
+                .await
+                .ok()
+        } else {
+            None
+        }
+    };
+
+    let (quiz_result, adv_result) = futures::join!(quiz_fut, adv_fut);
+
+    // Check quiz gate
+    if let Some(quiz_status) = quiz_result {
         match quiz_status {
             QuizStatus::NotRequired | QuizStatus::Passed => {}
             QuizStatus::NotStarted => {
@@ -540,27 +556,8 @@ pub async fn execute_claim(
         }
     }
 
-    // 5. Adventure gate — must complete adventure before claiming
-    let adv_kv = if let Some(ref kv) = state.events_kv {
-        Some(kv)
-    } else {
-        state.quiz_kv.as_ref()
-    };
-
-    if let Some(kv) = adv_kv {
-        let adv_status = match crate::adventure::get_adventure_status(kv, &event.id, token).await {
-            Ok(s) => s,
-            Err(e) => {
-                tracing::error!(
-                    claim_token = %token,
-                    error = %e,
-                    "claim mint: failed to check adventure status"
-                );
-                return Err(AppError::Internal(format!(
-                    "failed to verify adventure status: {e}"
-                )));
-            }
-        };
+    // Check adventure gate
+    if let Some(adv_status) = adv_result {
         match adv_status {
             AdventureStatus::NotRequired | AdventureStatus::Passed => {}
             AdventureStatus::NotStarted => {

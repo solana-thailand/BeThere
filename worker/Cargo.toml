@@ -47,6 +47,9 @@ uuid = { version = "1", features = ["v7", "serde", "js"] }
 # Time
 chrono = { version = "0.4", features = ["serde"] }
 
+# Async utilities (join! for concurrent KV reads)
+futures = "0.3"
+
 # Logging
 tracing = "0.1"
 tracing-wasm = "0.2"

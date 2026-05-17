@@ -23,22 +23,44 @@ use axum::{
 };
 
 pub fn routes(state: AppState) -> Router<()> {
+    // Cache-Control layers — applied per route group via sub-routers.
+    // Public event list: 60s cache (changes infrequently)
+    let public_events_list = Router::new()
+        .route("/public/events", get(public_event::list_public_events))
+        .layer(middleware::from_fn(
+            crate::middleware::cache_public_60_layer,
+        ));
+
+    // Public event detail: 120s cache (individual events rarely change)
+    let public_events_detail = Router::new()
+        .route("/public/event/{slug}", get(public_event::get_public_event))
+        .layer(middleware::from_fn(
+            crate::middleware::cache_public_120_layer,
+        ));
+
+    // Health check: no-cache (should always be fresh)
+    let health_routes = Router::new()
+        .route("/health", get(health::health_check))
+        .layer(middleware::from_fn(crate::middleware::cache_no_cache_layer));
+
+    // Auth routes: no-store (sensitive data)
+    let auth_routes = Router::new()
+        .route("/auth/url", get(auth::auth_url))
+        .route("/auth/callback", get(auth::auth_callback))
+        .route("/auth/logout", post(auth::auth_logout))
+        .layer(middleware::from_fn(crate::middleware::cache_no_store_layer));
+
     // Public routes — no auth middleware required.
     // Rate limiting is handled by Cloudflare Rate Limiting Rules (dashboard config).
     let public = Router::new()
-        .route("/health", get(health::health_check))
+        .merge(health_routes)
         // NFT metadata (public — wallets/explorers fetch these)
         .route("/metadata/{event_id}", get(metadata::get_metadata))
         .route("/badge.svg", get(metadata::get_badge_svg))
         .route("/badge-hd.svg", get(metadata::get_badge_hd_svg))
-        // Public event list (no auth — landing page)
-        .route("/public/events", get(public_event::list_public_events))
-        // Public event details (no auth)
-        .route("/public/event/{slug}", get(public_event::get_public_event))
-        // Auth routes (public)
-        .route("/auth/url", get(auth::auth_url))
-        .route("/auth/callback", get(auth::auth_callback))
-        .route("/auth/logout", post(auth::auth_logout))
+        .merge(public_events_list)
+        .merge(public_events_detail)
+        .merge(auth_routes)
         // Claim routes (public — attendees claim NFTs without staff login)
         .route("/claim/{token}", get(claim::get_claim))
         .route("/claim/{token}", post(claim::post_claim))

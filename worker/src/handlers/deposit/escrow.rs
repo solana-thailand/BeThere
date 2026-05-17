@@ -109,16 +109,7 @@ pub async fn init_escrow_tx_handler(
         event_end + 86400 * 7
     };
 
-    let rpc_url = format!(
-        "{}{}{}",
-        state.config.solana.rpc_url,
-        if state.config.solana.rpc_url.contains('?') {
-            "&"
-        } else {
-            "?api-key="
-        },
-        state.config.solana.api_key
-    );
+    let rpc_url = state.config.solana.full_rpc_url();
 
     let tx = crate::solana_escrow::build_init_escrow_transaction(
         &rpc_url,
@@ -297,16 +288,7 @@ pub async fn refund_and_close_tx_handler(
     };
 
     // Build the RPC URL with API key
-    let rpc_url = format!(
-        "{}{}{}",
-        state.config.solana.rpc_url,
-        if state.config.solana.rpc_url.contains('?') {
-            "&"
-        } else {
-            "?api-key="
-        },
-        state.config.solana.api_key
-    );
+    let rpc_url = state.config.solana.full_rpc_url();
 
     // Build the combined refund + close_deposit transaction
     let tx = crate::solana_escrow::build_refund_and_close_transaction(
@@ -450,16 +432,7 @@ pub async fn mark_checked_in_tx_handler(
     };
 
     // Build the RPC URL with API key
-    let rpc_url = format!(
-        "{}{}{}",
-        state.config.solana.rpc_url,
-        if state.config.solana.rpc_url.contains('?') {
-            "&"
-        } else {
-            "?api-key="
-        },
-        state.config.solana.api_key
-    );
+    let rpc_url = state.config.solana.full_rpc_url();
 
     let tx = crate::solana_escrow::build_mark_checked_in_transaction(
         &rpc_url,
@@ -535,17 +508,7 @@ pub async fn backfill_wallets_handler(
         .as_ref()
         .ok_or_else(|| AppError::Internal("EVENTS KV not configured".to_string()))?;
 
-    // Build the RPC URL with API key
-    let rpc_url = format!(
-        "{}{}{}",
-        state.config.solana.rpc_url,
-        if state.config.solana.rpc_url.contains('?') {
-            "&"
-        } else {
-            "?api-key="
-        },
-        state.config.solana.api_key
-    );
+    let rpc_url = state.config.solana.full_rpc_url();
 
     // Resolve event IDs to scan
     let event_ids: Vec<String> = match &body.event_id {
@@ -796,16 +759,7 @@ pub async fn deactivate_event_tx_handler(
         super::derive_on_chain_event_id(&event.id)
     };
 
-    let rpc_url = format!(
-        "{}{}{}",
-        state.config.solana.rpc_url,
-        if state.config.solana.rpc_url.contains('?') {
-            "&"
-        } else {
-            "?api-key="
-        },
-        state.config.solana.api_key
-    );
+    let rpc_url = state.config.solana.full_rpc_url();
 
     // Verify escrow exists on-chain (catches stale KV state)
     crate::solana_escrow::verify_escrow_account_exists(
@@ -924,16 +878,7 @@ pub async fn close_event_tx_handler(
         super::derive_on_chain_event_id(&event.id)
     };
 
-    let rpc_url = format!(
-        "{}{}{}",
-        state.config.solana.rpc_url,
-        if state.config.solana.rpc_url.contains('?') {
-            "&"
-        } else {
-            "?api-key="
-        },
-        state.config.solana.api_key
-    );
+    let rpc_url = state.config.solana.full_rpc_url();
 
     // Verify escrow exists on-chain (catches stale KV state)
     crate::solana_escrow::verify_escrow_account_exists(
@@ -1051,16 +996,7 @@ pub async fn claim_forfeited_tx_handler(
         super::derive_on_chain_event_id(&event.id)
     };
 
-    let rpc_url = format!(
-        "{}{}{}",
-        state.config.solana.rpc_url,
-        if state.config.solana.rpc_url.contains('?') {
-            "&"
-        } else {
-            "?api-key="
-        },
-        state.config.solana.api_key
-    );
+    let rpc_url = state.config.solana.full_rpc_url();
 
     // Verify escrow exists on-chain (catches stale KV state)
     crate::solana_escrow::verify_escrow_account_exists(
@@ -1208,16 +1144,7 @@ pub async fn close_deposit_tx_handler(
     };
 
     // Build the RPC URL with API key
-    let rpc_url = format!(
-        "{}{}{}",
-        state.config.solana.rpc_url,
-        if state.config.solana.rpc_url.contains('?') {
-            "&"
-        } else {
-            "?api-key="
-        },
-        state.config.solana.api_key
-    );
+    let rpc_url = state.config.solana.full_rpc_url();
 
     // Build the close_deposit transaction
     let tx = crate::solana_escrow::build_close_deposit_transaction(
@@ -1319,12 +1246,12 @@ pub async fn cancel_status_handler(
         crate::handlers::ext::resolve_event_with_access(&state, &claims, query.event_id.as_deref())
             .await?;
 
-    let deposits = event_store::list_deposit_statuses(kv, &event.id)
-        .await
-        .map_err(AppError::Internal)?;
-    let thb_deposits = event_store::list_thb_deposits(kv, &event.id)
-        .await
-        .map_err(AppError::Internal)?;
+    let (deposits_res, thb_res) = futures::join!(
+        event_store::list_deposit_statuses(kv, &event.id),
+        event_store::list_thb_deposits(kv, &event.id),
+    );
+    let deposits = deposits_res.map_err(AppError::Internal)?;
+    let thb_deposits = thb_res.map_err(AppError::Internal)?;
 
     let usdc_total = deposits
         .iter()

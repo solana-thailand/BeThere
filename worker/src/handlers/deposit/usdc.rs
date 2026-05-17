@@ -319,17 +319,7 @@ pub async fn deposit_usdc_tx_handler(
         super::derive_on_chain_event_id(&event.id)
     };
 
-    // Build the RPC URL with API key
-    let rpc_url = format!(
-        "{}{}{}",
-        state.config.solana.rpc_url,
-        if state.config.solana.rpc_url.contains('?') {
-            "&"
-        } else {
-            "?api-key="
-        },
-        state.config.solana.api_key
-    );
+    let rpc_url = state.config.solana.full_rpc_url();
 
     // Build the deposit transaction
     let tx = crate::solana_escrow::build_deposit_transaction(
@@ -432,16 +422,7 @@ pub async fn confirm_deposit_handler(
             match &status.tx_signature {
                 Some(sig) if !sig.is_empty() => {
                     // Verify the TX on-chain via RPC
-                    let rpc_url = format!(
-                        "{}{}{}",
-                        state.config.solana.rpc_url,
-                        if state.config.solana.rpc_url.contains('?') {
-                            "&"
-                        } else {
-                            "?api-key="
-                        },
-                        state.config.solana.api_key
-                    );
+                    let rpc_url = state.config.solana.full_rpc_url();
                     let confirmed = verify_tx_on_chain(&rpc_url, sig).await;
 
                     if confirmed {
@@ -681,16 +662,7 @@ pub async fn deposit_webhook_handler(
     deposit_status.tx_signature = Some(body.tx_signature.clone());
 
     // Try to verify the TX on-chain immediately
-    let rpc_url = format!(
-        "{}{}{}",
-        state.config.solana.rpc_url,
-        if state.config.solana.rpc_url.contains('?') {
-            "&"
-        } else {
-            "?api-key="
-        },
-        state.config.solana.api_key
-    );
+    let rpc_url = state.config.solana.full_rpc_url();
     let confirmed = verify_tx_on_chain(&rpc_url, &body.tx_signature).await;
 
     if confirmed {
