@@ -2,96 +2,70 @@
 
 ## Summary
 
-Walk-in attendees are stored in KV but invisible to organizers post-event. They're not in Google Sheets, not in the attendee list API, and have no CSV export. Phase 4 adds batch sync to Google Sheets + CSV download for walk-in data.
+Walk-in attendees are stored in KV. Phase 4 adds batch sync to Google Sheets + CSV download + auto-sync on register. Auto-sync has a known bug writing to the wrong sheet.
 
-## Problem
+## Status: IN PROGRESS
 
-### Walk-ins are invisible to organizers
+### ✅ Done
+- [x] `GET /api/walkin/list` — list walk-in attendees from KV (cursor pagination)
+- [x] `GET /api/walkin/export` — CSV export with proper headers + UTF-8
+- [x] `POST /api/walkin/sync` — batch sync to Google Sheet (idempotent)
+- [x] Idempotency via `walkin_synced:{event_id}:{email}` KV markers
+- [x] Admin UI: "Export Walk-in CSV" + "Sync Walk-ins to Sheet" buttons
+- [x] Audit logging: `WalkinSynced`, `WalkinExported` actions
+- [x] Auto-sync on register (best-effort, non-blocking fallback to batch sync)
+- [x] Diagnostic logging for auto-sync: `event_id`, `sheet_id`, `sheet_name`
 
-- `GET /api/attendees` only reads from Google Sheets — walk-in attendees don't appear
-- Walk-ins are KV-only (`walkin:{event_id}:{email}` with 90-day TTL)
-- After an event, organizers can't see walk-in attendance in their Sheets analytics
-- CSV exports miss all walk-in data
+### ⚠️ Bug — Auto-sync writes to wrong event's Google Sheet
+- [ ] Reproduce: `cd worker && npx wrangler tail` → register walk-in → check logs
+- [ ] Find `"walk-in auto-sync: resolved sheet"` log line → note `sheet_id` + `sheet_name`
+- [ ] Compare with expected Google Sheet
+- [ ] Possible causes:
+  - Event config in KV has wrong `sheet_id`
+  - Multiple events share same `sheet_id` / `sheet_name`
+  - Column mapping cache from different sheet
+- [ ] Fix root cause
+- [ ] Verify fix: register walk-in → check correct Google Sheet
 
-### Current state of walk-in data
+### TODO — Remaining
+- [ ] Unified attendee list: merge walk-ins into `GET /api/attendees` with `source` field
+- [ ] Unified CSV export: `GET /api/attendees/export` includes both sheet + walk-in
 
-| Field | Walk-in (`WalkinAttendee`) | Pre-registered (`Attendee`) |
-|-------|---------------------------|---------------------------|
-| Source | KV only | Google Sheet |
-| Primary key | email (per event) | api_id (UUID v7) |
-| Fields | 8: name, email, phone, claim_token, timestamps, wallet | 28 columns |
-| Check-in | Automatic (checked_in_at = registration time) | Written to sheet columns |
-| NFT claim | KV only | Sheet + KV |
+## Endpoints
 
-## Proposed Solution
+| Method | Path | Auth | Purpose |
+|--------|------|------|---------|
+| `POST` | `/api/walkin/register` | Staff | Register walk-in + auto-sync to sheet |
+| `GET` | `/api/walkin/list` | Staff | List walk-in attendees from KV |
+| `GET` | `/api/walkin/export` | Staff | Download walk-in CSV |
+| `POST` | `/api/walkin/sync` | Staff | Batch sync all walk-ins to Google Sheet |
 
-### A. Unified attendee list endpoint
-
-Merge walk-ins into the existing `GET /api/attendees` response so organizers see everyone in one view.
-
-- Scan KV prefix `walkin:{event_id}:*` using cursor pagination (same pattern as `cleanup.rs` `delete_keys_by_prefix`)
-- Add a `source` field: `"sheet"` or `"walkin"` to each attendee
-- Walk-ins get synthetic values for missing fields (e.g., `participation_type: "In-Person"`, `approval_status: "CheckedIn"`)
-
-### B. CSV export endpoint
-
-```
-GET /api/walkin/export?event_id=xxx
-```
-
-- Staff-only endpoint
-- Scans all `walkin:{event_id}:*` KV keys
-- Returns `text/csv` with headers: `Name, Email, Phone, Check-in Time, Registered By, Wallet Address, NFT Claimed`
-- Also add a unified export: `GET /api/attendees/export?event_id=xxx` that includes both sheet + walk-in attendees
-
-### C. Google Sheet sync endpoint
-
-```
-POST /api/walkin/sync?event_id=xxx
-```
-
-- Staff-only endpoint
-- Scans all walk-in KV records for the event
-- Maps `WalkinAttendee` fields to `ColumnMapping` columns with sensible defaults:
-  - `ParticipationType` = "In-Person"
-  - `ApprovalStatus` = "CheckedIn" (they were checked in on arrival)
-  - `TicketName` = "Walk-in"
-  - `DepositMethod` = empty (walk-ins don't deposit)
-- Uses existing `append_attendee_row()` for each record, OR batch append
-- Idempotency: check KV key `walkin_synced:{event_id}:{email}` before appending
-- Returns sync summary: `{ synced: N, skipped: M, errors: [...] }`
-
-### D. Admin UI button
-
-Add "Export CSV" and "Sync to Sheet" buttons to the admin dashboard for each event.
-
-## Files to Create/Modify
+## Key Files
 
 | File | Change |
 |------|--------|
-| `worker/src/handlers/walkin.rs` | Add `list_walkin_attendees()`, `export_walkin_csv()`, `sync_walkin_to_sheet()` |
-| `worker/src/handlers/mod.rs` | Register `/walkin/export` and `/walkin/sync` routes on staff router |
-| `worker/src/handlers/admin.rs` | Add unified attendee export endpoint |
-| `frontend-leptos/src/pages/admin.rs` | Add "Export CSV" and "Sync to Sheet" buttons per event |
+| `worker/src/handlers/walkin.rs` | Register + auto-sync, list, export, sync handlers |
+| `worker/src/sheets.rs` | `append_walkin_row()` — maps walk-in fields to sheet columns |
+| `frontend-leptos/src/api.rs` | Walkin API types |
+| `frontend-leptos/src/pages/admin.rs` | Export/Sync buttons |
 
-## Acceptance Criteria
+## How to Debug Auto-sync Wrong Sheet
 
-- [ ] `GET /api/walkin/export?event_id=xxx` returns CSV with all walk-in attendees
-- [ ] `POST /api/walkin/sync?event_id=xxx` appends walk-in rows to Google Sheet
-- [ ] Sync is idempotent — running twice doesn't create duplicate rows
-- [ ] `GET /api/attendees?event_id=xxx` includes walk-in attendees (with `source` field)
-- [ ] Admin dashboard has "Export CSV" button for walk-in data
-- [ ] Admin dashboard has "Sync to Sheet" button with sync result feedback
-- [ ] CSV has proper headers and UTF-8 encoding
+```bash
+# Terminal 1: Watch live logs
+cd worker && npx wrangler tail --format json
 
-## Dependencies
+# Terminal 2 (or browser): Register a walk-in attendee
+# Check logs for:
+#   "walk-in registered"          → event_id, email
+#   "walk-in auto-sync: resolved sheet"  → event_id, sheet_id, sheet_name
 
-- Issue 014 Phases 1-3 (walk-in registration) — ✅ already deployed
-- Google Sheets service account access — already configured
+# Check event config in KV
+npx wrangler kv key get --namespace-id=c8a6a87f9ed34ce0a3c8e48b84039214 "event:<event_id>"
+# Verify sheet_id field matches expected Google Sheet
+```
 
 ## Refs
-
-- `.issues/014_walkin_attendee_flow.md` — original walk-in issue
-- `worker/src/handlers/walkin.rs` — current walk-in handler
-- `worker/src/sheets.rs` — Google Sheets integration patterns
-- `worker/src/cleanup.rs` L209-240 — KV list+cursor pagination pattern
+- `.issues/014_walkin_attendee_flow.md` — parent walk-in issue
+- `worker/src/handlers/walkin.rs` — walk-in handlers
+- `worker/src/sheets.rs` — Google Sheets integration

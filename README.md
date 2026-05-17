@@ -306,7 +306,10 @@ The frontend is served from `frontend-leptos/dist/` via Workers Assets with SPA 
 ```
 worker/src/             — Cloudflare Worker
   handlers/             — API endpoints (auth, check-in, QR, attendee, events, quiz, claim, adventure, health)
-    deposit.rs            — USDC/THB deposit, confirmation, webhook, refund queue
+    deposit/              — Deposit/refund handlers (split by payment track)
+      usdc.rs               — USDC deposit flow: status, initiate, TX callback, confirm, webhook
+      thb.rs                — THB slip upload/verify, refund queue, batch refund
+      escrow.rs             — On-chain escrow: init, mark-checked-in, close, claim-forfeited, cancel
     ext.rs              — Shared utilities (EventIdQuery, resolve_event_with_access, resolve_kv)
   adventure.rs          — Adventure business logic (save progress, check completion)
   auth.rs               — Google OAuth + JWT + role resolution (super_admin/organizer/staff)
@@ -314,12 +317,18 @@ worker/src/             — Cloudflare Worker
   event_store.rs        — KV event registry CRUD, seed, migration, hard_delete_event
   audit_store.rs        — Append-only audit trail (per-event + global, 27 action types)
   quiz.rs               — Quiz business logic (scoring, KV interaction)
-  sheets.rs             — Google Sheets read/write (worker::Fetch) + KV attendee cache + token cache
+  sheets/               — Google Sheets API
+    mod.rs                — Access token, column mapping, attendee/staff queries, KV cache
+    write.rs              — Sheet mutations: check-in, claim, QR URLs, row append
   solana.rs             — Helius cNFT minting (mintCompressedNft RPC, MintRequest struct)
-  solana_escrow.rs      — Solana escrow TX builders (deposit, refund, create_event, mark_checked_in, create_vault_ata)
+  solana_escrow/        — Solana escrow TX builders
+    mod.rs                — Types, constants, EscrowError
+    crypto.rs             — SHA-256, base58, PDA/ATA derivation (WASM SubtleCrypto + native)
+    wire.rs               — Blockhash cache, tx serialization, message account ordering
+    tx_builders.rs        — 9 build_* functions using shared EscrowCtx + finalize_tx
   crypto.rs             — SubtleCrypto bridge (RSA-SHA256, HMAC-SHA256)
   http.rs               — HTTP client wrapping worker::Fetch
-  middleware.rs         — Security headers, auth guard
+  middleware.rs         — Security headers, auth guard, correlation IDs
   state.rs              — AppState from Env bindings
 
 domain/src/             — Shared (compiles x86_64 + wasm32)
@@ -370,7 +379,7 @@ The escrow system uses PDAs (Program Derived Addresses) to hold attendee USDC de
 | Program ID | `C6HDeZES9aPpNwe3UvS9ecmfcRhH1XeJb8PGJmLG3z3T` | TBD |
 | USDC Mint | `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU` | `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1m` |
 
-**Transaction building:** All TX builders are in `worker/src/solana_escrow.rs`. They use a shared `build_message_accounts()` helper for Solana's canonical 4-pass account ordering.
+**Transaction building:** All TX builders are in `worker/src/solana_escrow/tx_builders.rs`. They share an `EscrowCtx` that resolves program IDs + derives PDAs once, and a `finalize_tx()` helper that handles message building → blockhash → serialization → base64. This eliminates ~480 lines of duplicated boilerplate across the 9 builder functions.
 
 ### Performance Layers
 
@@ -378,6 +387,8 @@ The escrow system uses PDAs (Program Derived Addresses) to hold attendee USDC de
 |-------|-----------|-----|--------|
 | Google access token | KV cache | 3500s | Eliminates RSA-JWT signing per request (~100ms saved) |
 | Attendee data | KV cache | 30s | Eliminates Google Sheets full-scan per request (~200-800ms saved) |
+| Solana blockhash | KV cache | 30s | Eliminates RPC call per TX build (~50-200ms saved) |
+| TX builder context | `EscrowCtx` | Per-request | Resolves 7 program IDs + 3 PDAs once instead of per-instruction (~3-5ms saved) |
 | Cache invalidation | On write-through | Immediate | Mutations (check-in, claim) invalidate cache instantly |
 
 ## Tests

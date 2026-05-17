@@ -1,7 +1,7 @@
 # 014 — Walk-in Attendee Flow (Hybrid KV-based)
 
 ## Summary
-BeThere currently requires attendees to pre-register via Google Sheet before the event. Walk-in attendees (who show up without pre-registering) cannot be properly handled. This issue tracks the hybrid KV-based walk-in solution: staff registers walk-ins via the admin scanner UI → backend creates KV attendee record → same deposit/NFT/refund loop as pre-registered attendees.
+Walk-in attendees (who show up without pre-registering) are registered by staff via the scanner UI → backend creates KV record + auto-syncs to Google Sheet → same deposit/NFT/refund loop as pre-registered attendees.
 
 ## Status: IN PROGRESS
 
@@ -26,103 +26,63 @@ BeThere currently requires attendees to pre-register via Google Sheet before the
 - [x] Walk-in success: QR code of claim URL for attendee to scan
 - [x] "Scan Another" button returns to Idle
 
-### Phase 4 — Optional: Post-event Sync
-- [ ] Sync walk-in data to Google Sheet post-event (batch)
-- [ ] Export walk-in attendee list as CSV
+### Phase 4 — Google Sheet Sync & CSV Export ✅ Done
+- [x] `POST /api/walkin/sync` — batch sync walk-ins to Google Sheet (idempotent)
+- [x] `GET /api/walkin/export` — CSV export of walk-in attendees
+- [x] `GET /api/walkin/list` — list walk-in attendees from KV
+- [x] Admin UI: "Export CSV" and "Sync to Sheet" buttons
+- [x] Idempotency via `walkin_synced:{event_id}:{email}` KV markers
 
-## Background
-BeThere is an event check-in platform on Solana with deposit-backed attendance (USDC escrow). The current flow is:
+### Phase 5 — Auto-sync on Register ⚠️ In Progress
+- [x] Auto-sync walk-in to Google Sheet immediately after KV write (best-effort)
+- [x] Mark as synced in KV on success (prevents duplicate by `/walkin/sync`)
+- [x] Graceful fallback — logs warning on failure, `/walkin/sync` retries later
+- [x] Diagnostic logging: `sheet_id`, `sheet_name`, `event_id` on auto-sync
+- [ ] **BUG: auto-sync writes to wrong event's Google Sheet** — needs investigation
+  - Check `wrangler tail` logs for `"walk-in auto-sync: resolved sheet"` line
+  - Compare `sheet_id` with expected Google Sheet
+  - Possible cause: event config in KV has wrong `sheet_id`
 
-1. Organizer creates event
-2. Attendees pre-register via Google Sheet
-3. Backend syncs sheet → creates KV attendee records with claim tokens
-4. Attendees deposit USDC → staff checks them in → they claim NFT → refund deposit
-
-Walk-in attendees (people who show up at the door without pre-registering) break this flow because they have no KV record and no claim token.
-
-## Approach Analysis
-
-| Approach | Description | Pros | Cons |
-|----------|-------------|------|------|
-| **1. On-the-spot registration** | Staff enters name/email → creates attendee in Google Sheet → normal flow | Full deposit + NFT + refund tracking | Requires Google Sheet write access |
-| **2. Deposit-first walk-in** | Walk-in scans event QR → deposits USDC → gets temporary ticket → staff verifies | Self-serve, no staff data entry | Walk-in needs Solana wallet; no THB option |
-| **3. Staff-override check-in** | Staff enters identifier → creates minimal KV record → generates claim token | Fastest to implement | Data split between KV and sheet |
-| **4. Hybrid (recommended)** | Staff-side "Register Walk-in" → KV attendee record → same deposit/NFT/refund loop | Avoids sheet complexity, keeps full feature set | KV-sheet data sync needed later |
-
-**Recommended: Hybrid KV-based (Approach 4)**
-
-## Flow
-
-1. Staff taps **"Register Walk-in"** in the scanner UI
-2. Modal form: enters walk-in's name + email (or phone)
-3. Backend `POST /api/walkin/register` creates a KV attendee record with key `walkin:{event_id}:{email}`
-4. Backend generates a claim token (same as normal attendees)
-5. Walk-in can now: deposit USDC → get checked in → claim NFT → refund deposit
-6. If walk-in has a Solana wallet, they can scan the event QR and deposit self-serve
-
-## Implementation Plan
-
-### Phase 1 — Backend Walk-in Registration API
-- [ ] Add `POST /api/walkin/register` endpoint (staff-only, requires auth)
-- [ ] Validate input: name (required), email (required), phone (optional)
-- [ ] Create KV attendee record with `walkin:{event_id}:{email}` key
-- [ ] Generate claim token for walk-in (reuse existing claim token logic)
-- [ ] Return claim token + attendee record to staff UI
-- [ ] Add `walkin:true` flag to KV attendee record
-- [ ] Ensure walk-in appears in attendee list alongside pre-registered attendees
-
-### Phase 2 — Deposit/Refund/NFT Flow Compatibility
-- [ ] Verify deposit flow works for walk-in KV records (no sheet dependency)
-- [ ] Verify check-in flow works for walk-in attendees (scanner reads claim token)
-- [ ] Verify NFT claim flow works for walk-ins
-- [ ] Verify refund flow works for walk-ins
-- [ ] Walk-in count included in event stats
-
-### Phase 3 — Scanner UI (Frontend)
-- [ ] Add "Register Walk-in" button to scanner page (`frontend-leptos/src/pages/scanner.rs`)
-- [ ] Walk-in registration form modal: name, email, optional phone
-- [ ] Show claim token (QR code) after successful registration
-- [ ] Walk-in attendees visually distinguished with `walkin` badge in attendee list
+### TODO — Remaining
+- [ ] Fix auto-sync wrong sheet bug (Phase 5)
+- [ ] Unified attendee list: merge walk-ins into `GET /api/attendees` with `source` field
 - [ ] Walk-in count shown separately in event dashboard
+- [ ] Walk-in cap per event (configurable, prevent escrow abuse)
+- [ ] Rate limiting on walk-in register (max N per minute per staff)
 
-### Phase 4 — Optional: Post-event Sync
-- [ ] Sync walk-in data to Google Sheet post-event (batch)
-- [ ] Export walk-in attendee list as CSV
+## Architecture
 
-## Security Considerations
+```
+Register Flow:
+  Staff UI → POST /api/walkin/register
+    → 1. Validate input
+    → 2. Check duplicate in KV
+    → 3. Generate claim token (UUID v7)
+    → 4. Write walk-in record to KV (90-day TTL)
+    → 5. Write reverse mapping (claim token → event + email)
+    → 6. Auto-sync to Google Sheet (best-effort, non-blocking)
+    → 7. Return claim URL + attendee data
 
-- **Staff-only endpoint** — Same auth middleware as check-in endpoint
-- **Rate limiting** — Prevent abuse (e.g., max 5 walk-in registrations per minute per staff)
-- **Walk-in count cap** — Configurable per event (e.g., max 20 walk-ins) to prevent escrow abuse
-- **Input validation** — Sanitize name/email/phone, validate email format
-- **Claim token security** — Same entropy and TTL as pre-registered claim tokens
-- **No privilege escalation** — Walk-in attendees cannot modify their own records
+Sync Flow (fallback):
+  Admin UI → POST /api/walkin/sync
+    → List all walk-in KV records for event
+    → Skip already-synced (idempotency check)
+    → Append each to Google Sheet via append_walkin_row()
+    → Mark synced in KV
+```
+
+## Key Files
+
+| File | Purpose |
+|------|---------|
+| `worker/src/handlers/walkin.rs` | Register, list, export, sync handlers |
+| `worker/src/sheets.rs` | `append_walkin_row()` — maps walk-in fields to sheet columns |
+| `frontend-leptos/src/pages/scanner.rs` | Walk-in form, QR display |
+| `frontend-leptos/src/api.rs` | Frontend API types for walk-in |
+| `domain/src/models/attendee.rs` | `WalkinAttendee` struct |
 
 ## Refs
+- `.issues/019_walkin_sync_export.md` — Phase 4 sync/export issue
 - `docs/escrow_protocol.md` — Protocol design with deposit/NFT/refund loop
 - Issue 010 — Deposit/refund escrow architecture
 - Issue 013 — Escrow rug pull prevention (security context)
-- `frontend-leptos/src/pages/scanner.rs` — Scanner UI (walk-in button target)
-- `worker/src/api/` — Existing API endpoints (pattern reference)
-
-## How to Test
-
-```bash
-# Phase 1: Backend
-cd worker && cargo test --lib
-# Test walkin register endpoint manually:
-# curl -X POST /api/walkin/register \
-#   -H "Authorization: Bearer <staff_token>" \
-#   -d '{"event_id":"...", "name":"Test Walk-in", "email":"walkin@test.com"}'
-
-# Phase 2: Verify existing flows
-# Deposit → check-in → NFT claim → refund for walk-in attendee
-# Compare with pre-registered attendee flow (should be identical)
-
-# Phase 3: Frontend
-cd frontend-leptos && cargo check --target wasm32-unknown-unknown
-bash build.sh
-# Manual: open scanner UI → tap "Register Walk-in" → fill form → verify QR appears
-
-# E2E: full walk-in lifecycle on devnet
-```

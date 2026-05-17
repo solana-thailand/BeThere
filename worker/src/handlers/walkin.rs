@@ -1,8 +1,9 @@
 //! Walk-in attendee registration handler.
 //!
 //! Staff can register walk-in attendees who show up without pre-registering.
-//! Records are stored in KV only (no Google Sheets) with a reverse mapping
-//! for claim token lookup.
+//! Records are stored in KV with a reverse mapping for claim token lookup.
+//! After KV write, the record is also auto-synced to Google Sheets (best-effort).
+//! The separate `/walkin/sync` endpoint can retry any failed syncs.
 
 use axum::{
     Extension, Json,
@@ -74,6 +75,7 @@ fn claim_walkin_key(claim_token: &str) -> String {
 /// 3. Generate claim token (UUID v7)
 /// 4. Write walk-in record + reverse mapping to KV with 90-day TTL
 /// 5. Return claim URL and attendee data
+/// 6. Auto-sync to Google Sheet (best-effort; falls back to /walkin/sync on failure)
 #[worker::send]
 pub async fn register_walkin(
     State(state): State<AppState>,
@@ -197,6 +199,84 @@ pub async fn register_walkin(
         claim_token = %claim_token,
         "walk-in registered"
     );
+
+    // 8. Auto-sync to Google Sheet (best-effort, non-blocking)
+    let sheet_id = &event.sheet_id;
+    let sheet_name = if event.sheet_name.is_empty() {
+        &state.config.sheets.sheet_name
+    } else {
+        &event.sheet_name
+    };
+
+    tracing::info!(
+        event_id = %event.id,
+        sheet_id = %sheet_id,
+        sheet_name = %sheet_name,
+        "walk-in auto-sync: resolved sheet"
+    );
+
+    match crate::sheets::get_column_mapping(&state, sheet_id, sheet_name, Some(kv)).await {
+        Ok(mapping) => {
+            let api_id = Uuid::now_v7().to_string();
+            match crate::sheets::append_walkin_row(
+                &api_id,
+                &attendee.name,
+                &attendee.email,
+                attendee.phone.as_deref(),
+                &attendee.claim_token,
+                &attendee.checked_in_at,
+                &attendee.checked_in_by,
+                attendee.wallet_address.as_deref(),
+                attendee.claimed_at.as_deref(),
+                &mapping,
+                &state,
+                sheet_id,
+                sheet_name,
+                Some(kv),
+            )
+            .await
+            {
+                Ok(()) => {
+                    tracing::info!(
+                        event_id = %event.id,
+                        email = %email_lower,
+                        "walk-in auto-synced to google sheet"
+                    );
+                    // Mark as synced so walkin_sync_handler skips it
+                    let sync_key = format!("walkin_synced:{}:{}", event.id, email_lower);
+                    let sync_val = serde_json::to_string(&true).unwrap_or_default();
+                    match kv
+                        .put(&sync_key, &sync_val)
+                        .map(|builder| builder.expiration_ttl(WALKIN_TTL_SECS))
+                    {
+                        Ok(builder) => {
+                            if let Err(e) = builder.execute().await {
+                                tracing::warn!(key = %sync_key, error = ?e, "failed to write sync marker");
+                            }
+                        }
+                        Err(e) => {
+                            tracing::warn!(key = %sync_key, error = ?e, "failed to build sync marker");
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        event_id = %event.id,
+                        email = %email_lower,
+                        error = %e,
+                        "walk-in auto-sync to google sheet failed, will be retried by /walkin/sync"
+                    );
+                }
+            }
+        }
+        Err(e) => {
+            tracing::warn!(
+                event_id = %event.id,
+                error = %e,
+                "walk-in auto-sync: failed to get column mapping, skipping sheet sync"
+            );
+        }
+    }
 
     // Audit log
     if let Some(kv) = &state.events_kv {
