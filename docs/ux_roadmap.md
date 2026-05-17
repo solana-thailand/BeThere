@@ -156,21 +156,15 @@ USDC payment card on the deposit page is hidden unless the backend returns `dev_
 
 ### AF-6. Deposit page "Back to event" navigation
 
-**Status**: ❌ Not started — `.issues/017_attendee_navigation_logout.md`
-
-Deposit page has "← Back to home" linking to `/`. This is a dead-end — no way back to `/e/:slug`. Fix: add `event_slug` to `DepositStatusResponse`, link back to `/e/:slug`.
+**Status**: ✅ Implemented (commit `3c89fd3`) — `event_slug` added to `DepositStatusResponse`, deposit page links to `/e/{slug}` with `/` fallback.
 
 ### AF-7. Logout button for attendees
 
-**Status**: ❌ Not started — `.issues/017_attendee_navigation_logout.md`
-
-No logout exists anywhere. JWT cookie is `HttpOnly` — needs `POST /api/auth/logout` server-side. Add logout button on deposit page + public event page.
+**Status**: ✅ Implemented (commit `1577828`) — `POST /api/auth/logout` clears JWT cookie. Logout button on deposit page (auth-gated), public event page (signed-in bar), and landing page (MyRegistrations section).
 
 ### AF-8. "My Registrations" on landing page
 
-**Status**: ❌ Not started — `.issues/017_attendee_navigation_logout.md`
-
-Signed-in attendees visiting `/` see no indication they're signed in. No list of their registered events. Add `GET /api/my-registrations` + "My Events" section on landing page.
+**Status**: ✅ Implemented (commits `3c89fd3`, `1577828`, `c9b6f1d`, `64ec532`) — `GET /api/my-registrations` endpoint + `MyRegistrations` component with color-coded status labels. Auth redirect fixed to respect event page URL for all users.
 
 ---
 
