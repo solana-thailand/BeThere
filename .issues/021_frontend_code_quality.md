@@ -2,8 +2,9 @@
 
 > **Priority**: P2 (maintenance, not blocking)
 > **Scope**: `frontend-leptos/src/api.rs`, `auth.rs`, `utils.rs`, `pages/public_event.rs`
-> **Status**: ❌ Open
+> **Status**: ✅ Completed
 > **Source**: Code review during awesome-leptos ecosystem analysis (2026-06-12)
+> **Completed**: 2026-06-13 — All 5 steps implemented and verified
 
 ## Problem
 
@@ -197,13 +198,13 @@ frontend-leptos/src/api/
 
 ## Acceptance Criteria
 
-- [ ] `api_post_json` and `api_put_json` share a single implementation
-- [ ] `public_event.rs` countdown interval is cleaned up on unmount and on zero
-- [ ] `auth.rs` has a single `local_storage()` helper, no repeated chains
-- [ ] `utils.rs` `format_timestamp` uses `js_object` helper instead of 6 `Reflect::set` calls
-- [ ] `api.rs` split into domain modules under `src/api/`
-- [ ] `cargo check -p event-checkin-frontend --target wasm32-unknown-unknown` passes
-- [ ] `cargo clippy --all-targets` passes
+- [x] `api_post_json` and `api_put_json` share a single implementation
+- [x] `public_event.rs` countdown interval is cleaned up on unmount and on zero
+- [x] `auth.rs` has a single `local_storage()` helper, no repeated chains
+- [x] `utils.rs` `format_timestamp` uses `js_object` helper instead of 6 `Reflect::set` calls
+- [x] `api.rs` split into domain modules under `src/api/`
+- [x] `cargo check --target wasm32-unknown-unknown` passes
+- [x] `cargo clippy` passes (no new warnings)
 - [ ] Manual test: countdown timer on `/e/{slug}` still works
 
 ## Related

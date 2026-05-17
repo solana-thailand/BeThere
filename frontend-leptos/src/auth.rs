@@ -9,25 +9,28 @@ use web_sys::window;
 /// localStorage key for the JWT session token.
 const TOKEN_KEY: &str = "event_checkin_token";
 
+/// Get the browser's localStorage, if available.
+fn local_storage() -> Option<web_sys::Storage> {
+    window().and_then(|w| w.local_storage().ok()).flatten()
+}
+
 /// Read the JWT token from localStorage.
 pub fn get_token() -> Option<String> {
-    window()
-        .and_then(|w| w.local_storage().ok())
-        .flatten()
-        .and_then(|storage| storage.get_item(TOKEN_KEY).ok())
+    local_storage()
+        .and_then(|s| s.get_item(TOKEN_KEY).ok())
         .flatten()
 }
 
 /// Write the JWT token to localStorage.
 pub fn set_token(token: &str) {
-    if let Some(storage) = window().and_then(|w| w.local_storage().ok()).flatten() {
+    if let Some(storage) = local_storage() {
         let _ = storage.set_item(TOKEN_KEY, token);
     }
 }
 
 /// Remove the JWT token from localStorage.
 pub fn clear_token() {
-    if let Some(storage) = window().and_then(|w| w.local_storage().ok()).flatten() {
+    if let Some(storage) = local_storage() {
         let _ = storage.remove_item(TOKEN_KEY);
     }
 }

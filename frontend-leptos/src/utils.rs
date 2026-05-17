@@ -128,6 +128,22 @@ pub fn get_participation_badge(participation_type: &str) -> ParticipationBadge {
     }
 }
 
+/// Build a JS object from key-value string pairs.
+///
+/// Helper to avoid repeated `Reflect::set` calls when constructing
+/// JS options objects for `toLocaleString` etc.
+fn js_object(pairs: &[(&str, &str)]) -> js_sys::Object {
+    let obj = js_sys::Object::new();
+    for (key, val) in pairs {
+        let _ = js_sys::Reflect::set(
+            &obj,
+            &wasm_bindgen::JsValue::from_str(key),
+            &wasm_bindgen::JsValue::from_str(val),
+        );
+    }
+    obj
+}
+
 /// Format an ISO 8601 timestamp to a human-readable locale string.
 ///
 /// Returns "N/A" for empty strings and the raw input if parsing fails.
@@ -142,32 +158,13 @@ pub fn format_timestamp(iso: &str) -> String {
         return iso.to_string();
     }
 
-    let opts = js_sys::Object::new();
-    let _ = js_sys::Reflect::set(
-        &opts,
-        &wasm_bindgen::JsValue::from_str("year"),
-        &wasm_bindgen::JsValue::from_str("numeric"),
-    );
-    let _ = js_sys::Reflect::set(
-        &opts,
-        &wasm_bindgen::JsValue::from_str("month"),
-        &wasm_bindgen::JsValue::from_str("short"),
-    );
-    let _ = js_sys::Reflect::set(
-        &opts,
-        &wasm_bindgen::JsValue::from_str("day"),
-        &wasm_bindgen::JsValue::from_str("numeric"),
-    );
-    let _ = js_sys::Reflect::set(
-        &opts,
-        &wasm_bindgen::JsValue::from_str("hour"),
-        &wasm_bindgen::JsValue::from_str("2-digit"),
-    );
-    let _ = js_sys::Reflect::set(
-        &opts,
-        &wasm_bindgen::JsValue::from_str("minute"),
-        &wasm_bindgen::JsValue::from_str("2-digit"),
-    );
+    let opts = js_object(&[
+        ("year", "numeric"),
+        ("month", "short"),
+        ("day", "numeric"),
+        ("hour", "2-digit"),
+        ("minute", "2-digit"),
+    ]);
 
     js_date
         .to_locale_string("en-US", &opts)

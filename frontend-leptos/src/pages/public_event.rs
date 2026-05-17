@@ -390,8 +390,8 @@ pub fn PublicEvent() -> impl IntoView {
                                                 set_countdown
                                                     .set(format_countdown(start_ms - now_ms));
 
-                                                // Tick every second
-                                                set_interval(
+                                                // Tick every second — store handle for cleanup
+                                                if let Ok(handle) = set_interval_with_handle(
                                                     move || {
                                                         let now = js_sys::Date::now() as i64;
                                                         let remaining = start_ms - now;
@@ -405,7 +405,10 @@ pub fn PublicEvent() -> impl IntoView {
                                                         }
                                                     },
                                                     std::time::Duration::from_secs(1),
-                                                );
+                                                ) {
+                                                    // Clear interval on component unmount
+                                                    on_cleanup(move || handle.clear());
+                                                }
                                             }
                                         } else {
                                             set_state.set(PublicEventState::Error(

@@ -98,9 +98,21 @@ cargo test -p event-checkin-frontend
 
 ## Remain Work
 
-- [ ] Implement fixes from `.issues/021_frontend_code_quality.md` (Steps 1-5)
+- [x] Implement fixes from `.issues/021_frontend_code_quality.md` (Steps 1-5)
 - [ ] Manual test countdown timer on public event page
 - [ ] Consider `leptos-captcha` if going public without bot protection
+
+### Implementation Summary (2026-06-13)
+
+All 5 code quality fixes implemented and compiled:
+
+| # | Fix | File(s) Changed | Lines Saved |
+|---|-----|-----------------|-------------|
+| 1 | DRY `api_post_json`/`api_put_json` → `api_json_with_body(HttpMethod, ...)` | `api/mod.rs` | ~55 |
+| 2 | Timer leak → `set_interval_with_handle` + `on_cleanup` | `pages/public_event.rs` | bug fix |
+| 3 | Extract `local_storage()` helper | `auth.rs` | ~6 |
+| 4 | `js_object()` helper for `format_timestamp` | `utils.rs` | ~14 |
+| 5 | Split `api.rs` into 7 domain modules | `api/*.rs` (2885 total) | structural |
 
 ## Issues Ref
 
