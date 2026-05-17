@@ -272,7 +272,7 @@ Staff currently must scan 50 individual QR codes for group check-ins. A manual/b
 
 ### P2-3. Wallet Error Recovery Messages
 
-**Status**: ❌ Not started
+**Status**: ✅ Implemented (commit `bd9601e`) — `wallet_error.rs`, structured error JSON in `solana_wallet.js`, error classification + user-friendly messages across all wallet call sites.
 
 Wallet errors are generic and provide no recovery guidance. Users see "Transaction failed" without knowing why.
 
@@ -310,7 +310,7 @@ The landing page has no evidence that the platform works. Showing real/upcoming 
 
 ### P2-5. Walk-in Phase 4 — Post-Event Sync
 
-**Status**: ❌ Not started (Phases 1-3 complete)
+**Status**: ✅ Implemented (commit `bd9601e`) — CSV export endpoint, Google Sheet sync with idempotency, admin UI buttons, walkin list handler.
 
 Walk-in attendees are stored in KV but not synced back to the Google Sheet after the event. This means:
 
@@ -358,7 +358,7 @@ Translate deposit and claim pages to Thai for local adoption in Thailand. Could 
 
 ### P3-5. Event Cancellation Instruction (`cancel_event`)
 
-The escrow program supports `cancel_event` (refund all + close), but there's no UI for it. Admins must refund attendees one by one. A "Cancel Event" button would batch-refund all depositors.
+**Status**: ✅ Implemented (commit `bd9601e`) — Cancellation workflow with THB batch refund, USDC refund queue, cancel status endpoint, admin UI (Alt+8). Note: USDC refunds still require attendee signature (on-chain constraint).
 
 **Issue ref**: `docs/escrow_protocol.md` Q6
 
