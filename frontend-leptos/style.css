@@ -17,19 +17,26 @@
     --accent: #6366f1;
     --accent-hover: #818cf8;
     --success: #22c55e;
+    --success-bright: #4ade80;
     --success-bg: rgba(34, 197, 94, 0.12);
     --success-border: rgba(34, 197, 94, 0.3);
     --warning: #f59e0b;
     --warning-bg: rgba(245, 158, 11, 0.12);
     --warning-border: rgba(245, 158, 11, 0.3);
     --danger: #ef4444;
+    --danger-bright: #f87171;
     --danger-bg: rgba(239, 68, 68, 0.12);
     --danger-border: rgba(239, 68, 68, 0.3);
     --info: #3b82f6;
+    --info-bright: #60a5fa;
     --info-bg: rgba(59, 130, 246, 0.12);
     --info-border: rgba(59, 130, 246, 0.3);
     --success-hover: #16a34a;
+    --success-btn: #15803d;
+    --success-btn-hover: #166534;
     --danger-hover: #dc2626;
+    --danger-btn: #b91c1c;
+    --danger-btn-hover: #991b1b;
     --text-primary-inverse: #1a1a1a;
     --bg-google-hover: #f5f5f5;
     --solana: #9945ff;
@@ -152,7 +159,7 @@ body {
 
 /* ===== Typography ===== */
 h1 {
-    font-size: 1.75rem;
+    font-size: clamp(1.75rem, 5vw, 2.75rem);
     font-weight: 700;
     color: var(--text-heading);
     margin-bottom: 0.5rem;
@@ -361,21 +368,21 @@ h3 {
 }
 
 .btn-success {
-    background: var(--success);
+    background: var(--success-btn);
     color: var(--text-heading);
 }
 
 .btn-success:hover {
-    background: var(--success-hover);
+    background: var(--success-btn-hover);
 }
 
 .btn-danger {
-    background: var(--danger);
+    background: var(--danger-btn);
     color: var(--text-heading);
 }
 
 .btn-danger:hover {
-    background: var(--danger-hover);
+    background: var(--danger-btn-hover);
 }
 
 .btn-outline {
@@ -748,13 +755,13 @@ nav a.active {
 
 .badge-danger {
     background: var(--danger-bg);
-    color: var(--danger);
+    color: var(--danger-bright);
     border: 1px solid var(--danger-border);
 }
 
 .badge-info {
     background: var(--info-bg);
-    color: var(--info);
+    color: var(--info-bright);
     border: 1px solid var(--info-border);
 }
 
@@ -7946,7 +7953,7 @@ nav a.active {
     color: var(--warning-border);
 }
 .btn-confirm-danger {
-    background: var(--danger-hover);
+    background: var(--danger-btn);
     color: white;
     animation: pulse-danger 1s infinite;
 }
