@@ -76,11 +76,10 @@ pub async fn upload_thb_slip_handler(
         .await
         .map_err(AppError::Internal)?;
 
-    // Count existing deposits for this event to determine tier
-    let existing_deposits = event_store::list_deposit_statuses(kv, &event.id)
+    // Atomically increment deposit counter for this event
+    let deposit_order = event_store::increment_deposit_counter(kv, &event.id)
         .await
         .map_err(AppError::Internal)?;
-    let deposit_order = (existing_deposits.len() as u32) + 1;
     let refundable =
         event.max_refundable_deposits == 0 || deposit_order <= event.max_refundable_deposits;
 

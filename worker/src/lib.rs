@@ -62,7 +62,7 @@ async fn fetch(
 ) -> Result<axum::http::Response<axum::body::Body>> {
     console_log::init_with_level(log::Level::Info).ok();
 
-    let state = state::AppState::from_env(&env)?;
+    let state = state::AppState::from_env(&env)?.with_ctx(_ctx);
 
     let mut router = app_router(state);
     Ok(router.call(req).await?)

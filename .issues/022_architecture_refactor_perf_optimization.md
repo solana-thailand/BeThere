@@ -29,9 +29,9 @@ Introduced `EscrowCtx` (shared program IDs + PDA resolution), `acct_sw/acct_w/ac
 
 | # | Finding | File | Est. Savings | Status |
 |---|---------|------|-------------|--------|
-| H1 | Walk-in Sheets sync blocks response — use `wait_until` | `walkin.rs#L236-298` | **500-1500ms** | ⬜ |
+| H1 | Walk-in Sheets sync blocks response — use `wait_until` | `walkin.rs#L236-298` | **500-1500ms** | ✅ |
 | H2 | Claim lookup fetches ALL attendees to find one by token | `claim.rs#L270-290` | **50-2000ms** | ⬜ |
-| H3 | Full KV scan to count deposits (USDC + THB) | `usdc.rs#L134`, `thb.rs#L78` | **100-300ms** | ⬜ |
+| H3 | Full KV scan to count deposits (USDC + THB) | `usdc.rs#L134`, `thb.rs#L78` | **100-300ms** | ✅ |
 | H4 | `my_registrations` N sequential config + attendee loads | `register.rs#L435-520` | **200-1000ms** | ⬜ |
 | H5 | `cancel_status` two sequential KV scans → `join!` | `escrow.rs#L1308-1327` | **50-200ms** | ✅ |
 | H6 | `backfill_wallets` sequential RPC → parallel | `escrow.rs#L528-653` | **~80% time** | ⬜ |
@@ -43,7 +43,7 @@ Introduced `EscrowCtx` (shared program IDs + PDA resolution), `acct_sw/acct_w/ac
 | # | Finding | File | Est. Savings | Status |
 |---|---------|------|-------------|--------|
 | B1 | `list_attendees` no pagination | `attendee.rs#L36-92` | **~80% bytes** | ⬜ |
-| B2 | Sheets API reads `A2:Z` when ~18 cols needed | `sheets/mod.rs#L346` | **~30-40%** | ⬜ |
+| B2 | Sheets API reads `A2:Z` when ~18 cols needed | `sheets/mod.rs#L346` | **~30-40%** | ✅ |
 | B3 | QR response includes all 200+ details | `qr.rs#L194-215` | **20-40KB** | ⬜ |
 | B4 | No `Cache-Control` on public endpoints | `public_event.rs` | **~100% cached** | ✅ |
 | B5 | QR base64 PNG embedded in JSON | `attendee.rs#L125-138` | **2-5KB+CPU** | ⬜ |

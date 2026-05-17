@@ -22,6 +22,100 @@ use crate::state::AppState;
 use super::ext::{EventIdQuery, resolve_event_with_access};
 
 // ---------------------------------------------------------------------------
+// Sheets sync helpers
+// ---------------------------------------------------------------------------
+
+/// Best-effort sync of a single walk-in row to Google Sheets.
+///
+/// Extracted into a standalone async fn so it can be passed to `wait_until()`
+/// without borrowing the handler's stack frame.
+async fn sync_walkin_to_sheet(
+    state: AppState,
+    attendee: WalkinAttendee,
+    event_id: String,
+    sheet_id: String,
+    sheet_name: String,
+) {
+    let kv = match state.events_kv.as_ref() {
+        Some(kv) => kv.clone(),
+        None => {
+            tracing::warn!(event_id = %event_id, "sync: EVENTS KV not available");
+            return;
+        }
+    };
+
+    tracing::info!(
+        event_id = %event_id,
+        sheet_id = %sheet_id,
+        sheet_name = %sheet_name,
+        "walk-in auto-sync: resolved sheet"
+    );
+
+    match crate::sheets::get_column_mapping(&state, &sheet_id, &sheet_name, Some(&kv)).await {
+        Ok(mapping) => {
+            let api_id = Uuid::now_v7().to_string();
+            match crate::sheets::append_walkin_row(
+                &api_id,
+                &attendee.name,
+                &attendee.email,
+                attendee.phone.as_deref(),
+                &attendee.claim_token,
+                &attendee.checked_in_at,
+                &attendee.checked_in_by,
+                attendee.wallet_address.as_deref(),
+                attendee.claimed_at.as_deref(),
+                &mapping,
+                &state,
+                &sheet_id,
+                &sheet_name,
+                Some(&kv),
+            )
+            .await
+            {
+                Ok(()) => {
+                    tracing::info!(
+                        event_id = %event_id,
+                        email = %attendee.email,
+                        "walk-in auto-synced to google sheet"
+                    );
+                    // Mark as synced so walkin_sync_handler skips it
+                    let sync_key = format!("walkin_synced:{}:{}", event_id, attendee.email);
+                    let sync_val = serde_json::to_string(&true).unwrap_or_default();
+                    match kv
+                        .put(&sync_key, &sync_val)
+                        .map(|builder| builder.expiration_ttl(WALKIN_TTL_SECS))
+                    {
+                        Ok(builder) => {
+                            if let Err(e) = builder.execute().await {
+                                tracing::warn!(key = %sync_key, error = ?e, "failed to write sync marker");
+                            }
+                        }
+                        Err(e) => {
+                            tracing::warn!(key = %sync_key, error = ?e, "failed to build sync marker");
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        event_id = %event_id,
+                        email = %attendee.email,
+                        error = %e,
+                        "walk-in auto-sync to google sheet failed, will be retried by /walkin/sync"
+                    );
+                }
+            }
+        }
+        Err(e) => {
+            tracing::warn!(
+                event_id = %event_id,
+                error = %e,
+                "walk-in auto-sync: failed to get column mapping, skipping sheet sync"
+            );
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // TTL constants
 // ---------------------------------------------------------------------------
 
@@ -200,82 +294,32 @@ pub async fn register_walkin(
         "walk-in registered"
     );
 
-    // 8. Auto-sync to Google Sheet (best-effort, non-blocking)
-    let sheet_id = &event.sheet_id;
+    // 8. Auto-sync to Google Sheet (best-effort, detached via wait_until)
+    let sheet_id = event.sheet_id.clone();
     let sheet_name = if event.sheet_name.is_empty() {
-        &state.config.sheets.sheet_name
+        state.config.sheets.sheet_name.clone()
     } else {
-        &event.sheet_name
+        event.sheet_name.clone()
     };
 
-    tracing::info!(
-        event_id = %event.id,
-        sheet_id = %sheet_id,
-        sheet_name = %sheet_name,
-        "walk-in auto-sync: resolved sheet"
-    );
-
-    match crate::sheets::get_column_mapping(&state, sheet_id, sheet_name, Some(kv)).await {
-        Ok(mapping) => {
-            let api_id = Uuid::now_v7().to_string();
-            match crate::sheets::append_walkin_row(
-                &api_id,
-                &attendee.name,
-                &attendee.email,
-                attendee.phone.as_deref(),
-                &attendee.claim_token,
-                &attendee.checked_in_at,
-                &attendee.checked_in_by,
-                attendee.wallet_address.as_deref(),
-                attendee.claimed_at.as_deref(),
-                &mapping,
-                &state,
-                sheet_id,
-                sheet_name,
-                Some(kv),
-            )
-            .await
-            {
-                Ok(()) => {
-                    tracing::info!(
-                        event_id = %event.id,
-                        email = %email_lower,
-                        "walk-in auto-synced to google sheet"
-                    );
-                    // Mark as synced so walkin_sync_handler skips it
-                    let sync_key = format!("walkin_synced:{}:{}", event.id, email_lower);
-                    let sync_val = serde_json::to_string(&true).unwrap_or_default();
-                    match kv
-                        .put(&sync_key, &sync_val)
-                        .map(|builder| builder.expiration_ttl(WALKIN_TTL_SECS))
-                    {
-                        Ok(builder) => {
-                            if let Err(e) = builder.execute().await {
-                                tracing::warn!(key = %sync_key, error = ?e, "failed to write sync marker");
-                            }
-                        }
-                        Err(e) => {
-                            tracing::warn!(key = %sync_key, error = ?e, "failed to build sync marker");
-                        }
-                    }
-                }
-                Err(e) => {
-                    tracing::warn!(
-                        event_id = %event.id,
-                        email = %email_lower,
-                        error = %e,
-                        "walk-in auto-sync to google sheet failed, will be retried by /walkin/sync"
-                    );
-                }
-            }
-        }
-        Err(e) => {
-            tracing::warn!(
-                event_id = %event.id,
-                error = %e,
-                "walk-in auto-sync: failed to get column mapping, skipping sheet sync"
-            );
-        }
+    // Detach the sheets sync — response returns immediately.
+    // The sync future owns its data (no borrows on the handler's stack).
+    if let Some(ctx) = &state.worker_ctx {
+        let sync_state = state.clone();
+        let sync_attendee = attendee.clone();
+        let sync_event_id = event.id.clone();
+        ctx.wait_until(sync_walkin_to_sheet(
+            sync_state,
+            sync_attendee,
+            sync_event_id,
+            sheet_id,
+            sheet_name,
+        ));
+    } else {
+        tracing::warn!(
+            event_id = %event.id,
+            "no worker_ctx available — skipping detached sheets sync"
+        );
     }
 
     // Audit log

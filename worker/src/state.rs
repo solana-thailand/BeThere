@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use worker::{Env, KvStore};
+use worker::{Context, Env, KvStore};
 
 use event_checkin_domain::config::{
     AppConfig, EventDefaults, GoogleOAuthConfig, GoogleServiceAccountConfig, NftConfig,
@@ -23,6 +23,10 @@ pub struct AppState {
     /// Shared secret for validating webhook `Authorization: Bearer <token>` header.
     /// If empty, webhook auth validation is skipped (backward compatible).
     pub webhook_secret: String,
+    /// Workers fetch-event context — used for `wait_until()` to detach background
+    /// tasks (e.g. Google Sheets sync) so the HTTP response returns immediately.
+    /// `None` outside the fetch lifecycle (tests, scheduled events).
+    pub worker_ctx: Option<Arc<Context>>,
 }
 
 impl AppState {
@@ -164,7 +168,14 @@ impl AppState {
             quiz_kv,
             events_kv,
             webhook_secret,
+            worker_ctx: None,
         })
+    }
+
+    /// Attach the Workers fetch-event context so handlers can call `wait_until()`.
+    pub fn with_ctx(mut self, ctx: Context) -> Self {
+        self.worker_ctx = Some(Arc::new(ctx));
+        self
     }
 
     /// Check if a given email is in the staff emails allowlist.

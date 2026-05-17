@@ -348,7 +348,8 @@ pub async fn get_attendees(
     // Resolve column mapping from headers
     let mapping = get_column_mapping(state, sheet_id, sheet_name, kv).await?;
 
-    let range = format!("{sheet_name}!A2:Z");
+    let last_col = mapping.last_column_letter();
+    let range = format!("{sheet_name}!A2:{last_col}");
     let url = format!(
         "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{}",
         urlencoding::encode(&range)

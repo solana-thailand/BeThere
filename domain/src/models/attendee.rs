@@ -382,6 +382,17 @@ impl ColumnMapping {
     pub fn is_valid(&self) -> bool {
         self.get(ColumnKey::ApiId).is_some() && self.get(ColumnKey::Email).is_some()
     }
+
+    /// Returns the spreadsheet column letter for the last mapped column.
+    ///
+    /// Uses `total_columns` (the header row width) so the Sheets API range
+    /// covers only the columns we actually need, reducing response payload.
+    pub fn last_column_letter(&self) -> String {
+        if self.total_columns == 0 {
+            return "Z".to_string();
+        }
+        index_to_column_letter(self.total_columns - 1)
+    }
 }
 
 /// Normalize a header string for comparison: lowercase, trim, replace `-`/` ` with `_`.
@@ -841,6 +852,34 @@ mod tests {
         assert_eq!(mapping.column_letter(ColumnKey::CheckedInAt), "R");
         assert_eq!(mapping.column_letter(ColumnKey::SolanaAddress), "T");
         assert_eq!(mapping.column_letter(ColumnKey::ClaimToken), "V");
+    }
+
+    #[test]
+    fn test_last_column_letter_hardcoded() {
+        let mapping = ColumnMapping::hardcoded();
+        // 28 columns → last index 27 → "AB"
+        assert_eq!(mapping.last_column_letter(), "AB");
+    }
+
+    #[test]
+    fn test_last_column_letter_from_headers() {
+        let headers: Vec<String> = vec![
+            "API ID".into(),
+            "Name".into(),
+            "Email".into(),
+            "Approval Status".into(),
+            "Participation Type".into(),
+        ];
+        let mapping = ColumnMapping::from_headers(&headers);
+        // 5 columns → last index 4 → "E"
+        assert_eq!(mapping.last_column_letter(), "E");
+    }
+
+    #[test]
+    fn test_last_column_letter_empty() {
+        let mapping = ColumnMapping::from_headers(&[]);
+        // 0 columns → fallback "Z"
+        assert_eq!(mapping.last_column_letter(), "Z");
     }
 
     #[test]

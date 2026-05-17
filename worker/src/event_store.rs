@@ -1067,6 +1067,40 @@ pub async fn list_deposit_statuses(
     Ok(deposits)
 }
 
+/// KV key for the deposit counter for an event.
+/// Value is a u32 counter (stored as decimal string).
+fn deposit_counter_key(event_id: &str) -> String {
+    format!("event:{event_id}:deposit:counter")
+}
+
+/// Atomically increment and return the new deposit counter value.
+/// If the counter doesn't exist yet, creates it starting at 1.
+pub async fn increment_deposit_counter(kv: &KvStore, event_id: &str) -> Result<u32, String> {
+    let key = deposit_counter_key(event_id);
+    let raw: Option<String> = kv
+        .get(&key)
+        .text()
+        .await
+        .map_err(|e| format!("failed to read deposit counter: {e:?}"))?;
+
+    let current: u32 = match raw {
+        None => 0,
+        Some(s) => s
+            .parse::<u32>()
+            .map_err(|e| format!("failed to parse deposit counter '{s}': {e}"))?,
+    };
+
+    let next = current + 1;
+    let val = next.to_string();
+    kv.put(&key, &val)
+        .map_err(|e| format!("failed to build deposit counter put: {e:?}"))?
+        .execute()
+        .await
+        .map_err(|e| format!("failed to write deposit counter: {e:?}"))?;
+
+    Ok(next)
+}
+
 /// Get THB deposit record for an attendee.
 pub async fn get_thb_deposit(
     kv: &KvStore,
