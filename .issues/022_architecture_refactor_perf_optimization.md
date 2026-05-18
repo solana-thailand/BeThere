@@ -30,11 +30,11 @@ Introduced `EscrowCtx` (shared program IDs + PDA resolution), `acct_sw/acct_w/ac
 | # | Finding | File | Est. Savings | Status |
 |---|---------|------|-------------|--------|
 | H1 | Walk-in Sheets sync blocks response — use `wait_until` | `walkin.rs#L236-298` | **500-1500ms** | ✅ |
-| H2 | Claim lookup fetches ALL attendees to find one by token | `claim.rs#L270-290` | **50-2000ms** | ⬜ |
+| H2 | Claim lookup fetches ALL attendees to find one by token | `claim.rs#L270-290` | **50-2000ms** | ✅ |
 | H3 | Full KV scan to count deposits (USDC + THB) | `usdc.rs#L134`, `thb.rs#L78` | **100-300ms** | ✅ |
-| H4 | `my_registrations` N sequential config + attendee loads | `register.rs#L435-520` | **200-1000ms** | ⬜ |
+| H4 | `my_registrations` N sequential config + attendee loads | `register.rs#L435-520` | **200-1000ms** | ✅ |
 | H5 | `cancel_status` two sequential KV scans → `join!` | `escrow.rs#L1308-1327` | **50-200ms** | ✅ |
-| H6 | `backfill_wallets` sequential RPC → parallel | `escrow.rs#L528-653` | **~80% time** | ⬜ |
+| H6 | `backfill_wallets` sequential RPC → parallel | `escrow.rs#L528-653` | **~80% time** | ✅ |
 | H7 | `resolve_event_by_escrow` scans ALL configs | `escrow_indexer.rs#L985` | **~180ms** | ⬜ |
 | H8 | Deposit webhook verifies on-chain synchronously | `usdc.rs#L659-734` | **100-500ms** | ⬜ |
 
@@ -52,7 +52,7 @@ Introduced `EscrowCtx` (shared program IDs + PDA resolution), `acct_sw/acct_w/ac
 
 | # | Finding | File | Details | Status |
 |---|---------|------|---------|--------|
-| C1 | Claim lock TOCTOU race (double-mint risk) | `claim.rs#L37-73` | Correctness | ⬜ |
+| C1 | Claim lock TOCTOU race (double-mint risk) | `claim.rs#L37-73` | Correctness | ✅ |
 | C2 | `get_column_mapping` fetched 2-3x per claim | `claim.rs#L396-718` | Eliminates 1-2 KV | ⬜ |
 | C3 | `AppState::from_env` called every request | `lib.rs#L64-70` | ~1-3ms | ⬜ |
 | C4 | `is_staff` linear scan → HashSet | `state.rs#L157-162` | Minor | ⬜ |

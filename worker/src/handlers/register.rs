@@ -9,6 +9,7 @@ use axum::{
     Extension, Json,
     extract::{Path, State},
 };
+use futures::future::join_all;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -425,97 +426,109 @@ pub async fn my_registrations(
     let kv = state
         .events_kv
         .as_ref()
-        .ok_or_else(|| AppError::Internal("EVENTS KV not configured".to_string()))?;
+        .ok_or_else(|| AppError::Internal("EVENTS KV not configured".to_string()))?
+        .clone();
 
-    let index = crate::event_store::get_event_index(kv)
+    let index = crate::event_store::get_event_index(&kv)
         .await
         .map_err(AppError::Internal)?;
 
-    let mut results: Vec<MyRegistrationsItem> = Vec::new();
+    // Process events concurrently (config + attendee loads are independent per-event)
+    let event_futures: Vec<_> = index
+        .events
+        .iter()
+        .filter(|e| !matches!(e.status, EventStatus::Completed | EventStatus::Archived))
+        .map(|event_entry| {
+            let state = state.clone();
+            let kv = kv.clone();
+            let email = claims.email.clone();
+            let event_entry = event_entry.clone();
+            async move {
+                // Load event config
+                let config = match crate::event_store::get_event_config(&kv, &event_entry.id).await
+                {
+                    Ok(Some(c)) => c,
+                    _ => return None,
+                };
 
-    for event_entry in &index.events {
-        // Skip completed/archived events
-        if matches!(
-            event_entry.status,
-            EventStatus::Completed | EventStatus::Archived
-        ) {
-            continue;
-        }
-
-        // Load event config to get sheet info
-        let config = match crate::event_store::get_event_config(kv, &event_entry.id).await {
-            Ok(Some(c)) => c,
-            _ => continue,
-        };
-
-        // Fetch attendees for this event (KV-cached)
-        let attendees =
-            match sheets::get_attendees(&state, &config.sheet_id, &config.sheet_name, Some(kv))
+                // Fetch attendees (KV-cached)
+                let attendees = match crate::sheets::get_attendees(
+                    &state,
+                    &config.sheet_id,
+                    &config.sheet_name,
+                    Some(&kv),
+                )
                 .await
-            {
-                Ok(a) => a,
-                Err(e) => {
-                    tracing::warn!(
-                        event_id = %event_entry.id,
-                        error = %e,
-                        "my-registrations: failed to fetch attendees, skipping"
-                    );
-                    continue;
-                }
-            };
+                {
+                    Ok(a) => a,
+                    Err(e) => {
+                        tracing::warn!(
+                            event_id = %event_entry.id,
+                            error = %e,
+                            "my-registrations: failed to fetch attendees, skipping"
+                        );
+                        return None;
+                    }
+                };
 
-        // Find attendee matching JWT email
-        if let Some(attendee) = attendees
-            .iter()
-            .find(|a| a.email.eq_ignore_ascii_case(&claims.email))
-        {
-            let claim_token = attendee.claim_token.clone().unwrap_or_default();
-            let next_step = build_next_step(
-                &config.event_format,
-                &event_entry.id,
-                &attendee.api_id,
-                &claim_token,
-                &state,
-            );
+                // Find attendee matching JWT email
+                let attendee = attendees
+                    .iter()
+                    .find(|a| a.email.eq_ignore_ascii_case(&email))?;
 
-            // Derive human-readable status from attendee fields
-            let status = if attendee.claimed_at.as_ref().is_some_and(|s| !s.is_empty()) {
-                "nft claimed".to_string()
-            } else if attendee
-                .checked_in_at
-                .as_ref()
-                .is_some_and(|s| !s.is_empty())
-            {
-                "checked in".to_string()
-            } else if attendee
-                .deposit_verified
-                .as_ref()
-                .is_some_and(|s| !s.is_empty())
-            {
-                "deposit confirmed".to_string()
-            } else if attendee
-                .deposit_method
-                .as_ref()
-                .is_some_and(|s| !s.is_empty())
-            {
-                "deposit pending".to_string()
-            } else {
-                "registered".to_string()
-            };
+                let claim_token = attendee.claim_token.clone().unwrap_or_default();
+                let next_step = build_next_step(
+                    &config.event_format,
+                    &event_entry.id,
+                    &attendee.api_id,
+                    &claim_token,
+                    &state,
+                );
 
-            results.push(MyRegistrationsItem {
-                event_id: event_entry.id.clone(),
-                event_name: event_entry.name.clone(),
-                event_slug: event_entry.slug.clone(),
-                event_start_ms: event_entry.event_start_ms,
-                attendee_id: attendee.api_id.clone(),
-                name: attendee.name.clone(),
-                participation_type: attendee.participation_type.clone(),
-                status,
-                next_step,
-            });
-        }
-    }
+                let status = if attendee.claimed_at.as_ref().is_some_and(|s| !s.is_empty()) {
+                    "nft claimed".to_string()
+                } else if attendee
+                    .checked_in_at
+                    .as_ref()
+                    .is_some_and(|s| !s.is_empty())
+                {
+                    "checked in".to_string()
+                } else if attendee
+                    .deposit_verified
+                    .as_ref()
+                    .is_some_and(|s| !s.is_empty())
+                {
+                    "deposit confirmed".to_string()
+                } else if attendee
+                    .deposit_method
+                    .as_ref()
+                    .is_some_and(|s| !s.is_empty())
+                {
+                    "deposit pending".to_string()
+                } else {
+                    "registered".to_string()
+                };
+
+                Some(MyRegistrationsItem {
+                    event_id: event_entry.id.clone(),
+                    event_name: event_entry.name.clone(),
+                    event_slug: event_entry.slug.clone(),
+                    event_start_ms: event_entry.event_start_ms,
+                    attendee_id: attendee.api_id.clone(),
+                    name: attendee.name.clone(),
+                    participation_type: attendee.participation_type.clone(),
+                    status,
+                    next_step,
+                })
+            }
+        })
+        .collect();
+
+    let results: Vec<MyRegistrationsItem> = join_all(event_futures)
+        .await
+        .into_iter()
+        .flatten()
+        .collect();
 
     tracing::info!(
         email = %claims.email,

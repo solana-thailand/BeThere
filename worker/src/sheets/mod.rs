@@ -45,6 +45,9 @@ const COLUMN_MAP_CACHE_KEY_PREFIX: &str = "cache:column_map";
 /// TTL for the cached column mapping (1 hour — headers rarely change).
 const COLUMN_MAP_CACHE_TTL_SECS: u64 = 3600;
 
+/// KV key prefix for caching the claim_token → Attendee map (optimized for claim lookups).
+const CLAIM_MAP_CACHE_KEY_PREFIX: &str = "cache:claim_map";
+
 // ---------------------------------------------------------------------------
 // Cache helpers
 // ---------------------------------------------------------------------------
@@ -54,7 +57,12 @@ fn attendee_cache_key(sheet_id: &str, sheet_name: &str) -> String {
     format!("{ATTENDEE_CACHE_KEY_PREFIX}:{sheet_id}:{sheet_name}")
 }
 
-/// Invalidate the attendee cache for the given sheet after a mutation.
+/// Build the KV cache key for the claim_token → Attendee map.
+fn claim_map_cache_key(sheet_id: &str, sheet_name: &str) -> String {
+    format!("{CLAIM_MAP_CACHE_KEY_PREFIX}:{sheet_id}:{sheet_name}")
+}
+
+/// Invalidate the attendee cache **and** the claim map cache for the given sheet.
 /// Errors are non-fatal — logged and ignored.
 pub(super) async fn invalidate_attendee_cache(
     kv: Option<&KvStore>,
@@ -65,6 +73,10 @@ pub(super) async fn invalidate_attendee_cache(
         let key = attendee_cache_key(sheet_id, sheet_name);
         if let Err(e) = kv.delete(&key).await {
             tracing::debug!(error = ?e, "failed to invalidate attendee cache");
+        }
+        let claim_key = claim_map_cache_key(sheet_id, sheet_name);
+        if let Err(e) = kv.delete(&claim_key).await {
+            tracing::debug!(error = ?e, "failed to invalidate claim map cache");
         }
     }
 }
@@ -432,20 +444,65 @@ pub async fn get_attendees_map(
         .collect())
 }
 
-/// Build a HashMap of attendees keyed by `claim_token`.
-/// Only attendees with `Some(token)` are included.
-/// Internally calls `get_attendees()` so KV caching is preserved.
-async fn get_attendees_by_claim_map(
+/// Get the claim_token → Attendee map, with its own dedicated KV cache.
+///
+/// This avoids deserializing the full attendee list and building the HashMap
+/// on every claim-path lookup. The map is cached with the same TTL as the
+/// attendee list cache and is co-invalidated on mutations.
+pub async fn get_claim_map_cached(
     state: &AppState,
     sheet_id: &str,
     sheet_name: &str,
     kv: Option<&KvStore>,
 ) -> Result<HashMap<String, Attendee>, String> {
+    let key = claim_map_cache_key(sheet_id, sheet_name);
+
+    // Try KV cache first
+    if let Some(kv) = kv {
+        match kv.get(&key).text().await {
+            Ok(Some(cached)) => {
+                if let Ok(map) = serde_json::from_str::<HashMap<String, Attendee>>(&cached) {
+                    tracing::debug!(count = map.len(), "claim map cache hit");
+                    return Ok(map);
+                }
+            }
+            Ok(None) => {
+                tracing::debug!("claim map cache miss");
+            }
+            Err(e) => {
+                tracing::debug!(error = ?e, "claim map cache read error");
+            }
+        }
+    }
+
+    // Cache miss — build from full attendee list (which itself is KV-cached)
     let attendees: Vec<Attendee> = get_attendees(state, sheet_id, sheet_name, kv).await?;
-    Ok(attendees
+    let map: HashMap<String, Attendee> = attendees
         .into_iter()
         .filter_map(|a| a.claim_token.clone().map(|token| (token, a)))
-        .collect())
+        .collect();
+
+    // Cache the built map for future lookups
+    if let Some(kv) = kv
+        && let Ok(json) = serde_json::to_string(&map)
+    {
+        match kv.put(&key, &json) {
+            Ok(builder) => {
+                if let Err(e) = builder
+                    .expiration_ttl(ATTENDEE_CACHE_TTL_SECS)
+                    .execute()
+                    .await
+                {
+                    tracing::debug!(error = ?e, "failed to cache claim map");
+                }
+            }
+            Err(e) => {
+                tracing::debug!(error = ?e, "failed to build claim map KV put");
+            }
+        }
+    }
+
+    Ok(map)
 }
 
 /// Get a single attendee by their api_id — O(1) via HashMap lookup.
@@ -460,7 +517,10 @@ pub async fn get_attendee_by_id(
     Ok(map.get(api_id).cloned())
 }
 
-/// Find an attendee by their claim token (column L) — O(1) via HashMap lookup.
+/// Find an attendee by their claim token (column L) — O(1) via cached HashMap lookup.
+///
+/// Uses a dedicated KV-cached claim map so that the hot claim path avoids
+/// deserializing the full attendee list on every call.
 /// Returns `None` if no attendee has the given token.
 pub async fn get_attendee_by_claim_token(
     claim_token: &str,
@@ -469,7 +529,7 @@ pub async fn get_attendee_by_claim_token(
     sheet_name: &str,
     kv: Option<&KvStore>,
 ) -> Result<Option<Attendee>, String> {
-    let map = get_attendees_by_claim_map(state, sheet_id, sheet_name, kv).await?;
+    let map = get_claim_map_cached(state, sheet_id, sheet_name, kv).await?;
     Ok(map.get(claim_token).cloned())
 }
 

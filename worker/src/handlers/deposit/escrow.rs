@@ -3,8 +3,9 @@ use axum::{
     extract::{Query, State},
 };
 use event_checkin_domain::models::auth::Claims;
-use event_checkin_domain::models::deposit::DepositMethod;
+use event_checkin_domain::models::deposit::{DepositMethod, DepositStatus};
 use event_checkin_domain::models::error::AppError;
+use futures::stream::{self, StreamExt};
 
 use crate::error::{ApiOk, WorkerError};
 use crate::event_store;
@@ -506,7 +507,8 @@ pub async fn backfill_wallets_handler(
     let kv = state
         .events_kv
         .as_ref()
-        .ok_or_else(|| AppError::Internal("EVENTS KV not configured".to_string()))?;
+        .ok_or_else(|| AppError::Internal("EVENTS KV not configured".to_string()))?
+        .clone();
 
     let rpc_url = state.config.solana.full_rpc_url();
 
@@ -514,61 +516,94 @@ pub async fn backfill_wallets_handler(
     let event_ids: Vec<String> = match &body.event_id {
         Some(id) => vec![id.clone()],
         None => {
-            let index = event_store::get_event_index(kv)
+            let index = event_store::get_event_index(&kv)
                 .await
                 .map_err(AppError::Internal)?;
             index.events.into_iter().map(|e| e.id).collect()
         }
     };
 
+    // Phase 1: Collect all deposits that need wallet resolution (fast — KV reads)
+    let mut to_resolve: Vec<(String, DepositStatus)> = Vec::new(); // (event_id, deposit)
     let mut scanned = 0usize;
-    let mut missing_wallet = 0usize;
-    let mut backfilled = 0usize;
-    let mut failed = 0usize;
     let mut already_present = 0usize;
-    let mut details = Vec::new();
+    let mut skipped_details = Vec::new();
 
     for event_id in &event_ids {
-        let deposits = event_store::list_deposit_statuses(kv, event_id)
+        let deposits = event_store::list_deposit_statuses(&kv, event_id)
             .await
             .map_err(AppError::Internal)?;
 
-        for mut deposit in deposits {
+        for deposit in deposits {
             scanned += 1;
 
-            // Already has wallet — skip
             if deposit.wallet_address.is_some() {
                 already_present += 1;
                 continue;
             }
 
-            missing_wallet += 1;
-
             // Only USDC deposits with tx_signature can be backfilled
-            let Some(tx_sig) = &deposit.tx_signature else {
-                details.push(BackfillDetail {
+            if deposit.tx_signature.is_none() {
+                skipped_details.push(BackfillDetail {
                     attendee_id: deposit.attendee_id.clone(),
                     result: "skipped".to_string(),
                     wallet_address: None,
                     error: Some("no tx_signature — cannot resolve wallet".to_string()),
                 });
-                failed += 1;
                 continue;
-            };
+            }
 
-            // Resolve wallet from on-chain TX
-            match resolve_wallet_from_tx(&rpc_url, tx_sig).await {
-                Ok(wallet) => {
-                    tracing::info!(
+            to_resolve.push((event_id.clone(), deposit));
+        }
+    }
+
+    let missing_wallet = to_resolve.len();
+
+    // Phase 2: Resolve wallets concurrently (bounded to 5 parallel RPC calls)
+    let resolve_futures = to_resolve.into_iter().map(|(event_id, deposit)| {
+        let rpc_url = rpc_url.clone();
+        async move {
+            let tx_sig = deposit.tx_signature.as_deref().unwrap();
+            let result = resolve_wallet_from_tx(&rpc_url, tx_sig).await;
+            (event_id, deposit, result)
+        }
+    });
+
+    let resolved: Vec<(String, DepositStatus, Result<String, String>)> =
+        stream::iter(resolve_futures)
+            .buffer_unordered(5)
+            .collect()
+            .await;
+
+    // Phase 3: Process results — save backfilled wallets
+    let mut backfilled = 0usize;
+    let mut failed = 0usize;
+    let mut details: Vec<BackfillDetail> = skipped_details;
+
+    for (event_id, mut deposit, result) in resolved {
+        match result {
+            Ok(wallet) => {
+                tracing::info!(
+                    attendee_id = %deposit.attendee_id,
+                    event_id = %event_id,
+                    wallet = %wallet,
+                    "Backfilled wallet_address"
+                );
+                deposit.wallet_address = Some(wallet.clone());
+                if let Err(e) = event_store::save_deposit_status(&kv, &deposit).await {
+                    tracing::warn!(
                         attendee_id = %deposit.attendee_id,
-                        event_id = %event_id,
-                        wallet = %wallet,
-                        "Backfilled wallet_address"
+                        error = %e,
+                        "Failed to save backfilled wallet"
                     );
-                    deposit.wallet_address = Some(wallet.clone());
-                    event_store::save_deposit_status(kv, &deposit)
-                        .await
-                        .map_err(AppError::Internal)?;
+                    failed += 1;
+                    details.push(BackfillDetail {
+                        attendee_id: deposit.attendee_id.clone(),
+                        result: "save_failed".to_string(),
+                        wallet_address: Some(wallet),
+                        error: Some(e),
+                    });
+                } else {
                     backfilled += 1;
                     details.push(BackfillDetail {
                         attendee_id: deposit.attendee_id.clone(),
@@ -577,21 +612,21 @@ pub async fn backfill_wallets_handler(
                         error: None,
                     });
                 }
-                Err(e) => {
-                    tracing::warn!(
-                        attendee_id = %deposit.attendee_id,
-                        tx_signature = %tx_sig,
-                        error = %e,
-                        "Failed to resolve wallet from TX"
-                    );
-                    failed += 1;
-                    details.push(BackfillDetail {
-                        attendee_id: deposit.attendee_id.clone(),
-                        result: "failed".to_string(),
-                        wallet_address: None,
-                        error: Some(e),
-                    });
-                }
+            }
+            Err(e) => {
+                tracing::warn!(
+                    attendee_id = %deposit.attendee_id,
+                    tx_signature = ?deposit.tx_signature,
+                    error = %e,
+                    "Failed to resolve wallet from TX"
+                );
+                failed += 1;
+                details.push(BackfillDetail {
+                    attendee_id: deposit.attendee_id.clone(),
+                    result: "failed".to_string(),
+                    wallet_address: None,
+                    error: Some(e),
+                });
             }
         }
     }

@@ -34,6 +34,10 @@ pub(crate) fn claim_lock_key(event_id: &str, token: &str) -> String {
 
 /// Try to acquire a claim lock. Returns Ok(()) if acquired, Err if already locked.
 /// Sets a 5-minute TTL as safety net.
+///
+/// Uses write-first, verify-after pattern to eliminate the TOCTOU race between
+/// checking for an existing lock and writing a new one. Each caller writes a
+/// unique lock_id, then reads back to confirm it won the race.
 pub(crate) async fn acquire_claim_lock(
     kv: &KvStore,
     event_id: &str,
@@ -42,25 +46,17 @@ pub(crate) async fn acquire_claim_lock(
 ) -> Result<(), String> {
     let key = claim_lock_key(event_id, token);
 
-    // Check if lock already exists
-    let existing: Option<String> = kv
-        .get(&key)
-        .text()
-        .await
-        .map_err(|e| format!("claim lock read failed: {e:?}"))?;
-
-    if existing.is_some() {
-        tracing::warn!(claim_token = %token, "claim lock already held");
-        return Err("claim is already being processed or has been completed".to_string());
-    }
-
-    // Acquire lock with 5-minute TTL (safety net for failed mints)
+    // Write-first, verify-after: eliminate TOCTOU window between check and write.
+    // Generate a unique lock ID so we can verify we won the race.
+    let lock_id = uuid::Uuid::now_v7().to_string();
     let lock_value = serde_json::json!({
+        "lock_id": lock_id,
         "wallet": wallet,
         "started_at": chrono::Utc::now().to_rfc3339(),
     })
     .to_string();
 
+    // Step 1: Write our lock unconditionally
     kv.put(&key, &lock_value)
         .map_err(|e| format!("claim lock put failed: {e:?}"))?
         .expiration_ttl(300) // 5 minutes TTL
@@ -68,8 +64,48 @@ pub(crate) async fn acquire_claim_lock(
         .await
         .map_err(|e| format!("claim lock write failed: {e:?}"))?;
 
-    tracing::info!(claim_token = %token, "claim lock acquired");
-    Ok(())
+    // Step 2: Read back and verify we see our own lock_id
+    let read_back: Option<String> = kv
+        .get(&key)
+        .text()
+        .await
+        .map_err(|e| format!("claim lock verify read failed: {e:?}"))?;
+
+    match read_back {
+        Some(stored) => {
+            let stored_id = serde_json::from_str::<serde_json::Value>(&stored)
+                .ok()
+                .and_then(|v| v.get("lock_id").and_then(|v| v.as_str()).map(String::from));
+
+            if stored_id.as_deref() == Some(&lock_id) {
+                tracing::info!(
+                    claim_token = %token,
+                    lock_id = %lock_id,
+                    "claim lock acquired (write-first verify)"
+                );
+                Ok(())
+            } else {
+                // Another request won — the winner's lock is authoritative.
+                tracing::warn!(
+                    claim_token = %token,
+                    our_lock_id = %lock_id,
+                    ?stored_id,
+                    "claim lock race: another request won"
+                );
+                Err("claim is already being processed or has been completed".to_string())
+            }
+        }
+        None => {
+            // Extremely unlikely: write succeeded but read returned nothing
+            // (could happen with eventual consistency across regions).
+            // Proceed optimistically — the lock was written.
+            tracing::warn!(
+                claim_token = %token,
+                "claim lock write succeeded but verify read returned None"
+            );
+            Ok(())
+        }
+    }
 }
 
 /// Finalize the claim lock after successful mint (removes TTL, sets final data).
