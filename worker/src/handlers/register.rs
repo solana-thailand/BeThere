@@ -190,12 +190,22 @@ pub async fn register_attendee(
     if let Some(existing) = attendees.iter().find(|a| a.email.to_lowercase() == email) {
         tracing::info!(%email, %slug, "registration duplicate — returning existing attendee");
         let claim_token = existing.claim_token.clone().unwrap_or_default();
+        // Fetch deposit status if KV is available
+        let deposit = if let Some(ref kv) = state.events_kv {
+            crate::event_store::get_deposit_status(kv, &event_id, &existing.api_id)
+                .await
+                .ok()
+                .flatten()
+        } else {
+            None
+        };
         let next_step = build_next_step(
             &config.event_format,
             &event_id,
             &existing.api_id,
             &claim_token,
             &state,
+            deposit.as_ref(),
         );
         return Ok(ApiOk::new(RegisterResponse {
             attendee_id: existing.api_id.clone(),
@@ -263,6 +273,7 @@ pub async fn register_attendee(
         &api_id,
         &claim_token,
         &state,
+        None,
     );
 
     tracing::info!(
@@ -338,12 +349,22 @@ pub async fn my_registration(
         })?;
 
     let claim_token = attendee.claim_token.clone().unwrap_or_default();
+    // Fetch deposit status
+    let deposit = if let Some(ref kv) = state.events_kv {
+        crate::event_store::get_deposit_status(kv, &event_entry.id, &attendee.api_id)
+            .await
+            .ok()
+            .flatten()
+    } else {
+        None
+    };
     let next_step = build_next_step(
         &config.event_format,
         &event_entry.id,
         &attendee.api_id,
         &claim_token,
         &state,
+        deposit.as_ref(),
     );
 
     tracing::info!(
@@ -477,12 +498,19 @@ pub async fn my_registrations(
                     .find(|a| a.email.eq_ignore_ascii_case(&email))?;
 
                 let claim_token = attendee.claim_token.clone().unwrap_or_default();
+                // Fetch deposit status for this attendee
+                let deposit =
+                    crate::event_store::get_deposit_status(&kv, &event_entry.id, &attendee.api_id)
+                        .await
+                        .ok()
+                        .flatten();
                 let next_step = build_next_step(
                     &config.event_format,
                     &event_entry.id,
                     &attendee.api_id,
                     &claim_token,
                     &state,
+                    deposit.as_ref(),
                 );
 
                 let status = if attendee.claimed_at.as_ref().is_some_and(|s| !s.is_empty()) {
@@ -539,20 +567,40 @@ pub async fn my_registrations(
     Ok(ApiOk::new(results))
 }
 
-/// Build the next_step response based on event format.
+/// Build the next_step response based on event format and deposit status.
+///
+/// Logic:
+/// - Online-only events → quest/claim page
+/// - In-person/hybrid events:
+///   - No deposit yet → deposit page
+///   - THB deposit pending verification → ticket page (info view, no QR)
+///   - Deposit verified (USDC or THB) → ticket page
 fn build_next_step(
     format: &EventFormat,
     event_id: &str,
     api_id: &str,
     claim_token: &str,
     state: &AppState,
+    deposit: Option<&event_checkin_domain::models::deposit::DepositStatus>,
 ) -> NextStep {
     let claim_base = &state.config.server.claim_base_url;
 
     if format.has_in_person() {
-        NextStep {
-            step_type: "deposit".to_string(),
-            url: format!("/deposit/{api_id}?event_id={event_id}"),
+        match deposit {
+            Some(_) => {
+                // Deposit exists (verified or pending) — show ticket page
+                NextStep {
+                    step_type: "ticket".to_string(),
+                    url: format!("/ticket/{api_id}?event_id={event_id}"),
+                }
+            }
+            None => {
+                // No deposit yet — go to deposit page
+                NextStep {
+                    step_type: "deposit".to_string(),
+                    url: format!("/deposit/{api_id}?event_id={event_id}"),
+                }
+            }
         }
     } else {
         NextStep {

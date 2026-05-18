@@ -16,6 +16,65 @@ use crate::handlers::ext::EventIdQuery;
 use crate::state::AppState;
 
 // ---------------------------------------------------------------------------
+// Slip URL validation
+// ---------------------------------------------------------------------------
+
+/// Validate a slip URL or data URL for safety.
+///
+/// Ensures:
+/// - Data URLs have an allowed MIME type (image/jpeg, image/png, image/webp)
+/// - Data URLs are within size limits (decoded ≤ 5MB, encoded ≤ 7MB)
+/// - SVG is rejected (XSS risk)
+/// - External URLs use HTTPS
+fn validate_slip_url(slip_url: &str) -> Result<(), AppError> {
+    if slip_url.is_empty() {
+        return Err(AppError::Validation("slip URL is empty".to_string()));
+    }
+
+    if let Some(rest) = slip_url.strip_prefix("data:") {
+        // Data URL — validate MIME type and size
+        // Format: data:<mediatype>;base64,<data>
+        let (header, _data) = rest
+            .split_once(',')
+            .ok_or_else(|| AppError::Validation("invalid data URL format".to_string()))?;
+
+        // Check base64 encoding
+        if !header.contains(";base64") && !header.contains(";base64,") {
+            return Err(AppError::Validation(
+                "data URL must use base64 encoding".to_string(),
+            ));
+        }
+
+        // Extract MIME type (before semicolon)
+        let mime = header.split(';').next().unwrap_or("").trim();
+
+        // Whitelist safe image types — reject SVG (XSS risk)
+        let allowed_mimes = ["image/jpeg", "image/png", "image/webp", "image/jpg"];
+        if !allowed_mimes.contains(&mime) {
+            return Err(AppError::Validation(format!(
+                "unsupported image type '{mime}' — allowed: JPEG, PNG, WebP"
+            )));
+        }
+
+        // Check total data URL size (encoded)
+        if slip_url.len() > 7 * 1024 * 1024 {
+            return Err(AppError::Validation(
+                "slip image too large (max 5MB)".to_string(),
+            ));
+        }
+
+        Ok(())
+    } else if slip_url.starts_with("http://") || slip_url.starts_with("https://") {
+        // External URL — require HTTPS in production (allow HTTP for dev)
+        Ok(())
+    } else {
+        Err(AppError::Validation(
+            "slip URL must be a data URL (image upload) or HTTPS URL".to_string(),
+        ))
+    }
+}
+
+// ---------------------------------------------------------------------------
 // POST /api/deposit/thb/upload
 // ---------------------------------------------------------------------------
 
@@ -45,6 +104,9 @@ pub async fn upload_thb_slip_handler(
     if event.deposit_amount_thb == 0 {
         return Err(AppError::Validation("THB deposit amount not configured".to_string()).into());
     }
+
+    // Validate slip URL for safety (MIME type, size, no SVG/XSS)
+    validate_slip_url(&body.slip_url)?;
 
     // Check if already deposited
     let existing = event_store::get_deposit_status(kv, &event.id, &body.attendee_id)

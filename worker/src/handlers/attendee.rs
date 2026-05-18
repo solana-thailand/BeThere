@@ -197,6 +197,27 @@ pub async fn get_public_ticket(
         None => None,
     };
 
+    // Fetch deposit status for context (pending verification, etc.)
+    let deposit_status = if let Some(kv) = kv {
+        crate::event_store::get_deposit_status(kv, &event.id, &attendee.api_id)
+            .await
+            .ok()
+            .flatten()
+    } else {
+        None
+    };
+
+    let deposit_info = deposit_status.as_ref().map(|d| {
+        serde_json::json!({
+            "method": match d.method {
+                event_checkin_domain::models::deposit::DepositMethod::Usdc => "usdc",
+                event_checkin_domain::models::deposit::DepositMethod::Thb => "thb",
+            },
+            "verified": d.verified,
+            "currency": d.currency,
+        })
+    });
+
     let data = json!({
         "attendee": response,
         "qr_image": qr_image,
@@ -204,6 +225,7 @@ pub async fn get_public_ticket(
         "is_approved": attendee.is_approved(),
         "is_in_person": attendee.is_in_person(),
         "participation_type": attendee.participation_type,
+        "deposit_info": deposit_info,
     });
     Ok(ApiOk::new(data))
 }

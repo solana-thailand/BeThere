@@ -127,6 +127,7 @@ pub fn Ticket() -> impl IntoView {
                         let masked_email = data.attendee.email.clone();
                         let api_id = data.attendee.api_id.clone();
                         let claim_token = data.attendee.claim_token.clone();
+                        let deposit_info = data.deposit_info.clone();
 
                         // Status text (pre-computed to avoid FnOnce issues)
                         let status_detail = if is_checked_in {
@@ -240,6 +241,42 @@ pub fn Ticket() -> impl IntoView {
 
                                 // Status section
                                 <div class="ticket-status-section">
+                                    // Deposit status section (only shown when deposit info is present)
+                                    {if let Some(ref dep) = deposit_info {
+                                        if !dep.verified {
+                                            view! {
+                                                <div class="ticket-deposit-pending" style="background:#fef3c7;border-radius:var(--radius);padding:0.75rem;margin-bottom:0.75rem;text-align:center;">
+                                                    <div style="display:flex;align-items:center;justify-content:center;gap:0.5rem;">
+                                                        <span style="color:#d97706;"><Icon icon=IconName::Hourglass class="icon-sm" /></span>
+                                                        <span style="color:#92400e;font-weight:600;">
+                                                            {match dep.method.as_str() {
+                                                                "thb" => "Payment Slip: Pending Verification",
+                                                                "usdc" => "Deposit: Pending Confirmation",
+                                                                _ => "Deposit: Pending",
+                                                            }}
+                                                        </span>
+                                                    </div>
+                                                    <p style="color:#92400e;font-size:0.8rem;margin:0.5rem 0 0;">
+                                                        {match dep.method.as_str() {
+                                                            "thb" => "Your payment slip has been submitted. We'll notify you once it's verified.",
+                                                            "usdc" => "Your deposit is being confirmed on-chain.",
+                                                            _ => "Your deposit is being processed.",
+                                                        }}
+                                                    </p>
+                                                </div>
+                                            }.into_any()
+                                        } else {
+                                            view! {
+                                                <div style="background:#d1fae5;border-radius:var(--radius);padding:0.5rem 0.75rem;margin-bottom:0.75rem;text-align:center;">
+                                                    <span style="color:#065f46;font-weight:600;font-size:0.85rem;">
+                                                        "Deposit: Verified ✓"
+                                                    </span>
+                                                </div>
+                                            }.into_any()
+                                        }
+                                    } else {
+                                        view! { <div></div> }.into_any()
+                                    }}
                                     {if is_checked_in {
                                         let detail = status_detail;
                                         let href = claim_href;
@@ -295,10 +332,33 @@ pub fn Ticket() -> impl IntoView {
                                 </div>
                             </div>
 
+                            // Navigation links
+                            <div class="ticket-nav-links" style="display:flex;gap:0.75rem;justify-content:center;margin-top:1rem;">
+                                <a href="/" class="btn btn-outline btn-sm">
+                                    "← Home"
+                                </a>
+                            </div>
+
                             // Footer hint
-                            <p class="ticket-footer-hint">
-                                "Present this ticket at the registration desk for check-in."
-                            </p>
+                            {if is_checked_in {
+                                view! {
+                                    <p class="ticket-footer-hint">
+                                        "You're checked in! Enjoy the event."
+                                    </p>
+                                }.into_any()
+                            } else if !is_approved {
+                                view! {
+                                    <p class="ticket-footer-hint">
+                                        "Your registration is being reviewed. You'll receive a QR code once approved."
+                                    </p>
+                                }.into_any()
+                            } else {
+                                view! {
+                                    <p class="ticket-footer-hint">
+                                        "Present this ticket at the registration desk for check-in."
+                                    </p>
+                                }.into_any()
+                            }}
                         }.into_any()
                     },
                     TicketState::NotFound(msg) => view! {

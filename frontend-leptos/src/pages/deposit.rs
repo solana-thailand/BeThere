@@ -297,7 +297,7 @@ enum DepositPageState {
     #[allow(dead_code)]
     ThbUploading(DepositStatusResponse),
     /// THB slip uploaded successfully.
-    ThbUploaded(String, String), // (attendee_id, event_id)
+    ThbUploaded(String, String, String), // (attendee_id, event_id, event_slug)
     /// Refund flow — choosing wallet to connect.
     RefundChooseWallet(DepositStatusResponse),
     /// Refund flow — wallet connected, ready to claim.
@@ -759,6 +759,7 @@ pub fn Deposit() -> impl IntoView {
 
         // Transition to uploading state
         let deposit_data_for_err = deposit_data.clone();
+        let deposit_data_slug = deposit_data.event_slug.clone();
         set_state.set(DepositPageState::ThbUploading(deposit_data));
 
         let file_ref = file_input_ref.clone();
@@ -826,7 +827,7 @@ pub fn Deposit() -> impl IntoView {
                     .ok()
                     .and_then(|url| url.search_params().get("event_id"))
                     .unwrap_or_default();
-                    set_state.set(DepositPageState::ThbUploaded(aid, eid));
+                    set_state.set(DepositPageState::ThbUploaded(aid, eid, deposit_data_slug));
                 }
                 Err(e) => {
                     log::error!("[deposit] THB slip upload failed: {e}");
@@ -1955,16 +1956,12 @@ pub fn Deposit() -> impl IntoView {
                         }
 
                         // ===== THB Uploaded =====
-                        DepositPageState::ThbUploaded(attendee_id, event_id) => {
-                            // Auto-redirect to ticket/QR page after brief confirmation
-                            let aid = attendee_id.clone();
-                            let eid = event_id.clone();
+                        DepositPageState::ThbUploaded(_attendee_id, _event_id, event_slug) => {
+                            // Auto-redirect to event page after brief confirmation
+                            let slug = event_slug.clone();
                             leptos::task::spawn_local(async move {
                                 gloo::timers::future::TimeoutFuture::new(1500).await;
-                                navigateTo(&format!(
-                                    "/ticket/{}?event_id={}",
-                                    aid, eid
-                                ));
+                                navigateTo(&format!("/e/{slug}"));
                             });
                             view! {
                                 <div class="card dep-card-error">
@@ -1976,7 +1973,7 @@ pub fn Deposit() -> impl IntoView {
                                     </p>
                                     <span class="badge badge-warning"><Icon icon=IconName::Hourglass class="icon-sm icon-warning" />" Pending Verification"</span>
                                     <p style="color:var(--text-secondary);font-size:0.8rem;margin-top:0.75rem;">
-                                        "Redirecting to your ticket..."
+                                        "Redirecting to event page..."
                                     </p>
                                 </div>
                             }

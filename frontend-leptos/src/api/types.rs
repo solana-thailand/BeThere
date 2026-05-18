@@ -153,6 +153,14 @@ pub struct AttendeesData {
     pub has_more: bool,
 }
 
+/// Deposit status info (optional — only for events with deposit enabled).
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct DepositInfo {
+    pub method: String,
+    pub verified: bool,
+    pub currency: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AttendeeData {
     #[serde(default)]
@@ -169,6 +177,9 @@ pub struct AttendeeData {
     /// Raw participation type string from backend.
     #[serde(default)]
     pub participation_type: String,
+    /// Deposit status info (present when event has deposit enabled).
+    #[serde(default)]
+    pub deposit_info: Option<DepositInfo>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
