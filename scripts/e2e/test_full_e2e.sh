@@ -469,7 +469,7 @@ if [ "$MINT_SUCCESS" = "true" ]; then
     info "  Signature: ${SIGNATURE:0:20}..."
     info "  Cluster:   $CLUSTER"
     info "  Claimed:   $CLAIMED_AT"
-    info "  Explorer:  https://explorer.solana.com/address/$ASSET_ID?cluster=$CLUSTER"
+    info "  Explorer:  https://solscan.io/account/$ASSET_ID?cluster=$CLUSTER"
 else
     ERROR_MSG=$(echo "$MINT_RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin).get('error',''))" 2>/dev/null || echo "")
     if echo "$ERROR_MSG" | grep -qi "already claimed"; then
@@ -583,7 +583,7 @@ try:
     if result is None:
         error_msg = data.get('error', {}).get('message', 'null result')
         print(f'  ⚠ Transaction data unavailable: {error_msg}')
-        print(f'  Explorer: https://explorer.solana.com/tx/$MINT_SIG?cluster=devnet')
+        print(f'  Explorer: https://solscan.io/tx/$MINT_SIG?cluster=devnet')
         sys.exit(0)
 
     meta = result.get('meta', {})
@@ -621,7 +621,7 @@ try:
         print(f'  {n:>4} attendees: {total_sol:.6f} SOL ≈ \${total_sol * sol_usd:.2f}')
 
     print()
-    print(f'  Explorer: https://explorer.solana.com/tx/$MINT_SIG?cluster=devnet')
+    print(f'  Explorer: https://solscan.io/tx/$MINT_SIG?cluster=devnet')
 except Exception as e:
     print(f'  Failed to parse transaction: {e}')
 " <<< "$TX_RESPONSE" 2>/dev/null
@@ -645,7 +645,7 @@ if [ "$FAIL" -gt 0 ]; then
 else
     echo -e "\n${GREEN}Full E2E test completed!${NC} 🎉"
     if [ -n "${ASSET_ID:-}" ]; then
-        echo -e "  View NFT: https://explorer.solana.com/address/$ASSET_ID?cluster=devnet"
+        echo -e "  View NFT: https://solscan.io/account/$ASSET_ID?cluster=devnet"
     fi
 fi
 

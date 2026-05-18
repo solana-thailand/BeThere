@@ -377,7 +377,7 @@ else
             INIT_SIG=$(echo "$SUBMIT_OUTPUT" | grep "SIGNATURE=" | cut -d= -f2)
             pass "Init escrow TX submitted!"
             info "Signature: $INIT_SIG"
-            info "View: https://explorer.solana.com/tx/$INIT_SIG?cluster=devnet"
+            info "View: https://solscan.io/tx/$INIT_SIG?cluster=devnet"
 
             # Wait for confirmation
             info "Waiting for confirmation..."
@@ -572,7 +572,7 @@ if [ "$DEP_INIT_SUCCESS" = "true" ]; then
             DEP_SIG=$(echo "$DEP_SUBMIT" | grep "SIGNATURE=" | cut -d= -f2)
             pass "Deposit TX submitted!"
             info "Signature: $DEP_SIG"
-            info "View: https://explorer.solana.com/tx/$DEP_SIG?cluster=devnet"
+            info "View: https://solscan.io/tx/$DEP_SIG?cluster=devnet"
 
             # Wait for confirmation
             info "Waiting for deposit confirmation..."
@@ -695,7 +695,7 @@ else
             MARK_CI_SIG=$(echo "$MARK_CI_SUBMIT" | grep "SIGNATURE=" | cut -d= -f2)
             pass "mark_checked_in TX submitted!"
             info "Signature: $MARK_CI_SIG"
-            info "View: https://explorer.solana.com/tx/$MARK_CI_SIG?cluster=devnet"
+            info "View: https://solscan.io/tx/$MARK_CI_SIG?cluster=devnet"
             sleep 5
         else
             fail "mark_checked_in TX submission failed"
@@ -778,7 +778,7 @@ if [ "$REFUND_SUCCESS" = "yes" ]; then
             REFUND_SIG=$(echo "$REFUND_SUBMIT" | grep "SIGNATURE=" | cut -d= -f2)
             pass "Refund TX submitted!"
             info "Signature: $REFUND_SIG"
-            info "View: https://explorer.solana.com/tx/$REFUND_SIG?cluster=devnet"
+            info "View: https://solscan.io/tx/$REFUND_SIG?cluster=devnet"
 
             # Wait for confirmation
             info "Waiting for refund confirmation..."
@@ -820,7 +820,7 @@ else
                 REFUND_SIG=$(echo "$REFUND_SUBMIT" | grep "SIGNATURE=" | cut -d= -f2)
                 pass "Refund TX submitted!"
                 info "Signature: $REFUND_SIG"
-                info "View: https://explorer.solana.com/tx/$REFUND_SIG?cluster=devnet"
+                info "View: https://solscan.io/tx/$REFUND_SIG?cluster=devnet"
                 sleep 5
                 ATT_USDC_AFTER=$(spl-token balance "$USDC_MINT" --url devnet --owner "$ATTENDEE_WALLET" 2>&1 | awk '{print $1}' || echo "?")
                 info "Attendee USDC after refund: $ATT_USDC_AFTER"
@@ -932,7 +932,7 @@ else
             DEACTIVATE_SIG=$(echo "$DEACTIVATE_SUBMIT" | grep "SIGNATURE=" | cut -d= -f2)
             pass "deactivate_event TX submitted!"
             info "Signature: $DEACTIVATE_SIG"
-            info "View: https://explorer.solana.com/tx/$DEACTIVATE_SIG?cluster=devnet"
+            info "View: https://solscan.io/tx/$DEACTIVATE_SIG?cluster=devnet"
             sleep 5
         else
             fail "deactivate_event TX submission failed"
@@ -977,7 +977,7 @@ else
             CLAIM_SIG=$(echo "$CLAIM_SUBMIT" | grep "SIGNATURE=" | cut -d= -f2)
             pass "claim_forfeited TX submitted!"
             info "Signature: $CLAIM_SIG"
-            info "View: https://explorer.solana.com/tx/$CLAIM_SIG?cluster=devnet"
+            info "View: https://solscan.io/tx/$CLAIM_SIG?cluster=devnet"
             sleep 5
         else
             # claim_forfeited may fail with "nothing to claim" if all attendees were refunded
@@ -1027,7 +1027,7 @@ else
             CLOSE_SIG=$(echo "$CLOSE_SUBMIT" | grep "SIGNATURE=" | cut -d= -f2)
             pass "close_event TX submitted!"
             info "Signature: $CLOSE_SIG"
-            info "View: https://explorer.solana.com/tx/$CLOSE_SIG?cluster=devnet"
+            info "View: https://solscan.io/tx/$CLOSE_SIG?cluster=devnet"
             sleep 5
 
             # Verify escrow account is closed

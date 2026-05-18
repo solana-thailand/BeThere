@@ -309,7 +309,7 @@ pub async fn run(
 
     println!();
     println!(
-        "   Explorer: https://explorer.solana.com/address/{leaf_owner}?cluster=devnet"
+        "   Explorer: https://solscan.io/account/{leaf_owner}?cluster=devnet"
     );
 
     Ok(())

@@ -146,7 +146,7 @@ if [ "$CREATE_SUCCESS" = "true" ]; then
     if echo "$RESULT" | grep -q "SIGNATURE="; then
         SIG=$(echo "$RESULT" | grep "SIGNATURE=" | cut -d= -f2)
         pass "Event escrow created: $SIG"
-        info "View: https://explorer.solana.com/tx/$SIG?cluster=devnet"
+        info "View: https://solscan.io/tx/$SIG?cluster=devnet"
         sleep 5
 
         # Verify escrow on-chain
@@ -184,7 +184,7 @@ if [ "$DEACT_SUCCESS" = "true" ]; then
     if echo "$RESULT" | grep -q "SIGNATURE="; then
         SIG=$(echo "$RESULT" | grep "SIGNATURE=" | cut -d= -f2)
         pass "Deactivate event submitted: $SIG"
-        info "View: https://explorer.solana.com/tx/$SIG?cluster=devnet"
+        info "View: https://solscan.io/tx/$SIG?cluster=devnet"
 
         # Check if it actually succeeded
         sleep 5
@@ -219,7 +219,7 @@ if [ "$CLAIM_SUCCESS" = "true" ]; then
     if echo "$RESULT" | grep -q "SIGNATURE="; then
         SIG=$(echo "$RESULT" | grep "SIGNATURE=" | cut -d= -f2)
         info "Claim forfeited submitted: $SIG"
-        info "View: https://explorer.solana.com/tx/$SIG?cluster=devnet"
+        info "View: https://solscan.io/tx/$SIG?cluster=devnet"
 
         sleep 5
         CONFIRM=$(solana confirm "$SIG" --url devnet 2>&1 || echo "confirm failed")
@@ -257,7 +257,7 @@ if [ "$CLOSE_SUCCESS" = "true" ]; then
     if echo "$RESULT" | grep -q "SIGNATURE="; then
         SIG=$(echo "$RESULT" | grep "SIGNATURE=" | cut -d= -f2)
         pass "Close event submitted: $SIG"
-        info "View: https://explorer.solana.com/tx/$SIG?cluster=devnet"
+        info "View: https://solscan.io/tx/$SIG?cluster=devnet"
 
         sleep 5
         CONFIRM=$(solana confirm "$SIG" --url devnet 2>&1 || echo "confirm failed")

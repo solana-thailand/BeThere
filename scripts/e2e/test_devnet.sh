@@ -208,7 +208,7 @@ except:
 
     if [ -n "$ASSET_ID" ] && [ "$ASSET_ID" != "" ]; then
         pass "mintCompressedNft succeeded → asset_id=$ASSET_ID"
-        info "View: https://explorer.solana.com/address/$ASSET_ID?cluster=devnet"
+        info "View: https://solscan.io/account/$ASSET_ID?cluster=devnet"
     else
         ERROR_RPC=$(echo "$MINT_RESPONSE" | python3 -c "
 import sys, json
@@ -561,7 +561,7 @@ echo "   4. Open $BASE_URL/claim/{TOKEN} → see NFT preview"
 echo "   5. (If quiz enabled) Pass quiz first"
 echo "   6. Adventure gate → click Start → complete Level 1"
 echo "   7. Return to claim → enter wallet → mint cNFT"
-echo "   8. Check https://explorer.solana.com/address/{ASSET_ID}?cluster=devnet"
+echo "   8. Check https://solscan.io/account/{ASSET_ID}?cluster=devnet"
 echo ""
 echo "📋 Deposit & Refund Flow:"
 echo "   9.  Admin panel → enable deposit for event (set USDC/THB amount)"
