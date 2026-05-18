@@ -243,6 +243,29 @@ pub async fn undo_check_in(attendee_id: &str, event_id: Option<&str>) -> Result<
     Ok(())
 }
 
+/// DELETE /api/attendee/:id?event_id=xxx
+/// Delete an attendee from the system (sheet row + KV data).
+pub async fn delete_attendee(attendee_id: &str, event_id: Option<&str>) -> Result<(), ApiError> {
+    let path = match event_id {
+        Some(eid) if !eid.is_empty() => format!("/attendee/{attendee_id}?event_id={eid}"),
+        _ => format!("/attendee/{attendee_id}"),
+    };
+    let response = super::api_delete(&path).await?;
+    if response.status() >= 400 {
+        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
+            success: false,
+            data: None,
+            error: Some("Delete failed".to_string()),
+            correlation_id: None,
+        });
+        return Err(ApiError {
+            message: body.error.unwrap_or_default(),
+            status: response.status(),
+        });
+    }
+    Ok(())
+}
+
 // ===== Walk-in API functions =====
 
 /// POST /api/walkin/register

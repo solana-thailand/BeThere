@@ -496,3 +496,79 @@ pub async fn append_walkin_row(
     invalidate_column_map_cache(kv, sheet_id, sheet_name).await;
     Ok(())
 }
+
+// ---------------------------------------------------------------------------
+// Row Deletion
+// ---------------------------------------------------------------------------
+
+/// Clear all cells in a row of the Google Sheet.
+///
+/// Uses `spreadsheets.values.clear` to empty the row without deleting it
+/// (avoids shifting row indices which would break row_index references).
+#[allow(clippy::too_many_arguments)]
+pub async fn delete_sheet_row(
+    row_index: usize,
+    mapping: &ColumnMapping,
+    state: &AppState,
+    sheet_id: &str,
+    sheet_name: &str,
+    kv: Option<&KvStore>,
+) -> Result<(), String> {
+    let access_token = get_cached_access_token(state, kv).await?;
+
+    // Determine the column range to clear (A to last mapped column)
+    let last_col_idx = mapping.total_columns.max(28).saturating_sub(1);
+    let last_col_letter = {
+        let mut result = String::new();
+        let mut n = last_col_idx;
+        loop {
+            result.insert(0, (b'A' + (n % 26) as u8) as char);
+            if n < 26 {
+                break;
+            }
+            n = (n / 26) - 1;
+        }
+        result
+    };
+
+    let range = format!("{sheet_name}!A{row_index}:{last_col_letter}{row_index}");
+    let url = format!(
+        "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{range}:clear",
+        range = urlencoding::encode(&range),
+    );
+
+    let headers = worker::Headers::new();
+    headers
+        .set("Authorization", &format!("Bearer {access_token}"))
+        .map_err(|e| format!("failed to set auth header: {e:?}"))?;
+    headers
+        .set("Content-Type", "application/json")
+        .map_err(|e| format!("failed to set content-type: {e:?}"))?;
+
+    let mut init = worker::RequestInit::new();
+    init.with_method(worker::Method::Post).with_headers(headers);
+
+    let request = worker::Request::new_with_init(&url, &init)
+        .map_err(|e| format!("failed to create clear request: {e:?}"))?;
+
+    let mut response = worker::Fetch::Request(request)
+        .send()
+        .await
+        .map_err(|e| format!("failed to send clear request: {e:?}"))?;
+
+    let status = response.status_code();
+    if !(200..300).contains(&status) {
+        let body = response.text().await.unwrap_or_default();
+        return Err(format!("sheet clear failed (HTTP {status}): {body}"));
+    }
+
+    tracing::info!(
+        row_index = row_index,
+        range = %range,
+        "cleared sheet row"
+    );
+
+    invalidate_attendee_cache(kv, sheet_id, sheet_name).await;
+    invalidate_column_map_cache(kv, sheet_id, sheet_name).await;
+    Ok(())
+}

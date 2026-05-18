@@ -58,6 +58,7 @@ pub enum AuditAction {
 
     // Walk-in
     WalkinRegistered,
+    WalkinDeleted,
     WalkinSynced,
     WalkinExported,
 
@@ -75,6 +76,7 @@ pub enum AuditAction {
     AdventureCompleted,
 
     // Admin
+    AttendeeDeleted,
     ForceDeleteUsed,
 
     // On-chain indexing

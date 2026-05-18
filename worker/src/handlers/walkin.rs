@@ -196,6 +196,48 @@ fn claim_walkin_key(claim_token: &str) -> String {
     format!("claim_walkin:{claim_token}")
 }
 
+/// Find a walk-in attendee by any identifier: email, claim token, or name.
+/// Scans `walkin:{event_id}:*` keys to find a match.
+pub async fn find_walkin_by_any(
+    kv: &worker::KvStore,
+    event_id: &str,
+    query: &str,
+) -> Option<WalkinAttendee> {
+    let query_lower = query.to_lowercase();
+    let prefix = format!("walkin:{event_id}:");
+    let mut cursor: Option<String> = None;
+
+    loop {
+        let mut builder = kv.list().prefix(prefix.clone());
+        if let Some(c) = cursor.take() {
+            builder = builder.cursor(c);
+        }
+
+        let resp = builder.execute().await.ok()?;
+
+        for key in &resp.keys {
+            if let Some(raw) = kv.get(&key.name).text().await.ok().flatten() {
+                if let Ok(a) = serde_json::from_str::<WalkinAttendee>(&raw) {
+                    // Match by email, claim_token, or name (case-insensitive)
+                    if a.email == query_lower
+                        || a.claim_token == query
+                        || a.name.to_lowercase() == query_lower
+                    {
+                        return Some(a);
+                    }
+                }
+            }
+        }
+
+        if resp.list_complete {
+            break;
+        }
+        cursor = resp.cursor;
+    }
+
+    None
+}
+
 // ---------------------------------------------------------------------------
 // Handler
 // ---------------------------------------------------------------------------

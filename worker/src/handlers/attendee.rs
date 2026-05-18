@@ -303,3 +303,186 @@ pub async fn flush_cache(
         "sheet_id": event.sheet_id,
     })))
 }
+
+// ---------------------------------------------------------------------------
+// DELETE /api/attendee/{id} — delete attendee from system + sheet
+// ---------------------------------------------------------------------------
+
+/// Delete attendee request (supports both sheet-based and walk-in attendees).
+///
+/// Cleans up:
+/// - Google Sheet row (regular attendees)
+/// - Walk-in KV records (walkin:*, claim_walkin:*, walkin_synced:*)
+/// - Deposit status, THB deposit data
+/// - Claim locks
+/// - QR image cache
+/// - Attendee list cache
+#[worker::send]
+pub async fn delete_attendee(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(id): Path<String>,
+    Query(query): Query<EventIdQuery>,
+) -> Result<ApiOk<serde_json::Value>, crate::error::WorkerError> {
+    tracing::info!(attendee_id = %id, staff_email = %claims.email, "delete attendee request");
+
+    let event = resolve_event_with_access(&state, &claims, query.event_id.as_deref()).await?;
+    let kv = resolve_kv(&state);
+
+    let mut deleted_keys = Vec::new();
+    let mut source = "unknown".to_string();
+
+    // 1. Try to find as walk-in attendee in KV
+    let walkin = if let Some(kv) = kv {
+        // Walk-in keys are indexed by email, not api_id.
+        // We need to scan walkin:{event_id}:* to find by claim_token or name.
+        crate::handlers::walkin::find_walkin_by_any(kv, &event.id, &id).await
+    } else {
+        None
+    };
+
+    if let Some(walkin_attendee) = walkin {
+        // Walk-in attendee found in KV
+        source = "walk-in".to_string();
+        let email_lower = walkin_attendee.email.to_lowercase();
+
+        // Delete walk-in record
+        let key = format!("walkin:{}:{}", event.id, email_lower);
+        if let Some(kv) = kv {
+            let _ = kv.delete(&key).await;
+            deleted_keys.push(key);
+        }
+
+        // Delete reverse mapping
+        let rkey = format!("claim_walkin:{}", walkin_attendee.claim_token);
+        if let Some(kv) = kv {
+            let _ = kv.delete(&rkey).await;
+            deleted_keys.push(rkey);
+        }
+
+        // Delete sync marker
+        let skey = format!("walkin_synced:{}:{}", event.id, email_lower);
+        if let Some(kv) = kv {
+            let _ = kv.delete(&skey).await;
+            deleted_keys.push(skey);
+        }
+
+        // Delete claim lock
+        let lkey = crate::claim::claim_lock_key(&event.id, &walkin_attendee.claim_token);
+        if let Some(kv) = kv {
+            let _ = kv.delete(&lkey).await;
+            deleted_keys.push(lkey);
+        }
+
+        tracing::info!(
+            event_id = %event.id,
+            email = %email_lower,
+            name = %walkin_attendee.name,
+            "walk-in attendee deleted from KV"
+        );
+    } else {
+        // 2. Try to find as regular attendee in Google Sheet
+        let attendee =
+            sheets::get_attendee_by_id(&id, &state, &event.sheet_id, &event.sheet_name, kv)
+                .await
+                .map_err(|e| AppError::Internal(format!("failed to look up attendee: {e}")))?;
+
+        match attendee {
+            Some(attendee) => {
+                source = "sheet".to_string();
+
+                // Delete the row from Google Sheet
+                let mapping =
+                    sheets::get_column_mapping(&state, &event.sheet_id, &event.sheet_name, kv)
+                        .await
+                        .unwrap_or_else(|_| {
+                            event_checkin_domain::models::attendee::ColumnMapping::hardcoded()
+                        });
+
+                crate::sheets::write::delete_sheet_row(
+                    attendee.row_index,
+                    &mapping,
+                    &state,
+                    &event.sheet_id,
+                    &event.sheet_name,
+                    kv,
+                )
+                .await
+                .map_err(|e| AppError::Internal(format!("failed to delete sheet row: {e}")))?;
+
+                // Clean up KV keys for this attendee
+                if let Some(kv) = kv {
+                    // Deposit status
+                    let dkey = crate::event_store::deposit_status_key(&event.id, &attendee.api_id);
+                    let _ = kv.delete(&dkey).await;
+                    deleted_keys.push(dkey);
+
+                    // THB deposit
+                    let tkey = crate::event_store::thb_deposit_key(&event.id, &attendee.api_id);
+                    let _ = kv.delete(&tkey).await;
+                    deleted_keys.push(tkey);
+
+                    // Claim lock (if has claim_token)
+                    if let Some(ref token) = attendee.claim_token {
+                        if !token.is_empty() {
+                            let lkey = crate::claim::claim_lock_key(&event.id, token);
+                            let _ = kv.delete(&lkey).await;
+                            deleted_keys.push(lkey);
+                        }
+                    }
+
+                    // QR image cache
+                    let qrkey = format!("qr:{}", attendee.api_id);
+                    let _ = kv.delete(&qrkey).await;
+                    deleted_keys.push(qrkey);
+
+                    // Flush attendee cache so list refreshes
+                    sheets::flush_caches(&state, &event.sheet_id, &event.sheet_name, Some(kv))
+                        .await;
+                }
+
+                tracing::info!(
+                    event_id = %event.id,
+                    attendee_id = %attendee.api_id,
+                    name = %attendee.display_name(),
+                    row_index = attendee.row_index,
+                    "sheet attendee deleted"
+                );
+            }
+            None => {
+                return Err(AppError::NotFound(format!(
+                    "attendee '{id}' not found in walk-in records or event sheet"
+                ))
+                .into());
+            }
+        }
+    }
+
+    // Audit log
+    if let Some(kv) = &state.events_kv {
+        let action = if source == "walk-in" {
+            crate::audit_store::AuditAction::WalkinDeleted
+        } else {
+            crate::audit_store::AuditAction::AttendeeDeleted
+        };
+        let _ = crate::audit_store::append_event_audit(
+            kv,
+            &event.id,
+            crate::audit_store::create_entry(
+                &claims.email,
+                action,
+                &id,
+                &format!("attendee deleted (source={source})"),
+            ),
+        )
+        .await;
+    }
+
+    Ok(ApiOk::new(json!({
+        "deleted": true,
+        "attendee_id": id,
+        "event_id": event.id,
+        "source": source,
+        "kv_keys_removed": deleted_keys.len(),
+    })))
+}
