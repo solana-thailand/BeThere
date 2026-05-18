@@ -330,7 +330,7 @@ pub async fn delete_attendee(
     let kv = resolve_kv(&state);
 
     let mut deleted_keys = Vec::new();
-    let mut source = "unknown".to_string();
+    let source;
 
     // 1. Try to find as walk-in attendee in KV
     let walkin = if let Some(kv) = kv {
@@ -423,12 +423,12 @@ pub async fn delete_attendee(
                     deleted_keys.push(tkey);
 
                     // Claim lock (if has claim_token)
-                    if let Some(ref token) = attendee.claim_token {
-                        if !token.is_empty() {
-                            let lkey = crate::claim::claim_lock_key(&event.id, token);
-                            let _ = kv.delete(&lkey).await;
-                            deleted_keys.push(lkey);
-                        }
+                    if let Some(ref token) = attendee.claim_token
+                        && !token.is_empty()
+                    {
+                        let lkey = crate::claim::claim_lock_key(&event.id, token);
+                        let _ = kv.delete(&lkey).await;
+                        deleted_keys.push(lkey);
                     }
 
                     // QR image cache

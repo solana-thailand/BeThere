@@ -216,8 +216,8 @@ pub async fn find_walkin_by_any(
         let resp = builder.execute().await.ok()?;
 
         for key in &resp.keys {
-            if let Some(raw) = kv.get(&key.name).text().await.ok().flatten() {
-                if let Ok(a) = serde_json::from_str::<WalkinAttendee>(&raw) {
+            if let Some(raw) = kv.get(&key.name).text().await.ok().flatten()
+                && let Ok(a) = serde_json::from_str::<WalkinAttendee>(&raw) {
                     // Match by email, claim_token, or name (case-insensitive)
                     if a.email == query_lower
                         || a.claim_token == query
@@ -226,7 +226,6 @@ pub async fn find_walkin_by_any(
                         return Some(a);
                     }
                 }
-            }
         }
 
         if resp.list_complete {
