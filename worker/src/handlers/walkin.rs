@@ -44,11 +44,50 @@ async fn sync_walkin_to_sheet(
         }
     };
 
+    // Guard: attendee's event_id must match the resolved event
+    if attendee.event_id != event_id {
+        tracing::error!(
+            attendee_event_id = %attendee.event_id,
+            resolved_event_id = %event_id,
+            email = %attendee.email,
+            "walk-in auto-sync ABORTED: attendee event_id mismatch"
+        );
+        return;
+    }
+
+    // Re-verify event config from KV at sync time (runs detached, config may have changed)
+    match crate::event_store::get_event_config(&kv, &event_id).await {
+        Ok(Some(fresh_config)) => {
+            if fresh_config.sheet_id != sheet_id
+                || (fresh_config.sheet_name.is_empty()
+                    && sheet_name != state.config.sheets.sheet_name)
+                || (!fresh_config.sheet_name.is_empty() && fresh_config.sheet_name != sheet_name)
+            {
+                tracing::warn!(
+                    event_id = %event_id,
+                    original_sheet_id = %sheet_id,
+                    current_sheet_id = %fresh_config.sheet_id,
+                    original_sheet_name = %sheet_name,
+                    current_sheet_name = %fresh_config.sheet_name,
+                    "walk-in auto-sync: event config changed since registration, using current config"
+                );
+            }
+        }
+        Ok(None) => {
+            tracing::error!(event_id = %event_id, "walk-in auto-sync ABORTED: event no longer exists in KV");
+            return;
+        }
+        Err(e) => {
+            tracing::warn!(event_id = %event_id, error = %e, "walk-in auto-sync: could not re-verify event config, proceeding with original");
+        }
+    }
+
     tracing::info!(
         event_id = %event_id,
+        email = %attendee.email,
         sheet_id = %sheet_id,
         sheet_name = %sheet_name,
-        "walk-in auto-sync: resolved sheet"
+        "walk-in auto-sync: starting"
     );
 
     match crate::sheets::get_column_mapping(&state, &sheet_id, &sheet_name, Some(&kv)).await {
@@ -302,9 +341,22 @@ pub async fn register_walkin(
         event.sheet_name.clone()
     };
 
-    // Detach the sheets sync — response returns immediately.
-    // The sync future owns its data (no borrows on the handler's stack).
-    if let Some(ctx) = &state.worker_ctx {
+    if sheet_id.is_empty() {
+        tracing::warn!(
+            event_id = %event.id,
+            event_name = %event.name,
+            "walk-in auto-sync skipped: event has no sheet_id configured"
+        );
+    } else if let Some(ctx) = &state.worker_ctx {
+        tracing::info!(
+            event_id = %event.id,
+            event_name = %event.name,
+            sheet_id = %sheet_id,
+            sheet_name = %sheet_name,
+            "walk-in auto-sync: dispatching to sheet"
+        );
+        // Detach the sheets sync — response returns immediately.
+        // The sync future owns its data (no borrows on the handler's stack).
         let sync_state = state.clone();
         let sync_attendee = attendee.clone();
         let sync_event_id = event.id.clone();
@@ -565,12 +617,29 @@ pub async fn walkin_sync_handler(
 
     let attendees = list_walkin_attendees(kv, &event.id).await?;
 
+    if event.sheet_id.is_empty() {
+        return Err(AppError::Validation(format!(
+            "event '{}' has no sheet_id configured — cannot sync walk-ins",
+            event.name
+        ))
+        .into());
+    }
+
     let sheet_id = &event.sheet_id;
     let sheet_name = if event.sheet_name.is_empty() {
         &state.config.sheets.sheet_name
     } else {
         &event.sheet_name
     };
+
+    tracing::info!(
+        event_id = %event.id,
+        event_name = %event.name,
+        sheet_id = %sheet_id,
+        sheet_name = %sheet_name,
+        walkin_count = attendees.len(),
+        "walk-in batch sync: starting"
+    );
 
     // Get column mapping for the sheet
     let mapping = crate::sheets::get_column_mapping(&state, sheet_id, sheet_name, Some(kv))
