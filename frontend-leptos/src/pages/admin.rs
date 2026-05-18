@@ -243,9 +243,14 @@ pub fn Admin() -> impl IntoView {
     let (selected_ids, set_selected_ids) = signal(HashSet::<String>::new());
     let (bulk_checking_in, set_bulk_checking_in) = signal(false);
 
+    // Delete attendee confirmation state
+    let (confirm_delete_id, set_confirm_delete_id) = signal(None::<String>);
+    let (deleting_ids, set_deleting_ids) = signal(HashSet::<String>::new());
+
     // Event selector state
     let (events_list, set_events_list) = signal(Vec::<api::EventMeta>::new());
     let (active_event_id, set_active_event_id) = signal(None::<String>);
+    let event_id_for_delete = active_event_id;
     let (events_loading, set_events_loading) = signal(false);
 
     // Load events list on mount
@@ -1087,6 +1092,7 @@ pub fn Admin() -> impl IntoView {
                                     let is_walkin = attendee.ticket_name.eq_ignore_ascii_case("Walk-in");
                                     let is_selected = selected.contains(&attendee.api_id);
                                     let api_id = attendee.api_id.clone();
+                                    let delete_id = api_id.clone();
                                     let badge_class = if is_checked_in { "badge badge-success" } else { "badge badge-warning" };
                                     let badge_text = if is_checked_in { "Checked In" } else { "Pending" };
                                     let participation = utils::get_participation_badge(&attendee.participation_type);
@@ -1176,6 +1182,64 @@ pub fn Admin() -> impl IntoView {
                                                     }
                                                 >
                                                     "Ticket"
+                                                </button>
+                                                <button
+                                                    class={
+                                                        let is_confirming = confirm_delete_id.get().as_deref() == Some(&delete_id);
+                                                        let is_deleting = deleting_ids.get().contains(&delete_id);
+                                                        if is_deleting {
+                                                            "btn btn-xs btn-xs-override".to_string()
+                                                        } else if is_confirming {
+                                                            "btn btn-confirm-danger btn-xs btn-xs-override".to_string()
+                                                        } else {
+                                                            "btn btn-danger btn-xs btn-xs-override".to_string()
+                                                        }
+                                                    }
+                                                    disabled=deleting_ids.get().contains(&delete_id)
+                                                    title="Delete attendee"
+                                                    on:click={
+                                                        let delete_id = delete_id.clone();
+                                                        let set_toast = set_toast;
+                                                        move |_| {
+                                                            let is_confirming = confirm_delete_id.get().as_deref() == Some(&delete_id);
+                                                            if is_confirming {
+                                                                // Second click — execute delete
+                                                                set_confirm_delete_id.set(None);
+                                                                set_deleting_ids.update(|ids| { ids.insert(delete_id.clone()); });
+                                                                let aid = delete_id.clone();
+                                                                let eid = event_id_for_delete.get();
+                                                                let set_toast = set_toast;
+                                                                let set_deleting_ids = set_deleting_ids;
+                                                                let set_refresh_counter = set_refresh_counter;
+                                                                leptos::task::spawn_local(async move {
+                                                                    match api::delete_attendee(&aid, eid.as_deref()).await {
+                                                                        Ok(()) => {
+                                                                            components::show_toast(&set_toast, "Attendee deleted", ToastType::Success);
+                                                                            api::invalidate_attendee_cache();
+                                                                            set_refresh_counter.update(|c| *c += 1);
+                                                                        }
+                                                                        Err(e) => {
+                                                                            components::show_toast(&set_toast, &format!("Delete failed: {e}"), ToastType::Error);
+                                                                        }
+                                                                    }
+                                                                    set_deleting_ids.update(|ids| { ids.remove(&aid); });
+                                                                });
+                                                            } else {
+                                                                // First click — ask for confirmation
+                                                                set_confirm_delete_id.set(Some(delete_id.clone()));
+                                                                let set_confirm = set_confirm_delete_id;
+                                                                gloo::timers::callback::Timeout::new(3000, move || {
+                                                                    set_confirm.set(None);
+                                                                }).forget();
+                                                            }
+                                                        }
+                                                    }
+                                                >
+                                                    {
+                                                        let is_confirming = confirm_delete_id.get().as_deref() == Some(&delete_id);
+                                                        let is_deleting = deleting_ids.get().contains(&delete_id);
+                                                        if is_deleting { "Deleting..." } else if is_confirming { "⚠ Confirm?" } else { "Delete" }
+                                                    }
                                                 </button>
                                                 <Show
                                                     when=move || has_time_ago
