@@ -169,6 +169,8 @@ pub struct PublicEventData {
     pub status: String,
     pub event_start_ms: i64,
     pub event_end_ms: i64,
+    #[serde(default)]
+    pub time_tba: bool,
     pub deposit_enabled: bool,
     pub deposit_amount_usdc: u64,
     pub deposit_amount_thb: u64,
@@ -687,11 +689,15 @@ fn render_loaded_event(
     let has_location = !data.location.is_empty();
     let is_hybrid = data.event_format == crate::api::EventFormat::Hybrid;
     let date_str = format_event_date(data.event_start_ms);
-    let time_str = format!(
-        "{} — {}",
-        format_event_time(data.event_start_ms),
-        format_event_time(data.event_end_ms)
-    );
+    let time_str = if data.time_tba {
+        "Time TBA".to_string()
+    } else {
+        format!(
+            "{} — {}",
+            format_event_time(data.event_start_ms),
+            format_event_time(data.event_end_ms)
+        )
+    };
     let nft_image_url = data.nft_image_url.clone();
     let nft_image_url_2 = data.nft_image_url.clone();
     let _link = data.link.clone();

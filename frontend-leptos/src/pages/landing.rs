@@ -479,6 +479,8 @@ struct PublicEventItem {
     name: String,
     slug: String,
     event_start_ms: i64,
+    #[serde(default)]
+    time_tba: bool,
     deposit_enabled: bool,
 }
 
@@ -573,9 +575,19 @@ fn UpcomingEvents() -> impl IntoView {
                                 let date_str = if evt.event_start_ms > 0 {
                                     let d = js_sys::Date::new_with_year_month_day(0, 0, 0);
                                     d.set_time(evt.event_start_ms as f64);
-                                    d.to_locale_string("en-US", &js_sys::Object::new()).as_string().unwrap_or_default()
+                                    if evt.time_tba {
+                                        // Date only — show just the date, time is TBA
+                                        let opts = js_sys::Object::new();
+                                        let _ = js_sys::Reflect::set(&opts, &"year".into(), &"numeric".into());
+                                        let _ = js_sys::Reflect::set(&opts, &"month".into(), &"short".into());
+                                        let _ = js_sys::Reflect::set(&opts, &"day".into(), &"numeric".into());
+                                        let date_part = d.to_locale_string("en-US", &opts).as_string().unwrap_or_default();
+                                        format!("{date_part} · Time TBA")
+                                    } else {
+                                        d.to_locale_string("en-US", &js_sys::Object::new()).as_string().unwrap_or_default()
+                                    }
                                 } else {
-                                    "TBA".to_string()
+                                    "Date TBA".to_string()
                                 };
                                 let deposit_badge = if evt.deposit_enabled {
                                     view! { <span style="display:inline-flex;align-items:center;gap:0.25rem;"><Icon icon=IconName::Coin class="icon-xs"/>" Deposit required"</span> }.into_any()

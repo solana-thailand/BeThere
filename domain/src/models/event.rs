@@ -138,6 +138,9 @@ pub struct EventMeta {
     pub event_start_ms: i64,
     /// Event end time as Unix epoch milliseconds.
     pub event_end_ms: i64,
+    /// Whether event time is TBA (To Be Announced). When true, public pages show "TBA" instead of time.
+    #[serde(default)]
+    pub time_tba: bool,
     /// Google Sheets spreadsheet ID for attendee data.
     pub sheet_id: String,
     /// ISO 8601 creation timestamp.
@@ -193,6 +196,9 @@ pub struct EventConfig {
     pub event_start_ms: i64,
     /// Event end time as Unix epoch milliseconds.
     pub event_end_ms: i64,
+    /// Whether event time is TBA (To Be Announced).
+    #[serde(default)]
+    pub time_tba: bool,
 
     // ── Google Sheets ─────────────────────────────────────────────────
     /// Google Sheets spreadsheet ID (contains attendee + staff tabs).
@@ -320,6 +326,7 @@ impl EventConfig {
             status: self.status.clone(),
             event_start_ms: self.event_start_ms,
             event_end_ms: self.event_end_ms,
+            time_tba: self.time_tba,
             sheet_id: self.sheet_id.clone(),
             created_at: self.created_at.clone(),
             organizer_emails: self.organizer_emails.clone(),
@@ -407,6 +414,7 @@ impl EventConfig {
             status: EventStatus::Active,
             event_start_ms,
             event_end_ms,
+            time_tba: false,
             sheet_id: sheet_id.to_string(),
             sheet_name: sheet_name.to_string(),
             staff_sheet_name: staff_sheet_name.to_string(),
@@ -464,6 +472,9 @@ pub struct CreateEventRequest {
     pub event_start_ms: i64,
     /// Event end time as Unix epoch milliseconds (required).
     pub event_end_ms: i64,
+    /// Mark event time as TBA. When true, event_start_ms/end_ms are treated as date-only.
+    #[serde(default)]
+    pub time_tba: bool,
     /// Google Sheets spreadsheet ID (required).
     pub sheet_id: String,
     /// Tab name for attendee data (defaults to "Attendees").
@@ -572,6 +583,9 @@ pub struct UpdateEventRequest {
     /// New end time.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub event_end_ms: Option<i64>,
+    /// Update TBA status.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub time_tba: Option<bool>,
     /// New Google Sheets spreadsheet ID.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sheet_id: Option<String>,

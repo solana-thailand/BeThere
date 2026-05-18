@@ -46,6 +46,7 @@ pub async fn list_public_events(
                 "status": e.status.as_str(),
                 "event_start_ms": e.event_start_ms,
                 "event_end_ms": e.event_end_ms,
+                "time_tba": e.time_tba,
                 "deposit_enabled": e.deposit_enabled,
                 "event_format": e.event_format.as_str(),
                 "created_at": e.created_at,
