@@ -33,6 +33,7 @@ pub struct EventForm {
     link: String,
     event_start: String,
     event_end: String,
+    time_tba: bool,
     sheet_id: String,
     sheet_name: String,
     staff_sheet_name: String,
@@ -60,6 +61,7 @@ pub struct EventForm {
     pub on_chain_event_id: String,
     pub refund_deadline_hours: String,
     pub max_refundable_deposits: String,
+    location: String,
     /// Server-side `updated_at` captured at load time for optimistic concurrency.
     pub updated_at: String,
 }
@@ -163,6 +165,8 @@ fn default_form() -> EventForm {
         on_chain_event_id: String::new(),
         refund_deadline_hours: String::new(),
         max_refundable_deposits: String::new(),
+        location: String::new(),
+        time_tba: false,
         ..Default::default()
     }
 }
@@ -219,6 +223,8 @@ fn form_from_detail(detail: &api::EventDetail) -> EventForm {
         on_chain_event_id: if detail.on_chain_event_id > 0 { detail.on_chain_event_id.to_string() } else { String::new() },
         refund_deadline_hours: if detail.refund_deadline_hours > 0 { detail.refund_deadline_hours.to_string() } else { String::new() },
         max_refundable_deposits: if detail.max_refundable_deposits > 0 { detail.max_refundable_deposits.to_string() } else { String::new() },
+        location: detail.location.clone(),
+        time_tba: detail.time_tba,
         updated_at: detail.updated_at.clone(),
     }
 }
@@ -440,20 +446,23 @@ pub fn EventsPage(
         }
 
         // Validate schedule — backend requires positive start_ms and end > start
+        let time_tba = current_form.time_tba;
         let start_ms = parse_date_to_ms(&current_form.event_start).unwrap_or(0);
         let end_ms = parse_date_to_ms(&current_form.event_end).unwrap_or(0);
         if start_ms <= 0 {
             components::show_toast(&set_toast, "Event start date is required", components::ToastType::Error);
             return;
         }
-        if end_ms <= 0 {
+        if !time_tba && end_ms <= 0 {
             components::show_toast(&set_toast, "Event end date is required", components::ToastType::Error);
             return;
         }
-        if end_ms <= start_ms {
+        if !time_tba && end_ms <= start_ms {
             components::show_toast(&set_toast, "Event end must be after event start", components::ToastType::Error);
             return;
         }
+        // TBA mode: default end_ms to start_ms + 24h if not set
+        let end_ms = if time_tba && end_ms <= 0 { start_ms + 86_400_000 } else { end_ms };
 
         // Validate deposit fields when deposit is enabled
         if current_form.deposit_enabled {
@@ -555,6 +564,8 @@ pub fn EventsPage(
                 max_refundable_deposits: current_form.max_refundable_deposits.parse::<u32>().unwrap_or(0),
                 event_format: current_form.event_format.clone(),
                 require_contact_info: current_form.require_contact_info,
+                time_tba,
+                location: if current_form.location.trim().is_empty() { None } else { Some(current_form.location.trim().to_string()) },
             };
 
             // Determine if we should also initialize escrow after creating the event.
@@ -703,6 +714,8 @@ pub fn EventsPage(
                 expected_updated_at: if current_form.updated_at.is_empty() { None } else { Some(current_form.updated_at.clone()) },
                 event_format: Some(current_form.event_format.clone()),
                 require_contact_info: Some(current_form.require_contact_info),
+                time_tba: Some(time_tba),
+                location: if current_form.location.trim().is_empty() { None } else { Some(current_form.location.trim().to_string()) },
             };
 
             leptos::task::spawn_local(async move {
@@ -1462,6 +1475,17 @@ pub fn EventsPage(
                                         />
                                         <span class="quiz-setting-hint">"Times in your local timezone"</span>
                                     </div>
+                                    <div class="quiz-setting-item" style="grid-column: 1 / -1;">
+                                        <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;">
+                                            <input
+                                                type="checkbox"
+                                                prop:checked=move || form.get().time_tba
+                                                on:change=move |ev| set_form.update(|f| f.time_tba = event_target_checked(&ev))
+                                            />
+                                            <span class="quiz-field-label" style="margin:0;">"Time TBA (To Be Announced)"</span>
+                                            <span class="form-hint" style="margin:0;">"Show \"TBA\" instead of specific time"</span>
+                                        </label>
+                                    </div>
                                     <Show
                                         when=move || {
                                             let start = parse_date_to_ms(&form.get().event_start).unwrap_or(0);
@@ -1474,6 +1498,17 @@ pub fn EventsPage(
                                             "Event end must be after event start"
                                         </div>
                                     </Show>
+                                    <div class="quiz-setting-item" style="grid-column:1/-1">
+                                        <label class="quiz-field-label">"Location"<span class="field-optional-badge">"Optional"</span></label>
+                                        <input
+                                            type="text"
+                                            class="quiz-number-input"
+                                            placeholder="e.g. Impact Exhibition Center, Bangkok"
+                                            prop:value=move || form.get().location
+                                            on:input=move |ev| set_form.update(|f| f.location = event_target_value(&ev))
+                                        />
+                                        <span class="quiz-setting-hint">"Venue name and address for in-person events"</span>
+                                    </div>
                                 </div>
                                 </div>
                             </div>

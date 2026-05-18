@@ -106,6 +106,8 @@ pub struct EventMeta {
     #[serde(default)]
     pub event_end_ms: i64,
     #[serde(default)]
+    pub time_tba: bool,
+    #[serde(default)]
     pub sheet_id: String,
     #[serde(default)]
     pub created_at: String,
@@ -141,6 +143,8 @@ pub struct EventDetail {
     #[serde(default)]
     pub event_end_ms: i64,
     #[serde(default)]
+    pub time_tba: bool,
+    #[serde(default)]
     pub sheet_id: String,
     #[serde(default)]
     pub sheet_name: String,
@@ -193,6 +197,8 @@ pub struct EventDetail {
     #[serde(default = "default_true_fn")]
     pub require_contact_info: bool,
     #[serde(default)]
+    pub location: String,
+    #[serde(default)]
     pub created_at: String,
     #[serde(default)]
     pub updated_at: String,
@@ -226,6 +232,8 @@ pub struct CreateEventBody {
     pub event_start_ms: i64,
     #[serde(default)]
     pub event_end_ms: i64,
+    #[serde(default)]
+    pub time_tba: bool,
     #[serde(default)]
     pub sheet_id: String,
     #[serde(default)]
@@ -276,6 +284,8 @@ pub struct CreateEventBody {
     pub event_format: EventFormat,
     #[serde(default = "default_true_fn")]
     pub require_contact_info: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub location: Option<String>,
 }
 
 /// Request body for PUT /api/events/{id} — update event.
@@ -296,6 +306,8 @@ pub struct UpdateEventBody {
     pub event_start_ms: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub event_end_ms: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub time_tba: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sheet_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -351,6 +363,8 @@ pub struct UpdateEventBody {
     pub event_format: Option<EventFormat>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub require_contact_info: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub location: Option<String>,
 }
 
 /// Response from event create/update (partial data).
