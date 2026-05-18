@@ -471,6 +471,22 @@ pub async fn execute_claim(
 
     let display_name = attendee.display_name().to_string();
 
+    // Resolve column mapping once — reused for virtual check-in and mark_claimed (C2)
+    let mapping = match crate::sheets::get_column_mapping(
+        state,
+        &event.sheet_id,
+        &event.sheet_name,
+        kv,
+    )
+    .await
+    {
+        Ok(m) => m,
+        Err(e) => {
+            tracing::warn!(error = %e, "column mapping fallback to hardcoded");
+            event_checkin_domain::models::attendee::ColumnMapping::hardcoded()
+        }
+    };
+
     // 3. Check-in verification — with virtual check-in for online attendees
     if attendee.checked_in_at.is_none() {
         let is_online_attendee = !attendee.is_in_person();
@@ -478,23 +494,7 @@ pub async fn execute_claim(
             // Verify quiz/adventure completion (at least one must be passed)
             let quest_passed = verify_online_quest_completion(state, &event.id, token).await;
             if quest_passed {
-                // Resolve column mapping
-                let mapping = match crate::sheets::get_column_mapping(
-                    state,
-                    &event.sheet_id,
-                    &event.sheet_name,
-                    kv,
-                )
-                .await
-                {
-                    Ok(m) => m,
-                    Err(e) => {
-                        tracing::warn!(error = %e, "column mapping fallback to hardcoded");
-                        event_checkin_domain::models::attendee::ColumnMapping::hardcoded()
-                    }
-                };
-
-                // Auto virtual check-in — write to Google Sheet
+                // Auto virtual check-in — write to Google Sheet (uses pre-resolved mapping)
                 match crate::sheets::mark_virtual_checked_in(
                     attendee.row_index,
                     &mapping,
@@ -678,24 +678,8 @@ pub async fn execute_claim(
         }
     };
 
-    // 10. Mark as claimed in Google Sheet
+    // 10. Mark as claimed in Google Sheet (uses pre-resolved mapping)
     let claimed_at = Utc::now().to_rfc3339();
-
-    // Resolve column mapping
-    let mapping = match crate::sheets::get_column_mapping(
-        state,
-        &event.sheet_id,
-        &event.sheet_name,
-        kv,
-    )
-    .await
-    {
-        Ok(m) => m,
-        Err(e) => {
-            tracing::warn!(error = %e, "column mapping fallback to hardcoded");
-            event_checkin_domain::models::attendee::ColumnMapping::hardcoded()
-        }
-    };
 
     if let Err(ref e) = crate::sheets::mark_claimed(
         attendee.row_index,

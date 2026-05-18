@@ -16,6 +16,19 @@ pub struct EventIdQuery {
     pub event_id: Option<String>,
 }
 
+/// Query params for attendee list with cursor-based pagination.
+#[derive(Debug, Clone, Deserialize)]
+pub struct AttendeesQuery {
+    pub event_id: Option<String>,
+    /// Cursor: row_index of the last attendee in the previous page.
+    /// None means start from the beginning.
+    #[serde(default)]
+    pub cursor: Option<usize>,
+    /// Page size limit. Default: 200, max: 200.
+    #[serde(default)]
+    pub limit: Option<usize>,
+}
+
 /// Resolve an event from query params and verify access.
 ///
 /// Returns `AppError::Unauthorized` if the user has no access to the event,

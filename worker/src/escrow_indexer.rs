@@ -589,9 +589,10 @@ fn extract_amount_from_transfers(
         for change in &account.token_balance_changes {
             if let Some(raw) = &change.raw_token_amount
                 && let Ok(amount) = raw.token_amount.parse::<u64>()
-                    && amount > 0 {
-                        return Some(amount);
-                    }
+                && amount > 0
+            {
+                return Some(amount);
+            }
         }
     }
 
@@ -870,9 +871,10 @@ fn parse_rpc_transaction(
 ) -> Option<OnChainEvent> {
     // Skip if meta has error
     if let Some(meta) = &tx.meta
-        && meta.err.is_some() {
-            return None;
-        }
+        && meta.err.is_some()
+    {
+        return None;
+    }
 
     // Find instructions targeting the escrow program
     for instr in &tx.transaction.message.instructions {
@@ -978,18 +980,33 @@ async fn rpc_post(rpc_url: &str, body: &serde_json::Value) -> Result<String, Str
 // Event resolution (escrow address → event ID)
 // ---------------------------------------------------------------------------
 
-/// Resolve an escrow PDA address to an event ID by scanning all events.
+/// Resolve an escrow PDA address to an event ID.
 ///
-/// This iterates the event index and checks `escrow_address` field.
-/// For a small number of events (< 100), this is fast enough.
+/// Uses the reverse index (`escrow:{address} → event_id`) for O(1) lookup (H7).
+/// Falls back to scanning all event configs if the index misses (migration).
 pub async fn resolve_event_by_escrow(kv: &KvStore, escrow_address: &str) -> Option<String> {
+    // Fast path: reverse index (single KV read)
+    if let Some(event_id) = crate::event_store::get_event_id_by_escrow(kv, escrow_address).await {
+        tracing::debug!(
+            escrow = %escrow_address,
+            event_id = %event_id,
+            "resolved escrow via reverse index"
+        );
+        return Some(event_id);
+    }
+
+    // Slow fallback: scan all event configs (for events created before the index existed)
+    tracing::debug!(escrow = %escrow_address, "reverse index miss — falling back to full scan");
     let index = crate::event_store::get_event_index(kv).await.ok()?;
 
     for meta in &index.events {
         if let Ok(Some(config)) = crate::event_store::get_event_config(kv, &meta.id).await
-            && config.escrow_address == escrow_address {
-                return Some(config.id);
-            }
+            && config.escrow_address == escrow_address
+        {
+            // Backfill the reverse index for future lookups
+            let _ = crate::event_store::save_escrow_index(kv, escrow_address, &config.id).await;
+            return Some(config.id);
+        }
     }
 
     None

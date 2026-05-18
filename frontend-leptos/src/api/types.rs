@@ -89,6 +89,33 @@ pub struct AttendeeResponse {
     pub participation_type: String,
 }
 
+/// Lightweight attendee summary for list views.
+/// Omits `claim_token` (only needed for single-attendee detail).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct AttendeeListItem {
+    #[serde(default)]
+    pub api_id: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub email: String,
+    #[serde(default)]
+    pub ticket_name: String,
+    #[serde(default)]
+    pub approval_status: String,
+    #[serde(default)]
+    pub checked_in_at: Option<String>,
+    #[serde(default)]
+    pub checked_in_by: Option<String>,
+    #[serde(default)]
+    pub qr_code_url: Option<String>,
+    #[serde(default)]
+    pub row_index: usize,
+    /// Participation type from Google Sheet column Y (e.g. "In-Person", "Online").
+    #[serde(default)]
+    pub participation_type: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RecentCheckIn {
     pub api_id: String,
@@ -115,9 +142,15 @@ pub struct StatsResponse {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AttendeesData {
     #[serde(default)]
-    pub attendees: Vec<AttendeeResponse>,
+    pub attendees: Vec<AttendeeListItem>,
     #[serde(default)]
     pub stats: StatsResponse,
+    /// Cursor for the next page (row_index of last item in current page).
+    #[serde(default)]
+    pub next_cursor: Option<usize>,
+    /// Whether more pages exist beyond this response.
+    #[serde(default)]
+    pub has_more: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

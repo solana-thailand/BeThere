@@ -74,15 +74,33 @@ pub struct WalkinSyncResponse {
 use super::types::{AttendeeData, AttendeesData, CheckInData, GenerateQrData};
 
 /// GET /api/attendees
-/// Returns all attendees with stats.
+/// Returns attendees with cursor-based pagination and stats.
 ///
 /// Results are cached client-side for 30 seconds (B5).
 /// Call `invalidate_attendee_cache()` after mutations (check-in, QR gen).
-pub async fn get_attendees(event_id: Option<&str>) -> Result<AttendeesData, ApiError> {
-    let path = match event_id {
-        Some(id) if !id.is_empty() => format!("/attendees?event_id={id}"),
-        _ => "/attendees".to_string(),
-    };
+pub async fn get_attendees(
+    event_id: Option<&str>,
+    cursor: Option<usize>,
+    limit: Option<usize>,
+) -> Result<AttendeesData, ApiError> {
+    let mut path = "/attendees".to_string();
+    let mut params = Vec::new();
+
+    if let Some(id) = event_id {
+        if !id.is_empty() {
+            params.push(format!("event_id={id}"));
+        }
+    }
+    if let Some(c) = cursor {
+        params.push(format!("cursor={c}"));
+    }
+    if let Some(l) = limit {
+        params.push(format!("limit={l}"));
+    }
+
+    if !params.is_empty() {
+        path = format!("{path}?{}", params.join("&"));
+    }
 
     let json = cached_get(&path).await?;
 

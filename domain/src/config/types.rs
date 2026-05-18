@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::fmt;
 
 use serde::Deserialize;
@@ -157,8 +158,8 @@ pub struct AppConfig {
     pub service_account: GoogleServiceAccountConfig,
     pub sheets: SheetsConfig,
     pub jwt_secret: String,
-    pub staff_emails: Vec<String>,
-    pub super_admin_emails: Vec<String>,
+    pub staff_emails: HashSet<String>,
+    pub super_admin_emails: HashSet<String>,
     pub server: ServerConfig,
     pub solana: SolanaConfig,
     pub nft: NftConfig,

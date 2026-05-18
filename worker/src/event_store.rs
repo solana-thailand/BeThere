@@ -89,6 +89,50 @@ async fn save_event_config(kv: &KvStore, config: &EventConfig) -> Result<(), Str
 }
 
 // ---------------------------------------------------------------------------
+// Escrow reverse index (escrow address → event ID) — H7
+// ---------------------------------------------------------------------------
+
+/// KV key for the escrow → event reverse index.
+fn escrow_index_key(escrow_address: &str) -> String {
+    format!("escrow:{escrow_address}")
+}
+
+/// Look up an event ID by its escrow PDA address via the reverse index.
+/// Returns `None` if the escrow address is not indexed.
+pub async fn get_event_id_by_escrow(kv: &KvStore, escrow_address: &str) -> Option<String> {
+    let key = escrow_index_key(escrow_address);
+    kv.get(&key).text().await.ok().flatten()
+}
+
+/// Write the escrow → event reverse index entry.
+pub async fn save_escrow_index(
+    kv: &KvStore,
+    escrow_address: &str,
+    event_id: &str,
+) -> Result<(), String> {
+    if escrow_address.is_empty() {
+        return Ok(()); // no escrow to index
+    }
+    let key = escrow_index_key(escrow_address);
+    kv.put(&key, event_id)
+        .map_err(|e| format!("failed to build escrow index put: {e:?}"))?
+        .execute()
+        .await
+        .map_err(|e| format!("failed to write escrow index to KV: {e:?}"))
+}
+
+/// Remove the escrow → event reverse index entry.
+async fn delete_escrow_index(kv: &KvStore, escrow_address: &str) -> Result<(), String> {
+    if escrow_address.is_empty() {
+        return Ok(());
+    }
+    let key = escrow_index_key(escrow_address);
+    kv.delete(&key)
+        .await
+        .map_err(|e| format!("failed to delete escrow index: {e:?}"))
+}
+
+// ---------------------------------------------------------------------------
 // CRUD operations
 // ---------------------------------------------------------------------------
 
@@ -216,6 +260,11 @@ pub async fn create_event(
 
     // Save full config
     save_event_config(kv, &config).await?;
+
+    // Maintain escrow reverse index (H7)
+    if !config.escrow_address.is_empty() {
+        save_escrow_index(kv, &config.escrow_address, &config.id).await?;
+    }
 
     // Update index
     let mut index = index;
@@ -442,6 +491,11 @@ pub async fn update_event(
     // Save updated config
     save_event_config(kv, &config).await?;
 
+    // Maintain escrow reverse index (H7)
+    if !config.escrow_address.is_empty() {
+        save_escrow_index(kv, &config.escrow_address, &config.id).await?;
+    }
+
     // Update index entry
     let mut index = get_event_index(kv).await?;
     if let Some(entry) = index.events.iter_mut().find(|e| e.id == id) {
@@ -569,6 +623,11 @@ pub async fn hard_delete_event(kv: &KvStore, id: &str, force: bool) -> Result<()
         .await
         .map_err(|e| format!("failed to delete event config: {e:?}"))?;
 
+    // Clean up escrow reverse index (H7)
+    if !config.escrow_address.is_empty() {
+        let _ = delete_escrow_index(kv, &config.escrow_address).await;
+    }
+
     // Remove from index
     let mut index = get_event_index(kv).await?;
     let before = index.events.len();
@@ -652,7 +711,7 @@ pub async fn seed_from_config(
         nft_symbol: "BETHERE".to_string(),
         nft_description_template: "Proof of attendance at {event_name}".to_string(),
         organizer_emails: {
-            let mut emails = global.super_admin_emails.clone();
+            let mut emails: Vec<String> = global.super_admin_emails.iter().cloned().collect();
             // Merge organizers from Google Sheet staff tab (role "admin" or "organizer")
             let kv = state.events_kv.as_ref().or(state.quiz_kv.as_ref());
             if let Ok(members) = crate::sheets::get_staff_members(
@@ -674,7 +733,7 @@ pub async fn seed_from_config(
             emails
         },
         staff_emails: {
-            let mut emails = global.staff_emails.clone();
+            let mut emails: Vec<String> = global.staff_emails.iter().cloned().collect();
             // Merge staff from Google Sheet staff tab (all members)
             let kv = state.events_kv.as_ref().or(state.quiz_kv.as_ref());
             if let Ok(members) = crate::sheets::get_staff_members(
@@ -833,9 +892,9 @@ pub async fn resolve_event_or_fallback(
                 &global.nft.collection_mint,
                 &global.nft.metadata_uri,
                 &global.nft.image_url,
-                "",                          // nft_symbol — not in global config
-                global.staff_emails.clone(), // organizer_emails — use staff_emails for legacy
-                Vec::new(),                  // staff_emails
+                "", // nft_symbol — not in global config
+                global.staff_emails.iter().cloned().collect::<Vec<String>>(), // organizer_emails — use staff_emails for legacy
+                Vec::new(),                                                   // staff_emails
                 &global.server.claim_base_url,
                 "", // merkle_tree — not in global config
             ))

@@ -10,25 +10,33 @@ use axum::{
 };
 use serde_json::json;
 
+use worker::KvStore;
+
 use crate::error::ApiOk;
 
-use event_checkin_domain::models::api::{AttendeeResponse, RecentCheckIn, StatsResponse};
+use event_checkin_domain::models::api::{
+    AttendeeListItem, AttendeeResponse, RecentCheckIn, StatsResponse,
+};
 use event_checkin_domain::models::auth::Claims;
 use event_checkin_domain::models::error::AppError;
 
-use super::ext::{EventIdQuery, resolve_event, resolve_event_with_access, resolve_kv};
+use super::ext::{
+    AttendeesQuery, EventIdQuery, resolve_event, resolve_event_with_access, resolve_kv,
+};
 use crate::sheets;
 use crate::state::AppState;
 
 /// GET /api/attendees
-/// List all attendees with optional filtering and statistics.
+/// List attendees with cursor-based pagination and statistics.
 ///
-/// Returns attendee list and check-in statistics.
+/// Stats are computed over ALL attendees regardless of pagination.
+/// Attendees are sorted by `row_index` ascending for deterministic pagination.
+/// Use `cursor` (row_index of last item) and `limit` (page size) for pagination.
 #[worker::send]
 pub async fn list_attendees(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
-    Query(query): Query<EventIdQuery>,
+    Query(query): Query<AttendeesQuery>,
 ) -> Result<ApiOk<serde_json::Value>, crate::error::WorkerError> {
     tracing::info!("listing attendees (requested by: {})", claims.email);
 
@@ -42,7 +50,7 @@ pub async fn list_attendees(
             AppError::Internal(format!("failed to fetch attendees: {e}"))
         })?;
 
-    // Compute statistics
+    // Compute statistics over ALL attendees (not paginated)
     let total_approved: usize = attendees.iter().filter(|a| a.is_approved()).count();
 
     let total_checked_in: usize = attendees.iter().filter(|a| a.is_checked_in()).count();
@@ -68,12 +76,6 @@ pub async fn list_attendees(
         })
         .collect();
 
-    let attendee_responses: Vec<AttendeeResponse> = attendees
-        .iter()
-        .filter(|a| a.is_approved())
-        .map(AttendeeResponse::from_attendee)
-        .collect();
-
     let stats = StatsResponse {
         total_approved,
         total_checked_in,
@@ -82,9 +84,40 @@ pub async fn list_attendees(
         recent_check_ins,
     };
 
+    // Cursor-based pagination: sort approved attendees by row_index,
+    // filter by cursor, then take up to `page_limit`.
+    let page_limit = query.limit.unwrap_or(200).min(200);
+
+    let mut approved: Vec<_> = attendees.iter().filter(|a| a.is_approved()).collect();
+    approved.sort_by_key(|a| a.row_index);
+
+    let filtered: Vec<_> = match query.cursor {
+        Some(cursor) => approved
+            .into_iter()
+            .filter(|a| a.row_index > cursor)
+            .collect(),
+        None => approved,
+    };
+
+    let has_more = filtered.len() > page_limit;
+    let page: Vec<_> = filtered.into_iter().take(page_limit).collect();
+
+    let next_cursor = if has_more {
+        page.last().map(|a| a.row_index)
+    } else {
+        None
+    };
+
+    let attendee_responses: Vec<AttendeeListItem> = page
+        .iter()
+        .map(|a| AttendeeListItem::from_attendee(a))
+        .collect();
+
     let data = json!({
         "attendees": attendee_responses,
         "stats": stats,
+        "next_cursor": next_cursor,
+        "has_more": has_more,
     });
     Ok(ApiOk::new(data))
 }
@@ -114,11 +147,11 @@ pub async fn get_attendee(
 
     let response = AttendeeResponse::from_attendee(&attendee);
 
-    // Also generate a QR code image if the attendee has a QR URL
-    let qr_image = attendee
-        .qr_code_url
-        .as_ref()
-        .and_then(|url| event_checkin_domain::qr::generate_qr_base64(url).ok());
+    // Generate a QR code image (cached in KV) if the attendee has a QR URL
+    let qr_image = match attendee.qr_code_url.as_ref() {
+        Some(url) => get_cached_qr_image(kv, &attendee.api_id, url).await,
+        None => None,
+    };
 
     let data = json!({
         "attendee": response,
@@ -158,14 +191,11 @@ pub async fn get_public_ticket(
     // Mask email for privacy: "john@example.com" → "j***@example.com"
     response.email = mask_email(&response.email);
 
-    // Generate QR code image from the check-in URL
-    let qr_image = attendee
-        .qr_code_url
-        .as_ref()
-        .and_then(|url| event_checkin_domain::qr::generate_qr_base64(url).ok());
-
-    // Also try generating QR from the attendee api_id directly if no qr_code_url
-    let qr_image = qr_image.or_else(|| event_checkin_domain::qr::generate_qr_base64(&id).ok());
+    // Generate QR code image (cached in KV) if the attendee has a QR URL
+    let qr_image = match attendee.qr_code_url.as_ref() {
+        Some(url) => get_cached_qr_image(kv, &attendee.api_id, url).await,
+        None => None,
+    };
 
     let data = json!({
         "attendee": response,
@@ -188,6 +218,45 @@ fn mask_email(email: &str) -> String {
     }
     let first = local.chars().next().unwrap_or('*');
     format!("{first}***@{domain}")
+}
+
+/// QR image cache TTL in seconds (1 hour).
+const QR_IMAGE_CACHE_TTL_SECS: u64 = 3600;
+
+/// Generate a QR base64 image, cached in KV.
+///
+/// Key: `qr:{api_id}`, TTL: 1 hour.
+/// Falls back to uncached generation if KV is unavailable.
+#[allow(clippy::collapsible_if)]
+async fn get_cached_qr_image(
+    kv: Option<&KvStore>,
+    api_id: &str,
+    qr_code_url: &str,
+) -> Option<String> {
+    let cache_key = format!("qr:{api_id}");
+
+    // Try KV cache first
+    if let Some(kv) = kv
+        && let Ok(Some(cached)) = kv.get(&cache_key).text().await
+    {
+        return Some(cached);
+    }
+
+    // Generate fresh
+    let image = event_checkin_domain::qr::generate_qr_base64(qr_code_url).ok()?;
+
+    // Store in KV (best-effort, don't block on failure)
+    if let Some(kv) = kv
+        && let Ok(builder) = kv.put(&cache_key, image.clone())
+        && let Err(e) = builder
+            .expiration_ttl(QR_IMAGE_CACHE_TTL_SECS)
+            .execute()
+            .await
+    {
+        tracing::debug!(key = %cache_key, error = %e, "failed to cache QR image in KV");
+    }
+
+    Some(image)
 }
 
 /// POST /api/admin/flush-cache

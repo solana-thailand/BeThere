@@ -618,7 +618,7 @@ pub struct HeliusTransactionData {
 }
 
 /// Response body for updating deposit status with TX signature.
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Deserialize)]
 pub struct UpdateDepositSignatureRequest {
     /// Event ID.
     pub event_id: String,
@@ -626,6 +626,79 @@ pub struct UpdateDepositSignatureRequest {
     pub attendee_id: String,
     /// On-chain transaction signature.
     pub tx_signature: String,
+}
+
+/// Background task: verify deposit TX on-chain and update status (H8).
+///
+/// Detached via `wait_until` so the webhook response returns immediately.
+/// Owns all data — no borrows on the handler's stack.
+async fn verify_and_confirm_deposit(state: &AppState, body: &UpdateDepositSignatureRequest) {
+    let Some(kv) = state.events_kv.as_ref() else {
+        tracing::error!("EVENTS KV not configured in background verification");
+        return;
+    };
+
+    let rpc_url = state.config.solana.full_rpc_url();
+    let confirmed = verify_tx_on_chain(&rpc_url, &body.tx_signature).await;
+
+    if confirmed {
+        // Reload and update deposit status
+        match event_store::get_deposit_status(kv, &body.event_id, &body.attendee_id).await {
+            Ok(Some(mut deposit_status)) => {
+                deposit_status.verified = true;
+                if let Err(e) = event_store::save_deposit_status(kv, &deposit_status).await {
+                    tracing::error!(
+                        attendee_id = %body.attendee_id,
+                        error = %e,
+                        "failed to save verified deposit status in background"
+                    );
+                    return;
+                }
+
+                tracing::info!(
+                    attendee_id = %body.attendee_id,
+                    tx_signature = %body.tx_signature,
+                    "USDC deposit verified in background"
+                );
+
+                // Audit log
+                let _ = crate::audit_store::append_event_audit(
+                    kv,
+                    &body.event_id,
+                    crate::audit_store::create_entry_with_meta(
+                        "system",
+                        crate::audit_store::AuditAction::DepositConfirmed,
+                        &body.attendee_id,
+                        "USDC deposit confirmed on-chain (background)",
+                        serde_json::json!({
+                            "tx_signature": body.tx_signature,
+                            "confirmed": true,
+                        }),
+                    ),
+                )
+                .await;
+            }
+            Ok(None) => {
+                tracing::warn!(
+                    attendee_id = %body.attendee_id,
+                    "deposit record disappeared before background verification"
+                );
+            }
+            Err(e) => {
+                tracing::error!(
+                    attendee_id = %body.attendee_id,
+                    error = %e,
+                    "failed to reload deposit status for background verification"
+                );
+            }
+        }
+    } else {
+        tracing::info!(
+            attendee_id = %body.attendee_id,
+            tx_signature = %body.tx_signature,
+            "USDC deposit not yet confirmed on-chain (background check)"
+        );
+    }
 }
 
 /// Helius webhook handler for USDC deposit confirmations.
@@ -660,46 +733,35 @@ pub async fn deposit_webhook_handler(
     // Update with TX signature
     deposit_status.tx_signature = Some(body.tx_signature.clone());
 
-    // Try to verify the TX on-chain immediately
-    let rpc_url = state.config.solana.full_rpc_url();
-    let confirmed = verify_tx_on_chain(&rpc_url, &body.tx_signature).await;
-
-    if confirmed {
-        deposit_status.verified = true;
-        tracing::info!(
-            attendee_id = %body.attendee_id,
-            tx_signature = %body.tx_signature,
-            "USDC deposit verified via webhook"
-        );
-    } else {
-        tracing::info!(
-            attendee_id = %body.attendee_id,
-            tx_signature = %body.tx_signature,
-            "USDC deposit TX signature recorded, pending on-chain confirmation"
-        );
-    }
-
+    // Save immediately so the frontend sees the TX signature (H8: verification detached)
     event_store::save_deposit_status(kv, &deposit_status)
         .await
         .map_err(event_checkin_domain::models::error::AppError::Internal)?;
 
-    // Audit log
-    let _ = crate::audit_store::append_event_audit(
-        kv,
-        &body.event_id,
-        crate::audit_store::create_entry_with_meta(
-            "system",
-            crate::audit_store::AuditAction::DepositConfirmed,
-            &body.attendee_id,
-            "USDC deposit confirmed on-chain",
-            serde_json::json!({"tx_signature": body.tx_signature, "confirmed": confirmed}),
-        ),
-    )
-    .await;
+    tracing::info!(
+        attendee_id = %body.attendee_id,
+        tx_signature = %body.tx_signature,
+        "USDC deposit TX signature recorded, pending on-chain verification"
+    );
+
+    // Detach on-chain verification — response returns immediately (H8)
+    // If verified, updates deposit status + audit log in background via wait_until.
+    if let Some(ctx) = &state.worker_ctx {
+        let verify_state = state.clone();
+        let verify_body = body.clone();
+        ctx.wait_until(async move {
+            verify_and_confirm_deposit(&verify_state, &verify_body).await;
+        });
+    } else {
+        tracing::warn!(
+            attendee_id = %body.attendee_id,
+            "no worker_ctx available — skipping detached on-chain verification"
+        );
+    }
 
     Ok(ApiOk::new(serde_json::json!({
         "success": true,
-        "confirmed": confirmed,
+        "confirmed": false, // pending — will be verified in background
         "tx_signature": body.tx_signature,
     })))
 }

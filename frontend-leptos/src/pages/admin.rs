@@ -15,7 +15,7 @@ use std::collections::{HashMap, HashSet};
 use leptos::prelude::*;
 use leptos_router::hooks::use_navigate;
 
-use crate::api::{self, AttendeeResponse, GenerateQrData, StatsResponse};
+use crate::api::{self, AttendeeListItem, GenerateQrData, StatsResponse};
 use crate::auth;
 use crate::components::{self, ToastType};
 use crate::icons::{Icon, IconName};
@@ -72,7 +72,7 @@ enum FilterPill {
 
 impl FilterPill {
     /// Whether an attendee passes this filter.
-    fn matches(&self, a: &AttendeeResponse) -> bool {
+    fn matches(&self, a: &AttendeeListItem) -> bool {
         match self {
             FilterPill::All => true,
             FilterPill::CheckedIn => a.checked_in_at.is_some(),
@@ -88,7 +88,7 @@ fn is_vip_ticket(ticket_name: &str) -> bool {
 }
 
 /// Generate CSV content from a filtered attendee list.
-fn generate_csv(attendees: &[AttendeeResponse]) -> String {
+fn generate_csv(attendees: &[AttendeeListItem]) -> String {
     let mut csv = String::from(
         "Name,Email,Ticket,Participation,Status,Checked In At,Checked In By,API ID\n",
     );
@@ -207,7 +207,7 @@ pub fn Admin() -> impl IntoView {
     });
 
     // Data state
-    let (attendees, set_attendees) = signal(Vec::<AttendeeResponse>::new());
+    let (attendees, set_attendees) = signal(Vec::<AttendeeListItem>::new());
     let (stats, set_stats) = signal(None::<StatsResponse>);
     let (search_query, set_search_query) = signal(String::new());
     let (is_loading, set_is_loading) = signal(true);
@@ -277,7 +277,7 @@ pub fn Admin() -> impl IntoView {
         let pill = filter_pill.get();
         let list = attendees.get();
 
-        let mut filtered: Vec<AttendeeResponse> = list
+        let mut filtered: Vec<AttendeeListItem> = list
             .iter()
             .filter(|a| tab.matches(&a.participation_type))
             .filter(|a| {
@@ -360,7 +360,7 @@ pub fn Admin() -> impl IntoView {
         set_is_loading.set(true);
 
         leptos::task::spawn_local(async move {
-            match api::get_attendees(eid.as_deref()).await {
+            match api::get_attendees(eid.as_deref(), None, None).await {
                 Ok(data) => {
                     set_attendees.set(data.attendees);
                     set_stats.set(Some(data.stats));
@@ -1290,7 +1290,7 @@ fn spawn_qr_generation(
 /// Render tab-aware stats cards and progress bar.
 fn render_stats(
     stats: &Option<StatsResponse>,
-    attendees: &[AttendeeResponse],
+    attendees: &[AttendeeListItem],
     tab: DashboardTab,
 ) -> AnyView {
     match stats {
@@ -1427,7 +1427,7 @@ fn render_qr_result(data: &Option<GenerateQrData>) -> AnyView {
 /// Render the recent check-ins panel, filtered by tab.
 fn render_recent_check_ins(
     stats: &Option<StatsResponse>,
-    attendees: &[AttendeeResponse],
+    attendees: &[AttendeeListItem],
     tab: DashboardTab,
 ) -> AnyView {
     match stats {

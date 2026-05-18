@@ -523,11 +523,13 @@ mod tests {
                 staff_sheet_name: "staff".to_string(),
             },
             jwt_secret: "test-jwt-secret".to_string(),
-            staff_emails: vec![
+            staff_emails: [
                 "admin@example.com".to_string(),
                 "staff@example.com".to_string(),
-            ],
-            super_admin_emails: vec!["admin@example.com".to_string()],
+            ]
+            .into_iter()
+            .collect(),
+            super_admin_emails: ["admin@example.com".to_string()].into_iter().collect(),
             server: ServerConfig {
                 host: "0.0.0.0".to_string(),
                 port: 3000,

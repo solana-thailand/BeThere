@@ -1,4 +1,5 @@
-use std::sync::Arc;
+use std::collections::HashSet;
+use std::sync::{Arc, OnceLock};
 
 use worker::{Context, Env, KvStore};
 
@@ -6,6 +7,20 @@ use event_checkin_domain::config::{
     AppConfig, EventDefaults, GoogleOAuthConfig, GoogleServiceAccountConfig, NftConfig,
     ServerConfig, SheetsConfig, SolanaConfig,
 };
+
+/// Global cache for the parsed `AppConfig`.
+///
+/// Built once per Workers isolate, reused across all subsequent fetch requests.
+/// Only the KV bindings and `webhook_secret` are re-read per request (cheap
+/// single calls to `env.kv()` / `env.var()`).
+///
+/// Safe because `AppConfig` is pure Rust data — no JS interop objects — so it
+/// is `Send + Sync`.
+static CACHED_CONFIG: OnceLock<Arc<AppConfig>> = OnceLock::new();
+
+/// Whether the `WEBHOOK_SECRET` empty-warning has already been emitted.
+/// Prevents log spam on every request when the var is not set.
+static WARNED_WEBHOOK_SECRET: OnceLock<()> = OnceLock::new();
 
 /// Application state available to all Axum handlers on Workers.
 ///
@@ -30,11 +45,11 @@ pub struct AppState {
 }
 
 impl AppState {
-    /// Build `AppState` from Workers environment bindings.
+    /// Build `AppConfig` from Workers environment (called once, cached globally).
     ///
-    /// Secrets are set via `npx wrangler secret put <NAME>`.
-    /// Vars are defined in `wrangler.toml` `[vars]`.
-    pub fn from_env(env: &Env) -> Result<Self, String> {
+    /// Reads 22+ env vars, creates 2 `HashSet`s, and performs string
+    /// allocation. Expensive enough to justify caching.
+    fn build_config(env: &Env) -> Result<AppConfig, String> {
         let google_oauth = GoogleOAuthConfig {
             client_id: get_secret(env, "GOOGLE_CLIENT_ID")?,
             client_secret: get_secret(env, "GOOGLE_CLIENT_SECRET")?,
@@ -56,7 +71,7 @@ impl AppState {
         };
 
         let staff_emails_str = get_secret(env, "STAFF_EMAILS")?;
-        let staff_emails: Vec<String> = staff_emails_str
+        let staff_emails: HashSet<String> = staff_emails_str
             .split(',')
             .map(|s| s.trim().to_lowercase())
             .filter(|s| !s.is_empty())
@@ -65,7 +80,7 @@ impl AppState {
         let super_admin_emails_str = get_secret(env, "SUPER_ADMIN_EMAILS")
             .or_else(|_| get_var(env, "SUPER_ADMIN_EMAILS"))
             .unwrap_or_else(|_| String::new());
-        let super_admin_emails: Vec<String> = super_admin_emails_str
+        let super_admin_emails: HashSet<String> = super_admin_emails_str
             .split(',')
             .map(|s| s.trim().to_lowercase())
             .filter(|s| !s.is_empty())
@@ -125,7 +140,8 @@ impl AppState {
 
         let dev_email = get_var(env, "DEV_EMAIL").unwrap_or_else(|_| {
             super_admin_emails
-                .first()
+                .iter()
+                .next()
                 .cloned()
                 .unwrap_or_else(|| "dev@localhost".to_string())
         });
@@ -137,7 +153,7 @@ impl AppState {
             );
         }
 
-        let config = AppConfig {
+        Ok(AppConfig {
             google_oauth,
             service_account,
             sheets,
@@ -150,21 +166,42 @@ impl AppState {
             event_defaults,
             dev_mode,
             dev_email,
+        })
+    }
+
+    /// Build `AppState` from Workers environment bindings.
+    ///
+    /// Caches the expensive `AppConfig` parsing (22+ env var reads, 2 HashSets)
+    /// behind a global `OnceLock` so it runs once per Workers isolate.
+    /// Only the cheap KV bindings and `webhook_secret` are re-read per request.
+    pub fn from_env(env: &Env) -> Result<Self, String> {
+        // Use cached config if available, otherwise build + cache it
+        let config = match CACHED_CONFIG.get() {
+            Some(cached) => Arc::clone(cached),
+            None => {
+                let cfg = Self::build_config(env)?;
+                let arc = Arc::new(cfg);
+                // Best-effort: if another invocation beat us, that's fine —
+                // both produce identical configs from the same env.
+                let _ = CACHED_CONFIG.set(arc.clone());
+                arc
+            }
         };
 
-        // Quiz KV namespace — optional, quiz feature disabled if not bound
+        // Per-request bindings — cheap single calls, not cached
         let quiz_kv = env.kv("QUIZ").ok();
-
-        // Events KV namespace — optional, multi-event disabled if not bound
         let events_kv = env.kv("EVENTS").ok();
 
         let webhook_secret = get_var(env, "WEBHOOK_SECRET").unwrap_or_default();
         if webhook_secret.is_empty() {
-            tracing::warn!("WEBHOOK_SECRET not set — webhook auth validation is disabled");
+            // Only warn once per isolate to avoid log spam
+            let _ = WARNED_WEBHOOK_SECRET.get_or_init(|| {
+                tracing::warn!("WEBHOOK_SECRET not set — webhook auth validation is disabled");
+            });
         }
 
         Ok(Self {
-            config: Arc::new(config),
+            config,
             quiz_kv,
             events_kv,
             webhook_secret,
@@ -180,10 +217,7 @@ impl AppState {
 
     /// Check if a given email is in the staff emails allowlist.
     pub fn is_staff(&self, email: &str) -> bool {
-        self.config
-            .staff_emails
-            .iter()
-            .any(|allowed| allowed.eq_ignore_ascii_case(email))
+        self.config.staff_emails.contains(&email.to_lowercase())
     }
 }
 

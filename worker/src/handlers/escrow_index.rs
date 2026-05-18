@@ -206,8 +206,7 @@ pub async fn escrow_sync_handler(
     let is_super_admin = state
         .config
         .super_admin_emails
-        .iter()
-        .any(|e| e.eq_ignore_ascii_case(&claims.email));
+        .contains(&claims.email.to_lowercase());
 
     if !is_organizer && !is_super_admin {
         return Err(AppError::Forbidden(
@@ -303,8 +302,7 @@ pub async fn get_onchain_events_handler(
     let is_super_admin = state
         .config
         .super_admin_emails
-        .iter()
-        .any(|e| e.eq_ignore_ascii_case(&claims.email));
+        .contains(&claims.email.to_lowercase());
 
     if !is_staff && !is_organizer && !is_super_admin {
         return Err(AppError::Forbidden("insufficient permissions".to_string()).into());
