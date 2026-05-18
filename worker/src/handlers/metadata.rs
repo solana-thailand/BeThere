@@ -1,7 +1,8 @@
 //! NFT metadata and badge endpoints.
 
 use axum::extract::{Path, State};
-use axum::response::{Html, Json};
+use axum::http::{StatusCode, header};
+use axum::response::{IntoResponse, Json, Response};
 use serde_json::json;
 
 use crate::error::WorkerError;
@@ -112,16 +113,26 @@ pub async fn get_metadata(
 /// GET /api/badge.svg
 ///
 /// Simple 200x200 badge for thumbnails and quick previews.
-pub async fn get_badge_svg() -> Html<&'static str> {
+pub async fn get_badge_svg() -> Response {
     let svg = include_str!("../badge.svg");
-    Html(svg)
+    (
+        StatusCode::OK,
+        [(header::CONTENT_TYPE, "image/svg+xml")],
+        svg,
+    )
+        .into_response()
 }
 
 /// GET /api/badge-hd.svg
 ///
 /// Production 1000x1000 badge for NFT display.
 /// Use this URL as `nft_image_url` in the admin UI for best quality.
-pub async fn get_badge_hd_svg() -> Html<&'static str> {
+pub async fn get_badge_hd_svg() -> Response {
     let svg = include_str!("../badge_production.svg");
-    Html(svg)
+    (
+        StatusCode::OK,
+        [(header::CONTENT_TYPE, "image/svg+xml")],
+        svg,
+    )
+        .into_response()
 }

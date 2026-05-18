@@ -164,11 +164,21 @@ pub async fn create_event(
     if req.sheet_id.trim().is_empty() {
         return Err("google sheet_id is required".to_string());
     }
-    if req.event_start_ms <= 0 {
-        return Err("event_start_ms must be a positive Unix epoch millisecond".to_string());
-    }
-    if req.event_end_ms <= req.event_start_ms {
-        return Err("event_end_ms must be after event_start_ms".to_string());
+    if req.time_tba {
+        // TBA mode: ensure at least date-level timestamps
+        if req.event_start_ms <= 0 {
+            return Err("event_start_ms date is required even for TBA events".to_string());
+        }
+        if req.event_end_ms <= 0 {
+            // Default end = start + 24h if not provided
+        }
+    } else {
+        if req.event_start_ms <= 0 {
+            return Err("event_start_ms must be a positive Unix epoch millisecond".to_string());
+        }
+        if req.event_end_ms <= req.event_start_ms {
+            return Err("event_end_ms must be after event_start_ms".to_string());
+        }
     }
 
     // SEC-003: Max deposit cap ($1,000 USDC = 1_000_000_000 smallest units, 6 decimals)
@@ -205,6 +215,7 @@ pub async fn create_event(
         status: EventStatus::Draft,
         event_start_ms: req.event_start_ms,
         event_end_ms: req.event_end_ms,
+        time_tba: req.time_tba,
         sheet_id: req.sheet_id.trim().to_string(),
         sheet_name: if req.sheet_name.is_empty() {
             "Attendees".to_string()
@@ -369,6 +380,9 @@ pub async fn update_event(
             return Err("event_end_ms must be after event_start_ms".to_string());
         }
         config.event_end_ms = ms;
+    }
+    if let Some(tba) = req.time_tba {
+        config.time_tba = tba;
     }
     if let Some(ref sheet_id) = req.sheet_id {
         if sheet_id.trim().is_empty() {
@@ -700,13 +714,21 @@ pub async fn seed_from_config(
         status: EventStatus::Active,
         event_start_ms: defaults.start_ms,
         event_end_ms: defaults.end_ms,
+        time_tba: false,
         sheet_id: global.sheets.sheet_id.clone(),
         sheet_name: global.sheets.sheet_name.clone(),
         staff_sheet_name: global.sheets.staff_sheet_name.clone(),
         quiz_enabled: true,
         nft_collection_mint: global.nft.collection_mint.clone(),
         nft_metadata_uri: global.nft.metadata_uri.clone(),
-        nft_image_url: global.nft.image_url.clone(),
+        nft_image_url: if global.nft.image_url.is_empty() {
+            format!(
+                "{}/api/badge-hd.svg",
+                global.server.url.trim_end_matches('/')
+            )
+        } else {
+            global.nft.image_url.clone()
+        },
         nft_name_template: "BeThere - {event_name}".to_string(),
         nft_symbol: "BETHERE".to_string(),
         nft_description_template: "Proof of attendance at {event_name}".to_string(),
