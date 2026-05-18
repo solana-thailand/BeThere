@@ -1781,7 +1781,12 @@ pub fn Claim() -> impl IntoView {
                                                     }
                                                     // Not connected: show connect buttons + manual fallback
                                                     None => {
-                                                        let wallets = detected_wallets.get();
+                                                        let mut wallets = detected_wallets.get();
+                                                        // Always show Phantom as an option — if not installed,
+                                                        // the connect will fail gracefully and show install prompt.
+                                                        if !wallets.iter().any(|w| w.eq_ignore_ascii_case("Phantom")) {
+                                                            wallets.push("Phantom".to_string());
+                                                        }
                                                         let has_wallets = !wallets.is_empty();
                                                         view! {
                                                             // Wallet adapter connect buttons
@@ -1815,7 +1820,18 @@ pub fn Claim() -> impl IntoView {
                                                                                                         set_cw.set(Some((w, pubkey)));
                                                                                                     }
                                                                                                     crate::wallet_error::WalletResult::Error(e) => {
-                                                                                                        log::warn!("[claim] wallet connect error for {}: code={:?} msg={}", w, e.code, e.raw_message);
+                                                                                                        if e.raw_message.contains("Wallet not found") {
+                                                                                                            log::info!("[claim] {} not installed, opening download page", w);
+                                                                                                            let url = match w.to_lowercase().as_str() {
+                                                                                                                "phantom" => "https://phantom.app/download",
+                                                                                                                "backpack" => "https://backpack.app/download",
+                                                                                                                "solflare" => "https://solflare.com/download",
+                                                                                                                _ => "https://phantom.app/download",
+                                                                                                            };
+                                                                                                            let _ = web_sys::window().and_then(|w| w.open_with_url_and_target(url, "_blank").ok());
+                                                                                                        } else {
+                                                                                                            log::warn!("[claim] wallet connect error for {}: code={:?} msg={}", w, e.code, e.raw_message);
+                                                                                                        }
                                                                                                     }
                                                                                                     crate::wallet_error::WalletResult::UnknownFailure => {
                                                                                                         log::warn!("[claim] wallet connect failed for {}", w);

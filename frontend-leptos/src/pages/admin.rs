@@ -68,6 +68,7 @@ enum FilterPill {
     CheckedIn,
     NotCheckedIn,
     Vip,
+    Walkin,
 }
 
 impl FilterPill {
@@ -78,6 +79,7 @@ impl FilterPill {
             FilterPill::CheckedIn => a.checked_in_at.is_some(),
             FilterPill::NotCheckedIn => a.checked_in_at.is_none(),
             FilterPill::Vip => a.ticket_name.to_lowercase().contains("vip"),
+            FilterPill::Walkin => a.ticket_name.eq_ignore_ascii_case("Walk-in"),
         }
     }
 }
@@ -1021,6 +1023,13 @@ pub fn Admin() -> impl IntoView {
                         >
                             "VIP"
                         </button>
+                        <button
+                            class="filter-pill"
+                            class:active=move || filter_pill.get() == FilterPill::Walkin
+                            on:click=move |_| set_filter_pill.set(FilterPill::Walkin)
+                        >
+                            "Walk-in"
+                        </button>
                     </div>
 
                     // Attendee count
@@ -1075,6 +1084,7 @@ pub fn Admin() -> impl IntoView {
                                 let items = visible.into_iter().map(|attendee| {
                                     let is_checked_in = attendee.checked_in_at.is_some();
                                     let is_vip = is_vip_ticket(&attendee.ticket_name);
+                                    let is_walkin = attendee.ticket_name.eq_ignore_ascii_case("Walk-in");
                                     let is_selected = selected.contains(&attendee.api_id);
                                     let api_id = attendee.api_id.clone();
                                     let badge_class = if is_checked_in { "badge badge-success" } else { "badge badge-warning" };
@@ -1122,6 +1132,9 @@ pub fn Admin() -> impl IntoView {
                                                         {utils::escape_html(&ticket)}
                                                         <Show when=move || is_vip fallback=|| view! { <span></span> }>
                                                             <span class="vip-badge">"VIP"</span>
+                                                        </Show>
+                                                        <Show when=move || is_walkin fallback=|| view! { <span></span> }>
+                                                            <span class="walkin-badge">"Walk-in"</span>
                                                         </Show>
                                                     </div>
                                                 </Show>
