@@ -724,7 +724,15 @@ fn render_loaded_event(
         None
     };
     let refund_label = format_refund_deadline(data.refund_deadline_hours);
-    let deposit_thb = data.deposit_amount_thb;
+    // Build the deposit label for the registration form checkbox.
+    // Shows USDC for USDC-only events, THB for THB-only, or both when both are set.
+    let deposit_label = if data.deposit_amount_usdc > 0 && data.deposit_amount_thb > 0 {
+        format!("{} (~{})", format_usdc(data.deposit_amount_usdc), format_thb(data.deposit_amount_thb))
+    } else if data.deposit_amount_usdc > 0 {
+        format_usdc(data.deposit_amount_usdc)
+    } else {
+        format_thb(data.deposit_amount_thb)
+    };
     let _show_deposit_cta = has_deposit && !event_completed.get();
     let show_reg_form = !event_completed.get();
     let require_contact = data.require_contact_info;
@@ -1131,7 +1139,7 @@ fn render_loaded_event(
                                 is_hybrid,
                                 require_contact,
                                 has_deposit,
-                                deposit_thb,
+                                deposit_label.clone(),
                                 in_person_available,
                                 online_available,
                                 in_person_remaining,
@@ -1162,7 +1170,7 @@ fn render_loaded_event(
                                 is_hybrid,
                                 require_contact,
                                 has_deposit,
-                                deposit_thb,
+                                deposit_label.clone(),
                                 in_person_available,
                                 online_available,
                                 in_person_remaining,
@@ -1247,7 +1255,7 @@ fn render_registration_form(
     is_hybrid: bool,
     require_contact: bool,
     has_deposit: bool,
-    deposit_thb: u64,
+    deposit_label: String,
     in_person_available: bool,
     online_available: bool,
     in_person_remaining: Option<u32>,
@@ -1274,6 +1282,7 @@ fn render_registration_form(
     view! {
         {move || {
             let current_reg = reg_state.get();
+            let dep_label = deposit_label.clone();
             match &current_reg {
                 RegState::Success(data) => {
                     // Auto-redirect: save progress then navigate
@@ -1436,7 +1445,7 @@ fn render_registration_form(
                                 // Deposit Agreement (only when deposit enabled)
                                 {move || {
                                     if has_deposit {
-                                        let dep_thb = deposit_thb;
+                                        let dep_label = dep_label.clone();
                                         view! {
                                             <label style="display:flex;align-items:flex-start;gap:0.5rem;font-size:0.85rem;color:var(--text-secondary);cursor:pointer;">
                                                 <input
@@ -1445,7 +1454,7 @@ fn render_registration_form(
                                                     checked=move || reg_deposit_agreed.get()
                                                     on:change=move |ev| set_reg_deposit_agreed.set(event_target_checked(&ev))
                                                 />
-                                                <span>{format!("ยอมรับการจ่ายมัดจำ {} บาท (จะได้รับคืนภายในงาน) / I agree to pay a {} THB commitment deposit to secure my seat and understand I will receive a refund upon check-in at the venue.", dep_thb, dep_thb)}</span>
+                                                <span>{format!("ยอมรับการจ่ายมัดจำ {} (จะได้รับคืนภายในงาน) / I agree to pay a {} commitment deposit to secure my seat and understand I will receive a refund upon check-in at the venue.", dep_label, dep_label)}</span>
                                             </label>
                                         }.into_any()
                                     } else {
