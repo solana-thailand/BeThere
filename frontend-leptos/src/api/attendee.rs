@@ -14,6 +14,9 @@ pub struct WalkinRegisterRequest {
     pub name: String,
     pub email: String,
     pub phone: Option<String>,
+    /// Staff override: register walk-in even when in-person capacity is reached.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub override_capacity: bool,
 }
 
 /// Response from POST /api/walkin/register

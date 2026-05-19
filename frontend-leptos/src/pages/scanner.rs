@@ -237,6 +237,12 @@ enum CheckInState {
         claim_url: String,
         name: String,
     },
+    /// Walk-in capacity reached — show warning dialog with override option.
+    WalkinCapacityWarning {
+        pending_name: String,
+        pending_email: String,
+        pending_phone: Option<String>,
+    },
 }
 
 
@@ -277,6 +283,10 @@ pub fn Scanner() -> impl IntoView {
     let (active_event_id, set_active_event_id) = signal(None::<String>);
     let (escrow_enabled, set_escrow_enabled) = signal(false);
     let (events_loading, set_events_loading) = signal(false);
+
+    // Event format + capacity from EventDetail (used for walk-in gating).
+    let (active_event_format, set_active_event_format) = signal(api::EventFormat::InPerson);
+    let (_active_in_person_capacity, set_active_in_person_capacity) = signal(None::<u32>);
 
     // Wallet detection — pre-poll on mount like events_page.rs.
     // Phantom injects async after page load; a single sync call returns [].
@@ -625,6 +635,8 @@ pub fn Scanner() -> impl IntoView {
         let set_ee = set_escrow_enabled;
         let set_el = set_events_list;
         let set_el_loading = set_events_loading;
+        let set_ef = set_active_event_format;
+        let set_cap = set_active_in_person_capacity;
         leptos::task::spawn_local(async move {
             let data = match api::list_events().await {
                 Ok(data) => data,
@@ -651,11 +663,14 @@ pub fn Scanner() -> impl IntoView {
                         let enabled = detail.event.deposit_enabled
                             && !detail.event.escrow_address.is_empty();
                         log::info!(
-                            "[scanner] event '{}' escrow_enabled={}",
+                            "[scanner] event '{}' escrow_enabled={} format={:?}",
                             event_id,
-                            enabled
+                            enabled,
+                            detail.event.event_format,
                         );
                         set_ee.set(enabled);
+                        set_ef.set(detail.event.event_format);
+                        set_cap.set(detail.event.in_person_capacity);
                     }
                     Err(e) => {
                         log::warn!("[scanner] failed to load event detail: {e}");
@@ -669,6 +684,8 @@ pub fn Scanner() -> impl IntoView {
     Effect::new(move |_| {
         let eid = active_event_id.get();
         let set_ee = set_escrow_enabled;
+        let set_ef = set_active_event_format;
+        let set_cap = set_active_in_person_capacity;
         leptos::task::spawn_local(async move {
             if let Some(ref event_id) = eid {
                 if event_id.is_empty() {
@@ -679,11 +696,14 @@ pub fn Scanner() -> impl IntoView {
                         let enabled = detail.event.deposit_enabled
                             && !detail.event.escrow_address.is_empty();
                         log::info!(
-                            "[scanner] event '{}' escrow_enabled={}",
+                            "[scanner] event '{}' escrow_enabled={} format={:?}",
                             event_id,
-                            enabled
+                            enabled,
+                            detail.event.event_format,
                         );
                         set_ee.set(enabled);
+                        set_ef.set(detail.event.event_format);
+                        set_cap.set(detail.event.in_person_capacity);
                     }
                     Err(e) => {
                         log::warn!("[scanner] failed to load event detail for escrow: {e}");
@@ -896,13 +916,15 @@ pub fn Scanner() -> impl IntoView {
         let set_state = set_check_in_state;
         let set_t = set_toast;
         let name_for_callback = name.clone();
+        let phone_for_warning = if phone.is_empty() { None } else { Some(phone.clone()) };
 
         leptos::task::spawn_local(async move {
             let req = WalkinRegisterRequest {
                 event_id,
                 name: name.clone(),
                 email: email.clone(),
-                phone: if phone.is_empty() { None } else { Some(phone) },
+                phone: if phone_for_warning.is_some() { Some(phone_for_warning.clone().unwrap()) } else { None },
+                override_capacity: false,
             };
             match api::register_walkin(&req).await {
                 Ok(resp) => {
@@ -919,11 +941,76 @@ pub fn Scanner() -> impl IntoView {
                     );
                 }
                 Err(err) => {
-                    log::error!("[scanner] walk-in register failed: {err}");
+                    let err_msg = err.message.clone();
+                    if err_msg.starts_with("CAPACITY_REACHED") {
+                        log::warn!("[scanner] walk-in capacity reached: {err_msg}");
+                        set_state.set(CheckInState::WalkinCapacityWarning {
+                            pending_name: name_for_callback,
+                            pending_email: email.clone(),
+                            pending_phone: phone_for_warning,
+                        });
+                    } else {
+                        log::error!("[scanner] walk-in register failed: {err}");
+                        set_state.set(CheckInState::WalkinForm);
+                        components::show_toast(
+                            &set_t,
+                            &format!("Registration failed: {err}"),
+                            ToastType::Error,
+                        );
+                    }
+                }
+            }
+        });
+    };
+
+    // Handler: override capacity and register walk-in anyway
+    let handle_walkin_override = move |_: web_sys::MouseEvent| {
+        let state = check_in_state.get();
+        let (pending_name, pending_email, pending_phone) = match &state {
+            CheckInState::WalkinCapacityWarning { pending_name, pending_email, pending_phone } => {
+                (pending_name.clone(), pending_email.clone(), pending_phone.clone())
+            }
+            _ => return,
+        };
+
+        let event_id = match active_event_id.get() {
+            Some(eid) if !eid.is_empty() => eid,
+            _ => return,
+        };
+
+        set_check_in_state.set(CheckInState::WalkinRegistering);
+
+        let set_state = set_check_in_state;
+        let set_t = set_toast;
+
+        leptos::task::spawn_local(async move {
+            let req = WalkinRegisterRequest {
+                event_id,
+                name: pending_name.clone(),
+                email: pending_email.clone(),
+                phone: pending_phone,
+                override_capacity: true,
+            };
+            match api::register_walkin(&req).await {
+                Ok(resp) => {
+                    log::info!("[scanner] walk-in override registered: {}", resp.claim_url);
+                    feedback_success_js();
+                    set_state.set(CheckInState::WalkinSuccess {
+                        claim_url: resp.claim_url,
+                        name: pending_name,
+                    });
+                    components::show_toast(
+                        &set_t,
+                        "Walk-in registered (capacity override)",
+                        ToastType::Success,
+                    );
+                }
+                Err(err) => {
+                    log::error!("[scanner] walk-in override failed: {err}");
                     set_state.set(CheckInState::WalkinForm);
                     components::show_toast(
                         &set_t,
-                        &format!("Registration failed: {err}"),
+                        &format!("Override failed: {err}"),
                         ToastType::Error,
                     );
                 }
@@ -1140,6 +1227,44 @@ pub fn Scanner() -> impl IntoView {
                                 </div>
                             </div>
                         </Show>
+                        // Walk-in capacity warning — show override dialog
+                        <Show
+                            when=move || matches!(check_in_state.get(), CheckInState::WalkinCapacityWarning { .. })
+                            fallback=|| view! { <div></div> }
+                        >
+                            {move || {
+                                let state = check_in_state.get();
+                                match state {
+                                    CheckInState::WalkinCapacityWarning { ref pending_name, .. } => {
+                                        let name_display = pending_name.clone();
+                                        view! {
+                                            <div style="width:100%;background:var(--bg-card);border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;box-shadow:var(--shadow);border:2px solid #f59e0b;">
+                                                <div style="text-align:center;margin-bottom:1rem;">
+                                                    <div style="font-size:2rem;margin-bottom:0.5rem;">"⚠"</div>
+                                                    <h2 style="font-size:1.2rem;font-weight:600;color:#f59e0b;margin:0;">"In-Person Capacity Reached"</h2>
+                                                    <p style="color:var(--muted);margin-top:0.5rem;font-size:0.9rem;">{name_display}" has reached the in-person capacity limit."</p>
+                                                </div>
+                                                <div style="display:flex;flex-direction:column;gap:0.5rem;">
+                                                    <button
+                                                        class="btn btn-success btn-block"
+                                                        on:click=handle_walkin_override
+                                                    >
+                                                        "Register Anyway (Override)"
+                                                    </button>
+                                                    <button
+                                                        class="btn btn-outline btn-block"
+                                                        on:click=handle_walkin_cancel
+                                                    >
+                                                        "Cancel"
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        }.into_any()
+                                    }
+                                    _ => view! { <div></div> }.into_any(),
+                                }
+                            }}
+                        </Show>
                         // Walk-in success — show claim QR
                         <Show
                             when=move || matches!(check_in_state.get(), CheckInState::WalkinSuccess { .. })
@@ -1203,6 +1328,7 @@ pub fn Scanner() -> impl IntoView {
                                 CheckInState::WalkinForm
                                     | CheckInState::WalkinRegistering
                                     | CheckInState::WalkinSuccess { .. }
+                                    | CheckInState::WalkinCapacityWarning { .. }
                             )
                             fallback=|| view! { <div></div> }
                         >
@@ -1344,8 +1470,15 @@ pub fn Scanner() -> impl IntoView {
                         <button
                             class="btn btn-primary btn-block"
                             on:click=handle_walkin_open
+                            disabled=move || !active_event_format.get().has_in_person()
                         >
-                            "Register Walk-in Attendee"
+                            {move || {
+                                if active_event_format.get().has_in_person() {
+                                    view! { "Register Walk-in Attendee" }.into_any()
+                                } else {
+                                    view! { "Walk-in Not Available (Online Event)" }.into_any()
+                                }
+                            }}
                         </button>
                     </div>
                 </div>
@@ -1973,5 +2106,6 @@ where
         CheckInState::WalkinForm => view! { <div></div> }.into_any(),
         CheckInState::WalkinRegistering => view! { <div></div> }.into_any(),
         CheckInState::WalkinSuccess { .. } => view! { <div></div> }.into_any(),
+        CheckInState::WalkinCapacityWarning { .. } => view! { <div></div> }.into_any(),
     }
 }

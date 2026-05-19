@@ -171,6 +171,9 @@ pub struct WalkinRegisterRequest {
     pub name: String,
     pub email: String,
     pub phone: Option<String>,
+    /// Staff override: register walk-in even when in-person capacity is reached.
+    #[serde(default)]
+    pub override_capacity: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -287,8 +290,17 @@ pub async fn register_walkin(
         event_name = %event.name,
         sheet_id = %event.sheet_id,
         sheet_name = %event.sheet_name,
+        event_format = %event.event_format,
         "walk-in: resolved event config"
     );
+
+    // 2a. Block walk-in for online-only events
+    if !event.event_format.has_in_person() {
+        return Err(AppError::Validation(
+            "Walk-in registration is not available for online-only events.".to_string(),
+        )
+        .into());
+    }
 
     let email_lower = email.to_lowercase();
     let kv = state.events_kv.as_ref().ok_or_else(|| {
@@ -315,7 +327,17 @@ pub async fn register_walkin(
         .into());
     }
 
-    // 3. Generate claim token
+    // 3. Enforce in-person capacity (walk-ins are always in-person)
+    if !body.override_capacity {
+        enforce_walkin_capacity(&state, &event, kv).await?;
+    } else {
+        tracing::info!(
+            event_id = %event.id,
+            "walk-in capacity override: staff bypassing capacity check"
+        );
+    }
+
+    // 4. Generate claim token
     let claim_token = Uuid::now_v7().to_string();
     let now = chrono::Utc::now().to_rfc3339();
 
@@ -797,4 +819,67 @@ pub async fn walkin_sync_handler(
         errors,
         total_walkins: attendees.len(),
     }))
+}
+
+// ---------------------------------------------------------------------------
+// Capacity enforcement
+// ---------------------------------------------------------------------------
+
+/// Count current in-person attendees (sheet + walk-in) and reject if capacity is reached.
+async fn enforce_walkin_capacity(
+    state: &AppState,
+    config: &event_checkin_domain::models::event::EventConfig,
+    kv: &worker::kv::KvStore,
+) -> Result<(), AppError> {
+    // Only enforce when a capacity limit is set
+    let cap = match config.in_person_capacity {
+        Some(c) => c,
+        None => return Ok(()),
+    };
+
+    // Count sheet-based in-person attendees
+    let attendees =
+        crate::sheets::get_attendees(state, &config.sheet_id, &config.sheet_name, Some(kv))
+            .await
+            .map_err(|e| AppError::Internal(format!("failed to check capacity: {e}")))?;
+
+    let mut in_person_count: u32 = attendees.iter().filter(|a| a.is_in_person()).count() as u32;
+
+    // Count walk-in attendees (all are in-person)
+    let walkin_prefix = format!("walkin:{}:", config.id);
+    let mut walkin_cursor: Option<String> = None;
+    loop {
+        let mut builder = kv.list().prefix(walkin_prefix.clone());
+        if let Some(c) = walkin_cursor.take() {
+            builder = builder.cursor(c);
+        }
+        match builder.execute().await {
+            Ok(resp) => {
+                in_person_count += resp.keys.len() as u32;
+                if resp.list_complete {
+                    break;
+                }
+                walkin_cursor = resp.cursor;
+            }
+            Err(e) => {
+                tracing::warn!(error = ?e, "failed to list walk-in keys for capacity");
+                break;
+            }
+        }
+    }
+
+    tracing::info!(
+        event_id = %config.id,
+        in_person_count,
+        in_person_capacity = cap,
+        "walk-in capacity check"
+    );
+
+    if in_person_count >= cap {
+        return Err(AppError::Validation(
+            "CAPACITY_REACHED: In-person spots are full. Override to register anyway.".to_string(),
+        ));
+    }
+
+    Ok(())
 }
