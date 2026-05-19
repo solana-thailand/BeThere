@@ -1527,7 +1527,7 @@ pub fn Deposit() -> impl IntoView {
                                                             let pp_qr_image = pp_qr_string.as_ref().and_then(|s| generate_qr_data_url_js(s, 256));
                                                             match pp_qr_image {
                                                                 Some(url) => view! {
-                                                                    <div class="qr-wrapper u-mb-half">
+                                                                    <div class="qr-wrapper">
                                                                         <img src=url alt="PromptPay QR" class="qr-img-md" />
                                                                     </div>
                                                                 }.into_any(),
@@ -1538,7 +1538,7 @@ pub fn Deposit() -> impl IntoView {
                                                             }
                                                         } else {
                                                             view! {
-                                                                <div class="qr-wrapper u-mb-half qr-loading">
+                                                                <div class="qr-wrapper qr-loading">
                                                                     <div class="qr-loading-spinner"></div>
                                                                     <p class="hint-2xs">"Loading QR generator..."</p>
                                                                 </div>
@@ -1554,10 +1554,10 @@ pub fn Deposit() -> impl IntoView {
                                             view! { <div></div> }.into_any()
                                         }}
 
-                                        // File upload for slip image
-                                        <div class="u-mb-sm">
+                                        // Upload section divider
+                                        <div class="dep-divider-section">
                                             <label class="upload-label">
-                                                <Icon icon=IconName::Clip class="icon-sm" />" Upload payment slip image:"
+                                                <Icon icon=IconName::Clip class="icon-sm" />" Upload payment slip"
                                             </label>
                                             <input
                                                 type="file"
@@ -1565,33 +1565,32 @@ pub fn Deposit() -> impl IntoView {
                                                 node_ref=file_input_ref
                                                 class="file-input-styled"
                                             />
+
+                                            // Text input fallback for slip URL
+                                            <details class="u-mt-xs">
+                                                <summary class="details-summary-text">
+                                                    "Or paste slip URL manually"
+                                                </summary>
+                                                <input
+                                                    type="text"
+                                                    class="form-input dep-input u-mt-xs"
+                                                    placeholder="Paste slip image URL"
+                                                    prop:value=move || slip_url_input.get()
+                                                    on:input=move |ev| {
+                                                        let val = event_target_value(&ev);
+                                                        set_slip_url_input.set(val);
+                                                    }
+                                                />
+                                            </details>
+
+                                            <button
+                                                class="btn btn-success btn-block btn-action-lg u-mt-1rem"
+                                                on:click=move |_| handle_upload_slip()
+                                            >
+                                                "Upload Slip"
+                                            </button>
                                         </div>
-
-                                        // Text input fallback for slip URL
-                                        <details class="u-mb-sm">
-                                            <summary class="details-summary-text">
-                                                "Or paste slip URL manually"
-                                            </summary>
-                                            <input
-                                                type="text"
-                                                class="form-input dep-input u-mt-xs"
-                                                placeholder="Paste slip image URL"
-                                                prop:value=move || slip_url_input.get()
-                                                on:input=move |ev| {
-                                                    let val = event_target_value(&ev);
-                                                    set_slip_url_input.set(val);
-                                                }
-                                            />
-                                        </details>
-
-                                        <button
-                                            class="btn btn-success btn-block"
-                                            on:click=move |_| handle_upload_slip()
-                                        >
-                                            "Upload Slip"
-                                        </button>
                                     </div>
-
                                 </div>
 
                                 // Back to event
