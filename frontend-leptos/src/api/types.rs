@@ -7,6 +7,87 @@ pub(crate) const fn default_true() -> bool {
     true
 }
 
+// ===== Typed Enums =====
+
+/// Check-in / approval status for an attendee.
+/// Mirrors `domain::models::attendee::CheckInStatus`.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum CheckInStatus {
+    #[default]
+    PendingApproval,
+    Approved,
+    Invited,
+    CheckedIn,
+}
+
+impl CheckInStatus {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::PendingApproval => "pending_approval",
+            Self::Approved => "approved",
+            Self::Invited => "invited",
+            Self::CheckedIn => "checked_in",
+        }
+    }
+
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::PendingApproval => "Pending Approval",
+            Self::Approved => "Approved",
+            Self::Invited => "Invited",
+            Self::CheckedIn => "Checked In",
+        }
+    }
+
+    pub fn is_approved(&self) -> bool {
+        matches!(self, Self::Approved | Self::CheckedIn)
+    }
+}
+
+/// Deposit payment method.
+/// Mirrors `domain::models::deposit::DepositMethod`.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum DepositMethod {
+    #[default]
+    Usdc,
+    Thb,
+}
+
+impl DepositMethod {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Usdc => "usdc",
+            Self::Thb => "thb",
+        }
+    }
+
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Usdc => "USDC (Solana)",
+            Self::Thb => "THB (PromptPay)",
+        }
+    }
+
+    pub fn icon_name(&self) -> &'static str {
+        match self {
+            Self::Usdc => "coin",
+            Self::Thb => "baht",
+        }
+    }
+}
+
+/// QR code generation status.
+/// Mirrors `domain::models::api::QrGenerationStatus`.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum QrGenerationStatus {
+    #[default]
+    Generated,
+    Skipped,
+}
+
 // ===== Error & Response wrapper =====
 
 /// API error type.
@@ -72,7 +153,7 @@ pub struct AttendeeResponse {
     #[serde(default)]
     pub ticket_name: String,
     #[serde(default)]
-    pub approval_status: String,
+    pub approval_status: CheckInStatus,
     #[serde(default)]
     pub checked_in_at: Option<String>,
     #[serde(default)]
@@ -102,7 +183,7 @@ pub struct AttendeeListItem {
     #[serde(default)]
     pub ticket_name: String,
     #[serde(default)]
-    pub approval_status: String,
+    pub approval_status: CheckInStatus,
     #[serde(default)]
     pub checked_in_at: Option<String>,
     #[serde(default)]
@@ -156,7 +237,7 @@ pub struct AttendeesData {
 /// Deposit status info (optional — only for events with deposit enabled).
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct DepositInfo {
-    pub method: String,
+    pub method: DepositMethod,
     pub verified: bool,
     pub currency: String,
 }
@@ -207,7 +288,7 @@ pub struct QrGenerationDetail {
     #[serde(default)]
     pub qr_code_url: String,
     #[serde(default)]
-    pub status: String,
+    pub status: QrGenerationStatus,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

@@ -11,7 +11,7 @@ use super::{api_get, api_post_json};
 pub struct DepositStatusInfo {
     pub attendee_id: String,
     pub event_id: String,
-    pub method: String,
+    pub method: super::types::DepositMethod,
     pub amount: u64,
     pub currency: String,
     pub tx_signature: Option<String>,

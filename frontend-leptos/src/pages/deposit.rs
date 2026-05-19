@@ -17,7 +17,7 @@ use leptos_router::hooks::use_params;
 use leptos_router::params::Params;
 
 use crate::api::{
-    self, CloseDepositRequest, ConfirmDepositResponse, DepositStatusResponse, RefundTxRequest,
+    self, CloseDepositRequest, ConfirmDepositResponse, DepositMethod, DepositStatusResponse, RefundTxRequest,
     ThbSlipUploadRequest, UsdcDepositRequest,
 };
 use crate::components::{self, Toast, ToastType};
@@ -1316,10 +1316,9 @@ pub fn Deposit() -> impl IntoView {
                         // ===== Already Deposited =====
                         DepositPageState::AlreadyDeposited(data) => {
                             let info = data.status.as_ref().unwrap();
-                            let (method_icon, method_label) = match info.method.as_str() {
-                                "usdc" => (IconName::Coin, "USDC (Solana)"),
-                                "thb" => (IconName::Baht, "THB (PromptPay)"),
-                                _ => (IconName::Circle, info.method.as_str()),
+                            let (method_icon, method_label) = match info.method {
+                                DepositMethod::Usdc => (IconName::Coin, "USDC (Solana)"),
+                                DepositMethod::Thb => (IconName::Baht, "THB (PromptPay)"),
                             };
                             let (verified_icon, verified_text) = if info.verified {
                                 (IconName::Check, "Verified")
@@ -1366,7 +1365,7 @@ pub fn Deposit() -> impl IntoView {
                                             <span>{format_timestamp(&info.deposited_at)}</span>
                                         </div>
                                     </div>
-                                    {if info.verified && info.method == "usdc" {
+                                    {if info.verified && info.method == DepositMethod::Usdc {
                                         let data_clone_for_refund = data.clone();
                                         let refund_info_clone = refund_info.clone();
                                         view! {

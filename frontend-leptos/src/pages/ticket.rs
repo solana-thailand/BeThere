@@ -9,7 +9,7 @@ use leptos_meta::Title;
 use leptos_router::hooks::use_params;
 use leptos_router::params::Params;
 
-use crate::api;
+use crate::api::{self, DepositMethod};
 use crate::icons::{Icon, IconName};
 use crate::utils;
 
@@ -249,18 +249,16 @@ pub fn Ticket() -> impl IntoView {
                                                     <div style="display:flex;align-items:center;justify-content:center;gap:0.5rem;">
                                                         <span style="color:#d97706;"><Icon icon=IconName::Hourglass class="icon-sm" /></span>
                                                         <span style="color:#92400e;font-weight:600;">
-                                                            {match dep.method.as_str() {
-                                                                "thb" => "Payment Slip: Pending Verification",
-                                                                "usdc" => "Deposit: Pending Confirmation",
-                                                                _ => "Deposit: Pending",
+                                                            {match dep.method {
+                                                                DepositMethod::Thb => "Payment Slip: Pending Verification",
+                                                                DepositMethod::Usdc => "Deposit: Pending Confirmation",
                                                             }}
                                                         </span>
                                                     </div>
                                                     <p style="color:#92400e;font-size:0.8rem;margin:0.5rem 0 0;">
-                                                        {match dep.method.as_str() {
-                                                            "thb" => "Your payment slip has been submitted. We'll notify you once it's verified.",
-                                                            "usdc" => "Your deposit is being confirmed on-chain.",
-                                                            _ => "Your deposit is being processed.",
+                                                        {match dep.method {
+                                                            DepositMethod::Thb => "Your payment slip has been submitted. We'll notify you once it's verified.",
+                                                            DepositMethod::Usdc => "Your deposit is being confirmed on-chain.",
                                                         }}
                                                     </p>
                                                 </div>

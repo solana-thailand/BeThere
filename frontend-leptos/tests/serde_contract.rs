@@ -100,6 +100,36 @@ enum AdventureStatusType {
 }
 
 // ================================================================================================
+// Mirrored enums from src/api/types.rs (typed enums — were String before)
+// ================================================================================================
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+enum CheckInStatus {
+    #[default]
+    PendingApproval,
+    Approved,
+    Invited,
+    CheckedIn,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+enum DepositMethod {
+    #[default]
+    Usdc,
+    Thb,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+enum QrGenerationStatus {
+    #[default]
+    Generated,
+    Skipped,
+}
+
+// ================================================================================================
 // Mirrored enums from src/api/admin.rs
 // ================================================================================================
 
@@ -359,6 +389,75 @@ fn escrow_instruction_unknown() {
 }
 
 // ================================================================================================
+// Tests — CheckInStatus (newly typed, was String)
+// ================================================================================================
+
+#[test]
+fn check_in_status_pending_approval() {
+    assert_round_trip(r#""pending_approval""#, CheckInStatus::PendingApproval);
+}
+
+#[test]
+fn check_in_status_approved() {
+    assert_round_trip(r#""approved""#, CheckInStatus::Approved);
+}
+
+#[test]
+fn check_in_status_invited() {
+    assert_round_trip(r#""invited""#, CheckInStatus::Invited);
+}
+
+#[test]
+fn check_in_status_checked_in() {
+    assert_round_trip(r#""checked_in""#, CheckInStatus::CheckedIn);
+}
+
+#[test]
+fn check_in_status_rejects_pascal_case() {
+    assert_unknown_variant::<CheckInStatus>(r#""PendingApproval""#);
+    assert_unknown_variant::<CheckInStatus>(r#""CheckedIn""#);
+}
+
+// ================================================================================================
+// Tests — DepositMethod (newly typed, was String)
+// ================================================================================================
+
+#[test]
+fn deposit_method_usdc() {
+    assert_round_trip(r#""usdc""#, DepositMethod::Usdc);
+}
+
+#[test]
+fn deposit_method_thb() {
+    assert_round_trip(r#""thb""#, DepositMethod::Thb);
+}
+
+#[test]
+fn deposit_method_rejects_pascal_case() {
+    assert_unknown_variant::<DepositMethod>(r#""Usdc""#);
+    assert_unknown_variant::<DepositMethod>(r#""Thb""#);
+}
+
+// ================================================================================================
+// Tests — QrGenerationStatus (newly typed, was String)
+// ================================================================================================
+
+#[test]
+fn qr_generation_status_generated() {
+    assert_round_trip(r#""generated""#, QrGenerationStatus::Generated);
+}
+
+#[test]
+fn qr_generation_status_skipped() {
+    assert_round_trip(r#""skipped""#, QrGenerationStatus::Skipped);
+}
+
+#[test]
+fn qr_generation_status_rejects_pascal_case() {
+    assert_unknown_variant::<QrGenerationStatus>(r#""Generated""#);
+}
+
+// ================================================================================================
 // Integration — deserialize a full JSON object containing enum fields
 // ================================================================================================
 
@@ -414,4 +513,28 @@ fn onchain_event_json_uses_snake_case_instruction() {
     let json = r#"{ "instruction": "mark_checked_in" }"#;
     let event: FakeOnChainEvent = serde_json::from_str(json).expect("should parse on-chain event");
     assert_eq!(event.instruction, EscrowInstruction::MarkCheckedIn);
+}
+
+#[test]
+fn attendee_json_uses_snake_case_enums() {
+    #[derive(Debug, Deserialize)]
+    struct FakeAttendee {
+        approval_status: CheckInStatus,
+    }
+
+    let json = r#"{ "approval_status": "checked_in" }"#;
+    let attendee: FakeAttendee = serde_json::from_str(json).expect("should parse attendee");
+    assert_eq!(attendee.approval_status, CheckInStatus::CheckedIn);
+}
+
+#[test]
+fn deposit_info_json_uses_snake_case_method() {
+    #[derive(Debug, Deserialize)]
+    struct FakeDepositInfo {
+        method: DepositMethod,
+    }
+
+    let json = r#"{ "method": "thb" }"#;
+    let info: FakeDepositInfo = serde_json::from_str(json).expect("should parse deposit info");
+    assert_eq!(info.method, DepositMethod::Thb);
 }

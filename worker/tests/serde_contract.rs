@@ -11,7 +11,7 @@
 use serde::{Deserialize, Serialize};
 
 use event_checkin_domain::models::adventure::AdventureStatus;
-use event_checkin_domain::models::api::QuizStatus;
+use event_checkin_domain::models::api::{QrGenerationStatus, QuizStatus};
 use event_checkin_domain::models::attendee::CheckInStatus;
 use event_checkin_domain::models::deposit::DepositMethod;
 use event_checkin_domain::models::event::{EscrowStatus, EventFormat, EventStatus, OnlineOpenMode};
@@ -197,6 +197,22 @@ fn check_in_status_round_trip() {
 fn check_in_status_rejects_pascal_case() {
     assert_rejects_pascal_case::<CheckInStatus>(r#""PendingApproval""#);
     assert_rejects_pascal_case::<CheckInStatus>(r#""CheckedIn""#);
+}
+
+// ================================================================================================
+// QrGenerationStatus — generated, skipped
+// ================================================================================================
+
+#[test]
+fn qr_generation_status_round_trip() {
+    assert_round_trip(r#""generated""#, QrGenerationStatus::Generated);
+    assert_round_trip(r#""skipped""#, QrGenerationStatus::Skipped);
+}
+
+#[test]
+fn qr_generation_status_rejects_pascal_case() {
+    assert_rejects_pascal_case::<QrGenerationStatus>(r#""Generated""#);
+    assert_rejects_pascal_case::<QrGenerationStatus>(r#""Skipped""#);
 }
 
 // ================================================================================================

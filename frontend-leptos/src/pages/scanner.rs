@@ -1735,7 +1735,7 @@ where
         CheckInState::NotApproved(data) => {
             let name = data.attendee.name.clone();
             let email = data.attendee.email.clone();
-            let status = data.attendee.approval_status.clone();
+            let status_label = data.attendee.approval_status.label();
             view! {
                 <div>
                     <div class="result-error">
@@ -1743,7 +1743,7 @@ where
                         <AttendeeInfoCard name=name email=email />
                         <p class="scanner-result-detail-line">
                             "Status: "
-                            <span style="color:var(--warning);">{status}</span>
+                            <span style="color:var(--warning);">{status_label}</span>
                         </p>
                     </div>
                     <button class="btn btn-outline btn-block" style="margin-top:1rem;" on:click=on_reset>
