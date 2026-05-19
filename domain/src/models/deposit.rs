@@ -145,6 +145,9 @@ pub struct DepositStatusResponse {
     /// When false, Solana wallet payment options are hidden from the UI.
     #[serde(default)]
     pub dev_mode: bool,
+    /// Deposit deadline in hours after registration. None = no deadline.
+    #[serde(default)]
+    pub deposit_deadline_hours: Option<u32>,
 }
 
 /// Request body for POST /api/deposit/thb/verify — admin verifies/rejects a slip.

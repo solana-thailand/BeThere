@@ -311,6 +311,7 @@ pub fn EventsPage(
     let (sec_nft_open, set_sec_nft_open) = signal(true);
     let (sec_settings_open, set_sec_settings_open) = signal(true);
     let (sec_deposit_open, set_sec_deposit_open) = signal(true);
+    let (sec_capacity_open, set_sec_capacity_open) = signal(true);
     let (sec_people_open, set_sec_people_open) = signal(true);
     let (search_query, set_search_query) = signal(String::new());
     let search_input_ref: NodeRef<leptos::html::Input> = NodeRef::new();
@@ -1956,6 +1957,125 @@ pub fn EventsPage(
                                     }}
                                 </p>
                             </div>
+
+                            // ── Capacity ──
+                            <Show when=move || {
+                                let fmt = form.get().event_format;
+                                fmt == api::EventFormat::InPerson || fmt == api::EventFormat::Hybrid
+                            } fallback=|| view! { <div></div> }>
+                            <div class="form-section">
+                                <div class="form-section-header" on:click=move |_| set_sec_capacity_open.update(|v| *v = !*v)>
+                                    <span class="form-section-icon form-section-icon-settings"></span>
+                                    <span class="form-section-title">"Capacity & Registration Control"</span>
+                                    <span class="form-section-badge form-section-badge-optional">"Optional"</span>
+                                    <span class="form-section-toggle" class:form-section-toggle-open=move || sec_capacity_open.get()>&"▼"</span>
+                                </div>
+                                <div class="form-section-body" class:form-section-body-hidden=move || !sec_capacity_open.get()>
+                                    <div class="quiz-settings-grid">
+                                        // In-person capacity
+                                        <Show when=move || form.get().event_format != api::EventFormat::Online fallback=|| view! { <div></div> }>
+                                            <div class="quiz-setting-item">
+                                                <label class="quiz-field-label">"In-Person Capacity"<span class="field-optional-badge">"Unlimited if empty"</span></label>
+                                                <input
+                                                    type="number"
+                                                    class="quiz-number-input"
+                                                    placeholder="e.g., 150"
+                                                    min="1"
+                                                    step="1"
+                                                    prop:value=move || form.get().in_person_capacity
+                                                    on:input=move |ev| set_form.update(|f| f.in_person_capacity = event_target_value(&ev))
+                                                />
+                                                <span class="quiz-setting-hint">"Maximum number of on-site attendees. Leave empty for unlimited. Includes walk-ins."</span>
+                                            </div>
+                                        </Show>
+                                        // Online capacity (hybrid only)
+                                        <Show when=move || form.get().event_format == api::EventFormat::Hybrid fallback=|| view! { <div></div> }>
+                                            <div class="quiz-setting-item">
+                                                <label class="quiz-field-label">"Online Capacity"<span class="field-optional-badge">"Unlimited if empty"</span></label>
+                                                <input
+                                                    type="number"
+                                                    class="quiz-number-input"
+                                                    placeholder="e.g., 500"
+                                                    min="1"
+                                                    step="1"
+                                                    prop:value=move || form.get().online_capacity
+                                                    on:input=move |ev| set_form.update(|f| f.online_capacity = event_target_value(&ev))
+                                                />
+                                                <span class="quiz-setting-hint">"Maximum online attendees. Leave empty for unlimited. Prevents NFT exhaustion for large events."</span>
+                                            </div>
+                                        </Show>
+                                        // Online open mode (hybrid only)
+                                        <Show when=move || form.get().event_format == api::EventFormat::Hybrid fallback=|| view! { <div></div> }>
+                                            <div class="quiz-setting-item">
+                                                <label class="quiz-field-label">"Online Registration"</label>
+                                                <select
+                                                    class="quiz-number-input"
+                                                    on:change=move |ev| {
+                                                        let val = event_target_value(&ev);
+                                                        let mode = match val.as_str() {
+                                                            "auto_on_full" => api::OnlineOpenMode::AutoOnFull,
+                                                            "manual" => api::OnlineOpenMode::Manual,
+                                                            _ => api::OnlineOpenMode::Always,
+                                                        };
+                                                        set_form.update(|f| f.online_open_mode = mode);
+                                                    }
+                                                    prop:value=move || form.get().online_open_mode.as_str()
+                                                >
+                                                    <option value="always">"Always Open"</option>
+                                                    <option value="auto_on_full">"Auto (when in-person full)"</option>
+                                                    <option value="manual">"Manual Toggle"</option>
+                                                </select>
+                                                <span class="quiz-setting-hint">
+                                                    {move || match form.get().online_open_mode {
+                                                        api::OnlineOpenMode::Always => "Both in-person and online tracks open from the start.",
+                                                        api::OnlineOpenMode::AutoOnFull => "Online registration opens automatically when in-person capacity is reached.",
+                                                        api::OnlineOpenMode::Manual => "You control when online registration opens via the toggle below.",
+                                                    }}
+                                                </span>
+                                            </div>
+                                        </Show>
+                                        // Manual toggle (only when Manual mode selected)
+                                        <Show when=move || form.get().online_open_mode == api::OnlineOpenMode::Manual && form.get().event_format == api::EventFormat::Hybrid fallback=|| view! { <div></div> }>
+                                            <div class="quiz-setting-item">
+                                                <label class="quiz-field-label">"Online Registration Open"</label>
+                                                <label class="quiz-toggle-label" style="cursor:pointer;padding-top:0.3rem">
+                                                    <input
+                                                        type="checkbox"
+                                                        class="quiz-toggle-checkbox"
+                                                        prop:checked=move || form.get().online_registration_open
+                                                        on:change=move |ev| {
+                                                            let checked = event_target_checked(&ev);
+                                                            set_form.update(|f| f.online_registration_open = checked);
+                                                        }
+                                                    />
+                                                    <span class="quiz-toggle-switch"></span>
+                                                    <span class="quiz-toggle-text">
+                                                        {move || if form.get().online_registration_open { "Open" } else { "Closed" }}
+                                                    </span>
+                                                </label>
+                                                <span class="quiz-setting-hint">"Toggle online registration on/off. Attendees see the online option only when this is enabled."</span>
+                                            </div>
+                                        </Show>
+                                        // Deposit deadline (in-person / hybrid only)
+                                        <Show when=move || form.get().deposit_enabled && form.get().event_format != api::EventFormat::Online fallback=|| view! { <div></div> }>
+                                            <div class="quiz-setting-item">
+                                                <label class="quiz-field-label">"Deposit Deadline"<span class="field-optional-badge">"Hours"</span></label>
+                                                <input
+                                                    type="number"
+                                                    class="quiz-number-input"
+                                                    placeholder="e.g., 24"
+                                                    min="1"
+                                                    step="1"
+                                                    prop:value=move || form.get().deposit_deadline_hours
+                                                    on:input=move |ev| set_form.update(|f| f.deposit_deadline_hours = event_target_value(&ev))
+                                                />
+                                                <span class="quiz-setting-hint">"Hours after registration to complete deposit. Attendees who miss the deadline are auto-switched to online track. Leave empty for no deadline."</span>
+                                            </div>
+                                        </Show>
+                                    </div>
+                                </div>
+                            </div>
+                            </Show>
 
                             // Deposit config section — only when enabled
                             <Show when=move || form.get().deposit_enabled fallback=|| view! { <div></div> }>

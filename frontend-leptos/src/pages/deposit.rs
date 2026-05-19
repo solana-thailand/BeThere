@@ -1415,10 +1415,26 @@ pub fn Deposit() -> impl IntoView {
                             let data_clone = data.clone();
                             let wallets = detected_wallets.get();
                             let is_dev_mode = data.dev_mode;
+                            let deposit_deadline = data_clone.deposit_deadline_hours;
                             view! {
                                 <p class="subtitle subtitle-lg">
                                     "Choose your preferred payment method to secure your spot."
                                 </p>
+
+                                // Deposit deadline warning
+                                {if let Some(hours) = deposit_deadline {
+                                    let label = format_duration_label(hours);
+                                    view! {
+                                        <div class="dep-info-note" style="margin-bottom:1rem">
+                                            <p class="hint-note">
+                                                <Icon icon=IconName::Clock class="icon-sm" />
+                                                " You have "{label}" to complete your deposit. After that, your in-person spot may be released."
+                                            </p>
+                                        </div>
+                                    }.into_any()
+                                } else {
+                                    view! { <div></div> }.into_any()
+                                }}
 
                                 <div class="dep-methods">
 

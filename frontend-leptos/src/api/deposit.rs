@@ -50,6 +50,9 @@ pub struct DepositStatusResponse {
     /// Whether the backend is in dev mode (shows Solana wallet options).
     #[serde(default)]
     pub dev_mode: bool,
+    /// Deposit deadline in hours after registration. None = no deadline.
+    #[serde(default)]
+    pub deposit_deadline_hours: Option<u32>,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]

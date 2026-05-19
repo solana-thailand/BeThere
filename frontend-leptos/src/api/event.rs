@@ -102,6 +102,14 @@ impl OnlineOpenMode {
             Self::Manual => "Manual Toggle",
         }
     }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Always => "always",
+            Self::AutoOnFull => "auto_on_full",
+            Self::Manual => "manual",
+        }
+    }
 }
 
 /// Default true helper for serde.

@@ -52,6 +52,7 @@ pub async fn get_deposit_status_handler(
         event_slug: event.slug,
         status,
         dev_mode: state.config.dev_mode,
+        deposit_deadline_hours: event.deposit_deadline_hours,
     }))
 }
 
