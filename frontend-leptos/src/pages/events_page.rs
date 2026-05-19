@@ -62,6 +62,12 @@ pub struct EventForm {
     pub refund_deadline_hours: String,
     pub max_refundable_deposits: String,
     location: String,
+    // Capacity settings
+    pub in_person_capacity: String,
+    pub online_capacity: String,
+    pub online_open_mode: api::OnlineOpenMode,
+    pub online_registration_open: bool,
+    pub deposit_deadline_hours: String,
     /// Server-side `updated_at` captured at load time for optimistic concurrency.
     pub updated_at: String,
 }
@@ -166,6 +172,11 @@ fn default_form() -> EventForm {
         refund_deadline_hours: String::new(),
         max_refundable_deposits: String::new(),
         location: String::new(),
+        in_person_capacity: String::new(),
+        online_capacity: String::new(),
+        online_open_mode: api::OnlineOpenMode::default(),
+        online_registration_open: false,
+        deposit_deadline_hours: String::new(),
         time_tba: false,
         ..Default::default()
     }
@@ -224,6 +235,11 @@ fn form_from_detail(detail: &api::EventDetail) -> EventForm {
         refund_deadline_hours: if detail.refund_deadline_hours > 0 { detail.refund_deadline_hours.to_string() } else { String::new() },
         max_refundable_deposits: if detail.max_refundable_deposits > 0 { detail.max_refundable_deposits.to_string() } else { String::new() },
         location: detail.location.clone(),
+        in_person_capacity: detail.in_person_capacity.map(|v| v.to_string()).unwrap_or_default(),
+        online_capacity: detail.online_capacity.map(|v| v.to_string()).unwrap_or_default(),
+        online_open_mode: detail.online_open_mode.clone(),
+        online_registration_open: detail.online_registration_open,
+        deposit_deadline_hours: detail.deposit_deadline_hours.map(|v| v.to_string()).unwrap_or_default(),
         time_tba: detail.time_tba,
         updated_at: detail.updated_at.clone(),
     }
@@ -566,6 +582,11 @@ pub fn EventsPage(
                 require_contact_info: current_form.require_contact_info,
                 time_tba,
                 location: if current_form.location.trim().is_empty() { None } else { Some(current_form.location.trim().to_string()) },
+                in_person_capacity: current_form.in_person_capacity.trim().parse::<u32>().ok(),
+                online_capacity: current_form.online_capacity.trim().parse::<u32>().ok(),
+                online_open_mode: current_form.online_open_mode.clone(),
+                online_registration_open: current_form.online_registration_open,
+                deposit_deadline_hours: current_form.deposit_deadline_hours.trim().parse::<u32>().ok(),
             };
 
             // Determine if we should also initialize escrow after creating the event.
@@ -716,6 +737,11 @@ pub fn EventsPage(
                 require_contact_info: Some(current_form.require_contact_info),
                 time_tba: Some(time_tba),
                 location: if current_form.location.trim().is_empty() { None } else { Some(current_form.location.trim().to_string()) },
+                in_person_capacity: Some(current_form.in_person_capacity.trim().parse::<u32>().ok()),
+                online_capacity: Some(current_form.online_capacity.trim().parse::<u32>().ok()),
+                online_open_mode: Some(current_form.online_open_mode.clone()),
+                online_registration_open: Some(current_form.online_registration_open),
+                deposit_deadline_hours: Some(current_form.deposit_deadline_hours.trim().parse::<u32>().ok()),
             };
 
             leptos::task::spawn_local(async move {

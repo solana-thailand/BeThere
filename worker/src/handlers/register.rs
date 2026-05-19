@@ -216,6 +216,9 @@ pub async fn register_attendee(
         }));
     }
 
+    // 5b. Enforce capacity limits (only for new registrations)
+    enforce_capacity(&state, &config, &participation_type, kv).await?;
+
     // 6. Generate IDs
     let api_id = Uuid::now_v7().to_string();
     let claim_token = Uuid::now_v7().to_string();
@@ -579,11 +582,11 @@ fn build_next_step(
     format: &EventFormat,
     event_id: &str,
     api_id: &str,
-    claim_token: &str,
+    _claim_token: &str,
     state: &AppState,
     deposit: Option<&event_checkin_domain::models::deposit::DepositStatus>,
 ) -> NextStep {
-    let claim_base = &state.config.server.claim_base_url;
+    let _claim_base = &state.config.server.claim_base_url;
 
     if format.has_in_person() {
         match deposit {
@@ -603,9 +606,129 @@ fn build_next_step(
             }
         }
     } else {
+        // Online-only: claims open after event ends.
+        // Return "waiting" step — frontend shows "You're registered!
+        // Claim page will be available after the event ends."
         NextStep {
-            step_type: "quest".to_string(),
-            url: format!("{claim_base}/{claim_token}"),
+            step_type: "waiting".to_string(),
+            url: format!("/ticket/{api_id}?event_id={event_id}"),
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Capacity enforcement
+// ---------------------------------------------------------------------------
+
+/// Enforce capacity limits before registration.
+/// Returns an error if the selected track is full or not available.
+async fn enforce_capacity(
+    state: &AppState,
+    config: &event_checkin_domain::models::event::EventConfig,
+    participation_type: &str,
+    kv: &worker::kv::KvStore,
+) -> Result<(), AppError> {
+    use event_checkin_domain::models::event::OnlineOpenMode;
+
+    let is_in_person = participation_type
+        .trim()
+        .to_lowercase()
+        .contains("in-person")
+        || participation_type
+            .trim()
+            .to_lowercase()
+            .contains("in person")
+        || participation_type.trim().is_empty();
+
+    // Count current attendees from sheet
+    let attendees =
+        crate::sheets::get_attendees(state, &config.sheet_id, &config.sheet_name, Some(kv))
+            .await
+            .map_err(|e| AppError::Internal(format!("failed to check capacity: {e}")))?;
+
+    let mut in_person_count: u32 = 0;
+    let mut online_count: u32 = 0;
+    for a in &attendees {
+        if a.is_in_person() {
+            in_person_count += 1;
+        } else {
+            online_count += 1;
+        }
+    }
+
+    // Count walk-in attendees as in-person
+    let walkin_prefix = format!("walkin:{}:", config.id);
+    let mut walkin_cursor: Option<String> = None;
+    let mut walkin_count: u32 = 0;
+    loop {
+        let mut builder = kv.list().prefix(walkin_prefix.clone());
+        if let Some(c) = walkin_cursor.take() {
+            builder = builder.cursor(c);
+        }
+        match builder.execute().await {
+            Ok(resp) => {
+                walkin_count += resp.keys.len() as u32;
+                if resp.list_complete {
+                    break;
+                }
+                walkin_cursor = resp.cursor;
+            }
+            Err(e) => {
+                tracing::warn!(error = ?e, "failed to list walk-in keys for capacity");
+                break;
+            }
+        }
+    }
+    in_person_count += walkin_count;
+
+    tracing::info!(
+        event_id = %config.id,
+        participation_type = %participation_type,
+        is_in_person = is_in_person,
+        in_person_count = in_person_count,
+        online_count = online_count,
+        in_person_capacity = ?config.in_person_capacity,
+        online_capacity = ?config.online_capacity,
+        "capacity check"
+    );
+
+    if is_in_person {
+        // Check in-person capacity
+        if let Some(cap) = config.in_person_capacity
+            && in_person_count >= cap
+        {
+            return Err(AppError::Validation(
+                "In-person spots are full. Please register for the online track instead."
+                    .to_string(),
+            ));
+        }
+    } else {
+        // Check online capacity
+        if let Some(cap) = config.online_capacity
+            && online_count >= cap
+        {
+            return Err(AppError::Validation(
+                "Online spots are full. Registration is closed.".to_string(),
+            ));
+        }
+
+        // Check online registration gating
+        let in_person_available = config
+            .in_person_capacity
+            .is_none_or(|cap| in_person_count < cap);
+
+        let online_open = match config.online_open_mode {
+            OnlineOpenMode::Always => true,
+            OnlineOpenMode::AutoOnFull => !in_person_available,
+            OnlineOpenMode::Manual => config.online_registration_open,
+        };
+
+        if !online_open {
+            return Err(AppError::Validation(
+                "Online registration is not open yet. Please check back later or register for the in-person track.".to_string(),
+            ));
+        }
+    }
+
+    Ok(())
 }

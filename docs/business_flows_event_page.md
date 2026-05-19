@@ -993,3 +993,136 @@ NFT Mint
 | NFT already minted | Show "Badge already claimed" with link to Solscan |
 | Wallet not connected at mint step | Prompt wallet connection, then retry |
 | Mint TX fails | "Minting failed, please retry" — claim_minted not set, can retry |
+
+---
+
+## 19. Registration Capacity & Track Gating (Issue 024)
+
+### Overview
+
+Events can have configurable capacity limits per track, with intelligent gating that controls when each track becomes available for registration. This prevents NFT exhaustion and ensures fair spot allocation.
+
+### Capacity Fields
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `in_person_capacity` | `Option<u32>` | Required | Max in-person spots (None = unlimited) |
+| `online_capacity` | `Option<u32>` | None (unlimited) | Max online spots — prevents NFT exhaustion |
+| `online_open_mode` | `OnlineOpenMode` | `Always` | How/when online track opens |
+| `online_registration_open` | `bool` | `false` | Manual toggle (for Manual mode) |
+| `deposit_deadline_hours` | `Option<u32>` | `None` | Hours to complete deposit before auto-switch |
+
+### Capacity Counting
+
+In-person capacity counts **all registered in-person attendees** regardless of deposit status:
+
+| State | Description | Counts toward capacity? |
+|-------|-------------|------------------------|
+| Registered | Just registered, no deposit yet | ✅ Yes — holds the spot |
+| Pending | Deposit slip uploaded, awaiting verification | ✅ Yes — holds the spot |
+| Deposited | Deposit verified (USDC on-chain or THB admin-verified) | ✅ Yes — confirmed spot |
+
+### Deposit Deadline + Auto-Switch to Online
+
+```
+Register as In-Person
+  ├─ Deposit within deadline → spot confirmed ✅
+  └─ Deadline passes → auto-switch to Online track ♻️
+      → participation_type changed to "Online" in sheet + KV
+      → in-person spot released
+      → attendee gets online claim path (after event end)
+```
+
+Rationale: Instead of cancelling the registration entirely (loses the attendee), auto-switch to online. They keep their registration but free up the physical spot.
+
+### Online Registration Gating
+
+#### `Always` Mode
+Both tracks open from registration start. User picks their preferred track. In-person disappears when full.
+
+#### `AutoOnFull` Mode
+Online track is hidden until in-person capacity is reached. Once in-person is full, online automatically becomes available. This creates a natural funnel: physical spots first, then virtual.
+
+#### `Manual` Mode
+Organizer controls when online opens via a toggle in staff UI. Useful for events where online should open at a specific moment (e.g., livestream goes live).
+
+### Registration UX
+
+#### Tracks Available (Both Open)
+```
+┌──────────────────────────────────┐
+│  Choose your track:              │
+│                                  │
+│  ● In-Person  — 12 spots left   │
+│  ○ Online  — Unlimited          │
+│                                  │
+│  [Reserve My Spot]               │
+└──────────────────────────────────┘
+```
+
+#### In-Person Full (Auto-Switch to Online)
+```
+┌──────────────────────────────────┐
+│  ✅ Online — Unlimited           │
+│                                  │
+│  In-person spots are all taken.  │
+│  You've been registered for the  │
+│  online track.                   │
+│                                  │
+│  [Register for Online]           │
+└──────────────────────────────────┘
+```
+
+### Claim Timing by Track
+
+| Track | Claim Available | Rationale |
+|-------|----------------|----------|
+| In-Person | After check-in | Proved physical presence |
+| Online | After event end (`now > event_end_ms`) | Prevents gaming before event |
+
+### Walk-in Capacity Handling
+
+- Walk-ins always count against in-person capacity
+- If capacity is reached, staff sees a warning: "⚠️ In-person capacity reached (150/150). Register anyway?"
+- Staff can override — they physically see the person
+- Online-only events: walk-in registration is blocked
+
+### Backend Capacity Check (Pseudocode)
+
+```
+fn check_registration_capacity(config, attendees, participation_type):
+    if participation_type == "In-Person":
+        in_person_count = attendees.filter(|a| a.is_in_person()).count()
+        if let Some(cap) = config.in_person_capacity:
+            if in_person_count >= cap:
+                return Err("In-person spots are full")
+    
+    if participation_type == "Online":
+        online_count = attendees.filter(|a| !a.is_in_person()).count()
+        if let Some(cap) = config.online_capacity:
+            if online_count >= cap:
+                return Err("Online spots are full")
+        
+        match config.online_open_mode:
+            Manual => if !config.online_registration_open:
+                return Err("Online registration not yet available")
+            AutoOnFull => 
+                in_person_count = attendees.filter(|a| a.is_in_person()).count()
+                if let Some(cap) = config.in_person_capacity:
+                    if in_person_count < cap:
+                        return Err("Online opens when in-person is full")
+            Always => () // always allowed
+    
+    Ok(())
+```
+
+### Google Sheet Row Deletion Fix
+
+**Problem**: `delete_sheet_row` uses `spreadsheets.values.clear` which empties cells but leaves empty rows. When appending new rows, Google Sheets may fail on sheets with gaps.
+
+**Fix**: Use `spreadsheets.batchUpdate` with `DeleteDimensionRequest` to actually remove the row, then invalidate all caches so subsequent reads get fresh row indices.
+
+```
+Before: Row 1 [data], Row 2 [empty], Row 3 [data] → append fails
+After:  Row 1 [data], Row 2 [data] → append works
+```

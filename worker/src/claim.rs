@@ -487,6 +487,30 @@ pub async fn execute_claim(
         }
     };
 
+    // 2b. Online claim timing gate — online attendees can only claim after event ends
+    // This prevents online attendees from completing everything before the event occurs.
+    let is_online_attendee = !attendee.is_in_person();
+    if is_online_attendee {
+        let now_ms = chrono::Utc::now().timestamp_millis();
+        if event.event_end_ms > 0 && now_ms < event.event_end_ms {
+            let remaining_secs = (event.event_end_ms - now_ms) / 1000;
+            let remaining_hours = remaining_secs / 3600;
+            let remaining_mins = (remaining_secs % 3600) / 60;
+            tracing::warn!(
+                claim_token = %token,
+                participation_type = %attendee.participation_type,
+                event_end_ms = event.event_end_ms,
+                now_ms = now_ms,
+                remaining_hours = remaining_hours,
+                "online claim blocked: event has not ended yet"
+            );
+            return Err(AppError::Validation(format!(
+                "Online claims open after the event ends. {}h {}m remaining.",
+                remaining_hours, remaining_mins
+            )));
+        }
+    }
+
     // 3. Check-in verification — with virtual check-in for online attendees
     if attendee.checked_in_at.is_none() {
         let is_online_attendee = !attendee.is_in_person();
@@ -749,6 +773,8 @@ async fn execute_walkin_claim(
     walkin: WalkinAttendee,
 ) -> Result<ClaimResult, AppError> {
     let display_name = walkin.name.clone();
+
+    // Note: walk-ins are always in-person — no online claim timing gate needed
 
     // Already claimed check
     if walkin.claimed_at.is_some() {

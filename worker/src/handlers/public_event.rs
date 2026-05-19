@@ -53,6 +53,8 @@ pub async fn list_public_events(
                 "location": e.location,
                 "nft_image_url": e.nft_image_url,
                 "created_at": e.created_at,
+                "in_person_capacity": e.in_person_capacity,
+                "online_capacity": e.online_capacity,
             })
         })
         .collect();
@@ -123,6 +125,23 @@ pub async fn get_public_event(
 
     tracing::info!(slug = %slug, "public event fetched");
 
+    // Count attendees for capacity display
+    let (in_person_count, online_count) = count_attendees_by_track(&state, &config, Some(kv)).await;
+
+    let in_person_remaining = config
+        .in_person_capacity
+        .map(|cap| cap.saturating_sub(in_person_count));
+    let online_remaining = config
+        .online_capacity
+        .map(|cap| cap.saturating_sub(online_count));
+
+    // Determine track availability for frontend gating
+    let in_person_available =
+        config.event_format.has_in_person() && in_person_remaining.is_none_or(|r| r > 0);
+    let online_available = config.event_format.has_online()
+        && online_remaining.is_none_or(|r| r > 0)
+        && is_online_registration_open(&config, in_person_available);
+
     // Return sanitized response — exclude all sensitive/internal fields
     Ok(ApiOk::new(json!({
         "id": config.id,
@@ -148,5 +167,87 @@ pub async fn get_public_event(
         "location": config.location,
         "created_at": config.created_at,
         "dev_mode": state.config.dev_mode,
+        // Capacity info for frontend gating
+        "in_person_capacity": config.in_person_capacity,
+        "online_capacity": config.online_capacity,
+        "in_person_count": in_person_count,
+        "online_count": online_count,
+        "in_person_remaining": in_person_remaining,
+        "online_remaining": online_remaining,
+        "in_person_available": in_person_available,
+        "online_available": online_available,
+        "online_open_mode": config.online_open_mode.as_str(),
     })))
+}
+
+/// Count attendees by track from sheet data.
+/// Returns (in_person_count, online_count).
+async fn count_attendees_by_track(
+    state: &AppState,
+    config: &event_checkin_domain::models::event::EventConfig,
+    kv: Option<&worker::kv::KvStore>,
+) -> (u32, u32) {
+    let attendees =
+        match crate::sheets::get_attendees(state, &config.sheet_id, &config.sheet_name, kv).await {
+            Ok(a) => a,
+            Err(e) => {
+                tracing::warn!(error = %e, "failed to count attendees for capacity");
+                return (0, 0);
+            }
+        };
+
+    let mut in_person_count: u32 = 0;
+    let mut online_count: u32 = 0;
+
+    for attendee in &attendees {
+        if attendee.is_in_person() {
+            in_person_count += 1;
+        } else {
+            online_count += 1;
+        }
+    }
+
+    // Count walk-in attendees as in-person (they are by definition in-person)
+    // Walk-in records are stored as individual KV keys: walkin:{event_id}:{email}
+    if let Some(kv) = kv {
+        let prefix = format!("walkin:{}:", config.id);
+        let mut walkin_cursor: Option<String> = None;
+        let mut walkin_count: u32 = 0;
+        loop {
+            let mut builder = kv.list().prefix(prefix.clone());
+            if let Some(c) = walkin_cursor.take() {
+                builder = builder.cursor(c);
+            }
+            match builder.execute().await {
+                Ok(resp) => {
+                    walkin_count += resp.keys.len() as u32;
+                    if resp.list_complete {
+                        break;
+                    }
+                    walkin_cursor = resp.cursor;
+                }
+                Err(e) => {
+                    tracing::warn!(error = ?e, "failed to list walk-in keys for capacity count");
+                    break;
+                }
+            }
+        }
+        in_person_count += walkin_count;
+    }
+
+    (in_person_count, online_count)
+}
+
+/// Check whether online registration is currently open based on `OnlineOpenMode`.
+fn is_online_registration_open(
+    config: &event_checkin_domain::models::event::EventConfig,
+    in_person_available: bool,
+) -> bool {
+    use event_checkin_domain::models::event::OnlineOpenMode;
+
+    match config.online_open_mode {
+        OnlineOpenMode::Always => true,
+        OnlineOpenMode::AutoOnFull => !in_person_available,
+        OnlineOpenMode::Manual => config.online_registration_open,
+    }
 }

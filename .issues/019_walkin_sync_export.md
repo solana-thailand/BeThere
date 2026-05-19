@@ -67,5 +67,6 @@ npx wrangler kv key get --namespace-id=c8a6a87f9ed34ce0a3c8e48b84039214 "event:<
 
 ## Refs
 - `.issues/014_walkin_attendee_flow.md` — parent walk-in issue
+- `.issues/024_registration_capacity_gating.md` — sheet row deletion fix (Phase 1)
 - `worker/src/handlers/walkin.rs` — walk-in handlers
 - `worker/src/sheets.rs` — Google Sheets integration

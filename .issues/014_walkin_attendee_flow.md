@@ -47,7 +47,7 @@ Walk-in attendees (who show up without pre-registering) are registered by staff 
 - [ ] Fix auto-sync wrong sheet bug (Phase 5)
 - [ ] Unified attendee list: merge walk-ins into `GET /api/attendees` with `source` field
 - [ ] Walk-in count shown separately in event dashboard
-- [ ] Walk-in cap per event (configurable, prevent escrow abuse)
+- [ ] Walk-in cap per event (configurable, prevent escrow abuse) — see `.issues/024_registration_capacity_gating.md` Phase 4
 - [ ] Rate limiting on walk-in register (max N per minute per staff)
 
 ## Architecture

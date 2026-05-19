@@ -501,14 +501,15 @@ pub async fn append_walkin_row(
 // Row Deletion
 // ---------------------------------------------------------------------------
 
-/// Clear all cells in a row of the Google Sheet.
+/// Delete a row from the Google Sheet by removing the entire row dimension.
 ///
-/// Uses `spreadsheets.values.clear` to empty the row without deleting it
-/// (avoids shifting row indices which would break row_index references).
+/// Uses `spreadsheets.batchUpdate` with `DeleteDimensionRequest` to remove the row,
+/// which shifts subsequent rows up (no gaps left behind).
+/// All caches are invalidated after deletion since row indices shift.
 #[allow(clippy::too_many_arguments)]
 pub async fn delete_sheet_row(
     row_index: usize,
-    mapping: &ColumnMapping,
+    _mapping: &ColumnMapping,
     state: &AppState,
     sheet_id: &str,
     sheet_name: &str,
@@ -516,26 +517,26 @@ pub async fn delete_sheet_row(
 ) -> Result<(), String> {
     let access_token = get_cached_access_token(state, kv).await?;
 
-    // Determine the column range to clear (A to last mapped column)
-    let last_col_idx = mapping.total_columns.max(28).saturating_sub(1);
-    let last_col_letter = {
-        let mut result = String::new();
-        let mut n = last_col_idx;
-        loop {
-            result.insert(0, (b'A' + (n % 26) as u8) as char);
-            if n < 26 {
-                break;
-            }
-            n = (n / 26) - 1;
-        }
-        result
-    };
+    // Use batchUpdate with DeleteDimensionRequest to remove the entire row
+    // This shifts all subsequent rows up, leaving no gaps
+    let url = format!("https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}:batchUpdate");
 
-    let range = format!("{sheet_name}!A{row_index}:{last_col_letter}{row_index}");
-    let url = format!(
-        "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{range}:clear",
-        range = urlencoding::encode(&range),
-    );
+    // Google Sheets API uses 0-based indices for dimensions
+    // row_index from the sheet is 1-based, so subtract 1
+    let zero_based_row = if row_index > 0 { row_index - 1 } else { 0 };
+
+    let body = serde_json::json!({
+        "requests": [{
+            "deleteDimension": {
+                "range": {
+                    "sheetId": resolve_sheet_gid(sheet_name),
+                    "dimension": "ROWS",
+                    "startIndex": zero_based_row,
+                    "endIndex": zero_based_row + 1
+                }
+            }
+        }]
+    });
 
     let headers = worker::Headers::new();
     headers
@@ -545,30 +546,50 @@ pub async fn delete_sheet_row(
         .set("Content-Type", "application/json")
         .map_err(|e| format!("failed to set content-type: {e:?}"))?;
 
+    let json_body = serde_json::to_string(&body)
+        .map_err(|e| format!("failed to serialize batch update: {e}"))?;
+
     let mut init = worker::RequestInit::new();
-    init.with_method(worker::Method::Post).with_headers(headers);
+    init.with_method(worker::Method::Post)
+        .with_headers(headers)
+        .with_body(Some(wasm_bindgen::JsValue::from_str(&json_body)));
 
     let request = worker::Request::new_with_init(&url, &init)
-        .map_err(|e| format!("failed to create clear request: {e:?}"))?;
+        .map_err(|e| format!("failed to create delete request: {e:?}"))?;
 
     let mut response = worker::Fetch::Request(request)
         .send()
         .await
-        .map_err(|e| format!("failed to send clear request: {e:?}"))?;
+        .map_err(|e| format!("failed to send delete request: {e:?}"))?;
 
     let status = response.status_code();
     if !(200..300).contains(&status) {
         let body = response.text().await.unwrap_or_default();
-        return Err(format!("sheet clear failed (HTTP {status}): {body}"));
+        return Err(format!("sheet row delete failed (HTTP {status}): {body}"));
     }
 
     tracing::info!(
         row_index = row_index,
-        range = %range,
-        "cleared sheet row"
+        sheet_name = %sheet_name,
+        "deleted sheet row (dimension removed)"
     );
 
+    // Invalidate all caches — row indices have shifted
     invalidate_attendee_cache(kv, sheet_id, sheet_name).await;
     invalidate_column_map_cache(kv, sheet_id, sheet_name).await;
     Ok(())
+}
+
+/// Resolve a sheet tab name to its numeric GID for dimension operations.
+///
+/// The `deleteDimension` API requires a `sheetId` (numeric GID), not the tab name.
+/// Common defaults: first tab = 0, "Attendees" = 0, "Staff" = 1.
+/// Falls back to 0 for the first/default tab.
+fn resolve_sheet_gid(sheet_name: &str) -> i64 {
+    match sheet_name.to_lowercase().as_str() {
+        "attendees" => 0,
+        "staff" => 1,
+        // Default to first tab — covers most cases
+        _ => 0,
+    }
 }

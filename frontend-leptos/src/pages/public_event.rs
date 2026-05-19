@@ -186,6 +186,16 @@ pub struct PublicEventData {
     pub location: String,
     pub created_at: String,
     pub dev_mode: bool,
+    // Capacity info
+    pub in_person_capacity: Option<u32>,
+    pub online_capacity: Option<u32>,
+    pub in_person_count: u32,
+    pub online_count: u32,
+    pub in_person_remaining: Option<u32>,
+    pub online_remaining: Option<u32>,
+    pub in_person_available: bool,
+    pub online_available: bool,
+    pub online_open_mode: String,
 }
 
 /// API response wrapper for public event endpoint.
@@ -719,6 +729,18 @@ fn render_loaded_event(
     let show_reg_form = !event_completed.get();
     let require_contact = data.require_contact_info;
 
+    // Capacity info for registration gating
+    let in_person_available = data.in_person_available;
+    let online_available = data.online_available;
+    let in_person_remaining = data.in_person_remaining;
+    let online_remaining = data.online_remaining;
+    let in_person_capacity = data.in_person_capacity;
+
+    // Determine which tracks to show in the dropdown
+    // Hybrid: show available tracks only. In-person disappears when full.
+    // Single-format: no dropdown needed.
+    let is_hybrid_with_options = is_hybrid && (in_person_available || online_available);
+
     // Registration form signals
     let (reg_name, set_reg_name) = signal(String::new());
     let (reg_email, set_reg_email) = signal(String::new());
@@ -903,6 +925,59 @@ fn render_loaded_event(
             }
         }}
 
+       // Capacity indicator (shows remaining spots when capacity is set)
+        {move || {
+            let has_ip_cap = in_person_capacity.is_some();
+            let has_on_cap = online_remaining.is_some();
+            if has_ip_cap || has_on_cap {
+                view! {
+                    <div style="width:100%;background:var(--bg-card);border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;box-shadow:var(--shadow);">
+                        <h2 style="font-size:1.1rem;font-weight:600;color:#fff;margin-bottom:0.75rem;">
+                            <Icon icon=IconName::Ticket class="icon-md" />" Capacity"
+                        </h2>
+                        <div style="display:flex;flex-direction:column;gap:0.5rem;">
+                            {if has_ip_cap {
+                                let remaining = in_person_remaining.unwrap_or(0);
+                                let color = if remaining > 0 { "#34d399" } else { "#f87171" };
+                                let label = if remaining > 0 {
+                                    format!("In-Person: {} spots left", remaining)
+                                } else {
+                                    "In-Person: FULL".to_string()
+                                };
+                                view! {
+                                    <div style="display:flex;align-items:center;gap:0.5rem;">
+                                        <span style=format!("width:8px;height:8px;border-radius:50%;background:{color};flex-shrink:0;")></span>
+                                        <span style=format!("color:{color};font-size:0.9rem;font-weight:500;")>{label}</span>
+                                    </div>
+                                }.into_any()
+                            } else {
+                                ().into_any()
+                            }}
+                            {if has_on_cap {
+                                let remaining = online_remaining.unwrap_or(0);
+                                let color = if remaining > 0 { "#34d399" } else { "#f87171" };
+                                let label = if remaining > 0 {
+                                    format!("Online: {} spots left", remaining)
+                                } else {
+                                    "Online: FULL".to_string()
+                                };
+                                view! {
+                                    <div style="display:flex;align-items:center;gap:0.5rem;">
+                                        <span style=format!("width:8px;height:8px;border-radius:50%;background:{color};flex-shrink:0;")></span>
+                                        <span style=format!("color:{color};font-size:0.9rem;font-weight:500;")>{label}</span>
+                                    </div>
+                                }.into_any()
+                            } else {
+                                ().into_any()
+                            }}
+                        </div>
+                    </div>
+                }.into_any()
+            } else {
+                ().into_any()
+            }
+        }}
+
         // Signed-in indicator + logout (visible when signed in)
         {move || {
             match &auth_state.get() {
@@ -1057,6 +1132,11 @@ fn render_loaded_event(
                                 require_contact,
                                 has_deposit,
                                 deposit_thb,
+                                in_person_available,
+                                online_available,
+                                in_person_remaining,
+                                online_remaining,
+                                in_person_capacity,
                                 reg_name,
                                 set_reg_name,
                                 reg_email,
@@ -1083,6 +1163,11 @@ fn render_loaded_event(
                                 require_contact,
                                 has_deposit,
                                 deposit_thb,
+                                in_person_available,
+                                online_available,
+                                in_person_remaining,
+                                online_remaining,
+                                in_person_capacity,
                                 reg_name,
                                 set_reg_name,
                                 reg_email,
@@ -1163,6 +1248,11 @@ fn render_registration_form(
     require_contact: bool,
     has_deposit: bool,
     deposit_thb: u64,
+    in_person_available: bool,
+    online_available: bool,
+    in_person_remaining: Option<u32>,
+    online_remaining: Option<u32>,
+    in_person_capacity: Option<u32>,
     reg_name: ReadSignal<String>,
     set_reg_name: WriteSignal<String>,
     _reg_email: ReadSignal<String>,
@@ -1281,17 +1371,33 @@ fn render_registration_form(
                                     readonly
                                     style="width:100%;padding:0.6rem 0.8rem;background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);color:var(--text-muted);font-size:0.9rem;outline:none;opacity:0.7;cursor:not-allowed;"
                                 />
-                                // Participation type (hybrid only)
+                                // Participation type (hybrid only — shows available tracks)
                                 {move || {
                                     if is_hybrid {
+                                        let ip_label = match in_person_remaining {
+                                            Some(r) => format!("In-Person (on-site) — {} spots left", r),
+                                            None => "In-Person (on-site)".to_string(),
+                                        };
+                                        let on_label = match online_remaining {
+                                            Some(r) => format!("Online (virtual) — {} spots left", r),
+                                            None => "Online (virtual)".to_string(),
+                                        };
                                         view! {
                                             <select
                                                 style="width:100%;padding:0.6rem 0.8rem;background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:0.9rem;outline:none;"
                                                 on:change=move |ev| set_reg_participation.set(event_target_value(&ev))
                                             >
                                                 <option value="">"Select track..."</option>
-                                                <option value="In-Person">"In-Person (on-site)"</option>
-                                                <option value="Online">"Online (virtual)"</option>
+                                                {if in_person_available {
+                                                    view! { <option value="In-Person">{ip_label}</option> }.into_any()
+                                                } else {
+                                                    ().into_any()
+                                                }}
+                                                {if online_available {
+                                                    view! { <option value="Online">{on_label}</option> }.into_any()
+                                                } else {
+                                                    ().into_any()
+                                                }}
                                             </select>
                                         }.into_any()
                                     } else {

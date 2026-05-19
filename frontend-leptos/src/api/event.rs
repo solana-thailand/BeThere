@@ -85,6 +85,25 @@ impl EventFormat {
     }
 }
 
+/// Controls when online registration opens for hybrid events.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub enum OnlineOpenMode {
+    #[default]
+    Always,
+    AutoOnFull,
+    Manual,
+}
+
+impl OnlineOpenMode {
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Always => "Always Open",
+            Self::AutoOnFull => "Auto (when in-person full)",
+            Self::Manual => "Manual Toggle",
+        }
+    }
+}
+
 /// Default true helper for serde.
 fn default_true_fn() -> bool {
     true
@@ -121,6 +140,11 @@ pub struct EventMeta {
     pub escrow_status: EscrowStatus,
     #[serde(default)]
     pub event_format: EventFormat,
+    // Capacity
+    #[serde(default)]
+    pub in_person_capacity: Option<u32>,
+    #[serde(default)]
+    pub online_capacity: Option<u32>,
 }
 
 /// Full event configuration (from GET /api/events/{id}).
@@ -202,6 +226,17 @@ pub struct EventDetail {
     pub created_at: String,
     #[serde(default)]
     pub updated_at: String,
+    // Capacity settings
+    #[serde(default)]
+    pub in_person_capacity: Option<u32>,
+    #[serde(default)]
+    pub online_capacity: Option<u32>,
+    #[serde(default)]
+    pub online_open_mode: OnlineOpenMode,
+    #[serde(default)]
+    pub online_registration_open: bool,
+    #[serde(default)]
+    pub deposit_deadline_hours: Option<u32>,
 }
 
 /// Response for GET /api/events — list all events.
@@ -286,6 +321,17 @@ pub struct CreateEventBody {
     pub require_contact_info: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub location: Option<String>,
+    // Capacity settings
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub in_person_capacity: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub online_capacity: Option<u32>,
+    #[serde(default)]
+    pub online_open_mode: OnlineOpenMode,
+    #[serde(default)]
+    pub online_registration_open: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deposit_deadline_hours: Option<u32>,
 }
 
 /// Request body for PUT /api/events/{id} — update event.
@@ -365,6 +411,17 @@ pub struct UpdateEventBody {
     pub require_contact_info: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub location: Option<String>,
+    // Capacity settings
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub in_person_capacity: Option<Option<u32>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub online_capacity: Option<Option<u32>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub online_open_mode: Option<OnlineOpenMode>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub online_registration_open: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deposit_deadline_hours: Option<Option<u32>>,
 }
 
 /// Response from event create/update (partial data).

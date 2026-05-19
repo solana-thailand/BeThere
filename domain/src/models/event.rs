@@ -13,6 +13,36 @@ fn default_true() -> bool {
     true
 }
 
+/// Controls when online registration opens for hybrid events.
+///
+/// - `Always`: Both tracks open from registration start.
+/// - `AutoOnFull`: Online opens automatically when in-person capacity is reached.
+/// - `Manual`: Organizer flips toggle manually via staff UI.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum OnlineOpenMode {
+    #[default]
+    Always,
+    AutoOnFull,
+    Manual,
+}
+
+impl OnlineOpenMode {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Always => "always",
+            Self::AutoOnFull => "auto_on_full",
+            Self::Manual => "manual",
+        }
+    }
+}
+
+impl std::fmt::Display for OnlineOpenMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
 /// Event format — controls deposit, check-in, claim, and escrow paths.
 ///
 /// - `InPerson`: Physical event, deposit auto-enabled, physical check-in required.
@@ -173,6 +203,14 @@ pub struct EventMeta {
     /// NFT badge image URL (for event card display).
     #[serde(default)]
     pub nft_image_url: String,
+
+    // ── Capacity settings ─────────────────────────────────────────────
+    /// Maximum number of in-person attendees. None = unlimited.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub in_person_capacity: Option<u32>,
+    /// Maximum number of online attendees. None = unlimited (default).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub online_capacity: Option<u32>,
 }
 
 /// Top-level index of all events, stored under KV key "events".
@@ -315,6 +353,24 @@ pub struct EventConfig {
     #[serde(default = "default_true")]
     pub require_contact_info: bool,
 
+    // ── Capacity settings ─────────────────────────────────────────────
+    /// Maximum number of in-person attendees. None = unlimited.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub in_person_capacity: Option<u32>,
+    /// Maximum number of online attendees. None = unlimited (default).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub online_capacity: Option<u32>,
+    /// Controls when online registration opens for hybrid events.
+    #[serde(default)]
+    pub online_open_mode: OnlineOpenMode,
+    /// Manual toggle for online registration (used when `online_open_mode = Manual`).
+    #[serde(default)]
+    pub online_registration_open: bool,
+    /// Hours after registration to auto-switch from in-person to online track.
+    /// None = no deadline (in-person spot held indefinitely).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deposit_deadline_hours: Option<u32>,
+
     // ── Timestamps ────────────────────────────────────────────────────
     /// ISO 8601 creation timestamp.
     pub created_at: String,
@@ -347,6 +403,8 @@ impl EventConfig {
             tagline: self.tagline.clone(),
             location: self.location.clone(),
             nft_image_url: self.nft_image_url.clone(),
+            in_person_capacity: self.in_person_capacity,
+            online_capacity: self.online_capacity,
         }
     }
 
@@ -455,6 +513,11 @@ impl EventConfig {
             location: String::new(),
             event_format: EventFormat::InPerson,
             require_contact_info: true,
+            in_person_capacity: None,
+            online_capacity: None,
+            online_open_mode: OnlineOpenMode::default(),
+            online_registration_open: false,
+            deposit_deadline_hours: None,
             created_at: String::new(),
             updated_at: String::new(),
             updated_by: String::new(),
@@ -569,6 +632,23 @@ pub struct CreateEventRequest {
     /// Whether contact info is required during self-registration (defaults to true).
     #[serde(default = "default_true")]
     pub require_contact_info: bool,
+
+    // ── Capacity settings ─────────────────────────────────────────────
+    /// Maximum number of in-person attendees. None = unlimited.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub in_person_capacity: Option<u32>,
+    /// Maximum number of online attendees. None = unlimited (default).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub online_capacity: Option<u32>,
+    /// Controls when online registration opens for hybrid events.
+    #[serde(default)]
+    pub online_open_mode: OnlineOpenMode,
+    /// Manual toggle for online registration.
+    #[serde(default)]
+    pub online_registration_open: bool,
+    /// Hours after registration to auto-switch from in-person to online.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deposit_deadline_hours: Option<u32>,
 }
 /// Request body for PUT /api/events/{id} — update an existing event.
 /// All fields are optional; only provided fields are updated.
@@ -688,6 +768,23 @@ pub struct UpdateEventRequest {
     /// Whether contact info is required during self-registration.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub require_contact_info: Option<bool>,
+
+    // ── Capacity settings ─────────────────────────────────────────────
+    /// Maximum number of in-person attendees. None = unlimited.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub in_person_capacity: Option<Option<u32>>,
+    /// Maximum number of online attendees. None = unlimited.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub online_capacity: Option<Option<u32>>,
+    /// Controls when online registration opens for hybrid events.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub online_open_mode: Option<OnlineOpenMode>,
+    /// Manual toggle for online registration.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub online_registration_open: Option<bool>,
+    /// Hours after registration to auto-switch from in-person to online.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deposit_deadline_hours: Option<Option<u32>>,
 }
 
 /// Response for GET /api/events — list all events.

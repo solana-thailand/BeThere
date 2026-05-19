@@ -450,4 +450,38 @@ Submit the on-chain escrow program to a Solana audit firm (e.g., Audit Arena, Ot
 
 ---
 
+## P0.8 — Registration Capacity & Track Gating (Issue 024)
+
+### RC-1. Capacity indicator on public event page
+**Current**: Registration form always shows both tracks for hybrid events.
+**Target**: Show remaining in-person spots. Hide in-person option when full. Auto-select online.
+**Impact**: Prevents frustration from registering for a full track. Clear expectations.
+**Effort**: ~2h (frontend + backend capacity count)
+
+### RC-2. Claim timing gate for online attendees
+**Current**: Online attendees get claim URL immediately after registration.
+**Target**: Online claim page shows "Claims open after event ends on [date]" with countdown.
+**Impact**: Prevents attendees from completing everything before the event occurs.
+**Effort**: ~1h (backend gate in claim endpoint)
+
+### RC-3. Deposit deadline countdown on deposit page
+**Current**: No urgency indicator for completing deposit.
+**Target**: Show countdown timer: "Complete your deposit within 23h 45m to keep your in-person spot."
+**Impact**: Reduces "seat hoarding" — encourages timely deposits.
+**Effort**: ~2h (frontend countdown + backend deadline field)
+
+### RC-4. Organizer capacity controls on event form
+**Current**: No capacity fields on create/edit event form.
+**Target**: Add in-person capacity, online capacity, online open mode selector.
+**Impact**: Gives organizers control over spot allocation and NFT supply.
+**Effort**: ~3h (form fields + backend validation)
+
+### RC-5. Manual online toggle in staff UI
+**Current**: No way to manually open/close online registration.
+**Target**: Toggle button in admin panel for "Open Online Registration".
+**Impact**: Organizer control over when online track becomes available.
+**Effort**: ~1h (toggle button + API endpoint)
+
+---
+
 *Document created from UX audit session. Last updated: 2026-06-12.*

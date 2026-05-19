@@ -264,6 +264,11 @@ pub async fn create_event(
         location: req.location.trim().to_string(),
         event_format: req.event_format.clone(),
         require_contact_info: req.require_contact_info,
+        in_person_capacity: req.in_person_capacity,
+        online_capacity: req.online_capacity,
+        online_open_mode: req.online_open_mode.clone(),
+        online_registration_open: req.online_registration_open,
+        deposit_deadline_hours: req.deposit_deadline_hours,
         created_at: now.clone(),
         updated_at: now,
         updated_by: updated_by.to_string(),
@@ -497,6 +502,23 @@ pub async fn update_event(
     }
     if let Some(v) = req.require_contact_info {
         config.require_contact_info = v;
+    }
+
+    // Capacity settings
+    if let Some(v) = req.in_person_capacity {
+        config.in_person_capacity = v;
+    }
+    if let Some(v) = req.online_capacity {
+        config.online_capacity = v;
+    }
+    if let Some(ref v) = req.online_open_mode {
+        config.online_open_mode = v.clone();
+    }
+    if let Some(v) = req.online_registration_open {
+        config.online_registration_open = v;
+    }
+    if let Some(v) = req.deposit_deadline_hours {
+        config.deposit_deadline_hours = v;
     }
 
     config.updated_at = chrono::Utc::now().to_rfc3339();
@@ -790,6 +812,11 @@ pub async fn seed_from_config(
         location: String::new(),
         event_format: event_checkin_domain::models::event::EventFormat::InPerson,
         require_contact_info: true,
+        in_person_capacity: None,
+        online_capacity: None,
+        online_open_mode: event_checkin_domain::models::event::OnlineOpenMode::default(),
+        online_registration_open: false,
+        deposit_deadline_hours: None,
         created_at: now.clone(),
         updated_at: now,
         updated_by: String::new(), // seeded from config, no user context
