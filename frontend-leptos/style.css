@@ -7536,6 +7536,10 @@ nav a.active {
     width: 256px;
     height: 256px;
     display: block;
+    object-fit: contain;
+    /* Optical alignment: QR codes have asymmetric visual weight
+       (heavy data blocks bottom-right). Nudge to visually center. */
+    transform: translate(-2px, -3px);
 }
 
 /* QR image — medium (220px, PromptPay)
@@ -7544,6 +7548,9 @@ nav a.active {
     width: 200px;
     height: 200px;
     display: block;
+    object-fit: contain;
+    /* Same optical alignment nudge */
+    transform: translate(-2px, -3px);
 }
 
 /* ---------- Deposit Input Fields ---------- */

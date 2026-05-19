@@ -10,7 +10,7 @@ Implement capacity limits, track-based registration gating, and claim timing enf
 - Claim gating: online attendees can only claim after event ends
 - Sheet row deletion fix (delete row instead of clearing cells)
 
-## Status: IN PROGRESS — Phase 3 Done (cron trigger remaining)
+## Status: Phase 4 Done — Issue Complete (cron batch scan deferred)
 
 ## Design Decisions
 
@@ -146,19 +146,20 @@ Online                  → waiting page (event page with "Claims open after eve
 - [x] Event form state includes capacity fields (create/edit wired through)
 - **Files**: `domain/src/models/event.rs`, `worker/src/handlers/register.rs`, `worker/src/handlers/public_event.rs`, `worker/src/event_store.rs`, `frontend-leptos/src/pages/public_event.rs`, `frontend-leptos/src/api/event.rs`, `frontend-leptos/src/pages/events_page.rs`
 
-### Phase 3 — Organizer Controls + Deposit Deadline
+### Phase 3 — Organizer Controls + Deposit Deadline ✅ Done
 - [x] Manual toggle for online registration in staff/admin UI
 - [x] Capacity input fields on event create/edit form
 - [x] `OnlineOpenMode` selector on event form
 - [x] Deposit deadline field + countdown on deposit page
-- [ ] Cron/edge trigger for deposit deadline enforcement (auto-switch to online)
+- [x] Edge-triggered deadline enforcement (auto-switch to online on deposit status check)
+- [x] Reclaim flow (attendee can reclaim spot if capacity still available)
 - **Files**: `frontend-leptos/src/pages/events_page.rs`, `frontend-leptos/src/pages/deposit.rs`, `worker/src/handlers/deposit/usdc.rs`, `domain/src/models/deposit.rs`
 
-### Phase 4 — Walk-in Capacity Handling
-- [ ] Walk-in counts against in-person capacity
-- [ ] Warning dialog when walk-in exceeds capacity (staff can override)
-- [ ] Walk-in blocked for online-only events
-- **Files**: `worker/src/handlers/walkin.rs`, `frontend-leptos/src/pages/scanner.rs`
+### Phase 4 — Walk-in Capacity Handling ✅ Done
+- [x] Walk-in counts against in-person capacity
+- [x] Warning dialog when walk-in exceeds capacity (staff can override)
+- [x] Walk-in blocked for online-only events
+- **Files**: `worker/src/handlers/walkin.rs`, `frontend-leptos/src/pages/scanner.rs`, `frontend-leptos/src/api/attendee.rs`
 
 ## Related Issues
 - `.issues/014_walkin_attendee_flow.md` — Walk-in flow

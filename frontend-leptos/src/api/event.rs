@@ -87,6 +87,7 @@ impl EventFormat {
 
 /// Controls when online registration opens for hybrid events.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
 pub enum OnlineOpenMode {
     #[default]
     Always,
