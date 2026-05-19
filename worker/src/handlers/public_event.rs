@@ -49,6 +49,9 @@ pub async fn list_public_events(
                 "time_tba": e.time_tba,
                 "deposit_enabled": e.deposit_enabled,
                 "event_format": e.event_format.as_str(),
+                "tagline": e.tagline,
+                "location": e.location,
+                "nft_image_url": e.nft_image_url,
                 "created_at": e.created_at,
             })
         })

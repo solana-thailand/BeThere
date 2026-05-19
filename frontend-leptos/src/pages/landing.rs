@@ -482,6 +482,12 @@ struct PublicEventItem {
     #[serde(default)]
     time_tba: bool,
     deposit_enabled: bool,
+    #[serde(default)]
+    tagline: String,
+    #[serde(default)]
+    location: String,
+    #[serde(default)]
+    nft_image_url: String,
 }
 
 #[derive(Clone, Deserialize)]
@@ -594,6 +600,41 @@ fn UpcomingEvents() -> impl IntoView {
                                 } else {
                                     view! { <span style="display:inline-flex;align-items:center;gap:0.25rem;"><Icon icon=IconName::TicketFree class="icon-xs"/>" Free entry"</span> }.into_any()
                                 };
+
+                                let badge_img = if !evt.nft_image_url.is_empty() {
+                                    view! {
+                                        <div style="margin-bottom:0.5rem;">
+                                            <img
+                                                src=evt.nft_image_url.clone()
+                                                alt="Event badge"
+                                                style="width:100%;height:80px;object-fit:cover;border-radius:6px 6px 0 0;display:block;"
+                                            />
+                                        </div>
+                                    }.into_any()
+                                } else {
+                                    view! { <div></div> }.into_any()
+                                };
+
+                                let tagline_html = if !evt.tagline.is_empty() {
+                                    view! {
+                                        <p style="font-size:0.8rem;color:var(--text-secondary);margin-bottom:0.35rem;font-style:italic;">
+                                            {evt.tagline.clone()}
+                                        </p>
+                                    }.into_any()
+                                } else {
+                                    view! { <div></div> }.into_any()
+                                };
+
+                                let location_html = if !evt.location.is_empty() {
+                                    view! {
+                                        <p style="font-size:0.8rem;color:var(--text-secondary);margin-bottom:0.25rem;">
+                                            <span style="display:inline-flex;align-items:center;gap:0.25rem;"><Icon icon=IconName::Pin class="icon-xs"/>" "{evt.location.clone()}</span>
+                                        </p>
+                                    }.into_any()
+                                } else {
+                                    view! { <div></div> }.into_any()
+                                };
+
                                 view! {
                                     <a
                                         href=event_url
@@ -604,12 +645,15 @@ fn UpcomingEvents() -> impl IntoView {
                                             class="card event-card"
                                             style="text-align:left;padding:1.25rem 1.5rem;"
                                         >
+                                            {badge_img}
                                             <h3 style="font-size:1rem;font-weight:600;color:#fff;margin-bottom:0.35rem;">
                                                 {evt.name}
                                             </h3>
+                                            {tagline_html}
                                             <p style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:0.35rem;">
                                                 <span style="display:inline-flex;align-items:center;gap:0.25rem;"><Icon icon=IconName::Calendar class="icon-xs"/>" "{date_str}</span>
                                             </p>
+                                            {location_html}
                                             <p style="font-size:0.8rem;color:var(--text-muted);">
                                                 {deposit_badge}
                                             </p>

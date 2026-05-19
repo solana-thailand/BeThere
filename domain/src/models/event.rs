@@ -164,6 +164,15 @@ pub struct EventMeta {
     /// Event format — controls deposit, check-in, and claim paths.
     #[serde(default)]
     pub event_format: EventFormat,
+    /// Event tagline / subtitle.
+    #[serde(default)]
+    pub tagline: String,
+    /// Event venue / location.
+    #[serde(default)]
+    pub location: String,
+    /// NFT badge image URL (for event card display).
+    #[serde(default)]
+    pub nft_image_url: String,
 }
 
 /// Top-level index of all events, stored under KV key "events".
@@ -335,6 +344,9 @@ impl EventConfig {
             escrow_address: self.escrow_address.clone(),
             escrow_status: self.escrow_status.clone(),
             event_format: self.event_format.clone(),
+            tagline: self.tagline.clone(),
+            location: self.location.clone(),
+            nft_image_url: self.nft_image_url.clone(),
         }
     }
 
