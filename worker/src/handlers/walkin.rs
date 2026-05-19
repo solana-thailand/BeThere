@@ -217,15 +217,16 @@ pub async fn find_walkin_by_any(
 
         for key in &resp.keys {
             if let Some(raw) = kv.get(&key.name).text().await.ok().flatten()
-                && let Ok(a) = serde_json::from_str::<WalkinAttendee>(&raw) {
-                    // Match by email, claim_token, or name (case-insensitive)
-                    if a.email == query_lower
-                        || a.claim_token == query
-                        || a.name.to_lowercase() == query_lower
-                    {
-                        return Some(a);
-                    }
+                && let Ok(a) = serde_json::from_str::<WalkinAttendee>(&raw)
+            {
+                // Match by email, claim_token, or name (case-insensitive)
+                if a.email == query_lower
+                    || a.claim_token == query
+                    || a.name.to_lowercase() == query_lower
+                {
+                    return Some(a);
                 }
+            }
         }
 
         if resp.list_complete {
@@ -277,7 +278,17 @@ pub async fn register_walkin(
     }
 
     // Resolve event and check access
+    let requested_event_id = body.event_id.clone();
     let event = resolve_event_with_access(&state, &claims, Some(&body.event_id)).await?;
+
+    tracing::info!(
+        requested_event_id = %requested_event_id,
+        resolved_event_id = %event.id,
+        event_name = %event.name,
+        sheet_id = %event.sheet_id,
+        sheet_name = %event.sheet_name,
+        "walk-in: resolved event config"
+    );
 
     let email_lower = email.to_lowercase();
     let kv = state.events_kv.as_ref().ok_or_else(|| {
