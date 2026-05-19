@@ -10,7 +10,7 @@ Implement capacity limits, track-based registration gating, and claim timing enf
 - Claim gating: online attendees can only claim after event ends
 - Sheet row deletion fix (delete row instead of clearing cells)
 
-## Status: Phase 4 Done — Issue Complete (cron batch scan deferred)
+## Status: ✅ CLOSED — All 4 phases complete + typed frontend enums + serde contract tests
 
 ## Design Decisions
 

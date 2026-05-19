@@ -3443,9 +3443,8 @@ nav a.active {
     align-items: center;
     background: var(--text-heading);
     border-radius: var(--radius);
-    /* Asymmetric padding to optically center QR (bottom-right heavy data pattern).
-       top right bottom left */
-    padding: 1.25rem 0.75rem 0.75rem 1rem;
+    /* Uniform padding for geometric centering. */
+    padding: 1rem;
 }
 
 .scanner-qr-label {
@@ -7501,20 +7500,14 @@ nav a.active {
 /* ---------- QR Code Display ---------- */
 
 /* QR wrapper (white bg, rounded)
- * Replaces: style="background:white;border-radius:12px;padding:1rem;display:inline-block;margin-bottom:1rem;"
- *
- * Asymmetric padding: QR codes have heavier visual weight in the bottom-right
- * (finder patterns + data blocks). More padding on left/top optically centers
- * the perceived visual mass. The QR is generated with padding:0 (tight crop),
- * so all white space is controlled here.
- *
- *        top    right  bottom left
- *        1.5rem 1rem   1rem   1.25rem
+ * Uniform 1rem padding keeps the QR image geometrically centered.
+ * QR is generated with padding:0 (tight crop), so all whitespace
+ * is controlled here.
  */
 .qr-wrapper {
     background: white;
     border-radius: var(--radius);
-    padding: 1.5rem 1rem 1rem 1.25rem;
+    padding: 1rem;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -8249,9 +8242,8 @@ nav a.active {
 .ticket-qr-wrapper {
     background: #fff;
     border-radius: var(--radius);
-    /* Asymmetric padding to optically center QR (bottom-right heavy data pattern).
-       top right bottom left */
-    padding: 1.25rem 0.75rem 0.75rem 1rem;
+    /* Uniform padding for geometric centering. */
+    padding: 1rem;
     display: flex;
     align-items: center;
     justify-content: center;
