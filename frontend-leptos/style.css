@@ -3443,7 +3443,9 @@ nav a.active {
     align-items: center;
     background: var(--text-heading);
     border-radius: var(--radius);
-    padding: 1rem;
+    /* Asymmetric padding to optically center QR (bottom-right heavy data pattern).
+       top right bottom left */
+    padding: 1.25rem 0.75rem 0.75rem 1rem;
 }
 
 .scanner-qr-label {
@@ -7499,11 +7501,20 @@ nav a.active {
 /* ---------- QR Code Display ---------- */
 
 /* QR wrapper (white bg, rounded)
- * Replaces: style="background:white;border-radius:12px;padding:1rem;display:inline-block;margin-bottom:1rem;" */
+ * Replaces: style="background:white;border-radius:12px;padding:1rem;display:inline-block;margin-bottom:1rem;"
+ *
+ * Asymmetric padding: QR codes have heavier visual weight in the bottom-right
+ * (finder patterns + data blocks). More padding on left/top optically centers
+ * the perceived visual mass. The QR is generated with padding:0 (tight crop),
+ * so all white space is controlled here.
+ *
+ *        top    right  bottom left
+ *        1.5rem 1rem   1rem   1.25rem
+ */
 .qr-wrapper {
     background: white;
     border-radius: var(--radius);
-    padding: 1.25rem;
+    padding: 1.5rem 1rem 1rem 1.25rem;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -7531,26 +7542,24 @@ nav a.active {
 }
 
 /* QR image — large (256px, Solana Pay)
- * Replaces: style="width:256px;height:256px;" */
+ * Replaces: style="width:256px;height:256px;"
+ * QR is generated with padding:0 — no internal quiet zone from QRious.
+ * The .qr-wrapper provides all framing/whitespace. */
 .qr-img-lg {
     width: 256px;
     height: 256px;
     display: block;
     object-fit: contain;
-    /* Optical alignment: QR codes have asymmetric visual weight
-       (heavy data blocks bottom-right). Nudge to visually center. */
-    transform: translate(-2px, -3px);
 }
 
-/* QR image — medium (220px, PromptPay)
- * Replaces: style="width:220px;height:220px;" */
+/* QR image — medium (200px, PromptPay)
+ * Generated at 256px canvas, displayed at 200px for card-appropriate sizing.
+ * Slight upscale from canvas→display is fine — QR data is crisp at any size. */
 .qr-img-md {
     width: 200px;
     height: 200px;
     display: block;
     object-fit: contain;
-    /* Same optical alignment nudge */
-    transform: translate(-2px, -3px);
 }
 
 /* ---------- Deposit Input Fields ---------- */
@@ -8240,16 +8249,20 @@ nav a.active {
 .ticket-qr-wrapper {
     background: #fff;
     border-radius: var(--radius);
-    padding: 1rem;
+    /* Asymmetric padding to optically center QR (bottom-right heavy data pattern).
+       top right bottom left */
+    padding: 1.25rem 0.75rem 0.75rem 1rem;
     display: flex;
     align-items: center;
     justify-content: center;
     margin-bottom: 0.5rem;
 }
+
 .ticket-qr-img {
     width: 256px;
     height: 256px;
     display: block;
+    object-fit: contain;
 }
 .ticket-qr-placeholder {
     display: flex;

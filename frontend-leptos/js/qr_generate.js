@@ -50,13 +50,16 @@ export function generateQrDataUrl(text, size) {
 
   var qrSize = size || 200;
 
+  // padding: 0 — the QR fills the canvas tightly.
+  // Visual centering is handled by CSS asymmetric padding on the .qr-wrapper,
+  // which compensates for the QR code's bottom-right-heavy data pattern.
   var qr = new QRious({
     value: text,
     size: qrSize,
     level: "M",
     background: "#ffffff",
     foreground: "#000000",
-    padding: 16,
+    padding: 0,
   });
 
   return qr.toDataURL("image/png");
