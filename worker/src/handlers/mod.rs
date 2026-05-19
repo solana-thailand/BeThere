@@ -96,10 +96,6 @@ pub fn routes(state: AppState) -> Router<()> {
             "/deposit/usdc/webhook",
             post(deposit::deposit_webhook_handler),
         )
-        .route(
-            "/deposit/thb/upload",
-            post(deposit::upload_thb_slip_handler),
-        )
         // Escrow refund + close deposit (combined atomic TX — attendee claims refund and reclaims rent)
         .route("/escrow/refund", post(deposit::refund_and_close_tx_handler))
         // Escrow close deposit (public — attendee closes deposit PDA to reclaim rent)
@@ -125,6 +121,11 @@ pub fn routes(state: AppState) -> Router<()> {
         .route("/my-registration/{slug}", get(register::my_registration))
         // All registrations for the signed-in user across all events
         .route("/my-registrations", get(register::my_registrations))
+        // THB slip upload (requires verified email — attendee uploads their own slip)
+        .route(
+            "/deposit/thb/upload",
+            post(deposit::upload_thb_slip_handler),
+        )
         .layer(middleware::from_fn_with_state(
             state.clone(),
             crate::auth::require_identity,

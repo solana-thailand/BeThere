@@ -85,8 +85,16 @@ fn validate_slip_url(slip_url: &str) -> Result<(), AppError> {
 #[worker::send]
 pub async fn upload_thb_slip_handler(
     State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
     Json(body): Json<ThbSlipUploadRequest>,
 ) -> Result<ApiOk<serde_json::Value>, WorkerError> {
+    tracing::info!(
+        attendee_id = %body.attendee_id,
+        event_id = %body.event_id,
+        uploader_email = %claims.email,
+        "THB slip upload initiated"
+    );
+
     let kv = state
         .events_kv
         .as_ref()
