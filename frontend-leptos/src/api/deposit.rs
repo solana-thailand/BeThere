@@ -53,6 +53,17 @@ pub struct DepositStatusResponse {
     /// Deposit deadline in hours after registration. None = no deadline.
     #[serde(default)]
     pub deposit_deadline_hours: Option<u32>,
+    /// Whether the deposit deadline has expired (no deposit received in time).
+    /// When true, the attendee's participation_type has been auto-switched to "Online".
+    #[serde(default)]
+    pub deadline_expired: bool,
+    /// Registration timestamp (ISO 8601) from the Google Sheet.
+    /// Used by the frontend to compute remaining time for the countdown.
+    #[serde(default)]
+    pub registration_date: Option<String>,
+    /// Whether in-person capacity is still available (for reclaim flow).
+    #[serde(default)]
+    pub in_person_available: Option<bool>,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]

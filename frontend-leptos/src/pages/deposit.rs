@@ -1416,19 +1416,23 @@ pub fn Deposit() -> impl IntoView {
                             let wallets = detected_wallets.get();
                             let is_dev_mode = data.dev_mode;
                             let deposit_deadline = data_clone.deposit_deadline_hours;
+                            let deadline_expired = data_clone.deadline_expired;
+                            let can_reclaim = data_clone.in_person_available.unwrap_or(false);
                             view! {
-                                <p class="subtitle subtitle-lg">
-                                    "Choose your preferred payment method to secure your spot."
-                                </p>
-
-                                // Deposit deadline warning
-                                {if let Some(hours) = deposit_deadline {
-                                    let label = format_duration_label(hours);
+                                // Deadline expired banner
+                                {if deadline_expired && !can_reclaim {
+                                    // Fully expired — no reclaim possible
                                     view! {
                                         <div class="dep-info-note" style="margin-bottom:1rem">
+                                            <div class="badge badge-warning" style="margin-bottom:0.5rem">
+                                                "Deadline Expired"
+                                            </div>
                                             <p class="hint-note">
                                                 <Icon icon=IconName::Clock class="icon-sm" />
-                                                " You have "{label}" to complete your deposit. After that, your in-person spot may be released."
+                                                " Your deposit deadline has passed and in-person spots are now full. You have been moved to the online track."
+                                            </p>
+                                            <p class="hint-note" style="margin-top:0.5rem">
+                                                "You will be able to claim your NFT after the event ends."
                                             </p>
                                         </div>
                                     }.into_any()
@@ -1436,7 +1440,51 @@ pub fn Deposit() -> impl IntoView {
                                     view! { <div></div> }.into_any()
                                 }}
 
-                                <div class="dep-methods">
+                                {if deadline_expired && can_reclaim {
+                                    // Reclaim available — show payment options with reclaim banner
+                                    view! {
+                                        <div class="dep-info-note" style="margin-bottom:1rem">
+                                            <div class="badge badge-success" style="margin-bottom:0.5rem">
+                                                "Spot Still Available!"
+                                            </div>
+                                            <p class="hint-note">
+                                                <Icon icon=IconName::Clock class="icon-sm" />
+                                                " Your deposit deadline has passed, but in-person spots are still available! Complete your deposit now to reclaim your spot."
+                                            </p>
+                                        </div>
+                                        <p class="subtitle subtitle-lg">
+                                            "Choose your preferred payment method to secure your spot."
+                                        </p>
+                                    }.into_any()
+                                } else if !deadline_expired {
+                                    // Normal flow — not expired
+                                    view! {
+                                        <p class="subtitle subtitle-lg">
+                                            "Choose your preferred payment method to secure your spot."
+                                        </p>
+
+                                        // Deposit deadline countdown warning
+                                        {if let Some(hours) = deposit_deadline {
+                                            let label = format_duration_label(hours);
+                                            view! {
+                                                <div class="dep-info-note" style="margin-bottom:1rem">
+                                                    <p class="hint-note">
+                                                        <Icon icon=IconName::Clock class="icon-sm" />
+                                                        " You have "{label}" to complete your deposit. After that, your in-person spot may be released."
+                                                    </p>
+                                                </div>
+                                            }.into_any()
+                                        } else {
+                                            view! { <div></div> }.into_any()
+                                        }}
+                                    }.into_any()
+                                } else {
+                                    view! { <div></div> }.into_any()
+                                }}
+
+                                {if !deadline_expired || can_reclaim {
+                                    view! {
+                                        <div class="dep-methods">
 
                                     // USDC Card — only shown in dev mode
                                     {if is_dev_mode {
@@ -1608,6 +1656,10 @@ pub fn Deposit() -> impl IntoView {
                                         </div>
                                     </div>
                                 </div>
+                                    }.into_any()
+                                } else {
+                                    view! { <div></div> }.into_any()
+                                }}
 
                                 // Back to event
                                 {

@@ -68,6 +68,7 @@ mod tests {
             ticket_name: "General".to_string(),
             approval_status: status,
             participation_type: "In-Person".to_string(),
+            registration_date: None,
             phone: None,
             contact_channel: None,
             contact_handle: None,

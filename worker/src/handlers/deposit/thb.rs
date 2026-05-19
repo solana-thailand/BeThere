@@ -125,6 +125,81 @@ pub async fn upload_thb_slip_handler(
         return Err(AppError::Validation("attendee already has a deposit".to_string()).into());
     }
 
+    // Deposit deadline check: reject OR reclaim
+    // If deadline expired but in-person capacity is still available,
+    // switch the attendee back to In-Person and allow the deposit (reclaim flow).
+    if let Some(deadline_hours) = event.deposit_deadline_hours
+        && let Ok(Some(attendee)) = crate::sheets::get_attendee_by_id(
+            &body.attendee_id,
+            &state,
+            &event.sheet_id,
+            &event.sheet_name,
+            Some(kv),
+        )
+        .await
+        && let Some(reg_str) = &attendee.registration_date
+        && let Ok(reg_time) = chrono::DateTime::parse_from_rfc3339(reg_str)
+    {
+        let deadline = reg_time.with_timezone(&chrono::Utc)
+            + chrono::Duration::hours(i64::from(deadline_hours));
+        if chrono::Utc::now() > deadline {
+            // Deadline passed — check if reclaim is possible
+            let capacity_available = if let Some(cap) = event.in_person_capacity {
+                // Quick capacity check (sheet only — walk-ins less likely for THB)
+                let in_person_count = crate::sheets::get_attendees(
+                    &state,
+                    &event.sheet_id,
+                    &event.sheet_name,
+                    Some(kv),
+                )
+                .await
+                .map(|a| a.iter().filter(|a| a.is_in_person()).count() as u32)
+                .unwrap_or(u32::MAX);
+                in_person_count < cap
+            } else {
+                true // No capacity limit = always available
+            };
+
+            if capacity_available {
+                // Reclaim: switch back to In-Person
+                if let Ok(mapping) = crate::sheets::get_column_mapping(
+                    &state,
+                    &event.sheet_id,
+                    &event.sheet_name,
+                    Some(kv),
+                )
+                .await
+                {
+                    match crate::sheets::write::update_participation_type(
+                        attendee.row_index,
+                        "In-Person",
+                        &mapping,
+                        &state,
+                        &event.sheet_id,
+                        &event.sheet_name,
+                        Some(kv),
+                    )
+                    .await
+                    {
+                        Ok(()) => tracing::info!(
+                            attendee_id = %attendee.api_id,
+                            "THB deposit deadline reclaim: switched back to In-Person"
+                        ),
+                        Err(e) => tracing::warn!(
+                            attendee_id = %attendee.api_id,
+                            error = %e,
+                            "THB deposit deadline reclaim: failed to switch back"
+                        ),
+                    }
+                }
+            } else {
+                return Err(AppError::Validation(
+                    "deposit deadline has passed and in-person spots are now full. You have been moved to the online track.".to_string(),
+                ).into());
+            }
+        }
+    }
+
     let now = Utc::now().to_rfc3339();
 
     // Create THB deposit record

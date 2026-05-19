@@ -53,6 +53,7 @@ pub struct Attendee {
     pub ticket_name: String,
     pub approval_status: CheckInStatus,
     pub participation_type: String,
+    pub registration_date: Option<String>,
     pub phone: Option<String>,
     pub contact_channel: Option<String>,
     pub contact_handle: Option<String>,
@@ -436,6 +437,7 @@ pub struct AttendeeRow {
     pub ticket_name: String,
     pub approval_status: String,
     pub participation_type: String,
+    pub registration_date: Option<String>,
     pub phone: Option<String>,
     pub contact_channel: Option<String>,
     pub contact_handle: Option<String>,
@@ -491,6 +493,7 @@ impl AttendeeRow {
         }
 
         let participation_type = get(idx(ColumnKey::ParticipationType));
+        let registration_date = get_opt(idx(ColumnKey::RegistrationDate));
         let phone = get_opt(idx(ColumnKey::Phone));
         let contact_channel = get_opt(idx(ColumnKey::ContactChannel));
         let contact_handle = get_opt(idx(ColumnKey::ContactHandle));
@@ -532,6 +535,7 @@ impl AttendeeRow {
             ticket_name: get(idx(ColumnKey::TicketName)),
             approval_status: get(idx(ColumnKey::ApprovalStatus)),
             participation_type,
+            registration_date,
             phone,
             contact_channel,
             contact_handle,
@@ -571,6 +575,7 @@ impl AttendeeRow {
             ticket_name: self.ticket_name.clone(),
             approval_status: status,
             participation_type: self.participation_type.clone(),
+            registration_date: self.registration_date.clone(),
             phone: self.phone.clone(),
             contact_channel: self.contact_channel.clone(),
             contact_handle: self.contact_handle.clone(),
@@ -635,6 +640,7 @@ mod tests {
             ticket_name: "General".to_string(),
             approval_status: CheckInStatus::Approved,
             participation_type: participation_type.to_string(),
+            registration_date: None,
             phone: None,
             contact_channel: None,
             contact_handle: None,

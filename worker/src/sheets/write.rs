@@ -593,3 +593,52 @@ fn resolve_sheet_gid(sheet_name: &str) -> i64 {
         _ => 0,
     }
 }
+
+// ---------------------------------------------------------------------------
+// Participation Type Update (deposit deadline auto-switch)
+// ---------------------------------------------------------------------------
+
+/// Update a single attendee's participation_type cell in the Google Sheet.
+///
+/// Used by the deposit deadline auto-switch to change "In-Person" → "Online"
+/// when an attendee misses the deposit deadline.
+#[allow(clippy::too_many_arguments)]
+pub async fn update_participation_type(
+    row_index: usize,
+    new_value: &str,
+    mapping: &ColumnMapping,
+    state: &AppState,
+    sheet_id: &str,
+    sheet_name: &str,
+    kv: Option<&KvStore>,
+) -> Result<(), String> {
+    let access_token = get_cached_access_token(state, kv).await?;
+
+    use event_checkin_domain::models::attendee::ColumnKey as CK;
+    let col = mapping.column_letter(CK::ParticipationType);
+
+    let data = vec![ValueRange {
+        range: format!("{sheet_name}!{col}{row_index}"),
+        values: vec![vec![new_value.to_string()]],
+    }];
+
+    let url =
+        format!("https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values:batchUpdate");
+
+    let body = BatchUpdateRequest {
+        data,
+        value_input_option: "USER_ENTERED".to_string(),
+    };
+
+    batch_update_sheet(&url, &body, &access_token).await?;
+
+    tracing::info!(
+        row_index = row_index,
+        new_value = new_value,
+        "updated participation_type in google sheet"
+    );
+
+    invalidate_attendee_cache(kv, sheet_id, sheet_name).await;
+    invalidate_column_map_cache(kv, sheet_id, sheet_name).await;
+    Ok(())
+}

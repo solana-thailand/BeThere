@@ -39,6 +39,41 @@ pub async fn get_deposit_status_handler(
         .await
         .map_err(event_checkin_domain::models::error::AppError::Internal)?;
 
+    // --- Deposit deadline edge-trigger ---
+    // If event has a deposit_deadline_hours and attendee hasn't deposited,
+    // check if deadline passed since registration. If so, auto-switch to Online.
+    let mut deadline_expired = false;
+    let mut registration_date: Option<String> = None;
+    let mut in_person_available: Option<bool> = None;
+
+    if status.is_none() && event.deposit_deadline_hours.is_some() {
+        // Look up the attendee to get registration_date and participation_type
+        if let Ok(Some(attendee)) = crate::sheets::get_attendee_by_id(
+            &attendee_id,
+            &state,
+            &event.sheet_id,
+            &event.sheet_name,
+            Some(kv),
+        )
+        .await
+        {
+            registration_date = attendee.registration_date.clone();
+
+            // Only auto-switch if currently in-person
+            if attendee.is_in_person()
+                && let Some(reg_str) = &attendee.registration_date
+            {
+                deadline_expired =
+                    check_and_switch_deadline(&state, kv, &event, &attendee, reg_str).await;
+            }
+
+            // Check if in-person capacity is still available (reclaim flow)
+            if deadline_expired {
+                in_person_available = Some(check_in_person_capacity(&state, &event, kv).await);
+            }
+        }
+    }
+
     Ok(ApiOk::new(DepositStatusResponse {
         deposit_enabled: event.deposit_enabled,
         deposit_amount_usdc: event.deposit_amount_usdc,
@@ -53,7 +88,147 @@ pub async fn get_deposit_status_handler(
         status,
         dev_mode: state.config.dev_mode,
         deposit_deadline_hours: event.deposit_deadline_hours,
+        deadline_expired,
+        registration_date,
+        in_person_available,
     }))
+}
+
+/// Check if the deposit deadline has passed and auto-switch participation_type.
+/// Returns `true` if the deadline expired and the switch was performed.
+async fn check_and_switch_deadline(
+    state: &AppState,
+    kv: &worker::KvStore,
+    event: &event_checkin_domain::models::event::EventConfig,
+    attendee: &event_checkin_domain::models::attendee::Attendee,
+    registration_date_str: &str,
+) -> bool {
+    let Some(deadline_hours) = event.deposit_deadline_hours else {
+        return false;
+    };
+
+    // Parse registration_date (ISO 8601)
+    let reg_time = match chrono::DateTime::parse_from_rfc3339(registration_date_str) {
+        Ok(dt) => dt.with_timezone(&Utc),
+        Err(e) => {
+            tracing::warn!(
+                attendee_id = %attendee.api_id,
+                error = %e,
+                raw = registration_date_str,
+                "deposit deadline: failed to parse registration_date"
+            );
+            return false;
+        }
+    };
+
+    let deadline = reg_time + chrono::Duration::hours(i64::from(deadline_hours));
+    let now = Utc::now();
+
+    if now <= deadline {
+        return false; // Still within deadline
+    }
+
+    // Deadline passed — auto-switch participation_type in the sheet
+    tracing::info!(
+        attendee_id = %attendee.api_id,
+        event_id = %event.id,
+        deadline = %deadline.to_rfc3339(),
+        "deposit deadline expired: auto-switching participation_type to Online"
+    );
+
+    // Get column mapping for the sheet
+    let mapping = match crate::sheets::get_column_mapping(
+        state,
+        &event.sheet_id,
+        &event.sheet_name,
+        Some(kv),
+    )
+    .await
+    {
+        Ok(m) => m,
+        Err(e) => {
+            tracing::warn!(error = %e, "deadline switch: failed to get column mapping");
+            return true; // Deadline expired even if we can't switch
+        }
+    };
+
+    match crate::sheets::write::update_participation_type(
+        attendee.row_index,
+        "Online",
+        &mapping,
+        state,
+        &event.sheet_id,
+        &event.sheet_name,
+        Some(kv),
+    )
+    .await
+    {
+        Ok(()) => tracing::info!(
+            attendee_id = %attendee.api_id,
+            "deposit deadline: participation_type switched to Online"
+        ),
+        Err(e) => tracing::warn!(
+            attendee_id = %attendee.api_id,
+            error = %e,
+            "deposit deadline: failed to update sheet participation_type"
+        ),
+    }
+
+    true
+}
+
+/// Check if in-person capacity is still available for the event.
+/// Returns `true` if spots are available (or unlimited), `false` if full.
+async fn check_in_person_capacity(
+    state: &AppState,
+    event: &event_checkin_domain::models::event::EventConfig,
+    kv: &worker::KvStore,
+) -> bool {
+    // No capacity limit = always available
+    let Some(cap) = event.in_person_capacity else {
+        return true;
+    };
+
+    // Count in-person attendees from sheet
+    let attendees =
+        match crate::sheets::get_attendees(state, &event.sheet_id, &event.sheet_name, Some(kv))
+            .await
+        {
+            Ok(a) => a,
+            Err(e) => {
+                tracing::warn!(error = %e, "reclaim capacity: failed to get attendees");
+                return false; // Assume full on error
+            }
+        };
+
+    let in_person_count = attendees.iter().filter(|a| a.is_in_person()).count() as u32;
+
+    // Count walk-in attendees as in-person
+    let walkin_prefix = format!("walkin:{}:", event.id);
+    let mut walkin_count: u32 = 0;
+    let mut cursor: Option<String> = None;
+    loop {
+        let mut builder = kv.list().prefix(walkin_prefix.clone());
+        if let Some(c) = cursor.take() {
+            builder = builder.cursor(c);
+        }
+        match builder.execute().await {
+            Ok(resp) => {
+                walkin_count += resp.keys.len() as u32;
+                if resp.list_complete {
+                    break;
+                }
+                cursor = resp.cursor;
+            }
+            Err(e) => {
+                tracing::warn!(error = ?e, "reclaim capacity: failed to list walk-in keys");
+                break;
+            }
+        }
+    }
+
+    let total = in_person_count + walkin_count;
+    total < cap
 }
 
 // ---------------------------------------------------------------------------
@@ -114,6 +289,66 @@ pub async fn deposit_usdc_handler(
                 "event has ended — deposits are no longer accepted".to_string(),
             )
             .into());
+        }
+    }
+
+    // Deposit deadline check: reject OR reclaim
+    // If deadline expired but in-person capacity is still available,
+    // switch the attendee back to In-Person and allow the deposit (reclaim flow).
+    if let Some(deadline_hours) = event.deposit_deadline_hours
+        && let Ok(Some(attendee)) = crate::sheets::get_attendee_by_id(
+            &body.attendee_id,
+            &state,
+            &event.sheet_id,
+            &event.sheet_name,
+            Some(kv),
+        )
+        .await
+        && let Some(reg_str) = &attendee.registration_date
+        && let Ok(reg_time) = chrono::DateTime::parse_from_rfc3339(reg_str)
+    {
+        let deadline =
+            reg_time.with_timezone(&Utc) + chrono::Duration::hours(i64::from(deadline_hours));
+        if Utc::now() > deadline {
+            // Deadline passed — check if reclaim is possible
+            if check_in_person_capacity(&state, &event, kv).await {
+                // Reclaim: switch back to In-Person so the deposit proceeds
+                if let Ok(mapping) = crate::sheets::get_column_mapping(
+                    &state,
+                    &event.sheet_id,
+                    &event.sheet_name,
+                    Some(kv),
+                )
+                .await
+                {
+                    match crate::sheets::write::update_participation_type(
+                        attendee.row_index,
+                        "In-Person",
+                        &mapping,
+                        &state,
+                        &event.sheet_id,
+                        &event.sheet_name,
+                        Some(kv),
+                    )
+                    .await
+                    {
+                        Ok(()) => tracing::info!(
+                            attendee_id = %attendee.api_id,
+                            "deposit deadline reclaim: switched back to In-Person"
+                        ),
+                        Err(e) => tracing::warn!(
+                            attendee_id = %attendee.api_id,
+                            error = %e,
+                            "deposit deadline reclaim: failed to switch back to In-Person"
+                        ),
+                    }
+                }
+                // Continue to accept the deposit
+            } else {
+                return Err(event_checkin_domain::models::error::AppError::Validation(
+                    "deposit deadline has passed and in-person spots are now full. You have been moved to the online track.".to_string(),
+                ).into());
+            }
         }
     }
 

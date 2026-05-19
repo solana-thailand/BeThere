@@ -739,7 +739,7 @@ fn render_loaded_event(
     // Determine which tracks to show in the dropdown
     // Hybrid: show available tracks only. In-person disappears when full.
     // Single-format: no dropdown needed.
-    let is_hybrid_with_options = is_hybrid && (in_person_available || online_available);
+    let _is_hybrid_with_options = is_hybrid && (in_person_available || online_available);
 
     // Registration form signals
     let (reg_name, set_reg_name) = signal(String::new());
@@ -1252,7 +1252,7 @@ fn render_registration_form(
     online_available: bool,
     in_person_remaining: Option<u32>,
     online_remaining: Option<u32>,
-    in_person_capacity: Option<u32>,
+    _in_person_capacity: Option<u32>,
     reg_name: ReadSignal<String>,
     set_reg_name: WriteSignal<String>,
     _reg_email: ReadSignal<String>,

@@ -199,14 +199,56 @@ pub async fn register_attendee(
         } else {
             None
         };
-        let next_step = build_next_step(
-            &config.event_format,
-            &event_id,
-            &existing.api_id,
-            &claim_token,
-            &state,
-            deposit.as_ref(),
-        );
+
+        // Check if deposit deadline expired — attendee may have been auto-switched to Online
+        let deadline_expired = deposit.is_none()
+            && config.deposit_deadline_hours.is_some()
+            && existing.is_in_person()
+            && existing.registration_date.as_ref().is_some_and(|reg_str| {
+                if let Ok(reg_time) = chrono::DateTime::parse_from_rfc3339(reg_str) {
+                    let deadline = reg_time.with_timezone(&chrono::Utc)
+                        + chrono::Duration::hours(i64::from(
+                            config.deposit_deadline_hours.unwrap_or(0),
+                        ));
+                    chrono::Utc::now() > deadline
+                } else {
+                    false
+                }
+            });
+
+        let next_step = if deadline_expired {
+            // Deadline expired — check if reclaim is possible
+            let capacity_available = if let Some(cap) = config.in_person_capacity {
+                let in_person_count = attendees.iter().filter(|a| a.is_in_person()).count() as u32;
+                in_person_count < cap
+            } else {
+                true // No capacity limit = reclaim available
+            };
+
+            if capacity_available && deposit.is_none() {
+                // Reclaim: send to deposit page — the deposit handler will
+                // switch participation_type back to In-Person
+                NextStep {
+                    step_type: "deposit".to_string(),
+                    url: format!("/deposit/{}?event_id={}", existing.api_id, event_id),
+                }
+            } else {
+                // Capacity full or already deposited — online track
+                NextStep {
+                    step_type: "waiting".to_string(),
+                    url: format!("/ticket/{}?event_id={}", existing.api_id, event_id),
+                }
+            }
+        } else {
+            build_next_step(
+                &config.event_format,
+                &event_id,
+                &existing.api_id,
+                &claim_token,
+                &state,
+                deposit.as_ref(),
+            )
+        };
         return Ok(ApiOk::new(RegisterResponse {
             attendee_id: existing.api_id.clone(),
             name: existing.name.clone(),
