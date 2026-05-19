@@ -4,7 +4,7 @@
 
 Walk-in attendees are stored in KV. Phase 4 adds batch sync to Google Sheets + CSV download + auto-sync on register. Auto-sync has a known bug writing to the wrong sheet.
 
-## Status: IN PROGRESS
+## Status: IN PROGRESS — auto-sync sheet_id fix applied, needs E2E verification
 
 ### ✅ Done
 - [x] `GET /api/walkin/list` — list walk-in attendees from KV (cursor pagination)
@@ -16,21 +16,14 @@ Walk-in attendees are stored in KV. Phase 4 adds batch sync to Google Sheets + C
 - [x] Auto-sync on register (best-effort, non-blocking fallback to batch sync)
 - [x] Diagnostic logging for auto-sync: `event_id`, `sheet_id`, `sheet_name`
 
-### ⚠️ Bug — Auto-sync writes to wrong event's Google Sheet
-- [ ] Reproduce: `cd worker && npx wrangler tail` → register walk-in → check logs
-- [ ] Find `"walk-in auto-sync: resolved sheet"` log line → note `sheet_id` + `sheet_name`
-- [ ] Compare with expected Google Sheet
-- [ ] Possible causes:
-  - Event config in KV has wrong `sheet_id`
-  - Multiple events share same `sheet_id` / `sheet_name`
-  - Column mapping cache from different sheet
-- [ ] Fix root cause
-- [ ] Verify fix: register walk-in → check correct Google Sheet
+### ✅ Bug Fix — Auto-sync now uses fresh event config
+- [x] Refactored `sync_walkin_to_sheet` to resolve `sheet_id`/`sheet_name` from fresh KV config at sync time
+- [x] Previously: warned about config drift but still used stale values → now uses current config
+- [x] Added `event_id` empty-string validation in `register_walkin` (defense-in-depth)
+- [x] Added `sheet_id.is_empty()` guard before sync
+- [ ] E2E verify: `wrangler deploy` → register walk-in → check correct Google Sheet
 
-### TODO — Remaining
-- [ ] Unified attendee list: merge walk-ins into `GET /api/attendees` with `source` field
-- [ ] Unified CSV export: `GET /api/attendees/export` includes both sheet + walk-in
-
+### ✅ Done
 ## Endpoints
 
 | Method | Path | Auth | Purpose |

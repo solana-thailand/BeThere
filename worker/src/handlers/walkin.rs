@@ -33,8 +33,8 @@ async fn sync_walkin_to_sheet(
     state: AppState,
     attendee: WalkinAttendee,
     event_id: String,
-    sheet_id: String,
-    sheet_name: String,
+    original_sheet_id: String,
+    original_sheet_name: String,
 ) {
     let kv = match state.events_kv.as_ref() {
         Some(kv) => kv.clone(),
@@ -55,31 +55,52 @@ async fn sync_walkin_to_sheet(
         return;
     }
 
-    // Re-verify event config from KV at sync time (runs detached, config may have changed)
-    match crate::event_store::get_event_config(&kv, &event_id).await {
+    // Resolve sheet_id and sheet_name from the FRESH event config in KV.
+    // The handler runs detached via wait_until(), so the config may have changed
+    // since the registration request was processed. Always use the current config
+    // to ensure we write to the correct sheet.
+    let (sheet_id, sheet_name) = match crate::event_store::get_event_config(&kv, &event_id).await {
         Ok(Some(fresh_config)) => {
-            if fresh_config.sheet_id != sheet_id
-                || (fresh_config.sheet_name.is_empty()
-                    && sheet_name != state.config.sheets.sheet_name)
-                || (!fresh_config.sheet_name.is_empty() && fresh_config.sheet_name != sheet_name)
-            {
+            let sid = fresh_config.sheet_id.clone();
+            let sname = if fresh_config.sheet_name.is_empty() {
+                state.config.sheets.sheet_name.clone()
+            } else {
+                fresh_config.sheet_name.clone()
+            };
+
+            if sid != original_sheet_id || sname != original_sheet_name {
                 tracing::warn!(
                     event_id = %event_id,
-                    original_sheet_id = %sheet_id,
-                    current_sheet_id = %fresh_config.sheet_id,
-                    original_sheet_name = %sheet_name,
-                    current_sheet_name = %fresh_config.sheet_name,
+                    original_sheet_id = %original_sheet_id,
+                    current_sheet_id = %sid,
+                    original_sheet_name = %original_sheet_name,
+                    current_sheet_name = %sname,
                     "walk-in auto-sync: event config changed since registration, using current config"
                 );
             }
+            (sid, sname)
         }
         Ok(None) => {
             tracing::error!(event_id = %event_id, "walk-in auto-sync ABORTED: event no longer exists in KV");
             return;
         }
         Err(e) => {
-            tracing::warn!(event_id = %event_id, error = %e, "walk-in auto-sync: could not re-verify event config, proceeding with original");
+            tracing::warn!(
+                event_id = %event_id,
+                error = %e,
+                original_sheet_id = %original_sheet_id,
+                "walk-in auto-sync: could not re-verify event config, proceeding with original"
+            );
+            (original_sheet_id, original_sheet_name)
         }
+    };
+
+    if sheet_id.is_empty() {
+        tracing::warn!(
+            event_id = %event_id,
+            "walk-in auto-sync skipped: resolved sheet_id is empty"
+        );
+        return;
     }
 
     tracing::info!(
@@ -261,6 +282,13 @@ pub async fn register_walkin(
     axum::Json(body): axum::Json<WalkinRegisterRequest>,
 ) -> Result<ApiOk<WalkinRegisterResponse>, crate::error::WorkerError> {
     // 1. Validate input
+    if body.event_id.trim().is_empty() {
+        return Err(AppError::Validation(
+            "event_id is required — cannot register walk-in without an event".to_string(),
+        )
+        .into());
+    }
+
     let name = body.name.trim();
     if name.is_empty() || name.len() > 100 {
         return Err(AppError::Validation("name is required (max 100 chars)".to_string()).into());
