@@ -28,6 +28,13 @@ pub struct CloseEvent {
 impl CloseEvent {
     #[inline(always)]
     pub fn close_event(&self, bumps: &CloseEventBumps) -> Result<(), ProgramError> {
+        // SEC-DUP: Defense-in-depth — no duplicate mutable accounts.
+        super::require_distinct(&[
+            *self.organizer.address(),
+            *self.event_escrow.address(),
+            *self.vault.address(),
+        ])?;
+
         self.event_escrow.validate_version()?;
 
         // Safety: vault must be empty before closing.

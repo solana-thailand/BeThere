@@ -56,6 +56,15 @@ pub struct Refund {
 impl Refund {
     #[inline(always)]
     pub fn validate_and_update(&mut self) -> Result<(), ProgramError> {
+        // SEC-DUP: Defense-in-depth — no duplicate mutable accounts.
+        super::require_distinct(&[
+            *self.attendee.address(),
+            *self.event_escrow.address(),
+            *self.attendee_deposit.address(),
+            *self.attendee_ta.address(),
+            *self.vault.address(),
+        ])?;
+
         self.event_escrow.validate_version()?;
         self.attendee_deposit.validate_version()?;
 

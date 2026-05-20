@@ -29,6 +29,12 @@ pub struct DeactivateEvent {
 impl DeactivateEvent {
     #[inline(always)]
     pub fn deactivate(&mut self) -> Result<(), ProgramError> {
+        // SEC-DUP: Defense-in-depth — no duplicate mutable accounts.
+        super::require_distinct(&[
+            *self.organizer.address(),
+            *self.event_escrow.address(),
+        ])?;
+
         self.event_escrow.validate_version()?;
         self.event_escrow.is_active = false.into();
 

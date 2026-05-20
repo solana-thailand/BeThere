@@ -310,6 +310,19 @@ pub fn AdminEscrow(
                         return;
                     }
                     log::info!("[admin-escrow] {} TX built, signing...", action.label());
+
+                    // Pre-sign simulation (Solana Foundation Security Checklist).
+                    match crate::pages::escrow_init::simulate_transaction_js(&wn, &transaction_b64).await {
+                        Ok(sim) if sim.ok => {}
+                        Ok(sim) => {
+                            let err_msg = sim.error.unwrap_or_else(|| "Simulation failed".to_string());
+                            log::error!("[admin-escrow] {} simulation failed: {err_msg}", action.label());
+                            set_ar.update(|v| v.push((action, Err(format!("Transaction would fail: {err_msg}")))));
+                            return;
+                        }
+                        Err(e) => { log::warn!("[admin-escrow] simulate error (not blocking): {e}"); }
+                    }
+
                     match sign_and_send_tx_js(&wn, &transaction_b64).await {
                         crate::wallet_error::WalletResult::Success(signature) => {
                             log::info!("[admin-escrow] {} TX confirmed: {}", action.label(), signature);

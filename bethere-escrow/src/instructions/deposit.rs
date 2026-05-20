@@ -44,6 +44,15 @@ pub struct Deposit {
 impl Deposit {
     #[inline(always)]
     pub fn create_deposit(&mut self, bumps: &DepositBumps) -> Result<(), ProgramError> {
+        // SEC-DUP: Defense-in-depth — no duplicate mutable accounts.
+        super::require_distinct(&[
+            *self.attendee.address(),
+            *self.event_escrow.address(),
+            *self.attendee_deposit.address(),
+            *self.attendee_ta.address(),
+            *self.vault.address(),
+        ])?;
+
         self.event_escrow.validate_version()?;
         let clock = <Clock as quasar_lang::sysvars::Sysvar>::get()?;
         let amount = self.event_escrow.deposit_amount();

@@ -623,6 +623,168 @@ async function fetchGenesisHash(rpcUrl) {
 }
 
 // ---------------------------------------------------------------------------
+// Pre-sign Simulation (Solana Foundation Security Checklist)
+// ---------------------------------------------------------------------------
+
+/**
+ * Simulate a transaction before signing to verify it will succeed.
+ *
+ * Follows the Solana Foundation Security Checklist recommendation:
+ * "Simulate first: Call simulateTransaction and surface results before
+ * requesting a real signature."
+ *
+ * Uses the wallet's RPC endpoint for simulation. The transaction is simulated
+ * with sigVerify=false (unsigned), which still checks program logic, account
+ * data, and instruction validity.
+ *
+ * @param {string} walletName - Name of the wallet (for RPC endpoint discovery)
+ * @param {string} transactionB64 - Base64-encoded serialized transaction
+ * @returns {Promise<string>} JSON string: { ok: true, logs: [...] } or
+ *          { ok: false, error: "...", logs: [...] }
+ */
+export async function simulateTransactionB64(walletName, transactionB64) {
+  try {
+    // Find the RPC URL from the wallet provider
+    var provider = getProvider(walletName);
+    var rpcUrl = null;
+
+    if (provider && provider.connection) {
+      rpcUrl =
+        provider.connection.rpcEndpoint ||
+        provider.connection._rpcEndpoint ||
+        provider.connection.endpoint ||
+        null;
+    }
+
+    if (!rpcUrl) {
+      // Cannot simulate without RPC endpoint — return OK (don't block signing)
+      console.warn("[solana_wallet] simulate: no RPC URL, skipping simulation");
+      return JSON.stringify({ ok: true, skipped: true, logs: [] });
+    }
+
+    // Decode base64 transaction
+    var binaryString = atob(transactionB64);
+    var bytes = new Uint8Array(binaryString.length);
+    for (var i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+
+    // Encode bytes as base58 for the RPC call
+    // Solana RPC simulateTransaction expects the transaction as a base58 or base64 string
+    var transactionB58 = base58Encode(bytes);
+
+    // Call simulateTransaction RPC method
+    var response = await fetch(rpcUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "simulateTransaction",
+        params: [
+          transactionB58,
+          {
+            sigVerify: false,
+            replaceRecentBlockhash: true,
+            commitment: "processed",
+          },
+        ],
+      }),
+    });
+
+    if (!response.ok) {
+      console.warn("[solana_wallet] simulate: RPC returned", response.status);
+      return JSON.stringify({
+        ok: true,
+        skipped: true,
+        logs: [],
+      });
+    }
+
+    var data = await response.json();
+
+    if (data.error) {
+      console.warn("[solana_wallet] simulate: RPC error:", data.error.message);
+      return JSON.stringify({
+        ok: false,
+        error: data.error.message,
+        logs: [],
+      });
+    }
+
+    var simResult = data.value || data.result;
+    if (!simResult) {
+      // Unexpected response format — don't block
+      return JSON.stringify({ ok: true, skipped: true, logs: [] });
+    }
+
+    if (simResult.err) {
+      var errMsg =
+        typeof simResult.err === "string"
+          ? simResult.err
+          : JSON.stringify(simResult.err);
+      console.warn("[solana_wallet] simulate: transaction would fail:", errMsg);
+      return JSON.stringify({
+        ok: false,
+        error: errMsg,
+        logs: simResult.logs || [],
+      });
+    }
+
+    console.log(
+      "[solana_wallet] simulate: transaction OK",
+      simResult.logs ? simResult.logs.length + " log lines" : "",
+    );
+    return JSON.stringify({
+      ok: true,
+      skipped: false,
+      logs: simResult.logs || [],
+    });
+  } catch (e) {
+    // Simulation failure should not block signing — log and continue
+    console.warn("[solana_wallet] simulate: error (not blocking):", e);
+    return JSON.stringify({ ok: true, skipped: true, logs: [] });
+  }
+}
+
+/**
+ * Encode a Uint8Array as base58 (Bitcoin alphabet).
+ * Used for RPC calls that expect base58-encoded transactions.
+ */
+var BASE58_ALPHABET =
+  "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+
+function base58Encode(bytes) {
+  // Count leading zeros
+  var zeros = 0;
+  for (var i = 0; i < bytes.length; i++) {
+    if (bytes[i] === 0) zeros++;
+    else break;
+  }
+
+  // Convert to big-endian number
+  var num = BigInt(0);
+  for (var j = zeros; j < bytes.length; j++) {
+    num = num * BigInt(256) + BigInt(bytes[j]);
+  }
+
+  // Encode to base58
+  var result = "";
+  while (num > BigInt(0)) {
+    var remainder = num % BigInt(58);
+    num = num / BigInt(58);
+    result = BASE58_ALPHABET[Number(remainder)] + result;
+  }
+
+  // Add leading '1's for leading zeros
+  for (var k = 0; k < zeros; k++) {
+    result = "1" + result;
+  }
+
+  return result || "1";
+}
+
+// ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
 

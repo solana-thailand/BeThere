@@ -642,6 +642,20 @@ pub fn EventsPage(
                                 return;
                             }
                             log::info!("[events-page] escrow TX built, signing via {}...", wn);
+
+                            // Pre-sign simulation.
+                            match super::escrow_init::simulate_transaction_js(&wn, &resp.transaction).await {
+                                Ok(sim) if sim.ok => {}
+                                Ok(sim) => {
+                                    let err_msg = sim.error.unwrap_or_else(|| "Simulation failed".to_string());
+                                    log::error!("[events-page] escrow simulation failed: {err_msg}");
+                                    components::show_toast(&set_toast, &format!("Transaction would fail: {err_msg}"), components::ToastType::Error);
+                                    set_saving.set(false);
+                                    return;
+                                }
+                                Err(e) => { log::warn!("[events-page] simulate error (not blocking): {e}"); }
+                            }
+
                             match super::escrow_init::sign_and_send_tx_js(&wn, &resp.transaction).await {
                                 crate::wallet_error::WalletResult::Success(signature) => {
                                     log::info!("[events-page] escrow TX confirmed: {}", signature);

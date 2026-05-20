@@ -827,6 +827,18 @@ pub fn Scanner() -> impl IntoView {
                     return;
                 }
 
+                // Pre-sign simulation.
+                match crate::pages::escrow_init::simulate_transaction_js(&wallet_name, &tx_resp.transaction).await {
+                    Ok(sim) if sim.ok => {}
+                    Ok(sim) => {
+                        let err_msg = sim.error.unwrap_or_else(|| "Simulation failed".to_string());
+                        log::error!("[scanner] check-in simulation failed: {err_msg}");
+                        set_state.set(CheckInState::EscrowError { check_in_data, message: format!("Transaction would fail: {err_msg}") });
+                        return;
+                    }
+                    Err(e) => { log::warn!("[scanner] simulate error (not blocking): {e}"); }
+                }
+
                 // Step 2: Sign and send the TX via the wallet
                 match sign_and_send_tx_js(&wallet_name, &tx_resp.transaction).await {
                     crate::wallet_error::WalletResult::Success(signature) => {

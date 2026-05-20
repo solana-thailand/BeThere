@@ -28,6 +28,9 @@ pub struct MarkCheckedIn {
 impl MarkCheckedIn {
     #[inline(always)]
     pub fn mark_checked_in(&mut self) -> Result<(), ProgramError> {
+        // SEC-DUP: Defense-in-depth — no duplicate mutable accounts.
+        super::require_distinct(&[*self.organizer.address(), *self.attendee_deposit.address()])?;
+
         self.event_escrow.validate_version()?;
         self.attendee_deposit.validate_version()?;
 

@@ -41,6 +41,13 @@ impl CreateEvent {
         refund_deadline: i64,
         bumps: &CreateEventBumps,
     ) -> Result<(), ProgramError> {
+        // SEC-DUP: Defense-in-depth — no duplicate mutable accounts.
+        super::require_distinct(&[
+            *self.organizer.address(),
+            *self.event_escrow.address(),
+            *self.vault.address(),
+        ])?;
+
         if deposit_amount == 0 {
             return Err(EscrowError::InvalidDepositAmount.into());
         }

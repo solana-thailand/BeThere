@@ -27,6 +27,11 @@ extern "C" {
     /// Returns "devnet", "mainnet-beta", "testnet", "localnet", or null.
     #[wasm_bindgen(js_name = "getWalletCluster")]
     fn get_wallet_cluster_js_raw(wallet_name: &str) -> js_sys::Promise;
+
+    /// Pre-sign simulation: simulates TX before requesting wallet signature.
+    /// Returns JSON string: { ok: bool, skipped: bool, error: string?, logs: string[] }
+    #[wasm_bindgen(js_name = "simulateTransactionB64")]
+    fn simulate_tx_js_raw(wallet_name: &str, transaction_b64: &str) -> js_sys::Promise;
 }
 
 /// Detect installed Solana wallet extensions.
@@ -114,6 +119,52 @@ pub async fn check_wallet_cluster(wallet_name: &str, expected_cluster: &str) -> 
                 "[escrow-init] cannot detect wallet cluster, skipping check (expected={expected_cluster})"
             );
             Ok(())
+        }
+    }
+}
+
+/// Result of a pre-sign simulation.
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct SimulateResult {
+    pub ok: bool,
+    #[serde(default)]
+    pub skipped: bool,
+    #[serde(default)]
+    pub error: Option<String>,
+    #[serde(default)]
+    pub logs: Vec<String>,
+}
+
+/// Simulate a transaction before requesting wallet signature.
+/// Follows Solana Foundation Security Checklist: "Simulate first."
+/// Returns Ok(SimulateResult) on success, or Err(msg) if simulation failed.
+pub async fn simulate_transaction_js(wallet_name: &str, transaction_b64: &str) -> Result<SimulateResult, String> {
+    if wallet_name.is_empty() {
+        log::warn!("[simulate] empty wallet name, skipping");
+        return Ok(SimulateResult { ok: true, skipped: true, error: None, logs: vec![] });
+    }
+    let promise = simulate_tx_js_raw(wallet_name, transaction_b64);
+    match wasm_bindgen_futures::JsFuture::from(promise).await {
+        Ok(val) => {
+            let json_str = val.as_string().unwrap_or_default();
+            match serde_json::from_str::<SimulateResult>(&json_str) {
+                Ok(result) => {
+                    if result.ok {
+                        log::info!("[simulate] TX simulation passed (skipped={})", result.skipped);
+                    } else {
+                        log::warn!("[simulate] TX simulation failed: {:?}", result.error);
+                    }
+                    Ok(result)
+                }
+                Err(e) => {
+                    log::warn!("[simulate] failed to parse result: {e}, skipping");
+                    Ok(SimulateResult { ok: true, skipped: true, error: None, logs: vec![] })
+                }
+            }
+        }
+        Err(e) => {
+            log::warn!("[simulate] JS error: {e:?}, skipping");
+            Ok(SimulateResult { ok: true, skipped: true, error: None, logs: vec![] })
         }
     }
 }
@@ -450,6 +501,27 @@ pub fn EscrowInitPanel(
                                                     }
 
                                                     log::info!("[escrow-init] escrow TX built, signing...");
+
+                                                    // Pre-sign simulation (Solana Foundation Security Checklist).
+                                                    match simulate_transaction_js(&wn, &resp.transaction).await {
+                                                        Ok(sim) if sim.ok => {
+                                                            if !sim.skipped {
+                                                                log::info!("[escrow-init] simulation passed");
+                                                            }
+                                                        }
+                                                        Ok(sim) => {
+                                                            let err_msg = sim.error.unwrap_or_else(|| "Simulation failed".to_string());
+                                                            log::error!("[escrow-init] simulation failed: {err_msg}");
+                                                            set_s.set(EscrowInitState::Error {
+                                                                message: format!("Transaction would fail: {err_msg}"),
+                                                            });
+                                                            return;
+                                                        }
+                                                        Err(e) => {
+                                                            log::warn!("[escrow-init] simulation error (not blocking): {e}");
+                                                        }
+                                                    }
+
                                                     match sign_and_send_tx_js(&wn, &resp.transaction).await {
                                                         crate::wallet_error::WalletResult::Success(signature) => {
                                                             log::info!("[escrow-init] escrow TX confirmed: {}", signature);
@@ -719,6 +791,17 @@ pub fn EscrowInitPanel(
                                                 let req = api::DeactivateEventRequest { event_id: eid.clone() };
                                                 match api::deactivate_event(&req).await {
                                                     Ok(resp) => {
+                                                        // Pre-sign simulation.
+                                                        match simulate_transaction_js(&wn, &resp.transaction).await {
+                                                            Ok(sim) if sim.ok => {}
+                                                            Ok(sim) => {
+                                                                let err_msg = sim.error.unwrap_or_else(|| "Simulation failed".to_string());
+                                                                log::error!("[escrow] deactivate simulation failed: {err_msg}");
+                                                                set_s.set(EscrowInitState::Error { message: format!("Transaction would fail: {err_msg}") });
+                                                                return;
+                                                            }
+                                                            Err(e) => { log::warn!("[escrow] simulate error (not blocking): {e}"); }
+                                                        }
                                                         match sign_and_send_tx_js(&wn, &resp.transaction).await {
                                                             crate::wallet_error::WalletResult::Success(sig) => {
                                                                 log::info!("[escrow] deactivate TX confirmed: {}", sig);
@@ -900,6 +983,17 @@ pub fn EscrowInitPanel(
                                         let req = api::CloseEventRequest { event_id: eid.clone() };
                                         match api::close_event(&req).await {
                                             Ok(resp) => {
+                                                // Pre-sign simulation.
+                                                match simulate_transaction_js(&wn, &resp.transaction).await {
+                                                    Ok(sim) if sim.ok => {}
+                                                    Ok(sim) => {
+                                                        let err_msg = sim.error.unwrap_or_else(|| "Simulation failed".to_string());
+                                                        log::error!("[escrow] close simulation failed: {err_msg}");
+                                                        set_s.set(EscrowInitState::Error { message: format!("Transaction would fail: {err_msg}") });
+                                                        return;
+                                                    }
+                                                    Err(e) => { log::warn!("[escrow] simulate error (not blocking): {e}"); }
+                                                }
                                                 match sign_and_send_tx_js(&wn, &resp.transaction).await {
                                                     crate::wallet_error::WalletResult::Success(sig) => {
                                                         log::info!("[escrow] close_event TX confirmed: {}", sig);

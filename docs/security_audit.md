@@ -28,7 +28,7 @@
 | SEC-012 | 🟠 High | Refund No refund_deadline Upper Bound (Race with claim_forfeited) | ✅ Fixed (Phase 5) |
 | SEC-013 | 🟡 Medium | Vault Griefing via External USDC Airdrop Blocks close_event | ✅ Fixed (Phase 5) |
 | SEC-014 | 🟡 Medium | No Wallet Network Detection (Wrong Cluster TX Signing) | ✅ Fixed (Phase 6) |
-
+| SEC-015 | ℹ️ Info | Stranded Lamports on Token Accounts (Rent Never Recovered) | ✅ Confirmed Safe |
 ---
 
 ## Finding Details
@@ -383,6 +383,29 @@ The `mark_checked_in` instruction has no time-based guard — the organizer can 
 
 ---
 
+### SEC-015: Stranded Lamports on Token Accounts (Rent Never Recovered)
+
+**Severity**: ℹ️ Info
+**Status**: ✅ Confirmed Safe
+
+**Reference**: [Stranded Lamports](https://lost-lamports.vercel.app/about) — documents SOL above rent-exempt minimum permanently stuck on SPL token accounts and mints because the Token program owns those accounts, and there was historically no instruction to withdraw excess lamports.
+
+**Assessment**: Confirmed Safe — not applicable to BeThere escrow design.
+
+| Account | Close Path | Lamport Recovery |
+|---------|-----------|-----------------|
+| Vault token account | `close_event` → `close_account` CPI | ✅ All lamports drained to organizer (rent + any excess) |
+| EventEscrow PDA | `close_event` → `close(dest=organizer)` | ✅ All lamports drained to organizer |
+| AttendeeDeposit PDA | `close_deposit` → `close(dest=signer)` | ✅ All lamports drained to closer |
+
+**Why P-token's `WithdrawExcessLamports` is not needed**: The BeThere escrow fully closes accounts (zeroing data + draining all lamports) rather than leaving them alive with excess lamports. No SOL is stranded because no token account or PDA is left in a "rent-exempt but alive" state with excess lamports after the event lifecycle completes.
+
+**Edge case — SOL sent to vault token account**: If an attacker sends raw SOL (not USDC) to the vault token account, those lamports sit above rent-exempt minimum until `close_event`. At close time, `close_account` drains all lamports to the organizer — so the organizer actually receives slightly more SOL than expected. This is not a vulnerability; the excess is recovered, not stranded.
+
+**Edge case — abandoned events**: If an organizer never calls `close_event`, both the vault token account and EventEscrow PDA retain their rent-exempt lamports indefinitely. This is expected user behavior (abandonment), not a program vulnerability. The program provides the reclamation path; it's the organizer's responsibility to use it.
+
+**Note on P-token epoch 971**: P-token (an efficient rewrite of SPL Token) added `WithdrawExcessLamports` on epoch 971. This instruction allows recovering stranded lamports from token accounts that must stay alive (e.g., long-lived mints). BeThere's vault accounts are ephemeral (created per event, closed after settlement), so full closure is the correct pattern.
+
 ## Safe Solana Builder Cross-Reference Summary
 
 Cross-referenced against [Safe Solana Builder](https://github.com/Frankcastleauditor/safe-solana-builder) by Frank Castle (124⭐, Solana security researcher, 70+ Rust audits, 250+ Critical/High findings).
@@ -425,7 +448,7 @@ Cross-referenced against [Safe Solana Builder](https://github.com/Frankcastleaud
 | P9 | SEC-012: Refund deadline upper bound | Small | On-chain program | ✅ Fixed (Phase 5) |
 | P10 | SEC-013: Vault griefing via airdrop | Small | On-chain program | ✅ Fixed (Phase 5) |
 | P11 | SEC-014: Wallet cluster mismatch | Small | Frontend (JS + Rust) | ✅ Fixed (Phase 6) |
-
+| P12 | SEC-015: Stranded lamports evaluation | None | Informational | ✅ Confirmed Safe |
 ---
 
 ## Scope for Mainnet
@@ -438,7 +461,7 @@ SEC-001 was a direct fund theft vector (organizer rug pull). SEC-002 caused perm
 
 SEC-005 was explorer links hardcoded to devnet cluster. ✅ Fixed in Phase 2 — all Solscan links now use cluster-aware URLs via `/api/health` endpoint.
 
-**ALL FINDINGS RESOLVED**: All 12 actionable findings (SEC-001 through SEC-014, excluding SEC-007/008 confirmed safe) are now fixed. SEC-010 (rent reclamation) resolved in Phase 4. SEC-012 (refund deadline upper bound) and SEC-013 (vault griefing via airdrop) resolved in Phase 5. SEC-014 (wallet network detection) resolved in Phase 6.
+**ALL FINDINGS RESOLVED**: All 12 actionable findings (SEC-001 through SEC-014, excluding SEC-007/008/015 confirmed safe) are now fixed. SEC-010 (rent reclamation) resolved in Phase 4. SEC-012 (refund deadline upper bound) and SEC-013 (vault griefing via airdrop) resolved in Phase 5. SEC-014 (wallet network detection) resolved in Phase 6.
 
 ---
 
@@ -483,10 +506,132 @@ Pure arithmetic functions were extracted from the 5 critical financial instructi
 ### Limitations
 
 Kani **cannot** verify (covered by SVM integration tests):
-- PDA seed correctness → covered by 26 SVM tests
+- PDA seed correctness → covered by 29 SVM tests
 - CPI call success/failure → covered by SVM `transfer_checked` tests
 - Account ownership checks → covered by SVM `has_one` constraint tests
 - Signer authority → covered by SVM unauthorized signer tests
+
+### Testing Strategy (Solana Foundation Testing Pyramid)
+
+| Tier | Tool | Purpose | BeThere Status |
+|------|------|---------|---------------|
+| **Unit (single-ix)** | [Mollusk](https://github.com/anza-xyz/mollusk) | Pure instruction logic, CU benchmarking, fixture-based regression | ❌ Not used |
+| **Unit (multi-ix)** | [LiteSVM](https://github.com/LiteSVM/litesvm) | Full TX simulation, fast red-green-refactor loop | ⚠️ Using `quasar-svm` (framework-equivalent) |
+| **Integration** | [Surfpool](https://github.com/nickfrosty/surfpool) | Devnet-fork realistic state, RPC-level testing | ❌ Not used |
+| **Formal verification** | [Kani](https://github.com/model-checking/kani) | Arithmetic invariant proofs for financial logic | ✅ 13 harnesses, 729 checks |
+
+**Current stack**: `quasar-svm` (29 tests) + Kani (13 harnesses). `quasar-svm` is the Quasar framework's bundled SVM runner — provides equivalent functionality to LiteSVM (in-process VM, token helpers, clock manipulation) with native Quasar account type integration.
+
+**Migration path**: If Quasar loses maintenance or the project migrates to Anchor/Pinocchio, `litesvm` + `litesvm-token` is the Solana Foundation's recommended replacement.
+
+---
+
+## Solana Foundation Security Checklist Cross-Reference
+
+Mapped against the [Solana Foundation Security Checklist](https://github.com/solana-foundation/solana-dev-skill/blob/main/skill/references/security.md) — 18 vulnerability categories + program/client checklists. The BeThere escrow uses **Quasar** (not raw Pinocchio or Anchor), which provides automatic protections equivalent to Anchor for most categories.
+
+### Vulnerability Category Mapping
+
+| # | Category | Status | How BeThere Addresses It | Finding |
+|---|----------|--------|--------------------------|--------|
+| 1 | Missing Owner Checks | ✅ Compliant | Quasar's `Account<T>` enforces `owner == program_id` at deserialization. Counterfeit accounts with matching data but wrong owner are rejected automatically. | — |
+| 2 | Missing Signer Checks | ✅ Compliant | All 8 instructions use `Signer` type. Mutating instructions add `has_one(organizer)` or `address = Seeds(..., attendee)` for authority scoping. | SEC-001 fix |
+| 3 | Arbitrary CPI Attacks | ✅ Compliant | All CPIs use `Program<TokenProgram>` and `Program<SystemProgram>`, which validate the target program ID before invocation. No untyped CPI targets. | — |
+| 4 | Reinitialization Attacks | ✅ Compliant | `init` constraint on `EventEscrow` and `AttendeeDeposit` PDAs prevents reinitialization. Seeds are unique per organizer+event_id and event+attendee, making PDA collision impossible. | — |
+| 5 | PDA Sharing Vulnerabilities | ✅ Compliant | `EventEscrow` seeds: `["escrow", organizer, event_id]` — unique per organizer per event. `AttendeeDeposit` seeds: `["deposit", event, attendee]` — unique per attendee per event. No shared PDAs across users. | — |
+| 6 | Type Cosplay Attacks | ✅ Compliant | Quasar uses 1-byte discriminators: `EventEscrow = 1`, `AttendeeDeposit = 2`. Deserialization validates the discriminator before any field access. | — |
+| 7 | Duplicate Mutable Accounts | ✅ Compliant | `require_distinct` helper checks all mutable accounts for duplicate addresses at the start of each instruction handler (defense-in-depth). | — |
+| 8 | Revival Attacks | ✅ Compliant | `close_event` uses `close(dest = organizer)` which atomically zeroes data and transfers lamports. `close_deposit` uses the same pattern. Multi-instruction revival within the same TX is not possible because Quasar's close operation completes atomically. | — |
+| 9 | Data Matching | ✅ Compliant | `has_one(organizer)` on `close_event`, `claim_forfeited`, `deactivate_event`. `constraints(*vault == *event_escrow.vault())` on all financial instructions. `constraints(*deposit_mint == *event_escrow.deposit_mint())` on all token operations. | — |
+| 10 | Sysvar Spoofing | ✅ Compliant | Quasar's `Sysvar<Clock>` and `Sysvar<Rent>` validate the canonical sysvar address internally (equivalent to Anchor). No raw `UncheckedAccount` passed for sysvars. | — |
+| 11 | Bump Canonicalization | ✅ Compliant | `find_program_address` returns canonical (highest) bump. Stored in `event_escrow.bump` and `attendee_deposit.bump` at creation. CPIs use stored bump for `create_program_address` derivation. | — |
+| 12 | Lamport Griefing (Pre-funded PDA) | ✅ Compliant | `init` constraint handles account creation — if PDA already exists with lamports, init fails (account already allocated). No manual lamport transfer logic that could be exploited. | — |
+| 13 | Writable / Read-Only Enforcement | ✅ Compliant | Quasar enforces mutability at the account level: `#[account(mut)]` for writable, bare for read-only. `deposit_mint`, `rent`, `token_program`, `system_program` are all read-only. Financial accounts are `mut`. | — |
+| — | Checked Math | ✅ Compliant | All arithmetic uses `checked_add`, `checked_sub`. No raw `+` or `-` operators on financial values. Verified by Kani formal verification (13 harnesses). | SEC-009 (F09-F11) |
+| — | Token-2022 (`transfer_checked`) | ✅ Compliant | All 3 transfer sites use `transfer_checked()` with mint + decimals. Compatible with Token-2022 transfer hooks and fees. | SEC-009 |
+| — | Rent Reclamation | ✅ Compliant | `close_deposit` instruction (discriminator 7) with self-close + GC paths. Vault rent reclaimed via `close_account` in `close_event`. | SEC-010 |
+| — | Vault Balance Integrity | ✅ Compliant | `close_event` checks both accounting invariant (`deposited == refunded + forfeited`) AND actual vault token balance (`vault.amount() != 0`). Prevents griefing via external airdrop. | SEC-013 |
+| — | Time-Based State Guards | ✅ Compliant | `create_event`: `event_end > now`. `refund`: `now >= event_end`. `claim_forfeited`: `now >= refund_deadline`. `mark_checked_in`: `now <= event_end`. | SEC-011, SEC-012 |
+| — | Stranded Lamports Recovery | ✅ Compliant | All accounts fully closed (not left rent-exempt alive). `close_account` CPI drains all lamports. No `WithdrawExcessLamports` needed. | SEC-015 |
+### Program-Side Checklist
+
+| Check | Status | Evidence |
+|-------|--------|----------|
+| Validate account owners match expected program | ✅ | Quasar `Account<T>` auto-enforces |
+| Validate signer requirements explicitly | ✅ | `Signer` + `has_one` constraints on all 8 instructions |
+| Validate writable requirements explicitly | ✅ | `#[account(mut)]` on writable, bare for read-only |
+| Validate read-only accounts are not writable | ✅ | Quasar enforces at framework level |
+| Validate PDAs match expected seeds + canonical bump | ✅ | `address = Type::seeds(...)` on all PDA accounts |
+| Validate token mint ↔ token account relationships | ✅ | `constraints(*deposit_mint == *event_escrow.deposit_mint())` |
+| Validate rent exemption / initialization status | ✅ | `init` + `Sysvar<Rent>` pattern |
+| Check for duplicate mutable accounts | ✅ | `require_distinct` helper called in all 8 instruction handlers |
+| Verify sysvar addresses before reading | ✅ | Quasar `Sysvar<T>` validates internally |
+| Handle existing lamports on PDA init | ✅ | `init` constraint fails if account exists |
+| Validate program IDs before CPIs | ✅ | `Program<TokenProgram>` + `Program<SystemProgram>` |
+| Do not pass extra writable/signer to callees | ✅ | Only PDA signer via `invoke_signed` with scoped seeds |
+| Ensure invoke_signed seeds are correct and canonical | ✅ | Seeds stored at creation, reused in CPIs |
+| Use checked math | ✅ | All arithmetic is `checked_*` — Kani verified |
+| Avoid unchecked casts | ✅ | No `as` casts on financial values |
+| Re-validate state after CPIs when required | ✅ | No stale reads — state updated before CPI, no post-CPI reads |
+| Close accounts securely | ✅ | `close(dest)` in Quasar atomically zeroes + drains |
+| Avoid leaving zombie accounts with lamports | ✅ | `close_deposit` instruction + GC path |
+| Gate upgrades and ownership transfers | ✅ | Program upgrade authority is standard Solana BPF loader |
+| Prevent reinitialization of existing accounts | ✅ | `init` constraint on PDA accounts |
+| Recover stranded lamports on token accounts | ✅ | `close_account` CPI in `close_event` drains all lamports; no account left alive with excess |
+### Client-Side Checklist
+
+| Check | Status | Evidence |
+|-------|--------|----------|
+| Cluster awareness: never hardcode mainnet in dev | ✅ | SEC-005 fix: all Solscan links cluster-aware via `/api/health` |
+| Simulate transactions for UX where feasible | ✅ | `simulateTransactionB64` JS function + Rust binding — called before signing in all 7 flows |
+| Handle blockhash expiry and retry | ✅ | Worker TX builders fetch fresh blockhash per request |
+| Treat signature as not-final; track confirmation | ✅ | `confirm_escrow_init_handler` polls on-chain state before persisting |
+| Never assume token program variant | ✅ | Uses `token_program` account from instruction context (works with both) |
+| Validate simulation results before signing | ✅ | All 7 signing paths check simulation result; blocks signing if simulation fails |
+| Show clear error messages for common failures | ✅ | Frontend maps on-chain error codes to user-friendly messages |
+| Wallet cluster mismatch detection | ✅ | SEC-014 fix: `getWalletCluster()` + `check_wallet_cluster()` blocks cross-cluster signing |
+
+### Token-2022 Extension Security
+
+| Check | Status | Notes |
+|-------|--------|-------|
+| Transfer fee accounting | ⚠️ N/A | BeThere uses USDC (no transfer fee extension). If fee-bearing tokens are added in future, all balance-delta paths must be audited. |
+| Permanent delegate authority | ⚠️ N/A | USDC has no permanent delegate. If custom tokens are accepted, validate delegate trust. |
+| Mint close + reinitialization | ⚠️ N/A | USDC mint cannot be closed. If custom mints are accepted, verify MintCloseAuthority. |
+| Using `transfer` instead of `transfer_checked` | ✅ Fixed | SEC-009: All 3 sites use `transfer_checked()` since Phase 3. |
+| Transfer hook validation | ⚠️ N/A | USDC has no transfer hook. If hook-bearing tokens are added, validate mint + state + ownership. |
+| Metadata pointer bidirectional reference | ⚠️ N/A | Not applicable — no metadata pointer in escrow. |
+| Memo transfer on destination | ⚠️ N/A | No memo transfer requirements in current flow. |
+| Closing token accounts with extensions | ✅ | `close_account` CPI works for both SPL Token and Token-2022 accounts |
+| Hardcoded token account rent | ✅ | No hardcoded rent — `Sysvar<Rent>` used for rent calculations |
+
+### Payments & Commerce (Solana Foundation Reference)
+
+Cross-referenced against the [Solana Foundation Payments & Commerce Checklist](https://github.com/solana-foundation/solana-dev-skill/blob/main/skill/references/payments.md). BeThere implements a custom Solana Pay flow (not Commerce Kit) because the payment is a **deposit-to-escrow**, not a direct merchant payment.
+
+| Check | Status | Evidence |
+|-------|--------|----------|
+| Show recipient + amount + token clearly before signing | ✅ | Wallet adapter displays TX details (deposit amount, vault recipient, USDC token). Solana Pay `message` field shown in wallet UI via `DepositTxResponse.message` |
+| Protect against replay (unique references) | ✅ | Each deposit uses unique PDA seeds (`["deposit", event, attendee]`), preventing replay. KV tracks `deposit_status` per attendee — duplicate deposits rejected |
+| Confirm settlement by querying chain state | ✅ | `confirm_deposit_handler` polls `getSignatureStatuses` via RPC. `deposit_usdc_webhook` records on-chain TX signature. Worker never trusts client-side callbacks alone |
+| Handle partial failures (TX sent but not confirmed) | ✅ | Deposit status tracks `tx_signature` separately from `verified`. Frontend polls `/api/deposit/usdc/confirm` until on-chain confirmation. Helius webhook provides backup confirmation |
+| Clear error messages for common failures | ✅ | Frontend maps on-chain error codes to user-friendly messages. Deposit page shows "deposit not enabled", "event has ended", "already deposited" etc. |
+| Solana Pay Transaction Request spec compliance | ✅ | `GET /api/deposit/usdc/tx` returns `{ transaction, message }` per [SPEC-8](https://github.com/solana-labs/solana-pay/blob/master/SPEC.md#spec-8). Callback URL uses `solana:` scheme |
+
+**Why not Commerce Kit**: BeThere deposits go to a **PDA escrow** (not a merchant wallet), require CPI through the escrow program, and have time-based refund logic. Commerce Kit targets direct merchant payments — not applicable here. The custom Solana Pay flow is the correct pattern.
+
+**Why not Kora (gasless)**: Deposit transactions require the attendee's signature (non-custodial). Gas fees are negligible on Solana (~$0.00025). Fee abstraction adds complexity without meaningful UX benefit for the deposit flow. May reconsider for refund flow if attendees have zero SOL.
+
+### Agent-Assisted Development Safety
+
+| Check | Status | Notes |
+|-------|--------|-------|
+| Transaction approval: show recipient, amount, token, fee payer, cluster | ✅ | Frontend wallet adapter displays all TX details before signing |
+| No key material in code/logs | ✅ | Non-custodial — worker never holds keys; all signing via wallet adapter |
+| Default to safe clusters | ✅ | SEC-014: cluster mismatch detection blocks cross-cluster signing |
+| Simulate before signing | ✅ | `simulateTransactionB64` called before all wallet signing requests |
+| Sanitize on-chain data (no prompt injection) | ✅ | On-chain data used for business logic only, not interpolated into executable context |
+| Validate before deserializing | ✅ | Quasar validates owner, data length, discriminator before field access |
 
 ---
 
@@ -494,11 +639,17 @@ Kani **cannot** verify (covered by SVM integration tests):
 
 External resources and vulnerability patterns relevant to the BeThere escrow.
 
+### Solana Foundation Security Checklist
+
+- **Source**: [solana-dev-skill/security.md](https://github.com/solana-foundation/solana-dev-skill/blob/main/skill/references/security.md)
+- **Coverage**: 18 vulnerability categories, program-side checklist (20 items), client-side checklist (7 items), Token-2022 extension checklist (9 items), agent safety (6 items)
+- **Cross-reference**: Full mapping above — **13/13 categories fully compliant**. All 20 program-side checks pass. All 8 client-side checks pass. All 6 agent safety checks pass.
+
 ### Safe Solana Builder
 
 - **Repo**: https://github.com/Frankcastleauditor/safe-solana-builder (124⭐)
 - **Author**: Frank Castle (@0xcastle_chain), Solana security researcher, 70+ Rust audits, 250+ Critical/High findings
-- **Usage**: Cross-referenced against BeThere escrow in the table above. 8 rules compliant, 4 partial, 1 violation (Token-2022).
+- **Usage**: Cross-referenced against BeThere escrow in the table above. 11 rules compliant, 2 partial, 0 violations.
 
 ### Solana Audit Arena
 
@@ -508,11 +659,48 @@ External resources and vulnerability patterns relevant to the BeThere escrow.
 
 | Arena Finding | Pattern | BeThere Match |
 |---------------|---------|---------------|
-| Week 1: StakeFlow `instant_unlock` bypasses lockup check | Time-gate bypass | SEC-011: `mark_checked_in` has no `event_end` guard |
-| Week 2: MissionX Token-2022 `transfer()` incompatibility | Token-2022 readiness | SEC-009: Escrow uses `transfer()` not `transfer_checked()` |
-| Week 3: Zenon uncapped buy causing underflow | Missing bounds | SEC-003: No max deposit cap on `deposit_amount_usdc` |
+| Week 1: StakeFlow `instant_unlock` bypasses lockup check | Time-gate bypass | SEC-011: ✅ Fixed — `mark_checked_in` now has `event_end` guard |
+| Week 2: MissionX Token-2022 `transfer()` incompatibility | Token-2022 readiness | SEC-009: ✅ Fixed — all sites use `transfer_checked()` |
+| Week 3: Zenon uncapped buy causing underflow | Missing bounds | SEC-003: ✅ Fixed — max deposit cap enforced |
 | Week 1: StakeFlow `UserStake` PDA rent never reclaimed | Rent leak | SEC-010: ✅ Fixed — `close_deposit` instruction reclaims rent |
+
+### Stranded Lamports
+
+- **Site**: [lost-lamports.vercel.app](https://lost-lamports.vercel.app/about)
+- **Focus**: SOL stranded above rent-exempt minimum on SPL token accounts and mints
+- **Relevance**: BeThere fully closes all accounts (vault, escrow PDA, deposit PDA), draining all lamports. No stranded-lamport risk.
+- **P-token**: Epoch 971 added `WithdrawExcessLamports` for long-lived token accounts — not needed for BeThere's ephemeral per-event accounts.
+
+### Payments & Commerce
+
+- **Source**: [solana-dev-skill/payments.md](https://github.com/solana-foundation/solana-dev-skill/blob/main/skill/references/payments.md)
+- **Coverage**: Commerce Kit, Kora (gasless), UX/security checklist for payments
+- **BeThere approach**: Custom Solana Pay Transaction Request flow (not Commerce Kit) — deposits go to PDA escrow with CPI, not direct merchant payments
+- **Cross-reference**: 6/6 payment UX/security checks compliant (see Payments & Commerce table above)
 
 ### Recommendation
 
 Consider submitting the BeThere escrow program (`bethere-escrow/`) as a future Audit Arena target for community review. The Arena's researchers and Frank Castle's validation would provide independent third-party security assessment at no cost.
+
+### Security Review Questions (from Solana Foundation Checklist)
+
+Self-assessment against the 16 standard Solana security review questions:
+
+| # | Question | Answer |
+|---|----------|--------|
+| 1 | Can an attacker pass a fake account that passes validation? | No — Quasar `Account<T>` enforces owner + discriminator |
+| 2 | Can an attacker call this instruction without proper authorization? | No — `Signer` + `has_one` constraints on all mutating instructions |
+| 3 | Can an attacker substitute a malicious program for CPI targets? | No — `Program<TokenProgram>` validates CPI target ID |
+| 4 | Can an attacker reinitialize an existing account? | No — `init` constraint prevents re-init; unique PDA seeds |
+| 5 | Can an attacker exploit shared PDAs across users? | No — seeds include user-specific identifiers (organizer, attendee) |
+| 6 | Can an attacker pass the same account for multiple parameters? | No — runtime blocks; defense-in-depth via `require_distinct` helper in all 8 handlers |
+| 7 | Can an attacker revive a closed account in the same transaction? | No — Quasar `close` is atomic; data zeroed + lamports drained |
+| 8 | Can an attacker exploit data mismatches between stored and provided data? | No — `has_one(organizer)`, `address = Seeds(...)`, vault/mint constraints |
+| 9 | Does the protocol handle Token-2022 transfer fees correctly? | N/A — USDC has no transfer fee; `transfer_checked()` is used |
+| 10 | Can permanent delegate drain token accounts? | N/A — USDC has no permanent delegate |
+| 11 | Can an attacker close + reinitialize a mint? | N/A — USDC mint cannot be closed |
+| 12 | Is `transfer_checked` used for all token movements? | Yes — all 3 transfer sites use `transfer_checked()` (SEC-009 fix) |
+| 13 | Can an attacker pass a fake sysvar? | No — Quasar `Sysvar<T>` validates canonical addresses |
+| 14 | Does PDA creation store and validate canonical bump? | Yes — `find_program_address` at creation, stored bump reused in CPIs |
+| 15 | Can an attacker pre-fund a PDA to grief initialization? | No — `init` constraint fails if account already allocated |
+| 16 | Are read-only accounts protected from being passed as writable? | Yes — Quasar enforces mutability at framework level |

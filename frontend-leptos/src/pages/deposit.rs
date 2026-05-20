@@ -580,6 +580,18 @@ pub fn Deposit() -> impl IntoView {
                 return;
             }
 
+            // Pre-sign simulation (Solana Foundation Security Checklist).
+            match crate::pages::escrow_init::simulate_transaction_js(&wallet_name_for_tx, &tx_b64).await {
+                Ok(sim) if sim.ok => {}
+                Ok(sim) => {
+                    let err_msg = sim.error.unwrap_or_else(|| "Simulation failed".to_string());
+                    log::error!("[deposit] simulation failed: {err_msg}");
+                    components::show_toast(&set_toast, &format!("Transaction would fail: {err_msg}"), ToastType::Error);
+                    return;
+                }
+                Err(e) => { log::warn!("[deposit] simulate error (not blocking): {e}"); }
+            }
+
             // Step 4: Sign and send the TX via the wallet
             match sign_and_send_tx_js(&wallet_name_for_tx, &tx_b64).await {
                 crate::wallet_error::WalletResult::Success(signature) => {
@@ -1009,6 +1021,18 @@ pub fn Deposit() -> impl IntoView {
                 return;
             }
 
+            // Pre-sign simulation.
+            match crate::pages::escrow_init::simulate_transaction_js(&wallet_name_for_tx, &tx_b64).await {
+                Ok(sim) if sim.ok => {}
+                Ok(sim) => {
+                    let err_msg = sim.error.unwrap_or_else(|| "Simulation failed".to_string());
+                    log::error!("[deposit] refund simulation failed: {err_msg}");
+                    components::show_toast(&set_toast, &format!("Transaction would fail: {err_msg}"), ToastType::Error);
+                    return;
+                }
+                Err(e) => { log::warn!("[deposit] simulate error (not blocking): {e}"); }
+            }
+
             // Step 2: Sign and send via wallet
             match sign_and_send_tx_js(&wallet_name_for_tx, &tx_b64).await {
                 crate::wallet_error::WalletResult::Success(signature) => {
@@ -1173,6 +1197,18 @@ pub fn Deposit() -> impl IntoView {
                     ToastType::Error,
                 );
                 return;
+            }
+
+            // Pre-sign simulation.
+            match crate::pages::escrow_init::simulate_transaction_js(&wallet_name_for_tx, &tx_b64).await {
+                Ok(sim) if sim.ok => {}
+                Ok(sim) => {
+                    let err_msg = sim.error.unwrap_or_else(|| "Simulation failed".to_string());
+                    log::error!("[deposit] close simulation failed: {err_msg}");
+                    components::show_toast(&set_toast, &format!("Transaction would fail: {err_msg}"), ToastType::Error);
+                    return;
+                }
+                Err(e) => { log::warn!("[deposit] simulate error (not blocking): {e}"); }
             }
 
             // Step 2: Sign and send via wallet

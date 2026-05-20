@@ -28,6 +28,12 @@ pub struct CloseDeposit {
 impl CloseDeposit {
     #[inline(always)]
     pub fn close_deposit(&self) -> Result<(), ProgramError> {
+        // SEC-DUP: Defense-in-depth — no duplicate mutable accounts.
+        super::require_distinct(&[
+            *self.signer.address(),
+            *self.attendee_deposit.address(),
+        ])?;
+
         self.attendee_deposit.validate_version()?;
         let event_escrow_closed = self.event_escrow.to_account_view().data_len() == 0;
 

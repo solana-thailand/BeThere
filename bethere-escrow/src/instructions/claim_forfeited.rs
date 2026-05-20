@@ -62,6 +62,15 @@ pub struct ClaimForfeited {
 impl ClaimForfeited {
     #[inline(always)]
     pub fn validate_and_claim(&mut self, bumps: &ClaimForfeitedBumps) -> Result<(), ProgramError> {
+        // SEC-DUP: Defense-in-depth — no duplicate mutable accounts.
+        super::require_distinct(&[
+            *self.organizer.address(),
+            *self.event_escrow.address(),
+            *self.attendee_deposit.address(),
+            *self.organizer_ta.address(),
+            *self.vault.address(),
+        ])?;
+
         self.event_escrow.validate_version()?;
         self.attendee_deposit.validate_version()?;
         let clock = <Clock as quasar_lang::sysvars::Sysvar>::get()?;
