@@ -25,7 +25,7 @@ pub use tx_builders::{
     build_refund_and_close_transaction, build_refund_transaction,
 };
 #[allow(unused_imports)]
-pub use wire::verify_escrow_account_exists;
+pub use wire::{check_escrow_pda_available, derive_escrow_address, verify_escrow_account_exists};
 
 // ---------------------------------------------------------------------------
 // Constants

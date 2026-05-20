@@ -5,6 +5,7 @@ use axum::{
 use event_checkin_domain::models::auth::Claims;
 use event_checkin_domain::models::deposit::{DepositMethod, DepositStatus};
 use event_checkin_domain::models::error::AppError;
+use event_checkin_domain::models::event::EscrowStatus;
 use futures::stream::{self, StreamExt};
 
 use crate::error::{ApiOk, WorkerError};
@@ -111,6 +112,17 @@ pub async fn init_escrow_tx_handler(
     };
 
     let rpc_url = state.config.solana.full_rpc_url();
+
+    // Collision detection: verify the escrow PDA doesn't already exist on-chain
+    // before building the transaction to avoid AccountAlreadyInitialized errors.
+    crate::solana_escrow::check_escrow_pda_available(&rpc_url, organizer_pubkey, on_chain_event_id)
+        .await
+        .map_err(|e| {
+            AppError::Validation(format!(
+                "escrow PDA collision: {e}. \
+         Use a different on_chain_event_id or close the existing escrow first."
+            ))
+        })?;
 
     let tx = crate::solana_escrow::build_init_escrow_transaction(
         &rpc_url,
@@ -1314,4 +1326,177 @@ pub async fn cancel_status_handler(
         "thb_refunded": thb_refunded,
         "thb_pending_refund": thb_total.saturating_sub(thb_refunded),
     })))
+}
+
+// ---------------------------------------------------------------------------
+// POST /api/escrow/confirm-init — Confirm escrow initialized on-chain
+// ---------------------------------------------------------------------------
+
+/// Request body for POST /api/escrow/confirm-init.
+#[derive(Debug, serde::Deserialize)]
+pub struct ConfirmEscrowInitRequest {
+    /// Event ID (KV key).
+    pub event_id: String,
+}
+
+/// Response for escrow init confirmation.
+#[derive(Debug, serde::Serialize)]
+pub struct ConfirmEscrowInitResponse {
+    /// Derived escrow PDA address (base58).
+    pub escrow_address: String,
+    /// On-chain event ID used for PDA derivation.
+    pub on_chain_event_id: u64,
+    /// Confirmed escrow status.
+    pub escrow_status: EscrowStatus,
+}
+
+/// Confirm that an escrow has been initialized on-chain and persist the state.
+///
+/// Called by the frontend after the wallet confirms the init TX.
+/// Also serves as a recovery endpoint — can be called anytime to sync on-chain state.
+/// Idempotent: if the event already has `escrow_status=Initialized` and the
+/// derived address matches, returns success without re-saving.
+#[worker::send]
+pub async fn confirm_escrow_init_handler(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Json(body): Json<ConfirmEscrowInitRequest>,
+) -> Result<ApiOk<ConfirmEscrowInitResponse>, WorkerError> {
+    use event_checkin_domain::models::event::UpdateEventRequest;
+
+    let kv = state
+        .events_kv
+        .as_ref()
+        .ok_or_else(|| AppError::Internal("EVENTS KV not configured".to_string()))?;
+
+    // 1. Resolve event with access check
+    let event =
+        crate::handlers::ext::resolve_event_with_access(&state, &claims, Some(&body.event_id))
+            .await?;
+
+    if !event.deposit_enabled {
+        return Err(AppError::Validation("deposit not enabled for this event".to_string()).into());
+    }
+
+    // 2. Derive on_chain_event_id (same logic as init_escrow_tx_handler)
+    let on_chain_event_id = if event.on_chain_event_id != 0 {
+        event.on_chain_event_id
+    } else {
+        super::derive_on_chain_event_id(&event.id)
+    };
+
+    // 3. Validate organizer wallet
+    let organizer_pubkey = if event.organizer_wallet.is_empty() {
+        return Err(
+            AppError::Validation("event has no organizer wallet configured".to_string()).into(),
+        );
+    } else {
+        crate::solana::validate_wallet_address(&event.organizer_wallet)
+            .map_err(|e| AppError::Validation(format!("invalid organizer_wallet: {e}")))?;
+        &event.organizer_wallet
+    };
+
+    // 4. Derive escrow PDA address
+    let escrow_address =
+        crate::solana_escrow::derive_escrow_address(organizer_pubkey, on_chain_event_id)
+            .await
+            .map_err(|e| AppError::Internal(format!("failed to derive escrow address: {e}")))?;
+
+    // 5. Verify escrow exists on-chain
+    let rpc_url = state.config.solana.full_rpc_url();
+    crate::solana_escrow::verify_escrow_account_exists(
+        &rpc_url,
+        organizer_pubkey,
+        on_chain_event_id,
+    )
+    .await
+    .map_err(|e| AppError::Validation(format!("escrow not found on-chain: {e}")))?;
+
+    tracing::info!(
+        event_id = %event.id,
+        escrow_address = %escrow_address,
+        on_chain_event_id,
+        "escrow confirmed on-chain"
+    );
+
+    // 6. Idempotent check: if already persisted with matching address, skip update
+    let already_persisted = event.escrow_status == EscrowStatus::Initialized
+        && !event.escrow_address.is_empty()
+        && event.escrow_address == escrow_address;
+
+    if !already_persisted {
+        let update_req = UpdateEventRequest {
+            escrow_address: Some(escrow_address.clone()),
+            on_chain_event_id: Some(on_chain_event_id),
+            escrow_status: Some(EscrowStatus::Initialized),
+            name: None,
+            slug: None,
+            tagline: None,
+            link: None,
+            status: None,
+            event_start_ms: None,
+            event_end_ms: None,
+            time_tba: None,
+            sheet_id: None,
+            sheet_name: None,
+            staff_sheet_name: None,
+            quiz_enabled: None,
+            nft_collection_mint: None,
+            nft_metadata_uri: None,
+            nft_image_url: None,
+            nft_name_template: None,
+            nft_symbol: None,
+            nft_description_template: None,
+            merkle_tree: None,
+            organizer_emails: None,
+            staff_emails: None,
+            claim_base_url: None,
+            deposit_enabled: None,
+            deposit_amount_usdc: None,
+            deposit_amount_thb: None,
+            promptpay_id: None,
+            organizer_wallet: None,
+            refund_deadline_hours: None,
+            max_refundable_deposits: None,
+            expected_updated_at: None,
+            description: None,
+            location: None,
+            event_format: None,
+            require_contact_info: None,
+            in_person_capacity: None,
+            online_capacity: None,
+            online_open_mode: None,
+            online_registration_open: None,
+            deposit_deadline_hours: None,
+            visibility: None,
+        };
+
+        event_store::update_event(kv, &event.id, &update_req, &claims.email)
+            .await
+            .map_err(|e| AppError::Internal(format!("failed to persist escrow state: {e}")))?;
+
+        // Audit log
+        let _ = crate::audit_store::append_event_audit(
+            kv,
+            &event.id,
+            crate::audit_store::create_entry(
+                &claims.email,
+                crate::audit_store::AuditAction::EscrowInitialized,
+                &event.id,
+                "escrow init confirmed on-chain and persisted server-side",
+            ),
+        )
+        .await;
+    } else {
+        tracing::debug!(
+            event_id = %event.id,
+            "escrow already persisted with matching address — skipping update"
+        );
+    }
+
+    Ok(ApiOk::new(ConfirmEscrowInitResponse {
+        escrow_address,
+        on_chain_event_id,
+        escrow_status: EscrowStatus::Initialized,
+    }))
 }

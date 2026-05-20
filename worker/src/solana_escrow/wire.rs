@@ -136,6 +136,30 @@ async fn cache_blockhash(kv: &KvStore, blockhash: &str) -> Result<(), EscrowErro
 }
 
 // ---------------------------------------------------------------------------
+// Escrow PDA address derivation
+// ---------------------------------------------------------------------------
+
+/// Derive the escrow PDA address for a given organizer and on-chain event ID.
+/// Returns the base58-encoded address.
+///
+/// This is a local operation (no RPC needed) — PDA derivation uses SHA-256.
+pub async fn derive_escrow_address(
+    organizer_pubkey: &str,
+    event_id: u64,
+) -> Result<String, EscrowError> {
+    let organizer = pubkey_from_base58(organizer_pubkey)?;
+    let program_id = pubkey_from_base58(ESCROW_PROGRAM_ID)?;
+
+    let (event_escrow, _) = find_program_address(
+        &[b"escrow", organizer.as_slice(), &event_id.to_le_bytes()],
+        &program_id,
+    )
+    .await?;
+
+    Ok(pubkey_to_base58(&event_escrow))
+}
+
+// ---------------------------------------------------------------------------
 // On-chain escrow verification
 // ---------------------------------------------------------------------------
 
@@ -217,6 +241,104 @@ pub async fn verify_escrow_account_exists(
                 )));
             }
             Ok(())
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Escrow PDA collision detection
+// ---------------------------------------------------------------------------
+
+/// Check that the escrow PDA does NOT already exist on-chain.
+///
+/// Derives the escrow PDA from the organizer pubkey and event ID, then calls
+/// `getAccountInfo` to verify the account is **not** already initialized.
+///
+/// Returns `Ok(escrow_address_b58)` if the account is free to initialize.
+/// Returns `Err(EscrowError::AccountNotFound)` if the account already exists
+/// (collision) — the error message is repurposed to signal the collision.
+pub async fn check_escrow_pda_available(
+    rpc_url: &str,
+    organizer_pubkey: &str,
+    event_id: u64,
+) -> Result<String, EscrowError> {
+    let organizer = pubkey_from_base58(organizer_pubkey)?;
+    let program_id = pubkey_from_base58(ESCROW_PROGRAM_ID)?;
+
+    let (event_escrow, _) = find_program_address(
+        &[b"escrow", organizer.as_slice(), &event_id.to_le_bytes()],
+        &program_id,
+    )
+    .await?;
+
+    let escrow_b58 = pubkey_to_base58(&event_escrow);
+
+    let body = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": "bethere-check-pda-available",
+        "method": "getAccountInfo",
+        "params": [
+            escrow_b58,
+            { "encoding": "base64", "commitment": "confirmed" }
+        ]
+    });
+
+    let json_body = serde_json::to_string(&body)
+        .map_err(|e| EscrowError::RpcFailed(format!("serialize: {e}")))?;
+
+    let headers = worker::Headers::new();
+    headers
+        .set("Content-Type", "application/json")
+        .map_err(|e| EscrowError::RpcFailed(format!("headers: {e:?}")))?;
+
+    let mut init = worker::RequestInit::new();
+    init.with_method(worker::Method::Post)
+        .with_headers(headers)
+        .with_body(Some(wasm_bindgen::JsValue::from_str(&json_body)));
+
+    let request = worker::Request::new_with_init(rpc_url, &init)
+        .map_err(|e| EscrowError::RpcFailed(format!("request: {e:?}")))?;
+
+    let mut response = worker::Fetch::Request(request)
+        .send()
+        .await
+        .map_err(|e| EscrowError::RpcFailed(format!("fetch: {e:?}")))?;
+
+    let status = response.status_code();
+    if !(200..300).contains(&status) {
+        let text = response.text().await.unwrap_or_default();
+        return Err(EscrowError::RpcFailed(format!("HTTP {status}: {text}")));
+    }
+
+    let text = response
+        .text()
+        .await
+        .map_err(|e| EscrowError::RpcFailed(format!("read body: {e:?}")))?;
+
+    let json: serde_json::Value = serde_json::from_str(&text)
+        .map_err(|e| EscrowError::RpcFailed(format!("parse json: {e}")))?;
+
+    let account_info = json.get("result").and_then(|v| v.get("value"));
+
+    match account_info {
+        None | Some(serde_json::Value::Null) => {
+            // Account does not exist — PDA is available for initialization
+            Ok(escrow_b58)
+        }
+        Some(info) => {
+            // Account exists — check if it's owned by the escrow program
+            let owner = info.get("owner").and_then(|v| v.as_str()).unwrap_or("");
+            if owner == ESCROW_PROGRAM_ID {
+                // True collision: escrow already initialized
+                Err(EscrowError::AccountNotFound(format!(
+                    "escrow PDA {escrow_b58} already initialized on-chain for this organizer+event_id"
+                )))
+            } else {
+                // Account exists but not owned by escrow program — still a collision
+                Err(EscrowError::AccountNotFound(format!(
+                    "account {escrow_b58} already exists on-chain (owner: {owner}), cannot initialize escrow"
+                )))
+            }
         }
     }
 }

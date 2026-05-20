@@ -462,11 +462,33 @@ pub fn EscrowInitPanel(
                                                                 f.escrow_status = api::EscrowStatus::Initialized;
                                                             });
                                                             set_s.set(EscrowInitState::Done {
-                                                                escrow_address: resp.escrow_address,
+                                                                escrow_address: resp.escrow_address.clone(),
                                                                 vault_address: resp.vault_address,
                                                                 on_chain_event_id: resp.on_chain_event_id,
                                                                 signature,
                                                             });
+                                                            // Persist escrow state to backend
+                                                            let sync_body = api::UpdateEventBody {
+                                                                escrow_address: Some(resp.escrow_address.clone()),
+                                                                escrow_status: Some(api::EscrowStatus::Initialized),
+                                                                on_chain_event_id: Some(resp.on_chain_event_id),
+                                                                expected_updated_at: None, // skip concurrency check — escrow init is authoritative
+                                                                ..Default::default()
+                                                            };
+                                                            match api::update_event(&eid, &sync_body).await {
+                                                                Ok(_) => {
+                                                                    log::info!("[escrow-init] escrow state persisted to backend");
+                                                                }
+                                                                Err(e) => {
+                                                                    log::error!("[escrow-init] FAILED to persist escrow state: {e}");
+                                                                    // Non-fatal — on-chain state is the source of truth
+                                                                    components::show_toast(
+                                                                        &set_t,
+                                                                        "Escrow created on-chain but state sync failed — refresh to verify",
+                                                                        components::ToastType::Warning,
+                                                                    );
+                                                                }
+                                                            }
                                                             components::show_toast(
                                                                 &set_t,
                                                                 "Escrow initialized on-chain!",
@@ -543,6 +565,78 @@ pub fn EscrowInitPanel(
                     </div>
                 }.into_any()
             }}
+        </Show>
+
+        // ===== Sync/Recover: no wallet needed, server-side on-chain verification =====
+        <Show when=is_idle>
+            <div class="panel-box-dashed" style="margin-top:0.75rem; border-color: var(--warning-border, #f59e0b);">
+                <div class="panel-label" style="font-size:0.8rem;">
+                    "Escrow already exists on-chain?"
+                </div>
+                <div class="panel-hint u-mt-2xs" style="font-size:0.75rem;">
+                    "If you already initialized escrow but the page lost sync, click below to verify on-chain and restore the state."
+                </div>
+                {move || {
+                    let eid = event_id_sig.get();
+                    let set_s = set_state;
+                    let set_t = set_t;
+                    let set_f = set_form;
+                    let sync_eid = eid.clone();
+                    view! {
+                        <button
+                            class="btn btn-outline btn-sm u-mt-xs"
+                            style="font-size:0.8rem;"
+                            on:click=move |_| {
+                                let eid = sync_eid.clone();
+                                let set_s = set_s;
+                                let set_t = set_t;
+                                let set_f = set_f;
+                                leptos::task::spawn_local(async move {
+                                    log::info!("[escrow-sync] calling confirm-init for event: {eid}");
+                                    let req = api::ConfirmEscrowInitRequest {
+                                        event_id: eid.clone(),
+                                    };
+                                    match api::confirm_escrow_init(&req).await {
+                                        Ok(resp) => {
+                                            log::info!(
+                                                "[escrow-sync] confirmed: escrow={} on_chain_event_id={}",
+                                                resp.escrow_address,
+                                                resp.on_chain_event_id
+                                            );
+                                            set_f.update(|f| {
+                                                f.escrow_address = resp.escrow_address.clone();
+                                                f.on_chain_event_id = resp.on_chain_event_id.to_string();
+                                                f.escrow_status = api::EscrowStatus::Initialized;
+                                            });
+                                            set_s.set(EscrowInitState::Done {
+                                                escrow_address: resp.escrow_address,
+                                                vault_address: String::new(),
+                                                on_chain_event_id: resp.on_chain_event_id,
+                                                signature: String::new(),
+                                            });
+                                            components::show_toast(
+                                                &set_t,
+                                                "Escrow state synced from on-chain!",
+                                                components::ToastType::Success,
+                                            );
+                                        }
+                                        Err(e) => {
+                                            log::error!("[escrow-sync] confirm-init failed: {e}");
+                                            components::show_toast(
+                                                &set_t,
+                                                &format!("No escrow found on-chain: {e}"),
+                                                components::ToastType::Error,
+                                            );
+                                        }
+                                    }
+                                });
+                            }
+                        >
+                            "🔄 Sync from On-Chain"
+                        </button>
+                    }
+                }}
+            </div>
         </Show>
 
         // ===== Initializing: spinner =====

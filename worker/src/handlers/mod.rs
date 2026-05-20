@@ -194,6 +194,10 @@ pub fn routes(state: AppState) -> Router<()> {
         // Escrow management (protected — organizer initializes on-chain escrow)
         .route("/escrow/init", post(deposit::init_escrow_tx_handler))
         .route(
+            "/escrow/confirm-init",
+            post(deposit::confirm_escrow_init_handler),
+        )
+        .route(
             "/escrow/mark-checked-in",
             post(deposit::mark_checked_in_tx_handler),
         )

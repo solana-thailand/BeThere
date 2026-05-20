@@ -567,6 +567,30 @@ pub async fn init_escrow(body: &InitEscrowRequest) -> Result<InitEscrowResponse,
     api_post_json("/escrow/init", body).await
 }
 
+/// Request body for POST /api/escrow/confirm-init.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ConfirmEscrowInitRequest {
+    pub event_id: String,
+}
+
+/// Response from POST /api/escrow/confirm-init.
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct ConfirmEscrowInitResponse {
+    pub escrow_address: String,
+    pub on_chain_event_id: u64,
+    pub escrow_status: EscrowStatus,
+}
+
+/// POST /api/escrow/confirm-init — verify escrow exists on-chain & persist state.
+///
+/// Recovery endpoint: syncs on-chain escrow state to the server-side event config.
+/// Idempotent — safe to call multiple times.
+pub async fn confirm_escrow_init(
+    body: &ConfirmEscrowInitRequest,
+) -> Result<ConfirmEscrowInitResponse, ApiError> {
+    api_post_json("/escrow/confirm-init", body).await
+}
+
 /// DELETE /api/events/{id} — archive an event.
 pub async fn archive_event(id: &str) -> Result<EventMutationData, ApiError> {
     let path = format!("/events/{id}");
