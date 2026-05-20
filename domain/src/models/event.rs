@@ -43,6 +43,33 @@ impl std::fmt::Display for OnlineOpenMode {
     }
 }
 
+/// Controls event discoverability — whether the event appears publicly or requires auth.
+///
+/// - `Public`: Visible on landing page, accessible to anyone via `/e/{slug}`.
+/// - `Private`: Hidden from landing page, requires auth + access check via `/e/{slug}`.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum EventVisibility {
+    #[default]
+    Public,
+    Private,
+}
+
+impl EventVisibility {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Public => "public",
+            Self::Private => "private",
+        }
+    }
+}
+
+impl std::fmt::Display for EventVisibility {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
 /// Event format — controls deposit, check-in, claim, and escrow paths.
 ///
 /// - `InPerson`: Physical event, deposit auto-enabled, physical check-in required.
@@ -211,6 +238,9 @@ pub struct EventMeta {
     /// Maximum number of online attendees. None = unlimited (default).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub online_capacity: Option<u32>,
+    /// Event visibility — public (shown on landing) or private (auth required).
+    #[serde(default)]
+    pub visibility: EventVisibility,
 }
 
 /// Top-level index of all events, stored under KV key "events".
@@ -340,6 +370,9 @@ pub struct EventConfig {
     /// Event location (venue name, address, or "Online").
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub location: String,
+    /// Event visibility — public (shown on landing) or private (auth required).
+    #[serde(default)]
+    pub visibility: EventVisibility,
 
     // ── Event format ───────────────────────────────────────────────────
     /// Event format — In-Person, Online, or Hybrid.
@@ -405,6 +438,7 @@ impl EventConfig {
             nft_image_url: self.nft_image_url.clone(),
             in_person_capacity: self.in_person_capacity,
             online_capacity: self.online_capacity,
+            visibility: self.visibility.clone(),
         }
     }
 
@@ -518,6 +552,7 @@ impl EventConfig {
             online_open_mode: OnlineOpenMode::default(),
             online_registration_open: false,
             deposit_deadline_hours: None,
+            visibility: EventVisibility::default(),
             created_at: String::new(),
             updated_at: String::new(),
             updated_by: String::new(),
@@ -649,6 +684,9 @@ pub struct CreateEventRequest {
     /// Hours after registration to auto-switch from in-person to online.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub deposit_deadline_hours: Option<u32>,
+    /// Event visibility — public (shown on landing) or private (auth required).
+    #[serde(default)]
+    pub visibility: EventVisibility,
 }
 /// Request body for PUT /api/events/{id} — update an existing event.
 /// All fields are optional; only provided fields are updated.
@@ -785,6 +823,9 @@ pub struct UpdateEventRequest {
     /// Hours after registration to auto-switch from in-person to online.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub deposit_deadline_hours: Option<Option<u32>>,
+    /// New event visibility.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub visibility: Option<EventVisibility>,
 }
 
 /// Response for GET /api/events — list all events.

@@ -68,6 +68,7 @@ pub struct EventForm {
     pub online_open_mode: api::OnlineOpenMode,
     pub online_registration_open: bool,
     pub deposit_deadline_hours: String,
+    visibility: api::EventVisibility,
     /// Server-side `updated_at` captured at load time for optimistic concurrency.
     pub updated_at: String,
 }
@@ -177,6 +178,7 @@ fn default_form() -> EventForm {
         online_open_mode: api::OnlineOpenMode::default(),
         online_registration_open: false,
         deposit_deadline_hours: String::new(),
+        visibility: api::EventVisibility::default(),
         time_tba: false,
         ..Default::default()
     }
@@ -240,6 +242,7 @@ fn form_from_detail(detail: &api::EventDetail) -> EventForm {
         online_open_mode: detail.online_open_mode.clone(),
         online_registration_open: detail.online_registration_open,
         deposit_deadline_hours: detail.deposit_deadline_hours.map(|v| v.to_string()).unwrap_or_default(),
+        visibility: detail.visibility.clone(),
         time_tba: detail.time_tba,
         updated_at: detail.updated_at.clone(),
     }
@@ -588,6 +591,7 @@ pub fn EventsPage(
                 online_open_mode: current_form.online_open_mode.clone(),
                 online_registration_open: current_form.online_registration_open,
                 deposit_deadline_hours: current_form.deposit_deadline_hours.trim().parse::<u32>().ok(),
+                visibility: current_form.visibility.clone(),
             };
 
             // Determine if we should also initialize escrow after creating the event.
@@ -743,6 +747,7 @@ pub fn EventsPage(
                 online_open_mode: Some(current_form.online_open_mode.clone()),
                 online_registration_open: Some(current_form.online_registration_open),
                 deposit_deadline_hours: Some(current_form.deposit_deadline_hours.trim().parse::<u32>().ok()),
+                visibility: Some(current_form.visibility.clone()),
             };
 
             leptos::task::spawn_local(async move {
@@ -870,6 +875,11 @@ pub fn EventsPage(
                                                 <span class="card-title">{ename.clone()}</span>
                                                 <span class=badge_class>{status_text}</span>
                                                 <span class=fmt_badge_class>{fmt_label}</span>
+                                                {if evt.visibility == api::EventVisibility::Private {
+                                                    view! { <span class="badge badge-warning-xs">"🔒 Private"</span> }.into_any()
+                                                } else {
+                                                    view! { <span></span> }.into_any()
+                                                }}
                                                 {if show_escrow_badge {
                                                     view! {
                                                         <span class=escrow_cls.clone()>{escrow_label.clone()}</span>
@@ -1113,6 +1123,11 @@ pub fn EventsPage(
                                             <span class="card-title">{ename.clone()}</span>
                                             <span class=badge_class>{status_text}</span>
                                             <span class=fmt_badge_class>{fmt_label}</span>
+                                            {if event.visibility == api::EventVisibility::Private {
+                                                view! { <span class="badge badge-warning-xs">"🔒 Private"</span> }.into_any()
+                                            } else {
+                                                view! { <span></span> }.into_any()
+                                            }}
                                             {if show_escrow_badge {
                                                 view! {
                                                     <span class=escrow_cls.clone()>{escrow_label.clone()}</span>
@@ -1355,6 +1370,11 @@ pub fn EventsPage(
                                         <span class="card-title" style="font-size:1rem">{ename}</span>
                                         <span class=badge_class>{status_text}</span>
                                         <span class=fmt_badge_class>{fmt_label}</span>
+                                        {if evt.visibility == api::EventVisibility::Private {
+                                            view! { <span class="badge badge-warning-xs">"🔒 Private"</span> }.into_any()
+                                        } else {
+                                            view! { <span></span> }.into_any()
+                                        }}
                                         {if ctx_show_escrow {
                                             view! { <span class=ctx_escrow_cls>{ctx_escrow_label}</span> }.into_any()
                                         } else {
@@ -1956,6 +1976,29 @@ pub fn EventsPage(
                                         api::EventFormat::Hybrid => "Both in-person and online tracks. In-person attendees deposit; online attendees complete quests.",
                                     }}
                                 </p>
+                            </div>
+
+                            // ── Visibility ──
+                            <div class="dep-config-row">
+                                <span class="dep-config-label">"Visibility"</span>
+                                <div class="radio-group">
+                                    <label class="radio-label">
+                                        <input type="radio" name="visibility" value="public"
+                                            checked=move || form.get().visibility == api::EventVisibility::Public
+                                            on:change=move |_| set_form.update(|f| f.visibility = api::EventVisibility::Public)
+                                        />
+                                        <span>"🌐 Public"</span>
+                                        <span class="form-hint">" — visible on landing page, anyone can register"</span>
+                                    </label>
+                                    <label class="radio-label">
+                                        <input type="radio" name="visibility" value="private"
+                                            checked=move || form.get().visibility == api::EventVisibility::Private
+                                            on:change=move |_| set_form.update(|f| f.visibility = api::EventVisibility::Private)
+                                        />
+                                        <span>"🔒 Private"</span>
+                                        <span class="form-hint">" — hidden from landing, requires sign-in + access"</span>
+                                    </label>
+                                </div>
                             </div>
 
                             // ── Capacity ──

@@ -269,6 +269,7 @@ pub async fn create_event(
         online_open_mode: req.online_open_mode.clone(),
         online_registration_open: req.online_registration_open,
         deposit_deadline_hours: req.deposit_deadline_hours,
+        visibility: req.visibility.clone(),
         created_at: now.clone(),
         updated_at: now,
         updated_by: updated_by.to_string(),
@@ -519,6 +520,9 @@ pub async fn update_event(
     }
     if let Some(v) = req.deposit_deadline_hours {
         config.deposit_deadline_hours = v;
+    }
+    if let Some(ref v) = req.visibility {
+        config.visibility = v.clone();
     }
 
     config.updated_at = chrono::Utc::now().to_rfc3339();
@@ -817,6 +821,7 @@ pub async fn seed_from_config(
         online_open_mode: event_checkin_domain::models::event::OnlineOpenMode::default(),
         online_registration_open: false,
         deposit_deadline_hours: None,
+        visibility: event_checkin_domain::models::event::EventVisibility::default(),
         created_at: now.clone(),
         updated_at: now,
         updated_by: String::new(), // seeded from config, no user context

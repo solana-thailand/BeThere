@@ -323,7 +323,7 @@ pub async fn require_identity(
 // ---------------------------------------------------------------------------
 
 /// Extract JWT from Authorization header or cookie.
-fn extract_token_from_request(req: &Request) -> Option<String> {
+pub fn extract_token_from_request(req: &Request) -> Option<String> {
     // Try Authorization header first (for API clients)
     if let Some(auth_header) = req
         .headers()

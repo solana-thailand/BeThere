@@ -113,6 +113,31 @@ impl OnlineOpenMode {
     }
 }
 
+/// Event visibility (mirrors backend EventVisibility).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum EventVisibility {
+    #[default]
+    Public,
+    Private,
+}
+
+impl EventVisibility {
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Public => "Public",
+            Self::Private => "Private",
+        }
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Public => "public",
+            Self::Private => "private",
+        }
+    }
+}
+
 /// Default true helper for serde.
 fn default_true_fn() -> bool {
     true
@@ -154,6 +179,8 @@ pub struct EventMeta {
     pub in_person_capacity: Option<u32>,
     #[serde(default)]
     pub online_capacity: Option<u32>,
+    #[serde(default)]
+    pub visibility: EventVisibility,
 }
 
 /// Full event configuration (from GET /api/events/{id}).
@@ -246,6 +273,8 @@ pub struct EventDetail {
     pub online_registration_open: bool,
     #[serde(default)]
     pub deposit_deadline_hours: Option<u32>,
+    #[serde(default)]
+    pub visibility: EventVisibility,
 }
 
 /// Response for GET /api/events — list all events.
@@ -341,6 +370,8 @@ pub struct CreateEventBody {
     pub online_registration_open: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub deposit_deadline_hours: Option<u32>,
+    #[serde(default)]
+    pub visibility: EventVisibility,
 }
 
 /// Request body for PUT /api/events/{id} — update event.
@@ -431,6 +462,8 @@ pub struct UpdateEventBody {
     pub online_registration_open: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub deposit_deadline_hours: Option<Option<u32>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub visibility: Option<EventVisibility>,
 }
 
 /// Response from event create/update (partial data).

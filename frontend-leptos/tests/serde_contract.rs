@@ -538,3 +538,27 @@ fn deposit_info_json_uses_snake_case_method() {
     let info: FakeDepositInfo = serde_json::from_str(json).expect("should parse deposit info");
     assert_eq!(info.method, DepositMethod::Thb);
 }
+
+// ================================================================================================
+// EventVisibility — public, private
+// ================================================================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+enum EventVisibility {
+    #[default]
+    Public,
+    Private,
+}
+
+#[test]
+fn event_visibility_round_trip() {
+    assert_round_trip(r#""public""#, EventVisibility::Public);
+    assert_round_trip(r#""private""#, EventVisibility::Private);
+}
+
+#[test]
+fn event_visibility_rejects_pascal_case() {
+    assert_unknown_variant::<EventVisibility>(r#""Public""#);
+    assert_unknown_variant::<EventVisibility>(r#""Private""#);
+}

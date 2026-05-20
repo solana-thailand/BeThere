@@ -14,7 +14,9 @@ use event_checkin_domain::models::adventure::AdventureStatus;
 use event_checkin_domain::models::api::{QrGenerationStatus, QuizStatus};
 use event_checkin_domain::models::attendee::CheckInStatus;
 use event_checkin_domain::models::deposit::DepositMethod;
-use event_checkin_domain::models::event::{EscrowStatus, EventFormat, EventStatus, OnlineOpenMode};
+use event_checkin_domain::models::event::{
+    EscrowStatus, EventFormat, EventStatus, EventVisibility, OnlineOpenMode,
+};
 
 // ================================================================================================
 // Helpers
@@ -216,6 +218,22 @@ fn qr_generation_status_rejects_pascal_case() {
 }
 
 // ================================================================================================
+// EventVisibility — public, private
+// ================================================================================================
+
+#[test]
+fn event_visibility_round_trip() {
+    assert_round_trip(r#""public""#, EventVisibility::Public);
+    assert_round_trip(r#""private""#, EventVisibility::Private);
+}
+
+#[test]
+fn event_visibility_rejects_pascal_case() {
+    assert_rejects_pascal_case::<EventVisibility>(r#""Public""#);
+    assert_rejects_pascal_case::<EventVisibility>(r#""Private""#);
+}
+
+// ================================================================================================
 // Integration — verify a full JSON payload with enum fields round-trips
 // ================================================================================================
 
@@ -238,11 +256,13 @@ fn full_event_meta_json_round_trips() {
         "max_refundable_deposits": 0,
         "escrow_address": "",
         "escrow_status": "initialized",
-        "event_format": "hybrid"
+        "event_format": "hybrid",
+        "visibility": "public"
     }"#;
 
     let meta: EventMeta = serde_json::from_str(json).expect("should parse EventMeta");
     assert_eq!(meta.status, EventStatus::Active);
     assert_eq!(meta.escrow_status, EscrowStatus::Initialized);
     assert_eq!(meta.event_format, EventFormat::Hybrid);
+    assert_eq!(meta.visibility, EventVisibility::Public);
 }

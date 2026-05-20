@@ -1,5 +1,5 @@
 //! Public event endpoint — returns sanitized event details by slug.
-//! No authentication required. Only Active/Completed events are visible.
+//! No authentication required for public events. Private events require auth.
 
 use axum::extract::{Path, State};
 use serde_json::{Value, json};
@@ -7,6 +7,7 @@ use serde_json::{Value, json};
 use crate::error::ApiOk;
 use crate::state::AppState;
 use event_checkin_domain::models::error::AppError;
+use event_checkin_domain::models::event::EventVisibility;
 
 /// `GET /api/public/events`
 ///
@@ -37,6 +38,7 @@ pub async fn list_public_events(
                 e.status,
                 event_checkin_domain::models::event::EventStatus::Active
             ) && e.event_end_ms > now_ms
+                && e.visibility == EventVisibility::Public
         })
         .map(|e| {
             json!({
@@ -55,6 +57,7 @@ pub async fn list_public_events(
                 "created_at": e.created_at,
                 "in_person_capacity": e.in_person_capacity,
                 "online_capacity": e.online_capacity,
+                "visibility": e.visibility.as_str(),
             })
         })
         .collect();
@@ -80,11 +83,13 @@ pub async fn list_public_events(
 ///
 /// Returns publicly visible event details for a given slug.
 /// Draft and Archived events return 404.
+/// Private events require authentication + access check.
 /// Sensitive fields (sheet_id, organizer_wallet, etc.) are excluded.
 #[worker::send]
 pub async fn get_public_event(
     State(state): State<AppState>,
     Path(slug): Path<String>,
+    request: axum::extract::Request,
 ) -> Result<ApiOk<Value>, crate::error::WorkerError> {
     let kv = state
         .events_kv
@@ -121,6 +126,29 @@ pub async fn get_public_event(
             return Err(AppError::NotFound(format!("event '{slug}' not found")).into());
         }
         _ => {}
+    }
+
+    // Gate private events — require auth + access check
+    if config.visibility == EventVisibility::Private {
+        let token = crate::auth::extract_token_from_request(&request);
+        match token {
+            Some(t) => {
+                let claims = crate::auth::verify_session_jwt(&t, &state.config.jwt_secret)
+                    .await
+                    .map_err(|_| {
+                        AppError::Unauthorized("authentication required for private event".into())
+                    })?;
+                crate::auth::check_event_access(&claims.email, &state, &config)
+                    .await
+                    .map_err(AppError::Forbidden)?;
+            }
+            None => {
+                return Err(AppError::Unauthorized(
+                    "authentication required for private event".into(),
+                )
+                .into());
+            }
+        }
     }
 
     tracing::info!(slug = %slug, "public event fetched");
@@ -177,6 +205,7 @@ pub async fn get_public_event(
         "in_person_available": in_person_available,
         "online_available": online_available,
         "online_open_mode": config.online_open_mode.as_str(),
+        "visibility": config.visibility.as_str(),
     })))
 }
 
