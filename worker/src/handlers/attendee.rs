@@ -13,10 +13,10 @@ use serde_json::json;
 use worker::KvStore;
 
 use crate::error::ApiOk;
-
 use event_checkin_domain::models::api::{
     AttendeeListItem, AttendeeResponse, RecentCheckIn, StatsResponse,
 };
+use event_checkin_domain::models::attendee::{Attendee, CheckInStatus, WalkinAttendee};
 use event_checkin_domain::models::auth::Claims;
 use event_checkin_domain::models::error::AppError;
 
@@ -25,6 +25,42 @@ use super::ext::{
 };
 use crate::sheets;
 use crate::state::AppState;
+
+/// Convert a walk-in attendee (from KV) into an Attendee (sheet-compatible)
+/// so it can be merged into the unified attendee list.
+fn walkin_to_attendee(w: &WalkinAttendee, row_index: usize) -> Attendee {
+    Attendee {
+        api_id: format!("walkin:{}", w.email),
+        first_name: String::new(),
+        last_name: String::new(),
+        name: w.name.clone(),
+        email: w.email.clone(),
+        ticket_name: "Walk-in".to_string(),
+        approval_status: CheckInStatus::CheckedIn,
+        participation_type: "In-Person".to_string(),
+        registration_date: None,
+        phone: w.phone.clone(),
+        contact_channel: None,
+        contact_handle: None,
+        deposit_agreed: None,
+        deposit_method: None,
+        deposit_amount: None,
+        deposit_tx_signature: None,
+        deposit_verified: None,
+        checked_in_at: Some(w.checked_in_at.clone()),
+        checked_in_by: Some(w.checked_in_by.clone()),
+        solana_address: w.wallet_address.clone(),
+        qr_code_url: None,
+        claim_token: Some(w.claim_token.clone()),
+        claimed_at: w.claimed_at.clone(),
+        bank_account: None,
+        bank_name: None,
+        account_name: None,
+        refund_status: None,
+        send_email_status: None,
+        row_index,
+    }
+}
 
 /// GET /api/attendees
 /// List attendees with cursor-based pagination and statistics.
@@ -43,12 +79,51 @@ pub async fn list_attendees(
     let event = resolve_event_with_access(&state, &claims, query.event_id.as_deref()).await?;
 
     let kv = resolve_kv(&state);
-    let attendees = sheets::get_attendees(&state, &event.sheet_id, &event.sheet_name, kv)
+
+    // 1. Fetch sheet-based attendees
+    let mut attendees = sheets::get_attendees(&state, &event.sheet_id, &event.sheet_name, kv)
         .await
         .map_err(|e| {
             tracing::error!("failed to fetch attendees: {e}");
             AppError::Internal(format!("failed to fetch attendees: {e}"))
         })?;
+
+    // 2. Merge walk-in attendees from KV (only for this event)
+    let sheet_len = attendees.len();
+    let walkin_attendees = match kv {
+        Some(k) => super::walkin::list_walkin_attendees(k, &event.id)
+            .await
+            .unwrap_or_else(|e| {
+                tracing::warn!(event_id = %event.id, error = %e, "failed to load walk-in attendees, skipping");
+                Vec::new()
+            }),
+        None => Vec::new(),
+    };
+
+    // Deduplicate: skip walk-ins whose email already exists in the sheet
+    // (they may have been synced already)
+    let sheet_emails: std::collections::HashSet<String> =
+        attendees.iter().map(|a| a.email.to_lowercase()).collect();
+
+    for (i, w) in walkin_attendees.iter().enumerate() {
+        if sheet_emails.contains(&w.email.to_lowercase()) {
+            continue;
+        }
+        // Assign row_index beyond sheet rows (sheet rows are 1-based)
+        let row_index = sheet_len + i + 1;
+        attendees.push(walkin_to_attendee(w, row_index));
+    }
+
+    let walkin_merged = attendees.len().saturating_sub(sheet_len);
+    if walkin_merged > 0 {
+        tracing::info!(
+            event_id = %event.id,
+            sheet_attendees = sheet_len,
+            walkin_merged,
+            total = attendees.len(),
+            "merged walk-in attendees into unified list"
+        );
+    }
 
     // Compute statistics over ALL attendees (not paginated)
     let total_approved: usize = attendees.iter().filter(|a| a.is_approved()).count();
