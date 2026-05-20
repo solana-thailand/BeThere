@@ -353,6 +353,56 @@ pub async fn update_event(
         .into());
     }
 
+    // SEC-ESCROW-RESET: Verify on-chain escrow is actually closed before allowing
+    // reset to None. Prevents confusing UI state when KV says "none" but on-chain
+    // escrow still holds funds.
+    if let Some(ref new_status) = body.escrow_status
+        && matches!(
+            new_status,
+            event_checkin_domain::models::event::EscrowStatus::None
+        )
+        && matches!(
+            existing_event.escrow_status,
+            event_checkin_domain::models::event::EscrowStatus::Closed
+                | event_checkin_domain::models::event::EscrowStatus::Cancelled
+        )
+        && !existing_event.escrow_address.is_empty()
+        && !existing_event.organizer_wallet.is_empty()
+    {
+        let on_chain_id = if existing_event.on_chain_event_id != 0 {
+            existing_event.on_chain_event_id
+        } else {
+            crate::handlers::deposit::derive_on_chain_event_id(&existing_event.id)
+        };
+
+        let rpc_url = state.config.solana.full_rpc_url();
+
+        match crate::solana_escrow::check_escrow_pda_available(
+            &rpc_url,
+            &existing_event.organizer_wallet,
+            on_chain_id,
+        )
+        .await
+        {
+            Ok(_) => {
+                tracing::info!(
+                    event_id = %id,
+                    "escrow PDA confirmed closed on-chain — reset to None allowed"
+                );
+            }
+            Err(e) => {
+                tracing::warn!(
+                    event_id = %id,
+                    error = %e,
+                    "escrow PDA still exists on-chain — rejecting reset to None"
+                );
+                return Err(AppError::Validation(
+                    "cannot reset escrow: on-chain escrow account still exists. Close it on-chain first.".to_string()
+                ).into());
+            }
+        }
+    }
+
     let config = crate::event_store::update_event(kv, &id, &body, &claims.email)
         .await
         .map_err(|e| {
@@ -379,6 +429,30 @@ pub async fn update_event(
         ),
     )
     .await;
+
+    // Audit log: escrow re-initialized (reset from Closed/Cancelled → None)
+    if body.escrow_status == Some(event_checkin_domain::models::event::EscrowStatus::None)
+        && matches!(
+            existing_event.escrow_status,
+            event_checkin_domain::models::event::EscrowStatus::Closed
+                | event_checkin_domain::models::event::EscrowStatus::Cancelled
+        )
+    {
+        let _ = crate::audit_store::append_event_audit(
+            kv,
+            &config.id,
+            crate::audit_store::create_entry(
+                &claims.email,
+                crate::audit_store::AuditAction::EscrowReinitialized,
+                &config.id,
+                &format!(
+                    "escrow reset from {} to none — ready for re-initialization",
+                    existing_event.escrow_status
+                ),
+            ),
+        )
+        .await;
+    }
 
     Ok(ApiOk::new(json!({
         "id": config.id,

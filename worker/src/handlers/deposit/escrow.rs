@@ -96,6 +96,19 @@ pub async fn init_escrow_tx_handler(
         super::derive_on_chain_event_id(&event.id)
     };
 
+    // Log potential re-initialization — event had escrow before but was cleared
+    if event.escrow_status == EscrowStatus::None
+        && !event.organizer_wallet.is_empty()
+        && event.escrow_address.is_empty()
+    {
+        tracing::warn!(
+            event_id = %event.id,
+            on_chain_event_id,
+            organizer_wallet = %event.organizer_wallet,
+            "escrow re-initialization detected — ensure previous escrow was fully closed on-chain"
+        );
+    }
+
     // Calculate event_end and refund_deadline as unix timestamps (seconds)
     let event_end = if event.event_end_ms > 0 {
         event.event_end_ms / 1000
@@ -1498,5 +1511,151 @@ pub async fn confirm_escrow_init_handler(
         escrow_address,
         on_chain_event_id,
         escrow_status: EscrowStatus::Initialized,
+    }))
+}
+
+// ---------------------------------------------------------------------------
+// GET /api/escrow/health — Escrow health check (KV vs on-chain comparison)
+// ---------------------------------------------------------------------------
+
+/// Response for the escrow health check endpoint.
+#[derive(Debug, serde::Serialize)]
+pub struct EscrowHealthResponse {
+    /// Event ID.
+    pub event_id: String,
+    /// Server-side escrow status from KV.
+    pub kv_escrow_status: String,
+    /// Server-side escrow address from KV.
+    pub kv_escrow_address: String,
+    /// Server-side on-chain event ID from KV.
+    pub kv_on_chain_event_id: u64,
+    /// Server-side organizer wallet from KV.
+    pub kv_organizer_wallet: String,
+    /// Whether the escrow account exists on-chain.
+    pub on_chain_exists: bool,
+    /// Derived escrow PDA address (if derivable).
+    pub derived_escrow_address: Option<String>,
+    /// Whether KV and on-chain states are consistent.
+    pub consistent: bool,
+    /// Human-readable diagnosis.
+    pub diagnosis: String,
+}
+
+/// GET /api/escrow/health?event_id=xxx
+///
+/// Compares server-side (KV) escrow state with on-chain reality.
+/// Returns a health report showing whether the two are in sync.
+///
+/// **Requires**: SuperAdmin or Organizer role.
+#[worker::send]
+pub async fn escrow_health_handler(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> Result<ApiOk<EscrowHealthResponse>, WorkerError> {
+    use event_checkin_domain::models::event::EscrowStatus;
+
+    let event_id = params
+        .get("event_id")
+        .ok_or_else(|| AppError::Validation("missing event_id query parameter".to_string()))?;
+
+    let kv = state
+        .events_kv
+        .as_ref()
+        .ok_or_else(|| AppError::Internal("EVENTS KV not configured".to_string()))?;
+
+    let event = crate::event_store::get_event_config(kv, event_id)
+        .await
+        .map_err(AppError::Internal)?
+        .ok_or_else(|| AppError::NotFound(format!("event '{event_id}' not found")))?;
+
+    // Access control
+    let is_organizer = event
+        .organizer_emails
+        .iter()
+        .any(|e| e.eq_ignore_ascii_case(&claims.email));
+    let is_super_admin = state
+        .config
+        .super_admin_emails
+        .contains(&claims.email.to_lowercase());
+
+    if !is_organizer && !is_super_admin {
+        return Err(AppError::Forbidden(
+            "only organizers or super admins can check escrow health".to_string(),
+        )
+        .into());
+    }
+
+    let kv_status = event.escrow_status.as_str().to_string();
+    let kv_address = event.escrow_address.clone();
+    let kv_event_id = event.on_chain_event_id;
+    let kv_wallet = event.organizer_wallet.clone();
+
+    // Derive on-chain info if possible
+    let on_chain_id = if kv_event_id != 0 {
+        kv_event_id
+    } else {
+        super::derive_on_chain_event_id(&event.id)
+    };
+
+    let mut derived_address: Option<String> = None;
+    let mut on_chain_exists = false;
+
+    if !kv_wallet.is_empty() {
+        // Derive PDA address
+        match crate::solana_escrow::derive_escrow_address(&kv_wallet, on_chain_id).await {
+            Ok(addr) => {
+                derived_address = Some(addr.clone());
+                // Check on-chain existence
+                let rpc_url = state.config.solana.full_rpc_url();
+                match crate::solana_escrow::verify_escrow_account_exists(
+                    &rpc_url,
+                    &kv_wallet,
+                    on_chain_id,
+                )
+                .await
+                {
+                    Ok(()) => on_chain_exists = true,
+                    Err(_) => on_chain_exists = false,
+                }
+            }
+            Err(e) => {
+                tracing::warn!(error = %e, "failed to derive escrow address for health check");
+            }
+        }
+    }
+
+    // Determine consistency and diagnosis
+    let (consistent, diagnosis) = match (&event.escrow_status, on_chain_exists) {
+        (EscrowStatus::None, false) => (true, "healthy: no escrow on server, no escrow on-chain".to_string()),
+        (EscrowStatus::None, true) => (false, "DRIFT: server says None but escrow exists on-chain. Escrow may have been initialized outside the UI or server state was reset while on-chain escrow is still active.".to_string()),
+        (EscrowStatus::Initialized, true) => (true, "healthy: escrow initialized on server and active on-chain".to_string()),
+        (EscrowStatus::Initialized, false) => (false, "DRIFT: server says Initialized but escrow not found on-chain. Escrow may have been closed without updating server, or init TX failed.".to_string()),
+        (EscrowStatus::Deactivated, true) => (true, "healthy: escrow deactivated on server and still exists on-chain (refunds/claims in progress)".to_string()),
+        (EscrowStatus::Deactivated, false) => (false, "DRIFT: server says Deactivated but escrow not found on-chain. Escrow may have been closed without updating server.".to_string()),
+        (EscrowStatus::Closed, false) => (true, "healthy: escrow closed on server and account gone from chain".to_string()),
+        (EscrowStatus::Closed, true) => (false, "DRIFT: server says Closed but escrow still exists on-chain. Close TX may have failed. DO NOT re-initialize until on-chain escrow is fully closed.".to_string()),
+        (EscrowStatus::Cancelled, false) => (true, "healthy: escrow cancelled on server and account gone from chain".to_string()),
+        (EscrowStatus::Cancelled, true) => (false, "DRIFT: server says Cancelled but escrow still exists on-chain.".to_string()),
+    };
+
+    tracing::info!(
+        event_id = %event.id,
+        kv_status = %kv_status,
+        on_chain_exists,
+        consistent,
+        "escrow health check completed"
+    );
+
+    Ok(ApiOk::new(EscrowHealthResponse {
+        event_id: event.id,
+        kv_escrow_status: kv_status,
+        kv_escrow_address: kv_address,
+        kv_on_chain_event_id: kv_event_id,
+        kv_organizer_wallet: kv_wallet,
+        on_chain_exists,
+        derived_escrow_address: derived_address,
+        consistent,
+        diagnosis,
     }))
 }

@@ -327,7 +327,16 @@ pub async fn update_event(
     // If escrow_address is set (escrow initialized on-chain), reject changes to
     // fields that are baked into the on-chain EventEscrow PDA.
     // Compare actual values — only reject if the values actually changed.
-    if !config.escrow_address.is_empty() {
+    //
+    // Exception: when escrow_status is being reset to None (re-initialization),
+    // the on-chain escrow was already verified as closed by the handler (SEC-ESCROW-RESET).
+    // Allow unlocking all fields so a fresh escrow can be created.
+    let is_escrow_reset = req
+        .escrow_status
+        .as_ref()
+        .is_some_and(|s| matches!(s, EscrowStatus::None));
+
+    if !config.escrow_address.is_empty() && !is_escrow_reset {
         let wallet_changed = req
             .organizer_wallet
             .as_ref()
@@ -465,6 +474,8 @@ pub async fn update_event(
             (EscrowStatus::None, EscrowStatus::Initialized)
                 | (EscrowStatus::Initialized, EscrowStatus::Deactivated)
                 | (EscrowStatus::Deactivated, EscrowStatus::Closed)
+                | (EscrowStatus::Closed, EscrowStatus::None)
+                | (EscrowStatus::Cancelled, EscrowStatus::None)
         );
         if !valid {
             return Err(format!(

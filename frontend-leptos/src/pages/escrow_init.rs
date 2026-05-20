@@ -1017,6 +1017,50 @@ pub fn EscrowInitPanel(
                                 "View on Solscan ↗"
                             </a>
                         </div>
+                        <div class="flex-wrap-row u-mt-sm" style="gap:0.5rem">
+                            <button
+                                class="btn btn-outline btn-sm"
+                                on:click=move |_| {
+                                    let eid = event_id_sig.get();
+                                    let set_s = set_state;
+                                    let set_f = set_form;
+                                    let set_t = set_t;
+                                    leptos::task::spawn_local(async move {
+                                        // Reset escrow fields server-side so re-init is allowed
+                                        let ts = form.get().updated_at.clone();
+                                        let reset_body = api::UpdateEventBody {
+                                            escrow_address: Some(String::new()),
+                                            escrow_status: Some(api::EscrowStatus::None),
+                                            on_chain_event_id: Some(0),
+                                            expected_updated_at: if ts.is_empty() { None } else { Some(ts) },
+                                            ..Default::default()
+                                        };
+                                        match api::update_event(&eid, &reset_body).await {
+                                            Ok(resp) => {
+                                                log::info!("[escrow-reset] escrow fields reset to none — ready for re-init");
+                                                set_f.update(|f| {
+                                                    f.escrow_address = String::new();
+                                                    f.on_chain_event_id = String::new();
+                                                    f.organizer_wallet = String::new();
+                                                    f.escrow_status = api::EscrowStatus::None;
+                                                    if !resp.updated_at.is_empty() {
+                                                        f.updated_at = resp.updated_at.clone();
+                                                    }
+                                                });
+                                                set_s.set(EscrowInitState::Idle);
+                                                components::show_toast(&set_t, "Escrow reset — ready to initialize a new escrow", components::ToastType::Success);
+                                            }
+                                            Err(e) => {
+                                                log::error!("[escrow-reset] failed to reset escrow: {e}");
+                                                components::show_toast(&set_t, &format!("Failed to reset escrow: {e}"), components::ToastType::Error);
+                                            }
+                                        }
+                                    });
+                                }
+                            >
+                                "Re-initialize Escrow"
+                            </button>
+                        </div>
                     </div>
                 }.into_any()
             }}

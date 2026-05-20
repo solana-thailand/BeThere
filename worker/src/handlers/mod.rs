@@ -221,6 +221,7 @@ pub fn routes(state: AppState) -> Router<()> {
             get(deposit::usdc_refund_queue_handler),
         )
         .route("/escrow/cancel-status", get(deposit::cancel_status_handler))
+        .route("/escrow/health", get(deposit::escrow_health_handler))
         // On-chain event indexing (protected — manual sync + query)
         .route("/escrow/sync", post(escrow_index::escrow_sync_handler))
         .route(

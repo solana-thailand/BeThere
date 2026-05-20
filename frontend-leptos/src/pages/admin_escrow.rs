@@ -143,23 +143,75 @@ pub fn AdminEscrow(
     // Per-action results — persists Solscan links across steps
     let (action_results, set_action_results) = signal(Vec::<(EscrowAction, Result<String, String>)>::new());
 
-    // Step ordering — must complete in sequence: Deactivate → Claim → Close
+    // Step ordering — Deactivate first, then Claim (optional) and Close.
+    // Claim Forfeited is skippable: if no deposits exist, on-chain close_event
+    // validates accounting independently (total_deposited == total_refunded + total_forfeited).
     let (step1_done, set_step1_done) = signal(false);
     let (step2_done, set_step2_done) = signal(false);
     let (confirm_close, set_confirm_close) = signal(false);
 
-    // Reset state when event changes
-    Effect::new(move |_| {
-        let _ = active_event_id.get();
-        set_wallet_name.set(String::new());
-        set_wallet_pk.set(String::new());
-        set_completed_actions.set(Vec::new());
-        set_signing_action.set(None);
-        set_action_results.set(Vec::new());
-        set_step1_done.set(false);
-        set_step2_done.set(false);
-        set_confirm_close.set(false);
-    });
+    // Reset state when event changes — also pre-populate step progress
+    // from server-side escrow_status so the UI reflects reality.
+    {
+        let set_wn = set_wallet_name.clone();
+        let set_wp = set_wallet_pk.clone();
+        let set_ca = set_completed_actions.clone();
+        let set_sa = set_signing_action.clone();
+        let set_ar = set_action_results.clone();
+        let set_s1 = set_step1_done.clone();
+        let set_s2 = set_step2_done.clone();
+        let set_cc = set_confirm_close.clone();
+        Effect::new(move |_| {
+            let eid = active_event_id.get();
+            set_wn.set(String::new());
+            set_wp.set(String::new());
+            set_ca.set(Vec::new());
+            set_sa.set(None);
+            set_ar.set(Vec::new());
+            set_s1.set(false);
+            set_s2.set(false);
+            set_cc.set(false);
+
+            // Fetch server-side escrow_status to pre-populate step state.
+            // This handles the case where escrow was deactivated in a previous
+            // session — the UI should show Step 1 as already done.
+            if let Some(ref event_id) = eid {
+                let set_s1 = set_s1.clone();
+                let set_s2 = set_s2.clone();
+                let set_ca = set_ca.clone();
+                let event_id = event_id.clone();
+                leptos::task::spawn_local(async move {
+                    match api::get_event_detail(&event_id).await {
+                        Ok(detail) => {
+                            match detail.event.escrow_status {
+                                api::EscrowStatus::Deactivated => {
+                                    log::info!("[admin-escrow] escrow already deactivated on server — pre-completing step 1");
+                                    set_s1.set(true);
+                                    set_ca.update(|v| v.push(EscrowAction::Deactivate));
+                                }
+                                api::EscrowStatus::Closed | api::EscrowStatus::Cancelled => {
+                                    log::info!("[admin-escrow] escrow already closed/cancelled — pre-completing all steps");
+                                    set_s1.set(true);
+                                    set_s2.set(true);
+                                    set_ca.update(|v| {
+                                        v.push(EscrowAction::Deactivate);
+                                        v.push(EscrowAction::ClaimForfeited);
+                                        v.push(EscrowAction::CloseEvent);
+                                    });
+                                }
+                                _ => {
+                                    log::info!("[admin-escrow] escrow status: {:?} — starting from step 1", detail.event.escrow_status.as_str());
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            log::warn!("[admin-escrow] failed to fetch event for escrow status: {e}");
+                        }
+                    }
+                });
+            }
+        });
+    }
 
     // Detect available wallets — poll sync detection with delays to wait
     // for late-injecting wallet extensions (Phantom injects asynchronously).
@@ -472,7 +524,7 @@ pub fn AdminEscrow(
                             }
                         }}
 
-                        // Step 2: Claim Forfeited
+                        // Step 2: Claim Forfeited (optional — skip if no deposits)
                         {move || {
                             let action = EscrowAction::ClaimForfeited;
                             let done = is_done(action);
@@ -526,12 +578,14 @@ pub fn AdminEscrow(
                             }
                         }}
 
-                        // Step 3: Close Event
+                        // Step 3: Close Event (ready after deactivate — claim is optional)
                         {move || {
                             let action = EscrowAction::CloseEvent;
                             let done = is_done(action);
                             let signing = signing_action.get() == Some(action);
-                            let ready = step2_done.get();
+                            // Close is ready after deactivate (step1), NOT gated on claim_forfeited.
+                            // On-chain close_event validates accounting independently.
+                            let ready = step1_done.get();
                             let confirming = confirm_close.get();
                             let border = if done { "var(--success,green)" } else if ready { "var(--border)" } else { "var(--border-disabled,#ccc)" };
                             let trigger = set_action_to_execute.clone();
@@ -600,7 +654,7 @@ pub fn AdminEscrow(
                     // ── Info note ──
                     <div style="margin-top:0.75rem;padding:0.5rem 0.75rem;border:1px dashed var(--border);border-radius:6px;background:var(--bg-secondary);font-size:0.7rem;color:var(--text-secondary)">
                         <strong>"Order matters:"</strong>
-                        " Deactivate before claiming forfeited. Claim before closing. "
+                        " Deactivate first. Claim Forfeited is optional (skip if no deposits). "
                         "Close reclaims rent and permanently closes the escrow account."
                     </div>
                 </Show>

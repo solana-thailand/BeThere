@@ -42,6 +42,7 @@ pub enum AuditAction {
     EscrowInitialized,
     EscrowDeactivated,
     EscrowClosed,
+    EscrowReinitialized,
 
     // Deposit lifecycle
     DepositSubmitted,
