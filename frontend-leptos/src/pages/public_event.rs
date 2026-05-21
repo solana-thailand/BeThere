@@ -1165,11 +1165,18 @@ fn render_loaded_event(
                                 .map(|s| s.split('&').next().unwrap_or(s).to_string())
                                 .unwrap_or_default();
 
-                            // Auto-redirect
                             let redirect_url = next_url.clone();
+                            let share_slug = current_slug.clone();
+
+                            // Countdown for auto-redirect — gives users time to share the link
+                            let (countdown, set_countdown) = signal(5u32);
+                            let redirect_url_for_timer = redirect_url.clone();
                             leptos::task::spawn_local(async move {
-                                gloo::timers::future::TimeoutFuture::new(1200).await;
-                                navigateTo(&redirect_url);
+                                for i in (1..=5).rev() {
+                                    gloo::timers::future::TimeoutFuture::new(1000).await;
+                                    set_countdown.set(i - 1);
+                                }
+                                navigateTo(&redirect_url_for_timer);
                             });
 
                             view! {
@@ -1186,8 +1193,27 @@ fn render_loaded_event(
                                             {format!("Signed in as {email}")}
                                         </p>
                                         <p style="color:var(--text-secondary);font-size:0.8rem;margin-top:0.5rem;">
-                                            "Redirecting..."
+                                            {move || format!("Continuing in {}...", countdown.get())}
                                         </p>
+                                        <div style="display:flex;gap:0.5rem;justify-content:center;margin-top:0.75rem;flex-wrap:wrap;">
+                                            <button
+                                                class="btn btn-primary btn-sm"
+                                                on:click=move |_| navigateTo(&redirect_url)
+                                            >
+                                                "Continue now →"
+                                            </button>
+                                            <button
+                                                class="btn btn-outline btn-sm"
+                                                on:click=move |_| {
+                                                    let window = web_sys::window().expect("no window");
+                                                    let url = format!("{}/e/{share_slug}", window.location().origin().unwrap_or_default());
+                                                    let _ = share_event_js("", &url);
+                                                }
+                                            >
+                                                <Icon icon=IconName::Link class="icon-sm" />
+                                                " Share Event"
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             }.into_any()

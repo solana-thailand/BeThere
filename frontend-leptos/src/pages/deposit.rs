@@ -1792,8 +1792,7 @@ pub fn Deposit() -> impl IntoView {
                                                             } else {
                                                                 let items: Vec<_> = matches.into_iter().map(|bank| {
                                                                     let bank_val = bank.1.to_string();
-                                                                    let code = bank.0.to_string();
-                                                                    let full = bank.1.to_string();
+                                                                    let bank_display = bank_val.clone();
                                                                     view! {
                                                                         <div
                                                                             class="bank-dropdown-item"
@@ -1803,8 +1802,7 @@ pub fn Deposit() -> impl IntoView {
                                                                                 set_show_bank_dropdown.set(false);
                                                                             }
                                                                         >
-                                                                            <span class="bank-dropdown-code">{code}</span>
-                                                                            <span class="bank-dropdown-name">{full}</span>
+                                                                            <span class="bank-dropdown-name">{bank_display}</span>
                                                                         </div>
                                                                     }
                                                                 }).collect();

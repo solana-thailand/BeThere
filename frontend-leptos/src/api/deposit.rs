@@ -117,6 +117,7 @@ pub struct ThbDepositInfo {
 
 #[derive(Debug, Clone, Default, serde::Deserialize)]
 pub struct PendingSlipResponse {
+    #[serde(default)]
     pub slips: Vec<ThbDepositInfo>,
 }
 

@@ -187,7 +187,7 @@ pub struct VerifySlipRequest {
 /// Response for GET /api/deposit/thb/pending — list of unverified slips.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PendingSlipResponse {
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
     pub slips: Vec<ThbDeposit>,
 }
 
