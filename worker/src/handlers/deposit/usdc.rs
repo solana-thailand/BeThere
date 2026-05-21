@@ -674,6 +674,66 @@ pub async fn confirm_deposit_handler(
                             "USDC deposit confirmed on-chain"
                         );
 
+                        // Write deposit columns (N, O, Q) to Google Sheet + auto-generate QR
+                        let deposit_amount_str = status.amount.to_string();
+                        if let (Ok(mapping), Ok(Some(attendee))) = (
+                            crate::sheets::get_column_mapping(
+                                &state,
+                                &event.sheet_id,
+                                &event.sheet_name,
+                                Some(kv),
+                            )
+                            .await,
+                            crate::sheets::get_attendee_by_id(
+                                &query.attendee_id,
+                                &state,
+                                &event.sheet_id,
+                                &event.sheet_name,
+                                Some(kv),
+                            )
+                            .await,
+                        ) {
+                            let ctx = crate::sheets::write::SheetContext {
+                                mapping: &mapping,
+                                state: &state,
+                                sheet_id: &event.sheet_id,
+                                sheet_name: &event.sheet_name,
+                                kv: Some(kv),
+                            };
+
+                            // Write deposit columns to sheet
+                            if let Err(e) = crate::sheets::write::write_deposit_verification(
+                                attendee.row_index,
+                                "USDC",
+                                &deposit_amount_str,
+                                true,
+                                &ctx,
+                            )
+                            .await
+                            {
+                                tracing::warn!(error = %e, "failed to write deposit verification to sheet (non-fatal)");
+                            }
+
+                            // Auto-generate QR if attendee doesn't have one
+                            if attendee.qr_code_url.as_ref().is_none_or(|u| u.is_empty()) {
+                                let server_url = &state.config.server.url;
+                                let qr_url =
+                                    format!("{server_url}/staff/?scan={}", attendee.api_id);
+                                if let Err(e) = crate::sheets::write::update_qr_urls(
+                                    &[(attendee.row_index, qr_url)],
+                                    &mapping,
+                                    &state,
+                                    &event.sheet_id,
+                                    &event.sheet_name,
+                                    Some(kv),
+                                )
+                                .await
+                                {
+                                    tracing::warn!(error = %e, "failed to auto-generate QR for verified attendee (non-fatal)");
+                                }
+                            }
+                        }
+
                         Ok(ApiOk::new(ConfirmDepositResponse {
                             confirmed: true,
                             tx_signature: Some(sig.clone()),
@@ -913,6 +973,68 @@ async fn verify_and_confirm_deposit(state: &AppState, body: &UpdateDepositSignat
                     ),
                 )
                 .await;
+
+                // Write deposit columns to sheet + auto-generate QR (non-blocking)
+                let deposit_amount_str = deposit_status.amount.to_string();
+                // Can't collapse: inner lookups depend on event_config bound by this pattern
+                #[allow(clippy::collapsible_if)]
+                if let Ok(Some(event_config)) =
+                    event_store::get_event_config(kv, &body.event_id).await
+                {
+                    if let (Ok(mapping), Ok(Some(attendee))) = (
+                        crate::sheets::get_column_mapping(
+                            state,
+                            &event_config.sheet_id,
+                            &event_config.sheet_name,
+                            Some(kv),
+                        )
+                        .await,
+                        crate::sheets::get_attendee_by_id(
+                            &body.attendee_id,
+                            state,
+                            &event_config.sheet_id,
+                            &event_config.sheet_name,
+                            Some(kv),
+                        )
+                        .await,
+                    ) {
+                        let ctx = crate::sheets::write::SheetContext {
+                            mapping: &mapping,
+                            state,
+                            sheet_id: &event_config.sheet_id,
+                            sheet_name: &event_config.sheet_name,
+                            kv: Some(kv),
+                        };
+
+                        if let Err(e) = crate::sheets::write::write_deposit_verification(
+                            attendee.row_index,
+                            "USDC",
+                            &deposit_amount_str,
+                            true,
+                            &ctx,
+                        )
+                        .await
+                        {
+                            tracing::warn!(error = %e, "failed to write deposit verification to sheet in background");
+                        }
+                        if attendee.qr_code_url.as_ref().is_none_or(|u| u.is_empty()) {
+                            let server_url = &state.config.server.url;
+                            let qr_url = format!("{server_url}/staff/?scan={}", attendee.api_id);
+                            if let Err(e) = crate::sheets::write::update_qr_urls(
+                                &[(attendee.row_index, qr_url)],
+                                &mapping,
+                                state,
+                                &event_config.sheet_id,
+                                &event_config.sheet_name,
+                                Some(kv),
+                            )
+                            .await
+                            {
+                                tracing::warn!(error = %e, "failed to auto-generate QR in background");
+                            }
+                        }
+                    }
+                }
             }
             Ok(None) => {
                 tracing::warn!(

@@ -95,7 +95,17 @@ enum RegState {
     Idle,
     Submitting,
     Success(RegisterData),
+    /// API/network error only. Field validation uses `field_errors`.
     Error(String),
+}
+
+/// Inline field-level validation errors.
+#[derive(Clone, Debug, Default)]
+struct FieldErrors {
+    name: Option<String>,
+    contact_channel: Option<String>,
+    contact_handle: Option<String>,
+    deposit_agreed: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -1368,6 +1378,9 @@ fn render_registration_form(
     // Pre-fill email from JWT
     set_reg_email.set(locked_email.clone());
 
+    // Inline field validation errors
+    let (field_errors, set_field_errors) = signal(FieldErrors::default());
+
     view! {
         {move || {
             let current_reg = reg_state.get();
@@ -1455,13 +1468,22 @@ fn render_registration_form(
                             </div>
                             <div style="display:flex;flex-direction:column;gap:0.75rem;">
                                 // Name
-                                <input
-                                    type="text"
-                                    placeholder="Your name"
-                                    prop:value=move || reg_name.get()
-                                    on:input=move |ev| set_reg_name.set(event_target_value(&ev))
-                                    style="width:100%;padding:0.6rem 0.8rem;background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:0.9rem;outline:none;"
-                                />
+                                <div style="display:flex;flex-direction:column;gap:0.25rem;">
+                                    <input
+                                        type="text"
+                                        placeholder="Your name"
+                                        prop:value=move || reg_name.get()
+                                        on:input=move |ev| {
+                                            set_reg_name.set(event_target_value(&ev));
+                                            set_field_errors.update(|e| e.name = None);
+                                        }
+                                        style=move || format!("width:100%;padding:0.6rem 0.8rem;background:var(--bg-secondary);border:1px solid {};border-radius:var(--radius);color:var(--text-primary);font-size:0.9rem;outline:none;", if field_errors.get().name.is_some() { "#f87171" } else { "var(--border)" })
+                                    />
+                                    {move || match &field_errors.get().name {
+                                        Some(err) => view! { <span style="color:#f87171;font-size:0.8rem;">{err.clone()}</span> }.into_any(),
+                                        None => view! { <div></div> }.into_any(),
+                                    }}
+                                </div>
                                 // Email — locked (read-only, from Google account)
                                 <input
                                     type="email"
@@ -1513,8 +1535,11 @@ fn render_registration_form(
                                         }}
                                     </label>
                                     <select
-                                        style="width:100%;padding:0.6rem 0.8rem;background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:0.9rem;outline:none;"
-                                        on:change=move |ev| set_reg_contact_channel.set(event_target_value(&ev))
+                                        style=move || format!("width:100%;padding:0.6rem 0.8rem;background:var(--bg-secondary);border:1px solid {};border-radius:var(--radius);color:var(--text-primary);font-size:0.9rem;outline:none;", if field_errors.get().contact_channel.is_some() { "#f87171" } else { "var(--border)" })
+                                        on:change=move |ev| {
+                                            set_reg_contact_channel.set(event_target_value(&ev));
+                                            set_field_errors.update(|e| e.contact_channel = None);
+                                        }
                                     >
                                         <option value="">"Select channel..."</option>
                                         <option value="Telegram">"Telegram"</option>
@@ -1522,15 +1547,28 @@ fn render_registration_form(
                                         <option value="Facebook">"Facebook"</option>
                                         <option value="X (Twitter)">"X (Twitter)"</option>
                                     </select>
+                                    {move || match &field_errors.get().contact_channel {
+                                        Some(err) => view! { <span style="color:#f87171;font-size:0.8rem;">{err.clone()}</span> }.into_any(),
+                                        None => view! { <div></div> }.into_any(),
+                                    }}
                                 </div>
                                 // Contact Handle
-                                <input
-                                    type="text"
-                                    placeholder="Username or profile link / โปรดระบุ Username หรือลิงก์โปรไฟล์"
-                                    prop:value=move || reg_contact_handle.get()
-                                    on:input=move |ev| set_reg_contact_handle.set(event_target_value(&ev))
-                                    style="width:100%;padding:0.6rem 0.8rem;background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);color:var(--text-primary);font-size:0.9rem;outline:none;"
-                                />
+                                <div style="display:flex;flex-direction:column;gap:0.25rem;">
+                                    <input
+                                        type="text"
+                                        placeholder="Username or profile link / โปรดระบุ Username หรือลิงก์โปรไฟล์"
+                                        prop:value=move || reg_contact_handle.get()
+                                        on:input=move |ev| {
+                                            set_reg_contact_handle.set(event_target_value(&ev));
+                                            set_field_errors.update(|e| e.contact_handle = None);
+                                        }
+                                        style=move || format!("width:100%;padding:0.6rem 0.8rem;background:var(--bg-secondary);border:1px solid {};border-radius:var(--radius);color:var(--text-primary);font-size:0.9rem;outline:none;", if field_errors.get().contact_handle.is_some() { "#f87171" } else { "var(--border)" })
+                                    />
+                                    {move || match &field_errors.get().contact_handle {
+                                        Some(err) => view! { <span style="color:#f87171;font-size:0.8rem;">{err.clone()}</span> }.into_any(),
+                                        None => view! { <div></div> }.into_any(),
+                                    }}
+                                </div>
                                 // Deposit Agreement (only when deposit enabled)
                                 {move || {
                                     if has_deposit {
@@ -1541,10 +1579,17 @@ fn render_registration_form(
                                                     type="checkbox"
                                                     style="margin-top:0.2rem;accent-color:var(--accent);"
                                                     checked=move || reg_deposit_agreed.get()
-                                                    on:change=move |ev| set_reg_deposit_agreed.set(event_target_checked(&ev))
+                                                    on:change=move |ev| {
+                                                        set_reg_deposit_agreed.set(event_target_checked(&ev));
+                                                        set_field_errors.update(|e| e.deposit_agreed = None);
+                                                    }
                                                 />
                                                 <span>{format!("ยอมรับการจ่ายมัดจำ {} (จะได้รับคืนภายในงาน) / I agree to pay a {} commitment deposit to secure my seat and understand I will receive a refund upon check-in at the venue.", dep_label, dep_label)}</span>
                                             </label>
+                                            {move || match &field_errors.get().deposit_agreed {
+                                                Some(err) => view! { <span style="color:#f87171;font-size:0.8rem;margin-left:1.5rem;">{err.clone()}</span> }.into_any(),
+                                                None => view! { <div></div> }.into_any(),
+                                            }}
                                         }.into_any()
                                     } else {
                                         ().into_any()
@@ -1565,21 +1610,28 @@ fn render_registration_form(
                                                 let deposit_val = reg_deposit_agreed.get();
                                                 let email_val = email_sub.clone();
 
-                                                // Client-side validation
+                                                // Client-side validation — set inline field errors
+                                                let mut errors = FieldErrors::default();
                                                 if name_val.trim().is_empty() {
-                                                    set_reg_state.set(RegState::Error("Please enter your name".to_string()));
-                                                    return;
+                                                    errors.name = Some("Name is required".to_string());
                                                 }
                                                 if require_contact && channel_val.trim().is_empty() {
-                                                    set_reg_state.set(RegState::Error("Please select a preferred contact channel".to_string()));
-                                                    return;
+                                                    errors.contact_channel = Some("Please select a channel".to_string());
                                                 }
                                                 if require_contact && handle_val.trim().is_empty() {
-                                                    set_reg_state.set(RegState::Error("Please provide your contact username or profile link".to_string()));
-                                                    return;
+                                                    errors.contact_handle = Some("Please provide your contact info".to_string());
                                                 }
                                                 if has_deposit && !deposit_val {
-                                                    set_reg_state.set(RegState::Error("You must agree to the deposit commitment to register".to_string()));
+                                                    errors.deposit_agreed = Some("You must agree to the deposit".to_string());
+                                                }
+
+                                                let has_errors = errors.name.is_some()
+                                                    || errors.contact_channel.is_some()
+                                                    || errors.contact_handle.is_some()
+                                                    || errors.deposit_agreed.is_some();
+                                                set_field_errors.set(errors);
+
+                                                if has_errors {
                                                     return;
                                                 }
 

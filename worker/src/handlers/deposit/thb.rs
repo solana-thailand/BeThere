@@ -383,6 +383,62 @@ pub async fn verify_thb_slip_handler(
         "THB deposit slip verified"
     );
 
+    // Write deposit columns (N, O, Q) to Google Sheet + auto-generate QR if approved
+    if body.approved {
+        let deposit_amount_thb = thb_deposit.amount_thb.to_string();
+        if let (Ok(mapping), Ok(Some(attendee))) = (
+            crate::sheets::get_column_mapping(&state, &event.sheet_id, &event.sheet_name, Some(kv))
+                .await,
+            crate::sheets::get_attendee_by_id(
+                &body.attendee_id,
+                &state,
+                &event.sheet_id,
+                &event.sheet_name,
+                Some(kv),
+            )
+            .await,
+        ) {
+            let ctx = crate::sheets::write::SheetContext {
+                mapping: &mapping,
+                state: &state,
+                sheet_id: &event.sheet_id,
+                sheet_name: &event.sheet_name,
+                kv: Some(kv),
+            };
+
+            // Write deposit columns to sheet
+            if let Err(e) = crate::sheets::write::write_deposit_verification(
+                attendee.row_index,
+                "THB",
+                &deposit_amount_thb,
+                true,
+                &ctx,
+            )
+            .await
+            {
+                tracing::warn!(error = %e, "failed to write deposit verification to sheet (non-fatal)");
+            }
+
+            // Auto-generate QR if attendee doesn't have one
+            if attendee.qr_code_url.as_ref().is_none_or(|u| u.is_empty()) {
+                let server_url = &state.config.server.url;
+                let qr_url = format!("{server_url}/staff/?scan={}", attendee.api_id);
+                if let Err(e) = crate::sheets::write::update_qr_urls(
+                    &[(attendee.row_index, qr_url)],
+                    &mapping,
+                    &state,
+                    &event.sheet_id,
+                    &event.sheet_name,
+                    Some(kv),
+                )
+                .await
+                {
+                    tracing::warn!(error = %e, "failed to auto-generate QR for verified attendee (non-fatal)");
+                }
+            }
+        }
+    }
+
     let msg = if body.approved {
         "deposit verified"
     } else {

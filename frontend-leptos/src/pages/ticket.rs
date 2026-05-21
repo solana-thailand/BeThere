@@ -340,6 +340,17 @@ pub fn Ticket() -> impl IntoView {
                                                 "Your registration is being reviewed."
                                             </p>
                                         }.into_any()
+                                    } else if deposit_info.as_ref().is_some_and(|d| !d.verified) {
+                                        // Approved but deposit not yet verified — don't show QR yet
+                                        view! {
+                                            <div class="ticket-status-badge ticket-status-pending">
+                                                <Icon icon=IconName::Hourglass class="icon-sm" />
+                                                " Awaiting Deposit Verification"
+                                            </div>
+                                            <p class="ticket-status-detail">
+                                                "Your deposit is being verified. QR code will appear once confirmed."
+                                            </p>
+                                        }.into_any()
                                     } else {
                                         view! {
                                             <div class="ticket-status-badge ticket-status-ready">

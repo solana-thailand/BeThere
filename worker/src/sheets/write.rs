@@ -10,6 +10,20 @@ use crate::state::AppState;
 use super::{get_cached_access_token, invalidate_attendee_cache, invalidate_column_map_cache};
 
 // ---------------------------------------------------------------------------
+// Sheet write context — bundles repeated sheet operation parameters
+// ---------------------------------------------------------------------------
+
+/// Bundles the parameters commonly passed to sheet mutation functions.
+/// Reduces argument count and avoids repeating sheet_id/sheet_name/kv everywhere.
+pub struct SheetContext<'a> {
+    pub mapping: &'a ColumnMapping,
+    pub state: &'a AppState,
+    pub sheet_id: &'a str,
+    pub sheet_name: &'a str,
+    pub kv: Option<&'a KvStore>,
+}
+
+// ---------------------------------------------------------------------------
 // Sheet mutations
 // ---------------------------------------------------------------------------
 
@@ -703,5 +717,69 @@ pub async fn write_bank_info(
     tracing::info!(row_index = row_index, "wrote bank info to google sheet");
 
     invalidate_attendee_cache(kv, sheet_id, sheet_name).await;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Deposit verification — write N (deposit_method), O (deposit_amount), Q (deposit_verified)
+// ---------------------------------------------------------------------------
+
+/// Write deposit verification columns to the Google Sheet.
+/// Called when a deposit is verified (THB slip approved or USDC on-chain confirmed).
+pub async fn write_deposit_verification(
+    row_index: usize,
+    deposit_method: &str,
+    deposit_amount: &str,
+    verified: bool,
+    ctx: &SheetContext<'_>,
+) -> Result<(), String> {
+    let access_token = get_cached_access_token(ctx.state, ctx.kv).await?;
+
+    use event_checkin_domain::models::attendee::ColumnKey as CK;
+
+    let col_method = ctx.mapping.column_letter(CK::DepositMethod);
+    let col_amount = ctx.mapping.column_letter(CK::DepositAmount);
+    let col_verified = ctx.mapping.column_letter(CK::DepositVerified);
+
+    let data = vec![
+        ValueRange {
+            range: format!("{}!{}{}", ctx.sheet_name, col_method, row_index),
+            values: vec![vec![deposit_method.to_string()]],
+        },
+        ValueRange {
+            range: format!("{}!{}{}", ctx.sheet_name, col_amount, row_index),
+            values: vec![vec![deposit_amount.to_string()]],
+        },
+        ValueRange {
+            range: format!("{}!{}{}", ctx.sheet_name, col_verified, row_index),
+            values: vec![vec![if verified {
+                "Yes".to_string()
+            } else {
+                "No".to_string()
+            }]],
+        },
+    ];
+
+    let url = format!(
+        "https://sheets.googleapis.com/v4/spreadsheets/{}/values:batchUpdate",
+        ctx.sheet_id
+    );
+
+    let body = BatchUpdateRequest {
+        data,
+        value_input_option: "USER_ENTERED".to_string(),
+    };
+
+    batch_update_sheet(&url, &body, &access_token).await?;
+
+    tracing::info!(
+        row_index = row_index,
+        method = %deposit_method,
+        amount = %deposit_amount,
+        verified = verified,
+        "wrote deposit verification to google sheet"
+    );
+
+    invalidate_attendee_cache(ctx.kv, ctx.sheet_id, ctx.sheet_name).await;
     Ok(())
 }
