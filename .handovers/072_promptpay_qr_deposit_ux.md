@@ -49,7 +49,7 @@ Continued the BeThere deposit/attendee UX improvement session. Two commit batche
 ## Remain Work
 
 ### Immediate
-- [ ] Deploy to production
+- [x] Deploy to production — pushed `e08998e` to origin/main
 - [ ] End-to-end test full flow: register → deposit → admin verify → check sheet columns N/O/Q → QR appears on ticket page
 
 ### Known Limitations (unchanged)
@@ -58,7 +58,7 @@ Continued the BeThere deposit/attendee UX improvement session. Two commit batche
 - [ ] Metaplex Explorer lag on devnet
 
 ### Future UX Improvements
-- [ ] Ticket page auto-refresh (10s polling)
+- [x] ~~Ticket page auto-refresh (10s polling)~~ — Implemented in commit `e08998e`
 - [ ] USDC QR payment poll timeout + retry button
 - [ ] Quiz submit error toast
 - [ ] Wallet confirmation dialog before NFT minting
