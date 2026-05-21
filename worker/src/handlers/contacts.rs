@@ -4,13 +4,13 @@
 //! master contacts sheet that tracks all attendees across all events.
 
 use axum::extract::State;
-use event_checkin_domain::models::api::ApiOk;
 use serde::Serialize;
 
-use crate::error::WorkerError;
+use crate::error::{ApiOk, WorkerError};
 use crate::sheets;
 use crate::sheets::contacts::{self, ContactUpsert};
 use crate::state::AppState;
+use event_checkin_domain::models::error::AppError;
 
 // ---------------------------------------------------------------------------
 // GET /api/contacts — list all deduplicated contacts
@@ -42,7 +42,7 @@ pub async fn list_contacts_handler(
         kv,
     )
     .await
-    .map_err(|e| crate::error::AppError::Internal(e))?;
+    .map_err(|e| AppError::Internal(e))?;
 
     let total = contacts.len();
     Ok(ApiOk::new(ContactsListResponse { contacts, total }))
@@ -89,7 +89,7 @@ pub async fn contacts_stats_handler(
         kv,
     )
     .await
-    .map_err(|e| crate::error::AppError::Internal(e))?;
+    .map_err(|e| AppError::Internal(e))?;
 
     let total_contacts = all_contacts.len();
     let repeat_attendees = all_contacts.iter().filter(|c| c.event_count > 1).count();
@@ -141,20 +141,18 @@ pub async fn sync_contacts_handler(
 ) -> Result<ApiOk<ContactsSyncResponse>, WorkerError> {
     let contacts_config = &state.config.sheets;
     if contacts_config.contacts_sheet_id.is_empty() {
-        return Err(crate::error::AppError::Validation(
-            "CONTACTS_SHEET_ID not configured".to_string(),
-        )
-        .into());
+        return Err(AppError::Validation("CONTACTS_SHEET_ID not configured".to_string()).into());
     }
 
-    let kv = state.events_kv.as_ref().ok_or_else(|| {
-        crate::error::AppError::Internal("EVENTS KV namespace not configured".to_string())
-    })?;
+    let kv = state
+        .events_kv
+        .as_ref()
+        .ok_or_else(|| AppError::Internal("EVENTS KV namespace not configured".to_string()))?;
 
     // Load all events
     let index = crate::event_store::get_event_index(kv)
         .await
-        .map_err(crate::error::AppError::Internal)?;
+        .map_err(AppError::Internal)?;
 
     let mut synced = 0usize;
     let mut added = 0usize;
@@ -178,7 +176,7 @@ pub async fn sync_contacts_handler(
     for event_meta in &index.events {
         let config = match crate::event_store::get_event_config(kv, &event_meta.id)
             .await
-            .map_err(crate::error::AppError::Internal)?
+            .map_err(AppError::Internal)?
         {
             Some(c) => c,
             None => continue,

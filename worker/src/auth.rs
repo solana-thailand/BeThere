@@ -521,6 +521,8 @@ mod tests {
                 sheet_id: "test-sheet-id".to_string(),
                 sheet_name: "Sheet1".to_string(),
                 staff_sheet_name: "staff".to_string(),
+                contacts_sheet_id: String::new(),
+                contacts_sheet_name: "Contacts".to_string(),
             },
             jwt_secret: "test-jwt-secret".to_string(),
             staff_emails: [

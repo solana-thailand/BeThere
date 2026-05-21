@@ -253,7 +253,7 @@ async fn put_json_ignore(
         .map_err(|e| format!("PUT {url} failed: {e:?}"))?;
 
     // Check status
-    let status = response.status();
+    let status = response.status_code();
     if !(200..300).contains(&status) {
         let text = response.text().await.unwrap_or_default();
         return Err(format!("PUT {url} returned {status}: {text}"));
