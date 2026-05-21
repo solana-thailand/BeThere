@@ -20,6 +20,28 @@ use crate::api::{
     self, CloseDepositRequest, ConfirmDepositResponse, DepositMethod, DepositStatusResponse, RefundTxRequest,
     ThbSlipUploadRequest, UsdcDepositRequest,
 };
+
+// Thai banks (2c2p payout codes)
+const THAI_BANKS: &[(&str, &str)] = &[
+    ("002", "Bangkok Bank (BBL)"),
+    ("004", "Kasikornbank (KBANK)"),
+    ("006", "Krung Thai Bank (KTB)"),
+    ("011", "TMB Bank (TTB)"),
+    ("014", "Siam Commercial Bank (SCB)"),
+    ("022", "CIMB Thai Bank (CIMB)"),
+    ("024", "United Overseas Bank Thai (UOBT)"),
+    ("025", "Bank of Ayudhya (BAY)"),
+    ("065", "Thanachart Bank"),
+    ("066", "Islamic Bank of Thailand"),
+    ("067", "Tisco Bank"),
+    ("069", "Kiatnakin Bank (KK)"),
+    ("070", "ICBC Thai"),
+    ("071", "Thai Credit Retail Bank (TCRB)"),
+    ("073", "Land and Houses Bank (LHBANK)"),
+    ("030", "Government Saving Bank (GSB)"),
+    ("033", "Government Housing Bank (GHB)"),
+    ("034", "Bank for Agriculture (BAAC)"),
+];
 use crate::components::{self, Toast, ToastType};
 use crate::icons::{Icon, IconName, wallet_icon_name};
 use crate::utils::{format_timestamp, solscan_tx_url, get_cluster};
@@ -64,6 +86,13 @@ extern "C" {
     /// `reference` is an optional note shown in the banking app (EMVCo Tag 62 sub-tag 01).
     #[wasm_bindgen(js_name = "generatePromptPayQr")]
     fn generate_promptpay_qr_js(promptpay_id: &str, amount: f64, reference: &str) -> Option<String>;
+}
+
+#[wasm_bindgen(module = "/js/download.js")]
+extern "C" {
+    /// Download a data URL as a file.
+    #[wasm_bindgen(js_name = "downloadDataUrl")]
+    fn download_data_url(data_url: &str, filename: &str);
 }
 
 // ---------------------------------------------------------------------------
@@ -368,6 +397,7 @@ pub fn Deposit() -> impl IntoView {
     let (bank_account_input, set_bank_account_input) = signal(String::new());
     let (bank_name_input, set_bank_name_input) = signal(String::new());
     let (account_name_input, set_account_name_input) = signal(String::new());
+    let (show_bank_dropdown, set_show_bank_dropdown) = signal(false);
 
     // File input ref for slip image upload
     let file_input_ref = NodeRef::<leptos::html::Input>::new();
@@ -1644,11 +1674,24 @@ pub fn Deposit() -> impl IntoView {
                                                             let pp_qr_string = generate_promptpay_qr_js(&pp_id, pp_amount, &pp_reference);
                                                             let pp_qr_image = pp_qr_string.as_ref().and_then(|s| generate_qr_data_url_js(s, 256));
                                                             match pp_qr_image {
-                                                                Some(url) => view! {
-                                                                    <div class="qr-wrapper">
-                                                                        <img src=url alt="PromptPay QR" class="qr-img-md" />
-                                                                    </div>
-                                                                }.into_any(),
+                                                                Some(url) => {
+                                                                    let url_for_save = url.clone();
+                                                                    let pp_amount_for_filename = pp_amount_display;
+                                                                    view! {
+                                                                        <div class="qr-wrapper">
+                                                                            <img src=url alt="PromptPay QR" class="qr-img-md" />
+                                                                        </div>
+                                                                        <button
+                                                                            class="btn btn-outline btn-sm u-mt-sm"
+                                                                            on:click=move |_| {
+                                                                                download_data_url(&url_for_save, &format!("promptpay-{pp_amount_for_filename}THB-qr.png"));
+                                                                            }
+                                                                        >
+                                                                            <Icon icon=IconName::Save class="icon-sm" />
+                                                                            " Save QR Code"
+                                                                        </button>
+                                                                    }.into_any()
+                                                                },
                                                                 None => view! {
                                                                     <p class="hint-2xs">"QR generation failed — please pay manually."
                                                                     </p>
@@ -1716,16 +1759,64 @@ pub fn Deposit() -> impl IntoView {
                                                         set_bank_account_input.set(val);
                                                     }
                                                 />
-                                                <input
-                                                    type="text"
-                                                    class="form-input dep-input u-mt-xs"
-                                                    placeholder="Bank name (e.g. KBank, SCB)"
-                                                    prop:value=move || bank_name_input.get()
-                                                    on:input=move |ev| {
-                                                        let val = event_target_value(&ev);
-                                                        set_bank_name_input.set(val);
-                                                    }
-                                                />
+                                                <div class="bank-dropdown u-mt-xs">
+                                                    <input
+                                                        type="text"
+                                                        class="form-input dep-input"
+                                                        placeholder="Bank name (e.g. KBank, SCB)"
+                                                        prop:value=move || bank_name_input.get()
+                                                        on:focus=move |_| set_show_bank_dropdown.set(true)
+                                                        on:input=move |ev| {
+                                                            let val = event_target_value(&ev);
+                                                            set_bank_name_input.set(val);
+                                                            set_show_bank_dropdown.set(true);
+                                                        }
+                                                        on:blur=move |_| {
+                                                            set_timeout(move || set_show_bank_dropdown.set(false), std::time::Duration::from_millis(200));
+                                                        }
+                                                    />
+                                                    {move || {
+                                                        if !show_bank_dropdown.get() {
+                                                            view! { <div></div> }.into_any()
+                                                        } else {
+                                                            let query = bank_name_input.get().to_lowercase();
+                                                            let matches: Vec<&(&str, &str)> = THAI_BANKS
+                                                                .iter()
+                                                                .filter(|(code, name)| {
+                                                                    if query.is_empty() { return true; }
+                                                                    code.to_lowercase().contains(&query) || name.to_lowercase().contains(&query)
+                                                                })
+                                                                .collect();
+                                                            if matches.is_empty() {
+                                                                view! { <div></div> }.into_any()
+                                                            } else {
+                                                                let items: Vec<_> = matches.into_iter().map(|bank| {
+                                                                    let bank_val = bank.1.to_string();
+                                                                    let code = bank.0.to_string();
+                                                                    let full = bank.1.to_string();
+                                                                    view! {
+                                                                        <div
+                                                                            class="bank-dropdown-item"
+                                                                            on:mousedown=move |ev| {
+                                                                                ev.prevent_default();
+                                                                                set_bank_name_input.set(bank_val.clone());
+                                                                                set_show_bank_dropdown.set(false);
+                                                                            }
+                                                                        >
+                                                                            <span class="bank-dropdown-code">{code}</span>
+                                                                            <span class="bank-dropdown-name">{full}</span>
+                                                                        </div>
+                                                                    }
+                                                                }).collect();
+                                                                view! {
+                                                                    <div class="bank-dropdown-list">
+                                                                        {items}
+                                                                    </div>
+                                                                }.into_any()
+                                                            }
+                                                        }
+                                                    }}
+                                                </div>
                                                 <input
                                                     type="text"
                                                     class="form-input dep-input u-mt-xs"
@@ -1889,6 +1980,22 @@ pub fn Deposit() -> impl IntoView {
                             };
                             let solscan_url = solscan_tx_url(&tx_sig, &get_cluster());
                             let usdc_fmt = format!("{:.2}", data.deposit_amount_usdc as f64 / 1_000_000.0);
+                            // Build ticket page link
+                            let ticket_attendee_id = match params.get() {
+                                Ok(p) => p.attendee_id.unwrap_or_default(),
+                                Err(_) => String::new(),
+                            };
+                            let ticket_event_id = web_sys::Url::new(
+                                &web_sys::window()
+                                    .unwrap()
+                                    .location()
+                                    .href()
+                                    .unwrap(),
+                            )
+                            .ok()
+                            .and_then(|url| url.search_params().get("event_id"))
+                            .unwrap_or_default();
+                            let ticket_href = format!("/ticket/{ticket_attendee_id}?event_id={ticket_event_id}");
                             // Compute refund deadline info
                             let refund_info = if data.event_end_ms > 0 && data.refund_deadline_hours > 0 {
                                 let deadline_ms = data.event_end_ms + (i64::from(data.refund_deadline_hours) * 3_600_000);
@@ -1958,7 +2065,10 @@ pub fn Deposit() -> impl IntoView {
                                         }.into_any(),
                                     }}
                                     <div class="action-row-top-lg">
-                                        <a href="/" class="btn btn-primary">"Go Home"</a>
+                                        <a href=ticket_href class="btn btn-primary">
+                                            <Icon icon=IconName::Ticket class="icon-sm" />" View Your Ticket →"
+                                        </a>
+                                        <a href="/" class="btn btn-outline">"Go Home"</a>
                                     </div>
                                 </div>
                             }
@@ -2114,12 +2224,13 @@ pub fn Deposit() -> impl IntoView {
                         }
 
                         // ===== THB Uploaded =====
-                        DepositPageState::ThbUploaded(_attendee_id, _event_id, event_slug) => {
-                            // Auto-redirect to event page after brief confirmation
-                            let slug = event_slug.clone();
+                        DepositPageState::ThbUploaded(attendee_id, event_id, _event_slug) => {
+                            // Auto-redirect to ticket page after brief confirmation
+                            let aid = attendee_id.clone();
+                            let eid = event_id.clone();
                             leptos::task::spawn_local(async move {
                                 gloo::timers::future::TimeoutFuture::new(1500).await;
-                                navigateTo(&format!("/e/{slug}"));
+                                navigateTo(&format!("/ticket/{aid}?event_id={eid}"));
                             });
                             view! {
                                 <div class="card dep-card-error">
@@ -2131,7 +2242,7 @@ pub fn Deposit() -> impl IntoView {
                                     </p>
                                     <span class="badge badge-warning"><Icon icon=IconName::Hourglass class="icon-sm icon-warning" />" Pending Verification"</span>
                                     <p style="color:var(--text-secondary);font-size:0.8rem;margin-top:0.75rem;">
-                                        "Redirecting to event page..."
+                                        "Redirecting to your ticket..."
                                     </p>
                                 </div>
                             }

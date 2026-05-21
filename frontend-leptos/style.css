@@ -8430,3 +8430,42 @@ nav a.active {
     font-size: 0.85rem;
     margin: 0;
 }
+
+/* ===== Bank Dropdown (deposit page) ===== */
+.bank-dropdown {
+    position: relative;
+}
+.bank-dropdown-list {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    max-height: 200px;
+    overflow-y: auto;
+    background: var(--card-bg, #1a1a2e);
+    border: 1px solid var(--border);
+    border-radius: 0 0 0.5rem 0.5rem;
+    z-index: 100;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+.bank-dropdown-item {
+    padding: 0.5rem 0.75rem;
+    cursor: pointer;
+    font-size: 0.85rem;
+    border-bottom: 1px solid var(--border);
+    transition: background 0.15s;
+}
+.bank-dropdown-item:last-child {
+    border-bottom: none;
+}
+.bank-dropdown-item:hover {
+    background: rgba(99, 102, 241, 0.15);
+}
+.bank-dropdown-code {
+    font-weight: 600;
+    color: var(--accent);
+    margin-right: 0.5rem;
+}
+.bank-dropdown-name {
+    color: var(--text-secondary);
+}

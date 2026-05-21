@@ -74,3 +74,65 @@ export function readClipboardText() {
   }
   return Promise.resolve("");
 }
+
+/**
+ * Share an event URL using the Web Share API, with clipboard fallback.
+ *
+ * Returns true if the URL was shared or copied successfully.
+ *
+ * @param {string} title - Event name for the share dialog.
+ * @param {string} url - Full URL to share.
+ * @returns {Promise<boolean>}
+ */
+export function shareEvent(title, url) {
+  if (navigator.share) {
+    return navigator
+      .share({ title: title, url: url })
+      .then(function () {
+        return true;
+      })
+      .catch(function () {
+        // User cancelled or share failed — fall back to clipboard
+        return copyToClipboardFallback(url);
+      });
+  }
+  // No Web Share API — copy to clipboard
+  return Promise.resolve(copyToClipboardFallback(url));
+}
+
+/**
+ * Internal: copy URL to clipboard using Clipboard API with textarea fallback.
+ *
+ * @param {string} text
+ * @returns {boolean}
+ */
+function copyToClipboardFallback(text) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(
+      function () {
+        console.log("[share] copied successfully");
+      },
+      function (err) {
+        console.error("[share] copy failed:", err);
+      },
+    );
+    return true;
+  }
+  // Textarea fallback
+  var textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+  try {
+    document.execCommand("copy");
+    return true;
+  } catch (e) {
+    console.error("[share] fallback copy failed:", e);
+    return false;
+  } finally {
+    document.body.removeChild(textarea);
+  }
+}

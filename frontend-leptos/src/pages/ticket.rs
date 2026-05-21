@@ -8,10 +8,17 @@ use leptos::prelude::*;
 use leptos_meta::Title;
 use leptos_router::hooks::use_params;
 use leptos_router::params::Params;
+use wasm_bindgen::prelude::*;
 
 use crate::api::{self, DepositMethod};
 use crate::icons::{Icon, IconName};
 use crate::utils;
+
+#[wasm_bindgen(module = "/js/download.js")]
+extern "C" {
+    #[wasm_bindgen(js_name = "downloadDataUrl")]
+    fn download_data_url(data_url: &str, filename: &str);
+}
 
 // ---------------------------------------------------------------------------
 // URL params
@@ -161,7 +168,7 @@ pub fn Ticket() -> impl IntoView {
                                         view! {
                                             <div class="ticket-qr-wrapper">
                                                 <img
-                                                    src=qr_image.unwrap_or_default()
+                                                    src=qr_image.clone().unwrap_or_default()
                                                     alt="Check-in QR Code"
                                                     class="ticket-qr-img"
                                                 />
@@ -172,6 +179,23 @@ pub fn Ticket() -> impl IntoView {
                                             >
                                                 <Icon icon=IconName::Expand class="icon-sm" />
                                                 " Full Screen"
+                                            </button>
+                                            <button
+                                                class="btn btn-outline btn-sm"
+                                                on:click={
+                                                    let name = name.clone();
+                                                    move |_| {
+                                                        let qr = qr_image.clone();
+                                                        if let Some(ref data_url) = qr {
+                                                            if !data_url.is_empty() {
+                                                                download_data_url(data_url, &format!("{name}-qrcode.svg"));
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            >
+                                                <Icon icon=IconName::Save class="icon-sm" />
+                                                " Save QR Code"
                                             </button>
                                         }.into_any()
                                     } else {

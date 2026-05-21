@@ -24,6 +24,8 @@ extern "C" {
     fn saveProgress(attendee_id: &str, event_id: &str, slug: &str);
     fn loadProgress() -> Option<String>;
     fn navigateTo(path: &str);
+    #[wasm_bindgen(js_name = "shareEvent")]
+    fn share_event_js(title: &str, url: &str) -> js_sys::Promise;
 }
 
 // ---------------------------------------------------------------------------
@@ -339,6 +341,7 @@ pub fn PublicEvent() -> impl IntoView {
     let (countdown, set_countdown) = signal(String::new());
     let (event_completed, set_event_completed) = signal(false);
     let (event_name, set_event_name) = signal(String::new());
+    let (share_copied, set_share_copied) = signal(false);
 
     // Auth state
     let (auth_state, set_auth_state) = signal(AuthState::Checking);
@@ -666,6 +669,8 @@ pub fn PublicEvent() -> impl IntoView {
                                 auth_state,
                                 reg_lookup,
                                 slug_for_event.clone(),
+                                share_copied,
+                                set_share_copied,
                             )
                         }
                     }
@@ -691,6 +696,8 @@ fn render_loaded_event(
     auth_state: ReadSignal<AuthState>,
     reg_lookup: ReadSignal<RegistrationLookup>,
     current_slug: String,
+    share_copied: ReadSignal<bool>,
+    set_share_copied: WriteSignal<bool>,
 ) -> AnyView {
     let has_nft_image = !data.nft_image_url.is_empty();
     let has_description = !data.description.is_empty();
@@ -713,6 +720,7 @@ fn render_loaded_event(
     let _link = data.link.clone();
     let link_2 = data.link.clone();
     let name = data.name.clone();
+    let name_for_share = name.clone();
     let tagline = data.tagline.clone();
     let description = data.description.clone();
     let location = data.location.clone();
@@ -802,6 +810,47 @@ fn render_loaded_event(
                 }
             }}
         </div>
+
+        // Share button
+        {
+            let share_slug = current_slug.clone();
+            let share_name = name_for_share.clone();
+            let share_url = format!("https://bethere.solana-thailand.workers.dev/e/{share_slug}");
+            let set_copied = set_share_copied.clone();
+            view! {
+                <div style="width:100%;text-align:center;margin-bottom:1rem;">
+                    <button
+                        class="btn btn-outline btn-sm"
+                        on:click=move |_| {
+                            let url = share_url.clone();
+                            let title = share_name.clone();
+                            let set_c = set_copied.clone();
+                            leptos::task::spawn_local(async move {
+                                let _ = wasm_bindgen_futures::JsFuture::from(
+                                    share_event_js(&title, &url)
+                                ).await;
+                                set_c.set(true);
+                                gloo::timers::future::TimeoutFuture::new(2000).await;
+                                set_c.set(false);
+                            });
+                        }
+                    >
+                        <Icon icon=IconName::Link class="icon-sm" />" Share Event ↗"
+                    </button>
+                    {move || {
+                        if share_copied.get() {
+                            view! {
+                                <span style="color:var(--success);font-size:0.8rem;margin-left:0.5rem;">
+                                    "Link copied!"
+                                </span>
+                            }.into_any()
+                        } else {
+                            ().into_any()
+                        }
+                    }}
+                </div>
+            }.into_any()
+        }
 
         // Event Details Card
         <div style="width:100%;background:var(--bg-card);border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;box-shadow:var(--shadow);">
