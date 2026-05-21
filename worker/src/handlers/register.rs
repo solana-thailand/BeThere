@@ -311,6 +311,18 @@ pub async fn register_attendee(
         AppError::Internal(format!("failed to register: {e}"))
     })?;
 
+    // 9b. Upsert to master contacts sheet (non-fatal)
+    upsert_contact_after_registration(
+        &email,
+        name,
+        &event_id,
+        contact_channel,
+        contact_handle,
+        &state,
+        Some(kv),
+    )
+    .await;
+
     // 10. Determine next_step based on event format
     let next_step = build_next_step(
         &config.event_format,
@@ -780,4 +792,50 @@ async fn enforce_capacity(
     }
 
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Contacts upsert helper
+// ---------------------------------------------------------------------------
+
+/// Non-fatal upsert to the master contacts sheet after successful registration.
+/// Errors are logged but never block the registration response.
+async fn upsert_contact_after_registration(
+    email: &str,
+    name: &str,
+    event_id: &str,
+    contact_channel: Option<&str>,
+    contact_handle: Option<&str>,
+    state: &AppState,
+    kv: Option<&worker::KvStore>,
+) {
+    let contacts_config = &state.config.sheets;
+    if contacts_config.contacts_sheet_id.is_empty() {
+        return; // Not configured — skip silently
+    }
+
+    let upsert = crate::sheets::contacts::ContactUpsert {
+        email,
+        name,
+        event_id,
+        contact_channel,
+        contact_handle,
+    };
+
+    if let Err(e) = crate::sheets::contacts::upsert_contact(
+        &upsert,
+        state,
+        &contacts_config.contacts_sheet_id,
+        &contacts_config.contacts_sheet_name,
+        kv,
+    )
+    .await
+    {
+        tracing::warn!(
+            %email,
+            %event_id,
+            error = %e,
+            "failed to upsert contact to master sheet (non-fatal)"
+        );
+    }
 }

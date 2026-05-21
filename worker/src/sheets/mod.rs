@@ -4,6 +4,7 @@
 //! `worker::Fetch` (via `crate::http`) and SubtleCrypto (via `crate::crypto`)
 //! instead of `reqwest` and the `rsa` crate.
 
+pub mod contacts;
 pub mod write;
 
 use base64::Engine;

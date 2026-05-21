@@ -344,15 +344,23 @@ pub async fn update_event(
         let event_id_changed = req
             .on_chain_event_id
             .is_some_and(|id| id != config.on_chain_event_id);
-        let deposit_changed = req
+        let deposit_usdc_changed = req
             .deposit_amount_usdc
             .is_some_and(|d| d != config.deposit_amount_usdc);
+        let deposit_thb_changed = req
+            .deposit_amount_thb
+            .is_some_and(|d| d != config.deposit_amount_thb);
         let deadline_changed = req
             .refund_deadline_hours
             .is_some_and(|h| h != config.refund_deadline_hours);
-        if wallet_changed || event_id_changed || deposit_changed || deadline_changed {
+        if wallet_changed
+            || event_id_changed
+            || deposit_usdc_changed
+            || deposit_thb_changed
+            || deadline_changed
+        {
             return Err(
-                "cannot change organizer_wallet, on_chain_event_id, deposit_amount_usdc, or refund_deadline_hours after escrow is initialized on-chain".to_string()
+                "cannot change organizer_wallet, on_chain_event_id, deposit_amount_usdc, deposit_amount_thb, or refund_deadline_hours after escrow is initialized on-chain".to_string()
             );
         }
     }

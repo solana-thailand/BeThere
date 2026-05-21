@@ -42,6 +42,11 @@ pub struct SheetsConfig {
     pub sheet_id: String,
     pub sheet_name: String,
     pub staff_sheet_name: String,
+    /// Google Sheet ID for the master contacts list (cross-event deduplicated emails).
+    /// If empty, contacts upsert is skipped silently.
+    pub contacts_sheet_id: String,
+    /// Tab name for the contacts sheet. Defaults to "Contacts".
+    pub contacts_sheet_name: String,
 }
 
 /// Solana/Helius RPC configuration.

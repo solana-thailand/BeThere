@@ -68,6 +68,10 @@ impl AppState {
                 .unwrap_or_else(|_| "Attendees".to_string()),
             staff_sheet_name: get_var(env, "GOOGLE_STAFF_SHEET_NAME")
                 .unwrap_or_else(|_| "staff".to_string()),
+            contacts_sheet_id: get_var(env, "CONTACTS_SHEET_ID")
+                .unwrap_or_default(),
+            contacts_sheet_name: get_var(env, "CONTACTS_SHEET_NAME")
+                .unwrap_or_else(|_| "Contacts".to_string()),
         };
 
         let staff_emails_str = get_secret(env, "STAFF_EMAILS")?;
