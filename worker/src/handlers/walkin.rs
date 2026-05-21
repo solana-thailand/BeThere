@@ -813,7 +813,7 @@ pub async fn walkin_sync_handler(
     }
 
     // Invalidate attendee cache so the next GET /api/attendees picks up new rows
-    let cache_key = format!("attendees_cache:{sheet_id}:{sheet_name}");
+    let cache_key = format!("cache:attendees:{sheet_id}:{sheet_name}");
     let _ = kv.delete(&cache_key).await;
 
     tracing::info!(
@@ -873,7 +873,7 @@ async fn enforce_walkin_capacity(
 
     let mut in_person_count: u32 = attendees.iter().filter(|a| a.is_in_person()).count() as u32;
 
-    // Count walk-in attendees (all are in-person)
+    // Count UNSYNCED walk-in attendees (avoid double-counting with sheet)
     let walkin_prefix = format!("walkin:{}:", config.id);
     let mut walkin_cursor: Option<String> = None;
     loop {
@@ -883,7 +883,14 @@ async fn enforce_walkin_capacity(
         }
         match builder.execute().await {
             Ok(resp) => {
-                in_person_count += resp.keys.len() as u32;
+                for key in &resp.keys {
+                    let email = key.name.strip_prefix(&walkin_prefix).unwrap_or("");
+                    let sync_key = format!("walkin_synced:{}:{}", config.id, email);
+                    let synced: Option<bool> = kv.get(&sync_key).json().await.ok().flatten();
+                    if synced != Some(true) {
+                        in_person_count += 1;
+                    }
+                }
                 if resp.list_complete {
                     break;
                 }

@@ -698,7 +698,7 @@ async fn enforce_capacity(
         }
     }
 
-    // Count walk-in attendees as in-person
+    // Count UNSYNCED walk-in attendees as in-person (avoid double-counting with sheet)
     let walkin_prefix = format!("walkin:{}:", config.id);
     let mut walkin_cursor: Option<String> = None;
     let mut walkin_count: u32 = 0;
@@ -709,7 +709,14 @@ async fn enforce_capacity(
         }
         match builder.execute().await {
             Ok(resp) => {
-                walkin_count += resp.keys.len() as u32;
+                for key in &resp.keys {
+                    let email = key.name.strip_prefix(&walkin_prefix).unwrap_or("");
+                    let sync_key = format!("walkin_synced:{}:{}", config.id, email);
+                    let synced: Option<bool> = kv.get(&sync_key).json().await.ok().flatten();
+                    if synced != Some(true) {
+                        walkin_count += 1;
+                    }
+                }
                 if resp.list_complete {
                     break;
                 }

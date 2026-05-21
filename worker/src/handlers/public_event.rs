@@ -236,8 +236,10 @@ async fn count_attendees_by_track(
         }
     }
 
-    // Count walk-in attendees as in-person (they are by definition in-person)
+    // Count UNSYNCED walk-in attendees as in-person.
     // Walk-in records are stored as individual KV keys: walkin:{event_id}:{email}
+    // Once synced to the Google Sheet, a walkin_synced:{event_id}:{email} marker is set.
+    // We only count unsynced walk-ins to avoid double-counting with sheet-based attendees.
     if let Some(kv) = kv {
         let prefix = format!("walkin:{}:", config.id);
         let mut walkin_cursor: Option<String> = None;
@@ -249,7 +251,15 @@ async fn count_attendees_by_track(
             }
             match builder.execute().await {
                 Ok(resp) => {
-                    walkin_count += resp.keys.len() as u32;
+                    for key in &resp.keys {
+                        // Extract email from key: walkin:{event_id}:{email}
+                        let email = key.name.strip_prefix(&prefix).unwrap_or("");
+                        let sync_key = format!("walkin_synced:{}:{}", config.id, email);
+                        let synced: Option<bool> = kv.get(&sync_key).json().await.ok().flatten();
+                        if synced != Some(true) {
+                            walkin_count += 1;
+                        }
+                    }
                     if resp.list_complete {
                         break;
                     }
