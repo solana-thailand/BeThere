@@ -364,6 +364,10 @@ pub fn Deposit() -> impl IntoView {
     let (slip_url_input, set_slip_url_input) = signal(String::new());
     let (wallet_input, set_wallet_input) = signal(String::new());
     let (pay_url_copied, set_pay_url_copied) = signal(false);
+    // Bank info signals for THB refund
+    let (bank_account_input, set_bank_account_input) = signal(String::new());
+    let (bank_name_input, set_bank_name_input) = signal(String::new());
+    let (account_name_input, set_account_name_input) = signal(String::new());
 
     // File input ref for slip image upload
     let file_input_ref = NodeRef::<leptos::html::Input>::new();
@@ -776,6 +780,9 @@ pub fn Deposit() -> impl IntoView {
 
         let file_ref = file_input_ref.clone();
         let text_slip_url = slip_url_input.get();
+        let bank_account_input_for_upload = bank_account_input.get();
+        let bank_name_input_for_upload = bank_name_input.get();
+        let account_name_input_for_upload = account_name_input.get();
         let set_state = set_state;
         let set_toast = set_toast;
         let params = params.clone();
@@ -820,6 +827,18 @@ pub fn Deposit() -> impl IntoView {
                 event_id: event_id.unwrap_or_default(),
                 attendee_id,
                 slip_url,
+                bank_account: {
+                    let v = bank_account_input_for_upload.trim().to_string();
+                    if v.is_empty() { None } else { Some(v) }
+                },
+                bank_name: {
+                    let v = bank_name_input_for_upload.trim().to_string();
+                    if v.is_empty() { None } else { Some(v) }
+                },
+                account_name: {
+                    let v = account_name_input_for_upload.trim().to_string();
+                    if v.is_empty() { None } else { Some(v) }
+                },
             };
             match api::upload_thb_slip(&body).await {
                 Ok(_resp) => {
@@ -1681,6 +1700,43 @@ pub fn Deposit() -> impl IntoView {
                                                     }
                                                 />
                                             </details>
+
+                                            // Bank info for refund
+                                            <div class="u-mt-1rem" style="border-top:1px solid rgba(255,255,255,0.1);padding-top:0.75rem;">
+                                                <p class="hint-desc" style="margin-bottom:0.5rem;">
+                                                    "Bank account for refund"
+                                                </p>
+                                                <input
+                                                    type="text"
+                                                    class="form-input dep-input"
+                                                    placeholder="Bank account number"
+                                                    prop:value=move || bank_account_input.get()
+                                                    on:input=move |ev| {
+                                                        let val = event_target_value(&ev);
+                                                        set_bank_account_input.set(val);
+                                                    }
+                                                />
+                                                <input
+                                                    type="text"
+                                                    class="form-input dep-input u-mt-xs"
+                                                    placeholder="Bank name (e.g. KBank, SCB)"
+                                                    prop:value=move || bank_name_input.get()
+                                                    on:input=move |ev| {
+                                                        let val = event_target_value(&ev);
+                                                        set_bank_name_input.set(val);
+                                                    }
+                                                />
+                                                <input
+                                                    type="text"
+                                                    class="form-input dep-input u-mt-xs"
+                                                    placeholder="Account holder name"
+                                                    prop:value=move || account_name_input.get()
+                                                    on:input=move |ev| {
+                                                        let val = event_target_value(&ev);
+                                                        set_account_name_input.set(val);
+                                                    }
+                                                />
+                                            </div>
 
                                             <button
                                                 class="btn btn-success btn-block btn-action-lg u-mt-1rem"

@@ -86,6 +86,15 @@ pub struct ThbDeposit {
     /// Attendee display name (enriched from Google Sheets, not stored in KV).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub attendee_name: Option<String>,
+    /// Bank account number for THB refund.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bank_account: Option<String>,
+    /// Bank name for THB refund.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bank_name: Option<String>,
+    /// Account holder name for THB refund.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub account_name: Option<String>,
 }
 
 /// Request body for POST /api/deposit/usdc — build a Solana Pay deposit TX.

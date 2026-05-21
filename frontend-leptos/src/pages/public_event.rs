@@ -891,25 +891,39 @@ fn render_loaded_event(
                 let usdc = usdc_display.clone();
                 let thb = thb_display.clone();
                 let refund = refund_label.clone();
+                let usdc_amount = data.deposit_amount_usdc;
+                let thb_amount = data.deposit_amount_thb;
                 view! {
                     <div style="width:100%;background:var(--bg-card);border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;box-shadow:var(--shadow);">
                         <h2 style="font-size:1.1rem;font-weight:600;color:#fff;margin-bottom:0.75rem;">
                             <Icon icon=IconName::Coin class="icon-md" />" Deposit Commitment"
                         </h2>
                         <div style="margin-bottom:0.75rem;">
-                            <span style="color:var(--text-primary);font-size:1.1rem;font-weight:600;">
-                                {usdc}
-                            </span>
-                            {move || {
-                                if let Some(ref thb_str) = thb {
-                                    view! {
+                            // Show deposit amount based on what organizer configured
+                            {if usdc_amount > 0 && thb_amount > 0 {
+                                // Both: USDC primary, THB as equivalent
+                                view! {
+                                    <span style="color:var(--text-primary);font-size:1.1rem;font-weight:600;">
+                                        {usdc.clone()}
                                         <span style="color:var(--text-secondary);font-size:0.9rem;margin-left:0.5rem;">
-                                            "(~" {thb_str.clone()} ")"
+                                            "(~" {thb.clone().unwrap_or_default()} ")"
                                         </span>
-                                    }.into_any()
-                                } else {
-                                    ().into_any()
-                                }
+                                    </span>
+                                }.into_any()
+                            } else if usdc_amount > 0 {
+                                // USDC only
+                                view! {
+                                    <span style="color:var(--text-primary);font-size:1.1rem;font-weight:600;">
+                                        {usdc.clone()}
+                                    </span>
+                                }.into_any()
+                            } else {
+                                // THB only
+                                view! {
+                                    <span style="color:var(--text-primary);font-size:1.1rem;font-weight:600;">
+                                        {thb.clone().unwrap_or_default()}" Baht"
+                                    </span>
+                                }.into_any()
                             }}
                         </div>
                         <div style="display:flex;flex-direction:column;gap:0.4rem;">

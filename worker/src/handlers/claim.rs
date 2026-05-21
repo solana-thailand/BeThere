@@ -56,6 +56,10 @@ pub async fn get_claim(
         deposit_amount_usdc: lookup.deposit_amount_usdc,
         deposit_amount_thb: lookup.deposit_amount_thb,
         participation_type: lookup.participation_type,
+        claimed_signature: lookup.claimed_signature,
+        claimed_asset_id: lookup.claimed_asset_id,
+        claimed_wallet: lookup.claimed_wallet,
+        cluster: lookup.cluster,
     };
 
     Ok(ApiOk::new(response))

@@ -992,6 +992,9 @@ fn DepositRefundSection(
     /// Whether the attendee has a verified USDC deposit on-chain.
     #[prop(default = false)]
     has_usdc_deposit: bool,
+    /// Whether the attendee has already claimed their NFT (changes messaging).
+    #[prop(default = false)]
+    has_claimed: bool,
 ) -> impl IntoView {
     let usdc_display = format!("{:.2}", deposit_amount_usdc as f64 / 1_000_000.0);
     let deposit_link = if event_id.is_empty() {
@@ -1212,35 +1215,71 @@ fn DepositRefundSection(
                         }
                     }
                 } else {
-                    // No verified USDC deposit — show the original deposit info with link
-                    view! {
-                        <p class="hint-sm">
-                            "This event requires a deposit to confirm your spot."
-                        </p>
-                        <div class="badge-row">
-                            {if deposit_amount_usdc > 0 {
-                                view! {
-                                    <div class="badge" style="background:var(--badge-bg,#1e1b4b);color:#c084fc;padding:0.5rem 1rem;border-radius:0.5rem">
-                                        {format!("{} USDC", usdc_display)}
+                    // No verified USDC deposit on-chain
+                    if has_claimed {
+                        // Post-claim: informational only — attendee already got their NFT
+                        view! {
+                            <p class="hint-sm">
+                                "This event required a deposit to attend."
+                            </p>
+                            <div class="badge-row">
+                                {if deposit_amount_usdc > 0 {
+                                    view! {
+                                        <div class="badge" style="background:var(--badge-bg,#1e1b4b);color:#c084fc;padding:0.5rem 1rem;border-radius:0.5rem">
+                                            {format!("{} USDC", usdc_display)}
+                                        </div>
+                                    }.into_any()
+                                } else {
+                                    view! { <div></div> }.into_any()
+                                }}
+                                {if deposit_amount_thb > 0 {
+                                    view! {
+                                        <div class="badge" style="background:var(--badge-bg,#1e1b4b);color:#c084fc;padding:0.5rem 1rem;border-radius:0.5rem">
+                                            {format!("{} THB", deposit_amount_thb)}
+                                        </div>
+                                    }.into_any()
+                                } else {
+                                    view! { <div></div> }.into_any()
+                                }}
+                            </div>
+                            <p class="hint-desc" style="margin-top:0.5rem">
+                                "If you submitted a deposit (USDC or THB), visit the deposit page to check your status or request a refund."
+                            </p>
+                            <a href=&deposit_link class="btn btn-outline btn-sm">
+                                "Deposit & Refund Details →"
+                            </a>
+                        }.into_any()
+                    } else {
+                        // Pre-claim: attendee hasn't claimed yet, deposit still pending
+                        view! {
+                            <p class="hint-sm">
+                                "This event requires a deposit to confirm your spot."
+                            </p>
+                            <div class="badge-row">
+                                {if deposit_amount_usdc > 0 {
+                                    view! {
+                                        <div class="badge" style="background:var(--badge-bg,#1e1b4b);color:#c084fc;padding:0.5rem 1rem;border-radius:0.5rem">
+                                            {format!("{} USDC", usdc_display)}
+                                        </div>
+                                    }.into_any()
+                                } else {
+                                    view! { <div></div> }.into_any()
+                                }}
+                                {if deposit_amount_thb > 0 {
+                                    view! {
+                                        <div class="badge" style="background:var(--badge-bg,#1e1b4b);color:#c084fc;padding:0.5rem 1rem;border-radius:0.5rem">
+                                            {format!("{} THB", deposit_amount_thb)}
                                     </div>
                                 }.into_any()
                             } else {
                                 view! { <div></div> }.into_any()
                             }}
-                            {if deposit_amount_thb > 0 {
-                                view! {
-                                    <div class="badge" style="background:var(--badge-bg,#1e1b4b);color:#c084fc;padding:0.5rem 1rem;border-radius:0.5rem">
-                                        {format!("{} THB", deposit_amount_thb)}
-                                    </div>
-                                }.into_any()
-                            } else {
-                                view! { <div></div> }.into_any()
-                            }}
-                        </div>
-                        <a href=&deposit_link class="btn btn-primary">
-                            "Go to Deposit Page"
-                        </a>
-                    }.into_any()
+                            </div>
+                            <a href=&deposit_link class="btn btn-primary">
+                                "Go to Deposit Page"
+                            </a>
+                        }.into_any()
+                    }
                 }
             }}
         </div>
@@ -2050,11 +2089,11 @@ pub fn Claim() -> impl IntoView {
                                     </div>
 
                                     <div class="success-details">
-                                        <p><strong>"Name:"</strong>" "{escape_html(&data.name)}</p>
+                                        <p><strong>"Name:"</strong>" " {escape_html(&data.name)}</p>
                                         <p><strong>"Wallet:"</strong>
                                             <code>{escape_html(&data.wallet_address)}</code>
                                         </p>
-                                        <p><strong>"Claimed:"</strong>" "{format_timestamp(&data.claimed_at)}</p>
+                                        <p><strong>"Claimed:"</strong>" " {format_timestamp(&data.claimed_at)}</p>
                                     </div>
 
                                     // Explorer links
@@ -2065,7 +2104,7 @@ pub fn Claim() -> impl IntoView {
                                             rel="noopener noreferrer"
                                             class="btn btn-primary btn-block"
                                         >
-                                            "View on Solscan"
+                                            "View TX on Solscan ↗"
                                         </a>
                                         <a
                                             href=metaplex_url
@@ -2073,8 +2112,18 @@ pub fn Claim() -> impl IntoView {
                                             rel="noopener noreferrer"
                                             class="btn btn-outline btn-block"
                                         >
-                                            "Verify NFT on Metaplex"
+                                            "Verify NFT on Metaplex ↗"
                                         </a>
+                                    </div>
+
+                                    // cNFT explanation — help attendees understand why it doesn't show in wallet
+                                    <div class="claim-cnft-hint">
+                                        <p class="hint-title">"💡 Compressed NFT Info"</p>
+                                        <p class="hint-desc">
+                                            "This is a compressed NFT stored on Solana. It may "
+                                            <strong>"not appear"</strong>
+                                            " in some wallet apps (Phantom, Solflare). Use the links above to verify your NFT on-chain."
+                                        </p>
                                     </div>
 
                                     // Claim counter — social proof
@@ -2156,6 +2205,7 @@ pub fn Claim() -> impl IntoView {
                                                 deposit_amount_usdc=deposit_amount_usdc.get()
                                                 deposit_amount_thb=deposit_amount_thb.get()
                                                 has_usdc_deposit=has_usdc_deposit.get()
+                                                has_claimed=true
                                             />
                                         }.into_any()
                                     } else {
@@ -2173,6 +2223,18 @@ pub fn Claim() -> impl IntoView {
                                 .as_deref()
                                 .map(format_timestamp)
                                 .unwrap_or_else(|| "previously".to_string());
+
+                            // Explorer links (if claim lock data is available)
+                            let has_explorer_links = data.claimed_signature.is_some()
+                                || data.claimed_asset_id.is_some();
+                            let claimed_cluster = data.cluster.as_deref().unwrap_or("devnet");
+                            let explorer_url = data.claimed_signature.as_ref().map(|sig| {
+                                solscan_tx_url(sig, claimed_cluster)
+                            });
+                            let metaplex_url = data.claimed_asset_id.as_ref().map(|asset_id| {
+                                metaplex_explorer_url(asset_id, claimed_cluster)
+                            });
+
                             view! {
                                 <div class="claim-warning">
                                     <ParticipantAvatar name=data.name.clone() />
@@ -2182,11 +2244,85 @@ pub fn Claim() -> impl IntoView {
                                             <strong>{escape_html(&data.name)}</strong>
                                             " — your NFT was claimed "{claimed_display}"."
                                         </p>
+                                        {
+                                            if let Some(ref wallet) = data.claimed_wallet {
+                                                view! {
+                                                    <p><strong>"Wallet:"</strong>
+                                                        <code>{escape_html(wallet)}</code>
+                                                    </p>
+                                                }.into_any()
+                                            } else {
+                                                view! { <div></div> }.into_any()
+                                            }
+                                        }
                                         <p class="claim-already-detail">
-                                            "Check your Solana wallet for the NFT badge."
+                                            "Your compressed NFT may not appear in wallet apps like Phantom or Solflare. Use the links below to verify it on-chain."
                                         </p>
                                     </div>
                                 </div>
+
+                                // Explorer links — only if claim lock data is available
+                                {move || {
+                                    if has_explorer_links {
+                                        view! {
+                                            <div class="success-actions">
+                                                {
+                                                    if let Some(ref url) = explorer_url {
+                                                        view! {
+                                                            <a
+                                                                href=url
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                class="btn btn-primary btn-block"
+                                                            >
+                                                                "View TX on Solscan ↗"
+                                                            </a>
+                                                        }.into_any()
+                                                    } else {
+                                                        view! { <div></div> }.into_any()
+                                                    }
+                                                }
+                                                {
+                                                    if let Some(ref url) = metaplex_url {
+                                                        view! {
+                                                            <a
+                                                                href=url
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                class="btn btn-outline btn-block"
+                                                            >
+                                                                "Verify NFT on Metaplex ↗"
+                                                            </a>
+                                                        }.into_any()
+                                                    } else {
+                                                        view! { <div></div> }.into_any()
+                                                    }
+                                                }
+                                            </div>
+                                        }.into_any()
+                                    } else {
+                                        view! { <div></div> }.into_any()
+                                    }
+                                }}
+
+                                // cNFT explanation hint
+                                {move || {
+                                    if has_explorer_links {
+                                        view! {
+                                            <div class="claim-cnft-hint">
+                                                <p class="hint-title">"💡 Compressed NFT Info"</p>
+                                                <p class="hint-desc">
+                                                    "This is a compressed NFT stored on Solana. It may "
+                                                    <strong>"not appear"</strong>
+                                                    " in some wallet apps (Phantom, Solflare). Use the links above to verify your NFT on-chain."
+                                                </p>
+                                            </div>
+                                        }.into_any()
+                                    } else {
+                                        view! { <div></div> }.into_any()
+                                    }
+                                }}
+
                                 {move || {
                                     if deposit_enabled.get() && !deposit_api_id.get().is_empty() {
                                         view! {
@@ -2196,6 +2332,7 @@ pub fn Claim() -> impl IntoView {
                                                 deposit_amount_usdc=deposit_amount_usdc.get()
                                                 deposit_amount_thb=deposit_amount_thb.get()
                                                 has_usdc_deposit=has_usdc_deposit.get()
+                                                has_claimed=true
                                             />
                                         }.into_any()
                                     } else {

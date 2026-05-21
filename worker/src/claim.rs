@@ -115,12 +115,14 @@ pub(crate) async fn finalize_claim_lock(
     token: &str,
     wallet: &str,
     asset_id: &str,
+    signature: &str,
 ) -> Result<(), String> {
     let key = claim_lock_key(event_id, token);
 
     let lock_value = serde_json::json!({
         "wallet": wallet,
         "asset_id": asset_id,
+        "signature": signature,
         "claimed_at": chrono::Utc::now().to_rfc3339(),
     })
     .to_string();
@@ -248,6 +250,14 @@ pub struct ClaimLookup {
     pub deposit_amount_usdc: u64,
     pub deposit_amount_thb: u64,
     pub participation_type: String,
+    /// Transaction signature from the finalized claim lock KV (if available).
+    pub claimed_signature: Option<String>,
+    /// Asset ID from the finalized claim lock KV (if available).
+    pub claimed_asset_id: Option<String>,
+    /// Wallet address from the finalized claim lock KV (if available).
+    pub claimed_wallet: Option<String>,
+    /// Solana cluster for explorer links (e.g. "devnet", "mainnet-beta").
+    pub cluster: Option<String>,
 }
 
 /// Result of a successful NFT claim (POST).
@@ -309,6 +319,10 @@ pub async fn lookup_claim(
             deposit_amount_usdc: event.deposit_amount_usdc,
             deposit_amount_thb: event.deposit_amount_thb,
             participation_type: "In-Person".to_string(), // walk-ins are always in-person
+            claimed_signature: None,
+            claimed_asset_id: None,
+            claimed_wallet: None,
+            cluster: None,
         });
     }
 
@@ -375,6 +389,42 @@ pub async fn lookup_claim(
         },
     };
 
+    // Read finalized claim lock KV for already-claimed attendees
+    // to retrieve signature, asset_id, wallet for explorer links
+    let (claimed_signature, claimed_asset_id, claimed_wallet, cluster) = if claimed {
+        let lock_key = claim_lock_key(&event.id, token);
+        let lock_data: Option<String> = if let Some(kv_ref) = kv {
+            kv_ref.get(&lock_key).text().await.ok().flatten()
+        } else {
+            None
+        };
+        if let Some(json_str) = lock_data {
+            if let Ok(val) = serde_json::from_str::<serde_json::Value>(&json_str) {
+                let cluster_val = if state.config.solana.rpc_url.contains("mainnet") {
+                    "mainnet-beta".to_string()
+                } else {
+                    "devnet".to_string()
+                };
+                (
+                    val.get("signature")
+                        .and_then(|v| v.as_str())
+                        .map(String::from),
+                    val.get("asset_id")
+                        .and_then(|v| v.as_str())
+                        .map(String::from),
+                    val.get("wallet").and_then(|v| v.as_str()).map(String::from),
+                    Some(cluster_val),
+                )
+            } else {
+                (None, None, None, None)
+            }
+        } else {
+            (None, None, None, None)
+        }
+    } else {
+        (None, None, None, None)
+    };
+
     Ok(ClaimLookup {
         name: display_name,
         checked_in_at,
@@ -393,6 +443,10 @@ pub async fn lookup_claim(
         deposit_amount_usdc: event.deposit_amount_usdc,
         deposit_amount_thb: event.deposit_amount_thb,
         participation_type: attendee.participation_type.clone(),
+        claimed_signature,
+        claimed_asset_id,
+        claimed_wallet,
+        cluster,
     })
 }
 
@@ -727,8 +781,15 @@ pub async fn execute_claim(
 
     // 11. Finalize claim lock (permanent record, no TTL) — non-blocking
     if let Some(kv) = lock_kv
-        && let Err(e) =
-            finalize_claim_lock(kv, &event.id, token, wallet_address, &mint_result.asset_id).await
+        && let Err(e) = finalize_claim_lock(
+            kv,
+            &event.id,
+            token,
+            wallet_address,
+            &mint_result.asset_id,
+            &mint_result.signature,
+        )
+        .await
     {
         tracing::warn!(error = %e, "claim lock finalize failed (non-blocking)");
     }
@@ -835,8 +896,15 @@ async fn execute_walkin_claim(
     }
 
     // Finalize claim lock
-    if let Err(e) =
-        finalize_claim_lock(kv, &event.id, token, wallet_address, &mint_result.asset_id).await
+    if let Err(e) = finalize_claim_lock(
+        kv,
+        &event.id,
+        token,
+        wallet_address,
+        &mint_result.asset_id,
+        &mint_result.signature,
+    )
+    .await
     {
         tracing::warn!(error = %e, "walk-in claim lock finalize failed (non-blocking)");
     }

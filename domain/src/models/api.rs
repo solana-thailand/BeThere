@@ -254,6 +254,18 @@ pub struct ClaimLookupResponse {
     /// Attendee's participation type ("In-Person", "Online", etc.).
     #[serde(default)]
     pub participation_type: String,
+    /// Transaction signature from the finalized claim lock KV (if available).
+    #[serde(default)]
+    pub claimed_signature: Option<String>,
+    /// Asset ID from the finalized claim lock KV (if available).
+    #[serde(default)]
+    pub claimed_asset_id: Option<String>,
+    /// Wallet address from the finalized claim lock KV (if available).
+    #[serde(default)]
+    pub claimed_wallet: Option<String>,
+    /// Solana cluster for explorer links (e.g. "devnet", "mainnet-beta").
+    #[serde(default)]
+    pub cluster: Option<String>,
 }
 
 /// Response for POST /api/claim/{token} — mint cNFT and mark as claimed.

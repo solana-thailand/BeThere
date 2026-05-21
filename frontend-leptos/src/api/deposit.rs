@@ -84,6 +84,12 @@ pub struct ThbSlipUploadRequest {
     pub event_id: String,
     pub attendee_id: String,
     pub slip_url: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bank_account: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bank_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub account_name: Option<String>,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]

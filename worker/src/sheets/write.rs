@@ -642,3 +642,66 @@ pub async fn update_participation_type(
     invalidate_column_map_cache(kv, sheet_id, sheet_name).await;
     Ok(())
 }
+
+/// Write bank account info (bank_account, bank_name, account_name) to the sheet.
+/// Used when THB deposit slip is uploaded so the organizer has refund details.
+#[allow(clippy::too_many_arguments)]
+pub async fn write_bank_info(
+    row_index: usize,
+    bank_account: Option<&str>,
+    bank_name: Option<&str>,
+    account_name: Option<&str>,
+    mapping: &ColumnMapping,
+    state: &AppState,
+    sheet_id: &str,
+    sheet_name: &str,
+    kv: Option<&KvStore>,
+) -> Result<(), String> {
+    // Skip if nothing to write
+    if bank_account.is_none() && bank_name.is_none() && account_name.is_none() {
+        return Ok(());
+    }
+
+    let access_token = get_cached_access_token(state, kv).await?;
+
+    use event_checkin_domain::models::attendee::ColumnKey as CK;
+
+    let mut data = Vec::new();
+
+    if let Some(val) = bank_account {
+        let col = mapping.column_letter(CK::BankAccount);
+        data.push(ValueRange {
+            range: format!("{sheet_name}!{col}{row_index}"),
+            values: vec![vec![val.to_string()]],
+        });
+    }
+    if let Some(val) = bank_name {
+        let col = mapping.column_letter(CK::BankName);
+        data.push(ValueRange {
+            range: format!("{sheet_name}!{col}{row_index}"),
+            values: vec![vec![val.to_string()]],
+        });
+    }
+    if let Some(val) = account_name {
+        let col = mapping.column_letter(CK::AccountName);
+        data.push(ValueRange {
+            range: format!("{sheet_name}!{col}{row_index}"),
+            values: vec![vec![val.to_string()]],
+        });
+    }
+
+    let url =
+        format!("https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values:batchUpdate");
+
+    let body = BatchUpdateRequest {
+        data,
+        value_input_option: "USER_ENTERED".to_string(),
+    };
+
+    batch_update_sheet(&url, &body, &access_token).await?;
+
+    tracing::info!(row_index = row_index, "wrote bank info to google sheet");
+
+    invalidate_attendee_cache(kv, sheet_id, sheet_name).await;
+    Ok(())
+}

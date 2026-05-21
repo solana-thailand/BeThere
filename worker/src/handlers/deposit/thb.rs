@@ -215,11 +215,47 @@ pub async fn upload_thb_slip_handler(
         refunded: false,
         refunded_at: None,
         attendee_name: None,
+        bank_account: body.bank_account.clone(),
+        bank_name: body.bank_name.clone(),
+        account_name: body.account_name.clone(),
     };
 
     event_store::save_thb_deposit(kv, &thb_deposit)
         .await
         .map_err(AppError::Internal)?;
+
+    // Write bank info to Google Sheet for organizer refund reference
+    if (body.bank_account.is_some() || body.bank_name.is_some() || body.account_name.is_some())
+        && let Ok(mapping) =
+            crate::sheets::get_column_mapping(&state, &event.sheet_id, &event.sheet_name, Some(kv))
+                .await
+        && let Ok(Some(attendee)) = crate::sheets::get_attendee_by_id(
+            &body.attendee_id,
+            &state,
+            &event.sheet_id,
+            &event.sheet_name,
+            Some(kv),
+        )
+        .await
+        && let Err(e) = crate::sheets::write::write_bank_info(
+            attendee.row_index,
+            body.bank_account.as_deref(),
+            body.bank_name.as_deref(),
+            body.account_name.as_deref(),
+            &mapping,
+            &state,
+            &event.sheet_id,
+            &event.sheet_name,
+            Some(kv),
+        )
+        .await
+    {
+        tracing::warn!(
+            attendee_id = %body.attendee_id,
+            error = %e,
+            "failed to write bank info to sheet (non-blocking)"
+        );
+    }
 
     // Atomically increment deposit counter for this event
     let deposit_order = event_store::increment_deposit_counter(kv, &event.id)
@@ -269,6 +305,15 @@ pub struct ThbSlipUploadRequest {
     pub attendee_id: String,
     /// R2 URL of the uploaded payment slip image.
     pub slip_url: String,
+    /// Bank account number for THB refund.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bank_account: Option<String>,
+    /// Bank name for THB refund.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bank_name: Option<String>,
+    /// Account holder name for THB refund.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub account_name: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
