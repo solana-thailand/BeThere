@@ -287,6 +287,24 @@ For MVP, no banking API needed:
 2. Attendee uploads screenshot of payment confirmation
 3. Admin sees slip in dashboard, verifies amount + name match
 4. Admin clicks "Verify" → deposit status updated
+5. **Auto-actions on verify** (non-fatal if they fail):
+   - Sheet columns N (deposit_method), O (deposit_amount), Q (deposit_verified) written to Google Sheet
+   - QR code auto-generated for the attendee if they don't have one yet
+
+**Same auto-actions** occur for USDC on-chain confirmation (both in the confirm handler and the Helius background webhook).
+
+**Ticket page status flow** (for deposit events):
+```
+Registered → Awaiting Deposit Verification → Ready for Check-In → Checked In
+```
+- "Awaiting Deposit Verification": is_approved && deposit_info exists && !deposit_info.verified
+- "Ready for Check-In": only appears after deposit is verified (or when no deposit required)
+
+**Registration form**: Inline per-field validation (name, contact_channel, contact_handle, deposit_agreed) — errors clear on input change. No more full-form error replacement.
+
+**Returning registered users**: 5-second countdown auto-redirect to deposit/ticket page, with "Continue now" and "Share Event" buttons.
+
+**iOS QR save**: Detects iOS Safari → opens QR in new tab with dark background + hint to long-press → Save to Photos. Desktop/Android uses standard `<a download>`.
 
 Image storage: Cloudflare R2 (free tier: 10 GB storage, 10M reads/month).
 

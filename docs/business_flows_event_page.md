@@ -469,6 +469,17 @@ If not deposited → Show payment options:
   USDC QR: Solana Pay QR code → scan with mobile wallet
   THB: Upload slip URL → admin verifies manually
   → After THB slip upload: auto-redirect to `/ticket/{attendee_id}?event_id={id}` (shows QR code + pending approval status)
+
+**On deposit verification** (THB admin approve or USDC on-chain confirm):
+- Sheet columns N (deposit_method), O (deposit_amount), Q (deposit_verified) written to Google Sheet
+- QR code auto-generated for the attendee if they don't have one yet
+- Ticket page transitions: "Awaiting Deposit Verification" → "Ready for Check-In"
+
+**Registration form inline validation**: Per-field errors (name, contact_channel, contact_handle, deposit_agreed) shown below each input. Errors clear on input change. No full-form error replacement.
+
+**Returning registered users**: 5-second countdown auto-redirect to deposit/ticket page, with "Continue now" and "Share Event" buttons.
+
+**iOS QR save**: Detects iOS Safari → opens QR image in new tab with dark background + "Long press → Save to Photos" hint. Desktop/Android uses standard `<a download>`.
 ```
 
 **Resume capability**: localStorage stores `{attendee_id, event_id, event_slug}` after registration. Returning to `/e/{slug}` auto-redirects to deposit or ticket page based on current state.
