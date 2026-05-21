@@ -19,10 +19,11 @@ pub use crypto::{
 };
 #[allow(unused_imports)]
 pub use tx_builders::{
-    build_claim_forfeited_transaction, build_close_deposit_transaction,
-    build_close_event_transaction, build_deactivate_event_transaction, build_deposit_transaction,
-    build_init_escrow_transaction, build_mark_checked_in_transaction,
-    build_refund_and_close_transaction, build_refund_transaction,
+    build_batch_claim_forfeited_transaction, build_claim_forfeited_transaction,
+    build_close_deposit_transaction, build_close_event_transaction,
+    build_deactivate_event_transaction, build_deposit_transaction, build_init_escrow_transaction,
+    build_mark_checked_in_transaction, build_refund_and_close_transaction,
+    build_refund_transaction,
 };
 #[allow(unused_imports)]
 pub use wire::{check_escrow_pda_available, derive_escrow_address, verify_escrow_account_exists};

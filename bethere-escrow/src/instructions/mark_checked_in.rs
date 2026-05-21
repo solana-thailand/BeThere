@@ -12,7 +12,7 @@ pub struct MarkCheckedIn {
     #[account(mut)]
     pub organizer: Signer,
     #[account(
-        has_one(organizer),
+        has_one(organizer) @ crate::errors::EscrowError::Unauthorized,
         address = EventEscrow::seeds(event_escrow.organizer(), event_id)
     )]
     pub event_escrow: Account<EventEscrow>,

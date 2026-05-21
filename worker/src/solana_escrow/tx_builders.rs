@@ -612,6 +612,7 @@ pub async fn build_close_event_transaction(
 /// * `rpc_url` — Solana RPC URL (with API key if needed)
 /// * `kv` — Optional KV store for blockhash caching
 /// * `organizer_pubkey` — Organizer's wallet address (base58), must be signer
+/// * `attendee_pubkey` — Attendee's wallet address (base58) for deposit derivation
 /// * `event_id` — Numeric event ID used for PDA derivation
 ///
 /// # Discriminator
@@ -620,27 +621,34 @@ pub async fn build_close_event_transaction(
 /// # Accounts (ClaimForfeited)
 ///   0. organizer (signer, writable)
 ///   1. event_escrow (writable, PDA)
-///   2. organizer_ta (writable, init idempotent)
-///   3. usdc_mint (readonly)
-///   4. vault (writable, Token account)
-///   5. rent (readonly)
-///   6. token_program (readonly)
-///   7. system_program (readonly)
+///   2. attendee_deposit (writable, PDA)
+///   3. organizer_ta (writable, init idempotent)
+///   4. usdc_mint (readonly)
+///   5. vault (writable, Token account)
+///   6. rent (readonly)
+///   7. token_program (readonly)
+///   8. system_program (readonly)
+#[allow(dead_code)]
 pub async fn build_claim_forfeited_transaction(
     rpc_url: &str,
     kv: Option<&KvStore>,
     organizer_pubkey: &str,
+    attendee_pubkey: &str,
     event_id: u64,
 ) -> Result<ClaimForfeitedTransaction, EscrowError> {
     let ctx = EscrowCtx::resolve(organizer_pubkey, event_id).await?;
+    let attendee = pubkey_from_base58(attendee_pubkey)?;
+    let (attendee_deposit, _) = ctx.attendee_deposit(&attendee).await?;
     let organizer_ta = ctx.token_account(&ctx.organizer).await?;
 
     // Discriminator 4 (claim_forfeited).
-    // Accounts: organizer(S,W), event_escrow(W), organizer_ta(W, init idempotent),
-    //   usdc_mint(R), vault(W), rent(R), token_program(R), system_program(R)
+    // Accounts: organizer(S,W), event_escrow(W), attendee_deposit(W),
+    //   organizer_ta(W, init idempotent), usdc_mint(R), vault(W),
+    //   rent(R), token_program(R), system_program(R)
     let instruction_accounts = vec![
         acct_sw(ctx.organizer),
         acct_w(ctx.event_escrow),
+        acct_w(attendee_deposit),
         acct_w(organizer_ta),
         acct_r(ctx.usdc_mint),
         acct_w(ctx.vault),
@@ -665,6 +673,121 @@ pub async fn build_claim_forfeited_transaction(
     Ok(ClaimForfeitedTransaction {
         transaction_b64: tx_b64,
         message: "Claim forfeited deposits from no-shows".to_string(),
+    })
+}
+
+// ---------------------------------------------------------------------------
+// Batch Claim Forfeited Transaction Builder
+// ---------------------------------------------------------------------------
+
+/// Build a single transaction containing `claim_forfeited` instructions for
+/// multiple no-show attendees.
+///
+/// All instructions share the same organizer, event_escrow, vault, and program
+/// accounts. Each attendee gets their own AttendeeDeposit PDA resolved.
+///
+/// # Arguments
+/// * `rpc_url` — Solana RPC URL (with API key if needed)
+/// * `kv` — Optional KV store for blockhash caching
+/// * `organizer_pubkey` — Organizer's wallet address (base58), must be signer
+/// * `event_id` — Numeric event ID used for PDA derivation
+/// * `attendee_pubkeys` — List of attendee wallet addresses (base58) to claim
+///
+/// # Errors
+/// Returns `EscrowError` if the list is empty or any pubkey is invalid.
+pub async fn build_batch_claim_forfeited_transaction(
+    rpc_url: &str,
+    kv: Option<&KvStore>,
+    organizer_pubkey: &str,
+    event_id: u64,
+    attendee_pubkeys: &[String],
+) -> Result<ClaimForfeitedTransaction, EscrowError> {
+    if attendee_pubkeys.is_empty() {
+        return Err(EscrowError::AccountNotFound(
+            "no forfeited deposits to claim".to_string(),
+        ));
+    }
+
+    let ctx = EscrowCtx::resolve(organizer_pubkey, event_id).await?;
+    let organizer_ta = ctx.token_account(&ctx.organizer).await?;
+
+    // Shared accounts that appear in every claim_forfeited instruction.
+    // organizer_ta, rent, token_program, system_program are appended as extra.
+    let extra = vec![acct_r(ctx.ata_program)];
+
+    // Build per-attendee account lists and resolve PDAs
+    let mut instruction_account_lists: Vec<Vec<AccountMeta>> =
+        Vec::with_capacity(attendee_pubkeys.len());
+
+    for ap in attendee_pubkeys {
+        let attendee = pubkey_from_base58(ap)?;
+        let (attendee_deposit, _) = ctx.attendee_deposit(&attendee).await?;
+
+        // Discriminator 4 (claim_forfeited).
+        // Accounts: organizer(S,W), event_escrow(W), attendee_deposit(W),
+        //   organizer_ta(W, init idempotent), usdc_mint(R), vault(W),
+        //   rent(R), token_program(R), system_program(R)
+        let accounts = vec![
+            acct_sw(ctx.organizer),
+            acct_w(ctx.event_escrow),
+            acct_w(attendee_deposit),
+            acct_w(organizer_ta),
+            acct_r(ctx.usdc_mint),
+            acct_w(ctx.vault),
+            acct_r(ctx.rent_sysvar),
+            acct_r(ctx.token_program),
+            acct_r(ctx.system_program),
+        ];
+        instruction_account_lists.push(accounts);
+    }
+
+    // Merge all instruction account lists into a single deduplicated message
+    let refs: Vec<&[AccountMeta]> = instruction_account_lists
+        .iter()
+        .map(|v| v.as_slice())
+        .collect();
+    let message_accounts = merge_message_accounts(&refs, &[ctx.program_id]);
+
+    // Append extra accounts (ATA program for CPI)
+    let mut message_accounts = message_accounts;
+    for e in &extra {
+        if !message_accounts.iter().any(|ma| ma.pubkey == e.pubkey) {
+            message_accounts.push(AccountMeta {
+                pubkey: e.pubkey,
+                is_signer: e.is_signer,
+                is_writable: e.is_writable,
+            });
+        }
+    }
+
+    // Build index lookup
+    let get_index = |pk: &PubkeyBytes| -> u8 {
+        message_accounts
+            .iter()
+            .position(|m| &m.pubkey == pk)
+            .expect("all accounts should be in merged message") as u8
+    };
+
+    let program_id_index = get_index(&ctx.program_id);
+
+    // Build compiled instructions
+    let compiled_ixs: Vec<CompiledInstruction> = instruction_account_lists
+        .iter()
+        .map(|accounts| CompiledInstruction {
+            program_id_index,
+            accounts: accounts.iter().map(|m| get_index(&m.pubkey)).collect(),
+            data: ctx.ix_data(4),
+        })
+        .collect();
+
+    let tx_b64 = serialize_to_b64(rpc_url, kv, &message_accounts, &compiled_ixs).await?;
+
+    Ok(ClaimForfeitedTransaction {
+        transaction_b64: tx_b64,
+        message: format!(
+            "Claim forfeited deposits from {} no-show(s)",
+            attendee_pubkeys.len()
+        ),
     })
 }
 

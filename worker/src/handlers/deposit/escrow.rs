@@ -1004,10 +1004,11 @@ pub struct ClaimForfeitedTxResponse {
     pub message: String,
 }
 
-/// Build a `claim_forfeited` transaction for the organizer's wallet to sign.
+/// Build a batch `claim_forfeited` transaction for the organizer's wallet to sign.
 ///
-/// Transfers forfeited USDC (deposits from no-shows) from the vault to the
-/// organizer's USDC token account. Only callable after refund_deadline.
+/// Looks up all USDC deposits for this event, excludes checked-in and already-refunded
+/// attendees (via on-chain events), and builds a multi-instruction TX to claim
+/// forfeited deposits from all no-shows in one transaction.
 #[worker::send]
 pub async fn claim_forfeited_tx_handler(
     State(state): State<AppState>,
@@ -1071,19 +1072,75 @@ pub async fn claim_forfeited_tx_handler(
         ))
     })?;
 
-    let tx = crate::solana_escrow::build_claim_forfeited_transaction(
-        &rpc_url,
-        Some(kv),
-        organizer_pubkey,
-        on_chain_event_id,
-    )
-    .await
-    .map_err(|e| AppError::Internal(format!("failed to build claim_forfeited TX: {e}")))?;
+    // --- Collect all USDC deposits with wallet addresses ---
+    let all_deposits = event_store::list_deposit_statuses(kv, &body.event_id)
+        .await
+        .map_err(AppError::Internal)?;
+
+    let usdc_wallets: Vec<String> = all_deposits
+        .iter()
+        .filter(|d| d.method == DepositMethod::Usdc)
+        .filter_map(|d| d.wallet_address.clone())
+        .collect();
+
+    if usdc_wallets.is_empty() {
+        return Err(
+            AppError::Validation("no USDC deposits found for this event".to_string()).into(),
+        );
+    }
+
+    // --- Exclude checked-in and refunded attendees via on-chain events ---
+    let onchain_events = crate::escrow_indexer::get_onchain_events(kv, &body.event_id, 200).await;
+    let mut excluded_wallets: std::collections::HashSet<String> = std::collections::HashSet::new();
+    for ev in &onchain_events {
+        match ev.instruction {
+            crate::escrow_indexer::EscrowInstruction::MarkCheckedIn
+            | crate::escrow_indexer::EscrowInstruction::Refund => {
+                if let Some(ref attendee) = ev.attendee {
+                    excluded_wallets.insert(attendee.clone());
+                }
+            }
+            crate::escrow_indexer::EscrowInstruction::ClaimForfeited => {
+                // Already claimed — nothing to do (attendee field is None for claim_forfeited)
+            }
+            _ => {}
+        }
+    }
+
+    let forfeited: Vec<String> = usdc_wallets
+        .into_iter()
+        .filter(|w| !excluded_wallets.contains(w))
+        .collect();
+
+    if forfeited.is_empty() {
+        return Err(AppError::Validation(
+            "no forfeited deposits to claim — all attendees checked in or refunded".to_string(),
+        )
+        .into());
+    }
 
     tracing::info!(
         event_id = %event.id,
         on_chain_event_id,
-        "Claim forfeited TX built for organizer"
+        forfeited_count = forfeited.len(),
+        "Building batch claim_forfeited TX"
+    );
+
+    let tx = crate::solana_escrow::build_batch_claim_forfeited_transaction(
+        &rpc_url,
+        Some(kv),
+        organizer_pubkey,
+        on_chain_event_id,
+        &forfeited,
+    )
+    .await
+    .map_err(|e| AppError::Internal(format!("failed to build batch claim_forfeited TX: {e}")))?;
+
+    tracing::info!(
+        event_id = %event.id,
+        on_chain_event_id,
+        forfeited_count = forfeited.len(),
+        "Batch claim forfeited TX built for organizer"
     );
 
     // Audit log
@@ -1094,7 +1151,10 @@ pub async fn claim_forfeited_tx_handler(
             &claims.email,
             crate::audit_store::AuditAction::ClaimForfeited,
             &event.id,
-            "claim forfeited TX built",
+            &format!(
+                "batch claim forfeited TX built for {} attendee(s)",
+                forfeited.len()
+            ),
         ),
     )
     .await;
