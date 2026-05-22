@@ -1488,7 +1488,7 @@ pub fn Deposit() -> impl IntoView {
                                             </div>
                                         }.into_any()
                                     }}
-                                    <a href="/" class="btn btn-primary action-row-top">"Go Home"</a>
+                                    <a href=if data.event_slug.is_empty() { "/".to_string() } else { format!("/e/{}", data.event_slug) } class="btn btn-primary action-row-top">"← Back to event"</a>
                                 </div>
                             }
                                 .into_any()
@@ -2066,7 +2066,7 @@ pub fn Deposit() -> impl IntoView {
                                         <a href=ticket_href class="btn btn-primary">
                                             <Icon icon=IconName::Ticket class="icon-sm" />" View Your Ticket →"
                                         </a>
-                                        <a href="/" class="btn btn-outline">"Go Home"</a>
+                                        <a href=if data.event_slug.is_empty() { "/".to_string() } else { format!("/e/{}", data.event_slug) } class="btn btn-outline">"← Back to event"</a>
                                     </div>
                                 </div>
                             }
@@ -2415,7 +2415,7 @@ pub fn Deposit() -> impl IntoView {
                                         "View on Solscan ↗"
                                     </a>
                                     <div class="action-row-top-lg">
-                                        <a href="/" class="btn btn-primary">"Go Home"</a>
+                                        <a href=if data.event_slug.is_empty() { "/".to_string() } else { format!("/e/{}", data.event_slug) } class="btn btn-primary">"← Back to event"</a>
                                     </div>
                                 </div>
                             }
@@ -2573,7 +2573,7 @@ pub fn Deposit() -> impl IntoView {
                                         "View on Solscan ↗"
                                     </a>
                                     <div class="action-row-top-lg">
-                                        <a href="/" class="btn btn-primary">"Go Home"</a>
+                                        <a href=if _data.event_slug.is_empty() { "/".to_string() } else { format!("/e/{}", _data.event_slug) } class="btn btn-primary">"← Back to event"</a>
                                     </div>
                                 </div>
                             }
