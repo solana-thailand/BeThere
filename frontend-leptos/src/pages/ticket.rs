@@ -494,6 +494,19 @@ pub fn Ticket() -> impl IntoView {
                                                             "Pass the quiz or adventure to virtually check in."
                                                         }}
                                                     </div>
+                                                    {if !is_checked_in && has_claim {
+                                                        let quest_href = claim_href.clone();
+                                                        view! {
+                                                            <a
+                                                                href=quest_href
+                                                                style="font-size:0.75rem;color:var(--accent,#6366f1);text-decoration:none;font-weight:500;"
+                                                            >
+                                                                "→ Go to Quest"
+                                                            </a>
+                                                        }
+                                                    } else {
+                                                        view! { <div></div> }.into_any()
+                                                    }}
                                                 </div>
                                             </div>
                                             // Step 4: Claim NFT

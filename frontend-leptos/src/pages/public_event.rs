@@ -1028,6 +1028,19 @@ fn render_loaded_event(
                                 </span>
                             </div>
                         </div>
+                        // Hybrid note: deposit only applies to In-Person track
+                        {if is_hybrid {
+                            view! {
+                                <div style="margin-top:0.75rem;padding-top:0.6rem;border-top:1px solid var(--border);display:flex;align-items:flex-start;gap:0.4rem;">
+                                    <span style="color:var(--text-secondary);font-size:0.8rem;">"💡"</span>
+                                    <span style="color:var(--text-secondary);font-size:0.8rem;line-height:1.4;">
+                                        "Deposit applies to In-Person track only. Online participants are exempt."
+                                    </span>
+                                </div>
+                            }.into_any()
+                        } else {
+                            ().into_any()
+                        }}
                     </div>
                 }.into_any()
             } else {
