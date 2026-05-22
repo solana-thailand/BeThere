@@ -2,6 +2,7 @@
 //!
 //! Provides endpoints for listing, syncing, and querying the deduplicated
 //! master contacts sheet that tracks all attendees across all events.
+//! Also manages the Events tab (event registry in the same sheet).
 
 use axum::extract::State;
 use serde::Serialize;
@@ -9,6 +10,7 @@ use serde::Serialize;
 use crate::error::{ApiOk, WorkerError};
 use crate::sheets;
 use crate::sheets::contacts::{self, ContactUpsert};
+use crate::sheets::events_tab;
 use crate::state::AppState;
 use event_checkin_domain::models::error::AppError;
 
@@ -42,10 +44,46 @@ pub async fn list_contacts_handler(
         kv,
     )
     .await
-    .map_err(|e| AppError::Internal(e))?;
+    .map_err(AppError::Internal)?;
 
     let total = contacts.len();
     Ok(ApiOk::new(ContactsListResponse { contacts, total }))
+}
+
+// ---------------------------------------------------------------------------
+// GET /api/contacts/events — list events from the Events tab
+// ---------------------------------------------------------------------------
+
+#[derive(Serialize)]
+pub struct EventsTabListResponse {
+    pub events: Vec<events_tab::EventTabRow>,
+    pub total: usize,
+}
+
+#[worker::send]
+pub async fn list_events_tab_handler(
+    State(state): State<AppState>,
+) -> Result<ApiOk<EventsTabListResponse>, WorkerError> {
+    let config = &state.config.sheets;
+    if config.contacts_sheet_id.is_empty() {
+        return Ok(ApiOk::new(EventsTabListResponse {
+            events: vec![],
+            total: 0,
+        }));
+    }
+
+    let kv = state.events_kv.as_ref();
+    let events = events_tab::list_events_tab(
+        &state,
+        &config.contacts_sheet_id,
+        &config.events_sheet_name,
+        kv,
+    )
+    .await
+    .map_err(AppError::Internal)?;
+
+    let total = events.len();
+    Ok(ApiOk::new(EventsTabListResponse { events, total }))
 }
 
 // ---------------------------------------------------------------------------
@@ -89,7 +127,7 @@ pub async fn contacts_stats_handler(
         kv,
     )
     .await
-    .map_err(|e| AppError::Internal(e))?;
+    .map_err(AppError::Internal)?;
 
     let total_contacts = all_contacts.len();
     let repeat_attendees = all_contacts.iter().filter(|c| c.event_count > 1).count();
@@ -110,7 +148,7 @@ pub async fn contacts_stats_handler(
         .into_iter()
         .map(|(event_id, count)| EventContactCount { event_id, count })
         .collect();
-    events.sort_by(|a, b| b.count.cmp(&a.count));
+    events.sort_by_key(|e| std::cmp::Reverse(e.count));
 
     Ok(ApiOk::new(ContactsStatsResponse {
         total_contacts,
@@ -186,6 +224,24 @@ pub async fn sync_contacts_handler(
             sheets::get_attendees(&state, &config.sheet_id, &config.sheet_name, Some(kv))
                 .await
                 .unwrap_or_default();
+
+        // Sync event to Events tab (non-fatal)
+        if let Err(e) = events_tab::upsert_event_tab(
+            &config,
+            attendees.len(),
+            &state,
+            &contacts_config.contacts_sheet_id,
+            &contacts_config.events_sheet_name,
+            Some(kv),
+        )
+        .await
+        {
+            tracing::warn!(
+                event_id = %config.id,
+                error = %e,
+                "failed to sync event to Events tab"
+            );
+        }
 
         for attendee in &attendees {
             let email = attendee.email.trim().to_lowercase();

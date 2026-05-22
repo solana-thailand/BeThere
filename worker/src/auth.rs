@@ -523,6 +523,7 @@ mod tests {
                 staff_sheet_name: "staff".to_string(),
                 contacts_sheet_id: String::new(),
                 contacts_sheet_name: "Contacts".to_string(),
+                events_sheet_name: "Events".to_string(),
             },
             jwt_secret: "test-jwt-secret".to_string(),
             staff_emails: [

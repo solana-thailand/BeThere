@@ -5,6 +5,7 @@
 //! instead of `reqwest` and the `rsa` crate.
 
 pub mod contacts;
+pub mod events_tab;
 pub mod write;
 
 use base64::Engine;

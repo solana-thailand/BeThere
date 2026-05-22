@@ -147,7 +147,7 @@ pub fn AdminEscrow(
     // Claim Forfeited is skippable: if no deposits exist, on-chain close_event
     // validates accounting independently (total_deposited == total_refunded + total_forfeited).
     let (step1_done, set_step1_done) = signal(false);
-    let (step2_done, set_step2_done) = signal(false);
+    let (_step2_done, set_step2_done) = signal(false);
     let (confirm_close, set_confirm_close) = signal(false);
 
     // Reset state when event changes — also pre-populate step progress

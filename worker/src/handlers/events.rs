@@ -258,6 +258,9 @@ pub async fn create_event(
     )
     .await;
 
+    // Sync to Events tab in contacts sheet (non-fatal)
+    sync_event_to_tab(&state, &config, 0, kv).await;
+
     Ok(ApiOk::new(json!({
         "id": config.id,
         "name": config.name,
@@ -454,6 +457,9 @@ pub async fn update_event(
         .await;
     }
 
+    // Sync to Events tab in contacts sheet (non-fatal)
+    sync_event_to_tab(&state, &config, 0, kv).await;
+
     Ok(ApiOk::new(json!({
         "id": config.id,
         "name": config.name,
@@ -624,6 +630,26 @@ pub async fn hard_delete_event(
             AppError::Validation(e.to_string())
         })?;
 
+    // Clean up Events tab in contacts sheet (non-fatal)
+    let contacts_config = &state.config.sheets;
+    if !contacts_config.contacts_sheet_id.is_empty() {
+        let res = crate::sheets::events_tab::delete_event_tab(
+            &id,
+            &state,
+            &contacts_config.contacts_sheet_id,
+            &contacts_config.events_sheet_name,
+            Some(kv),
+        )
+        .await;
+        if let Err(e) = res {
+            tracing::warn!(
+                event_id = %id,
+                error = %e,
+                "failed to clean up Events tab after hard delete (non-fatal)"
+            );
+        }
+    }
+
     tracing::info!(event_id = %id, staff_email = %claims.email, force, "event permanently deleted");
 
     // Audit log — use global log since event KV entry is gone
@@ -728,4 +754,41 @@ pub async fn get_global_audit(
     Ok(ApiOk::new(serde_json::json!({
         "entries": entries,
     })))
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/// Non-fatal sync of an event to the Events tab in the contacts Google Sheet.
+///
+/// Called after event create/update. Errors are logged but never block the
+/// main operation.
+async fn sync_event_to_tab(
+    state: &AppState,
+    config: &event_checkin_domain::models::event::EventConfig,
+    total_attendees: usize,
+    kv: &worker::KvStore,
+) {
+    let contacts_config = &state.config.sheets;
+    if contacts_config.contacts_sheet_id.is_empty() {
+        return;
+    }
+
+    if let Err(e) = crate::sheets::events_tab::upsert_event_tab(
+        config,
+        total_attendees,
+        state,
+        &contacts_config.contacts_sheet_id,
+        &contacts_config.events_sheet_name,
+        Some(kv),
+    )
+    .await
+    {
+        tracing::warn!(
+            event_id = %config.id,
+            error = %e,
+            "failed to sync event to Events tab (non-fatal)"
+        );
+    }
 }

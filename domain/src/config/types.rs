@@ -47,6 +47,8 @@ pub struct SheetsConfig {
     pub contacts_sheet_id: String,
     /// Tab name for the contacts sheet. Defaults to "Contacts".
     pub contacts_sheet_name: String,
+    /// Tab name for the events registry in the contacts sheet. Defaults to "Events".
+    pub events_sheet_name: String,
 }
 
 /// Solana/Helius RPC configuration.
