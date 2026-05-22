@@ -163,17 +163,20 @@ pub async fn register_attendee(
         }
     }
 
-    // 3c. Validate deposit agreement if deposit is enabled
-    if config.deposit_enabled && body.deposit_agreed != Some(true) {
+    // 3c. Determine participation_type early (needed before deposit check)
+    let participation_type =
+        resolve_participation_type(&config.event_format, body.participation_type.as_deref())?;
+
+    // 3d. Validate deposit agreement if deposit is enabled — skip for Online attendees
+    if config.deposit_enabled
+        && !is_online_participation(&participation_type)
+        && body.deposit_agreed != Some(true)
+    {
         return Err(AppError::Validation(
             "you must agree to the deposit commitment to register".to_string(),
         )
         .into());
     }
-
-    // 4. Determine participation_type
-    let participation_type =
-        resolve_participation_type(&config.event_format, body.participation_type.as_deref())?;
 
     // 5. Check for duplicate email in the Google Sheet
     let attendees = sheets::get_attendees(&state, &config.sheet_id, &config.sheet_name, Some(kv))
@@ -247,6 +250,7 @@ pub async fn register_attendee(
                 &claim_token,
                 &state,
                 deposit.as_ref(),
+                &existing.participation_type,
             )
         };
         return Ok(ApiOk::new(RegisterResponse {
@@ -324,7 +328,7 @@ pub async fn register_attendee(
     )
     .await;
 
-    // 10. Determine next_step based on event format
+    // 10. Determine next_step based on event format and participation type
     let next_step = build_next_step(
         &config.event_format,
         &event_id,
@@ -332,6 +336,7 @@ pub async fn register_attendee(
         &claim_token,
         &state,
         None,
+        &participation_type,
     );
 
     tracing::info!(
@@ -423,6 +428,7 @@ pub async fn my_registration(
         &claim_token,
         &state,
         deposit.as_ref(),
+        &attendee.participation_type,
     );
 
     tracing::info!(
@@ -569,6 +575,7 @@ pub async fn my_registrations(
                     &claim_token,
                     &state,
                     deposit.as_ref(),
+                    &attendee.participation_type,
                 );
 
                 let status = if attendee.claimed_at.as_ref().is_some_and(|s| !s.is_empty()) {
@@ -633,6 +640,11 @@ pub async fn my_registrations(
 ///   - No deposit yet → deposit page
 ///   - THB deposit pending verification → ticket page (info view, no QR)
 ///   - Deposit verified (USDC or THB) → ticket page
+fn is_online_participation(participation_type: &str) -> bool {
+    let lower = participation_type.trim().to_lowercase();
+    lower.contains("online") || lower.contains("virtual")
+}
+
 fn build_next_step(
     format: &EventFormat,
     event_id: &str,
@@ -640,8 +652,18 @@ fn build_next_step(
     _claim_token: &str,
     state: &AppState,
     deposit: Option<&event_checkin_domain::models::deposit::DepositStatus>,
+    participation_type: &str,
 ) -> NextStep {
     let _claim_base = &state.config.server.claim_base_url;
+
+    // Online attendees never need deposit — skip straight to waiting/ticket.
+    // Quest completion (quiz/adventure) serves as virtual check-in at claim time.
+    if is_online_participation(participation_type) {
+        return NextStep {
+            step_type: "waiting".to_string(),
+            url: format!("/ticket/{api_id}?event_id={event_id}"),
+        };
+    }
 
     if format.has_in_person() {
         match deposit {
@@ -661,9 +683,8 @@ fn build_next_step(
             }
         }
     } else {
-        // Online-only: claims open after event ends.
-        // Return "waiting" step — frontend shows "You're registered!
-        // Claim page will be available after the event ends."
+        // Online-only event format (shouldn't reach here for in-person attendees,
+        // but kept as fallback)
         NextStep {
             step_type: "waiting".to_string(),
             url: format!("/ticket/{api_id}?event_id={event_id}"),
