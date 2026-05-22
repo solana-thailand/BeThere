@@ -261,6 +261,15 @@ pub struct AttendeeData {
     /// Deposit status info (present when event has deposit enabled).
     #[serde(default)]
     pub deposit_info: Option<DepositInfo>,
+    /// Event end timestamp in ms — used for online claim countdown.
+    #[serde(default)]
+    pub event_end_ms: i64,
+    /// Event name.
+    #[serde(default)]
+    pub event_name: String,
+    /// Event start timestamp in ms.
+    #[serde(default)]
+    pub event_start_ms: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

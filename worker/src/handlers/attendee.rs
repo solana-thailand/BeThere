@@ -301,6 +301,9 @@ pub async fn get_public_ticket(
         "is_in_person": attendee.is_in_person(),
         "participation_type": attendee.participation_type,
         "deposit_info": deposit_info,
+        "event_end_ms": event.event_end_ms,
+        "event_name": event.name,
+        "event_start_ms": event.event_start_ms,
     });
     Ok(ApiOk::new(data))
 }

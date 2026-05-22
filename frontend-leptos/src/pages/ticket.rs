@@ -326,6 +326,191 @@ pub fn Ticket() -> impl IntoView {
                         let claim_href = claim_token.map(|t| format!("/claim/{t}")).unwrap_or_default();
                         let has_claim = !claim_href.is_empty();
 
+                        // Online attendee detection
+                        let is_online = !data.is_in_person;
+                        let event_end_ms = data.event_end_ms;
+                        let event_name = data.event_name.clone();
+
+                        if is_online {
+                            // ── Online attendee view ──
+                            let now_ms = js_sys::Date::now() as i64;
+                            let event_ended = event_end_ms > 0 && now_ms >= event_end_ms;
+                            let claim_available = has_claim && event_ended;
+
+                            // Time remaining until event ends
+                            let remaining_text = if event_end_ms > 0 && !event_ended {
+                                let diff_ms = event_end_ms - now_ms;
+                                let days = diff_ms / (1000 * 60 * 60 * 24);
+                                let hours = (diff_ms % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60);
+                                if days > 0 {
+                                    format!("{days}d {hours}h remaining")
+                                } else {
+                                    let mins = (diff_ms % (1000 * 60 * 60)) / (1000 * 60);
+                                    format!("{hours}h {mins}m remaining")
+                                }
+                            } else {
+                                String::new()
+                            };
+
+                            view! {
+                                // Main ticket card
+                                <div class="card ticket-card">
+                                    // Header
+                                    <div class="ticket-header">
+                                        <Icon icon=IconName::Globe class="icon-lg" />
+                                        <h1 class="ticket-title">"Online Registration"</h1>
+                                    </div>
+
+                                    // Online badge
+                                    <div style="text-align:center;margin-bottom:1rem;">
+                                        <div style="display:inline-flex;align-items:center;gap:0.4rem;background:rgba(99,102,241,0.12);border:1px solid rgba(99,102,241,0.3);border-radius:9999px;padding:0.35rem 0.85rem;font-size:0.8rem;font-weight:600;color:#818cf8;">
+                                            <Icon icon=IconName::Globe class="icon-sm" />
+                                            "Online Track"
+                                        </div>
+                                    </div>
+
+                                    // Attendee info
+                                    <div class="ticket-info">
+                                        <div class="ticket-info-row">
+                                            <span class="ticket-info-label">"Name"</span>
+                                            <span class="ticket-info-value">
+                                                {utils::escape_html(&name)}
+                                            </span>
+                                        </div>
+                                        {if !masked_email.is_empty() {
+                                            let email = masked_email;
+                                            view! {
+                                                <div class="ticket-info-row">
+                                                    <span class="ticket-info-label">"Email"</span>
+                                                    <span class="ticket-info-value ticket-email-masked">
+                                                        {utils::escape_html(&email)}
+                                                    </span>
+                                                </div>
+                                            }.into_any()
+                                        } else {
+                                            view! { <div></div> }.into_any()
+                                        }}
+                                        {if !event_name.is_empty() {
+                                            let en = event_name;
+                                            view! {
+                                                <div class="ticket-info-row">
+                                                    <span class="ticket-info-label">"Event"</span>
+                                                    <span class="ticket-info-value">
+                                                        {utils::escape_html(&en)}
+                                                    </span>
+                                                </div>
+                                            }.into_any()
+                                        } else {
+                                            view! { <div></div> }.into_any()
+                                        }}
+                                    </div>
+
+                                    // Next steps timeline
+                                    <div style="margin-top:1.25rem;border-top:1px solid var(--border);padding-top:1.25rem;">
+                                        <h3 style="font-size:0.95rem;font-weight:600;color:#fff;margin-bottom:1rem;">
+                                            "What's Next?"
+                                        </h3>
+                                        <div style="display:flex;flex-direction:column;gap:0.75rem;">
+                                            // Step 1: Register — done
+                                            <div style="display:flex;gap:0.75rem;align-items:flex-start;">
+                                                <div style="flex-shrink:0;width:28px;height:28px;border-radius:50%;background:#22c55e;display:flex;align-items:center;justify-content:center;font-size:0.75rem;color:#fff;font-weight:700;">
+                                                    "\u{2713}" // ✓
+                                                </div>
+                                                <div>
+                                                    <div style="font-size:0.85rem;font-weight:600;color:var(--text-primary);">"Register"</div>
+                                                    <div style="font-size:0.75rem;color:var(--text-secondary);">"You're all signed up!"</div>
+                                                </div>
+                                            </div>
+                                            // Step 2: Wait for event to end
+                                            <div style="display:flex;gap:0.75rem;align-items:flex-start;">
+                                                <div style=format!("flex-shrink:0;width:28px;height:28px;border-radius:50%;background:{};display:flex;align-items:center;justify-content:center;font-size:0.75rem;color:#fff;font-weight:700;", if event_ended { "#22c55e" } else { "var(--text-secondary)" })>
+                                                    {if event_ended { "\u{2713}" } else { "2" }}
+                                                </div>
+                                                <div>
+                                                    <div style="font-size:0.85rem;font-weight:600;color:var(--text-primary);">
+                                                        {if event_ended { "Event Ended" } else { "Wait for Event" }}
+                                                    </div>
+                                                    <div style="font-size:0.75rem;color:var(--text-secondary);">
+                                                        {if event_ended {
+                                                            "The event has ended — you can proceed to claim.".to_string()
+                                                        } else if !remaining_text.is_empty() {
+                                                            remaining_text
+                                                        } else {
+                                                            "Claims open after the event ends.".to_string()
+                                                        }}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            // Step 3: Complete quest
+                                            <div style="display:flex;gap:0.75rem;align-items:flex-start;">
+                                                <div style=format!("flex-shrink:0;width:28px;height:28px;border-radius:50%;background:{};display:flex;align-items:center;justify-content:center;font-size:0.75rem;color:#fff;font-weight:700;", if is_checked_in { "#22c55e" } else { "var(--text-secondary)" })>
+                                                    {if is_checked_in { "\u{2713}" } else { "3" }}
+                                                </div>
+                                                <div>
+                                                    <div style="font-size:0.85rem;font-weight:600;color:var(--text-primary);">
+                                                        {if is_checked_in { "Quest Completed" } else { "Complete Quest" }}
+                                                    </div>
+                                                    <div style="font-size:0.75rem;color:var(--text-secondary);">
+                                                        {if is_checked_in {
+                                                            "Virtual check-in complete!"
+                                                        } else {
+                                                            "Pass the quiz or adventure to virtually check in."
+                                                        }}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            // Step 4: Claim NFT
+                                            <div style="display:flex;gap:0.75rem;align-items:flex-start;">
+                                                <div style="flex-shrink:0;width:28px;height:28px;border-radius:50%;background:var(--text-secondary);display:flex;align-items:center;justify-content:center;font-size:0.75rem;color:#fff;font-weight:700;">
+                                                    "4"
+                                                </div>
+                                                <div>
+                                                    <div style="font-size:0.85rem;font-weight:600;color:var(--text-primary);">"Claim Your Badge"</div>
+                                                    <div style="font-size:0.75rem;color:var(--text-secondary);">
+                                                        "Mint your compressed NFT attendance proof."
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    // Action button
+                                    <div style="margin-top:1.25rem;text-align:center;">
+                                        {if claim_available {
+                                            let href = claim_href.clone();
+                                            view! {
+                                                <a
+                                                    href=href
+                                                    class="btn btn-primary"
+                                                    style="width:100%;"
+                                                >
+                                                    <Icon icon=IconName::Gift class="icon-sm" />
+                                                    " Claim Your NFT Badge"
+                                                </a>
+                                            }.into_any()
+                                        } else if has_claim && !event_ended {
+                                            view! {
+                                                <div style="background:rgba(250,204,21,0.08);border:1px solid rgba(250,204,21,0.2);border-radius:var(--radius);padding:0.75rem;text-align:center;">
+                                                    <div style="font-size:0.8rem;color:#facc15;font-weight:500;">
+                                                        "Claim link will be available after the event ends."
+                                                    </div>
+                                                </div>
+                                            }.into_any()
+                                        } else {
+                                            view! { <div></div> }.into_any()
+                                        }}
+                                    </div>
+                                </div>
+
+                                // Navigation links
+                                <div class="ticket-nav-links" style="display:flex;gap:0.75rem;justify-content:center;margin-top:1rem;">
+                                    <a href="/" class="btn btn-outline btn-sm">
+                                        "\u{2190} Home"
+                                    </a>
+                                </div>
+                            }.into_any()
+                        } else {
+                        // ── In-Person attendee view (original) ──
                         view! {
                             // Main ticket card
                             <div class="card ticket-card">
@@ -568,6 +753,7 @@ pub fn Ticket() -> impl IntoView {
 
                             // Auto-refresh indicator (outside reactive block to access signals)
                         }.into_any()
+                        } // end else (in-person branch)
                     },
                     TicketState::NotFound(msg) => view! {
                         <div class="center-page">
