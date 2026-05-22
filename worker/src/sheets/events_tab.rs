@@ -3,7 +3,7 @@
 //! Stores event metadata in a dedicated "Events" tab alongside the "Contacts"
 //! tab, giving organizers a single-sheet view of their events + contacts.
 //!
-//! Sheet schema (columns A–P):
+//! Sheet schema (columns A–Q):
 //!   A: event_id            | solana-bangkok-2025      | Unique event ID
 //!   B: name                | Solana x AI Builders     | Display name
 //!   C: slug                | solana-bangkok-2025      | URL slug
@@ -20,6 +20,7 @@
 //!   N: organizer_emails    | alice@x.com,bob@y.com    | Comma-separated
 //!   O: total_attendees     | 42                       | Attendee count (updated on sync)
 //!   P: created_at          | 2025-03-15T10:00:00Z     | ISO 8601
+//!   Q: organization_id     | solana-thailand          | Org ID (empty = global)
 
 use worker::KvStore;
 
@@ -49,8 +50,9 @@ const COL_TAGLINE: usize = 12;
 const COL_ORGANIZER_EMAILS: usize = 13;
 const COL_TOTAL_ATTENDEES: usize = 14;
 const COL_CREATED_AT: usize = 15;
+const COL_ORGANIZATION_ID: usize = 16;
 
-const TOTAL_COLUMNS: usize = 16;
+const TOTAL_COLUMNS: usize = 17;
 
 // ---------------------------------------------------------------------------
 // Public: upsert event row
@@ -143,6 +145,7 @@ pub struct EventTabRow {
     pub organizer_emails: String,
     pub total_attendees: usize,
     pub created_at: String,
+    pub organization_id: String,
 }
 
 /// Read all events from the Events tab.
@@ -154,7 +157,7 @@ pub async fn list_events_tab(
 ) -> Result<Vec<EventTabRow>, String> {
     let access_token = get_cached_access_token(state, kv).await?;
 
-    let range = format!("{sheet_name}!A:P");
+    let range = format!("{sheet_name}!A:Q");
     let url = format!("https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{range}");
     let url_encoded = url.replace(':', "%3A").replace('!', "%21");
 
@@ -196,6 +199,7 @@ pub async fn list_events_tab(
                 .and_then(|s| s.parse().ok())
                 .unwrap_or(0),
             created_at: row.get(COL_CREATED_AT).cloned().unwrap_or_default(),
+            organization_id: row.get(COL_ORGANIZATION_ID).cloned().unwrap_or_default(),
         });
     }
 
@@ -225,6 +229,7 @@ fn event_config_to_row(config: &EventConfig, total_attendees: usize) -> Vec<Stri
     row[COL_ORGANIZER_EMAILS] = config.organizer_emails.join(",");
     row[COL_TOTAL_ATTENDEES] = total_attendees.to_string();
     row[COL_CREATED_AT] = config.created_at.clone();
+    row[COL_ORGANIZATION_ID] = config.organization_id.clone();
     row
 }
 
@@ -260,14 +265,14 @@ async fn update_event_row(
     sheet_name: &str,
     access_token: &str,
 ) -> Result<(), String> {
-    let range = format!("{sheet_name}!A{row_index}:P{row_index}");
+    let range = format!("{sheet_name}!A{row_index}:Q{row_index}");
     let url = format!(
         "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{range}?valueInputOption=USER_ENTERED"
     );
     let url_encoded = url.replace(':', "%3A").replace('!', "%21");
 
     let body = ValueRange {
-        range: format!("{sheet_name}!A{row_index}:P{row_index}"),
+        range: format!("{sheet_name}!A{row_index}:Q{row_index}"),
         values: vec![row_data.to_vec()],
     };
 
@@ -284,12 +289,12 @@ async fn append_event_row(
     access_token: &str,
 ) -> Result<(), String> {
     let url = format!(
-        "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{}!A:P:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS",
+        "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{}!A:Q:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS",
         urlencoding::encode(sheet_name)
     );
 
     let body = ValueRange {
-        range: format!("{sheet_name}!A:P"),
+        range: format!("{sheet_name}!A:Q"),
         values: vec![row.to_vec()],
     };
 

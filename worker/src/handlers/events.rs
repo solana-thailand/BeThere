@@ -623,6 +623,12 @@ pub async fn hard_delete_event(
         );
     }
 
+    // Load event config BEFORE deletion so we can resolve org's contacts sheet
+    let pre_delete_config = crate::event_store::get_event_config(kv, &id)
+        .await
+        .ok()
+        .flatten();
+
     crate::event_store::hard_delete_event(kv, &id, force)
         .await
         .map_err(|e| {
@@ -631,13 +637,26 @@ pub async fn hard_delete_event(
         })?;
 
     // Clean up Events tab in contacts sheet (non-fatal)
-    let contacts_config = &state.config.sheets;
-    if !contacts_config.contacts_sheet_id.is_empty() {
+    let resolved = match &pre_delete_config {
+        Some(config) => {
+            crate::org_store::resolve_contacts_sheet(kv, config, &state.config.sheets).await
+        }
+        None => {
+            // Event config already gone — use global config
+            event_checkin_domain::models::org::ResolvedContactsSheet {
+                sheet_id: state.config.sheets.contacts_sheet_id.clone(),
+                contacts_sheet_name: state.config.sheets.contacts_sheet_name.clone(),
+                events_sheet_name: state.config.sheets.events_sheet_name.clone(),
+            }
+        }
+    };
+
+    if !resolved.sheet_id.is_empty() {
         let res = crate::sheets::events_tab::delete_event_tab(
             &id,
             &state,
-            &contacts_config.contacts_sheet_id,
-            &contacts_config.events_sheet_name,
+            &resolved.sheet_id,
+            &resolved.events_sheet_name,
             Some(kv),
         )
         .await;
@@ -770,8 +789,9 @@ async fn sync_event_to_tab(
     total_attendees: usize,
     kv: &worker::KvStore,
 ) {
-    let contacts_config = &state.config.sheets;
-    if contacts_config.contacts_sheet_id.is_empty() {
+    let resolved = crate::org_store::resolve_contacts_sheet(kv, config, &state.config.sheets).await;
+
+    if resolved.sheet_id.is_empty() {
         return;
     }
 
@@ -779,8 +799,8 @@ async fn sync_event_to_tab(
         config,
         total_attendees,
         state,
-        &contacts_config.contacts_sheet_id,
-        &contacts_config.events_sheet_name,
+        &resolved.sheet_id,
+        &resolved.events_sheet_name,
         Some(kv),
     )
     .await

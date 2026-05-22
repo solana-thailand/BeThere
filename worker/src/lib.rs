@@ -10,6 +10,7 @@ mod event_store;
 mod handlers;
 mod http;
 mod middleware;
+mod org_store;
 mod quiz;
 
 mod sheets;

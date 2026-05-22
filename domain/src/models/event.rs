@@ -202,6 +202,9 @@ pub struct EventMeta {
     pub sheet_id: String,
     /// ISO 8601 creation timestamp.
     pub created_at: String,
+    /// Organization this event belongs to. Empty string = global (no org).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub organization_id: String,
     /// Emails of users with organizer-level access to this event.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub organizer_emails: Vec<String>,
@@ -316,6 +319,9 @@ pub struct EventConfig {
     pub merkle_tree: String,
 
     // ── Access control ────────────────────────────────────────────────
+    /// Organization this event belongs to. Empty string = global (no org).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub organization_id: String,
     /// Emails with organizer-level access (full event management).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub organizer_emails: Vec<String>,
@@ -427,6 +433,7 @@ impl EventConfig {
             time_tba: self.time_tba,
             sheet_id: self.sheet_id.clone(),
             created_at: self.created_at.clone(),
+            organization_id: self.organization_id.clone(),
             organizer_emails: self.organizer_emails.clone(),
             deposit_enabled: self.deposit_enabled,
             max_refundable_deposits: self.max_refundable_deposits,
@@ -530,6 +537,7 @@ impl EventConfig {
             nft_symbol: nft_symbol.to_string(),
             nft_description_template: String::new(),
             merkle_tree: merkle_tree.to_string(),
+            organization_id: String::new(),
             organizer_emails,
             staff_emails,
             claim_base_url: claim_base_url.to_string(),
@@ -617,6 +625,9 @@ pub struct CreateEventRequest {
     /// Merkle tree address for cNFT minting.
     #[serde(default)]
     pub merkle_tree: String,
+    /// Organization this event belongs to. Empty = global (no org).
+    #[serde(default)]
+    pub organization_id: String,
     /// Organizer email addresses.
     #[serde(default)]
     pub organizer_emails: Vec<String>,
@@ -749,6 +760,9 @@ pub struct UpdateEventRequest {
     /// New Merkle tree address.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub merkle_tree: Option<String>,
+    /// New organization ID.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub organization_id: Option<String>,
     /// Replace organizer emails.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub organizer_emails: Option<Vec<String>>,

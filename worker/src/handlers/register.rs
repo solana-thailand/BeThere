@@ -319,6 +319,7 @@ pub async fn register_attendee(
         contact_channel,
         contact_handle,
         &state,
+        &config,
         Some(kv),
     )
     .await;
@@ -800,6 +801,7 @@ async fn enforce_capacity(
 
 /// Non-fatal upsert to the master contacts sheet after successful registration.
 /// Errors are logged but never block the registration response.
+#[allow(clippy::too_many_arguments)]
 async fn upsert_contact_after_registration(
     email: &str,
     name: &str,
@@ -807,10 +809,27 @@ async fn upsert_contact_after_registration(
     contact_channel: Option<&str>,
     contact_handle: Option<&str>,
     state: &AppState,
+    event_config: &event_checkin_domain::models::event::EventConfig,
     kv: Option<&worker::KvStore>,
 ) {
-    let contacts_config = &state.config.sheets;
-    if contacts_config.contacts_sheet_id.is_empty() {
+    // Resolve the contacts sheet from the event's organization
+    let resolved = match kv {
+        Some(kv_store) => {
+            crate::org_store::resolve_contacts_sheet(kv_store, event_config, &state.config.sheets)
+                .await
+        }
+        None => {
+            // No KV — fall back to global config
+            let global = &state.config.sheets;
+            event_checkin_domain::models::org::ResolvedContactsSheet {
+                sheet_id: global.contacts_sheet_id.clone(),
+                contacts_sheet_name: global.contacts_sheet_name.clone(),
+                events_sheet_name: global.events_sheet_name.clone(),
+            }
+        }
+    };
+
+    if resolved.sheet_id.is_empty() {
         return; // Not configured — skip silently
     }
 
@@ -825,8 +844,8 @@ async fn upsert_contact_after_registration(
     if let Err(e) = crate::sheets::contacts::upsert_contact(
         &upsert,
         state,
-        &contacts_config.contacts_sheet_id,
-        &contacts_config.contacts_sheet_name,
+        &resolved.sheet_id,
+        &resolved.contacts_sheet_name,
         kv,
     )
     .await

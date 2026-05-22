@@ -1521,6 +1521,7 @@ pub async fn confirm_escrow_init_handler(
             nft_symbol: None,
             nft_description_template: None,
             merkle_tree: None,
+            organization_id: None,
             organizer_emails: None,
             staff_emails: None,
             claim_base_url: None,

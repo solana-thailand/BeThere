@@ -248,6 +248,7 @@ pub async fn create_event(
             .collect(),
         claim_base_url: req.claim_base_url.trim().to_string(),
         merkle_tree: req.merkle_tree.trim().to_string(),
+        organization_id: req.organization_id.trim().to_string(),
         // Deposit auto-enabled when format includes in-person track.
         // If organizer explicitly sets deposit_enabled=true for online-only, honor it.
         deposit_enabled: req.deposit_enabled || req.event_format.has_in_person(),
@@ -459,6 +460,9 @@ pub async fn update_event(
     }
     if let Some(ref v) = req.merkle_tree {
         config.merkle_tree = v.trim().to_string();
+    }
+    if let Some(ref v) = req.organization_id {
+        config.organization_id = v.trim().to_string();
     }
 
     // Deposit fields
@@ -821,6 +825,7 @@ pub async fn seed_from_config(
         },
         claim_base_url: global.server.claim_base_url.clone(),
         merkle_tree: String::new(), // not in global config — per-event only
+        organization_id: String::new(), // seeded event has no org
         deposit_enabled: false,
         deposit_amount_usdc: 0,
         deposit_amount_thb: 0,

@@ -220,6 +220,13 @@ pub async fn sync_contacts_handler(
             None => continue,
         };
 
+        // Resolve the contacts sheet from the event's organization
+        let resolved = crate::org_store::resolve_contacts_sheet(kv, &config, contacts_config).await;
+
+        if resolved.sheet_id.is_empty() {
+            continue;
+        }
+
         let attendees =
             sheets::get_attendees(&state, &config.sheet_id, &config.sheet_name, Some(kv))
                 .await
@@ -230,8 +237,8 @@ pub async fn sync_contacts_handler(
             &config,
             attendees.len(),
             &state,
-            &contacts_config.contacts_sheet_id,
-            &contacts_config.events_sheet_name,
+            &resolved.sheet_id,
+            &resolved.events_sheet_name,
             Some(kv),
         )
         .await
@@ -262,8 +269,8 @@ pub async fn sync_contacts_handler(
             match contacts::upsert_contact(
                 &upsert,
                 &state,
-                &contacts_config.contacts_sheet_id,
-                &contacts_config.contacts_sheet_name,
+                &resolved.sheet_id,
+                &resolved.contacts_sheet_name,
                 Some(kv),
             )
             .await
