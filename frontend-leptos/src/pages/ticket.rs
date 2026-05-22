@@ -307,6 +307,8 @@ pub fn Ticket() -> impl IntoView {
                         let is_checked_in = data.is_checked_in;
                         let is_approved = data.is_approved;
                         let claimed = data.claimed;
+                        let claimed_asset_id = data.claimed_asset_id.clone();
+                        let cluster = data.cluster.clone();
                         let checked_in_at = data.attendee.checked_in_at.clone();
                         let checked_in_by = data.attendee.checked_in_by.clone();
                         let masked_email = data.attendee.email.clone();
@@ -519,11 +521,29 @@ pub fn Ticket() -> impl IntoView {
                                     <div style="margin-top:1.25rem;text-align:center;">
                                         {move || {
                                             if claimed {
+                                                let solanafm_link = claimed_asset_id.as_ref().and_then(|id| {
+                                                    let c = cluster.as_deref().unwrap_or("devnet");
+                                                    if id.is_empty() { None } else { Some(utils::solanafm_asset_url(id, c)) }
+                                                });
                                                 view! {
                                                     <div style="background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.2);border-radius:var(--radius);padding:0.75rem;text-align:center;">
                                                         <div style="font-size:0.85rem;color:#34d399;font-weight:600;">
                                                             "\u{2713} NFT Badge claimed successfully!"
                                                         </div>
+                                                        {if let Some(url) = solanafm_link {
+                                                            view! {
+                                                                <a
+                                                                    href=url
+                                                                    target="_blank"
+                                                                    rel="noopener noreferrer"
+                                                                    style="display:inline-block;margin-top:0.5rem;font-size:0.8rem;color:#818cf8;text-decoration:underline;"
+                                                                >
+                                                                    "View NFT on SolanaFM \u{2197}"
+                                                                </a>
+                                                            }.into_any()
+                                                        } else {
+                                                            view! { <div></div> }.into_any()
+                                                        }}
                                                     </div>
                                                 }.into_any()
                                             } else {
@@ -729,7 +749,33 @@ pub fn Ticket() -> impl IntoView {
                                             } else {
                                                 view! { <div></div> }.into_any()
                                             }}
-                                            {if has_claim {
+                                            {if claimed {
+                                                let solanafm_link = claimed_asset_id.as_ref().and_then(|id| {
+                                                    let c = cluster.as_deref().unwrap_or("devnet");
+                                                    if id.is_empty() { None } else { Some(utils::solanafm_asset_url(id, c)) }
+                                                });
+                                                view! {
+                                                    <div style="background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.2);border-radius:var(--radius);padding:0.6rem 0.75rem;text-align:center;margin-top:0.5rem;">
+                                                        <div style="font-size:0.85rem;color:#34d399;font-weight:600;">
+                                                            "\u{2713} NFT Badge claimed!"
+                                                        </div>
+                                                        {if let Some(url) = solanafm_link {
+                                                            view! {
+                                                                <a
+                                                                    href=url
+                                                                    target="_blank"
+                                                                    rel="noopener noreferrer"
+                                                                    style="display:inline-block;margin-top:0.35rem;font-size:0.8rem;color:#818cf8;text-decoration:underline;"
+                                                                >
+                                                                    "View NFT on SolanaFM \u{2197}"
+                                                                </a>
+                                                            }.into_any()
+                                                        } else {
+                                                            view! { <div></div> }.into_any()
+                                                        }}
+                                                    </div>
+                                                }.into_any()
+                                            } else if has_claim {
                                                 view! {
                                                     <a
                                                         href=href

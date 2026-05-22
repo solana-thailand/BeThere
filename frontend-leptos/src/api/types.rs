@@ -273,6 +273,12 @@ pub struct AttendeeData {
     /// Whether the attendee has already claimed their NFT.
     #[serde(default)]
     pub claimed: bool,
+    /// Claimed NFT asset ID (for explorer links).
+    #[serde(default)]
+    pub claimed_asset_id: Option<String>,
+    /// Solana cluster for explorer links (e.g. "devnet", "mainnet-beta").
+    #[serde(default)]
+    pub cluster: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

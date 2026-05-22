@@ -74,6 +74,17 @@ pub fn metaplex_explorer_url(asset_id: &str, cluster: &str) -> String {
     format!("https://core.metaplex.com/explorer/{asset_id}?env={env}")
 }
 
+/// Build a SolanaFM URL for viewing a compressed NFT asset.
+/// SolanaFM indexes cNFTs via DAS API and displays them with metadata.
+pub fn solanafm_asset_url(asset_id: &str, cluster: &str) -> String {
+    let cluster_param = if cluster == "mainnet-beta" {
+        String::new()
+    } else {
+        format!("?cluster={cluster}")
+    };
+    format!("https://solanafm.com/token/{asset_id}{cluster_param}")
+}
+
 /// Result of parsing a participation type string into a display badge.
 #[derive(Debug, Clone)]
 pub struct ParticipationBadge {

@@ -228,6 +228,41 @@ pub async fn get_attendee(
         None => None,
     };
 
+    // Read finalized claim lock KV for claimed attendees to retrieve asset_id / cluster.
+    let (claimed_asset_id, cluster) = if attendee.claimed_at.is_some() {
+        if let Some(token) = attendee.claim_token.as_ref() {
+            let lock_key = crate::claim::claim_lock_key(&event.id, token);
+            let lock_data: Option<String> = if let Some(kv_ref) = kv {
+                kv_ref.get(&lock_key).text().await.ok().flatten()
+            } else {
+                None
+            };
+            if let Some(json_str) = lock_data {
+                if let Ok(val) = serde_json::from_str::<serde_json::Value>(&json_str) {
+                    let cluster_val = if state.config.solana.rpc_url.contains("mainnet") {
+                        "mainnet-beta".to_string()
+                    } else {
+                        "devnet".to_string()
+                    };
+                    (
+                        val.get("asset_id")
+                            .and_then(|v| v.as_str())
+                            .map(String::from),
+                        Some(cluster_val),
+                    )
+                } else {
+                    (None, None)
+                }
+            } else {
+                (None, None)
+            }
+        } else {
+            (None, None)
+        }
+    } else {
+        (None, None)
+    };
+
     let data = json!({
         "attendee": response,
         "qr_image": qr_image,
@@ -236,6 +271,8 @@ pub async fn get_attendee(
         "is_in_person": attendee.is_in_person(),
         "participation_type": attendee.participation_type,
         "claimed": attendee.claimed_at.is_some(),
+        "claimed_asset_id": claimed_asset_id,
+        "cluster": cluster,
     });
     Ok(ApiOk::new(data))
 }
@@ -294,6 +331,41 @@ pub async fn get_public_ticket(
         })
     });
 
+    // Read finalized claim lock KV for claimed attendees to retrieve asset_id / cluster.
+    let (claimed_asset_id, cluster) = if attendee.claimed_at.is_some() {
+        if let Some(token) = attendee.claim_token.as_ref() {
+            let lock_key = crate::claim::claim_lock_key(&event.id, token);
+            let lock_data: Option<String> = if let Some(kv_ref) = kv {
+                kv_ref.get(&lock_key).text().await.ok().flatten()
+            } else {
+                None
+            };
+            if let Some(json_str) = lock_data {
+                if let Ok(val) = serde_json::from_str::<serde_json::Value>(&json_str) {
+                    let cluster_val = if state.config.solana.rpc_url.contains("mainnet") {
+                        "mainnet-beta".to_string()
+                    } else {
+                        "devnet".to_string()
+                    };
+                    (
+                        val.get("asset_id")
+                            .and_then(|v| v.as_str())
+                            .map(String::from),
+                        Some(cluster_val),
+                    )
+                } else {
+                    (None, None)
+                }
+            } else {
+                (None, None)
+            }
+        } else {
+            (None, None)
+        }
+    } else {
+        (None, None)
+    };
+
     let data = json!({
         "attendee": response,
         "qr_image": qr_image,
@@ -306,6 +378,8 @@ pub async fn get_public_ticket(
         "event_name": event.name,
         "event_start_ms": event.event_start_ms,
         "claimed": attendee.claimed_at.is_some(),
+        "claimed_asset_id": claimed_asset_id,
+        "cluster": cluster,
     });
     Ok(ApiOk::new(data))
 }

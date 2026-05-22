@@ -16,7 +16,7 @@ use leptos_router::params::Params;
 use crate::api::{self, AdventureStatusType, ClaimLookupData, ClaimMintData, QuizQuestionsData, QuizStatus, QuizSubmitData, RefundTxRequest};
 use crate::components::{self, Toast, ToastType};
 use crate::icons::{Icon, IconName, wallet_icon_name};
-use crate::utils::{escape_html, format_timestamp, get_cluster, metaplex_explorer_url, solscan_tx_url};
+use crate::utils::{escape_html, format_timestamp, get_cluster, metaplex_explorer_url, solanafm_asset_url, solscan_tx_url};
 use wasm_bindgen::prelude::*;
 
 // ---------------------------------------------------------------------------
@@ -2015,6 +2015,7 @@ pub fn Claim() -> impl IntoView {
                         ClaimState::Success(data) => {
                             let explorer_url = solscan_tx_url(&data.signature, &data.cluster);
                             let metaplex_url = metaplex_explorer_url(&data.asset_id, &data.cluster);
+                            let solanafm_url = solanafm_asset_url(&data.asset_id, &data.cluster);
                             let asset_id_display = {
                                 let id = &data.asset_id;
                                 if id.len() > 12 {
@@ -2099,10 +2100,18 @@ pub fn Claim() -> impl IntoView {
                                     // Explorer links
                                     <div class="success-actions">
                                         <a
-                                            href=explorer_url
+                                            href=solanafm_url
                                             target="_blank"
                                             rel="noopener noreferrer"
                                             class="btn btn-primary btn-block"
+                                        >
+                                            "View NFT on SolanaFM ↗"
+                                        </a>
+                                        <a
+                                            href=explorer_url
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            class="btn btn-outline btn-block"
                                         >
                                             "View TX on Solscan ↗"
                                         </a>
@@ -2112,17 +2121,18 @@ pub fn Claim() -> impl IntoView {
                                             rel="noopener noreferrer"
                                             class="btn btn-outline btn-block"
                                         >
-                                            "Verify NFT on Metaplex ↗"
+                                            "Verify on Metaplex ↗"
                                         </a>
                                     </div>
 
-                                    // cNFT explanation — help attendees understand why it doesn't show in wallet
+                                    // cNFT explanation — help attendees understand how to view their NFT
                                     <div class="claim-cnft-hint">
-                                        <p class="hint-title">"💡 Compressed NFT Info"</p>
+                                        <p class="hint-title">"🎫 Your Compressed NFT"</p>
                                         <p class="hint-desc">
-                                            "This is a compressed NFT stored on Solana. It may "
-                                            <strong>"not appear"</strong>
-                                            " in some wallet apps (Phantom, Solflare). Use the links above to verify your NFT on-chain."
+                                            "This NFT is stored on Solana using state compression. View it on "
+                                            <strong>"SolanaFM"</strong>
+                                            " above — it shows the full NFT with artwork and metadata. "
+                                            "It may not appear in some wallet apps (Phantom, Solflare)."
                                         </p>
                                     </div>
 
