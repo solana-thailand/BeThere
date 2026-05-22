@@ -337,12 +337,16 @@ pub fn Ticket() -> impl IntoView {
 
                         if is_online {
                             // ── Online attendee view ──
-                            let now_ms = js_sys::Date::now() as i64;
-                            let event_ended = event_end_ms > 0 && now_ms >= event_end_ms;
-                            let claim_available = has_claim && event_ended;
 
-                            // Time remaining until event ends
-                            let remaining_text = if event_end_ms > 0 && !event_ended {
+                            // Live countdown: reactive signal updated every 60s
+                            let (countdown_text, set_countdown_text) = signal(String::new());
+                            let (event_ended, set_event_ended) = signal(event_end_ms > 0 && js_sys::Date::now() as i64 >= event_end_ms);
+
+                            // Compute remaining time label from a timestamp
+                            let fmt_remaining = move |now_ms: i64| -> String {
+                                if event_end_ms <= 0 || now_ms >= event_end_ms {
+                                    return String::new();
+                                }
                                 let diff_ms = event_end_ms - now_ms;
                                 let days = diff_ms / (1000 * 60 * 60 * 24);
                                 let hours = (diff_ms % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60);
@@ -352,9 +356,34 @@ pub fn Ticket() -> impl IntoView {
                                     let mins = (diff_ms % (1000 * 60 * 60)) / (1000 * 60);
                                     format!("{hours}h {mins}m remaining")
                                 }
-                            } else {
-                                String::new()
                             };
+
+                            // Initial value
+                            set_countdown_text.set(fmt_remaining(js_sys::Date::now() as i64));
+
+                            // Start a 60s interval to refresh countdown
+                            Effect::new(move |_| {
+                                let cb = Closure::<dyn Fn()>::new(move || {
+                                    let now_ms = js_sys::Date::now() as i64;
+                                    let ended = event_end_ms > 0 && now_ms >= event_end_ms;
+                                    set_event_ended.set(ended);
+                                    set_countdown_text.set(fmt_remaining(now_ms));
+                                });
+                                let interval_id = web_sys::window()
+                                    .unwrap()
+                                    .set_interval_with_callback_and_timeout_and_arguments_0(
+                                        cb.as_ref().unchecked_ref(),
+                                        60_000i32,
+                                    )
+                                    .unwrap();
+                                // Keep closure alive for the timer lifetime
+                                cb.forget();
+                                on_cleanup(move || {
+                                    let _ = web_sys::window().map(|w| {
+                                        w.clear_interval_with_handle(interval_id);
+                                    });
+                                });
+                            });
 
                             view! {
                                 // Main ticket card
@@ -425,22 +454,23 @@ pub fn Ticket() -> impl IntoView {
                                                     <div style="font-size:0.75rem;color:var(--text-secondary);">"You're all signed up!"</div>
                                                 </div>
                                             </div>
-                                            // Step 2: Wait for event to end
+                                            // Step 2: Wait for event to end (live countdown)
                                             <div style="display:flex;gap:0.75rem;align-items:flex-start;">
-                                                <div style=format!("flex-shrink:0;width:28px;height:28px;border-radius:50%;background:{};display:flex;align-items:center;justify-content:center;font-size:0.75rem;color:#fff;font-weight:700;", if event_ended { "#22c55e" } else { "var(--text-secondary)" })>
-                                                    {if event_ended { "\u{2713}" } else { "2" }}
+                                                <div style=format!("flex-shrink:0;width:28px;height:28px;border-radius:50%;background:{};display:flex;align-items:center;justify-content:center;font-size:0.75rem;color:#fff;font-weight:700;", if event_ended.get() { "#22c55e" } else { "var(--text-secondary)" })>
+                                                    {move || if event_ended.get() { "\u{2713}" } else { "2" }}
                                                 </div>
                                                 <div>
                                                     <div style="font-size:0.85rem;font-weight:600;color:var(--text-primary);">
-                                                        {if event_ended { "Event Ended" } else { "Wait for Event" }}
+                                                        {move || if event_ended.get() { "Event Ended" } else { "Wait for Event" }}
                                                     </div>
                                                     <div style="font-size:0.75rem;color:var(--text-secondary);">
-                                                        {if event_ended {
-                                                            "The event has ended — you can proceed to claim.".to_string()
-                                                        } else if !remaining_text.is_empty() {
-                                                            remaining_text
-                                                        } else {
-                                                            "Claims open after the event ends.".to_string()
+                                                        {move || {
+                                                            if event_ended.get() {
+                                                                "The event has ended — you can proceed to claim.".to_string()
+                                                            } else {
+                                                                let ct = countdown_text.get();
+                                                                if !ct.is_empty() { ct } else { "Claims open after the event ends.".to_string() }
+                                                            }
                                                         }}
                                                     </div>
                                                 </div>
@@ -480,28 +510,32 @@ pub fn Ticket() -> impl IntoView {
 
                                     // Action button
                                     <div style="margin-top:1.25rem;text-align:center;">
-                                        {if claim_available {
-                                            let href = claim_href.clone();
-                                            view! {
-                                                <a
-                                                    href=href
-                                                    class="btn btn-primary"
-                                                    style="width:100%;"
-                                                >
-                                                    <Icon icon=IconName::Gift class="icon-sm" />
-                                                    " Claim Your NFT Badge"
-                                                </a>
-                                            }.into_any()
-                                        } else if has_claim && !event_ended {
-                                            view! {
-                                                <div style="background:rgba(250,204,21,0.08);border:1px solid rgba(250,204,21,0.2);border-radius:var(--radius);padding:0.75rem;text-align:center;">
-                                                    <div style="font-size:0.8rem;color:#facc15;font-weight:500;">
-                                                        "Claim link will be available after the event ends."
+                                        {move || {
+                                            let ended = event_ended.get();
+                                            let available = has_claim && ended;
+                                            if available {
+                                                let href = claim_href.clone();
+                                                view! {
+                                                    <a
+                                                        href=href
+                                                        class="btn btn-primary"
+                                                        style="width:100%;"
+                                                    >
+                                                        <Icon icon=IconName::Gift class="icon-sm" />
+                                                        " Claim Your NFT Badge"
+                                                    </a>
+                                                }.into_any()
+                                            } else if has_claim && !ended {
+                                                view! {
+                                                    <div style="background:rgba(250,204,21,0.08);border:1px solid rgba(250,204,21,0.2);border-radius:var(--radius);padding:0.75rem;text-align:center;">
+                                                        <div style="font-size:0.8rem;color:#facc15;font-weight:500;">
+                                                            "Claim link will be available after the event ends."
+                                                        </div>
                                                     </div>
-                                                </div>
-                                            }.into_any()
-                                        } else {
-                                            view! { <div></div> }.into_any()
+                                                }.into_any()
+                                            } else {
+                                                view! { <div></div> }.into_any()
+                                            }
                                         }}
                                     </div>
                                 </div>

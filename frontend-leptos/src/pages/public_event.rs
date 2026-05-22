@@ -715,6 +715,8 @@ fn render_loaded_event(
     let has_deposit = data.deposit_enabled && (data.deposit_amount_usdc > 0 || data.deposit_amount_thb > 0);
     let has_location = !data.location.is_empty();
     let is_hybrid = data.event_format == crate::api::EventFormat::Hybrid;
+    let is_online_only = data.event_format == crate::api::EventFormat::Online;
+    let fmt_label = data.event_format.label();
     let date_str = format_event_date(data.event_start_ms);
     let time_str = if data.time_tba {
         "Time TBA".to_string()
@@ -865,9 +867,35 @@ fn render_loaded_event(
         // Event Details Card
         <div style="width:100%;background:var(--bg-card);border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;box-shadow:var(--shadow);">
 
-            // Location
+            // Event Format Badge
+            <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.75rem;">
+                {
+                    let (badge_bg, badge_border, badge_color, badge_icon) = match data.event_format {
+                        crate::api::EventFormat::Online => ("rgba(99,102,241,0.12)", "rgba(99,102,241,0.3)", "#818cf8", IconName::Globe),
+                        crate::api::EventFormat::Hybrid => ("rgba(52,211,153,0.12)", "rgba(52,211,153,0.3)", "#34d399", IconName::Ticket),
+                        crate::api::EventFormat::InPerson => ("rgba(96,165,250,0.12)", "rgba(96,165,250,0.3)", "#60a5fa", IconName::Pin),
+                    };
+                    view! {
+                        <div style=format!("display:inline-flex;align-items:center;gap:0.4rem;background:{};border:1px solid {};border-radius:9999px;padding:0.25rem 0.75rem;font-size:0.8rem;font-weight:600;color:{};", badge_bg, badge_border, badge_color)>
+                            <Icon icon=badge_icon class="icon-sm" />
+                            {fmt_label}
+                        </div>
+                    }.into_any()
+                }
+            </div>
+
+            // Location (or Virtual Event indicator)
             {move || {
-                if has_location {
+                if is_online_only && !has_location {
+                    view! {
+                        <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.75rem;">
+                            <span>"🌐"</span>
+                            <span style="color:var(--text-primary);font-size:0.95rem;">
+                                "Virtual Event"
+                            </span>
+                        </div>
+                    }.into_any()
+                } else if has_location {
                     let loc = location.clone();
                     view! {
                         <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.75rem;">
@@ -945,8 +973,9 @@ fn render_loaded_event(
         }}
 
         // Deposit Info Section (read-only, shows price + refund policy)
+        // Hidden for Online-only events; Hybrid shows note that deposit applies to In-Person only
         {move || {
-            if has_deposit {
+            if has_deposit && !is_online_only {
                 let usdc = usdc_display.clone();
                 let thb = thb_display.clone();
                 let refund = refund_label.clone();
@@ -1306,7 +1335,7 @@ fn render_loaded_event(
                             <Icon icon=IconName::Ticket class="icon-md" />" NFT Badge"
                         </h2>
                         <p style="color:var(--text-secondary);font-size:0.85rem;margin-bottom:0.75rem;">
-                            "Earn a commemorative NFT badge when you attend."
+                            {if is_online_only { "Earn this NFT badge when you complete the quest after the event." } else { "Earn a commemorative NFT badge when you attend." }}
                         </p>
                         <img
                             src=url
@@ -1569,9 +1598,10 @@ fn render_registration_form(
                                         None => view! { <div></div> }.into_any(),
                                     }}
                                 </div>
-                                // Deposit Agreement (only when deposit enabled)
+                                // Deposit Agreement (only when deposit enabled AND not Online track on hybrid)
                                 {move || {
-                                    if has_deposit {
+                                    let is_online_track = is_hybrid && reg_participation.get().to_lowercase().contains("online");
+                                    if has_deposit && !is_online_track {
                                         let dep_label = dep_label.clone();
                                         view! {
                                             <label style="display:flex;align-items:flex-start;gap:0.5rem;font-size:0.85rem;color:var(--text-secondary);cursor:pointer;">
