@@ -270,6 +270,9 @@ pub struct AttendeeData {
     /// Event start timestamp in ms.
     #[serde(default)]
     pub event_start_ms: i64,
+    /// Whether the attendee has already claimed their NFT.
+    #[serde(default)]
+    pub claimed: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

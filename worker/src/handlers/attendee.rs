@@ -235,6 +235,7 @@ pub async fn get_attendee(
         "is_approved": attendee.is_approved(),
         "is_in_person": attendee.is_in_person(),
         "participation_type": attendee.participation_type,
+        "claimed": attendee.claimed_at.is_some(),
     });
     Ok(ApiOk::new(data))
 }
@@ -304,6 +305,7 @@ pub async fn get_public_ticket(
         "event_end_ms": event.event_end_ms,
         "event_name": event.name,
         "event_start_ms": event.event_start_ms,
+        "claimed": attendee.claimed_at.is_some(),
     });
     Ok(ApiOk::new(data))
 }

@@ -306,6 +306,7 @@ pub fn Ticket() -> impl IntoView {
                         let participation = data.participation_type.clone();
                         let is_checked_in = data.is_checked_in;
                         let is_approved = data.is_approved;
+                        let claimed = data.claimed;
                         let checked_in_at = data.attendee.checked_in_at.clone();
                         let checked_in_by = data.attendee.checked_in_by.clone();
                         let masked_email = data.attendee.email.clone();
@@ -495,13 +496,19 @@ pub fn Ticket() -> impl IntoView {
                                             </div>
                                             // Step 4: Claim NFT
                                             <div style="display:flex;gap:0.75rem;align-items:flex-start;">
-                                                <div style="flex-shrink:0;width:28px;height:28px;border-radius:50%;background:var(--text-secondary);display:flex;align-items:center;justify-content:center;font-size:0.75rem;color:#fff;font-weight:700;">
-                                                    "4"
+                                                <div style=format!("flex-shrink:0;width:28px;height:28px;border-radius:50%;background:{};display:flex;align-items:center;justify-content:center;font-size:0.75rem;color:#fff;font-weight:700;", if claimed { "#22c55e" } else { "var(--text-secondary)" })>
+                                                    {if claimed { "\u{2713}" } else { "4" }}
                                                 </div>
                                                 <div>
-                                                    <div style="font-size:0.85rem;font-weight:600;color:var(--text-primary);">"Claim Your Badge"</div>
+                                                    <div style="font-size:0.85rem;font-weight:600;color:var(--text-primary);">
+                                                        {if claimed { "Badge Claimed!" } else { "Claim Your Badge" }}
+                                                    </div>
                                                     <div style="font-size:0.75rem;color:var(--text-secondary);">
-                                                        "Mint your compressed NFT attendance proof."
+                                                        {if claimed {
+                                                            "Your compressed NFT attendance proof has been minted."
+                                                        } else {
+                                                            "Mint your compressed NFT attendance proof."
+                                                        }}
                                                     </div>
                                                 </div>
                                             </div>
@@ -511,30 +518,40 @@ pub fn Ticket() -> impl IntoView {
                                     // Action button
                                     <div style="margin-top:1.25rem;text-align:center;">
                                         {move || {
-                                            let ended = event_ended.get();
-                                            let available = has_claim && ended;
-                                            if available {
-                                                let href = claim_href.clone();
+                                            if claimed {
                                                 view! {
-                                                    <a
-                                                        href=href
-                                                        class="btn btn-primary"
-                                                        style="width:100%;"
-                                                    >
-                                                        <Icon icon=IconName::Gift class="icon-sm" />
-                                                        " Claim Your NFT Badge"
-                                                    </a>
-                                                }.into_any()
-                                            } else if has_claim && !ended {
-                                                view! {
-                                                    <div style="background:rgba(250,204,21,0.08);border:1px solid rgba(250,204,21,0.2);border-radius:var(--radius);padding:0.75rem;text-align:center;">
-                                                        <div style="font-size:0.8rem;color:#facc15;font-weight:500;">
-                                                            "Claim link will be available after the event ends."
+                                                    <div style="background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.2);border-radius:var(--radius);padding:0.75rem;text-align:center;">
+                                                        <div style="font-size:0.85rem;color:#34d399;font-weight:600;">
+                                                            "\u{2713} NFT Badge claimed successfully!"
                                                         </div>
                                                     </div>
                                                 }.into_any()
                                             } else {
-                                                view! { <div></div> }.into_any()
+                                                let ended = event_ended.get();
+                                                let available = has_claim && ended;
+                                                if available {
+                                                    let href = claim_href.clone();
+                                                    view! {
+                                                        <a
+                                                            href=href
+                                                            class="btn btn-primary"
+                                                            style="width:100%;"
+                                                        >
+                                                            <Icon icon=IconName::Gift class="icon-sm" />
+                                                            " Claim Your NFT Badge"
+                                                        </a>
+                                                    }.into_any()
+                                                } else if has_claim && !ended {
+                                                    view! {
+                                                        <div style="background:rgba(250,204,21,0.08);border:1px solid rgba(250,204,21,0.2);border-radius:var(--radius);padding:0.75rem;text-align:center;">
+                                                            <div style="font-size:0.8rem;color:#facc15;font-weight:500;">
+                                                                "Claim link will be available after the event ends."
+                                                            </div>
+                                                        </div>
+                                                    }.into_any()
+                                                } else {
+                                                    view! { <div></div> }.into_any()
+                                                }
                                             }
                                         }}
                                     </div>
