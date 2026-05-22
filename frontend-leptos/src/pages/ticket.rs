@@ -67,6 +67,10 @@ pub fn Ticket() -> impl IntoView {
 
     // Helper: determine if current state needs polling
     let needs_polling = |data: &api::AttendeeData| -> bool {
+        // Online attendees never get QR/deposit — polling is pointless
+        if !data.is_in_person {
+            return false;
+        }
         if data.is_checked_in {
             return false;
         }
