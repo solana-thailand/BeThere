@@ -157,10 +157,12 @@ async fn find_contact_row(
     access_token: &str,
 ) -> Result<Option<(usize, Vec<String>)>, String> {
     let range = format!("{sheet_name}!A:J");
-    let url = format!("https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{range}");
-    let url_encoded = url.replace(':', "%3A").replace('!', "%21");
+    let url = format!(
+        "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{}",
+        urlencoding::encode(&range)
+    );
 
-    let response: ValueRange = crate::http::get_json(&url_encoded, access_token).await?;
+    let response: ValueRange = crate::http::get_json(&url, access_token).await?;
 
     let rows = response.values;
     for (i, row) in rows.iter().enumerate() {
@@ -186,9 +188,9 @@ async fn update_contact_row(
 ) -> Result<(), String> {
     let range = format!("{sheet_name}!A{row_index}:J{row_index}");
     let url = format!(
-        "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{range}?valueInputOption=USER_ENTERED"
+        "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{}?valueInputOption=USER_ENTERED",
+        urlencoding::encode(&range)
     );
-    let url_encoded = url.replace(':', "%3A").replace('!', "%21");
 
     let body = ValueRange {
         range: format!("{sheet_name}!A{row_index}:J{row_index}"),
@@ -196,7 +198,7 @@ async fn update_contact_row(
     };
 
     // Use PUT to update existing range
-    put_json_ignore(&url_encoded, &body, access_token).await?;
+    put_json_ignore(&url, &body, access_token).await?;
 
     Ok(())
 }
@@ -291,10 +293,12 @@ pub async fn list_contacts(
     let access_token = get_cached_access_token(state, kv).await?;
 
     let range = format!("{sheet_name}!A:J");
-    let url = format!("https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{range}");
-    let url_encoded = url.replace(':', "%3A").replace('!', "%21");
+    let url = format!(
+        "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{}",
+        urlencoding::encode(&range)
+    );
 
-    let response: ValueRange = crate::http::get_json(&url_encoded, &access_token).await?;
+    let response: ValueRange = crate::http::get_json(&url, &access_token).await?;
 
     let mut contacts = Vec::new();
     for row in &response.values {

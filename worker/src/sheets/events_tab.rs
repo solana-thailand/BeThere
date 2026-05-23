@@ -158,10 +158,12 @@ pub async fn list_events_tab(
     let access_token = get_cached_access_token(state, kv).await?;
 
     let range = format!("{sheet_name}!A:Q");
-    let url = format!("https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{range}");
-    let url_encoded = url.replace(':', "%3A").replace('!', "%21");
+    let url = format!(
+        "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{}",
+        urlencoding::encode(&range)
+    );
 
-    let response: ValueRange = crate::http::get_json(&url_encoded, &access_token).await?;
+    let response: ValueRange = crate::http::get_json(&url, &access_token).await?;
 
     let mut events = Vec::new();
     for row in &response.values {
@@ -242,10 +244,12 @@ async fn find_event_row(
     access_token: &str,
 ) -> Result<Option<usize>, String> {
     let range = format!("{sheet_name}!A:A");
-    let url = format!("https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{range}");
-    let url_encoded = url.replace(':', "%3A").replace('!', "%21");
+    let url = format!(
+        "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{}",
+        urlencoding::encode(&range)
+    );
 
-    let response: ValueRange = crate::http::get_json(&url_encoded, access_token).await?;
+    let response: ValueRange = crate::http::get_json(&url, access_token).await?;
 
     for (i, row) in response.values.iter().enumerate() {
         let id = row.first().map(|s| s.as_str()).unwrap_or("");
@@ -267,16 +271,16 @@ async fn update_event_row(
 ) -> Result<(), String> {
     let range = format!("{sheet_name}!A{row_index}:Q{row_index}");
     let url = format!(
-        "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{range}?valueInputOption=USER_ENTERED"
+        "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{}?valueInputOption=USER_ENTERED",
+        urlencoding::encode(&range)
     );
-    let url_encoded = url.replace(':', "%3A").replace('!', "%21");
 
     let body = ValueRange {
         range: format!("{sheet_name}!A{row_index}:Q{row_index}"),
         values: vec![row_data.to_vec()],
     };
 
-    put_json_ignore(&url_encoded, &body, access_token).await?;
+    put_json_ignore(&url, &body, access_token).await?;
 
     Ok(())
 }

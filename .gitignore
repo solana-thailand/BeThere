@@ -60,3 +60,7 @@ jupiter-brand-kit/
 scripts/cnft/target/
 scripts/cnft/Cargo.lock
 __pycache__/
+
+# Academic deliverables (internal, not for public repo)
+.deliverables/
+.issues/031_*
