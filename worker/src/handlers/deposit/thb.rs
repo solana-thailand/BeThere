@@ -58,9 +58,10 @@ fn validate_slip_url(slip_url: &str) -> Result<(), AppError> {
         }
 
         // Check total data URL size (encoded)
-        if slip_url.len() > 7 * 1024 * 1024 {
+        // base64 adds ~33% overhead, so 3MB file → ~4MB data URL
+        if slip_url.len() > 5 * 1024 * 1024 {
             return Err(AppError::Validation(
-                "slip image too large (max 5MB)".to_string(),
+                "slip image too large (max 3MB). Please resize or compress the image.".to_string(),
             ));
         }
 

@@ -892,9 +892,16 @@ pub fn Deposit() -> impl IntoView {
                 }
                 Err(e) => {
                     log::error!("[deposit] THB slip upload failed: {e}");
+                    let error_msg = if e.to_string().contains("413") || e.to_string().contains("too large") {
+                        "Image is too large to upload. Please resize or compress it to under 3MB and try again.".to_string()
+                    } else if e.to_string().contains("File size exceeds") {
+                        e.to_string()
+                    } else {
+                        format!("Failed to upload slip: {e}")
+                    };
                     components::show_toast(
                         &set_toast,
-                        &format!("Failed to upload slip: {e}"),
+                        &error_msg,
                         ToastType::Error,
                     );
                     let aid = match params.get() {
@@ -1655,7 +1662,21 @@ pub fn Deposit() -> impl IntoView {
                                                 {format!("{} THB", data_clone.deposit_amount_thb)}
                                             </span>
                                         </div>
-                                        <p class="hint-desc">
+
+                                        // Step-by-step instructions
+                                        <div style="background:rgba(255,255,255,0.04);border-radius:var(--radius);padding:0.75rem;margin-bottom:1rem;">
+                                            <p style="font-size:0.8rem;font-weight:600;color:var(--text-primary);margin-bottom:0.5rem;">
+                                                "How to pay:"
+                                            </p>
+                                            <ol style="font-size:0.75rem;color:var(--text-secondary);margin:0;padding-left:1.25rem;display:flex;flex-direction:column;gap:0.25rem;">
+                                                <li>"Scan the QR code below with your banking app"</li>
+                                                <li>"Transfer "{format!("{} THB", data_clone.deposit_amount_thb)}" via PromptPay"</li>
+                                                <li>"Take a screenshot of the payment confirmation"</li>
+                                                <li>"Upload the screenshot below and submit"</li>
+                                            </ol>
+                                        </div>
+
+                                        <p class="hint-desc" style="margin-bottom:0.75rem;">
                                             "Transfer via PromptPay and upload your payment slip."
                                         </p>
 
@@ -1722,9 +1743,12 @@ pub fn Deposit() -> impl IntoView {
                                             <label class="upload-label">
                                                 <Icon icon=IconName::Clip class="icon-sm" />" Upload payment slip"
                                             </label>
+                                            <p style="color:var(--text-secondary);font-size:0.75rem;margin:0.25rem 0 0.5rem;">
+                                                "Take a screenshot or photo of your transfer confirmation. Max 3MB (JPEG, PNG, WebP)."
+                                            </p>
                                             <input
                                                 type="file"
-                                                accept="image/*"
+                                                accept="image/jpeg,image/png,image/webp"
                                                 node_ref=file_input_ref
                                                 class="file-input-styled"
                                             />

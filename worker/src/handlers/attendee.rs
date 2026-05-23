@@ -333,6 +333,35 @@ pub async fn get_public_ticket(
         })
     });
 
+    // Deposit deadline check for ticket page notice
+    let mut deadline_expired = false;
+    let mut in_person_available: Option<bool> = None;
+
+    if deposit_status.is_none()
+        && event.deposit_deadline_hours.is_some()
+        && attendee.is_in_person()
+        && let Some(reg_str) = &attendee.registration_date
+        && let Ok(reg_time) = chrono::DateTime::parse_from_rfc3339(reg_str)
+    {
+        let deadline = reg_time.with_timezone(&chrono::Utc)
+            + chrono::Duration::hours(i64::from(event.deposit_deadline_hours.unwrap_or(0)));
+        if chrono::Utc::now() > deadline {
+            deadline_expired = true;
+            // Check capacity
+            let cap = event.in_person_capacity;
+            let available = if let Some(cap) = cap {
+                let count = sheets::get_attendees(&state, &event.sheet_id, &event.sheet_name, kv)
+                    .await
+                    .map(|a| a.iter().filter(|a| a.is_in_person()).count() as u32)
+                    .unwrap_or(u32::MAX);
+                count < cap
+            } else {
+                true
+            };
+            in_person_available = Some(available);
+        }
+    }
+
     // Read finalized claim lock KV for claimed attendees to retrieve asset_id / cluster.
     let (claimed_asset_id, cluster) = if attendee.claimed_at.is_some() {
         if let Some(token) = attendee.claim_token.as_ref() {
@@ -384,6 +413,12 @@ pub async fn get_public_ticket(
         "claimed": attendee.claimed_at.is_some(),
         "claimed_asset_id": claimed_asset_id,
         "cluster": cluster,
+        "deposit_enabled": event.deposit_enabled,
+        "deposit_deadline_hours": event.deposit_deadline_hours,
+        "deposit_amount_thb": event.deposit_amount_thb,
+        "deadline_expired": deadline_expired,
+        "in_person_available": in_person_available,
+        "event_slug": event.slug,
     });
     Ok(ApiOk::new(data))
 }

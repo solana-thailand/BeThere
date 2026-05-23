@@ -270,8 +270,8 @@ pub async fn register_attendee(
     if config.deposit_enabled && !is_online_participation(&participation_type) {
         let resolved_contacts =
             crate::org_store::resolve_contacts_sheet(kv, &config, &state.config.sheets).await;
-        if !resolved_contacts.sheet_id.is_empty() {
-            if let Ok((credit_thb, credit_usdc)) = crate::sheets::contacts::get_credit_balance(
+        if !resolved_contacts.sheet_id.is_empty()
+            && let Ok((credit_thb, credit_usdc)) = crate::sheets::contacts::get_credit_balance(
                 &state,
                 &resolved_contacts.sheet_id,
                 &resolved_contacts.contacts_sheet_name,
@@ -288,7 +288,6 @@ pub async fn register_attendee(
                     credit_covered_method = Some("credit_usdc".to_string());
                 }
             }
-        }
         if let Some(ref method) = credit_covered_method {
             tracing::info!(%email, %slug, %method, "deposit covered by rolling credit");
         }

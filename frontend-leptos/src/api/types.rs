@@ -293,6 +293,24 @@ pub struct AttendeeData {
     /// YouTube/livestream URL for the event.
     #[serde(default)]
     pub video_url: String,
+    /// Whether deposit is enabled for this event.
+    #[serde(default)]
+    pub deposit_enabled: bool,
+    /// Deposit deadline in hours after registration.
+    #[serde(default)]
+    pub deposit_deadline_hours: Option<u32>,
+    /// Deposit amount in THB.
+    #[serde(default)]
+    pub deposit_amount_thb: u64,
+    /// Whether the deposit deadline has expired for this attendee.
+    #[serde(default)]
+    pub deadline_expired: bool,
+    /// Whether in-person spots are still available (for reclaim flow).
+    #[serde(default)]
+    pub in_person_available: Option<bool>,
+    /// Event slug for navigation.
+    #[serde(default)]
+    pub event_slug: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
