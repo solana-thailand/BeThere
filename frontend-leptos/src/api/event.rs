@@ -181,6 +181,8 @@ pub struct EventMeta {
     pub online_capacity: Option<u32>,
     #[serde(default)]
     pub visibility: EventVisibility,
+    #[serde(default)]
+    pub video_url: String,
 }
 
 /// Full event configuration (from GET /api/events/{id}).
@@ -258,6 +260,8 @@ pub struct EventDetail {
     pub require_contact_info: bool,
     #[serde(default)]
     pub location: String,
+    #[serde(default)]
+    pub video_url: String,
     #[serde(default)]
     pub created_at: String,
     #[serde(default)]
@@ -359,6 +363,8 @@ pub struct CreateEventBody {
     pub require_contact_info: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub location: Option<String>,
+    #[serde(default)]
+    pub video_url: String,
     // Capacity settings
     #[serde(skip_serializing_if = "Option::is_none")]
     pub in_person_capacity: Option<u32>,
@@ -451,6 +457,8 @@ pub struct UpdateEventBody {
     pub require_contact_info: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub location: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub video_url: Option<String>,
     // Capacity settings
     #[serde(skip_serializing_if = "Option::is_none")]
     pub in_person_capacity: Option<Option<u32>>,

@@ -14,6 +14,10 @@ pub enum DepositMethod {
     Usdc,
     /// Off-chain Thai Baht via PromptPay bank transfer + slip upload.
     Thb,
+    /// THB credit from a held/rolling deposit.
+    CreditThb,
+    /// USDC credit from a held/rolling deposit.
+    CreditUsdc,
 }
 
 impl std::fmt::Display for DepositMethod {
@@ -21,6 +25,8 @@ impl std::fmt::Display for DepositMethod {
         match self {
             Self::Usdc => write!(f, "usdc"),
             Self::Thb => write!(f, "thb"),
+            Self::CreditThb => write!(f, "credit_thb"),
+            Self::CreditUsdc => write!(f, "credit_usdc"),
         }
     }
 }

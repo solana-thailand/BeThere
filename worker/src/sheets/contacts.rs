@@ -4,7 +4,7 @@
 //! Each row is keyed by email (lowercased) and tracks which events
 //! the contact has joined, along with contact info and email status.
 //!
-//! Sheet schema (columns A–J):
+//! Sheet schema (columns A–M):
 //!   A: email              | john@gmail.com       | Primary key (lowercased)
 //!   B: name               | John Doe             | Display name
 //!   C: first_registered   | 2025-03-15           | First event date
@@ -15,6 +15,9 @@
 //!   H: contact_handle     | @john                | Handle
 //!   I: send_email_status  | pending              | Last bulk email status
 //!   J: last_emailed_at    | 2026-05-22           | Last email timestamp
+//!   K: deposit_credit_thb | 500                  | Rolling deposit credit (THB)
+//!   L: deposit_credit_usdc| 15                   | Rolling deposit credit (USDC)
+//!   M: deposit_credit_since| 2026-05-22          | Date when credit was first held
 
 use worker::KvStore;
 
@@ -37,8 +40,11 @@ const COL_CONTACT_CHANNEL: usize = 6;
 const COL_CONTACT_HANDLE: usize = 7;
 const COL_SEND_EMAIL_STATUS: usize = 8;
 const COL_LAST_EMAILED_AT: usize = 9;
+const COL_DEPOSIT_CREDIT_THB: usize = 10; // K
+const COL_DEPOSIT_CREDIT_USDC: usize = 11; // L
+const COL_DEPOSIT_CREDIT_SINCE: usize = 12; // M
 
-const TOTAL_COLUMNS: usize = 10;
+const TOTAL_COLUMNS: usize = 13;
 
 // ---------------------------------------------------------------------------
 // Upsert contact
@@ -156,7 +162,7 @@ async fn find_contact_row(
     sheet_name: &str,
     access_token: &str,
 ) -> Result<Option<(usize, Vec<String>)>, String> {
-    let range = format!("{sheet_name}!A:J");
+    let range = format!("{sheet_name}!A:M");
     let url = format!(
         "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{}",
         urlencoding::encode(&range)
@@ -186,14 +192,14 @@ async fn update_contact_row(
     sheet_name: &str,
     access_token: &str,
 ) -> Result<(), String> {
-    let range = format!("{sheet_name}!A{row_index}:J{row_index}");
+    let range = format!("{sheet_name}!A{row_index}:M{row_index}");
     let url = format!(
         "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{}?valueInputOption=USER_ENTERED",
         urlencoding::encode(&range)
     );
 
     let body = ValueRange {
-        range: format!("{sheet_name}!A{row_index}:J{row_index}"),
+        range: format!("{sheet_name}!A{row_index}:M{row_index}"),
         values: vec![row_data.to_vec()],
     };
 
@@ -211,12 +217,12 @@ async fn append_contact_row(
     access_token: &str,
 ) -> Result<(), String> {
     let url = format!(
-        "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{}!A:J:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS",
+        "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{}!A:M:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS",
         urlencoding::encode(sheet_name)
     );
 
     let body = ValueRange {
-        range: format!("{sheet_name}!A:J"),
+        range: format!("{sheet_name}!A:M"),
         values: vec![row.to_vec()],
     };
 
@@ -281,6 +287,9 @@ pub struct Contact {
     pub contact_handle: String,
     pub send_email_status: String,
     pub last_emailed_at: String,
+    pub deposit_credit_thb: u64,
+    pub deposit_credit_usdc: u64,
+    pub deposit_credit_since: String,
 }
 
 /// Read all contacts from the master contacts sheet.
@@ -292,7 +301,7 @@ pub async fn list_contacts(
 ) -> Result<Vec<Contact>, String> {
     let access_token = get_cached_access_token(state, kv).await?;
 
-    let range = format!("{sheet_name}!A:J");
+    let range = format!("{sheet_name}!A:M");
     let url = format!(
         "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{}",
         urlencoding::encode(&range)
@@ -325,8 +334,112 @@ pub async fn list_contacts(
             contact_handle: row.get(COL_CONTACT_HANDLE).cloned().unwrap_or_default(),
             send_email_status: row.get(COL_SEND_EMAIL_STATUS).cloned().unwrap_or_default(),
             last_emailed_at: row.get(COL_LAST_EMAILED_AT).cloned().unwrap_or_default(),
+            deposit_credit_thb: row
+                .get(COL_DEPOSIT_CREDIT_THB)
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(0),
+            deposit_credit_usdc: row
+                .get(COL_DEPOSIT_CREDIT_USDC)
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(0),
+            deposit_credit_since: row
+                .get(COL_DEPOSIT_CREDIT_SINCE)
+                .cloned()
+                .unwrap_or_default(),
         });
     }
 
     Ok(contacts)
+}
+
+// ---------------------------------------------------------------------------
+// Public: deposit credit operations
+// ---------------------------------------------------------------------------
+
+/// Increment a contact's deposit credit balance after they hold their deposit.
+/// Called when attendee chooses "Hold Deposit" instead of "Claim Refund".
+pub async fn increment_credit(
+    state: &AppState,
+    sheet_id: &str,
+    sheet_name: &str,
+    kv: Option<&KvStore>,
+    email: &str,
+    currency: &str,
+    amount: u64,
+) -> Result<(), String> {
+    let access_token = get_cached_access_token(state, kv).await?;
+    let email_lower = email.to_lowercase();
+
+    // 1. Find existing row by email
+    let (row_index, mut row_data) =
+        find_contact_row(&email_lower, sheet_id, sheet_name, &access_token)
+            .await?
+            .ok_or_else(|| format!("contact not found: {email_lower}"))?;
+
+    // 2. Determine which credit column to update
+    let credit_col = match currency.to_lowercase().as_str() {
+        "thb" => COL_DEPOSIT_CREDIT_THB,
+        "usdc" => COL_DEPOSIT_CREDIT_USDC,
+        other => return Err(format!("unsupported currency: {other}")),
+    };
+
+    // 3. Parse current value and add amount
+    let current: u64 = row_data
+        .get(credit_col)
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0);
+    let new_total = current + amount;
+    row_data[credit_col] = new_total.to_string();
+
+    // 4. Set deposit_credit_since to today if currently empty
+    let since = row_data
+        .get(COL_DEPOSIT_CREDIT_SINCE)
+        .map(|s| s.trim())
+        .unwrap_or("");
+    if since.is_empty() {
+        let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+        row_data[COL_DEPOSIT_CREDIT_SINCE] = today;
+    }
+
+    // 5. Update the row
+    update_contact_row(row_index, &row_data, sheet_id, sheet_name, &access_token).await?;
+
+    tracing::info!(
+        %email_lower,
+        %currency,
+        amount,
+        new_total,
+        row_index,
+        "incremented deposit credit for contact"
+    );
+
+    Ok(())
+}
+
+/// Get a contact's deposit credit balance.
+pub async fn get_credit_balance(
+    state: &AppState,
+    sheet_id: &str,
+    sheet_name: &str,
+    kv: Option<&KvStore>,
+    email: &str,
+) -> Result<(u64, u64), String> {
+    let access_token = get_cached_access_token(state, kv).await?;
+    let email_lower = email.to_lowercase();
+
+    let (_row_index, row_data) =
+        find_contact_row(&email_lower, sheet_id, sheet_name, &access_token)
+            .await?
+            .ok_or_else(|| format!("contact not found: {email_lower}"))?;
+
+    let credit_thb: u64 = row_data
+        .get(COL_DEPOSIT_CREDIT_THB)
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0);
+    let credit_usdc: u64 = row_data
+        .get(COL_DEPOSIT_CREDIT_USDC)
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0);
+
+    Ok((credit_thb, credit_usdc))
 }

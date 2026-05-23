@@ -128,6 +128,13 @@ pub fn routes(state: AppState) -> Router<()> {
             "/deposit/thb/upload",
             post(deposit::upload_thb_slip_handler),
         )
+        // Hold deposit as rolling credit (attendee chooses credit over refund)
+        .route("/deposit/hold", post(deposit::hold_deposit_handler))
+        // Check deposit credit balance
+        .route(
+            "/deposit/credit-balance",
+            get(deposit::credit_balance_handler),
+        )
         .layer(middleware::from_fn_with_state(
             state.clone(),
             crate::auth::require_identity,

@@ -62,6 +62,7 @@ pub struct EventForm {
     pub refund_deadline_hours: String,
     pub max_refundable_deposits: String,
     location: String,
+    video_url: String,
     // Capacity settings
     pub in_person_capacity: String,
     pub online_capacity: String,
@@ -173,6 +174,7 @@ fn default_form() -> EventForm {
         refund_deadline_hours: String::new(),
         max_refundable_deposits: String::new(),
         location: String::new(),
+        video_url: String::new(),
         in_person_capacity: String::new(),
         online_capacity: String::new(),
         online_open_mode: api::OnlineOpenMode::default(),
@@ -237,6 +239,7 @@ fn form_from_detail(detail: &api::EventDetail) -> EventForm {
         refund_deadline_hours: if detail.refund_deadline_hours > 0 { detail.refund_deadline_hours.to_string() } else { String::new() },
         max_refundable_deposits: if detail.max_refundable_deposits > 0 { detail.max_refundable_deposits.to_string() } else { String::new() },
         location: detail.location.clone(),
+        video_url: detail.video_url.clone(),
         in_person_capacity: detail.in_person_capacity.map(|v| v.to_string()).unwrap_or_default(),
         online_capacity: detail.online_capacity.map(|v| v.to_string()).unwrap_or_default(),
         online_open_mode: detail.online_open_mode.clone(),
@@ -586,6 +589,7 @@ pub fn EventsPage(
                 require_contact_info: current_form.require_contact_info,
                 time_tba,
                 location: if current_form.location.trim().is_empty() { None } else { Some(current_form.location.trim().to_string()) },
+                video_url: current_form.video_url.trim().to_string(),
                 in_person_capacity: current_form.in_person_capacity.trim().parse::<u32>().ok(),
                 online_capacity: current_form.online_capacity.trim().parse::<u32>().ok(),
                 online_open_mode: current_form.online_open_mode.clone(),
@@ -756,6 +760,7 @@ pub fn EventsPage(
                 require_contact_info: Some(current_form.require_contact_info),
                 time_tba: Some(time_tba),
                 location: if current_form.location.trim().is_empty() { None } else { Some(current_form.location.trim().to_string()) },
+                video_url: Some(current_form.video_url.trim().to_string()),
                 in_person_capacity: Some(current_form.in_person_capacity.trim().parse::<u32>().ok()),
                 online_capacity: Some(current_form.online_capacity.trim().parse::<u32>().ok()),
                 online_open_mode: Some(current_form.online_open_mode.clone()),
@@ -1569,6 +1574,17 @@ pub fn EventsPage(
                                             on:input=move |ev| set_form.update(|f| f.location = event_target_value(&ev))
                                         />
                                         <span class="quiz-setting-hint">"Venue name and address for in-person events"</span>
+                                    </div>
+                                    <div class="quiz-setting-item" style="grid-column:1/-1">
+                                        <label class="quiz-field-label">"Video / Livestream URL"<span class="field-optional-badge">"Optional"</span></label>
+                                        <input
+                                            type="url"
+                                            class="quiz-number-input"
+                                            placeholder="e.g. https://youtube.com/live/abc123"
+                                            prop:value=move || form.get().video_url
+                                            on:input=move |ev| set_form.update(|f| f.video_url = event_target_value(&ev))
+                                        />
+                                        <span class="quiz-setting-hint">"YouTube livestream or recording link — shown to attendees on the event page"</span>
                                     </div>
                                 </div>
                                 </div>

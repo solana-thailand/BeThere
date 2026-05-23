@@ -230,6 +230,9 @@ pub struct EventMeta {
     /// Event venue / location.
     #[serde(default)]
     pub location: String,
+    /// YouTube/live stream/recording URL for the event.
+    #[serde(default)]
+    pub video_url: String,
     /// NFT badge image URL (for event card display).
     #[serde(default)]
     pub nft_image_url: String,
@@ -376,6 +379,9 @@ pub struct EventConfig {
     /// Event location (venue name, address, or "Online").
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub location: String,
+    /// YouTube/live stream/recording URL for the event.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub video_url: String,
     /// Event visibility — public (shown on landing) or private (auth required).
     #[serde(default)]
     pub visibility: EventVisibility,
@@ -442,6 +448,7 @@ impl EventConfig {
             event_format: self.event_format.clone(),
             tagline: self.tagline.clone(),
             location: self.location.clone(),
+            video_url: self.video_url.clone(),
             nft_image_url: self.nft_image_url.clone(),
             in_person_capacity: self.in_person_capacity,
             online_capacity: self.online_capacity,
@@ -553,6 +560,7 @@ impl EventConfig {
             max_refundable_deposits: 0,
             description: String::new(),
             location: String::new(),
+            video_url: String::new(),
             event_format: EventFormat::InPerson,
             require_contact_info: true,
             in_person_capacity: None,
@@ -672,6 +680,9 @@ pub struct CreateEventRequest {
     /// Event location (venue name, address, or "Online").
     #[serde(default)]
     pub location: String,
+    /// YouTube/live stream/recording URL.
+    #[serde(default)]
+    pub video_url: String,
     /// Event format — In-Person, Online, or Hybrid.
     #[serde(default)]
     pub event_format: EventFormat,
@@ -814,6 +825,9 @@ pub struct UpdateEventRequest {
     /// New event location.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub location: Option<String>,
+    /// YouTube/live stream/recording URL.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub video_url: Option<String>,
     /// New event format.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub event_format: Option<EventFormat>,

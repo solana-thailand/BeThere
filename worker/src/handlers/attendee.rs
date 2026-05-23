@@ -325,6 +325,8 @@ pub async fn get_public_ticket(
             "method": match d.method {
                 event_checkin_domain::models::deposit::DepositMethod::Usdc => "usdc",
                 event_checkin_domain::models::deposit::DepositMethod::Thb => "thb",
+                event_checkin_domain::models::deposit::DepositMethod::CreditThb => "credit_thb",
+                event_checkin_domain::models::deposit::DepositMethod::CreditUsdc => "credit_usdc",
             },
             "verified": d.verified,
             "currency": d.currency,
@@ -377,6 +379,8 @@ pub async fn get_public_ticket(
         "event_end_ms": event.event_end_ms,
         "event_name": event.name,
         "event_start_ms": event.event_start_ms,
+        "event_format": event.event_format.as_str(),
+        "video_url": event.video_url,
         "claimed": attendee.claimed_at.is_some(),
         "claimed_asset_id": claimed_asset_id,
         "cluster": cluster,

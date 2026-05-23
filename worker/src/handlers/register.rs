@@ -265,6 +265,35 @@ pub async fn register_attendee(
     // 5b. Enforce capacity limits (only for new registrations)
     enforce_capacity(&state, &config, &participation_type, kv).await?;
 
+    // 5c. Check if attendee has rolling deposit credit that covers this event's deposit
+    let mut credit_covered_method: Option<String> = None;
+    if config.deposit_enabled && !is_online_participation(&participation_type) {
+        let resolved_contacts =
+            crate::org_store::resolve_contacts_sheet(kv, &config, &state.config.sheets).await;
+        if !resolved_contacts.sheet_id.is_empty() {
+            if let Ok((credit_thb, credit_usdc)) = crate::sheets::contacts::get_credit_balance(
+                &state,
+                &resolved_contacts.sheet_id,
+                &resolved_contacts.contacts_sheet_name,
+                Some(kv),
+                &email,
+            )
+            .await
+            {
+                let required_thb = config.deposit_amount_thb;
+                let required_usdc = config.deposit_amount_usdc;
+                if required_thb > 0 && credit_thb >= required_thb {
+                    credit_covered_method = Some("credit_thb".to_string());
+                } else if required_usdc > 0 && credit_usdc >= required_usdc {
+                    credit_covered_method = Some("credit_usdc".to_string());
+                }
+            }
+        }
+        if let Some(ref method) = credit_covered_method {
+            tracing::info!(%email, %slug, %method, "deposit covered by rolling credit");
+        }
+    }
+
     // 6. Generate IDs
     let api_id = Uuid::now_v7().to_string();
     let claim_token = Uuid::now_v7().to_string();
@@ -329,15 +358,37 @@ pub async fn register_attendee(
     .await;
 
     // 10. Determine next_step based on event format and participation type
-    let next_step = build_next_step(
-        &config.event_format,
-        &event_id,
-        &api_id,
-        &claim_token,
-        &state,
-        None,
-        &participation_type,
-    );
+    // 10a. If deposit was covered by rolling credit, skip deposit page
+    //      and write credit method to the attendee's deposit_method column
+    let next_step = if let Some(ref method) = credit_covered_method {
+        // Write deposit_method to the attendee row (update column N)
+        if let Err(e) = sheets::update_deposit_method(
+            &state,
+            &config.sheet_id,
+            &config.sheet_name,
+            Some(kv),
+            &api_id,
+            method,
+        )
+        .await
+        {
+            tracing::warn!(%api_id, error = %e, "failed to write credit deposit_method to sheet");
+        }
+        NextStep {
+            step_type: "ticket".to_string(),
+            url: format!("/ticket/{api_id}?event_id={event_id}"),
+        }
+    } else {
+        build_next_step(
+            &config.event_format,
+            &event_id,
+            &api_id,
+            &claim_token,
+            &state,
+            None,
+            &participation_type,
+        )
+    };
 
     tracing::info!(
         %api_id,

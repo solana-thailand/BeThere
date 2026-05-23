@@ -53,6 +53,8 @@ pub enum DepositMethod {
     #[default]
     Usdc,
     Thb,
+    CreditThb,
+    CreditUsdc,
 }
 
 impl DepositMethod {
@@ -60,6 +62,8 @@ impl DepositMethod {
         match self {
             Self::Usdc => "usdc",
             Self::Thb => "thb",
+            Self::CreditThb => "credit_thb",
+            Self::CreditUsdc => "credit_usdc",
         }
     }
 
@@ -67,6 +71,8 @@ impl DepositMethod {
         match self {
             Self::Usdc => "USDC (Solana)",
             Self::Thb => "THB (PromptPay)",
+            Self::CreditThb => "THB Credit (held deposit)",
+            Self::CreditUsdc => "USDC Credit (held deposit)",
         }
     }
 
@@ -74,6 +80,8 @@ impl DepositMethod {
         match self {
             Self::Usdc => "coin",
             Self::Thb => "baht",
+            Self::CreditThb => "baht",
+            Self::CreditUsdc => "coin",
         }
     }
 }
@@ -279,6 +287,12 @@ pub struct AttendeeData {
     /// Solana cluster for explorer links (e.g. "devnet", "mainnet-beta").
     #[serde(default)]
     pub cluster: Option<String>,
+    /// Event format (in_person, online, hybrid).
+    #[serde(default)]
+    pub event_format: String,
+    /// YouTube/livestream URL for the event.
+    #[serde(default)]
+    pub video_url: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

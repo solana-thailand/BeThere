@@ -714,7 +714,16 @@ pub async fn write_bank_info(
 
     batch_update_sheet(&url, &body, &access_token).await?;
 
-    tracing::info!(row_index = row_index, "wrote bank info to google sheet");
+    tracing::info!(
+        row_index = row_index,
+        bank_account_col = mapping.column_letter(CK::BankAccount).as_str(),
+        bank_name_col = mapping.column_letter(CK::BankName).as_str(),
+        account_name_col = mapping.column_letter(CK::AccountName).as_str(),
+        bank_account_val = ?bank_account,
+        bank_name_val = ?bank_name,
+        account_name_val = ?account_name,
+        "wrote bank info to google sheet"
+    );
 
     invalidate_attendee_cache(kv, sheet_id, sheet_name).await;
     Ok(())
@@ -781,5 +790,58 @@ pub async fn write_deposit_verification(
     );
 
     invalidate_attendee_cache(ctx.kv, ctx.sheet_id, ctx.sheet_name).await;
+    Ok(())
+}
+
+/// Update the deposit_method column (N) for an attendee, found by api_id.
+/// Used when a rolling deposit credit covers the deposit — writes "credit_thb" or "credit_usdc".
+pub async fn update_deposit_method(
+    state: &AppState,
+    sheet_id: &str,
+    sheet_name: &str,
+    kv: Option<&KvStore>,
+    attendee_api_id: &str,
+    method: &str,
+) -> Result<(), String> {
+    let access_token = get_cached_access_token(state, kv).await?;
+
+    // Find the attendee row by api_id
+    let mapping = super::get_column_mapping(state, sheet_id, sheet_name, kv)
+        .await
+        .unwrap_or_else(|_| ColumnMapping::hardcoded());
+
+    let attendees = super::get_attendees(state, sheet_id, sheet_name, kv).await?;
+    let row_index = attendees
+        .iter()
+        .find(|a| a.api_id == attendee_api_id)
+        .map(|a| a.row_index)
+        .ok_or_else(|| format!("attendee {attendee_api_id} not found"))?;
+
+    use event_checkin_domain::models::attendee::ColumnKey as CK;
+    let col = mapping.column_letter(CK::DepositMethod);
+
+    let data = vec![ValueRange {
+        range: format!("{sheet_name}!{col}{row_index}"),
+        values: vec![vec![method.to_string()]],
+    }];
+
+    let url =
+        format!("https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values:batchUpdate");
+
+    let body = BatchUpdateRequest {
+        data,
+        value_input_option: "USER_ENTERED".to_string(),
+    };
+
+    batch_update_sheet(&url, &body, &access_token).await?;
+
+    tracing::info!(
+        %attendee_api_id,
+        row_index,
+        %method,
+        "wrote credit deposit_method to google sheet"
+    );
+
+    invalidate_attendee_cache(kv, sheet_id, sheet_name).await;
     Ok(())
 }

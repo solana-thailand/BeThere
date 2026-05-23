@@ -1404,6 +1404,8 @@ pub fn Deposit() -> impl IntoView {
                             let (method_icon, method_label) = match info.method {
                                 DepositMethod::Usdc => (IconName::Coin, "USDC (Solana)"),
                                 DepositMethod::Thb => (IconName::Baht, "THB (PromptPay)"),
+                                DepositMethod::CreditThb => (IconName::Baht, "THB Credit (held deposit)"),
+                                DepositMethod::CreditUsdc => (IconName::Coin, "USDC Credit (held deposit)"),
                             };
                             let (verified_icon, verified_text) = if info.verified {
                                 (IconName::Check, "Verified")

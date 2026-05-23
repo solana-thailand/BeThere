@@ -1664,7 +1664,9 @@ fn render_registration_form(
                                                 if require_contact && handle_val.trim().is_empty() {
                                                     errors.contact_handle = Some("Please provide your contact info".to_string());
                                                 }
-                                                if has_deposit && !deposit_val {
+                                                // Skip deposit validation for Online track (checkbox is hidden)
+                                                let is_online_track = is_hybrid && part_val.to_lowercase().contains("online");
+                                                if has_deposit && !is_online_track && !deposit_val {
                                                     errors.deposit_agreed = Some("You must agree to the deposit".to_string());
                                                 }
 

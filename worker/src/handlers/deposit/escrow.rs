@@ -1535,6 +1535,7 @@ pub async fn confirm_escrow_init_handler(
             expected_updated_at: None,
             description: None,
             location: None,
+            video_url: None,
             event_format: None,
             require_contact_info: None,
             in_person_capacity: None,

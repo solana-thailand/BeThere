@@ -263,6 +263,7 @@ pub async fn create_event(
         max_refundable_deposits: req.max_refundable_deposits,
         description: req.description.trim().to_string(),
         location: req.location.trim().to_string(),
+        video_url: req.video_url.trim().to_string(),
         event_format: req.event_format.clone(),
         require_contact_info: req.require_contact_info,
         in_person_capacity: req.in_person_capacity,
@@ -514,6 +515,9 @@ pub async fn update_event(
     }
     if let Some(ref v) = req.location {
         config.location = v.trim().to_string();
+    }
+    if let Some(ref v) = req.video_url {
+        config.video_url = v.trim().to_string();
     }
     if let Some(ref v) = req.event_format {
         config.event_format = v.clone();
@@ -838,6 +842,7 @@ pub async fn seed_from_config(
         max_refundable_deposits: 0,
         description: String::new(),
         location: String::new(),
+        video_url: String::new(),
         event_format: event_checkin_domain::models::event::EventFormat::InPerson,
         require_contact_info: true,
         in_person_capacity: None,

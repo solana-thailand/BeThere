@@ -119,6 +119,8 @@ enum DepositMethod {
     #[default]
     Usdc,
     Thb,
+    CreditThb,
+    CreditUsdc,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
@@ -433,9 +435,21 @@ fn deposit_method_thb() {
 }
 
 #[test]
+fn deposit_method_credit_thb() {
+    assert_round_trip(r#""credit_thb""#, DepositMethod::CreditThb);
+}
+
+#[test]
+fn deposit_method_credit_usdc() {
+    assert_round_trip(r#""credit_usdc""#, DepositMethod::CreditUsdc);
+}
+
+#[test]
 fn deposit_method_rejects_pascal_case() {
     assert_unknown_variant::<DepositMethod>(r#""Usdc""#);
     assert_unknown_variant::<DepositMethod>(r#""Thb""#);
+    assert_unknown_variant::<DepositMethod>(r#""CreditThb""#);
+    assert_unknown_variant::<DepositMethod>(r#""CreditUsdc""#);
 }
 
 // ================================================================================================

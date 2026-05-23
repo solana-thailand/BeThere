@@ -337,6 +337,8 @@ pub fn Ticket() -> impl IntoView {
                         let is_online = !data.is_in_person;
                         let event_end_ms = data.event_end_ms;
                         let event_name = data.event_name.clone();
+                        let video_url = data.video_url.clone();
+                        let has_video = !video_url.is_empty();
 
                         if is_online {
                             // ── Online attendee view ──
@@ -503,7 +505,7 @@ pub fn Ticket() -> impl IntoView {
                                                             >
                                                                 "→ Go to Quest"
                                                             </a>
-                                                        }
+                                                        }.into_any()
                                                     } else {
                                                         view! { <div></div> }.into_any()
                                                     }}
@@ -589,6 +591,62 @@ pub fn Ticket() -> impl IntoView {
                                         }}
                                     </div>
                                 </div>
+
+                                // Video / Livestream section (online attendees)
+                                {if has_video {
+                                    let url = video_url.clone();
+                                    let is_yt = url.contains("youtube.com") || url.contains("youtu.be");
+                                    let embed_url = if is_yt {
+                                        let vid = if url.contains("youtu.be/") {
+                                            url.split("youtu.be/").nth(1).map(|s| s.split('?').next().unwrap_or("")).unwrap_or("").to_string()
+                                        } else if url.contains("v=") {
+                                            url.split("v=").nth(1).map(|s| s.split('&').next().unwrap_or("")).unwrap_or("").to_string()
+                                        } else if url.contains("/live/") {
+                                            url.split("/live/").nth(1).map(|s| s.split('?').next().unwrap_or("")).unwrap_or("").to_string()
+                                        } else {
+                                            String::new()
+                                        };
+                                        if vid.is_empty() { String::new() } else { format!("https://www.youtube.com/embed/{vid}") }
+                                    } else { String::new() };
+
+                                    if !embed_url.is_empty() {
+                                        view! {
+                                            <div style="width:100%;margin-top:0.75rem;">
+                                                <h3 style="font-size:0.9rem;font-weight:600;color:#fff;margin-bottom:0.5rem;display:flex;align-items:center;gap:0.4rem;">
+                                                    "\u{1F4FA} Livestream / Recording"
+                                                </h3>
+                                                <div style="position:relative;width:100%;padding-bottom:56.25%;border-radius:8px;overflow:hidden;">
+                                                    <iframe
+                                                        src=embed_url
+                                                        style="position:absolute;top:0;left:0;width:100%;height:100%;border:none;"
+                                                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                                        allowfullscreen=true
+                                                        title="Event video"
+                                                    />
+                                                </div>
+                                            </div>
+                                        }.into_any()
+                                    } else {
+                                        let href = url;
+                                        view! {
+                                            <div style="width:100%;margin-top:0.75rem;">
+                                                <h3 style="font-size:0.9rem;font-weight:600;color:#fff;margin-bottom:0.5rem;display:flex;align-items:center;gap:0.4rem;">
+                                                    "\u{1F4FA} Livestream / Recording"
+                                                </h3>
+                                                <a
+                                                    href=href
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    style="display:inline-block;background:var(--accent);color:#000;padding:0.5rem 1rem;border-radius:8px;text-decoration:none;font-weight:600;font-size:0.85rem;"
+                                                >
+                                                    "Watch Video \u{2192}"
+                                                </a>
+                                            </div>
+                                        }.into_any()
+                                    }
+                                } else {
+                                    view! { <div></div> }.into_any()
+                                }}
 
                                 // Navigation links
                                 <div class="ticket-nav-links" style="display:flex;gap:0.75rem;justify-content:center;margin-top:1rem;">
@@ -722,6 +780,7 @@ pub fn Ticket() -> impl IntoView {
                                                             {match dep.method {
                                                                 DepositMethod::Thb => "Payment Slip: Pending Verification",
                                                                 DepositMethod::Usdc => "Deposit: Pending Confirmation",
+                                                                DepositMethod::CreditThb | DepositMethod::CreditUsdc => "Credit Deposit: Pending",
                                                             }}
                                                         </span>
                                                     </div>
@@ -729,6 +788,7 @@ pub fn Ticket() -> impl IntoView {
                                                         {match dep.method {
                                                             DepositMethod::Thb => "Your payment slip has been submitted. We'll notify you once it's verified.",
                                                             DepositMethod::Usdc => "Your deposit is being confirmed on-chain.",
+                                                            DepositMethod::CreditThb | DepositMethod::CreditUsdc => "Your credit deposit is being processed.",
                                                         }}
                                                     </p>
                                                 </div>
@@ -837,10 +897,66 @@ pub fn Ticket() -> impl IntoView {
                                 </div>
                             </div>
 
+                            // Video / Livestream section (in-person attendees)
+                            {if has_video {
+                                let url = video_url.clone();
+                                let is_yt = url.contains("youtube.com") || url.contains("youtu.be");
+                                let embed_url = if is_yt {
+                                    let vid = if url.contains("youtu.be/") {
+                                        url.split("youtu.be/").nth(1).map(|s| s.split('?').next().unwrap_or("")).unwrap_or("").to_string()
+                                    } else if url.contains("v=") {
+                                        url.split("v=").nth(1).map(|s| s.split('&').next().unwrap_or("")).unwrap_or("").to_string()
+                                    } else if url.contains("/live/") {
+                                        url.split("/live/").nth(1).map(|s| s.split('?').next().unwrap_or("")).unwrap_or("").to_string()
+                                    } else {
+                                        String::new()
+                                    };
+                                    if vid.is_empty() { String::new() } else { format!("https://www.youtube.com/embed/{vid}") }
+                                } else { String::new() };
+
+                                if !embed_url.is_empty() {
+                                    view! {
+                                        <div class="card" style="margin-top:0.75rem;padding:1rem;">
+                                            <h3 style="font-size:0.9rem;font-weight:600;color:#fff;margin-bottom:0.5rem;display:flex;align-items:center;gap:0.4rem;">
+                                                "\u{1F4FA} Livestream / Recording"
+                                            </h3>
+                                            <div style="position:relative;width:100%;padding-bottom:56.25%;border-radius:8px;overflow:hidden;">
+                                                <iframe
+                                                    src=embed_url
+                                                    style="position:absolute;top:0;left:0;width:100%;height:100%;border:none;"
+                                                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                                    allowfullscreen=true
+                                                    title="Event video"
+                                                />
+                                            </div>
+                                        </div>
+                                    }.into_any()
+                                } else {
+                                    let href = url;
+                                    view! {
+                                        <div class="card" style="margin-top:0.75rem;padding:1rem;">
+                                            <h3 style="font-size:0.9rem;font-weight:600;color:#fff;margin-bottom:0.5rem;display:flex;align-items:center;gap:0.4rem;">
+                                                "\u{1F4FA} Livestream / Recording"
+                                            </h3>
+                                            <a
+                                                href=href
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                style="display:inline-block;background:var(--accent);color:#000;padding:0.5rem 1rem;border-radius:8px;text-decoration:none;font-weight:600;font-size:0.85rem;"
+                                            >
+                                                "Watch Video \u{2192}"
+                                            </a>
+                                        </div>
+                                    }.into_any()
+                                }
+                            } else {
+                                view! { <div></div> }.into_any()
+                            }}
+
                             // Navigation links
                             <div class="ticket-nav-links" style="display:flex;gap:0.75rem;justify-content:center;margin-top:1rem;">
                                 <a href="/" class="btn btn-outline btn-sm">
-                                    "← Home"
+                                    "\u{2190} Home"
                                 </a>
                             </div>
 
