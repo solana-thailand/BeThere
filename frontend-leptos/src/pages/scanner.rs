@@ -277,6 +277,7 @@ pub fn Scanner() -> impl IntoView {
     let (scan_round, set_scan_round) = signal(0u32);
     let (flash_enabled, set_flash_enabled) = signal(true);
     let (audio_enabled, set_audio_enabled) = signal(is_audio_enabled_js());
+    let (settings_open, set_settings_open) = signal(false);
 
     // Event selector state — signals declared early because handlers below reference active_event_id.
     let (events_list, set_events_list) = signal(Vec::<api::EventMeta>::new());
@@ -1398,32 +1399,47 @@ pub fn Scanner() -> impl IntoView {
                             >
                                 {move || if manual_mode.get() { "Cancel" } else { "Enter manually" }}
                             </button>
-                            <button
-                                class="scanner-manual-toggle"
-                                style=move || if flash_enabled.get() { "color:var(--accent);" } else { "" }
-                                on:click=move |_| set_flash_enabled.update(|e| *e = !*e)
-                                title="Toggle success flash"
-                            >
-                                <Icon icon=IconName::Flash class="icon-sm" />
-                                {move || if flash_enabled.get() { " Flash On" } else { " Flash Off" }}
-                            </button>
-                            <button
-                                class="scanner-manual-toggle"
-                                style=move || if audio_enabled.get() { "color:var(--accent);" } else { "" }
-                                on:click=move |_| {
-                                    let new_val = !audio_enabled.get();
-                                    if new_val {
-                                        enable_audio_js();
-                                    } else {
-                                        disable_audio_js();
-                                    }
-                                    set_audio_enabled.set(new_val);
-                                }
-                                title="Toggle scan audio feedback"
-                            >
-                                <Icon icon=IconName::Sound class="icon-sm" />
-                                {move || if audio_enabled.get() { " Sound On" } else { " Sound Off" }}
-                            </button>
+                            <div style="position:relative">
+                                <button
+                                    class="scanner-settings-btn"
+                                    class:scanner-settings-btn-active=move || settings_open.get()
+                                    on:click=move |_| set_settings_open.update(|s| *s = !*s)
+                                    title="Settings"
+                                >
+                                    <Icon icon=IconName::Settings class="icon-sm" />
+                                </button>
+                                <Show
+                                    when=move || settings_open.get()
+                                    fallback=|| view! { <div></div> }
+                                >
+                                    <div class="scanner-settings-popover">
+                                        <button
+                                            class="scanner-settings-toggle"
+                                            class:is-on=move || flash_enabled.get()
+                                            on:click=move |_| set_flash_enabled.update(|e| *e = !*e)
+                                        >
+                                            <Icon icon=IconName::Flash class="icon-sm" />
+                                            {move || if flash_enabled.get() { "Flash On" } else { "Flash Off" }}
+                                        </button>
+                                        <button
+                                            class="scanner-settings-toggle"
+                                            class:is-on=move || audio_enabled.get()
+                                            on:click=move |_| {
+                                                let new_val = !audio_enabled.get();
+                                                if new_val {
+                                                    enable_audio_js();
+                                                } else {
+                                                    disable_audio_js();
+                                                }
+                                                set_audio_enabled.set(new_val);
+                                            }
+                                        >
+                                            <Icon icon=IconName::Sound class="icon-sm" />
+                                            {move || if audio_enabled.get() { "Sound On" } else { "Sound Off" }}
+                                        </button>
+                                    </div>
+                                </Show>
+                            </div>
                         </div>
                     </div>
                     // Session stats (shown when scans > 0)

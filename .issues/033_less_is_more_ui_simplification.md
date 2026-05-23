@@ -68,10 +68,11 @@ The app has grown feature-rich but UI-heavy. Pages that should be simple (deposi
 **Files**: `frontend-leptos/src/pages/admin_escrow.rs`, `frontend-leptos/style.css`
 **Status**: ✅ Completed — 30+ inline styles → 5 minor overrides. `<EscrowStepCard>` handles done/signing/disabled/actionable/confirm-danger states. Reused `.step-card`, `.wallet-bar`, `.info-note`, `.panel-box` CSS classes.
 
-#### 2C. Scanner → Settings Gear
+#### 2C. Scanner → Settings Gear ✅
 **Current**: Flash/Audio toggles always visible in bottom sheet.
 **Target**: Gear icon → settings popover with Flash/Audio toggles. Bottom sheet shows only: session stats + "Enter Manually" + "Register Walk-in".
-**Files**: `frontend-leptos/src/pages/scanner.rs`
+**Files**: `frontend-leptos/src/pages/scanner.rs`, `frontend-leptos/style.css`, `frontend-leptos/src/icons/mod.rs`
+**Status**: ✅ Completed — Flash/Sound moved to ⚙ popover. Bottom sheet: 3 primary controls (Enter manually + ⚙ + Register Walk-in). Added Settings icon + 6 CSS classes.
 
 ### Phase 3: Polish (nice-to-have)
 
@@ -86,7 +87,7 @@ The app has grown feature-rich but UI-heavy. Pages that should be simple (deposi
 - [x] Claim Success shows ≤4 sections (down from 10+) — celebration + asset card + view NFT + compact share + deposit link
 - [x] Events page file ≤1024 lines (down from 2,572) — 765 lines (events_page.rs) + 1,861 (event_form.rs)
 - [x] Admin Escrow has ≤5 inline styles (down from 30+) — only minor font/padding overrides remain
-- [ ] Scanner bottom sheet shows ≤3 primary controls
+- [x] Scanner bottom sheet shows ≤3 primary controls — "Enter manually" + ⚙ settings popover (Flash/Sound) + "Register Walk-in"
 - [ ] Frontend builds without warnings
 - [ ] Manual test: deposit flow, ticket view, claim flow still work end-to-end
 
