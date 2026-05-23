@@ -1118,137 +1118,145 @@ pub fn Admin() -> impl IntoView {
 
                                     view! {
                                         <div class="attendee-item" class:vip=is_vip class:selected=is_selected>
-                                            <button
-                                                class=format!("attendee-checkbox{}", if is_selected { " checked" } else { "" })
-                                                on:click=move |_| set_selected_ids.update(|ids| {
-                                                    if ids.contains(&api_id) { ids.remove(&api_id); } else { ids.insert(api_id.clone()); }
-                                                })
-                                                disabled=is_checked_in
-                                            >
-                                                {if is_selected { "✓" } else { "" }}
-                                            </button>
-                                            <div class="attendee-info">
-                                                <div class="attendee-name">{utils::escape_html(&name)}</div>
-                                                <div class="attendee-email">{utils::escape_html(&email)}</div>
-                                                <Show
-                                                    when=move || has_ticket
-                                                    fallback=|| view! { <div></div> }
+                                            // Row 1: checkbox + name + badges + status indicators
+                                            <div class="attendee-row-top">
+                                                <button
+                                                    class=format!("attendee-checkbox{}", if is_selected { " checked" } else { "" })
+                                                    on:click=move |_| set_selected_ids.update(|ids| {
+                                                        if ids.contains(&api_id) { ids.remove(&api_id); } else { ids.insert(api_id.clone()); }
+                                                    })
+                                                    disabled=is_checked_in
                                                 >
-                                                    <div class="admin-ticket-row">
-                                                        {utils::escape_html(&ticket)}
-                                                        <Show when=move || is_vip fallback=|| view! { <span></span> }>
-                                                            <span class="vip-badge">"VIP"</span>
-                                                        </Show>
-                                                        <Show when=move || is_walkin fallback=|| view! { <span></span> }>
-                                                            <span class="walkin-badge">"Walk-in"</span>
-                                                        </Show>
-                                                    </div>
-                                                </Show>
-                                            </div>
-                                            <div class="attendee-status">
+                                                    {if is_selected { "✓" } else { "" }}
+                                                </button>
+                                                <div class="attendee-name">{utils::escape_html(&name)}</div>
                                                 <span class=p_class.clone()>{p_label.clone()}</span>
                                                 <span class=badge_class>{badge_text}</span>
-                                                <a
-                                                    href=deposit_link
-                                                    class="btn btn-outline btn-xs btn-xs-override"
-                                                    title="Deposit page"
+                                                <Show
+                                                    when=move || has_ticket && is_vip
+                                                    fallback=|| view! { <span></span> }
                                                 >
-                                                    "Deposit"
-                                                </a>
-                                                <button
-                                                    class="btn btn-outline btn-xs btn-xs-override"
-                                                    title="Copy ticket link"
-                                                    on:click={
-                                                        let ticket_link = ticket_link.clone();
-                                                        let set_toast = set_toast;
-                                                        move |_| {
-                                                            let full_url = format!("{}{}",
-                                                                web_sys::window()
-                                                                    .and_then(|w| w.location().origin().ok())
-                                                                    .unwrap_or_default(),
-                                                                &ticket_link
-                                                            );
-                                                            let clipboard = web_sys::window()
-                                                                .unwrap()
-                                                                .navigator()
-                                                                .clipboard();
-                                                            let _ = clipboard.write_text(&full_url);
-                                                            components::show_toast(
-                                                                &set_toast,
-                                                                "Ticket link copied!",
-                                                                ToastType::Success,
-                                                            );
-                                                        }
-                                                    }
+                                                    <span class="vip-badge">"VIP"</span>
+                                                </Show>
+                                                <Show
+                                                    when=move || has_ticket && is_walkin
+                                                    fallback=|| view! { <span></span> }
                                                 >
-                                                    "Ticket"
-                                                </button>
-                                                <button
-                                                    class={
-                                                        let is_confirming = confirm_delete_id.get().as_deref() == Some(&delete_id);
-                                                        let is_deleting = deleting_ids.get().contains(&delete_id);
-                                                        if is_deleting {
-                                                            "btn btn-xs btn-xs-override".to_string()
-                                                        } else if is_confirming {
-                                                            "btn btn-confirm-danger btn-xs btn-xs-override".to_string()
-                                                        } else {
-                                                            "btn btn-danger btn-xs btn-xs-override".to_string()
-                                                        }
-                                                    }
-                                                    disabled=deleting_ids.get().contains(&delete_id)
-                                                    title="Delete attendee"
-                                                    on:click={
-                                                        let delete_id = delete_id.clone();
-                                                        let set_toast = set_toast;
-                                                        move |_| {
-                                                            let is_confirming = confirm_delete_id.get().as_deref() == Some(&delete_id);
-                                                            if is_confirming {
-                                                                // Second click — execute delete
-                                                                set_confirm_delete_id.set(None);
-                                                                set_deleting_ids.update(|ids| { ids.insert(delete_id.clone()); });
-                                                                let aid = delete_id.clone();
-                                                                let eid = event_id_for_delete.get();
-                                                                let set_toast = set_toast;
-                                                                let set_deleting_ids = set_deleting_ids;
-                                                                let set_refresh_counter = set_refresh_counter;
-                                                                leptos::task::spawn_local(async move {
-                                                                    match api::delete_attendee(&aid, eid.as_deref()).await {
-                                                                        Ok(()) => {
-                                                                            components::show_toast(&set_toast, "Attendee deleted", ToastType::Success);
-                                                                            api::invalidate_attendee_cache();
-                                                                            set_refresh_counter.update(|c| *c += 1);
-                                                                        }
-                                                                        Err(e) => {
-                                                                            components::show_toast(&set_toast, &format!("Delete failed: {e}"), ToastType::Error);
-                                                                        }
-                                                                    }
-                                                                    set_deleting_ids.update(|ids| { ids.remove(&aid); });
-                                                                });
-                                                            } else {
-                                                                // First click — ask for confirmation
-                                                                set_confirm_delete_id.set(Some(delete_id.clone()));
-                                                                let set_confirm = set_confirm_delete_id;
-                                                                gloo::timers::callback::Timeout::new(3000, move || {
-                                                                    set_confirm.set(None);
-                                                                }).forget();
+                                                    <span class="walkin-badge">"Walk-in"</span>
+                                                </Show>
+                                            </div>
+                                            // Row 2: email + ticket + time ago + action buttons
+                                            <div class="attendee-row-bottom">
+                                                <div class="attendee-meta">
+                                                    <span class="attendee-email-inline">{utils::escape_html(&email)}</span>
+                                                    <Show
+                                                        when=move || has_ticket
+                                                        fallback=|| view! { <span></span> }
+                                                    >
+                                                        <span class="admin-ticket-tag">{utils::escape_html(&ticket)}</span>
+                                                    </Show>
+                                                    <Show
+                                                        when=move || has_time_ago
+                                                        fallback=|| view! { <span></span> }
+                                                    >
+                                                        <span class="admin-time-ago-inline">
+                                                            {time_ago_str.clone()}{checked_in_by_suffix.clone()}
+                                                        </span>
+                                                    </Show>
+                                                </div>
+                                                <div class="attendee-actions">
+                                                    <a
+                                                        href=deposit_link
+                                                        class="btn btn-outline btn-xs btn-xs-override"
+                                                        title="Deposit page"
+                                                    >
+                                                        "Deposit"
+                                                    </a>
+                                                    <button
+                                                        class="btn btn-outline btn-xs btn-xs-override"
+                                                        title="Copy ticket link"
+                                                        on:click={
+                                                            let ticket_link = ticket_link.clone();
+                                                            let set_toast = set_toast;
+                                                            move |_| {
+                                                                let full_url = format!("{}{}",
+                                                                    web_sys::window()
+                                                                        .and_then(|w| w.location().origin().ok())
+                                                                        .unwrap_or_default(),
+                                                                    &ticket_link
+                                                                );
+                                                                let clipboard = web_sys::window()
+                                                                    .unwrap()
+                                                                    .navigator()
+                                                                    .clipboard();
+                                                                let _ = clipboard.write_text(&full_url);
+                                                                components::show_toast(
+                                                                    &set_toast,
+                                                                    "Ticket link copied!",
+                                                                    ToastType::Success,
+                                                                );
                                                             }
                                                         }
-                                                    }
-                                                >
-                                                    {
-                                                        let is_confirming = confirm_delete_id.get().as_deref() == Some(&delete_id);
-                                                        let is_deleting = deleting_ids.get().contains(&delete_id);
-                                                        if is_deleting { "Deleting..." } else if is_confirming { "⚠ Confirm?" } else { "Delete" }
-                                                    }
-                                                </button>
-                                                <Show
-                                                    when=move || has_time_ago
-                                                    fallback=|| view! { <div></div> }
-                                                >
-                                                    <div class="admin-time-ago">
-                                                        {time_ago_str.clone()}{checked_in_by_suffix.clone()}
-                                                    </div>
-                                                </Show>
+                                                    >
+                                                        "Ticket"
+                                                    </button>
+                                                    <button
+                                                        class={
+                                                            let is_confirming = confirm_delete_id.get().as_deref() == Some(&delete_id);
+                                                            let is_deleting = deleting_ids.get().contains(&delete_id);
+                                                            if is_deleting {
+                                                                "btn btn-xs btn-xs-override".to_string()
+                                                            } else if is_confirming {
+                                                                "btn btn-confirm-danger btn-xs btn-xs-override".to_string()
+                                                            } else {
+                                                                "btn btn-danger btn-xs btn-xs-override".to_string()
+                                                            }
+                                                        }
+                                                        disabled=deleting_ids.get().contains(&delete_id)
+                                                        title="Delete attendee"
+                                                        on:click={
+                                                            let delete_id = delete_id.clone();
+                                                            let set_toast = set_toast;
+                                                            move |_| {
+                                                                let is_confirming = confirm_delete_id.get().as_deref() == Some(&delete_id);
+                                                                if is_confirming {
+                                                                    set_confirm_delete_id.set(None);
+                                                                    set_deleting_ids.update(|ids| { ids.insert(delete_id.clone()); });
+                                                                    let aid = delete_id.clone();
+                                                                    let eid = event_id_for_delete.get();
+                                                                    let set_toast = set_toast;
+                                                                    let set_deleting_ids = set_deleting_ids;
+                                                                    let set_refresh_counter = set_refresh_counter;
+                                                                    leptos::task::spawn_local(async move {
+                                                                        match api::delete_attendee(&aid, eid.as_deref()).await {
+                                                                            Ok(()) => {
+                                                                                components::show_toast(&set_toast, "Attendee deleted", ToastType::Success);
+                                                                                api::invalidate_attendee_cache();
+                                                                                set_refresh_counter.update(|c| *c += 1);
+                                                                            }
+                                                                            Err(e) => {
+                                                                                components::show_toast(&set_toast, &format!("Delete failed: {e}"), ToastType::Error);
+                                                                            }
+                                                                        }
+                                                                        set_deleting_ids.update(|ids| { ids.remove(&aid); });
+                                                                    });
+                                                                } else {
+                                                                    set_confirm_delete_id.set(Some(delete_id.clone()));
+                                                                    let set_confirm = set_confirm_delete_id;
+                                                                    gloo::timers::callback::Timeout::new(3000, move || {
+                                                                        set_confirm.set(None);
+                                                                    }).forget();
+                                                                }
+                                                            }
+                                                        }
+                                                    >
+                                                        {
+                                                            let is_confirming = confirm_delete_id.get().as_deref() == Some(&delete_id);
+                                                            let is_deleting = deleting_ids.get().contains(&delete_id);
+                                                            if is_deleting { "Deleting..." } else if is_confirming { "⚠ Confirm?" } else { "Delete" }
+                                                        }
+                                                    </button>
+                                                </div>
                                             </div>
                                         </div>
                                     }
@@ -1574,16 +1582,18 @@ fn render_recent_check_ins(
 
                             view! {
                                 <div class="attendee-item">
-                                    <div class="attendee-info">
+                                    <div class="attendee-row-top">
                                         <div class="attendee-name">{utils::escape_html(&name)}</div>
-                                        <div class="attendee-email admin-recent-email">
-                                            {utils::escape_html(&api_id)}
-                                        </div>
-                                    </div>
-                                    <div class="attendee-status text-right">
                                         <span class=format!("{p_class} admin-badge-inline")>
                                             {p_label.clone()}
                                         </span>
+                                    </div>
+                                    <div class="attendee-row-bottom">
+                                        <div class="attendee-meta">
+                                            <span class="attendee-email-inline admin-recent-email">
+                                                {utils::escape_html(&api_id)}
+                                            </span>
+                                        </div>
                                         <div class="admin-checkin-time">
                                             {formatted}{by_suffix}
                                         </div>
