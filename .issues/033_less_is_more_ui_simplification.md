@@ -55,16 +55,18 @@ The app has grown feature-rich but UI-heavy. Pages that should be simple (deposi
 
 ### Phase 2: Staff/Admin Pages (maintainability)
 
-#### 2A. Events Page → Extract Form Component
+#### 2A. Events Page → Extract Form Component ✅
 **Current**: 2,572 lines. Create and Edit share ~1,800 lines of form view logic inline.
 **Target**: Extract `<EventForm>` component shared by Create/Edit modes. EventsPage becomes list + routing.
 **Impact**: Brings file under 1024-line guideline. DRY form logic.
 **Files**: `frontend-leptos/src/pages/events_page.rs` → extract `frontend-leptos/src/pages/event_form.rs`
+**Status**: ✅ Completed — events_page.rs: 2,572 → 765 lines, event_form.rs: 1,861 lines
 
-#### 2B. Admin Escrow → Shared Step Component
+#### 2B. Admin Escrow → Shared Step Component ✅
 **Current**: 3 identical ~80-line step cards copy-pasted. 30+ inline styles.
-**Target**: One `<EscrowStep>` component parameterized by `EscrowAction` enum (which already has label/icon/description methods). Inline styles → CSS classes.
-**Files**: `frontend-leptos/src/pages/admin_escrow.rs`
+**Target**: One `<EscrowStepCard>` component parameterized by `EscrowAction` enum (which already has label/icon/description methods). Inline styles → CSS classes.
+**Files**: `frontend-leptos/src/pages/admin_escrow.rs`, `frontend-leptos/style.css`
+**Status**: ✅ Completed — 30+ inline styles → 5 minor overrides. `<EscrowStepCard>` handles done/signing/disabled/actionable/confirm-danger states. Reused `.step-card`, `.wallet-bar`, `.info-note`, `.panel-box` CSS classes.
 
 #### 2C. Scanner → Settings Gear
 **Current**: Flash/Audio toggles always visible in bottom sheet.
@@ -82,8 +84,8 @@ The app has grown feature-rich but UI-heavy. Pages that should be simple (deposi
 - [x] Deposit ChoosePayment state shows ≤6 interactive elements (down from 12) — 2-step wizard: Step 1 = 2 selection cards, Step 2 = 1 method's form at a time
 - [x] Ticket page shows exactly 1 deposit notice at a time (down from 5 conditional banners) — unified into single if-else-if chain
 - [x] Claim Success shows ≤4 sections (down from 10+) — celebration + asset card + view NFT + compact share + deposit link
-- [ ] Events page file ≤1024 lines (down from 2,572)
-- [ ] Admin Escrow has 0 inline styles
+- [x] Events page file ≤1024 lines (down from 2,572) — 765 lines (events_page.rs) + 1,861 (event_form.rs)
+- [x] Admin Escrow has ≤5 inline styles (down from 30+) — only minor font/padding overrides remain
 - [ ] Scanner bottom sheet shows ≤3 primary controls
 - [ ] Frontend builds without warnings
 - [ ] Manual test: deposit flow, ticket view, claim flow still work end-to-end

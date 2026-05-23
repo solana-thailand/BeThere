@@ -6987,6 +6987,36 @@ nav a.active {
     margin-top: 0.15rem;
 }
 
+.step-card-disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.step-card-title-icon {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+}
+
+.step-card-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.step-number {
+    font-size: 1rem;
+    opacity: 0.6;
+}
+
+.step-spinner {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
 /* --- Badge additions (Completed, Archived) --- */
 .badge-completed {
     background: rgba(59, 130, 246, 0.15);

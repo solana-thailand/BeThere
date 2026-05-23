@@ -120,7 +120,128 @@ impl EscrowAction {
     }
 }
 
-// ===== Component =====
+// ===== Shared Step Card Component =====
+
+/// Renders one escrow lifecycle step card.
+///
+/// Handles 4 visual states: done (✓), signing (spinner), disabled (greyed),
+/// and actionable (button). The confirm-danger pattern (Step 3 Close Event)
+/// uses `set_confirming` to toggle between first-click and confirm-click.
+#[component]
+fn EscrowStepCard(
+    action: EscrowAction,
+    step_number: u8,
+    done: bool,
+    signing: bool,
+    ready: bool,
+    confirming: bool,
+    on_trigger: WriteSignal<Option<EscrowAction>>,
+    set_confirming: Option<WriteSignal<bool>>,
+) -> impl IntoView {
+    let card_class = if done {
+        "step-card step-card-done"
+    } else {
+        "step-card"
+    };
+    let step_symbol = match step_number {
+        1 => "①",
+        2 => "②",
+        3 => "③",
+        _ => "",
+    };
+
+    // Pre-compute button config for the actionable state.
+    // This avoids complex closure captures inside view! branches.
+    let is_confirm_step = set_confirming.is_some();
+
+    view! {
+        <div class=card_class>
+            <div class="step-card-info">
+                <div class="step-card-title-icon">
+                    <Icon icon=action.icon() class="icon-sm"/>
+                    <span class="step-card-title">{format!("Step {}: {}", step_number, action.label())}</span>
+                </div>
+                <div class="step-card-desc">{action.description()}</div>
+            </div>
+            {if done {
+                view! {
+                    <span class="badge-done" style="font-weight:600;font-size:0.85rem">
+                        "✓ Done"
+                    </span>
+                }.into_any()
+            } else if signing {
+                view! {
+                    <div class="step-spinner">
+                        <span class="spinner spinner-sm"></span>
+                        <span>{action.loading_label()}</span>
+                    </div>
+                }.into_any()
+            } else if !ready {
+                // Disabled state — step not yet available
+                view! {
+                    <div class="step-card-actions step-card-disabled">
+                        <span class="step-number">{step_symbol}</span>
+                        <button
+                            class=action.button_class()
+                            class:step-card-disabled=true
+                            disabled=true
+                        >
+                            {action.button_label()}
+                        </button>
+                    </div>
+                }.into_any()
+            } else if !is_confirm_step {
+                // Simple action — no confirm-danger pattern
+                let trigger = on_trigger.clone();
+                view! {
+                    <div class="step-card-actions">
+                        <span class="step-number">{step_symbol}</span>
+                        <button
+                            class=action.button_class()
+                            on:click=move |_| trigger.set(Some(action))
+                        >
+                            {action.button_label()}
+                        </button>
+                    </div>
+                }.into_any()
+            } else {
+                // Confirm-danger pattern (Step 3: Close Event)
+                // First click → show "⚠ Confirm Close?", second click → execute
+                let trigger = on_trigger.clone();
+                let set_cc = set_confirming.unwrap();
+                let set_cc_reset = set_cc.clone();
+                let (btn_class, btn_label) = if confirming {
+                    ("btn btn-confirm-danger".to_string(), "⚠ Confirm Close?".to_string())
+                } else {
+                    (action.button_class().to_string(), action.button_label().to_string())
+                };
+                view! {
+                    <div class="step-card-actions">
+                        <span class="step-number">{step_symbol}</span>
+                        <button
+                            class=btn_class
+                            on:click=move |_| {
+                                if !confirming {
+                                    set_cc.set(true);
+                                    // Auto-reset confirm after 5s
+                                    let reset = set_cc_reset.clone();
+                                    gloo::timers::callback::Timeout::new(5000, move || {
+                                        reset.set(false);
+                                    }).forget();
+                                } else {
+                                    set_cc.set(false);
+                                    trigger.set(Some(action));
+                                }
+                            }
+                        >
+                            {btn_label}
+                        </button>
+                    </div>
+                }.into_any()
+            }}
+        </div>
+    }
+}
 
 #[component]
 pub fn AdminEscrow(
@@ -394,15 +515,13 @@ pub fn AdminEscrow(
 
                 // ── Wallet Connect ──
                 <Show when=move || !is_connected() fallback=|| view! { <div></div> }>
-                    <div style="margin-bottom:1rem;padding:0.75rem;border:1px solid var(--border);border-radius:8px;background:var(--bg-secondary)">
-                        <div style="font-size:0.85rem;font-weight:600;color:var(--text-primary);margin-bottom:0.5rem">
-                            "Connect Organizer Wallet"
-                        </div>
-                        <div style="font-size:0.75rem;color:var(--text-secondary);margin-bottom:0.75rem">
+                    <div class="panel-box">
+                        <div class="panel-title">"Connect Organizer Wallet"</div>
+                        <div class="hint-text" style="margin-bottom:0.75rem">
                             "Connect the wallet that created this event's escrow to sign management transactions."
                         </div>
                         <Show when=move || has_wallets() fallback=|| view! {
-                            <div style="font-size:0.75rem;color:var(--warning,orange)">
+                            <div class="badge-warn-text">
                                 "No Solana wallet detected. Install Phantom or Solflare."
                             </div>
                         }>
@@ -430,8 +549,8 @@ pub fn AdminEscrow(
                 // ── Wallet Connected ──
                 <Show when=move || is_connected() fallback=|| view! { <div></div> }>
                     // Wallet info bar
-                    <div style="display:flex;align-items:center;justify-content:space-between;padding:0.5rem 0.75rem;border:1px solid var(--border);border-radius:6px;background:var(--bg-secondary);margin-bottom:0.75rem">
-                        <div style="font-size:0.8rem;color:var(--text-primary)">
+                    <div class="wallet-bar">
+                        <div class="wallet-bar-address">
                             {move || {
                                 let wn = wallet_name.get();
                                 let pk = wallet_pk.get();
@@ -487,185 +606,63 @@ pub fn AdminEscrow(
 
                     // ── Lifecycle Steps ──
                     <div class="step-list">
-
                         // Step 1: Deactivate
                         {move || {
                             let action = EscrowAction::Deactivate;
-                            let done = is_done(action);
-                            let signing = signing_action.get() == Some(action);
-                            let border = if done { "var(--success,green)" } else { "var(--border)" };
-                            let trigger = set_action_to_execute.clone();
                             view! {
-                                <div style=format!("display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:0.5rem 0.75rem;border:1px solid {border};border-radius:6px;background:var(--bg-primary)")>
-                                    <div>
-                                        <div style="font-size:0.85rem;font-weight:600;color:var(--text-primary);display:flex;align-items:center;gap:0.3rem">
-                                            <Icon icon=action.icon() class="icon-sm"/>
-                                            {format!("Step 1: {}", action.label())}
-                                        </div>
-                                        <div style="font-size:0.7rem;color:var(--text-secondary)">
-                                            {action.description()}
-                                        </div>
-                                    </div>
-                                    {if done {
-                                        view! {
-                                            <span style="display:inline-flex;align-items:center;gap:0.3rem;color:var(--success,green);font-weight:600;font-size:0.85rem">
-                                                "✓ Done"
-                                            </span>
-                                        }.into_any()
-                                    } else if signing {
-                                        view! {
-                                            <div style="display:flex;align-items:center;gap:0.3rem">
-                                                <span class="spinner spinner-sm"></span>
-                                                <span style="font-size:0.75rem;color:var(--text-secondary)">{action.loading_label()}</span>
-                                            </div>
-                                        }.into_any()
-                                    } else {
-                                        view! {
-                                            <div style="display:flex;align-items:center;gap:0.5rem">
-                                                <span style="font-size:1rem;opacity:0.6">"①"</span>
-                                                <button
-                                                    class=action.button_class()
-                                                    style="white-space:nowrap;font-size:0.8rem;padding:0.4rem 0.8rem"
-                                                    on:click=move |_| trigger.set(Some(action))
-                                                >
-                                                    {action.button_label()}
-                                                </button>
-                                            </div>
-                                        }.into_any()
-                                    }}
-                                </div>
+                                <EscrowStepCard
+                                    action
+                                    step_number=1
+                                    done=is_done(action)
+                                    signing=signing_action.get() == Some(action)
+                                    ready=true
+                                    confirming=false
+                                    on_trigger=set_action_to_execute.clone()
+                                    set_confirming=None
+                                />
                             }
                         }}
 
                         // Step 2: Claim Forfeited (optional — skip if no deposits)
                         {move || {
                             let action = EscrowAction::ClaimForfeited;
-                            let done = is_done(action);
-                            let signing = signing_action.get() == Some(action);
                             let ready = step1_done.get();
-                            let border = if done { "var(--success,green)" } else if ready { "var(--border)" } else { "var(--border-disabled,#ccc)" };
-                            let trigger = set_action_to_execute.clone();
                             view! {
-                                <div style=format!("display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:0.5rem 0.75rem;border:1px solid {border};border-radius:6px;background:var(--bg-primary)")>
-                                    <div>
-                                        <div style="font-size:0.85rem;font-weight:600;color:var(--text-primary);display:flex;align-items:center;gap:0.3rem">
-                                            <Icon icon=action.icon() class="icon-sm"/>
-                                            {format!("Step 2: {}", action.label())}
-                                        </div>
-                                        <div style="font-size:0.7rem;color:var(--text-secondary)">
-                                            {action.description()}
-                                        </div>
-                                    </div>
-                                    {if done {
-                                        view! {
-                                            <span style="display:inline-flex;align-items:center;gap:0.3rem;color:var(--success,green);font-weight:600;font-size:0.85rem">
-                                                "✓ Done"
-                                            </span>
-                                        }.into_any()
-                                    } else if signing {
-                                        view! {
-                                            <div style="display:flex;align-items:center;gap:0.3rem">
-                                                <span class="spinner spinner-sm"></span>
-                                                <span style="font-size:0.75rem;color:var(--text-secondary)">{action.loading_label()}</span>
-                                            </div>
-                                        }.into_any()
-                                    } else {
-                                        let disabled_style = if ready { String::new() } else { "opacity:0.4;cursor:not-allowed".to_string() };
-                                        view! {
-                                            <div style="display:flex;align-items:center;gap:0.5rem">
-                                                <span style="font-size:1rem;opacity:0.6">"②"</span>
-                                                <button
-                                                    class=action.button_class()
-                                                    style=format!("white-space:nowrap;font-size:0.8rem;padding:0.4rem 0.8rem;{disabled_style}")
-                                                    disabled=move || !ready
-                                                    on:click=move |_| {
-                                                        if ready { trigger.set(Some(action)); }
-                                                    }
-                                                >
-                                                    {action.button_label()}
-                                                </button>
-                                            </div>
-                                        }.into_any()
-                                    }}
-                                </div>
+                                <EscrowStepCard
+                                    action
+                                    step_number=2
+                                    done=is_done(action)
+                                    signing=signing_action.get() == Some(action)
+                                    ready
+                                    confirming=false
+                                    on_trigger=set_action_to_execute.clone()
+                                    set_confirming=None
+                                />
                             }
                         }}
 
                         // Step 3: Close Event (ready after deactivate — claim is optional)
                         {move || {
                             let action = EscrowAction::CloseEvent;
-                            let done = is_done(action);
-                            let signing = signing_action.get() == Some(action);
-                            // Close is ready after deactivate (step1), NOT gated on claim_forfeited.
-                            // On-chain close_event validates accounting independently.
                             let ready = step1_done.get();
                             let confirming = confirm_close.get();
-                            let border = if done { "var(--success,green)" } else if ready { "var(--border)" } else { "var(--border-disabled,#ccc)" };
-                            let trigger = set_action_to_execute.clone();
-                            let set_cc = set_confirm_close.clone();
                             view! {
-                                <div style=format!("display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:0.5rem 0.75rem;border:1px solid {border};border-radius:6px;background:var(--bg-primary)")>
-                                    <div>
-                                        <div style="font-size:0.85rem;font-weight:600;color:var(--text-primary);display:flex;align-items:center;gap:0.3rem">
-                                            <Icon icon=action.icon() class="icon-sm"/>
-                                            {format!("Step 3: {}", action.label())}
-                                        </div>
-                                        <div style="font-size:0.7rem;color:var(--text-secondary)">
-                                            {action.description()}
-                                        </div>
-                                    </div>
-                                    {if done {
-                                        view! {
-                                            <span style="display:inline-flex;align-items:center;gap:0.3rem;color:var(--success,green);font-weight:600;font-size:0.85rem">
-                                                "✓ Done"
-                                            </span>
-                                        }.into_any()
-                                    } else if signing {
-                                        view! {
-                                            <div style="display:flex;align-items:center;gap:0.3rem">
-                                                <span class="spinner spinner-sm"></span>
-                                                <span style="font-size:0.75rem;color:var(--text-secondary)">{action.loading_label()}</span>
-                                            </div>
-                                        }.into_any()
-                                    } else {
-                                        let disabled_style = if ready { String::new() } else { "opacity:0.4;cursor:not-allowed".to_string() };
-                                        let btn_class = if confirming { "btn btn-confirm-danger" } else { action.button_class() };
-                                        let btn_label = if confirming { "⚠ Confirm Close?".to_string() } else { action.button_label().to_string() };
-                                        view! {
-                                            <div style="display:flex;align-items:center;gap:0.5rem">
-                                                <span style="font-size:1rem;opacity:0.6">"③"</span>
-                                                <button
-                                                    class=btn_class
-                                                    style=format!("white-space:nowrap;font-size:0.8rem;padding:0.4rem 0.8rem;{disabled_style}")
-                                                    disabled=move || !ready
-                                                    on:click=move |_| {
-                                                        if ready {
-                                                            if !confirming {
-                                                                set_cc.set(true);
-                                                                let reset = set_confirm_close.clone();
-                                                                gloo::timers::callback::Timeout::new(5000, move || {
-                                                                    reset.set(false);
-                                                                }).forget();
-                                                            } else {
-                                                                set_cc.set(false);
-                                                                trigger.set(Some(action));
-                                                            }
-                                                        }
-                                                    }
-                                                >
-                                                    {btn_label}
-                                                </button>
-                                            </div>
-                                        }.into_any()
-                                    }}
-                                </div>
+                                <EscrowStepCard
+                                    action
+                                    step_number=3
+                                    done=is_done(action)
+                                    signing=signing_action.get() == Some(action)
+                                    ready
+                                    confirming
+                                    on_trigger=set_action_to_execute.clone()
+                                    set_confirming=Some(set_confirm_close.clone())
+                                />
                             }
                         }}
-
                     </div>
 
                     // ── Info note ──
-                    <div style="margin-top:0.75rem;padding:0.5rem 0.75rem;border:1px dashed var(--border);border-radius:6px;background:var(--bg-secondary);font-size:0.7rem;color:var(--text-secondary)">
+                    <div class="info-note" style="margin-top:0.75rem">
                         <strong>"Order matters:"</strong>
                         " Deactivate first. Claim Forfeited is optional (skip if no deposits). "
                         "Close reclaims rent and permanently closes the escrow account."
