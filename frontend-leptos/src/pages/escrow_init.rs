@@ -237,10 +237,10 @@ pub fn EscrowInitPanel(
     event_id: String,
     /// Reader for current form state.
     #[prop(name = "form")]
-    form: ReadSignal<super::events_page::EventForm>,
+    form: ReadSignal<super::event_form::EventForm>,
     /// Writer to update form escrow fields on success.
     #[prop(name = "set_form")]
-    set_form: WriteSignal<super::events_page::EventForm>,
+    set_form: WriteSignal<super::event_form::EventForm>,
     /// Writer for toast notifications.
     #[prop(name = "set_toast")]
     set_toast: WriteSignal<Option<components::ToastMessage>>,

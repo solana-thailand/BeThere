@@ -8,6 +8,7 @@ pub mod audit_panel;
 pub mod claim;
 pub mod deposit;
 pub mod escrow_init;
+pub mod event_form;
 pub mod events_page;
 pub mod landing;
 pub mod login;
