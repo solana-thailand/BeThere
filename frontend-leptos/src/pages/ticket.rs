@@ -451,47 +451,54 @@ pub fn Ticket() -> impl IntoView {
                                         }}
                                     </div>
 
-                                    // Deposit reclaim notice for auto-switched online attendees
-                                    {if deposit_enabled && deadline_expired && deposit_info.is_none() && in_person_available.unwrap_or(false) {
-                                        let attendee_id_for_reclaim = api_id.clone();
-                                        let eid_param = web_sys::Url::new(
-                                            &web_sys::window().unwrap().location().href().unwrap(),
-                                        ).ok().and_then(|url| url.search_params().get("event_id"));
-                                        let reclaim_href = match eid_param {
-                                            Some(ref eid) if !eid.is_empty() => format!("/deposit/{}?event_id={}", attendee_id_for_reclaim, eid),
-                                            _ => format!("/deposit/{}", attendee_id_for_reclaim),
-                                        };
-                                        view! {
-                                            <div style="background:rgba(250,204,21,0.08);border:1px solid rgba(250,204,21,0.3);border-radius:var(--radius);padding:1rem;margin-bottom:0.75rem;text-align:center;">
-                                                <div style="display:flex;align-items:center;justify-content:center;gap:0.5rem;margin-bottom:0.5rem;">
-                                                    <span style="color:#facc15;"><Icon icon=IconName::Warning class="icon-sm" /></span>
-                                                    <span style="color:#fbbf24;font-weight:700;font-size:0.9rem;">
-                                                        "Want to Attend In-Person?"
+                                    // Deposit status slot — exactly one notice for online attendees
+                                    {if deposit_enabled && deposit_info.is_none() {
+                                        if deadline_expired && in_person_available.unwrap_or(false) {
+                                            // Reclaim available — show reclaim banner
+                                            let attendee_id_for_reclaim = api_id.clone();
+                                            let eid_param = web_sys::Url::new(
+                                                &web_sys::window().unwrap().location().href().unwrap(),
+                                            ).ok().and_then(|url| url.search_params().get("event_id"));
+                                            let reclaim_href = match eid_param {
+                                                Some(ref eid) if !eid.is_empty() => format!("/deposit/{}?event_id={}", attendee_id_for_reclaim, eid),
+                                                _ => format!("/deposit/{}", attendee_id_for_reclaim),
+                                            };
+                                            view! {
+                                                <div style="background:rgba(250,204,21,0.08);border:1px solid rgba(250,204,21,0.3);border-radius:var(--radius);padding:1rem;margin-bottom:0.75rem;text-align:center;">
+                                                    <div style="display:flex;align-items:center;justify-content:center;gap:0.5rem;margin-bottom:0.5rem;">
+                                                        <span style="color:#facc15;"><Icon icon=IconName::Warning class="icon-sm" /></span>
+                                                        <span style="color:#fbbf24;font-weight:700;font-size:0.9rem;">
+                                                            "Want to Attend In-Person?"
+                                                        </span>
+                                                    </div>
+                                                    <p style="color:#eab308;font-size:0.8rem;margin:0.25rem 0 0.75rem;">
+                                                        "Your deposit deadline passed and you were moved to the online track. "
+                                                        "But in-person spots are still available! Complete your deposit to reclaim your spot."
+                                                    </p>
+                                                    <a
+                                                        href=reclaim_href
+                                                        class="btn btn-success btn-block"
+                                                        style="max-width:300px;margin:0 auto;"
+                                                    >
+                                                        <Icon icon=IconName::CreditCard class="icon-sm" />
+                                                        " Deposit Now to Reclaim Spot"
+                                                    </a>
+                                                </div>
+                                            }.into_any()
+                                        } else if deadline_expired {
+                                            // Moved to online — no reclaim possible
+                                            view! {
+                                                <div style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.2);border-radius:var(--radius);padding:0.75rem;margin-bottom:0.75rem;text-align:center;">
+                                                    <span style="color:#818cf8;font-size:0.8rem;">
+                                                        "You were moved to the online track because your deposit wasn't completed in time. "
+                                                        "You can still claim your NFT after the event."
                                                     </span>
                                                 </div>
-                                                <p style="color:#eab308;font-size:0.8rem;margin:0.25rem 0 0.75rem;">
-                                                    "Your deposit deadline passed and you were moved to the online track. "
-                                                    "But in-person spots are still available! Complete your deposit to reclaim your spot."
-                                                </p>
-                                                <a
-                                                    href=reclaim_href
-                                                    class="btn btn-success btn-block"
-                                                    style="max-width:300px;margin:0 auto;"
-                                                >
-                                                    <Icon icon=IconName::CreditCard class="icon-sm" />
-                                                    " Deposit Now to Reclaim Spot"
-                                                </a>
-                                            </div>
-                                        }.into_any()
-                                    } else if deposit_enabled && deadline_expired && deposit_info.is_none() {
-                                        view! {
-                                            <div style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.2);border-radius:var(--radius);padding:0.75rem;margin-bottom:0.75rem;text-align:center;">
-                                                <span style="color:#818cf8;font-size:0.8rem;">
-                                                    "You were moved to the online track because your deposit wasn't completed in time. "
-                                                    "You can still claim your NFT after the event."
-                                                </span>
-                                            </div>
-                                        }.into_any()
+                                            }.into_any()
+                                        } else {
+                                            // Not expired, online attendee — no notice needed
+                                            view! { <div></div> }.into_any()
+                                        }
                                     } else {
                                         view! { <div></div> }.into_any()
                                     }}
@@ -822,8 +829,86 @@ pub fn Ticket() -> impl IntoView {
 
                                 // Status section
                                 <div class="ticket-status-section">
-                                    // Deposit notice — action required (no deposit yet)
-                                    {if deposit_enabled && deposit_info.is_none() && !is_checked_in {
+                                    // Deposit status — single notice slot (exactly one shown)
+                                    {if let Some(ref dep) = deposit_info {
+                                        if dep.verified {
+                                            view! {
+                                                <div style="background:#d1fae5;border-radius:var(--radius);padding:0.5rem 0.75rem;margin-bottom:0.75rem;text-align:center;">
+                                                    <span style="color:#065f46;font-weight:600;font-size:0.85rem;">
+                                                        "Deposit: Verified ✓"
+                                                    </span>
+                                                </div>
+                                            }.into_any()
+                                        } else {
+                                            view! {
+                                                <div class="ticket-deposit-pending" style="background:#fef3c7;border-radius:var(--radius);padding:0.75rem;margin-bottom:0.75rem;text-align:center;">
+                                                    <div style="display:flex;align-items:center;justify-content:center;gap:0.5rem;">
+                                                        <span style="color:#d97706;"><Icon icon=IconName::Hourglass class="icon-sm" /></span>
+                                                        <span style="color:#92400e;font-weight:600;">
+                                                            {match dep.method {
+                                                                DepositMethod::Thb => "Payment Slip: Pending Verification",
+                                                                DepositMethod::Usdc => "Deposit: Pending Confirmation",
+                                                                DepositMethod::CreditThb | DepositMethod::CreditUsdc => "Credit Deposit: Pending",
+                                                            }}
+                                                        </span>
+                                                    </div>
+                                                    <p style="color:#92400e;font-size:0.8rem;margin:0.5rem 0 0;">
+                                                        {match dep.method {
+                                                            DepositMethod::Thb => "Your payment slip has been submitted. We'll verify it shortly — check back in a few minutes.",
+                                                            DepositMethod::Usdc => "Your deposit is being confirmed on-chain.",
+                                                            DepositMethod::CreditThb | DepositMethod::CreditUsdc => "Your credit deposit is being processed.",
+                                                        }}
+                                                    </p>
+                                                </div>
+                                            }.into_any()
+                                        }
+                                    } else if deposit_enabled && deadline_expired && in_person_available.unwrap_or(false) {
+                                        let attendee_id_for_reclaim = api_id.clone();
+                                        let eid_param = web_sys::Url::new(
+                                            &web_sys::window().unwrap().location().href().unwrap(),
+                                        ).ok().and_then(|url| url.search_params().get("event_id"));
+                                        let reclaim_href = match eid_param {
+                                            Some(ref eid) if !eid.is_empty() => format!("/deposit/{}?event_id={}", attendee_id_for_reclaim, eid),
+                                            _ => format!("/deposit/{}", attendee_id_for_reclaim),
+                                        };
+                                        view! {
+                                            <div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.3);border-radius:var(--radius);padding:1rem;margin-bottom:0.75rem;text-align:center;">
+                                                <div style="display:flex;align-items:center;justify-content:center;gap:0.5rem;margin-bottom:0.5rem;">
+                                                    <span style="color:#ef4444;"><Icon icon=IconName::Warning class="icon-sm" /></span>
+                                                    <span style="color:#f87171;font-weight:700;font-size:0.9rem;">
+                                                        "Deadline Passed — Reclaim Your Spot"
+                                                    </span>
+                                                </div>
+                                                <p style="color:#fca5a5;font-size:0.8rem;margin:0.25rem 0 0.75rem;">
+                                                    "Your deposit deadline has passed and you've been moved to the online track. "
+                                                    "However, in-person spots are still available!"
+                                                </p>
+                                                <a
+                                                    href=reclaim_href
+                                                    class="btn btn-success btn-block"
+                                                    style="max-width:300px;margin:0 auto;"
+                                                >
+                                                    <Icon icon=IconName::CreditCard class="icon-sm" />
+                                                    " Deposit Now to Reclaim"
+                                                </a>
+                                            </div>
+                                        }.into_any()
+                                    } else if deposit_enabled && deadline_expired && !in_person_available.unwrap_or(true) {
+                                        view! {
+                                            <div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.3);border-radius:var(--radius);padding:1rem;margin-bottom:0.75rem;text-align:center;">
+                                                <div style="display:flex;align-items:center;justify-content:center;gap:0.5rem;margin-bottom:0.5rem;">
+                                                    <span style="color:#ef4444;"><Icon icon=IconName::Warning class="icon-sm" /></span>
+                                                    <span style="color:#f87171;font-weight:700;font-size:0.9rem;">
+                                                        "Moved to Online Track"
+                                                    </span>
+                                                </div>
+                                                <p style="color:#fca5a5;font-size:0.8rem;margin:0.25rem 0 0;">
+                                                    "Your deposit deadline has passed. In-person spots are now full, so you've been automatically moved to the online track. "
+                                                    "You can still claim your NFT after the event."
+                                                </p>
+                                            </div>
+                                        }.into_any()
+                                    } else if deposit_enabled && !is_checked_in {
                                         let attendee_id_for_deposit = api_id.clone();
                                         let eid_param = web_sys::Url::new(
                                             &web_sys::window().unwrap().location().href().unwrap(),
@@ -861,94 +946,6 @@ pub fn Ticket() -> impl IntoView {
                                                 </a>
                                             </div>
                                         }.into_any()
-                                    } else {
-                                        view! { <div></div> }.into_any()
-                                    }}
-
-                                    // Deadline expired notice (auto-switched to online)
-                                    {if deadline_expired && deposit_info.is_none() && in_person_available.unwrap_or(false) {
-                                        let attendee_id_for_reclaim = api_id.clone();
-                                        let eid_param = web_sys::Url::new(
-                                            &web_sys::window().unwrap().location().href().unwrap(),
-                                        ).ok().and_then(|url| url.search_params().get("event_id"));
-                                        let reclaim_href = match eid_param {
-                                            Some(ref eid) if !eid.is_empty() => format!("/deposit/{}?event_id={}", attendee_id_for_reclaim, eid),
-                                            _ => format!("/deposit/{}", attendee_id_for_reclaim),
-                                        };
-                                        view! {
-                                            <div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.3);border-radius:var(--radius);padding:1rem;margin-bottom:0.75rem;text-align:center;">
-                                                <div style="display:flex;align-items:center;justify-content:center;gap:0.5rem;margin-bottom:0.5rem;">
-                                                    <span style="color:#ef4444;"><Icon icon=IconName::Warning class="icon-sm" /></span>
-                                                    <span style="color:#f87171;font-weight:700;font-size:0.9rem;">
-                                                        "Deadline Passed — In-Person Spot Released"
-                                                    </span>
-                                                </div>
-                                                <p style="color:#fca5a5;font-size:0.8rem;margin:0.25rem 0 0.75rem;">
-                                                    "Your deposit deadline has passed and you've been moved to the online track. "
-                                                    "However, in-person spots are still available!"
-                                                </p>
-                                                <a
-                                                    href=reclaim_href
-                                                    class="btn btn-success btn-block"
-                                                    style="max-width:300px;margin:0 auto;"
-                                                >
-                                                    <Icon icon=IconName::CreditCard class="icon-sm" />
-                                                    " Deposit Now to Reclaim Your Spot"
-                                                </a>
-                                            </div>
-                                        }.into_any()
-                                    } else if deadline_expired && deposit_info.is_none() && !in_person_available.unwrap_or(true) {
-                                        view! {
-                                            <div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.3);border-radius:var(--radius);padding:1rem;margin-bottom:0.75rem;text-align:center;">
-                                                <div style="display:flex;align-items:center;justify-content:center;gap:0.5rem;margin-bottom:0.5rem;">
-                                                    <span style="color:#ef4444;"><Icon icon=IconName::Warning class="icon-sm" /></span>
-                                                    <span style="color:#f87171;font-weight:700;font-size:0.9rem;">
-                                                        "Moved to Online Track"
-                                                    </span>
-                                                </div>
-                                                <p style="color:#fca5a5;font-size:0.8rem;margin:0.25rem 0 0;">
-                                                    "Your deposit deadline has passed. In-person spots are now full, so you've been automatically moved to the online track. "
-                                                    "You can still claim your NFT after the event."
-                                                </p>
-                                            </div>
-                                        }.into_any()
-                                    } else {
-                                        view! { <div></div> }.into_any()
-                                    }}
-
-                                    // Deposit status section (deposit submitted — awaiting verification)
-                                    {if let Some(ref dep) = deposit_info {
-                                        if !dep.verified {
-                                            view! {
-                                                <div class="ticket-deposit-pending" style="background:#fef3c7;border-radius:var(--radius);padding:0.75rem;margin-bottom:0.75rem;text-align:center;">
-                                                    <div style="display:flex;align-items:center;justify-content:center;gap:0.5rem;">
-                                                        <span style="color:#d97706;"><Icon icon=IconName::Hourglass class="icon-sm" /></span>
-                                                        <span style="color:#92400e;font-weight:600;">
-                                                            {match dep.method {
-                                                                DepositMethod::Thb => "Payment Slip: Pending Verification",
-                                                                DepositMethod::Usdc => "Deposit: Pending Confirmation",
-                                                                DepositMethod::CreditThb | DepositMethod::CreditUsdc => "Credit Deposit: Pending",
-                                                            }}
-                                                        </span>
-                                                    </div>
-                                                    <p style="color:#92400e;font-size:0.8rem;margin:0.5rem 0 0;">
-                                                        {match dep.method {
-                                                            DepositMethod::Thb => "Your payment slip has been submitted. We'll verify it shortly — check back in a few minutes.",
-                                                            DepositMethod::Usdc => "Your deposit is being confirmed on-chain.",
-                                                            DepositMethod::CreditThb | DepositMethod::CreditUsdc => "Your credit deposit is being processed.",
-                                                        }}
-                                                    </p>
-                                                </div>
-                                            }.into_any()
-                                        } else {
-                                            view! {
-                                                <div style="background:#d1fae5;border-radius:var(--radius);padding:0.5rem 0.75rem;margin-bottom:0.75rem;text-align:center;">
-                                                    <span style="color:#065f46;font-weight:600;font-size:0.85rem;">
-                                                        "Deposit: Verified ✓"
-                                                    </span>
-                                                </div>
-                                            }.into_any()
-                                        }
                                     } else {
                                         view! { <div></div> }.into_any()
                                     }}

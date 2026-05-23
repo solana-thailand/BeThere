@@ -13,10 +13,9 @@ use leptos_meta::Title;
 use leptos_router::hooks::use_params;
 use leptos_router::params::Params;
 
-use crate::api::{self, AdventureStatusType, ClaimLookupData, ClaimMintData, QuizQuestionsData, QuizStatus, QuizSubmitData, RefundTxRequest};
-use crate::components::{self, Toast, ToastType};
+use crate::api::{self, AdventureStatusType, ClaimLookupData, ClaimMintData, QuizQuestionsData, QuizStatus, QuizSubmitData};
 use crate::icons::{Icon, IconName, wallet_icon_name};
-use crate::utils::{escape_html, format_timestamp, get_cluster, metaplex_explorer_url, solanafm_asset_url, solscan_tx_url};
+use crate::utils::{escape_html, format_timestamp, metaplex_explorer_url, solanafm_asset_url, solscan_tx_url};
 use wasm_bindgen::prelude::*;
 
 // ---------------------------------------------------------------------------
@@ -85,6 +84,10 @@ async fn connect_wallet_js(wallet_name: &str) -> crate::wallet_error::WalletResu
     }
 }
 
+/// Sign and send a transaction via the wallet adapter.
+/// Currently unused after 1C simplification (refund moved to deposit page).
+/// Retained for potential future wallet operations on the claim page.
+#[allow(dead_code)]
 async fn sign_and_send_tx_js(wallet_name: &str, transaction_b64: &str) -> crate::wallet_error::WalletResult {
     let promise = sign_and_send_tx_js_raw(wallet_name, transaction_b64);
     match wasm_bindgen_futures::JsFuture::from(promise).await {
@@ -94,25 +97,6 @@ async fn sign_and_send_tx_js(wallet_name: &str, transaction_b64: &str) -> crate:
             crate::wallet_error::WalletResult::UnknownFailure
         }
     }
-}
-
-// ---------------------------------------------------------------------------
-// Inline refund state machine (lightweight version of deposit.rs refund)
-// ---------------------------------------------------------------------------
-
-/// Simplified refund state for the inline claim-page flow.
-#[derive(Clone, Debug)]
-enum ClaimRefundState {
-    /// Initial — no action taken yet.
-    Idle,
-    /// Wallet connection in progress.
-    Connecting,
-    /// Wallet connected, TX signing in progress.
-    Signing(String, String), // (wallet_name, public_key)
-    /// Refund TX confirmed on-chain.
-    Confirmed(String), // tx_signature
-    /// Error occurred (message shown inline).
-    Error(String),
 }
 
 // ---------------------------------------------------------------------------
@@ -977,315 +961,6 @@ fn QuizSubmittedView(
     }
 }
 
-// ---------------------------------------------------------------------------
-// Deposit info component (shown after NFT claim)
-// ---------------------------------------------------------------------------
-
-/// Renders a deposit info card with link to the deposit page.
-/// Shown on the claim page when the event has deposits enabled.
-#[component]
-fn DepositRefundSection(
-    api_id: String,
-    event_id: String,
-    deposit_amount_usdc: u64,
-    #[prop(default = 0)] deposit_amount_thb: u64,
-    /// Whether the attendee has a verified USDC deposit on-chain.
-    #[prop(default = false)]
-    has_usdc_deposit: bool,
-    /// Whether the attendee has already claimed their NFT (changes messaging).
-    #[prop(default = false)]
-    has_claimed: bool,
-) -> impl IntoView {
-    let usdc_display = format!("{:.2}", deposit_amount_usdc as f64 / 1_000_000.0);
-    let deposit_link = if event_id.is_empty() {
-        format!("/deposit/{api_id}")
-    } else {
-        format!("/deposit/{api_id}?event_id={event_id}")
-    };
-
-    // Inline refund state
-    let (refund_state, set_refund_state) = signal(ClaimRefundState::Idle);
-    let (toast, set_toast) = signal(None::<crate::components::ToastMessage>);
-
-    // Fetch cluster once for Solscan links
-    let cluster = get_cluster();
-
-    // Store the refund handler in StoredValue so reactive closures can clone it
-    let api_id_stored = StoredValue::new(api_id.clone());
-    let event_id_stored = StoredValue::new(event_id.clone());
-
-    let do_refund = move |wallet_name: String| {
-        let wn = wallet_name.clone();
-        let api_id_for_tx = api_id_stored.get_value();
-        let event_id_for_tx = event_id_stored.get_value();
-
-        set_refund_state.set(ClaimRefundState::Connecting);
-        leptos::task::spawn_local(async move {
-            // Step 1: Connect wallet
-            let pubkey = match connect_wallet_js(&wn).await {
-                crate::wallet_error::WalletResult::Success(pk) => pk,
-                crate::wallet_error::WalletResult::Error(e) => {
-                    let msg = crate::wallet_error::user_friendly_message(&e);
-                    log::error!("[claim-refund] wallet connect error: code={:?} msg={}", e.code, e.raw_message);
-                    components::show_toast(&set_toast, &msg, ToastType::Error);
-                    set_refund_state.set(ClaimRefundState::Error(msg));
-                    return;
-                }
-                crate::wallet_error::WalletResult::UnknownFailure => {
-                    let msg = "Failed to connect wallet. Please try again.";
-                    log::error!("[claim-refund] wallet connect failed");
-                    components::show_toast(&set_toast, msg, ToastType::Error);
-                    set_refund_state.set(ClaimRefundState::Error(msg.to_string()));
-                    return;
-                }
-            };
-            log::info!("[claim-refund] wallet connected: {wn} ({pubkey})");
-
-            let wallet_name_for_tx = wn.clone();
-            let pk_for_tx = pubkey.clone();
-
-            // Transition to signing
-            set_refund_state.set(ClaimRefundState::Signing(
-                wallet_name_for_tx.clone(),
-                pk_for_tx.clone(),
-            ));
-
-            // Step 2: Build refund TX
-            let body = RefundTxRequest {
-                event_id: event_id_for_tx,
-                attendee_id: api_id_for_tx,
-                wallet_address: pk_for_tx.clone(),
-            };
-            let refund_resp = match api::build_refund_tx(&body).await {
-                Ok(r) => r,
-                Err(e) => {
-                    let msg = format!("Failed to build refund: {e}");
-                    log::error!("[claim-refund] {msg}");
-                    components::show_toast(&set_toast, &msg, ToastType::Error);
-                    set_refund_state.set(ClaimRefundState::Error(msg));
-                    return;
-                }
-            };
-
-            let tx_b64 = refund_resp.transaction;
-            if tx_b64.is_empty() {
-                let msg = "Refund transaction was empty. Please try again later.";
-                log::error!("[claim-refund] {msg}");
-                components::show_toast(&set_toast, msg, ToastType::Error);
-                set_refund_state.set(ClaimRefundState::Error(msg.to_string()));
-                return;
-            }
-
-            // Step 3: Sign and send
-            match sign_and_send_tx_js(&wallet_name_for_tx, &tx_b64).await {
-                crate::wallet_error::WalletResult::Success(signature) => {
-                    log::info!("[claim-refund] TX sent, sig: {signature}");
-                    set_refund_state.set(ClaimRefundState::Confirmed(signature));
-                }
-                crate::wallet_error::WalletResult::Error(e) => {
-                    let msg = crate::wallet_error::user_friendly_message(&e);
-                    log::error!("[claim-refund] sign+send error: code={:?} msg={}", e.code, e.raw_message);
-                    components::show_toast(&set_toast, &msg, ToastType::Error);
-                    set_refund_state.set(ClaimRefundState::Error(msg));
-                }
-                crate::wallet_error::WalletResult::UnknownFailure => {
-                    let msg = "Refund transaction failed. Please try again.";
-                    log::error!("[claim-refund] sign+send failed");
-                    components::show_toast(&set_toast, msg, ToastType::Error);
-                    set_refund_state.set(ClaimRefundState::Error(msg.to_string()));
-                }
-            }
-        });
-    };
-
-    view! {
-        <div class="card dep-card">
-            <Toast toast_signal=toast />
-            // Header
-            <div class="card-header">
-                <h2 class="card-title"><Icon icon=IconName::Coin class="icon-md" />" Deposit & Refund"</h2>
-                {if deposit_amount_usdc > 0 {
-                    view! {
-                        <span class="badge badge-info">
-                            {format!("{} USDC", usdc_display)}
-                        </span>
-                    }.into_any()
-                } else {
-                    view! { <div></div> }.into_any()
-                }}
-            </div>
-
-            // Refund flow — only show when attendee has a verified USDC deposit
-            {move || {
-                let current = refund_state.get();
-                if has_usdc_deposit && deposit_amount_usdc > 0 {
-                    match &current {
-                        ClaimRefundState::Idle | ClaimRefundState::Error(_) => {
-                            let wallets = get_detected_wallets_js();
-                            if let Some(err) = match &current {
-                                ClaimRefundState::Error(e) => Some(e.clone()),
-                                _ => None,
-                            } {
-                                let err_msg = err.clone();
-                                view! {
-                                    <div class="claim-refund-error">
-                                        <p class="hint-desc" style="color:#ef4444">{escape_html(&err_msg)}</p>
-                                        <button
-                                            class="btn btn-outline btn-sm"
-                                            on:click=move |_| set_refund_state.set(ClaimRefundState::Idle)
-                                        >
-                                            "Try Again"
-                                        </button>
-                                    </div>
-                                }.into_any()
-                            } else if wallets.is_empty() {
-                                view! {
-                                    <p class="hint-desc">
-                                        "No Solana wallet detected. Install "
-                                        <a href="https://phantom.app/" target="_blank" rel="noopener noreferrer">"Phantom"</a>
-                                        ", Backpack, or Solflare and refresh."
-                                    </p>
-                                    // Fallback link to deposit page
-                                    <a href=&deposit_link class="btn btn-outline btn-sm">"Go to Deposit Page →"</a>
-                                }.into_any()
-                            } else {
-                                view! {
-                                    <p class="hint-desc">
-                                        "You deposited " <strong>{format!("{} USDC", usdc_display)}</strong>
-                                        ". Claim your refund below:"
-                                    </p>
-                                    <div class="wallet-list">
-                                        {wallets.into_iter().map(|w| {
-                                            let w_label = w.clone();
-                                            let w_click = w.clone();
-                                            let wallet_icon = wallet_icon_name(&w);
-                                            view! {
-                                                <button
-                                                    class="btn btn-primary btn-block wallet-btn-inner"
-                                                    on:click=move |_| do_refund(w_click.clone())
-                                                >
-                                                    <span><Icon icon=wallet_icon class="icon-sm" /></span>
-                                                    <span>{format!("Connect {} & Claim Refund", &w_label)}</span>
-                                                </button>
-                                            }
-                                        }).collect::<Vec<_>>()}
-                                    </div>
-                                }.into_any()
-                            }
-                        }
-                        ClaimRefundState::Connecting => {
-                            view! {
-                                <div class="spinner-wrap">
-                                    <span class="spinner spinner-lg"></span>
-                                </div>
-                                <p class="hint-sm">"Connecting wallet..."</p>
-                            }.into_any()
-                        }
-                        ClaimRefundState::Signing(_wallet_name, _public_key) => {
-                            view! {
-                                <div class="spinner-wrap">
-                                    <span class="spinner spinner-lg"></span>
-                                </div>
-                                <p class="hint-sm">"Please approve the transaction in your wallet..."</p>
-                            }.into_any()
-                        }
-                        ClaimRefundState::Confirmed(tx_sig) => {
-                            let sig_display = if tx_sig.len() > 20 {
-                                format!("{}...{}", &tx_sig[..8], &tx_sig[tx_sig.len()-8..])
-                            } else {
-                                tx_sig.clone()
-                            };
-                            let solscan_url = solscan_tx_url(tx_sig, &cluster);
-                            let usdc_fmt = format!("{:.2}", deposit_amount_usdc as f64 / 1_000_000.0);
-                            view! {
-                                <div class="celebration-emoji"><Icon icon=IconName::Coin class="icon-3xl" /><Icon icon=IconName::Recycle class="icon-3xl" /></div>
-                                <p class="success-title">
-                                    {format!("{usdc_fmt} USDC refunded to your wallet!")}
-                                </p>
-                                <p class="hint-desc">
-                                    "Your refund has been confirmed on Solana. Funds should appear in your wallet shortly."
-                                </p>
-                                <div class="tx-hash-box">
-                                    {format!("TX: {}", &sig_display)}
-                                </div>
-                                <a href=&solscan_url target="_blank" class="tx-explorer-link">
-                                    "View on Solscan ↗"
-                                </a>
-                            }.into_any()
-                        }
-                    }
-                } else {
-                    // No verified USDC deposit on-chain
-                    if has_claimed {
-                        // Post-claim: informational only — attendee already got their NFT
-                        view! {
-                            <p class="hint-sm">
-                                "This event required a deposit to attend."
-                            </p>
-                            <div class="badge-row">
-                                {if deposit_amount_usdc > 0 {
-                                    view! {
-                                        <div class="badge" style="background:var(--badge-bg,#1e1b4b);color:#c084fc;padding:0.5rem 1rem;border-radius:0.5rem">
-                                            {format!("{} USDC", usdc_display)}
-                                        </div>
-                                    }.into_any()
-                                } else {
-                                    view! { <div></div> }.into_any()
-                                }}
-                                {if deposit_amount_thb > 0 {
-                                    view! {
-                                        <div class="badge" style="background:var(--badge-bg,#1e1b4b);color:#c084fc;padding:0.5rem 1rem;border-radius:0.5rem">
-                                            {format!("{} THB", deposit_amount_thb)}
-                                        </div>
-                                    }.into_any()
-                                } else {
-                                    view! { <div></div> }.into_any()
-                                }}
-                            </div>
-                            <p class="hint-desc" style="margin-top:0.5rem">
-                                "If you submitted a deposit (USDC or THB), visit the deposit page to check your status or request a refund."
-                            </p>
-                            <a href=&deposit_link class="btn btn-outline btn-sm">
-                                "Deposit & Refund Details →"
-                            </a>
-                        }.into_any()
-                    } else {
-                        // Pre-claim: attendee hasn't claimed yet, deposit still pending
-                        view! {
-                            <p class="hint-sm">
-                                "This event requires a deposit to confirm your spot."
-                            </p>
-                            <div class="badge-row">
-                                {if deposit_amount_usdc > 0 {
-                                    view! {
-                                        <div class="badge" style="background:var(--badge-bg,#1e1b4b);color:#c084fc;padding:0.5rem 1rem;border-radius:0.5rem">
-                                            {format!("{} USDC", usdc_display)}
-                                        </div>
-                                    }.into_any()
-                                } else {
-                                    view! { <div></div> }.into_any()
-                                }}
-                                {if deposit_amount_thb > 0 {
-                                    view! {
-                                        <div class="badge" style="background:var(--badge-bg,#1e1b4b);color:#c084fc;padding:0.5rem 1rem;border-radius:0.5rem">
-                                            {format!("{} THB", deposit_amount_thb)}
-                                    </div>
-                                }.into_any()
-                            } else {
-                                view! { <div></div> }.into_any()
-                            }}
-                            </div>
-                            <a href=&deposit_link class="btn btn-primary">
-                                "Go to Deposit Page"
-                            </a>
-                        }.into_any()
-                    }
-                }
-            }}
-        </div>
-    }
-}
-
 /// The page looks up their check-in record and allows them to mint a
 /// compressed NFT badge to their Solana wallet.
 #[component]
@@ -1310,17 +985,15 @@ pub fn Claim() -> impl IntoView {
     let (share_copied, set_share_copied) = signal(false);
 
     // Claim counter (fetched from backend on initial lookup)
-    let (total_checked_in, set_total_checked_in) = signal(0usize);
-    let (total_claimed, set_total_claimed) = signal(0usize);
+    let (_total_checked_in, set_total_checked_in) = signal(0usize);
+    let (_total_claimed, set_total_claimed) = signal(0usize);
 
     // Deposit info (persisted across state transitions)
     let (deposit_api_id, set_deposit_api_id) = signal(String::new());
     let (deposit_event_id, set_deposit_event_id) = signal(String::new());
     let (deposit_enabled, set_deposit_enabled) = signal(false);
-    let (deposit_amount_usdc, set_deposit_amount_usdc) = signal(0u64);
-    let (deposit_amount_thb, set_deposit_amount_thb) = signal(0u64);
-    // Whether the attendee has a verified USDC deposit (fetched separately).
-    let (has_usdc_deposit, set_has_usdc_deposit) = signal(false);
+    let (_deposit_amount_usdc, set_deposit_amount_usdc) = signal(0u64);
+    let (_deposit_amount_thb, set_deposit_amount_thb) = signal(0u64);
 
     // Wallet adapter state — detected wallets and connected wallet info
     let (detected_wallets, set_detected_wallets) = signal(Vec::<String>::new());
@@ -1383,32 +1056,6 @@ pub fn Claim() -> impl IntoView {
                     set_deposit_enabled.set(data.deposit_enabled);
                     set_deposit_amount_usdc.set(data.deposit_amount_usdc);
                     set_deposit_amount_thb.set(data.deposit_amount_thb);
-
-                    // Check if attendee has a verified USDC deposit
-                    // (needed for inline refund flow on Success/AlreadyClaimed)
-                    if data.deposit_enabled && !data.api_id.is_empty() && data.deposit_amount_usdc > 0 {
-                        let api_id_for_deposit = data.api_id.clone();
-                        let event_id_for_deposit = data.event_id.clone();
-                        let set_has_deposit = set_has_usdc_deposit;
-                        leptos::task::spawn_local(async move {
-                            match api::get_deposit_status(
-                                &api_id_for_deposit,
-                                if event_id_for_deposit.is_empty() { None } else { Some(&event_id_for_deposit) },
-                            ).await {
-                                Ok(deposit_resp) => {
-                                    let is_usdc_deposited = deposit_resp.status
-                                        .as_ref()
-                                        .map(|s| s.verified && s.currency == "USDC")
-                                        .unwrap_or(false);
-                                    log::info!("[claim] deposit status: has_usdc_deposit={is_usdc_deposited}");
-                                    set_has_deposit.set(is_usdc_deposited);
-                                }
-                                Err(e) => {
-                                    log::warn!("[claim] deposit status fetch failed: {e}");
-                                }
-                            }
-                        });
-                    }
 
                     if data.claimed {
                         set_state.set(ClaimState::AlreadyClaimed(data));
@@ -2013,8 +1660,6 @@ pub fn Claim() -> impl IntoView {
 
                         // ---- Success! ----
                         ClaimState::Success(data) => {
-                            let explorer_url = solscan_tx_url(&data.signature, &data.cluster);
-                            let metaplex_url = metaplex_explorer_url(&data.asset_id, &data.cluster);
                             let solanafm_url = solanafm_asset_url(&data.asset_id, &data.cluster);
                             let asset_id_display = {
                                 let id = &data.asset_id;
@@ -2046,10 +1691,21 @@ pub fn Claim() -> impl IntoView {
                                     Err(_) => String::new(),
                                 }
                             );
-                            let tweet_preview_text = tweet_text.clone();
+
+                            // Deposit link for refund (if applicable)
+                            let deposit_link = {
+                                let api_id = deposit_api_id.get();
+                                let event_id = deposit_event_id.get();
+                                if event_id.is_empty() {
+                                    format!("/deposit/{api_id}")
+                                } else {
+                                    format!("/deposit/{api_id}?event_id={event_id}")
+                                }
+                            };
 
                             view! {
                                 <div class="claim-success">
+                                    // 1. Celebration
                                     <div class="claim-success-rings">
                                         <div class="claim-success-ring claim-success-ring-3"></div>
                                         <div class="claim-success-ring claim-success-ring-2"></div>
@@ -2062,7 +1718,7 @@ pub fn Claim() -> impl IntoView {
                                     </div>
                                     <h2>"NFT Claimed!"</h2>
 
-                                    // Asset ID card
+                                    // 2. Asset ID + View NFT
                                     <div class="claim-asset-card">
                                         <div class="claim-asset-header">
                                             <span class="claim-asset-label">"Asset ID"</span>
@@ -2089,15 +1745,6 @@ pub fn Claim() -> impl IntoView {
                                         </div>
                                     </div>
 
-                                    <div class="success-details">
-                                        <p><strong>"Name:"</strong>" " {escape_html(&data.name)}</p>
-                                        <p><strong>"Wallet:"</strong>
-                                            <code>{escape_html(&data.wallet_address)}</code>
-                                        </p>
-                                        <p><strong>"Claimed:"</strong>" " {format_timestamp(&data.claimed_at)}</p>
-                                    </div>
-
-                                    // Explorer links
                                     <div class="success-actions">
                                         <a
                                             href=solanafm_url
@@ -2107,121 +1754,70 @@ pub fn Claim() -> impl IntoView {
                                         >
                                             "View NFT on SolanaFM ↗"
                                         </a>
-                                        <a
-                                            href=explorer_url
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            class="btn btn-outline btn-block"
-                                        >
-                                            "View TX on Solscan ↗"
-                                        </a>
-                                        <a
-                                            href=metaplex_url
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            class="btn btn-outline btn-block"
-                                        >
-                                            "Verify on Metaplex ↗"
-                                        </a>
                                     </div>
 
-                                    // cNFT explanation — help attendees understand how to view their NFT
-                                    <div class="claim-cnft-hint">
-                                        <p class="hint-title">"🎫 Your Compressed NFT"</p>
-                                        <p class="hint-desc">
-                                            "This NFT is stored on Solana using state compression. View it on "
-                                            <strong>"SolanaFM"</strong>
-                                            " above — it shows the full NFT with artwork and metadata. "
-                                            "It may not appear in some wallet apps (Phantom, Solflare)."
-                                        </p>
+                                    // 3. Share (compact row)
+                                    <div class="claim-share-section">
+                                    <div class="claim-share-buttons">
+                                        <a
+                                            href=share_to_x_url
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            class="claim-share-x-btn"
+                                        >
+                                            <svg viewBox="0 0 24 24" fill="currentColor">
+                                                <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+                                            </svg>
+                                            "Post to X"
+                                        </a>
+                                        <button
+                                            class="claim-share-copy-btn"
+                                            type="button"
+                                            title="Copy claim link"
+                                            on:click=move |_| {
+                                                let _ = copy_to_clipboard_js(&claim_page_url);
+                                                set_share_copied.set(true);
+                                                leptos::task::spawn_local(async move {
+                                                    gloo::timers::future::TimeoutFuture::new(2000).await;
+                                                    set_share_copied.set(false);
+                                                });
+                                            }
+                                        >
+                                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+                                                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+                                            </svg>
+                                        </button>
+                                    </div>
+                                    <div class={move || {
+                                        if share_copied.get() {
+                                            "claim-share-copied visible".to_string()
+                                        } else {
+                                            "claim-share-copied".to_string()
+                                        }
+                                    }}>
+                                        "Link copied!"
+                                    </div>
                                     </div>
 
-                                    // Claim counter — social proof
+                                    // 4. Deposit refund link (if applicable)
                                     {move || {
-                                        let checked_in = total_checked_in.get();
-                                        let claimed = total_claimed.get();
-                                        if checked_in > 0 {
+                                        if deposit_enabled.get() && !deposit_api_id.get().is_empty() {
                                             view! {
-                                                <div class="claim-counter">
-                                                    <span class="claim-counter-badge"><Icon icon=IconName::Trophy class="icon-md icon-warning" /></span>
-                                                    <span class="claim-counter-text">
-                                                        <strong>{claimed}</strong>
-                                                        " of "
-                                                        <strong>{checked_in}</strong>
-                                                        " attendees claimed their NFT"
-                                                    </span>
+                                                <div class="success-actions" style="margin-top:0.75rem">
+                                                    <a
+                                                        href=&deposit_link
+                                                        class="btn btn-outline btn-block"
+                                                    >
+                                                        "Deposit & Refund Details →"
+                                                    </a>
                                                 </div>
                                             }.into_any()
                                         } else {
                                             view! { <div></div> }.into_any()
                                         }
                                     }}
-
-                                    // Share section with tweet preview
-                                    <div class="claim-share-section">
-                                        <div class="claim-share-heading">"Share your achievement"</div>
-                                        <div class="claim-share-preview">
-                                            <div class="claim-share-preview-name">"BeThere ✦ @BeThere"</div>
-                                            {tweet_preview_text}
-                                        </div>
-                                        <div class="claim-share-buttons">
-                                            <a
-                                                href=share_to_x_url
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                class="claim-share-x-btn"
-                                            >
-                                                <svg viewBox="0 0 24 24" fill="currentColor">
-                                                    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
-                                                </svg>
-                                                "Post to X"
-                                            </a>
-                                            <button
-                                                class="claim-share-copy-btn"
-                                                type="button"
-                                                title="Copy claim link"
-                                                on:click=move |_| {
-                                                    let _ = copy_to_clipboard_js(&claim_page_url);
-                                                    set_share_copied.set(true);
-                                                    leptos::task::spawn_local(async move {
-                                                        gloo::timers::future::TimeoutFuture::new(2000).await;
-                                                        set_share_copied.set(false);
-                                                    });
-                                                }
-                                            >
-                                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                                    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
-                                                    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
-                                                </svg>
-                                            </button>
-                                        </div>
-                                        <div class={move || {
-                                            if share_copied.get() {
-                                                "claim-share-copied visible".to_string()
-                                            } else {
-                                                "claim-share-copied".to_string()
-                                            }
-                                        }}>
-                                            "Link copied!"
-                                        </div>
-                                    </div>
                                 </div>
-                                {move || {
-                                    if deposit_enabled.get() && !deposit_api_id.get().is_empty() {
-                                        view! {
-                                            <DepositRefundSection
-                                                api_id=deposit_api_id.get()
-                                                event_id=deposit_event_id.get()
-                                                deposit_amount_usdc=deposit_amount_usdc.get()
-                                                deposit_amount_thb=deposit_amount_thb.get()
-                                                has_usdc_deposit=has_usdc_deposit.get()
-                                                has_claimed=true
-                                            />
-                                        }.into_any()
-                                    } else {
-                                        view! { <div></div> }.into_any()
-                                    }
-                                }}
                             }
                                 .into_any()
                         }
@@ -2245,6 +1841,17 @@ pub fn Claim() -> impl IntoView {
                                 metaplex_explorer_url(asset_id, claimed_cluster)
                             });
 
+                            // Deposit link for refund (if applicable)
+                            let deposit_link = {
+                                let api_id = deposit_api_id.get();
+                                let event_id = deposit_event_id.get();
+                                if event_id.is_empty() {
+                                    format!("/deposit/{api_id}")
+                                } else {
+                                    format!("/deposit/{api_id}?event_id={event_id}")
+                                }
+                            };
+
                             view! {
                                 <div class="claim-warning">
                                     <ParticipantAvatar name=data.name.clone() />
@@ -2266,12 +1873,12 @@ pub fn Claim() -> impl IntoView {
                                             }
                                         }
                                         <p class="claim-already-detail">
-                                            "Your compressed NFT may not appear in wallet apps like Phantom or Solflare. Use the links below to verify it on-chain."
+                                            "Compressed NFTs may not appear in wallet apps. Use the links below to verify on-chain."
                                         </p>
                                     </div>
                                 </div>
 
-                                // Explorer links — only if claim lock data is available
+                                // Explorer links — consolidated into one row
                                 {move || {
                                     if has_explorer_links {
                                         view! {
@@ -2315,35 +1922,18 @@ pub fn Claim() -> impl IntoView {
                                     }
                                 }}
 
-                                // cNFT explanation hint
-                                {move || {
-                                    if has_explorer_links {
-                                        view! {
-                                            <div class="claim-cnft-hint">
-                                                <p class="hint-title">"💡 Compressed NFT Info"</p>
-                                                <p class="hint-desc">
-                                                    "This is a compressed NFT stored on Solana. It may "
-                                                    <strong>"not appear"</strong>
-                                                    " in some wallet apps (Phantom, Solflare). Use the links above to verify your NFT on-chain."
-                                                </p>
-                                            </div>
-                                        }.into_any()
-                                    } else {
-                                        view! { <div></div> }.into_any()
-                                    }
-                                }}
-
+                                // Deposit refund link (if applicable)
                                 {move || {
                                     if deposit_enabled.get() && !deposit_api_id.get().is_empty() {
                                         view! {
-                                            <DepositRefundSection
-                                                api_id=deposit_api_id.get()
-                                                event_id=deposit_event_id.get()
-                                                deposit_amount_usdc=deposit_amount_usdc.get()
-                                                deposit_amount_thb=deposit_amount_thb.get()
-                                                has_usdc_deposit=has_usdc_deposit.get()
-                                                has_claimed=true
-                                            />
+                                            <div class="success-actions">
+                                                <a
+                                                    href=&deposit_link
+                                                    class="btn btn-outline btn-block"
+                                                >
+                                                    "Deposit & Refund Details →"
+                                                </a>
+                                            </div>
                                         }.into_any()
                                     } else {
                                         view! { <div></div> }.into_any()

@@ -6398,6 +6398,7 @@ nav a.active {
     border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
     border-radius: var(--radius);
     padding: 1.25rem;
+    cursor: pointer;
     transition:
         border-color 0.2s ease,
         box-shadow 0.2s ease;

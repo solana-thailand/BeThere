@@ -485,3 +485,40 @@ Submit the on-chain escrow program to a Solana audit firm (e.g., Audit Arena, Ot
 ---
 
 *Document created from UX audit session. Last updated: 2026-06-12.*
+
+---
+
+## P1.5 — "Less is More" UI Simplification (Issue 033)
+
+> **Philosophy**: Simple is complicated enough at scale. Stop building for 100x. The best engineers use boring technology.
+> Full audit and phased plan: `.issues/033_less_is_more_ui_simplification.md`
+
+### LM-1. Deposit Page → 2-Step Wizard (Phase 1A)
+**Current**: 12 interactive elements at once in ChoosePayment state.
+**Target**: Step 1 = pick method (USDC or THB). Step 2 = payment form for chosen method.
+**Impact**: Halves visual complexity on the most intimidating page.
+
+### LM-2. Ticket Page → 1 Deposit Status Slot (Phase 1B)
+**Current**: 5 mutually exclusive colored banners.
+**Target**: One notice slot showing the relevant status.
+**Impact**: Eliminates rainbow-of-banners confusion.
+
+### LM-3. Claim Success → NFT + View + Done (Phase 1C)
+**Current**: 10+ sections (3 explorer links, tweet preview, cNFT paragraph, deposit refund).
+**Target**: NFT claimed ✓ + asset ID + "View NFT" + optional share button.
+**Impact**: Celebration moment stays focused.
+
+### LM-4. Events Page → Extract Form Component (Phase 2A)
+**Current**: 2,572 lines, 35 fields, 9 sections.
+**Target**: `<EventForm>` component, EventsPage ≤1024 lines.
+
+### LM-5. Admin Escrow → Shared Step Component (Phase 2B)
+**Current**: 3 identical step cards copy-pasted, 30+ inline styles.
+**Target**: One `<EscrowStep>` component, CSS classes only.
+
+### LM-6. Scanner → Settings Gear (Phase 2C)
+**Current**: Flash/Audio toggles always visible.
+**Target**: Gear icon popover. Bottom sheet = stats + manual + walk-in.
+
+### ✅ LM-0. Admin Attendee List Redesign
+**Done**: Two-row card layout. Name is hero element. Commit `ef2aa89`.

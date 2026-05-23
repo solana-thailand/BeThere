@@ -285,6 +285,20 @@ fn format_duration_label(hours: u32) -> String {
 }
 
 // ---------------------------------------------------------------------------
+// Wizard: payment method choice (separate from DepositPageState to keep
+// handler logic untouched — all handlers still match on ChoosePayment)
+// ---------------------------------------------------------------------------
+
+/// Payment method chosen in Step 1 of the 2-step wizard.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum PaymentChoice {
+    /// THB via PromptPay slip upload.
+    Thb,
+    /// USDC via Solana wallet or QR.
+    Usdc,
+}
+
+// ---------------------------------------------------------------------------
 // Route params
 // ---------------------------------------------------------------------------
 
@@ -398,6 +412,10 @@ pub fn Deposit() -> impl IntoView {
     let (bank_name_input, set_bank_name_input) = signal(String::new());
     let (account_name_input, set_account_name_input) = signal(String::new());
     let (show_bank_dropdown, set_show_bank_dropdown) = signal(false);
+
+    // Wizard step: which payment method the attendee chose.
+    // None = Step 1 (pick method), Some(Thb) = Step 2a, Some(Usdc) = Step 2b.
+    let (payment_choice, set_payment_choice) = signal(None::<PaymentChoice>);
 
     // File input ref for slip image upload
     let file_input_ref = NodeRef::<leptos::html::Input>::new();
@@ -1579,7 +1597,52 @@ pub fn Deposit() -> impl IntoView {
                                     view! {
                                         <div class="dep-methods">
 
-                                    // USDC Card — only shown in dev mode
+                                    // 2-Step Wizard: Step 1 (pick method) ↔ Step 2 (payment form)
+                                    {move || match payment_choice.get() {
+                                        None => view! {
+                                            // Step 1: Pick payment method
+                                            <div class="deposit-method-cards">
+                                                {if is_dev_mode {
+                                                    view! {
+                                                        <div class="deposit-method-card"
+                                                            on:click=move |_| set_payment_choice.set(Some(PaymentChoice::Usdc))>
+                                                            <div class="deposit-method-header">
+                                                                <h3 class="deposit-method-title">"Pay with USDC"</h3>
+                                                                <span class="badge badge-info">
+                                                                    {format!("{:.2} USDC", data.deposit_amount_usdc as f64 / 1_000_000.0)}
+                                                                </span>
+                                                            </div>
+                                                            <p class="deposit-method-desc">
+                                                                "Pay via Solana wallet or QR code."
+                                                            </p>
+                                                            <span class="badge badge-muted">"🧪 Dev Mode"</span>
+                                                        </div>
+                                                    }.into_any()
+                                                } else {
+                                                    view! { <div></div> }.into_any()
+                                                }}
+                                                <div class="deposit-method-card"
+                                                    on:click=move |_| set_payment_choice.set(Some(PaymentChoice::Thb))>
+                                                    <div class="deposit-method-header">
+                                                        <h3 class="deposit-method-title">"Pay with THB"</h3>
+                                                        <span class="badge badge-warning">
+                                                            {format!("{} THB", data_clone.deposit_amount_thb)}
+                                                        </span>
+                                                    </div>
+                                                    <p class="deposit-method-desc">
+                                                        "Transfer via PromptPay and upload your payment slip."
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        }.into_any(),
+
+                                        Some(PaymentChoice::Usdc) => view! {
+                                            <button class="btn btn-outline btn-sm" style="margin-bottom:0.75rem"
+                                                on:click=move |_| set_payment_choice.set(None)>
+                                                "← Change method"
+                                            </button>
+
+                                    // USDC Card — Step 2a
                                     {if is_dev_mode {
                                         view! {
                                             <div class="card">
@@ -1654,7 +1717,15 @@ pub fn Deposit() -> impl IntoView {
                                         view! { <div></div> }.into_any()
                                     }}
 
-                                    // THB Card (always shown)
+                                        }.into_any(),
+
+                                        Some(PaymentChoice::Thb) => view! {
+                                            <button class="btn btn-outline btn-sm" style="margin-bottom:0.75rem"
+                                                on:click=move |_| set_payment_choice.set(None)>
+                                                "← Change method"
+                                            </button>
+
+                                    // THB Card — Step 2b
                                     <div class="card">
                                         <div class="card-header">
                                             <h2 class="card-title">"Pay with THB"</h2>
@@ -1861,6 +1932,10 @@ pub fn Deposit() -> impl IntoView {
                                             </button>
                                         </div>
                                     </div>
+
+                                        }.into_any(),
+                                    }}
+
                                 </div>
                                     }.into_any()
                                 } else {
