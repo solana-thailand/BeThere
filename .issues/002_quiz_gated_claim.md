@@ -47,6 +47,8 @@ QuizQuestion {
   options: Vec<String>, // ["Proof of Work", "Proof of History", "Proof of Stake", "PBFT"]
   correct_index: u8,    // 1 (index into options, NOT sent to frontend)
   explanation: Option<String>,  // shown after submission
+  session_id: Option<String>,    // e.g. "session-1" — groups questions by topic
+  session_title: Option<String>, // e.g. "Intro to Solana" — displayed as section header
 }
 
 KV Key: "progress:{claim_token}"
@@ -99,6 +101,8 @@ QuizQuestionPublic {
     id: String,
     text: String,
     options: Vec<String>,
+    session_id: Option<String>,    // groups questions by topic
+    session_title: Option<String>, // displayed as section header
     // NOTE: no correct_index — server validates
 }
 
@@ -253,68 +257,24 @@ preview_id = "<preview_id>"  # created via: wrangler kv namespace create QUIZ --
 
 ## Example Quiz (Solana x AI Builders Event)
 
+### Without sessions (flat — legacy)
+
 ```json
 {
   "questions": [
     {
       "id": "q1",
-      "text": "What consensus mechanism does Solana use to achieve high throughput?",
-      "options": [
-        "Proof of Work",
-        "Proof of History",
-        "Delegated Proof of Stake",
-        "Practical Byzantine Fault Tolerance"
-      ],
+      "text": "What consensus mechanism does Solana use?",
+      "options": ["Proof of Work", "Proof of History", "Delegated Proof of Stake", "PBFT"],
       "correct_index": 1,
-      "explanation": "Solana uses Proof of History (PoH) as a cryptographic clock to order transactions, combined with Tower BFT consensus."
+      "explanation": "Solana uses Proof of History (PoH) as a cryptographic clock."
     },
     {
       "id": "q2",
-      "text": "What is the primary advantage of compressed NFTs on Solana?",
-      "options": [
-        "They are encrypted for privacy",
-        "They cost significantly less to mint at scale",
-        "They can only be held by validators",
-        "They use a different blockchain"
-      ],
+      "text": "What is the primary advantage of compressed NFTs?",
+      "options": ["Encrypted for privacy", "Cost less at scale", "Only for validators", "Different blockchain"],
       "correct_index": 1,
-      "explanation": "Compressed NFTs use Merkle trees to reduce storage costs by ~100-500x, making large-scale distribution practical."
-    },
-    {
-      "id": "q3",
-      "text": "Which programming language is used to write Solana smart contracts (programs)?",
-      "options": [
-        "JavaScript",
-        "Python",
-        "Rust",
-        "Go"
-      ],
-      "correct_index": 2,
-      "explanation": "Solana programs are primarily written in Rust, compiled to BPF bytecode, and deployed on-chain."
-    },
-    {
-      "id": "q4",
-      "text": "What does an AI agent need to interact with a Solana program?",
-      "options": [
-        "A web browser",
-        "An IDL (Interface Description Language) and RPC connection",
-        "A physical hardware wallet",
-        "Permission from the program author"
-      ],
-      "correct_index": 1,
-      "explanation": "AI agents use the program's IDL to serialize/deserialize instructions and communicate via RPC."
-    },
-    {
-      "id": "q5",
-      "text": "What is the minimum deposit requirement concept in BeThere?",
-      "options": [
-        "Attendees pay for their NFT",
-        "Attendees lock a deposit, get it back if they show up",
-        "Organizers pay to create events",
-        "Staff pay to use the scanner"
-      ],
-      "correct_index": 1,
-      "explanation": "BeThere's deposit model: attendees commit money upfront, get refunded when they show up and complete the quiz. No-shows forfeit their deposit."
+      "explanation": "Compressed NFTs use Merkle trees to reduce costs by ~100-500x."
     }
   ],
   "passing_score_percent": 60,
@@ -322,6 +282,64 @@ preview_id = "<preview_id>"  # created via: wrangler kv namespace create QUIZ --
   "time_limit_seconds": null
 }
 ```
+
+### With sessions (Level 2 — session-grouped)
+
+For multi-topic events, tag questions with `session_id` and `session_title`.
+Attendees see questions grouped under session headers, but scored as one quiz.
+
+```json
+{
+  "questions": [
+    {
+      "id": "q1",
+      "text": "What consensus mechanism does Solana use?",
+      "options": ["Proof of Work", "Proof of History", "Delegated Proof of Stake", "PBFT"],
+      "correct_index": 1,
+      "explanation": "Solana uses Proof of History (PoH) as a cryptographic clock.",
+      "session_id": "session-1",
+      "session_title": "Intro to Solana"
+    },
+    {
+      "id": "q2",
+      "text": "What language are Solana programs written in?",
+      "options": ["JavaScript", "Python", "Rust", "Go"],
+      "correct_index": 2,
+      "explanation": "Solana programs are primarily written in Rust.",
+      "session_id": "session-1",
+      "session_title": "Intro to Solana"
+    },
+    {
+      "id": "q3",
+      "text": "What does AMM stand for?",
+      "options": ["Automated Market Maker", "Advanced Money Manager", "Asset Mining Module", "Automated Metadata Manager"],
+      "correct_index": 0,
+      "explanation": "AMM stands for Automated Market Maker.",
+      "session_id": "session-2",
+      "session_title": "DeFi Deep Dive"
+    },
+    {
+      "id": "q4",
+      "text": "What is a liquidity pool?",
+      "options": ["A swimming pool for developers", "Smart contract holding paired tokens for trading", "A backup wallet", "A type of NFT"],
+      "correct_index": 1,
+      "explanation": "Liquidity pools are smart contracts holding paired tokens for decentralized trading.",
+      "session_id": "session-2",
+      "session_title": "DeFi Deep Dive"
+    }
+  ],
+  "passing_score_percent": 60,
+  "max_attempts": 3,
+  "time_limit_seconds": null
+}
+```
+
+**Rules for sessions:**
+- `session_id` is an opaque string — just needs to be consistent within a group
+- `session_title` is the human-readable header shown to attendees
+- Both are `Option<String>` — omit for questions that don't belong to a session
+- Questions are rendered in array order — group questions by session in the JSON
+- Scoring is total — no per-session pass/fail
 
 ## Quiz Setup Instructions
 
