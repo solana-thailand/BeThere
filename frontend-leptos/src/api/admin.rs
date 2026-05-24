@@ -16,6 +16,10 @@ pub struct QuizQuestionAdmin {
     pub correct_index: u8,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub explanation: Option<String>,
+    #[serde(default)]
+    pub session_id: Option<String>,
+    #[serde(default)]
+    pub session_title: Option<String>,
 }
 
 /// Full quiz config for admin management.

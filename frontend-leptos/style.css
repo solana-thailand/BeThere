@@ -8603,3 +8603,35 @@ nav a.active {
     color: var(--text-secondary);
     font-size: 0.85rem;
 }
+
+/* Quiz session grouping */
+.quiz-preview-session-header {
+    margin: 1rem 0 0.5rem;
+    padding: 0.5rem 0.75rem;
+    background: rgba(99, 102, 241, 0.08);
+    border-left: 3px solid var(--accent, #6366f1);
+    border-radius: var(--radius, 8px);
+}
+
+.quiz-preview-session-title {
+    margin: 0;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--accent, #6366f1);
+}
+
+/* Claim page session header */
+.claim-quiz-session {
+    margin: 1.25rem 0 0.5rem;
+    padding: 0.5rem 0.75rem;
+    background: rgba(99, 102, 241, 0.08);
+    border-left: 3px solid var(--accent, #6366f1);
+    border-radius: var(--radius, 8px);
+}
+
+.claim-quiz-session-title {
+    margin: 0;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--accent, #6366f1);
+}

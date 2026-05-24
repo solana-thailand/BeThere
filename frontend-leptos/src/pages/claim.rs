@@ -510,7 +510,25 @@ fn build_quiz_questions(
     quiz_answers: ReadSignal<QuizAnswers>,
     set_quiz_answers: WriteSignal<QuizAnswers>,
 ) -> Vec<AnyView> {
-    questions.iter().enumerate().map(|(idx, q)| {
+    let mut views = Vec::new();
+    let mut last_session_id: Option<String> = None;
+    let mut first_session = true;
+
+    for (idx, q) in questions.iter().enumerate() {
+        // Insert session header when session changes
+        if first_session || q.session_id != last_session_id {
+            if let Some(ref title) = q.session_title {
+                let title_clone = title.clone();
+                views.push(view! {
+                    <div class="claim-quiz-session">
+                        <h4 class="claim-quiz-session-title">{title_clone}</h4>
+                    </div>
+                }.into_any());
+            }
+            last_session_id = q.session_id.clone();
+            first_session = false;
+        }
+
         let q_id = q.id.clone();
         let q_text = q.text.clone();
         let q_num = idx + 1;
@@ -518,15 +536,12 @@ fn build_quiz_questions(
 
         let option_views: Vec<AnyView> = options.iter().map(|opt| {
             let opt_display = opt.clone();
-            // Clones for class:dyn closure
             let qid_c = q_id.clone();
             let opt_c = opt.clone();
             let qa_c = quiz_answers;
-            // Clones for radio closure
             let qid_r = q_id.clone();
             let opt_r = opt.clone();
             let qa_r = quiz_answers;
-            // Clones for click handler
             let qid_click = q_id.clone();
             let opt_click = opt.clone();
             let set_qa = set_quiz_answers;
@@ -553,7 +568,7 @@ fn build_quiz_questions(
             }.into_any()
         }).collect();
 
-        view! {
+        views.push(view! {
             <div class="card claim-quiz-question">
                 <div class="claim-quiz-q-header">
                     <span class="claim-quiz-q-num">{format!("{q_num}")}</span>
@@ -562,8 +577,10 @@ fn build_quiz_questions(
                 <p class="claim-quiz-q-text">{q_text}</p>
                 <div class="claim-quiz-options">{option_views}</div>
             </div>
-        }.into_any()
-    }).collect()
+        }.into_any());
+    }
+
+    views
 }
 
 /// Build quiz explanation cards as a pre-rendered view.
@@ -575,8 +592,35 @@ fn build_quiz_explanations(
         return view! { <div></div> }.into_any();
     }
 
-    let items: Vec<AnyView> = explanations.iter().enumerate().map(|(idx, exp)| {
-        let q_text = questions.iter().find(|q| q.id == exp.question_id)
+    // Build a lookup from question_id to the question (for session info)
+    let q_lookup: std::collections::HashMap<String, &crate::api::QuizQuestionPublic> =
+        questions.iter().map(|q| (q.id.clone(), q)).collect();
+
+    let mut items: Vec<AnyView> = Vec::new();
+    let mut last_session_id: Option<String> = None;
+    let mut first_session = true;
+
+    for (idx, exp) in explanations.iter().enumerate() {
+        // Resolve session info from the matching question
+        let session_info = q_lookup.get(&exp.question_id).and_then(|q| {
+            q.session_title.as_ref().map(|t| (q.session_id.clone(), t.clone()))
+        });
+
+        // Insert session header when session changes
+        if let Some((ref sid, ref title)) = session_info {
+            if first_session || Some(sid) != last_session_id.as_ref() {
+                let title_clone = title.clone();
+                items.push(view! {
+                    <div class="claim-quiz-session">
+                        <h4 class="claim-quiz-session-title">{title_clone}</h4>
+                    </div>
+                }.into_any());
+                last_session_id = Some(sid.clone());
+                first_session = false;
+            }
+        }
+
+        let q_text = q_lookup.get(&exp.question_id)
             .map(|q| q.text.clone())
             .unwrap_or_default();
         let icon = match exp.correct { true => "✓", _ => "✗" };
@@ -587,7 +631,7 @@ fn build_quiz_explanations(
         let exp_text = exp.explanation.clone();
         let num = idx + 1;
 
-        view! {
+        items.push(view! {
             <div class="claim-quiz-exp-item">
                 <div class="claim-quiz-exp-header">
                     <span class=exp_class>{icon}</span>
@@ -598,8 +642,8 @@ fn build_quiz_explanations(
                     None => view! { <div></div> }.into_any(),
                 }}
             </div>
-        }.into_any()
-    }).collect();
+        }.into_any());
+    }
 
     view! {
         <div class="card claim-quiz-explanations">
@@ -781,6 +825,25 @@ fn QuizView(
                 </p>
                 <p class="claim-quiz-meta">
                     <span>{total_q}" questions"</span>
+                    {
+                        let mut seen = std::collections::HashSet::new();
+                        for q in &quiz_data.questions {
+                            if let Some(ref sid) = q.session_id {
+                                seen.insert(sid.clone());
+                            }
+                        }
+                        let session_count = seen.len();
+                        if session_count > 1 {
+                            view! {
+                                <>
+                                    <span class="claim-quiz-sep">"·"</span>
+                                    <span>{format!("{session_count} sessions")}</span>
+                                </>
+                            }.into_any()
+                        } else {
+                            view! { <span></span> }.into_any()
+                        }
+                    }
                     <span class="claim-quiz-sep">"·"</span>
                     <span>{attempts_label}</span>
                 </p>

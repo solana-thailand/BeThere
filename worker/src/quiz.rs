@@ -77,6 +77,8 @@ pub fn to_public_questions(config: &QuizConfig) -> QuizQuestionsResponse {
                 id: q.id.clone(),
                 text: q.text.clone(),
                 options: q.options.clone(),
+                session_id: q.session_id.clone(),
+                session_title: q.session_title.clone(),
             })
             .collect(),
         passing_score_percent: config.passing_score_percent,

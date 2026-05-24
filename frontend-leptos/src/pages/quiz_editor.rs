@@ -39,6 +39,8 @@ fn blank_question(id: String) -> QuizQuestionAdmin {
         ],
         correct_index: 0,
         explanation: None,
+        session_id: None,
+        session_title: None,
     }
 }
 
@@ -534,6 +536,7 @@ pub fn QuizEditor(
                                     // before any click that triggers structural re-renders).
                                     let local_q_text = RwSignal::new(q.text.clone());
                                     let local_explanation = RwSignal::new(q.explanation.clone().unwrap_or_default());
+                                    let local_session = RwSignal::new(q.session_title.clone().unwrap_or_default());
 
                                     view! {
                                         <div class="card quiz-question-card">
@@ -613,6 +616,36 @@ pub fn QuizEditor(
                                                             >{if is_confirming { "⚠?" } else { "✕" }}</button>
                                                         }
                                                     }
+                                                </div>
+                                            </div>
+
+                                            // Session selector
+                                            <div class="quiz-field">
+                                                <label class="quiz-field-label">"Session"</label>
+                                                <div class="quiz-setting-input-row">
+                                                    <input
+                                                        type="text"
+                                                        class="quiz-option-input"
+                                                        placeholder="e.g., Session 1 (optional)"
+                                                        prop:value=move || local_session.get()
+                                                        on:input=move |ev| {
+                                                            local_session.set(event_target_value(&ev));
+                                                        }
+                                                        on:blur=move |_| {
+                                                            let val = local_session.get();
+                                                            let sid = if val.is_empty() { None } else { Some(format!("session-{}", idx + 1)) };
+                                                            let stitle = if val.is_empty() { None } else { Some(val) };
+                                                            sc.update(|c| {
+                                                                if let Some(c) = c
+                                                                    && let Some(q) = c.questions.get_mut(idx)
+                                                                {
+                                                                    q.session_id = sid;
+                                                                    q.session_title = stitle;
+                                                                }
+                                                            });
+                                                        }
+                                                    />
+                                                    <span class="quiz-setting-hint">"Group questions by session/topic"</span>
                                                 </div>
                                             </div>
 
@@ -831,6 +864,34 @@ fn render_preview(config: &QuizConfigAdmin) -> AnyView {
     let time_limit = config.time_limit_seconds;
     let total = questions.len();
 
+    // Group questions by session, preserving encounter order.
+    // Questions without a session_id are grouped under the “General” bucket.
+    let mut session_order: Vec<(Option<String>, Option<String>)> = Vec::new(); // (session_id, session_title)
+    for q in &questions {
+        let key = (q.session_id.clone(), q.session_title.clone());
+        if !session_order.iter().any(|s| s.0 == key.0) {
+            session_order.push(key);
+        }
+    }
+
+    let session_groups: Vec<(Option<String>, Vec<(usize, &QuizQuestionAdmin)>)> = session_order
+        .iter()
+        .map(|(sid, stitle)| {
+            let group_qs: Vec<(usize, &QuizQuestionAdmin)> = questions
+                .iter()
+                .enumerate()
+                .filter(|(_, q)| q.session_id == *sid)
+                .collect();
+            (stitle.clone(), group_qs)
+        })
+        .collect();
+
+    let _has_sessions = session_groups.len() > 1
+        || session_groups
+            .first()
+            .map(|(t, _)| t.is_some())
+            .unwrap_or(false);
+
     let time_display = time_limit.map(|t| {
         if t >= 60 {
             format!("{}m {}s", t / 60, t % 60)
@@ -866,32 +927,49 @@ fn render_preview(config: &QuizConfigAdmin) -> AnyView {
                 }}
             </div>
 
-            // Questions
+            // Questions grouped by session
             <div class="quiz-preview-questions">
-                {questions.iter().enumerate().map(|(qi, q)| {
-                    let question_text = q.text.clone();
-                    let options = q.options.clone();
+                {session_groups.iter().map(|(session_title, group_qs)| {
+                    let title_view = match session_title {
+                        Some(t) => view! {
+                            <div class="quiz-preview-session-header">
+                                <h4 class="quiz-preview-session-title">{t.clone()}</h4>
+                            </div>
+                        }.into_any(),
+                        None => view! { <div></div> }.into_any(),
+                    };
+
+                    let q_views = group_qs.iter().map(|(global_idx, q)| {
+                        let question_text = q.text.clone();
+                        let options = q.options.clone();
+                        let qnum = global_idx + 1;
+
+                        view! {
+                            <div class="card quiz-preview-question">
+                                <div class="quiz-preview-question-text">
+                                    {format!("{}. {question_text}", qnum)}
+                                </div>
+                                <div class="quiz-preview-options">
+                                    {options.iter().enumerate().map(|(oi, opt)| {
+                                        let letter = (b'A' + oi as u8) as char;
+                                        view! {
+                                            <div class="quiz-preview-option">
+                                                <span class="quiz-preview-option-letter">
+                                                    {format!("{letter}.")}
+                                                </span>
+                                                <span>{opt.clone()}</span>
+                                            </div>
+                                        }
+                                    }).collect_view()}
+                                </div>
+                            </div>
+                        }
+                    }).collect_view();
 
                     view! {
-                        <div class="card quiz-preview-question">
-                            <div class="quiz-preview-question-text">
-                                {format!("{}. {question_text}", qi + 1)}
-                            </div>
-                            <div class="quiz-preview-options">
-                                {options.iter().enumerate().map(|(oi, opt)| {
-                                    let letter = (b'A' + oi as u8) as char;
-                                    view! {
-                                        <div class="quiz-preview-option">
-                                            <span class="quiz-preview-option-letter">
-                                                {format!("{letter}.")}
-                                            </span>
-                                            <span>{opt.clone()}</span>
-                                        </div>
-                                    }
-                                }).collect_view()}
-                            </div>
-                        </div>
-                    }
+                        {title_view}
+                        {q_views}
+                    }.into_any()
                 }).collect_view()}
             </div>
 

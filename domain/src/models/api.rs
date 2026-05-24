@@ -298,6 +298,12 @@ pub struct QuizQuestion {
     /// Optional explanation shown after submission.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub explanation: Option<String>,
+    /// Optional session ID for session-grouped quizzes (Level 2).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
+    /// Optional session title for session-grouped quizzes (Level 2).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_title: Option<String>,
 }
 
 /// A quiz question as sent to the frontend (correct answer stripped).
@@ -306,6 +312,12 @@ pub struct QuizQuestionPublic {
     pub id: String,
     pub text: String,
     pub options: Vec<String>,
+    /// Optional session ID for session-grouped quizzes (Level 2).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<String>,
+    /// Optional session title for session-grouped quizzes (Level 2).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_title: Option<String>,
 }
 
 /// Full quiz configuration stored in KV under key "questions".

@@ -128,6 +128,10 @@ pub struct QuizQuestionPublic {
     pub text: String,
     #[serde(default)]
     pub options: Vec<String>,
+    #[serde(default)]
+    pub session_id: Option<String>,
+    #[serde(default)]
+    pub session_title: Option<String>,
 }
 
 /// Response data for GET /api/quiz — quiz questions and config.
