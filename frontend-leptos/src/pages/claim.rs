@@ -608,14 +608,14 @@ fn build_quiz_explanations(
 
         // Insert session header when session changes
         if let Some((ref sid, ref title)) = session_info {
-            if first_session || Some(sid) != last_session_id.as_ref() {
-                let title_clone = title.clone();
-                items.push(view! {
-                    <div class="claim-quiz-session">
-                        <h4 class="claim-quiz-session-title">{title_clone}</h4>
-                    </div>
-                }.into_any());
-                last_session_id = Some(sid.clone());
+            if first_session || *sid != last_session_id {
+                    let title_clone = title.clone();
+                    items.push(view! {
+                        <div class="claim-quiz-session">
+                            <h4 class="claim-quiz-session-title">{title_clone}</h4>
+                        </div>
+                    }.into_any());
+                last_session_id = sid.clone();
                 first_session = false;
             }
         }
