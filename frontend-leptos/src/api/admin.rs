@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::types::{ApiError, ApiResponse};
+use super::types::{ApiError, ApiResponse, default_true};
 use super::{api_base, api_get, api_post_json};
 
 // ===== Admin Quiz Types =====
@@ -20,6 +20,8 @@ pub struct QuizQuestionAdmin {
     pub session_id: Option<String>,
     #[serde(default)]
     pub session_title: Option<String>,
+    #[serde(default = "default_true")]
+    pub enabled: bool,
 }
 
 /// Full quiz config for admin management.

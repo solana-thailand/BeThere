@@ -1,5 +1,9 @@
 use serde::{Deserialize, Serialize};
 
+fn default_true() -> bool {
+    true
+}
+
 // ---------------------------------------------------------------------------
 // ApiResponse<T> — standard JSON API envelope
 // ---------------------------------------------------------------------------
@@ -304,6 +308,9 @@ pub struct QuizQuestion {
     /// Optional session title for session-grouped quizzes (Level 2).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session_title: Option<String>,
+    /// Whether this question is active. Disabled questions are hidden from attendees.
+    #[serde(default = "default_true")]
+    pub enabled: bool,
 }
 
 /// A quiz question as sent to the frontend (correct answer stripped).

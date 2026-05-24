@@ -41,6 +41,7 @@ fn blank_question(id: String) -> QuizQuestionAdmin {
         explanation: None,
         session_id: None,
         session_title: None,
+        enabled: true,
     }
 }
 
@@ -85,6 +86,9 @@ pub fn QuizEditor(
     let (preview, set_preview) = signal(false);
     let (error, set_error) = signal(None::<String>);
     let (confirm_delete_q, set_confirm_delete_q) = signal(None::<String>);
+    let (show_import, set_show_import) = signal(false);
+    let (import_json, set_import_json) = signal(String::new());
+    let (import_mode, set_import_mode) = signal(false); // false = merge, true = replace
 
     // Dirty tracking: compare serialized current config vs original
     let is_dirty = Memo::new(move |_| {
@@ -313,6 +317,97 @@ pub fn QuizEditor(
         set_preview.update(|p| *p = !*p);
     };
 
+    // Import JSON handler
+    let handle_import = move |_: web_sys::MouseEvent| {
+        let raw = import_json.get();
+        if raw.trim().is_empty() {
+            components::show_toast(&set_toast, "Paste JSON to import", ToastType::Warning);
+            return;
+        }
+
+        // Try parsing as array of questions first, then as full QuizConfigAdmin
+        let imported_questions: Vec<QuizQuestionAdmin> =
+            if let Ok(arr) = serde_json::from_str::<Vec<QuizQuestionAdmin>>(&raw) {
+                arr
+            } else if let Ok(full) = serde_json::from_str::<QuizConfigAdmin>(&raw) {
+                full.questions
+            } else {
+                components::show_toast(
+                    &set_toast,
+                    "Invalid JSON — expected array of questions or full config",
+                    ToastType::Error,
+                );
+                return;
+            };
+
+        // Validate imported questions
+        for q in &imported_questions {
+            if q.text.trim().is_empty() {
+                components::show_toast(
+                    &set_toast,
+                    &format!("Imported question '{}' has empty text", q.id),
+                    ToastType::Error,
+                );
+                return;
+            }
+            if q.options.len() < 2 {
+                components::show_toast(
+                    &set_toast,
+                    &format!("Imported question '{}' needs at least 2 options", q.id),
+                    ToastType::Error,
+                );
+                return;
+            }
+            if (q.correct_index as usize) >= q.options.len() {
+                components::show_toast(
+                    &set_toast,
+                    &format!("Imported question '{}' has invalid correct_index", q.id),
+                    ToastType::Error,
+                );
+                return;
+            }
+        }
+
+        let count = imported_questions.len();
+
+        set_config.update(|c| {
+            if let Some(c) = c {
+                if import_mode.get() {
+                    // Replace mode: overwrite questions, keep settings
+                    c.questions = imported_questions;
+                } else {
+                    // Merge mode: append, re-number IDs to avoid collisions
+                    let existing_ids: Vec<String> =
+                        c.questions.iter().map(|q| q.id.clone()).collect();
+                    let max_num = existing_ids
+                        .iter()
+                        .filter_map(|id| id.strip_prefix('q').and_then(|n| n.parse::<u32>().ok()))
+                        .max()
+                        .unwrap_or(0);
+
+                    for (i, mut q) in imported_questions.into_iter().enumerate() {
+                        let new_num = max_num + i as u32 + 1;
+                        // Only re-ID if collides
+                        if existing_ids.contains(&q.id) {
+                            q.id = format!("q{new_num}");
+                        }
+                        c.questions.push(q);
+                    }
+                }
+            }
+        });
+
+        let total = config.get().map(|c| c.questions.len()).unwrap_or(0);
+        let mode_label = if import_mode.get() { "Replaced with" } else { "Imported" };
+        components::show_toast(
+            &set_toast,
+            &format!("{mode_label} {count} questions. Total: {total}"),
+            ToastType::Success,
+        );
+        set_show_import.set(false);
+        set_import_json.set(String::new());
+    };
+
     // Computed flags
     let has_event = move || active_event_id.get().is_some();
     let show_loading = move || loading.get() && has_event();
@@ -383,6 +478,12 @@ pub fn QuizEditor(
                                 } else {
                                     view! { <Icon icon=IconName::Search class="icon-sm" />" Preview" }.into_any()
                                 }}
+                            </button>
+                            <button
+                                class="btn btn-outline btn-sm"
+                                on:click=move |_: web_sys::MouseEvent| { set_show_import.set(true); }
+                            >
+                                "Import"
                             </button>
                             <button
                                 class="btn btn-primary btn-sm"
@@ -539,7 +640,12 @@ pub fn QuizEditor(
                                     let local_session = RwSignal::new(q.session_title.clone().unwrap_or_default());
 
                                     view! {
-                                        <div class="card quiz-question-card">
+                                        <div class=move || {
+                                            let is_enabled = config.get()
+                                                .and_then(|c| c.questions.get(idx).map(|q| q.enabled))
+                                                .unwrap_or(true);
+                                            if is_enabled { "card quiz-question-card".to_string() } else { "card quiz-question-card quiz-question-disabled".to_string() }
+                                        }>
                                             // Question header
                                             <div class="quiz-question-header">
                                                 <span class="quiz-question-number">
@@ -552,6 +658,28 @@ pub fn QuizEditor(
                                                         .unwrap_or_default();
                                                     view! {
                                                         <span class="quiz-question-id">{q_id}</span>
+                                                    }
+                                                }}
+                                                // Enable/disable toggle
+                                                {move || {
+                                                    let is_enabled = config.get()
+                                                        .and_then(|c| c.questions.get(idx).map(|q| q.enabled))
+                                                        .unwrap_or(true);
+                                                    let sc_toggle = sc;
+                                                    view! {
+                                                        <button
+                                                            class=if is_enabled { "quiz-ctrl-btn quiz-toggle-on" } else { "quiz-ctrl-btn quiz-toggle-off" }
+                                                            on:click=move |_| {
+                                                                sc_toggle.update(|c| {
+                                                                    if let Some(c) = c
+                                                                        && let Some(q) = c.questions.get_mut(idx)
+                                                                    {
+                                                                        q.enabled = !q.enabled;
+                                                                    }
+                                                                });
+                                                            }
+                                                            title=if is_enabled { "Disable question" } else { "Enable question" }
+                                                        >{if is_enabled { "●" } else { "○" }}</button>
                                                     }
                                                 }}
                                                 // Move & delete controls
@@ -846,6 +974,58 @@ pub fn QuizEditor(
                             view! { <span class="hint-clean">"Up to date"</span> }.into_any()
                         }}
                     </div>
+
+                    // Import JSON modal
+                    <Show when=move || show_import.get() fallback=|| view! { <div></div> }>
+                        <div class="quiz-modal-overlay" on:click=move |_| { set_show_import.set(false); }>
+                            <div class="quiz-modal" on:click=move |ev: web_sys::MouseEvent| { ev.stop_propagation(); }>
+                                <div class="quiz-modal-header">
+                                    <h3 class="quiz-modal-title">"Import Questions"</h3>
+                                    <button class="quiz-ctrl-btn" on:click=move |_| { set_show_import.set(false); }>"✕"</button>
+                                </div>
+                                <div class="quiz-modal-body">
+                                    <p class="quiz-modal-desc">
+                                        "Paste JSON — either an array of questions or a full quiz config."
+                                    </p>
+                                    <div class="quiz-import-mode">
+                                        <label class="quiz-setting-label">"Mode"</label>
+                                        <div class="quiz-import-mode-btns">
+                                            <button
+                                                class=move || if !import_mode.get() { "btn btn-sm btn-primary" } else { "btn btn-sm btn-outline" }
+                                                on:click=move |_| { set_import_mode.set(false); }
+                                            >"Merge (append)"</button>
+                                            <button
+                                                class=move || if import_mode.get() { "btn btn-sm btn-primary" } else { "btn btn-sm btn-outline" }
+                                                on:click=move |_| { set_import_mode.set(true); }
+                                            >"Replace all"</button>
+                                        </div>
+                                    </div>
+                                    <textarea
+                                        class="quiz-textarea quiz-import-textarea"
+                                        rows="12"
+                                        placeholder=r#"[
+  {
+    "id": "q1",
+    "text": "What is...?",
+    "options": ["A", "B", "C"],
+    "correct_index": 0,
+    "explanation": "Because...",
+    "enabled": true
+  }
+]"#
+                                        prop:value=move || import_json.get()
+                                        on:input=move |ev| {
+                                            set_import_json.set(event_target_value(&ev));
+                                        }
+                                    ></textarea>
+                                </div>
+                                <div class="quiz-modal-footer">
+                                    <button class="btn btn-outline btn-sm" on:click=move |_| { set_show_import.set(false); }>"Cancel"</button>
+                                    <button class="btn btn-primary btn-sm" on:click=handle_import>"Import"</button>
+                                </div>
+                            </div>
+                        </div>
+                    </Show>
                 </Show>
             </Show>
         </div>

@@ -67,12 +67,13 @@ pub async fn save_quiz_config(
         .map_err(|e| format!("failed to write quiz config to KV: {e:?}"))
 }
 
-/// Convert full quiz config to public response (strips correct answers).
+/// Convert full quiz config to public response (strips correct answers and disabled questions).
 pub fn to_public_questions(config: &QuizConfig) -> QuizQuestionsResponse {
     QuizQuestionsResponse {
         questions: config
             .questions
             .iter()
+            .filter(|q| q.enabled)
             .map(|q| QuizQuestionPublic {
                 id: q.id.clone(),
                 text: q.text.clone(),
@@ -175,20 +176,23 @@ pub async fn submit_quiz(
         ));
     }
 
-    // Answer count must match question count
-    if answers.len() != config.questions.len() {
+    // Only grade enabled questions
+    let enabled_questions: Vec<_> = config.questions.iter().filter(|q| q.enabled).collect();
+
+    // Answer count must match enabled question count
+    if answers.len() != enabled_questions.len() {
         return Err(format!(
             "expected {} answers, got {}",
-            config.questions.len(),
+            enabled_questions.len(),
             answers.len()
         ));
     }
 
-    // Grade each question
-    let mut explanations = Vec::with_capacity(config.questions.len());
+    // Grade each enabled question
+    let mut explanations = Vec::with_capacity(enabled_questions.len());
     let mut correct_count = 0usize;
 
-    for question in &config.questions {
+    for question in &enabled_questions {
         let selected = answers
             .iter()
             .find(|a| a.question_id == question.id)
@@ -214,10 +218,10 @@ pub async fn submit_quiz(
     }
 
     // Calculate score percentage
-    let score_percent = if config.questions.is_empty() {
+    let score_percent = if enabled_questions.is_empty() {
         100u8
     } else {
-        ((correct_count * 100) / config.questions.len()) as u8
+        ((correct_count * 100) / enabled_questions.len()) as u8
     };
 
     let passed = score_percent >= config.passing_score_percent;
@@ -252,7 +256,7 @@ pub async fn submit_quiz(
         score_percent,
         passed,
         correct_count,
-        total_questions: config.questions.len(),
+        total_questions: enabled_questions.len(),
         remaining_attempts: remaining,
         explanations,
     })

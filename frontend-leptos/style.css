@@ -4942,6 +4942,100 @@ nav a.active {
     font-style: italic;
 }
 
+/* ===== Quiz Question Disabled State ===== */
+.quiz-question-disabled {
+    opacity: 0.55;
+    border-color: var(--border);
+}
+
+.quiz-question-disabled:hover {
+    border-color: var(--border);
+}
+
+.quiz-toggle-on {
+    background: var(--success-bg);
+    border-color: var(--success-border);
+    color: var(--success);
+}
+
+.quiz-toggle-off {
+    background: var(--bg-tertiary);
+    border-color: var(--border);
+    color: var(--text-muted);
+}
+
+/* ===== Quiz Import Modal ===== */
+.quiz-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.quiz-modal {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    width: 90%;
+    max-width: 600px;
+    max-height: 85vh;
+    overflow-y: auto;
+}
+
+.quiz-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.quiz-modal-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.quiz-modal-body {
+    padding: 1rem 1.25rem;
+}
+
+.quiz-modal-desc {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    margin-bottom: 0.75rem;
+}
+
+.quiz-modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    padding: 0.75rem 1.25rem;
+    border-top: 1px solid var(--border);
+}
+
+.quiz-import-mode {
+    margin-bottom: 0.75rem;
+}
+
+.quiz-import-mode-btns {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.3rem;
+}
+
+.quiz-import-textarea {
+    font-family: monospace;
+    font-size: 0.82rem;
+    min-height: 200px;
+}
+
 /* ===== Quiz Editor Responsive ===== */
 @media (max-width: 640px) {
     .quiz-editor-title-row {
