@@ -46,8 +46,10 @@ Registration                Event Day              After Event
 │       NO                                                   │
 │       │                                                    │
 │   Refund queue in admin dashboard                           │
+│   → Admin sees slip + bank info                             │
 │   → Admin transfers 500 THB via PromptPay banking app       │
-│   → Clicks "Mark Refunded"                                 │
+│   → Admin pastes transfer receipt URL                       │
+│   → Clicks "✓ Confirm Refund"                               │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -222,7 +224,8 @@ pub refund_deadline_hours: u32,     // Hours after event end (default: 168 = 7 d
 | `GET` | `/api/deposit/thb/pending` | List unverified slips (admin) |
 | `POST` | `/api/refund/{token}` | Build refund TX (for checked-in attendees) |
 | `GET` | `/api/refund/queue` | Refund queue for admin (THB refunds pending) |
-| `POST` | `/api/refund/mark/{attendee_id}` | Mark THB refund as done (admin) |
+| `GET` | `/api/refund/refunded` | List already-refunded THB deposits |
+| `POST` | `/api/refund/mark/{attendee_id}` | Mark THB refund as done — requires `refund_proof_url` (admin) |
 
 ### Database / KV Storage
 
@@ -239,7 +242,11 @@ Value: {
   "verified_at": null,
   "uploaded_at": "2025-06-01T10:00:00Z",
   "refunded": false,
-  "refunded_at": null
+  "refunded_at": null,
+  "bank_account": "123-4-56789-0",       // Required since handover #074
+  "bank_name": "KBank",                // Required since handover #074
+  "account_name": "John Doe",          // Required since handover #074
+  "refund_proof_url": null             // Transfer receipt URL (set on refund)
 }
 ```
 
@@ -276,17 +283,20 @@ Value: {
 **Admin dashboard** (existing, new tabs):
 
 - "Deposits" tab: table of all attendees with deposit status (USDC ✅ / THB pending / Not deposited)
-- "Refund Queue" tab: checked-in THB depositors awaiting refund, "Mark Refunded" button
+- "Refund Queue" tab: checked-in THB depositors awaiting refund, shows slip + bank info, "Mark Refunded" button requires transfer receipt URL
+- "Refunded" tab: all refunded deposits with slip, bank info, refund proof link, and timestamp
 - "Escrow" tab: on-chain stats (total deposited, total refunded, total forfeited, available for claim)
 
 ### PromptPay Slip Verification (Free)
 
-For MVP, no banking API needed:
+No paid OCR service needed — admin verifies manually:
 
 1. Attendee scans PromptPay QR (static QR for organizer's bank)
-2. Attendee uploads screenshot of payment confirmation
+2. Attendee uploads screenshot of payment confirmation + fills in bank account info (required for refund)
 3. Admin sees slip in dashboard, verifies amount + name match
 4. Admin clicks "Verify" → deposit status updated
+5. After event, admin sees refund queue with slip + bank info
+6. Admin transfers THB, pastes transfer receipt URL, clicks "✓ Confirm Refund"
 5. **Auto-actions on verify** (non-fatal if they fail):
    - Sheet columns N (deposit_method), O (deposit_amount), Q (deposit_verified) written to Google Sheet
    - QR code auto-generated for the attendee if they don't have one yet

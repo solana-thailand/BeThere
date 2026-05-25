@@ -118,6 +118,25 @@ pub async fn upload_thb_slip_handler(
     // Validate slip URL for safety (MIME type, size, no SVG/XSS)
     validate_slip_url(&body.slip_url)?;
 
+    // Bank info is required for THB refund processing
+    if body
+        .bank_account
+        .as_ref()
+        .is_none_or(|v| v.trim().is_empty())
+    {
+        return Err(AppError::Validation("bank_account is required".to_string()).into());
+    }
+    if body.bank_name.as_ref().is_none_or(|v| v.trim().is_empty()) {
+        return Err(AppError::Validation("bank_name is required".to_string()).into());
+    }
+    if body
+        .account_name
+        .as_ref()
+        .is_none_or(|v| v.trim().is_empty())
+    {
+        return Err(AppError::Validation("account_name is required".to_string()).into());
+    }
+
     // Check if already deposited
     let existing = event_store::get_deposit_status(kv, &event.id, &body.attendee_id)
         .await
@@ -220,6 +239,7 @@ pub async fn upload_thb_slip_handler(
         bank_account: body.bank_account.clone(),
         bank_name: body.bank_name.clone(),
         account_name: body.account_name.clone(),
+        refund_proof_url: None,
     };
 
     event_store::save_thb_deposit(kv, &thb_deposit)
@@ -565,6 +585,52 @@ pub async fn refund_queue_handler(
 }
 
 // ---------------------------------------------------------------------------
+// GET /api/refund/refunded?event_id=xxx (admin)
+// ---------------------------------------------------------------------------
+
+/// Response for the refunded list endpoint.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RefundedListResponse {
+    pub refunded: Vec<ThbDeposit>,
+}
+
+/// List all refunded THB deposits for an event.
+#[worker::send]
+pub async fn refunded_list_handler(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Query(query): Query<EventIdQuery>,
+) -> Result<ApiOk<RefundedListResponse>, WorkerError> {
+    let kv = state
+        .events_kv
+        .as_ref()
+        .ok_or_else(|| AppError::Internal("EVENTS KV not configured".to_string()))?;
+
+    let event =
+        crate::handlers::ext::resolve_event_with_access(&state, &claims, query.event_id.as_deref())
+            .await?;
+
+    let all_deposits = event_store::list_thb_deposits(kv, &event.id)
+        .await
+        .map_err(AppError::Internal)?;
+
+    let refunded: Vec<ThbDeposit> = all_deposits.into_iter().filter(|d| d.refunded).collect();
+
+    // Enrich with attendee names from Google Sheets
+    let attendee_names =
+        resolve_attendee_names(&state, &event.sheet_id, &event.sheet_name, &refunded).await;
+    let enriched: Vec<ThbDeposit> = refunded
+        .into_iter()
+        .map(|mut d| {
+            d.attendee_name = attendee_names.get(&d.attendee_id).cloned();
+            d
+        })
+        .collect();
+
+    Ok(ApiOk::new(RefundedListResponse { refunded: enriched }))
+}
+
+// ---------------------------------------------------------------------------
 // POST /api/refund/mark/{attendee_id} (admin)
 // ---------------------------------------------------------------------------
 
@@ -605,9 +671,15 @@ pub async fn mark_refund_handler(
         );
     }
 
+    // Refund proof URL is required when marking a refund
+    if body.refund_proof_url.trim().is_empty() {
+        return Err(AppError::Validation("refund_proof_url is required".to_string()).into());
+    }
+
     let now = Utc::now().to_rfc3339();
     thb_deposit.refunded = true;
-    thb_deposit.refunded_at = Some(now);
+    thb_deposit.refunded_at = Some(now.clone());
+    thb_deposit.refund_proof_url = Some(body.refund_proof_url.clone());
 
     event_store::save_thb_deposit(kv, &thb_deposit)
         .await
@@ -619,6 +691,24 @@ pub async fn mark_refund_handler(
         marker = %claims.email,
         "THB refund marked complete"
     );
+
+    // Write refund_status to Google Sheet (non-blocking — don't fail the API if sheet write fails)
+    if let Err(e) = crate::sheets::write::write_refund_status(
+        &state,
+        &event.sheet_id,
+        &event.sheet_name,
+        Some(kv),
+        &attendee_id,
+        "refunded",
+    )
+    .await
+    {
+        tracing::warn!(
+            attendee_id = %attendee_id,
+            error = %e,
+            "failed to write refund_status to sheet (non-blocking)"
+        );
+    }
 
     // Audit log
     let _ = crate::audit_store::append_event_audit(

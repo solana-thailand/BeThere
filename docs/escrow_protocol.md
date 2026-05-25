@@ -100,6 +100,21 @@ These cannot be verified on-chain. Participants accept these risks:
 - **Event is real.** The organizer will actually host the event as described.
 - **Organizer will show up.** We cannot verify attendance on-chain.
 - **Check-in is honest.** The organizer scans people who actually attended.
+- **THB refund is honest.** Organizer keeps cash but marks as refunded (mitigated by refund proof — see below).
+
+### THB Refund Trust Mitigation
+
+THB deposits are off-chain (bank transfer → slip upload). Unlike USDC, the platform cannot verify that a bank refund actually happened. To minimize this risk:
+
+| Mitigation | Status |
+|---|---|
+| **Refund proof required** — Admin must provide transfer receipt URL when marking refund | ✅ Implemented |
+| **Refund proof auditable** — All refund proofs visible in Refunded tab for review | ✅ Implemented |
+| **Bank info required at deposit** — Attendee must provide bank account, bank name, account holder name when uploading slip | ✅ Implemented |
+| **Slip visible during refund** — Admin can see original deposit slip before marking refund | ✅ Implemented |
+| **Full audit trail** — All refund actions logged with admin email, timestamp, attendee ID | ✅ Implemented |
+| **Rolling deposit credit** — Attendee can hold deposit for next event instead of refunding (reduces cash flow risk) | ✅ Backend implemented |
+| **Attendee confirmation** — Refund isn't complete until attendee confirms receipt (future) | 🔲 Planned |
 
 ### Anti-Rug-Pull: Time-Based Refund Eligibility
 
@@ -316,6 +331,7 @@ Online attendees (in both online-only and hybrid events) follow a different path
 | Attack Vector | Current Status | Proposed Mitigation |
 |---|---|---|
 | Refuse check-ins, claim all forfeited | 🔴 POSSIBLE | Auto-refund eligibility after `event_end` — attendees don't need organizer's permission |
+| Keep THB deposit, mark as refunded | 🟡 Possible | Refund proof required (transfer receipt URL) + auditable in Refunded tab |
 | Change deposit amount after deposits | 🟢 Blocked | On-chain immutable after creation |
 | Change refund deadline after deposits | 🟢 Blocked | On-chain immutable after creation |
 | Change organizer wallet after deposits | 🟡 Possible in KV | Lock escrow-critical fields after `escrow_address` is set |

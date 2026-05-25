@@ -113,6 +113,14 @@ pub struct ThbDepositInfo {
     pub refunded_at: Option<String>,
     #[serde(default)]
     pub attendee_name: Option<String>,
+    #[serde(default)]
+    pub bank_account: Option<String>,
+    #[serde(default)]
+    pub bank_name: Option<String>,
+    #[serde(default)]
+    pub account_name: Option<String>,
+    #[serde(default)]
+    pub refund_proof_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, serde::Deserialize)]
@@ -129,6 +137,7 @@ pub struct RefundQueueResponse {
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct MarkRefundRequest {
     pub event_id: String,
+    pub refund_proof_url: String,
 }
 
 #[derive(Debug, Clone, Default, serde::Deserialize)]
@@ -419,6 +428,48 @@ pub async fn mark_refund(
 ) -> Result<serde_json::Value, ApiError> {
     let path = format!("/refund/mark/{attendee_id}");
     api_post_json(&path, body).await
+}
+
+/// Response for GET /api/refund/refunded
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+pub struct RefundedListResponse {
+    #[serde(default)]
+    pub refunded: Vec<ThbDepositInfo>,
+}
+
+/// GET /api/refund/refunded?event_id=xxx
+pub async fn get_refunded_list(
+    event_id: Option<&str>,
+) -> Result<RefundedListResponse, ApiError> {
+    let path = match event_id {
+        Some(eid) if !eid.is_empty() => format!("/refund/refunded?event_id={eid}"),
+        _ => "/refund/refunded".to_string(),
+    };
+    let response = api_get(&path).await?;
+
+    if !response.ok() {
+        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
+            success: false,
+            data: None,
+            error: Some("Failed to get refunded list".to_string()),
+            correlation_id: None,
+        });
+        return Err(ApiError {
+            message: body.error.unwrap_or_default(),
+            status: 0,
+        });
+    }
+
+    let wrapper: ApiResponse<RefundedListResponse> =
+        response.json().await.map_err(|e| ApiError {
+            message: format!("Failed to parse refunded list: {e}"),
+            status: 0,
+        })?;
+
+    wrapper.data.ok_or_else(|| ApiError {
+        message: wrapper.error.unwrap_or("No data".to_string()),
+        status: 0,
+    })
 }
 
 // ===== Escrow API =====

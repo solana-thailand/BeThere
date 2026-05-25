@@ -1926,10 +1926,18 @@ pub fn Deposit() -> impl IntoView {
 
                                             <button
                                                 class="btn btn-success btn-block btn-action-lg u-mt-1rem"
+                                                disabled=move || {
+                                                    bank_account_input.get().trim().is_empty()
+                                                    || bank_name_input.get().trim().is_empty()
+                                                    || account_name_input.get().trim().is_empty()
+                                                }
                                                 on:click=move |_| handle_upload_slip()
                                             >
                                                 "Upload Slip"
                                             </button>
+                                            <p class="hint-desc" style="margin-top:0.25rem;text-align:center;font-size:0.75rem;">
+                                                "Bank account, bank name, and account holder name are required for refund."
+                                            </p>
                                         </div>
                                     </div>
 

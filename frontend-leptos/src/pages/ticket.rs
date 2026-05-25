@@ -670,22 +670,31 @@ pub fn Ticket() -> impl IntoView {
                                     } else { String::new() };
 
                                     if !embed_url.is_empty() {
-                                        view! {
-                                            <div style="width:100%;margin-top:0.75rem;">
-                                                <h3 style="font-size:0.9rem;font-weight:600;color:#fff;margin-bottom:0.5rem;display:flex;align-items:center;gap:0.4rem;">
-                                                    "\u{1F4FA} Livestream / Recording"
-                                                </h3>
-                                                <div style="position:relative;width:100%;padding-bottom:56.25%;border-radius:8px;overflow:hidden;">
-                                                    <iframe
-                                                        src=embed_url
-                                                        style="position:absolute;top:0;left:0;width:100%;height:100%;border:none;"
-                                                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                                                        allowfullscreen=true
-                                                        title="Event video"
-                                                    />
+                                            let link = url.clone();
+                                            view! {
+                                                <div style="width:100%;margin-top:0.75rem;">
+                                                    <h3 style="font-size:0.9rem;font-weight:600;color:#fff;margin-bottom:0.5rem;display:flex;align-items:center;gap:0.4rem;">
+                                                        "\u{1F4FA} Livestream / Recording"
+                                                    </h3>
+                                                    <div style="position:relative;width:100%;padding-bottom:56.25%;border-radius:8px;overflow:hidden;">
+                                                        <iframe
+                                                            src=embed_url
+                                                            style="position:absolute;top:0;left:0;width:100%;height:100%;border:none;"
+                                                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                                            allowfullscreen=true
+                                                            title="Event video"
+                                                        />
+                                                    </div>
+                                                    <a
+                                                        href=link
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        style="display:inline-block;margin-top:0.5rem;background:var(--accent);color:#000;padding:0.5rem 1rem;border-radius:8px;text-decoration:none;font-weight:600;font-size:0.85rem;"
+                                                    >
+                                                        "Watch on YouTube \u{2192}"
+                                                    </a>
                                                 </div>
-                                            </div>
-                                        }.into_any()
+                                            }.into_any()
                                     } else {
                                         let href = url;
                                         view! {
@@ -725,6 +734,23 @@ pub fn Ticket() -> impl IntoView {
                                     <Icon icon=IconName::Ticket class="icon-lg" />
                                     <h1 class="ticket-title">"Your Ticket"</h1>
                                 </div>
+
+                                // Checked-in claim banner — prominent CTA at the top
+                                {if is_checked_in && !claimed && has_claim {
+                                    let claim_cta_href = claim_href.clone();
+                                    view! {
+                                        <a
+                                            href=claim_cta_href
+                                            class="btn btn-primary"
+                                            style="width:100%;margin-bottom:1rem;font-size:1rem;padding:0.85rem;"
+                                        >
+                                            <Icon icon=IconName::Gift class="icon-sm" />
+                                            " Claim Your NFT Badge →"
+                                        </a>
+                                    }.into_any()
+                                } else {
+                                    view! { <div></div> }.into_any()
+                                }}
 
                                 // QR Code section
                                 <div class="ticket-qr-section">
@@ -1059,6 +1085,7 @@ pub fn Ticket() -> impl IntoView {
                                 } else { String::new() };
 
                                 if !embed_url.is_empty() {
+                                    let link = url.clone();
                                     view! {
                                         <div class="card" style="margin-top:0.75rem;padding:1rem;">
                                             <h3 style="font-size:0.9rem;font-weight:600;color:#fff;margin-bottom:0.5rem;display:flex;align-items:center;gap:0.4rem;">
@@ -1073,6 +1100,14 @@ pub fn Ticket() -> impl IntoView {
                                                     title="Event video"
                                                 />
                                             </div>
+                                            <a
+                                                href=link
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                style="display:inline-block;margin-top:0.5rem;background:var(--accent);color:#000;padding:0.5rem 1rem;border-radius:8px;text-decoration:none;font-weight:600;font-size:0.85rem;"
+                                            >
+                                                "Watch on YouTube \u{2192}"
+                                            </a>
                                         </div>
                                     }.into_any()
                                 } else {

@@ -101,6 +101,9 @@ pub struct ThbDeposit {
     /// Account holder name for THB refund.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub account_name: Option<String>,
+    /// R2 URL of the refund transfer receipt (uploaded by admin when marking refund).
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub refund_proof_url: Option<String>,
 }
 
 /// Request body for POST /api/deposit/usdc — build a Solana Pay deposit TX.
@@ -209,4 +212,6 @@ pub struct RefundQueueResponse {
 pub struct MarkRefundRequest {
     /// Event ID.
     pub event_id: String,
+    /// R2 URL of the refund transfer receipt.
+    pub refund_proof_url: String,
 }

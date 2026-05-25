@@ -845,3 +845,55 @@ pub async fn update_deposit_method(
     invalidate_attendee_cache(kv, sheet_id, sheet_name).await;
     Ok(())
 }
+
+/// Write refund status to the Google Sheet (column AA: refund_status).
+/// Called after admin marks a refund as processed.
+pub async fn write_refund_status(
+    state: &AppState,
+    sheet_id: &str,
+    sheet_name: &str,
+    kv: Option<&KvStore>,
+    attendee_api_id: &str,
+    status: &str,
+) -> Result<(), String> {
+    let access_token = get_cached_access_token(state, kv).await?;
+
+    let mapping = super::get_column_mapping(state, sheet_id, sheet_name, kv)
+        .await
+        .unwrap_or_else(|_| ColumnMapping::hardcoded());
+
+    let attendees = super::get_attendees(state, sheet_id, sheet_name, kv).await?;
+    let row_index = attendees
+        .iter()
+        .find(|a| a.api_id == attendee_api_id)
+        .map(|a| a.row_index)
+        .ok_or_else(|| format!("attendee {attendee_api_id} not found"))?;
+
+    use event_checkin_domain::models::attendee::ColumnKey as CK;
+    let col = mapping.column_letter(CK::RefundStatus);
+
+    let data = vec![ValueRange {
+        range: format!("{sheet_name}!{col}{row_index}"),
+        values: vec![vec![status.to_string()]],
+    }];
+
+    let url =
+        format!("https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values:batchUpdate");
+
+    let body = BatchUpdateRequest {
+        data,
+        value_input_option: "USER_ENTERED".to_string(),
+    };
+
+    batch_update_sheet(&url, &body, &access_token).await?;
+
+    tracing::info!(
+        %attendee_api_id,
+        row_index,
+        %status,
+        "wrote refund_status to google sheet"
+    );
+
+    invalidate_attendee_cache(kv, sheet_id, sheet_name).await;
+    Ok(())
+}

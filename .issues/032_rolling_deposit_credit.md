@@ -72,22 +72,22 @@ Exit (any time):
 ### Code Changes
 
 **Backend (worker):**
-- [ ] Add columns K–M to contacts sheet schema (`contacts.rs`)
-- [ ] Add `credit_thb` / `credit_usdc` to `DepositMethod` enum (`domain/models/deposit.rs`)
+- [x] Add columns K–M to contacts sheet schema (`contacts.rs`)
+- [x] Add `credit_thb` / `credit_usdc` to `DepositMethod` enum (`domain/models/deposit.rs`)
+- [x] New endpoint: `POST /api/deposit/hold` — marks deposit as held, updates contact credit
+- [x] New endpoint: `GET /api/deposit/credit-balance` — returns attendee's current credit
+- [x] Upsert contact after "hold" action: increment credit balance
 - [ ] Registration handler: check credit before requiring deposit
-- [ ] New endpoint: `POST /api/deposit/hold` — marks deposit as held, updates contact credit
-- [ ] New endpoint: `POST /api/deposit/credit-balance` — returns attendee's current credit
-- [ ] Upsert contact after "hold" action: increment credit balance
 
 **Frontend (frontend-leptos):**
 - [ ] Ticket page: show "Hold Deposit" button after check-in (alongside "Claim Refund")
 - [ ] Ticket page: show credit balance if > 0
 - [ ] Registration: if credit covers deposit, show "Deposit covered by your credit" instead of deposit step
-- [ ] Deposit page: handle `credit_thb`/`credit_usdc` method display
+- [x] Deposit page: handle `credit_thb`/`credit_usdc` method display
 
 **Domain:**
-- [ ] Extend `DepositMethod` enum with `CreditThb`, `CreditUsdc` variants
-- [ ] Update serde tests for new variants
+- [x] Extend `DepositMethod` enum with `CreditThb`, `CreditUsdc` variants
+- [x] Update serde tests for new variants
 
 ### Phase 2: On-chain vault (future issue)
 

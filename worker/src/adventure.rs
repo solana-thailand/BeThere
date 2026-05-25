@@ -11,13 +11,10 @@ use event_checkin_domain::models::adventure::{
     AdventureConfig, AdventureProgress, AdventureStatus, LevelScore,
 };
 
-// ---------------------------------------------------------------------------
-// TTL constants
-// ---------------------------------------------------------------------------
-
-/// TTL for transient adventure progress (1 hour).
-/// Attendee session state — no need to persist beyond the event window.
-const ADVENTURE_PROGRESS_TTL_SECS: u64 = 3600;
+// No TTL on adventure progress.
+// Attendees may complete the adventure and claim their NFT hours later.
+// If progress expired before claiming, they'd have to redo all levels.
+// KV entries are small (a few KB) so storage cost is negligible.
 
 // Key helpers
 fn adventure_config_key(event_id: &str) -> String {
@@ -100,7 +97,6 @@ async fn save_adventure_progress(
         .map_err(|e| format!("failed to serialize adventure progress: {e:?}"))?;
     kv.put(&key, &json_str)
         .map_err(|e| format!("failed to build adventure progress put: {e:?}"))?
-        .expiration_ttl(ADVENTURE_PROGRESS_TTL_SECS)
         .execute()
         .await
         .map_err(|e| format!("failed to write adventure progress to KV: {e:?}"))
@@ -143,22 +139,21 @@ pub async fn save_level_completion(
     progress.total_time_seconds = progress.scores.values().map(|s| s.time_seconds).sum();
 
     // Check if adventure is now passed.
-    // If required_levels is non-empty, the attendee must complete those specific levels.
-    // If empty (config exists but no required_level set), mark passed when any level is completed
-    // as a fallback — the get_adventure_status function re-validates against config.
+    // required_levels is populated by the handler only when adventure is enabled.
+    // Empty required_levels means adventure is not configured — skip passed-check.
     if !required_levels.is_empty() {
-        let all_done = required_levels
-            .iter()
-            .all(|id| progress.levels_completed.iter().any(|lid| lid == id));
+        // required_levels contains level number prefixes like "01", "02", etc.
+        // Actual completed IDs are like "01_hello_world", "02_variables"
+        let all_done = required_levels.iter().all(|req| {
+            progress.levels_completed.iter().any(|lid| {
+                lid.strip_prefix(req)
+                    .is_some_and(|rest| rest.starts_with('_') || rest.is_empty())
+            })
+        });
         if all_done && !progress.passed {
             progress.passed = true;
             progress.passed_at = Some(Utc::now().to_rfc3339());
         }
-    } else if !progress.levels_completed.is_empty() && !progress.passed {
-        // No specific required_levels list — mark passed when at least one level is done.
-        // This covers the case where adventure is enabled but required_level is None.
-        progress.passed = true;
-        progress.passed_at = Some(Utc::now().to_rfc3339());
     }
 
     progress.last_played_at = Some(Utc::now().to_rfc3339());

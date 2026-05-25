@@ -196,6 +196,7 @@ pub fn routes(state: AppState) -> Router<()> {
             get(deposit::pending_thb_slips_handler),
         )
         .route("/refund/queue", get(deposit::refund_queue_handler))
+        .route("/refund/refunded", get(deposit::refunded_list_handler))
         .route(
             "/refund/mark/{attendee_id}",
             post(deposit::mark_refund_handler),

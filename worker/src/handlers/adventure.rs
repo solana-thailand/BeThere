@@ -110,16 +110,16 @@ pub async fn save_adventure_progress(
         .await
         .map_err(AppError::Internal)?;
 
-    // Determine required level IDs from config.
-    // If `required_level` is set (e.g., 1), the attendee must complete level_01 through that level.
-    // If not set, they must complete all levels.
+    // Determine required level prefixes from config.
+    // required_level is 0-based index: n=2 means levels 01..03 must be completed.
+    // If None, all 10 levels must be completed.
+    // If adventure is not enabled, pass empty vec to skip passed-check entirely.
+    const TOTAL_LEVELS: usize = 10;
     let required_levels: Vec<String> = match &config {
-        Some(c) if c.enabled => {
-            match c.required_level {
-                Some(n) => (1..=n).map(|i| format!("level_{i:02}")).collect(),
-                None => vec![], // empty = all levels required (handled in save_level_completion)
-            }
-        }
+        Some(c) if c.enabled => match c.required_level {
+            Some(n) => (1..=(n + 1)).map(|i| format!("{i:02}")).collect(),
+            None => (1..=TOTAL_LEVELS).map(|i| format!("{i:02}")).collect(),
+        },
         _ => vec![],
     };
 

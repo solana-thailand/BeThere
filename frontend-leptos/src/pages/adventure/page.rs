@@ -37,6 +37,7 @@ pub fn Adventure() -> impl IntoView {
     let _ = set_levels;
 
     // UI state
+    let (adventure_passed, set_adventure_passed) = signal(false);
     let (show_level_select, set_show_level_select) = signal(false);
     let (notification, set_notification) = signal::<Option<String>>(None);
     let (puzzle_feedback, set_puzzle_feedback) = signal::<Option<bool>>(None);
@@ -183,6 +184,7 @@ pub fn Adventure() -> impl IntoView {
     let auto_save_elapsed = elapsed_seconds.clone();
     let auto_save_set_status = set_save_status.clone();
     let auto_save_set_completed = set_completed_levels.clone();
+    let auto_save_set_adventure_passed = set_adventure_passed.clone();
     let auto_save_completed_read = completed_levels.clone();
     Effect::new(move |_| {
         let g = auto_save_game.get();
@@ -216,8 +218,12 @@ pub fn Adventure() -> impl IntoView {
             auto_save_set_status.set(Some("saving".to_string()));
             leptos::task::spawn_local(async move {
                 match api::save_adventure_progress(&token_clone, &level_id_clone, &score).await {
-                    Ok(_progress) => {
+                    Ok(progress) => {
                         log::info!("[adventure] saved progress for level {level_id_clone}");
+                        if progress.passed {
+                            log::info!("[adventure] adventure passed!");
+                            auto_save_set_adventure_passed.set(true);
+                        }
                         auto_save_set_status.set(Some("saved".to_string()));
                     }
                     Err(e) => {
@@ -684,13 +690,8 @@ pub fn Adventure() -> impl IntoView {
                                     view! { <div></div> }.into_any()
                                 }}
                                 <div class="adventure-success-actions">
-                                    {if has_next {
-                                        view! {
-                                            <button class="btn btn-primary" on:click=move |_| load_level(next_idx)>
-                                                "Next Level →"
-                                            </button>
-                                        }.into_any()
-                                    } else {
+                                    {if !has_next {
+                                        // All levels complete
                                         let claim_link = _claim_token().map(|t| format!("/claim/{t}"));
                                         view! {
                                             <div class="adventure-all-complete">
@@ -720,6 +721,33 @@ pub fn Adventure() -> impl IntoView {
                                                     </button>
                                                 }.into_any()
                                             }}
+                                        }.into_any()
+                                    } else if adventure_passed.get() {
+                                        // Required levels passed — can claim now
+                                        let claim_link = _claim_token().map(|t| format!("/claim/{t}"));
+                                        view! {
+                                            <div class="adventure-all-complete">
+                                                "🎉 Quest complete! You've passed the adventure!"
+                                            </div>
+                                            {if let Some(link) = claim_link {
+                                                view! {
+                                                    <a class="btn adventure-claim-btn" href={link}>
+                                                        "🎁 Claim your NFT Badge"
+                                                    </a>
+                                                }.into_any()
+                                            } else {
+                                                view! { <div></div> }.into_any()
+                                            }}
+                                            <button class="btn btn-outline" on:click=move |_| load_level(next_idx)>
+                                                "Continue Playing →"
+                                            </button>
+                                        }.into_any()
+                                    } else {
+                                        // More levels to go
+                                        view! {
+                                            <button class="btn btn-primary" on:click=move |_| load_level(next_idx)>
+                                                "Next Level →"
+                                            </button>
                                         }.into_any()
                                     }}
                                     <button class="btn btn-outline" on:click=move |_| {
