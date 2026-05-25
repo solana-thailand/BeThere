@@ -5,8 +5,8 @@ use axum::{
 use chrono::Utc;
 use event_checkin_domain::models::auth::Claims;
 use event_checkin_domain::models::deposit::{
-    DepositMethod, DepositStatus, MarkRefundRequest, PendingSlipResponse, RefundQueueResponse,
-    ThbDeposit, VerifySlipRequest,
+    DepositMethod, DepositStatus, ManualRefundRequest, MarkRefundRequest, PendingSlipResponse,
+    RefundQueueResponse, ThbDeposit, VerifySlipRequest,
 };
 use event_checkin_domain::models::error::AppError;
 use serde::{Deserialize, Serialize};
@@ -692,7 +692,7 @@ pub async fn mark_refund_handler(
         "THB refund marked complete"
     );
 
-    // Write refund_status to Google Sheet (non-blocking — don't fail the API if sheet write fails)
+    // Write refund_status to Google Sheet
     if let Err(e) = crate::sheets::write::write_refund_status(
         &state,
         &event.sheet_id,
@@ -707,6 +707,24 @@ pub async fn mark_refund_handler(
             attendee_id = %attendee_id,
             error = %e,
             "failed to write refund_status to sheet (non-blocking)"
+        );
+    }
+
+    // Write refund_proof_url to refund_link column in Google Sheet
+    if let Err(e) = crate::sheets::write::write_refund_link(
+        &state,
+        &event.sheet_id,
+        &event.sheet_name,
+        Some(kv),
+        &attendee_id,
+        &body.refund_proof_url,
+    )
+    .await
+    {
+        tracing::warn!(
+            attendee_id = %attendee_id,
+            error = %e,
+            "failed to write refund_link to sheet (non-blocking)"
         );
     }
 
@@ -1011,4 +1029,102 @@ async fn resolve_attendee_names(
             std::collections::HashMap::new()
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Manual refund (no deposit required)
+// ---------------------------------------------------------------------------
+
+/// Manually set refund status for an attendee (e.g., VIP who didn't deposit).
+/// Writes refund_status and optionally refund_link to the Google Sheet.
+#[worker::send]
+pub async fn mark_manual_refund_handler(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(attendee_id): Path<String>,
+    Json(body): Json<ManualRefundRequest>,
+) -> Result<ApiOk<serde_json::Value>, WorkerError> {
+    let kv = state
+        .events_kv
+        .as_ref()
+        .ok_or_else(|| AppError::Internal("EVENTS KV not configured".to_string()))?;
+
+    let event =
+        crate::handlers::ext::resolve_event_with_access(&state, &claims, Some(&body.event_id))
+            .await?;
+
+    // Verify attendee exists in sheet
+    let attendee = crate::sheets::get_attendee_by_id(
+        &attendee_id,
+        &state,
+        &event.sheet_id,
+        &event.sheet_name,
+        Some(kv),
+    )
+    .await
+    .map_err(|e| AppError::Internal(format!("failed to find attendee: {e}")))?
+    .ok_or_else(|| AppError::NotFound(format!("attendee '{attendee_id}' not found")))?;
+
+    // Write refund_status to sheet
+    crate::sheets::write::write_refund_status(
+        &state,
+        &event.sheet_id,
+        &event.sheet_name,
+        Some(kv),
+        &attendee_id,
+        &body.refund_status,
+    )
+    .await
+    .map_err(|e| AppError::Internal(format!("failed to write refund_status: {e}")))?;
+
+    // Write refund_link if provided
+    if let Some(ref link) = body.refund_link
+        && !link.trim().is_empty()
+    {
+        tracing::info!(
+            %attendee_id,
+            link = %link,
+            "writing refund_link to sheet"
+        );
+        crate::sheets::write::write_refund_link(
+            &state,
+            &event.sheet_id,
+            &event.sheet_name,
+            Some(kv),
+            &attendee_id,
+            link,
+        )
+        .await
+        .map_err(|e| AppError::Internal(format!("failed to write refund_link: {e}")))?;
+    }
+
+    // Audit log
+    let _ = crate::audit_store::append_event_audit(
+        kv,
+        &event.id,
+        crate::audit_store::create_entry(
+            &claims.email,
+            crate::audit_store::AuditAction::RefundMarked,
+            &event.id,
+            &format!(
+                "manual refund status '{}' set for {} ({})",
+                body.refund_status, attendee.name, attendee_id
+            ),
+        ),
+    )
+    .await;
+
+    tracing::info!(
+        %attendee_id,
+        status = %body.refund_status,
+        has_link = body.refund_link.is_some(),
+        marker = %claims.email,
+        "Manual refund status set"
+    );
+
+    Ok(ApiOk::new(serde_json::json!({
+        "attendee_id": attendee_id,
+        "refund_status": body.refund_status,
+        "refund_link": body.refund_link,
+    })))
 }

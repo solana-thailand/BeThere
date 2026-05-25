@@ -69,11 +69,12 @@ pub struct Attendee {
     pub claim_token: Option<String>,
     pub claimed_at: Option<String>,
     pub nft_proof_url: Option<String>,
-    // Section 6: Bank & Refund (Y–AC)
+    // Section 6: Bank & Refund (Y–AD)
     pub bank_account: Option<String>,
     pub bank_name: Option<String>,
     pub account_name: Option<String>,
     pub refund_status: Option<String>,
+    pub refund_link: Option<String>,
     pub send_email_status: Option<String>,
     pub row_index: usize,
 }
@@ -152,11 +153,12 @@ pub enum ColumnKey {
     ClaimToken,
     ClaimedAt,
     NftProofUrl,
-    // Section 6: Bank & Refund (Y–AC)
+    // Section 6: Bank & Refund (Y–AD)
     BankAccount,
     BankName,
     AccountName,
     RefundStatus,
+    RefundLink,
     SendEmailStatus,
 }
 
@@ -193,11 +195,12 @@ impl ColumnKey {
             ColumnKey::ClaimToken,
             ColumnKey::ClaimedAt,
             ColumnKey::NftProofUrl,
-            // Section 6: Bank & Refund (Y–AC)
+            // Section 6: Bank & Refund (Y–AD)
             ColumnKey::BankAccount,
             ColumnKey::BankName,
             ColumnKey::AccountName,
             ColumnKey::RefundStatus,
+            ColumnKey::RefundLink,
             ColumnKey::SendEmailStatus,
         ]
     }
@@ -257,6 +260,7 @@ impl ColumnKey {
             ColumnKey::BankName => &["bank_name", "bank"],
             ColumnKey::AccountName => &["account_name", "account_holder"],
             ColumnKey::RefundStatus => &["refund_status", "refund_state"],
+            ColumnKey::RefundLink => &["refund_link", "refund_url", "refund_proof_link"],
             ColumnKey::SendEmailStatus => &["send_email_status", "email_status", "email_sent"],
         }
     }
@@ -275,7 +279,7 @@ pub struct ColumnMapping {
 }
 
 impl ColumnMapping {
-    /// Hardcoded fallback mapping for the 28-column layout (A–AB).
+    /// Hardcoded fallback mapping for the 30-column layout (A–AD).
     /// Used for sheets without recognizable headers or when header reading fails.
     ///
     /// Layout:
@@ -284,7 +288,7 @@ impl ColumnMapping {
     ///   Section 3 — Contact (J–L):  phone, contact_channel, contact_handle
     ///   Section 4 — Deposit (M–Q):  deposit_agreed, deposit_method, deposit_amount, deposit_tx_signature, deposit_verified
     ///   Section 5 — Lifecycle (R–X):  checked_in_at, checked_in_by, solana_address, qr_code_url, claim_token, claimed_at, nft_proof_url
-    ///   Section 6 — Bank & Refund (Y–AC):  bank_account, bank_name, account_name, refund_status, send_email_status
+    ///   Section 6 — Bank & Refund (Y–AD):  bank_account, bank_name, account_name, refund_status, refund_link, send_email_status
     pub fn hardcoded() -> Self {
         // Section 1: Attendee Identity (A–E)
         let mut map = HashMap::new();
@@ -321,10 +325,11 @@ impl ColumnMapping {
         map.insert("bank_name".into(), 25); // Z
         map.insert("account_name".into(), 26); // AA
         map.insert("refund_status".into(), 27); // AB
-        map.insert("send_email_status".into(), 28); // AC
+        map.insert("refund_link".into(), 28); // AC
+        map.insert("send_email_status".into(), 29); // AD
         Self {
             map,
-            total_columns: 29,
+            total_columns: 30,
         }
     }
 
@@ -458,11 +463,12 @@ pub struct AttendeeRow {
     pub claim_token: Option<String>,
     pub claimed_at: Option<String>,
     pub nft_proof_url: Option<String>,
-    // Section 6: Bank & Refund (Y–AC)
+    // Section 6: Bank & Refund (Y–AD)
     pub bank_account: Option<String>,
     pub bank_name: Option<String>,
     pub account_name: Option<String>,
     pub refund_status: Option<String>,
+    pub refund_link: Option<String>,
     pub send_email_status: Option<String>,
     pub row_index: usize,
 }
@@ -521,6 +527,7 @@ impl AttendeeRow {
         let bank_name = get_opt(idx(ColumnKey::BankName));
         let account_name = get_opt(idx(ColumnKey::AccountName));
         let refund_status = get_opt(idx(ColumnKey::RefundStatus));
+        let refund_link = get_opt(idx(ColumnKey::RefundLink));
         let send_email_status = get_opt(idx(ColumnKey::SendEmailStatus));
 
         let first_name_col = idx(ColumnKey::FirstName);
@@ -562,6 +569,7 @@ impl AttendeeRow {
             bank_name,
             account_name,
             refund_status,
+            refund_link,
             send_email_status,
             row_index,
         })
@@ -603,6 +611,7 @@ impl AttendeeRow {
             bank_name: self.bank_name.clone(),
             account_name: self.account_name.clone(),
             refund_status: self.refund_status.clone(),
+            refund_link: self.refund_link.clone(),
             send_email_status: self.send_email_status.clone(),
             row_index: self.row_index,
         }
@@ -669,6 +678,7 @@ mod tests {
             bank_name: None,
             account_name: None,
             refund_status: None,
+            refund_link: None,
             send_email_status: None,
             row_index: 2,
         }
@@ -758,8 +768,9 @@ mod tests {
         assert_eq!(mapping.get(ColumnKey::BankName), Some(25)); // Z
         assert_eq!(mapping.get(ColumnKey::AccountName), Some(26)); // AA
         assert_eq!(mapping.get(ColumnKey::RefundStatus), Some(27)); // AB
-        assert_eq!(mapping.get(ColumnKey::SendEmailStatus), Some(28)); // AC
-        assert_eq!(mapping.total_columns, 29);
+        assert_eq!(mapping.get(ColumnKey::RefundLink), Some(28)); // AC
+        assert_eq!(mapping.get(ColumnKey::SendEmailStatus), Some(29)); // AD
+        assert_eq!(mapping.total_columns, 30);
     }
 
     #[test]
@@ -874,8 +885,8 @@ mod tests {
     #[test]
     fn test_last_column_letter_hardcoded() {
         let mapping = ColumnMapping::hardcoded();
-        // 29 columns → last index 28 → "AC"
-        assert_eq!(mapping.last_column_letter(), "AC");
+        // 30 columns → last index 29 → "AD"
+        assert_eq!(mapping.last_column_letter(), "AD");
     }
 
     #[test]
@@ -975,7 +986,7 @@ mod tests {
         // 28-column layout using hardcoded mapping
         let mapping = ColumnMapping::hardcoded();
 
-        let mut row_data = vec![String::new(); 28];
+        let mut row_data = vec![String::new(); 30];
         row_data[0] = "gst-legacy".into(); // A: api_id
         row_data[1] = "Jane Smith".into(); // B: name
         row_data[2] = "Jane".into(); // C: first_name

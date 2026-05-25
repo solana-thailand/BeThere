@@ -201,6 +201,10 @@ pub fn routes(state: AppState) -> Router<()> {
             "/refund/mark/{attendee_id}",
             post(deposit::mark_refund_handler),
         )
+        .route(
+            "/refund/manual/{attendee_id}",
+            post(deposit::mark_manual_refund_handler),
+        )
         // Escrow management (protected — organizer initializes on-chain escrow)
         .route("/escrow/init", post(deposit::init_escrow_tx_handler))
         .route(

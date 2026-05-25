@@ -5795,13 +5795,32 @@ nav a.active {
         --tile-size: 28px;
     }
     .dpad-btn {
-        width: 64px;
-        height: 64px;
-        font-size: 1.4rem;
+        width: 68px;
+        height: 68px;
+        font-size: 1.5rem;
     }
     .dpad-center {
-        width: 64px;
-        height: 64px;
+        width: 68px;
+        height: 68px;
+    }
+}
+
+/* Fallback: show D-pad on small screens regardless of hover/pointer capability */
+@media (max-width: 768px) {
+    .adventure-dpad {
+        display: flex;
+    }
+    .adventure-page {
+        --tile-size: 28px;
+    }
+    .dpad-btn {
+        width: 68px;
+        height: 68px;
+        font-size: 1.5rem;
+    }
+    .dpad-center {
+        width: 68px;
+        height: 68px;
     }
 }
 

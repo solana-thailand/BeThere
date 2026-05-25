@@ -58,6 +58,7 @@ fn walkin_to_attendee(w: &WalkinAttendee, row_index: usize) -> Attendee {
         bank_name: None,
         account_name: None,
         refund_status: None,
+        refund_link: None,
         send_email_status: None,
         row_index,
     }
@@ -321,6 +322,16 @@ pub async fn get_public_ticket(
         None
     };
 
+    // Fetch THB deposit for refund proof URL
+    let thb_deposit = if let Some(kv_ref) = kv {
+        crate::event_store::get_thb_deposit(kv_ref, &event.id, &attendee.api_id)
+            .await
+            .ok()
+            .flatten()
+    } else {
+        None
+    };
+
     let deposit_info = deposit_status.as_ref().map(|d| {
         serde_json::json!({
             "method": match d.method {
@@ -331,6 +342,8 @@ pub async fn get_public_ticket(
             },
             "verified": d.verified,
             "currency": d.currency,
+            "refunded": thb_deposit.as_ref().is_some_and(|t| t.refunded),
+            "refund_proof_url": thb_deposit.as_ref().and_then(|t| t.refund_proof_url.clone()),
         })
     });
 
@@ -424,6 +437,8 @@ pub async fn get_public_ticket(
         "deadline_expired": deadline_expired,
         "in_person_available": in_person_available,
         "event_slug": event.slug,
+        "refund_link": attendee.refund_link,
+        "escrow_status": format!("{}", event.escrow_status),
     });
     Ok(ApiOk::new(data))
 }

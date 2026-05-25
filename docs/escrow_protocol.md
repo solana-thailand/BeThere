@@ -114,6 +114,9 @@ THB deposits are off-chain (bank transfer → slip upload). Unlike USDC, the pla
 | **Slip visible during refund** — Admin can see original deposit slip before marking refund | ✅ Implemented |
 | **Full audit trail** — All refund actions logged with admin email, timestamp, attendee ID | ✅ Implemented |
 | **Rolling deposit credit** — Attendee can hold deposit for next event instead of refunding (reduces cash flow risk) | ✅ Backend implemented |
+| **Manual refund status** — Organizer can mark refund status for any attendee (e.g., VIP who didn't deposit) | ✅ Implemented |
+| **Refund link in sheet** — Organizer fills in refund link in Google Sheet, surfaced on attendee ticket page | ✅ Implemented |
+| **Attendee refund proof visible** — Ticket page shows refund receipt link from `refund_proof_url` | ✅ Implemented |
 | **Attendee confirmation** — Refund isn't complete until attendee confirms receipt (future) | 🔲 Planned |
 
 ### Anti-Rug-Pull: Time-Based Refund Eligibility

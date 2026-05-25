@@ -4,7 +4,7 @@
  * Run `setupSheet()` from Extensions → Apps Script to initialize
  * the active spreadsheet with the correct headers for the Attendees tab.
  *
- * Column Layout (A–AB, 28 columns):
+ * Column Layout (A–AD, 30 columns):
  *   Section 1 — Identity (A–E):
  *     A = api_id, B = name, C = first_name, D = last_name, E = email
  *   Section 2 — Registration (F–I):
@@ -14,12 +14,12 @@
  *   Section 4 — Deposit (M–Q):
  *     M = deposit_agreed, N = deposit_method, O = deposit_amount,
  *     P = deposit_tx_signature, Q = deposit_verified
- *   Section 5 — Lifecycle (R–W):
+ *   Section 5 — Lifecycle (R–X):
  *     R = checked_in_at, S = checked_in_by, T = solana_address,
- *     U = qr_code_url, V = claim_token, W = claimed_at
- *   Section 6 — Bank & Refund (X–AB):
- *     X = bank_account, Y = bank_name, Z = account_name,
- *     AA = refund_status, AB = send_email_status
+ *     U = qr_code_url, V = claim_token, W = claimed_at, X = nft_proof_url
+ *   Section 6 — Bank & Refund (Y–AD):
+ *     Y = bank_account, Z = bank_name, AA = account_name,
+ *     AB = refund_status, AC = refund_link, AD = send_email_status
  */
 
 /**
@@ -57,11 +57,13 @@ function setupSheet() {
     'qr_code_url',
     'claim_token',
     'claimed_at',
-    // Section 6: Bank & Refund (X–AB)
+    'nft_proof_url',
+    // Section 6: Bank & Refund (Y–AD)
     'bank_account',
     'bank_name',
     'account_name',
     'refund_status',
+    'refund_link',
     'send_email_status',
   ];
 
@@ -103,7 +105,7 @@ function setupSheet() {
     sheet.autoResizeColumn(i);
   }
 
-  Logger.log(`✅ Set up ${HEADERS.length} column headers in "${SHEET_NAME}" (A–AB)`);
+  Logger.log(`✅ Set up ${HEADERS.length} column headers in "${SHEET_NAME}" (A–AD)`);
   Logger.log('Headers: ' + HEADERS.join(', '));
 }
 

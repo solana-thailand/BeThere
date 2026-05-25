@@ -88,6 +88,7 @@ mod tests {
             bank_name: None,
             account_name: None,
             refund_status: None,
+            refund_link: None,
             send_email_status: None,
             row_index: 2,
         }

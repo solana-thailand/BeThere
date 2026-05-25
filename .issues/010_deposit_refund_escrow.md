@@ -226,6 +226,7 @@ pub refund_deadline_hours: u32,     // Hours after event end (default: 168 = 7 d
 | `GET` | `/api/refund/queue` | Refund queue for admin (THB refunds pending) |
 | `GET` | `/api/refund/refunded` | List already-refunded THB deposits |
 | `POST` | `/api/refund/mark/{attendee_id}` | Mark THB refund as done — requires `refund_proof_url` (admin) |
+| `POST` | `/api/refund/manual/{attendee_id}` | Set refund status for any attendee — e.g., VIP who didn't deposit (admin) |
 
 ### Database / KV Storage
 
@@ -286,6 +287,11 @@ Value: {
 - "Refund Queue" tab: checked-in THB depositors awaiting refund, shows slip + bank info, "Mark Refunded" button requires transfer receipt URL
 - "Refunded" tab: all refunded deposits with slip, bank info, refund proof link, and timestamp
 - "Escrow" tab: on-chain stats (total deposited, total refunded, total forfeited, available for claim)
+- Bulk action: "Set Refund Status" — marks refund_status (+ optional refund_link) in Google Sheet for any attendee, including VIPs who didn't deposit
+
+**Ticket page** (attendee-facing):
+- Shows "Refund: Processed ✓" with "View Refund Receipt →" link (from `refund_proof_url` in KV)
+- Shows "Organizer Refund Link" card when organizer fills in `refund_link` column in Google Sheet
 
 ### PromptPay Slip Verification (Free)
 

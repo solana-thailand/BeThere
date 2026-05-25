@@ -420,6 +420,47 @@ pub fn Adventure() -> impl IntoView {
         set_game.set(new_state);
     };
 
+    // Swipe support for mobile
+    let (touch_start, set_touch_start) = signal(Option::<(f64, f64)>::None);
+
+    let touch_start_handler = move |ev: web_sys::TouchEvent| {
+        if let Some(touch) = ev.touches().get(0) {
+            set_touch_start.set(Some((
+                touch.client_x() as f64,
+                touch.client_y() as f64,
+            )));
+        }
+    };
+
+    let swipe_dpad_move = dpad_move.clone();
+    let touch_end_handler = move |ev: web_sys::TouchEvent| {
+        if let Some((sx, sy)) = touch_start.get() {
+            if let Some(touch) = ev.changed_touches().get(0) {
+                let ex = touch.client_x() as f64;
+                let ey = touch.client_y() as f64;
+                let dx = ex - sx;
+                let dy = ey - sy;
+                let min_swipe = 30.0;
+                if dx.abs() < min_swipe && dy.abs() < min_swipe {
+                    return; // too short, ignore
+                }
+                let dir = if dx.abs() > dy.abs() {
+                    if dx > 0.0 {
+                        engine::Direction::Right
+                    } else {
+                        engine::Direction::Left
+                    }
+                } else if dy > 0.0 {
+                    engine::Direction::Down
+                } else {
+                    engine::Direction::Up
+                };
+                swipe_dpad_move(dir);
+            }
+        }
+        set_touch_start.set(None);
+    };
+
     // Compute tile grid for rendering
     // Check if all conditions are met for exit to be "unlocked"
     fn check_exit_unlocked(game: &GameState, levels: &[LevelData]) -> bool {
@@ -1095,7 +1136,7 @@ pub fn Adventure() -> impl IntoView {
             }}
 
             // === Game Grid ===
-            <div class="adventure-grid-container" node_ref=grid_container_ref>
+            <div class="adventure-grid-container" node_ref=grid_container_ref on:touchstart=touch_start_handler on:touchend=touch_end_handler>
                 <div class="adventure-grid" style={move || {
                     let g = game.get();
                     let levels = levels_signal.get();
@@ -1196,7 +1237,7 @@ pub fn Adventure() -> impl IntoView {
 
             // Controls hint
             <div class="adventure-controls-hint">
-                <span>"Arrow keys / WASD / hjkl to move"</span>
+                <span>"Arrow keys / WASD / swipe to move"</span>
             </div>
 
             // Back link

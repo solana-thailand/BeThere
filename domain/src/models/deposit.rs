@@ -220,3 +220,15 @@ pub struct MarkRefundRequest {
     /// R2 URL of the refund transfer receipt.
     pub refund_proof_url: String,
 }
+
+/// Request body for POST /api/refund/manual/{attendee_id} — set refund status for attendees without deposit (e.g., VIP).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ManualRefundRequest {
+    /// Event ID.
+    pub event_id: String,
+    /// Refund status string (e.g., "refunded", "pending", "not_applicable").
+    pub refund_status: String,
+    /// Optional refund link filled in by organizer.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub refund_link: Option<String>,
+}

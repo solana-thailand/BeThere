@@ -434,6 +434,24 @@ pub async fn mark_refund(
     api_post_json(&path, body).await
 }
 
+/// Request body for POST /api/refund/manual/{attendee_id} — set refund status without deposit.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ManualRefundRequest {
+    pub event_id: String,
+    pub refund_status: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub refund_link: Option<String>,
+}
+
+/// POST /api/refund/manual/{attendee_id}
+pub async fn mark_manual_refund(
+    attendee_id: &str,
+    body: &ManualRefundRequest,
+) -> Result<serde_json::Value, ApiError> {
+    let path = format!("/refund/manual/{attendee_id}");
+    api_post_json(&path, body).await
+}
+
 /// Response for GET /api/refund/refunded
 #[derive(Debug, Clone, Default, serde::Deserialize)]
 pub struct RefundedListResponse {

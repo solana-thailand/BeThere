@@ -243,6 +243,12 @@ pub fn Admin() -> impl IntoView {
     let (selected_ids, set_selected_ids) = signal(HashSet::<String>::new());
     let (bulk_checking_in, set_bulk_checking_in) = signal(false);
 
+    // Manual refund state (bulk action for VIPs / attendees without deposit)
+    let (show_manual_refund, set_show_manual_refund) = signal(false);
+    let (manual_refund_status, set_manual_refund_status) = signal(String::from("refunded"));
+    let (manual_refund_link, set_manual_refund_link) = signal(String::new());
+    let (manual_refund_sending, set_manual_refund_sending) = signal(false);
+
     // Delete attendee confirmation state
     let (confirm_delete_id, set_confirm_delete_id) = signal(None::<String>);
     let (deleting_ids, set_deleting_ids) = signal(HashSet::<String>::new());
@@ -472,6 +478,83 @@ pub fn Admin() -> impl IntoView {
             api::invalidate_attendee_cache();
             set_selected.set(HashSet::new());
             set_refresh.update(|c| *c += 1);
+            set_busy.set(false);
+        });
+    };
+
+    // Bulk manual refund handler
+    let handle_manual_refund = move |_: web_sys::MouseEvent| {
+        if manual_refund_sending.get() {
+            return;
+        }
+        let ids: Vec<String> = selected_ids.get().into_iter().collect();
+        if ids.is_empty() {
+            return;
+        }
+        let eid = get_event_id();
+        let Some(event_id) = eid else {
+            components::show_toast(&set_toast, "Select an event first", ToastType::Warning);
+            return;
+        };
+        let status = manual_refund_status.get();
+        let link = manual_refund_link.get();
+        let link_opt = if link.trim().is_empty() {
+            None
+        } else {
+            Some(link)
+        };
+
+        set_manual_refund_sending.set(true);
+        let set_toast = set_toast;
+        let set_selected = set_selected_ids;
+        let set_refresh = set_refresh_counter;
+        let set_busy = set_manual_refund_sending;
+        let set_show = set_show_manual_refund;
+
+        leptos::task::spawn_local(async move {
+            let mut succeeded = 0u32;
+            let mut failed = 0u32;
+
+            log::info!(
+                "[admin] manual refund: sending {} requests, status={}, link={:?}",
+                ids.len(),
+                status,
+                link_opt
+            );
+
+            for id in ids {
+                let body = api::ManualRefundRequest {
+                    event_id: event_id.clone(),
+                    refund_status: status.clone(),
+                    refund_link: link_opt.clone(),
+                };
+                match api::mark_manual_refund(&id, &body).await {
+                    Ok(resp) => {
+                        succeeded += 1;
+                        log::info!("[admin] manual refund OK for {id}: {:?}", resp);
+                    }
+                    Err(e) => {
+                        failed += 1;
+                        log::warn!("[admin] manual refund failed for {id}: {e}");
+                    }
+                }
+            }
+
+            let msg = if failed > 0 {
+                format!("Set refund status for {succeeded}, {failed} failed")
+            } else {
+                format!("Set refund status for {succeeded} attendees")
+            };
+            let toast_type = if failed > 0 {
+                ToastType::Warning
+            } else {
+                ToastType::Success
+            };
+            components::show_toast(&set_toast, &msg, toast_type);
+            api::invalidate_attendee_cache();
+            set_selected.set(HashSet::new());
+            set_refresh.update(|c| *c += 1);
+            set_show.set(false);
             set_busy.set(false);
         });
     };
@@ -1064,10 +1147,50 @@ pub fn Admin() -> impl IntoView {
                                 >
                                     {move || if bulk_checking_in.get() { "Checking in..." } else { "Check In Selected" }}
                                 </button>
+                                <button
+                                    class="btn btn-outline btn-sm"
+                                    on:click=move |_| set_show_manual_refund.set(!show_manual_refund.get())
+                                >
+                                    "Set Refund Status"
+                                </button>
                                 <button class="btn btn-outline btn-sm" on:click=handle_clear_selection>
                                     "Clear"
                                 </button>
                             </div>
+                            // Manual refund inline form
+                            <Show when=move || show_manual_refund.get() fallback=|| view! { <div></div> }>
+                                <div class="bulk-action-bar" style="margin-top: 4px; flex-wrap: wrap; gap: 8px;">
+                                    <label style="font-size: 0.8rem; color: var(--text-muted);">
+                                        "Status:"
+                                        <select
+                                            class="admin-event-select"
+                                            style="width: auto; margin-left: 4px;"
+                                            on:change=move |ev| set_manual_refund_status.set(event_target_value(&ev))
+                                        >
+                                            <option value="refunded" selected>"refunded"</option>
+                                            <option value="pending">"pending"</option>
+                                            <option value="not_applicable">"not_applicable"</option>
+                                            <option value="failed">"failed"</option>
+                                        </select>
+                                    </label>
+                                    <label style="font-size: 0.8rem; color: var(--text-muted);">
+                                        "Link (opt):"
+                                        <input
+                                            type="text"
+                                            placeholder="https://..."
+                                            style="width: 200px; margin-left: 4px; padding: 2px 6px; font-size: 0.8rem;"
+                                            on:input=move |ev| set_manual_refund_link.set(event_target_value(&ev))
+                                        />
+                                    </label>
+                                    <button
+                                        class="btn btn-primary btn-sm"
+                                        disabled=move || manual_refund_sending.get()
+                                        on:click=handle_manual_refund
+                                    >
+                                        {move || if manual_refund_sending.get() { "Applying..." } else { "Apply" }}
+                                    </button>
+                                </div>
+                            </Show>
                         </Show>
 
                         // Inline attendee items with checkboxes (B6: paginated)

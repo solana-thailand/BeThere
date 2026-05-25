@@ -248,6 +248,12 @@ pub struct DepositInfo {
     pub method: DepositMethod,
     pub verified: bool,
     pub currency: String,
+    /// Whether THB refund has been processed.
+    #[serde(default)]
+    pub refunded: bool,
+    /// URL of the refund transfer receipt (organizer-uploaded proof).
+    #[serde(default)]
+    pub refund_proof_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -323,6 +329,12 @@ pub struct AttendeeData {
     /// Event slug for navigation.
     #[serde(default)]
     pub event_slug: String,
+    /// Refund link filled in by organizer (e.g., bank transfer receipt link).
+    #[serde(default)]
+    pub refund_link: Option<String>,
+    /// Escrow status (none, initialized, deactivated, closed, cancelled).
+    #[serde(default)]
+    pub escrow_status: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

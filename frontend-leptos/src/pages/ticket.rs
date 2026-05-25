@@ -372,6 +372,9 @@ pub fn Ticket() -> impl IntoView {
                         let deadline_expired = data.deadline_expired;
                         let in_person_available = data.in_person_available;
                         let _event_slug = data.event_slug.clone();
+                        let refund_link = data.refund_link.clone();
+                        let escrow_status = data.escrow_status.clone();
+                        let escrow_closed = escrow_status == "closed" || escrow_status == "cancelled" || escrow_status == "deactivated";
 
                         // Online attendee detection
                         let is_online = !data.is_in_person;
@@ -741,14 +744,14 @@ pub fn Ticket() -> impl IntoView {
                                     if !embed_url.is_empty() {
                                             let link = url.clone();
                                             view! {
-                                                <div style="width:100%;margin-top:0.75rem;">
+                                                <div style="max-width:560px;margin:0.75rem auto 0;">
                                                     <h3 style="font-size:0.9rem;font-weight:600;color:#fff;margin-bottom:0.5rem;display:flex;align-items:center;gap:0.4rem;">
                                                         "\u{1F4FA} Livestream / Recording"
                                                     </h3>
-                                                    <div style="position:relative;width:100%;padding-bottom:56.25%;border-radius:8px;overflow:hidden;">
+                                                    <div style="position:relative;width:100%;padding-bottom:56.25%;max-width:560px;margin:0 auto;border-radius:8px;overflow:hidden;">
                                                         <iframe
                                                             src=embed_url
-                                                            style="position:absolute;top:0;left:0;width:100%;height:100%;border:none;"
+                                                            style="position:absolute;top:0;left:0;width:100%;height:100%;min-height:200px;border:none;"
                                                             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                                                             allowfullscreen=true
                                                             title="Event video"
@@ -1091,38 +1094,62 @@ pub fn Ticket() -> impl IntoView {
                                 <div class="ticket-status-section">
                                     // Deposit status — single notice slot (exactly one shown)
                                     {if let Some(ref dep) = deposit_info {
-                                        if dep.verified {
-                                            view! {
-                                                <div style="background:#d1fae5;border-radius:var(--radius);padding:0.5rem 0.75rem;margin-bottom:0.75rem;text-align:center;">
-                                                    <span style="color:#065f46;font-weight:600;font-size:0.85rem;">
-                                                        "Deposit: Verified ✓"
-                                                    </span>
-                                                </div>
-                                            }.into_any()
-                                        } else {
-                                            view! {
-                                                <div class="ticket-deposit-pending" style="background:#fef3c7;border-radius:var(--radius);padding:0.75rem;margin-bottom:0.75rem;text-align:center;">
-                                                    <div style="display:flex;align-items:center;justify-content:center;gap:0.5rem;">
-                                                        <span style="color:#d97706;"><Icon icon=IconName::Hourglass class="icon-sm" /></span>
-                                                        <span style="color:#92400e;font-weight:600;">
-                                                            {match dep.method {
-                                                                DepositMethod::Thb => "Payment Slip: Pending Verification",
-                                                                DepositMethod::Usdc => "Deposit: Pending Confirmation",
-                                                                DepositMethod::CreditThb | DepositMethod::CreditUsdc => "Credit Deposit: Pending",
-                                                            }}
+                                        view! {
+                                            {if dep.verified {
+                                                view! {
+                                                    <div style="background:#d1fae5;border-radius:var(--radius);padding:0.5rem 0.75rem;margin-bottom:0.75rem;text-align:center;">
+                                                        <span style="color:#065f46;font-weight:600;font-size:0.85rem;">
+                                                            "Deposit: Verified ✓"
                                                         </span>
                                                     </div>
-                                                    <p style="color:#92400e;font-size:0.8rem;margin:0.5rem 0 0;">
-                                                        {match dep.method {
-                                                            DepositMethod::Thb => "Your payment slip has been submitted. We'll verify it shortly — check back in a few minutes.",
-                                                            DepositMethod::Usdc => "Your deposit is being confirmed on-chain.",
-                                                            DepositMethod::CreditThb | DepositMethod::CreditUsdc => "Your credit deposit is being processed.",
+                                                }.into_any()
+                                            } else {
+                                                view! {
+                                                    <div class="ticket-deposit-pending" style="background:#fef3c7;border-radius:var(--radius);padding:0.75rem;margin-bottom:0.75rem;text-align:center;">
+                                                        <div style="display:flex;align-items:center;justify-content:center;gap:0.5rem;">
+                                                            <span style="color:#d97706;"><Icon icon=IconName::Hourglass class="icon-sm" /></span>
+                                                            <span style="color:#92400e;font-weight:600;">
+                                                                {match dep.method {
+                                                                    DepositMethod::Thb => "Payment Slip: Pending Verification",
+                                                                    DepositMethod::Usdc => "Deposit: Pending Confirmation",
+                                                                    DepositMethod::CreditThb | DepositMethod::CreditUsdc => "Credit Deposit: Pending",
+                                                                }}
+                                                            </span>
+                                                        </div>
+                                                        <p style="color:#92400e;font-size:0.8rem;margin:0.5rem 0 0;">
+                                                            {match dep.method {
+                                                                DepositMethod::Thb => "Your payment slip has been submitted. We'll verify it shortly — check back in a few minutes.",
+                                                                DepositMethod::Usdc => "Your deposit is being confirmed on-chain.",
+                                                                DepositMethod::CreditThb | DepositMethod::CreditUsdc => "Your credit deposit is being processed.",
+                                                            }}
+                                                        </p>
+                                                    </div>
+                                                }.into_any()
+                                            }}
+                                            {if dep.refunded {
+                                                view! {
+                                                    <div style="background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.2);border-radius:var(--radius);padding:0.5rem 0.75rem;margin-bottom:0.5rem;text-align:center;">
+                                                        <span style="color:#22c55e;font-weight:600;font-size:0.85rem;">
+                                                            "Refund: Processed ✓"
+                                                        </span>
+                                                        {if let Some(ref url) = dep.refund_proof_url {
+                                                            view! {
+                                                                <div style="margin-top:0.35rem;">
+                                                                    <a href=url target="_blank" rel="noopener noreferrer" style="color:var(--accent);font-size:0.8rem;">
+                                                                        "View Refund Receipt →"
+                                                                    </a>
+                                                                </div>
+                                                            }.into_any()
+                                                        } else {
+                                                            view! { <span></span> }.into_any()
                                                         }}
-                                                    </p>
-                                                </div>
-                                            }.into_any()
-                                        }
-                                    } else if deposit_enabled && deadline_expired && in_person_available.unwrap_or(false) {
+                                                    </div>
+                                                }.into_any()
+                                            } else {
+                                                view! { <span></span> }.into_any()
+                                            }}
+                                        }.into_any()
+                                    } else if deposit_enabled && deadline_expired && in_person_available.unwrap_or(false) && !escrow_closed {
                                         let attendee_id_for_reclaim = api_id.clone();
                                         let eid_param = web_sys::Url::new(
                                             &web_sys::window().unwrap().location().href().unwrap(),
@@ -1153,7 +1180,7 @@ pub fn Ticket() -> impl IntoView {
                                                 </a>
                                             </div>
                                         }.into_any()
-                                    } else if deposit_enabled && deadline_expired && !in_person_available.unwrap_or(true) {
+                                    } else if deposit_enabled && deadline_expired && !in_person_available.unwrap_or(true) && !escrow_closed {
                                         view! {
                                             <div style="background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.3);border-radius:var(--radius);padding:1rem;margin-bottom:0.75rem;text-align:center;">
                                                 <div style="display:flex;align-items:center;justify-content:center;gap:0.5rem;margin-bottom:0.5rem;">
@@ -1168,7 +1195,7 @@ pub fn Ticket() -> impl IntoView {
                                                 </p>
                                             </div>
                                         }.into_any()
-                                    } else if deposit_enabled && !is_checked_in {
+                                    } else if deposit_enabled && !is_checked_in && !escrow_closed {
                                         let attendee_id_for_deposit = api_id.clone();
                                         let eid_param = web_sys::Url::new(
                                             &web_sys::window().unwrap().location().href().unwrap(),
@@ -1208,6 +1235,27 @@ pub fn Ticket() -> impl IntoView {
                                         }.into_any()
                                     } else {
                                         view! { <div></div> }.into_any()
+                                    }}
+                                    // Organizer refund link (from Google Sheet, independent of deposit method)
+                                    {if let Some(ref link) = refund_link {
+                                        if !link.is_empty() {
+                                            view! {
+                                                <div style="background:rgba(99,102,241,0.08);border:1px solid rgba(99,102,241,0.2);border-radius:var(--radius);padding:0.5rem 0.75rem;margin-bottom:0.5rem;text-align:center;">
+                                                    <span style="color:#818cf8;font-weight:600;font-size:0.85rem;">
+                                                        "Organizer Refund Link"
+                                                    </span>
+                                                    <div style="margin-top:0.35rem;">
+                                                        <a href=link target="_blank" rel="noopener noreferrer" style="color:var(--accent);font-size:0.8rem;">
+                                                            "View Refund Details →"
+                                                        </a>
+                                                    </div>
+                                                </div>
+                                            }.into_any()
+                                        } else {
+                                            view! { <span></span> }.into_any()
+                                        }
+                                    } else {
+                                        view! { <span></span> }.into_any()
                                     }}
                                     {if is_checked_in {
                                         let detail = status_detail;
@@ -1269,14 +1317,14 @@ pub fn Ticket() -> impl IntoView {
                                 if !embed_url.is_empty() {
                                     let link = url.clone();
                                     view! {
-                                        <div class="card" style="margin-top:0.75rem;padding:1rem;">
+                                        <div class="card" style="max-width:600px;margin:0.75rem auto 0;padding:1rem;">
                                             <h3 style="font-size:0.9rem;font-weight:600;color:#fff;margin-bottom:0.5rem;display:flex;align-items:center;gap:0.4rem;">
                                                 "\u{1F4FA} Livestream / Recording"
                                             </h3>
-                                            <div style="position:relative;width:100%;padding-bottom:56.25%;border-radius:8px;overflow:hidden;">
+                                            <div style="position:relative;width:100%;padding-bottom:56.25%;max-width:560px;margin:0 auto;border-radius:8px;overflow:hidden;">
                                                 <iframe
                                                     src=embed_url
-                                                    style="position:absolute;top:0;left:0;width:100%;height:100%;border:none;"
+                                                    style="position:absolute;top:0;left:0;width:100%;height:100%;min-height:200px;border:none;"
                                                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                                                     allowfullscreen=true
                                                     title="Event video"
