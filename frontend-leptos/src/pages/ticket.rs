@@ -352,9 +352,14 @@ pub fn Ticket() -> impl IntoView {
                         // Online attendee detection
                         let is_online = !data.is_in_person;
                         let event_end_ms = data.event_end_ms;
-                        let event_name = data.event_name.clone();
+                        let _event_name = data.event_name.clone();
                         let video_url = data.video_url.clone();
                         let has_video = !video_url.is_empty();
+                        let event_link = data.event_link.clone();
+                        let event_location = data.event_location.clone();
+                        let event_tagline = data.event_tagline.clone();
+                        let nft_image_url = data.nft_image_url.clone();
+                        let has_event_link = !event_link.is_empty();
 
                         if is_online {
                             // ── Online attendee view ──
@@ -423,6 +428,63 @@ pub fn Ticket() -> impl IntoView {
                                         </div>
                                     </div>
 
+                                    // Event context card
+                                    {if !nft_image_url.is_empty() || !event_tagline.is_empty() || !event_location.is_empty() {
+                                        view! {
+                                            <div style="text-align:center;margin-bottom:1rem;padding-bottom:1rem;border-bottom:1px solid var(--border);">
+                                                {if !nft_image_url.is_empty() {
+                                                    let img = nft_image_url.clone();
+                                                    view! {
+                                                        <img
+                                                            src=img
+                                                            alt="Event badge"
+                                                            style="width:64px;height:64px;border-radius:12px;margin-bottom:0.5rem;"
+                                                        />
+                                                    }.into_any()
+                                                } else {
+                                                    view! { <div></div> }.into_any()
+                                                }}
+                                                {if !event_tagline.is_empty() {
+                                                    let t = event_tagline.clone();
+                                                    view! {
+                                                        <p style="font-size:0.8rem;color:var(--text-secondary);margin:0.25rem 0;">
+                                                            {utils::escape_html(&t)}
+                                                        </p>
+                                                    }.into_any()
+                                                } else {
+                                                    view! { <div></div> }.into_any()
+                                                }}
+                                                {if !event_location.is_empty() {
+                                                    let loc = event_location.clone();
+                                                    view! {
+                                                        <p style="font-size:0.75rem;color:var(--text-muted);margin:0.25rem 0;">
+                                                            "\u{1F4CD} " {utils::escape_html(&loc)}
+                                                        </p>
+                                                    }.into_any()
+                                                } else {
+                                                    view! { <div></div> }.into_any()
+                                                }}
+                                                {if has_event_link {
+                                                    let link = event_link.clone();
+                                                    view! {
+                                                        <a
+                                                            href=link
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            style="display:inline-block;margin-top:0.5rem;font-size:0.8rem;color:var(--accent,#6366f1);font-weight:500;text-decoration:none;"
+                                                        >
+                                                            "\u{1F4C5} Sessions & Slides \u{2197}"
+                                                        </a>
+                                                    }.into_any()
+                                                } else {
+                                                    view! { <div></div> }.into_any()
+                                                }}
+                                            </div>
+                                        }.into_any()
+                                    } else {
+                                        view! { <div></div> }.into_any()
+                                    }}
+
                                     // Attendee info
                                     <div class="ticket-info">
                                         <div class="ticket-info-row">
@@ -438,19 +500,6 @@ pub fn Ticket() -> impl IntoView {
                                                     <span class="ticket-info-label">"Email"</span>
                                                     <span class="ticket-info-value ticket-email-masked">
                                                         {utils::escape_html(&email)}
-                                                    </span>
-                                                </div>
-                                            }.into_any()
-                                        } else {
-                                            view! { <div></div> }.into_any()
-                                        }}
-                                        {if !event_name.is_empty() {
-                                            let en = event_name;
-                                            view! {
-                                                <div class="ticket-info-row">
-                                                    <span class="ticket-info-label">"Event"</span>
-                                                    <span class="ticket-info-value">
-                                                        {utils::escape_html(&en)}
                                                     </span>
                                                 </div>
                                             }.into_any()
@@ -817,6 +866,63 @@ pub fn Ticket() -> impl IntoView {
                                                 <Icon icon=IconName::Gift class="icon-sm" />
                                                 " Claim Your NFT Badge \u{2192}"
                                             </a>
+                                        </div>
+                                    }.into_any()
+                                } else {
+                                    view! { <div></div> }.into_any()
+                                }}
+
+                                // Event context card
+                                {if !nft_image_url.is_empty() || !event_tagline.is_empty() || !event_location.is_empty() {
+                                    view! {
+                                        <div style="text-align:center;margin-bottom:0.75rem;padding-bottom:0.75rem;border-bottom:1px solid var(--border);">
+                                            {if !nft_image_url.is_empty() {
+                                                let img = nft_image_url.clone();
+                                                view! {
+                                                    <img
+                                                        src=img
+                                                        alt="Event badge"
+                                                        style="width:48px;height:48px;border-radius:10px;margin-bottom:0.35rem;"
+                                                    />
+                                                }.into_any()
+                                            } else {
+                                                view! { <div></div> }.into_any()
+                                            }}
+                                            {if !event_tagline.is_empty() {
+                                                let t = event_tagline.clone();
+                                                view! {
+                                                    <p style="font-size:0.75rem;color:var(--text-secondary);margin:0.15rem 0;">
+                                                        {utils::escape_html(&t)}
+                                                    </p>
+                                                }.into_any()
+                                            } else {
+                                                view! { <div></div> }.into_any()
+                                            }}
+                                            {if !event_location.is_empty() {
+                                                let loc = event_location.clone();
+                                                view! {
+                                                    <p style="font-size:0.7rem;color:var(--text-muted);margin:0.15rem 0;">
+                                                        "\u{1F4CD} " {utils::escape_html(&loc)}
+                                                    </p>
+                                                }.into_any()
+                                            } else {
+                                                view! { <div></div> }.into_any()
+                                            }}
+                                            {if has_event_link {
+                                                let link = event_link.clone();
+                                                view! {
+                                                    <a
+                                                        href=link
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        style="display:inline-block;margin-top:0.35rem;font-size:0.75rem;color:var(--accent,#6366f1);font-weight:500;text-decoration:none;"
+                                                    >
+                                                        "\u{1F4C5} Sessions & Slides \u{2197}"
+                                                    </a>
+                                                }.into_any()
+                                            } else {
+                                                view! { <div></div> }.into_any()
+                                            }}
                                         </div>
                                     }.into_any()
                                 } else {

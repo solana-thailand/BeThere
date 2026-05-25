@@ -293,6 +293,18 @@ pub struct AttendeeData {
     /// YouTube/livestream URL for the event.
     #[serde(default)]
     pub video_url: String,
+    /// External event page URL (sessions, slides, etc.).
+    #[serde(default)]
+    pub event_link: String,
+    /// Event location (venue name, address, or "Online").
+    #[serde(default)]
+    pub event_location: String,
+    /// Event tagline / subtitle.
+    #[serde(default)]
+    pub event_tagline: String,
+    /// NFT badge image URL.
+    #[serde(default)]
+    pub nft_image_url: String,
     /// Whether deposit is enabled for this event.
     #[serde(default)]
     pub deposit_enabled: bool,
