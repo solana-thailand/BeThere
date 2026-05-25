@@ -8488,42 +8488,116 @@ nav a.active {
 }
 
 /* ===== Ticket Page ===== */
-.ticket-card {
-    max-width: 420px;
+
+/* --- 1. Layout --- */
+.ticket-page {
     width: 100%;
+    max-width: 520px;
     margin: 0 auto;
-    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 0 0.5rem 2rem;
 }
-.ticket-header {
+.ticket-page-inner {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    align-items: center;
+}
+
+/* --- 2. Hero Banner --- */
+.ticket-hero {
+    width: 100%;
+    padding: 1.5rem 1rem 1.25rem;
+    border-radius: 0 0 var(--radius) var(--radius);
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.375rem;
+}
+.ticket-hero--checked-in {
+    background: linear-gradient(180deg, var(--success-bg) 0%, transparent 100%);
+}
+.ticket-hero--pending {
+    background: linear-gradient(180deg, var(--warning-bg) 0%, transparent 100%);
+}
+.ticket-hero--ready {
+    background: linear-gradient(180deg, var(--info-bg) 0%, transparent 100%);
+}
+.ticket-hero--online {
+    background: linear-gradient(
+        180deg,
+        rgba(99, 102, 241, 0.12) 0%,
+        transparent 100%
+    );
+}
+.ticket-hero-icon {
+    width: 48px;
+    height: 48px;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 0.5rem;
-    margin-bottom: 1.5rem;
 }
-.ticket-title {
-    font-size: 1.25rem;
+.ticket-hero-title {
+    font-size: 1.1rem;
     font-weight: 700;
-    margin: 0;
     color: var(--text-primary);
+    margin: 0;
 }
+.ticket-hero-sub {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    margin: 0;
+}
+.ticket-hero-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    margin-bottom: 0.25rem;
+}
+
+/* --- 3. Main Card --- */
+.ticket-main-card {
+    max-width: 420px;
+    width: 100%;
+    background: var(--bg-card);
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow);
+    padding: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+/* --- 4. QR Section --- */
 .ticket-qr-section {
     display: flex;
     flex-direction: column;
     align-items: center;
-    margin-bottom: 1.5rem;
+    width: 100%;
+    margin-bottom: 1rem;
 }
 .ticket-qr-wrapper {
     background: #fff;
     border-radius: var(--radius);
-    /* Uniform padding for geometric centering. */
     padding: 1rem;
     display: flex;
     align-items: center;
     justify-content: center;
     margin-bottom: 0.5rem;
 }
-
 .ticket-qr-img {
     width: 256px;
     height: 256px;
@@ -8538,16 +8612,20 @@ nav a.active {
     padding: 2rem;
     color: var(--text-muted);
 }
-.ticket-fullscreen-btn {
-    margin-top: 0.25rem;
+.ticket-qr-actions {
     display: flex;
     align-items: center;
-    gap: 0.25rem;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    justify-content: center;
 }
+
+/* --- 5. Attendee Info Table --- */
 .ticket-info {
-    border-top: 1px solid var(--border, rgba(255, 255, 255, 0.1));
+    border-top: 1px solid var(--border);
     padding-top: 1rem;
-    margin-bottom: 1rem;
+    margin-bottom: 0.5rem;
+    width: 100%;
 }
 .ticket-info-row {
     display: flex;
@@ -8556,74 +8634,586 @@ nav a.active {
     padding: 0.375rem 0;
 }
 .ticket-info-label {
-    font-size: 0.75rem;
+    font-size: 0.7rem;
     color: var(--text-muted);
     text-transform: uppercase;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.06em;
     flex-shrink: 0;
     margin-right: 1rem;
 }
 .ticket-info-value {
-    font-size: 0.9rem;
+    font-size: 0.875rem;
     color: var(--text-primary);
     text-align: right;
     word-break: break-word;
 }
-.ticket-email-masked {
-    color: var(--text-muted);
-    font-size: 0.8rem;
-}
-.ticket-id {
-    font-family: monospace;
-    font-size: 0.75rem;
-    color: var(--text-muted);
-}
-.ticket-status-section {
-    border-top: 1px solid var(--border, rgba(255, 255, 255, 0.1));
-    padding-top: 1rem;
+
+/* --- 6. Action Cards --- */
+.ticket-action-card {
+    max-width: 420px;
+    width: 100%;
+    background: var(--bg-card);
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--accent);
+    padding: 1rem 1.25rem;
     display: flex;
     flex-direction: column;
-    align-items: center;
     gap: 0.5rem;
 }
-.ticket-status-badge {
-    display: flex;
+.ticket-action-card--deposit {
+    border-left-color: var(--warning);
+    background: linear-gradient(
+        135deg,
+        var(--warning-bg) 0%,
+        var(--bg-card) 100%
+    );
+}
+.ticket-action-card--refund {
+    border-left-color: var(--success);
+    background: linear-gradient(
+        135deg,
+        var(--success-bg) 0%,
+        var(--bg-card) 100%
+    );
+}
+.ticket-action-card--claim {
+    border-left-color: var(--accent);
+    background: linear-gradient(
+        135deg,
+        rgba(99, 102, 241, 0.08) 0%,
+        var(--bg-card) 100%
+    );
+}
+.ticket-action-card--danger {
+    border-left-color: var(--danger);
+    background: linear-gradient(
+        135deg,
+        var(--danger-bg) 0%,
+        var(--bg-card) 100%
+    );
+}
+.ticket-action-card--info {
+    border-left-color: var(--info);
+    background: linear-gradient(135deg, var(--info-bg) 0%, var(--bg-card) 100%);
+}
+.ticket-action-icon {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+}
+.ticket-action-title {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0;
+}
+.ticket-action-desc {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    margin: 0;
+    line-height: 1.4;
+}
+.ticket-action-btn {
+    display: inline-flex;
     align-items: center;
     gap: 0.375rem;
     padding: 0.5rem 1rem;
-    border-radius: 9999px;
-    font-weight: 600;
-    font-size: 0.85rem;
-}
-.ticket-status-checked-in {
-    background: rgba(34, 197, 94, 0.15);
-    color: var(--success);
-}
-.ticket-status-pending {
-    background: rgba(234, 179, 8, 0.15);
-    color: var(--warning-bright);
-}
-.ticket-status-ready {
-    background: rgba(59, 130, 246, 0.15);
-    color: var(--info);
-}
-.ticket-status-detail {
+    border-radius: var(--radius-sm);
     font-size: 0.8rem;
-    color: var(--text-muted);
-    text-align: center;
-    margin: 0;
+    font-weight: 600;
+    border: none;
+    cursor: pointer;
+    transition:
+        background 0.15s ease,
+        opacity 0.15s ease;
+    color: #fff;
+    background: var(--accent);
 }
-.ticket-claim-btn {
-    margin-top: 0.5rem;
+.ticket-action-btn:hover {
+    background: var(--accent-hover);
+}
+.ticket-action-card--deposit .ticket-action-btn {
+    background: var(--warning);
+}
+.ticket-action-card--deposit .ticket-action-btn:hover {
+    opacity: 0.85;
+}
+.ticket-action-card--refund .ticket-action-btn {
+    background: var(--success);
+}
+.ticket-action-card--refund .ticket-action-btn:hover {
+    opacity: 0.85;
+}
+.ticket-action-card--danger .ticket-action-btn {
+    background: var(--danger);
+}
+.ticket-action-card--danger .ticket-action-btn:hover {
+    opacity: 0.85;
+}
+.ticket-action-card--info .ticket-action-btn {
+    background: var(--info);
+}
+.ticket-action-card--info .ticket-action-btn:hover {
+    opacity: 0.85;
+}
+
+/* --- 7. Progress Steps / Timeline --- */
+.ticket-timeline {
+    max-width: 420px;
+    width: 100%;
+    position: relative;
+    padding-left: 2rem;
+}
+.ticket-timeline::before {
+    content: "";
+    position: absolute;
+    left: 13px;
+    top: 4px;
+    bottom: 4px;
+    width: 2px;
+    background: var(--border);
+}
+.ticket-timeline-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    position: relative;
+    padding-bottom: 1rem;
+}
+.ticket-timeline-step:last-child {
+    padding-bottom: 0;
+}
+.ticket-timeline-dot {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
     display: flex;
     align-items: center;
-    gap: 0.375rem;
+    justify-content: center;
+    flex-shrink: 0;
+    position: relative;
+    z-index: 1;
+    box-sizing: border-box;
 }
+.ticket-timeline-dot--done {
+    background: var(--success);
+    border: 2px solid var(--success);
+}
+.ticket-timeline-dot--current {
+    background: var(--bg-primary);
+    border: 2px solid var(--accent);
+}
+.ticket-timeline-dot--pending {
+    background: var(--bg-primary);
+    border: 2px solid var(--text-muted);
+}
+.ticket-timeline-content {
+    flex: 1;
+    padding-top: 0.2rem;
+}
+.ticket-timeline-title {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0;
+}
+.ticket-timeline-desc {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin: 0.125rem 0 0;
+    line-height: 1.4;
+}
+
+/* --- 8. Video Section --- */
+.ticket-video-card {
+    max-width: 560px;
+    width: 100%;
+    background: var(--bg-card);
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    overflow: hidden;
+}
+.ticket-video-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--border);
+}
+.ticket-video-header svg {
+    color: var(--danger);
+    flex-shrink: 0;
+}
+.ticket-video-header span {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+.ticket-video-embed {
+    position: relative;
+    width: 100%;
+    padding-bottom: 56.25%;
+    background: #000;
+}
+.ticket-video-embed iframe {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border: none;
+}
+.ticket-video-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.5rem 1rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--accent);
+    text-decoration: none;
+    border-top: 1px solid var(--border);
+    width: 100%;
+    box-sizing: border-box;
+    transition: background 0.15s ease;
+}
+.ticket-video-link:hover {
+    background: var(--bg-hover);
+}
+
+/* --- 9. Event Context --- */
+.ticket-event-context {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.375rem;
+    text-align: center;
+    padding: 0.75rem 1rem;
+}
+.ticket-event-badge {
+    width: 64px;
+    height: 64px;
+    border-radius: var(--radius);
+    object-fit: cover;
+}
+.ticket-event-tagline {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+.ticket-event-location {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+.ticket-event-link {
+    font-size: 0.8rem;
+    color: var(--accent);
+    text-decoration: none;
+    font-weight: 600;
+    transition: color 0.15s ease;
+}
+.ticket-event-link:hover {
+    color: var(--accent-hover);
+}
+
+/* --- 10. NFT Claimed --- */
+.ticket-nft-card {
+    max-width: 420px;
+    width: 100%;
+    background: var(--bg-card);
+    border-radius: var(--radius);
+    border: 1px solid var(--success-border);
+    padding: 1rem 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+.ticket-nft-card .ticket-action-title {
+    color: var(--success);
+}
+.ticket-nft-asset-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-family: monospace;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-sm);
+    padding: 0.5rem 0.75rem;
+}
+.ticket-nft-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--accent);
+    text-decoration: none;
+    transition: color 0.15s ease;
+}
+.ticket-nft-link:hover {
+    color: var(--accent-hover);
+}
+
+/* --- 11. Footer --- */
+.ticket-footer {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    text-align: center;
+    padding: 1rem 0.5rem 0;
+}
+.ticket-nav {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+.ticket-nav a {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    text-decoration: none;
+    transition: color 0.15s ease;
+}
+.ticket-nav a:hover {
+    color: var(--accent);
+}
+
+/* --- 12. Polling Indicator --- */
+.ticket-poll {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+}
+.ticket-poll::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    animation: ticket-poll-pulse 1.5s ease-in-out infinite;
+}
+@keyframes ticket-poll-pulse {
+    0%,
+    100% {
+        opacity: 0.3;
+    }
+    50% {
+        opacity: 1;
+    }
+}
+
+/* --- Missing variants for action cards --- */
+.ticket-action-card--pending {
+    border-left: 3px solid var(--warning);
+    background: var(--warning-bg);
+}
+.ticket-action-card--verified {
+    border-left: 3px solid var(--success);
+    background: var(--success-bg);
+}
+.ticket-action-card--reclaim {
+    border-left: 3px solid var(--danger);
+    background: var(--danger-bg);
+}
+.ticket-action-card--moved-online {
+    border-left: 3px solid var(--danger);
+    background: var(--danger-bg);
+}
+.ticket-action-card--ready {
+    border-left: 3px solid var(--info);
+    background: var(--info-bg);
+}
+.ticket-action-link {
+    display: inline-block;
+    margin-top: 0.35rem;
+    font-size: 0.8rem;
+    color: var(--accent);
+    text-decoration: none;
+}
+.ticket-action-link:hover {
+    text-decoration: underline;
+}
+
+/* --- NFT badge (used by nft_badge.rs) --- */
+.ticket-nft-claimed {
+    background: rgba(34, 197, 94, 0.08);
+    border: 1px solid rgba(34, 197, 94, 0.2);
+    border-radius: var(--radius);
+    padding: 1rem;
+    text-align: center;
+    margin-bottom: 1rem;
+}
+.ticket-nft-claimed-title {
+    font-size: 1.05rem;
+    color: var(--success-bright);
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+}
+.ticket-nft-asset-id {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.4rem 0.75rem;
+    margin: 0.35rem auto;
+    max-width: 320px;
+}
+.ticket-nft-asset-id code {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.ticket-nft-copy-btn {
+    background: none;
+    border: none;
+    color: var(--accent);
+    cursor: pointer;
+    padding: 2px;
+}
+.ticket-nft-view-btn {
+    margin-top: 0.75rem;
+}
+
+/* --- Event context badge image --- */
+.ticket-event-badge-img {
+    width: 64px;
+    height: 64px;
+    border-radius: 12px;
+    margin-bottom: 0.5rem;
+}
+
+/* --- Timeline extras --- */
+.ticket-timeline-heading {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #fff;
+    margin-bottom: 1rem;
+}
+.ticket-timeline-steps {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+.ticket-timeline-link {
+    font-size: 0.75rem;
+    color: var(--accent);
+    text-decoration: none;
+    font-weight: 500;
+}
+.ticket-timeline-link:hover {
+    text-decoration: underline;
+}
+
+/* --- Video section extras --- */
+.ticket-video-section {
+    max-width: 560px;
+    margin: 0.75rem auto 0;
+}
+.ticket-video-heading {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #fff;
+    margin-bottom: 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+.ticket-video-embed-wrapper {
+    position: relative;
+    width: 100%;
+    padding-bottom: 56.25%;
+    max-width: 560px;
+    margin: 0 auto;
+    border-radius: 8px;
+    overflow: hidden;
+}
+.ticket-video-iframe {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    min-height: 200px;
+    border: none;
+}
+
+/* --- Footer hint (in-person) --- */
 .ticket-footer-hint {
     font-size: 0.75rem;
     color: var(--text-muted);
     text-align: center;
     margin-top: 1rem;
+}
+
+/* --- 13. Responsive --- */
+@media (max-width: 480px) {
+    .ticket-page {
+        padding: 0 0.375rem 1.5rem;
+    }
+    .ticket-hero {
+        padding: 1.25rem 0.75rem 1rem;
+    }
+    .ticket-hero-title {
+        font-size: 1rem;
+    }
+    .ticket-main-card {
+        padding: 1rem;
+    }
+    .ticket-qr-img {
+        width: 220px;
+        height: 220px;
+    }
+    .ticket-action-card {
+        padding: 0.75rem 1rem;
+    }
+    .ticket-timeline {
+        padding-left: 1.5rem;
+    }
+    .ticket-timeline::before {
+        left: 10px;
+    }
+    .ticket-timeline-dot {
+        width: 24px;
+        height: 24px;
+    }
+}
+@media (max-width: 359px) {
+    .ticket-page {
+        padding: 0 0.25rem 1rem;
+    }
+    .ticket-hero {
+        padding: 1rem 0.5rem 0.75rem;
+    }
+    .ticket-main-card {
+        padding: 0.75rem;
+        border-radius: var(--radius-sm);
+    }
+    .ticket-qr-img {
+        width: 180px;
+        height: 180px;
+    }
+    .ticket-qr-wrapper {
+        padding: 0.75rem;
+    }
+    .ticket-info-label {
+        font-size: 0.65rem;
+    }
+    .ticket-info-value {
+        font-size: 0.8rem;
+    }
+    .ticket-action-card {
+        padding: 0.625rem 0.75rem;
+    }
+    .ticket-timeline-step {
+        padding-bottom: 0.75rem;
+    }
 }
 
 /* Ticket fullscreen QR overlay */

@@ -15,7 +15,7 @@ use crate::components::ProtectedRoute;
 use crate::icons::{Icon, IconName};
 use crate::pages::{
     admin::Admin, adventure::page::Adventure, claim::Claim, deposit::Deposit, landing::Landing,
-    login::Login, public_event::PublicEvent, scanner::Scanner, ticket::Ticket,
+    login::Login, public_event::PublicEvent, scanner::Scanner, ticket::page::Ticket,
 };
 
 /// Main application component.
