@@ -74,15 +74,15 @@ pub fn metaplex_explorer_url(asset_id: &str, cluster: &str) -> String {
     format!("https://core.metaplex.com/explorer/{asset_id}?env={env}")
 }
 
-/// Build a SolanaFM URL for viewing a compressed NFT asset.
-/// SolanaFM indexes cNFTs via DAS API and displays them with metadata.
-pub fn solanafm_asset_url(asset_id: &str, cluster: &str) -> String {
+/// Build an Orb Markets URL for viewing a compressed NFT asset.
+/// Orb Markets displays cNFT images and metadata reliably across clusters.
+pub fn orb_nft_url(asset_id: &str, cluster: &str) -> String {
     let cluster_param = if cluster == "mainnet-beta" {
-        String::new()
+        "?cluster=mainnet".to_string()
     } else {
-        format!("?cluster={cluster}")
+        "?cluster=devnet".to_string()
     };
-    format!("https://solanafm.com/token/{asset_id}{cluster_param}")
+    format!("https://orbmarkets.io/token/{asset_id}/metadata{cluster_param}")
 }
 
 /// Result of parsing a participation type string into a display badge.

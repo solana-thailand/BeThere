@@ -15,7 +15,7 @@ use leptos_router::params::Params;
 
 use crate::api::{self, AdventureStatusType, ClaimLookupData, ClaimMintData, QuizQuestionsData, QuizStatus, QuizSubmitData};
 use crate::icons::{Icon, IconName, wallet_icon_name};
-use crate::utils::{escape_html, format_timestamp, metaplex_explorer_url, solanafm_asset_url, solscan_tx_url};
+use crate::utils::{escape_html, format_timestamp, orb_nft_url};
 use wasm_bindgen::prelude::*;
 
 // ---------------------------------------------------------------------------
@@ -1723,7 +1723,7 @@ pub fn Claim() -> impl IntoView {
 
                         // ---- Success! ----
                         ClaimState::Success(data) => {
-                            let solanafm_url = solanafm_asset_url(&data.asset_id, &data.cluster);
+                            let orb_url = orb_nft_url(&data.asset_id, &data.cluster);
                             let asset_id_display = {
                                 let id = &data.asset_id;
                                 if id.len() > 12 {
@@ -1810,12 +1810,12 @@ pub fn Claim() -> impl IntoView {
 
                                     <div class="success-actions">
                                         <a
-                                            href=solanafm_url
+                                            href=orb_url
                                             target="_blank"
                                             rel="noopener noreferrer"
                                             class="btn btn-primary btn-block"
                                         >
-                                            "View NFT on SolanaFM ↗"
+                                            "View NFT on Orb ↗"
                                         </a>
                                     </div>
 
@@ -1880,128 +1880,66 @@ pub fn Claim() -> impl IntoView {
                                             view! { <div></div> }.into_any()
                                         }
                                     }}
+
+                                    // 5. Back to Ticket link
+                                    {
+                                        let api_id = deposit_api_id.get();
+                                        let event_id = deposit_event_id.get();
+                                        let ticket_href = if event_id.is_empty() {
+                                            format!("/ticket/{api_id}")
+                                        } else {
+                                            format!("/ticket/{api_id}?event_id={event_id}")
+                                        };
+                                        view! {
+                                            <div class="success-actions" style="margin-top:0.75rem">
+                                                <a
+                                                    href=ticket_href
+                                                    class="btn btn-outline btn-block"
+                                                >
+                                                    "← Back to Ticket"
+                                                </a>
+                                            </div>
+                                        }.into_any()
+                                    }
                                 </div>
                             }
                                 .into_any()
                         }
 
-                        // ---- Already claimed ----
-                        ClaimState::AlreadyClaimed(data) => {
-                            let claimed_display = data
-                                .claimed_at
-                                .as_deref()
-                                .map(format_timestamp)
-                                .unwrap_or_else(|| "previously".to_string());
-
-                            // Explorer links (if claim lock data is available)
-                            let has_explorer_links = data.claimed_signature.is_some()
-                                || data.claimed_asset_id.is_some();
-                            let claimed_cluster = data.cluster.as_deref().unwrap_or("devnet");
-                            let explorer_url = data.claimed_signature.as_ref().map(|sig| {
-                                solscan_tx_url(sig, claimed_cluster)
-                            });
-                            let metaplex_url = data.claimed_asset_id.as_ref().map(|asset_id| {
-                                metaplex_explorer_url(asset_id, claimed_cluster)
-                            });
-
-                            // Deposit link for refund (if applicable)
-                            let deposit_link = {
-                                let api_id = deposit_api_id.get();
-                                let event_id = deposit_event_id.get();
-                                if event_id.is_empty() {
-                                    format!("/deposit/{api_id}")
-                                } else {
-                                    format!("/deposit/{api_id}?event_id={event_id}")
-                                }
+                        // ---- Already claimed ---- redirect to ticket page
+                        ClaimState::AlreadyClaimed(_data) => {
+                            // Build ticket page URL from deposit signals
+                            let api_id = deposit_api_id.get();
+                            let event_id = deposit_event_id.get();
+                            let ticket_href = if event_id.is_empty() {
+                                format!("/ticket/{api_id}")
+                            } else {
+                                format!("/ticket/{api_id}?event_id={event_id}")
                             };
 
+                            // Redirect immediately via JS
+                            let href_clone = ticket_href.clone();
+                            leptos::task::spawn_local(async move {
+                                if let Some(window) = web_sys::window() {
+                                    let _ = window.location().set_href(&href_clone);
+                                }
+                            });
+
                             view! {
-                                <div class="claim-warning">
-                                    <ParticipantAvatar name=data.name.clone() />
-                                    <h2>"Already Claimed"</h2>
-                                    <div class="result-details">
-                                        <p>
-                                            <strong>{escape_html(&data.name)}</strong>
-                                            " — your NFT was claimed "{claimed_display}"."
-                                        </p>
-                                        {
-                                            if let Some(ref wallet) = data.claimed_wallet {
-                                                view! {
-                                                    <p><strong>"Wallet:"</strong>
-                                                        <code>{escape_html(wallet)}</code>
-                                                    </p>
-                                                }.into_any()
-                                            } else {
-                                                view! { <div></div> }.into_any()
-                                            }
-                                        }
-                                        <p class="claim-already-detail">
-                                            "Compressed NFTs may not appear in wallet apps. Use the links below to verify on-chain."
-                                        </p>
-                                    </div>
+                                <div class="claim-state-full" style="text-align:center;">
+                                    <span class="spinner spinner-lg" style="margin-bottom:1rem;"></span>
+                                    <h3 style="color:#fff;">"Already Claimed"</h3>
+                                    <p style="color:var(--text-secondary);font-size:0.9rem;">
+                                        "Redirecting to your ticket..."
+                                    </p>
+                                    <a
+                                        href=ticket_href
+                                        class="btn btn-outline"
+                                        style="margin-top:1rem;"
+                                    >
+                                        "Go to Ticket"
+                                    </a>
                                 </div>
-
-                                // Explorer links — consolidated into one row
-                                {move || {
-                                    if has_explorer_links {
-                                        view! {
-                                            <div class="success-actions">
-                                                {
-                                                    if let Some(ref url) = explorer_url {
-                                                        view! {
-                                                            <a
-                                                                href=url
-                                                                target="_blank"
-                                                                rel="noopener noreferrer"
-                                                                class="btn btn-primary btn-block"
-                                                            >
-                                                                "View TX on Solscan ↗"
-                                                            </a>
-                                                        }.into_any()
-                                                    } else {
-                                                        view! { <div></div> }.into_any()
-                                                    }
-                                                }
-                                                {
-                                                    if let Some(ref url) = metaplex_url {
-                                                        view! {
-                                                            <a
-                                                                href=url
-                                                                target="_blank"
-                                                                rel="noopener noreferrer"
-                                                                class="btn btn-outline btn-block"
-                                                            >
-                                                                "Verify NFT on Metaplex ↗"
-                                                            </a>
-                                                        }.into_any()
-                                                    } else {
-                                                        view! { <div></div> }.into_any()
-                                                    }
-                                                }
-                                            </div>
-                                        }.into_any()
-                                    } else {
-                                        view! { <div></div> }.into_any()
-                                    }
-                                }}
-
-                                // Deposit refund link (if applicable)
-                                {move || {
-                                    if deposit_enabled.get() && !deposit_api_id.get().is_empty() {
-                                        view! {
-                                            <div class="success-actions">
-                                                <a
-                                                    href=&deposit_link
-                                                    class="btn btn-outline btn-block"
-                                                >
-                                                    "Deposit & Refund Details →"
-                                                </a>
-                                            </div>
-                                        }.into_any()
-                                    } else {
-                                        view! { <div></div> }.into_any()
-                                    }
-                                }}
                             }
                                 .into_any()
                         }

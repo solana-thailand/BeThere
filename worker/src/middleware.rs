@@ -7,6 +7,7 @@
 //! - `X-XSS-Protection` — disabled (modern browsers use CSP instead)
 //! - `Referrer-Policy` — limit referrer info to origin only
 //! - `Content-Security-Policy` — restrict resource loading
+//!   - `connect-src 'self' https: wss:` — allows Solana RPC, wallet extensions (Phantom/Solflare/Backpack), and WebSocket connections
 //! - `Permissions-Policy` — limit browser feature access
 //! - `Cross-Origin-Opener-Policy` — isolate window origin
 //! - `Cross-Origin-Resource-Policy` — prevent cross-origin resource leaks
@@ -57,9 +58,9 @@ static CONTENT_SECURITY_POLICY: LazyLock<HeaderValue> = LazyLock::new(|| {
         "default-src 'self'; \
          script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://unpkg.com https://cdn.jsdelivr.net https://static.cloudflareinsights.com; \
          style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; \
-         img-src 'self' data: blob:; \
+         img-src 'self' data: blob: https:; \
          media-src 'self' blob:; \
-         connect-src 'self' https://cloudflareinsights.com; \
+         connect-src 'self' https: wss:; \
          font-src 'self' https://fonts.gstatic.com; \
          frame-ancestors 'none'; \
          base-uri 'self'; \

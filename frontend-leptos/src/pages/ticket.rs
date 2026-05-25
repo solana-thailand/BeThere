@@ -27,6 +27,9 @@ const POLL_MAX_MS: u32 = 300_000; // 5 minutes
 extern "C" {
     #[wasm_bindgen(js_name = "downloadDataUrl")]
     fn download_data_url(data_url: &str, filename: &str);
+
+    #[wasm_bindgen(js_name = "copyToClipboard")]
+    fn copy_to_clipboard_js(text: &str) -> bool;
 }
 
 // ---------------------------------------------------------------------------
@@ -61,6 +64,8 @@ pub fn Ticket() -> impl IntoView {
 
     let (state, set_state) = signal(TicketState::Loading);
     let (fullscreen_qr, set_fullscreen_qr) = signal(false);
+    // Collapsible QR toggle — collapsed by default after check-in
+    let (show_qr, set_show_qr) = signal(false);
     // Auto-refresh polling state
     let (polling_active, set_polling_active) = signal(false);
     let (polling_expired, set_polling_expired) = signal(false);
@@ -596,16 +601,16 @@ pub fn Ticket() -> impl IntoView {
                                     <div style="margin-top:1.25rem;text-align:center;">
                                         {move || {
                                             if claimed {
-                                                let solanafm_link = claimed_asset_id.as_ref().and_then(|id| {
+                                                let orb_link = claimed_asset_id.as_ref().and_then(|id| {
                                                     let c = cluster.as_deref().unwrap_or("devnet");
-                                                    if id.is_empty() { None } else { Some(utils::solanafm_asset_url(id, c)) }
+                                                    if id.is_empty() { None } else { Some(utils::orb_nft_url(id, c)) }
                                                 });
                                                 view! {
                                                     <div style="background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.2);border-radius:var(--radius);padding:0.75rem;text-align:center;">
                                                         <div style="font-size:0.85rem;color:#34d399;font-weight:600;">
                                                             "\u{2713} NFT Badge claimed successfully!"
                                                         </div>
-                                                        {if let Some(url) = solanafm_link {
+                                                        {if let Some(url) = orb_link {
                                                             view! {
                                                                 <a
                                                                     href=url
@@ -613,7 +618,7 @@ pub fn Ticket() -> impl IntoView {
                                                                     rel="noopener noreferrer"
                                                                     style="display:inline-block;margin-top:0.5rem;font-size:0.8rem;color:#818cf8;text-decoration:underline;"
                                                                 >
-                                                                    "View NFT on SolanaFM \u{2197}"
+                                                                    "View NFT on Orb \u{2197}"
                                                                 </a>
                                                             }.into_any()
                                                         } else {
@@ -735,68 +740,182 @@ pub fn Ticket() -> impl IntoView {
                                     <h1 class="ticket-title">"Your Ticket"</h1>
                                 </div>
 
-                                // Checked-in claim banner — prominent CTA at the top
-                                {if is_checked_in && !claimed && has_claim {
+                                // ── State-driven hero ──
+                                // Pre-checkin: QR as hero
+                                // Post-checkin, not claimed: Claim CTA as hero
+                                // Post-checkin, claimed: NFT badge as hero
+                                {if is_checked_in && claimed {
+                                    // ── NFT Badge hero ──
+                                    let orb_link = claimed_asset_id.as_ref().and_then(|id| {
+                                        let c = cluster.as_deref().unwrap_or("devnet");
+                                        if id.is_empty() { None } else { Some(utils::orb_nft_url(id, c)) }
+                                    });
+                                    let asset_id_short = claimed_asset_id.as_ref().map(|id| {
+                                        if id.len() > 12 {
+                                            format!("{}...{}", &id[..6], &id[id.len()-4..])
+                                        } else {
+                                            id.clone()
+                                        }
+                                    }).unwrap_or_default();
+                                    let asset_id_full = claimed_asset_id.clone().unwrap_or_default();
+                                    view! {
+                                        <div style="background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.25);border-radius:var(--radius);padding:1.25rem;text-align:center;margin-bottom:1rem;">
+                                            <div style="font-size:1.1rem;color:#34d399;font-weight:700;margin-bottom:0.5rem;">
+                                                "\u{2713} NFT Badge Claimed!"
+                                            </div>
+                                            {if !asset_id_short.is_empty() {
+                                                view! {
+                                                    <div style="display:flex;align-items:center;justify-content:center;gap:0.5rem;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:6px;padding:0.5rem 0.75rem;margin:0.5rem auto;max-width:320px;">
+                                                        <code style="font-size:0.8rem;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{asset_id_short.clone()}</code>
+                                                        <button
+                                                            style="background:none;border:none;color:var(--accent,#6366f1);cursor:pointer;padding:2px;"
+                                                            title="Copy Asset ID"
+                                                            on:click=move |_| {
+                                                                let _ = copy_to_clipboard_js(&asset_id_full);
+                                                            }
+                                                        >
+                                                            <Icon icon=IconName::Copy class="icon-sm" />
+                                                        </button>
+                                                    </div>
+                                                }.into_any()
+                                            } else {
+                                                view! { <div></div> }.into_any()
+                                            }}
+                                            {if let Some(url) = orb_link {
+                                                view! {
+                                                    <a
+                                                        href=url
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        class="btn btn-primary"
+                                                        style="margin-top:0.75rem;"
+                                                    >
+                                                        "View NFT on Orb \u{2197}"
+                                                    </a>
+                                                }.into_any()
+                                            } else {
+                                                view! { <div></div> }.into_any()
+                                            }}
+                                        </div>
+                                    }.into_any()
+                                } else if is_checked_in && !claimed && has_claim {
+                                    // ── Claim CTA hero ──
                                     let claim_cta_href = claim_href.clone();
                                     view! {
-                                        <a
-                                            href=claim_cta_href
-                                            class="btn btn-primary"
-                                            style="width:100%;margin-bottom:1rem;font-size:1rem;padding:0.85rem;"
-                                        >
-                                            <Icon icon=IconName::Gift class="icon-sm" />
-                                            " Claim Your NFT Badge →"
-                                        </a>
+                                        <div style="background:linear-gradient(135deg,rgba(99,102,241,0.15),rgba(167,139,250,0.1));border:1px solid rgba(99,102,241,0.3);border-radius:var(--radius);padding:1.25rem;text-align:center;margin-bottom:1rem;">
+                                            <div style="font-size:1rem;color:#818cf8;font-weight:600;margin-bottom:0.75rem;">
+                                                "\u{1F389} You're checked in!"
+                                            </div>
+                                            <a
+                                                href=claim_cta_href
+                                                class="btn btn-primary"
+                                                style="width:100%;font-size:1rem;padding:0.85rem;"
+                                            >
+                                                <Icon icon=IconName::Gift class="icon-sm" />
+                                                " Claim Your NFT Badge \u{2192}"
+                                            </a>
+                                        </div>
                                     }.into_any()
                                 } else {
                                     view! { <div></div> }.into_any()
                                 }}
 
-                                // QR Code section
-                                <div class="ticket-qr-section">
-                                    {if has_qr {
-                                        view! {
-                                            <div class="ticket-qr-wrapper">
-                                                <img
-                                                    src=qr_image.clone().unwrap_or_default()
-                                                    alt="Check-in QR Code"
-                                                    class="ticket-qr-img"
-                                                />
-                                            </div>
-                                            <button
-                                                class="btn btn-outline btn-sm ticket-fullscreen-btn"
-                                                on:click=move |_| set_fullscreen_qr.set(true)
-                                            >
-                                                <Icon icon=IconName::Expand class="icon-sm" />
-                                                " Full Screen"
-                                            </button>
+                                // ── QR Code section ──
+                                // Pre-checkin: always visible (hero)
+                                // Post-checkin: collapsed, togglable
+                                {if is_checked_in {
+                                    // Collapsible QR after check-in
+                                    view! {
+                                        <div style="margin-bottom:0.75rem;">
                                             <button
                                                 class="btn btn-outline btn-sm"
-                                                on:click={
-                                                    let name = name.clone();
-                                                    move |_| {
-                                                        let qr = qr_image.clone();
-                                                        if let Some(ref data_url) = qr {
-                                                            if !data_url.is_empty() {
-                                                                download_data_url(data_url, &format!("{name}-qrcode.svg"));
+                                                style="width:100%;margin-bottom:0.5rem;"
+                                                on:click=move |_| set_show_qr.set(!show_qr.get())
+                                            >
+                                                {move || if show_qr.get() {
+                                                    "\u{25B2} Hide QR Code"
+                                                } else {
+                                                    "\u{25BC} Show QR Code"
+                                                }}
+                                            </button>
+                                            <Show
+                                                when=move || show_qr.get()
+                                                fallback=|| view! { <div></div> }
+                                            >
+                                                {if has_qr {
+                                                    view! {
+                                                        <div class="ticket-qr-section">
+                                                            <div class="ticket-qr-wrapper">
+                                                                <img
+                                                                    src=qr_image.clone().unwrap_or_default()
+                                                                    alt="Check-in QR Code"
+                                                                    class="ticket-qr-img"
+                                                                />
+                                                            </div>
+                                                            <button
+                                                                class="btn btn-outline btn-sm ticket-fullscreen-btn"
+                                                                on:click=move |_| set_fullscreen_qr.set(true)
+                                                            >
+                                                                <Icon icon=IconName::Expand class="icon-sm" />
+                                                                " Full Screen"
+                                                            </button>
+                                                        </div>
+                                                    }.into_any()
+                                                } else {
+                                                    view! { <div></div> }.into_any()
+                                                }}
+                                            </Show>
+                                        </div>
+                                    }.into_any()
+                                } else {
+                                    // Pre-checkin: QR as hero
+                                    view! {
+                                        <div class="ticket-qr-section">
+                                            {if has_qr {
+                                                view! {
+                                                    <div class="ticket-qr-wrapper">
+                                                        <img
+                                                            src=qr_image.clone().unwrap_or_default()
+                                                            alt="Check-in QR Code"
+                                                            class="ticket-qr-img"
+                                                        />
+                                                    </div>
+                                                    <button
+                                                        class="btn btn-outline btn-sm ticket-fullscreen-btn"
+                                                        on:click=move |_| set_fullscreen_qr.set(true)
+                                                    >
+                                                        <Icon icon=IconName::Expand class="icon-sm" />
+                                                        " Full Screen"
+                                                    </button>
+                                                    <button
+                                                        class="btn btn-outline btn-sm"
+                                                        on:click={
+                                                            let name = name.clone();
+                                                            move |_| {
+                                                                let qr = qr_image.clone();
+                                                                if let Some(ref data_url) = qr {
+                                                                    if !data_url.is_empty() {
+                                                                        download_data_url(data_url, &format!("{name}-qrcode.svg"));
+                                                                    }
+                                                                }
                                                             }
                                                         }
-                                                    }
-                                                }
-                                            >
-                                                <Icon icon=IconName::Save class="icon-sm" />
-                                                " Save QR Code"
-                                            </button>
-                                        }.into_any()
-                                    } else {
-                                        view! {
-                                            <div class="ticket-qr-placeholder">
-                                                <Icon icon=IconName::QrCode class="icon-xl" />
-                                                <p class="hint">"QR code not yet generated"</p>
-                                            </div>
-                                        }.into_any()
-                                    }}
-                                </div>
+                                                    >
+                                                        <Icon icon=IconName::Save class="icon-sm" />
+                                                        " Save QR Code"
+                                                    </button>
+                                                }.into_any()
+                                            } else {
+                                                view! {
+                                                    <div class="ticket-qr-placeholder">
+                                                        <Icon icon=IconName::QrCode class="icon-xl" />
+                                                        <p class="hint">"QR code not yet generated"</p>
+                                                    </div>
+                                                }.into_any()
+                                            }}
+                                        </div>
+                                    }.into_any()
+                                }}
 
                                 // Attendee info
                                 <div class="ticket-info">
@@ -845,12 +964,6 @@ pub fn Ticket() -> impl IntoView {
                                     } else {
                                         view! { <div></div> }.into_any()
                                     }}
-                                    <div class="ticket-info-row">
-                                        <span class="ticket-info-label">"ID"</span>
-                                        <span class="ticket-info-value ticket-id">
-                                            {utils::escape_html(&api_id)}
-                                        </span>
-                                    </div>
                                 </div>
 
                                 // Status section
@@ -977,7 +1090,6 @@ pub fn Ticket() -> impl IntoView {
                                     }}
                                     {if is_checked_in {
                                         let detail = status_detail;
-                                        let href = claim_href;
                                         view! {
                                             <div class="ticket-status-badge ticket-status-checked-in">
                                                 <Icon icon=IconName::Check class="icon-sm" />
@@ -988,45 +1100,6 @@ pub fn Ticket() -> impl IntoView {
                                                     <p class="ticket-status-detail">
                                                         {detail}
                                                     </p>
-                                                }.into_any()
-                                            } else {
-                                                view! { <div></div> }.into_any()
-                                            }}
-                                            {if claimed {
-                                                let solanafm_link = claimed_asset_id.as_ref().and_then(|id| {
-                                                    let c = cluster.as_deref().unwrap_or("devnet");
-                                                    if id.is_empty() { None } else { Some(utils::solanafm_asset_url(id, c)) }
-                                                });
-                                                view! {
-                                                    <div style="background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.2);border-radius:var(--radius);padding:0.6rem 0.75rem;text-align:center;margin-top:0.5rem;">
-                                                        <div style="font-size:0.85rem;color:#34d399;font-weight:600;">
-                                                            "\u{2713} NFT Badge claimed!"
-                                                        </div>
-                                                        {if let Some(url) = solanafm_link {
-                                                            view! {
-                                                                <a
-                                                                    href=url
-                                                                    target="_blank"
-                                                                    rel="noopener noreferrer"
-                                                                    style="display:inline-block;margin-top:0.35rem;font-size:0.8rem;color:#818cf8;text-decoration:underline;"
-                                                                >
-                                                                    "View NFT on SolanaFM \u{2197}"
-                                                                </a>
-                                                            }.into_any()
-                                                        } else {
-                                                            view! { <div></div> }.into_any()
-                                                        }}
-                                                    </div>
-                                                }.into_any()
-                                            } else if has_claim {
-                                                view! {
-                                                    <a
-                                                        href=href
-                                                        class="btn btn-primary ticket-claim-btn"
-                                                    >
-                                                        <Icon icon=IconName::Gift class="icon-sm" />
-                                                        " Claim Your NFT"
-                                                    </a>
                                                 }.into_any()
                                             } else {
                                                 view! { <div></div> }.into_any()
