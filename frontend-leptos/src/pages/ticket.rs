@@ -23,6 +23,30 @@ const POLL_INTERVAL_MS: u32 = 10_000;
 /// Maximum duration for auto-refresh polling before stopping.
 const POLL_MAX_MS: u32 = 300_000; // 5 minutes
 
+/// Extract YouTube embed URL from various YouTube link formats.
+///
+/// Supports: watch?v=, youtu.be/, /live/, /shorts/, /embed/
+/// Returns empty string if not a YouTube URL or video ID can't be extracted.
+fn youtube_embed_url(url: &str) -> String {
+    if !url.contains("youtube.com") && !url.contains("youtu.be") {
+        return String::new();
+    }
+    let vid = if url.contains("youtu.be/") {
+        url.split("youtu.be/").nth(1).map(|s| s.split('?').next().unwrap_or("")).unwrap_or("")
+    } else if url.contains("v=") {
+        url.split("v=").nth(1).map(|s| s.split('&').next().unwrap_or("")).unwrap_or("")
+    } else if url.contains("/live/") {
+        url.split("/live/").nth(1).map(|s| s.split('?').next().unwrap_or("")).unwrap_or("")
+    } else if url.contains("/shorts/") {
+        url.split("/shorts/").nth(1).map(|s| s.split('?').next().unwrap_or("")).unwrap_or("")
+    } else if url.contains("/embed/") {
+        url.split("/embed/").nth(1).map(|s| s.split('?').next().unwrap_or("")).unwrap_or("")
+    } else {
+        ""
+    };
+    if vid.is_empty() { String::new() } else { format!("https://www.youtube.com/embed/{vid}") }
+}
+
 #[wasm_bindgen(module = "/js/download.js")]
 extern "C" {
     #[wasm_bindgen(js_name = "downloadDataUrl")]
@@ -712,19 +736,7 @@ pub fn Ticket() -> impl IntoView {
                                 // Video / Livestream section (online attendees)
                                 {if has_video {
                                     let url = video_url.clone();
-                                    let is_yt = url.contains("youtube.com") || url.contains("youtu.be");
-                                    let embed_url = if is_yt {
-                                        let vid = if url.contains("youtu.be/") {
-                                            url.split("youtu.be/").nth(1).map(|s| s.split('?').next().unwrap_or("")).unwrap_or("").to_string()
-                                        } else if url.contains("v=") {
-                                            url.split("v=").nth(1).map(|s| s.split('&').next().unwrap_or("")).unwrap_or("").to_string()
-                                        } else if url.contains("/live/") {
-                                            url.split("/live/").nth(1).map(|s| s.split('?').next().unwrap_or("")).unwrap_or("").to_string()
-                                        } else {
-                                            String::new()
-                                        };
-                                        if vid.is_empty() { String::new() } else { format!("https://www.youtube.com/embed/{vid}") }
-                                    } else { String::new() };
+                                    let embed_url = youtube_embed_url(&url);
 
                                     if !embed_url.is_empty() {
                                             let link = url.clone();
@@ -1252,19 +1264,7 @@ pub fn Ticket() -> impl IntoView {
                             // Video / Livestream section (in-person attendees)
                             {if has_video {
                                 let url = video_url.clone();
-                                let is_yt = url.contains("youtube.com") || url.contains("youtu.be");
-                                let embed_url = if is_yt {
-                                    let vid = if url.contains("youtu.be/") {
-                                        url.split("youtu.be/").nth(1).map(|s| s.split('?').next().unwrap_or("")).unwrap_or("").to_string()
-                                    } else if url.contains("v=") {
-                                        url.split("v=").nth(1).map(|s| s.split('&').next().unwrap_or("")).unwrap_or("").to_string()
-                                    } else if url.contains("/live/") {
-                                        url.split("/live/").nth(1).map(|s| s.split('?').next().unwrap_or("")).unwrap_or("").to_string()
-                                    } else {
-                                        String::new()
-                                    };
-                                    if vid.is_empty() { String::new() } else { format!("https://www.youtube.com/embed/{vid}") }
-                                } else { String::new() };
+                                let embed_url = youtube_embed_url(&url);
 
                                 if !embed_url.is_empty() {
                                     let link = url.clone();
