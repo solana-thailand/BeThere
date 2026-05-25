@@ -91,6 +91,8 @@ pub async fn get_deposit_status_handler(
         deadline_expired,
         registration_date,
         in_person_available,
+        usdc_deposits_accepted: event.escrow_status
+            == event_checkin_domain::models::event::EscrowStatus::Initialized,
     }))
 }
 

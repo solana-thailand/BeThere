@@ -64,6 +64,10 @@ pub struct DepositStatusResponse {
     /// Whether in-person capacity is still available (for reclaim flow).
     #[serde(default)]
     pub in_person_available: Option<bool>,
+    /// Whether USDC (on-chain escrow) deposits are currently accepted.
+    /// `true` only when escrow_status is `Initialized`.
+    #[serde(default)]
+    pub usdc_deposits_accepted: bool,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]

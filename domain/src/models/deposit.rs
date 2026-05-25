@@ -180,6 +180,11 @@ pub struct DepositStatusResponse {
     /// Some(false) = capacity full, cannot reclaim.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub in_person_available: Option<bool>,
+    /// Whether USDC (on-chain escrow) deposits are currently accepted.
+    /// `true` only when escrow_status is `Initialized`.
+    /// Frontend uses this to hide the USDC payment option when escrow is closed/deactivated.
+    #[serde(default)]
+    pub usdc_deposits_accepted: bool,
 }
 
 /// Request body for POST /api/deposit/thb/verify — admin verifies/rejects a slip.

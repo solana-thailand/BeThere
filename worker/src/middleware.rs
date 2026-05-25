@@ -8,6 +8,7 @@
 //! - `Referrer-Policy` — limit referrer info to origin only
 //! - `Content-Security-Policy` — restrict resource loading
 //!   - `connect-src 'self' https: wss:` — allows Solana RPC, wallet extensions (Phantom/Solflare/Backpack), and WebSocket connections
+//!   - `frame-src https://www.youtube.com https://www.youtube-nocookie.com` — allows YouTube iframe embeds on ticket pages
 //! - `Permissions-Policy` — limit browser feature access
 //! - `Cross-Origin-Opener-Policy` — isolate window origin
 //! - `Cross-Origin-Resource-Policy` — prevent cross-origin resource leaks
@@ -60,6 +61,7 @@ static CONTENT_SECURITY_POLICY: LazyLock<HeaderValue> = LazyLock::new(|| {
          style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; \
          img-src 'self' data: blob: https:; \
          media-src 'self' blob:; \
+         frame-src https://www.youtube.com https://www.youtube-nocookie.com; \
          connect-src 'self' https: wss:; \
          font-src 'self' https://fonts.gstatic.com; \
          frame-ancestors 'none'; \

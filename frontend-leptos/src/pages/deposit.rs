@@ -1526,6 +1526,8 @@ pub fn Deposit() -> impl IntoView {
                             let data_clone = data.clone();
                             let wallets = detected_wallets.get();
                             let is_dev_mode = data.dev_mode;
+                            let usdc_accepted = data.usdc_deposits_accepted;
+                            let show_usdc = is_dev_mode && usdc_accepted;
                             let deposit_deadline = data_clone.deposit_deadline_hours;
                             let deadline_expired = data_clone.deadline_expired;
                             let can_reclaim = data_clone.in_person_available.unwrap_or(false);
@@ -1602,7 +1604,7 @@ pub fn Deposit() -> impl IntoView {
                                         None => view! {
                                             // Step 1: Pick payment method
                                             <div class="deposit-method-cards">
-                                                {if is_dev_mode {
+                                                {if show_usdc {
                                                     view! {
                                                         <div class="deposit-method-card"
                                                             on:click=move |_| set_payment_choice.set(Some(PaymentChoice::Usdc))>
@@ -1643,7 +1645,7 @@ pub fn Deposit() -> impl IntoView {
                                             </button>
 
                                     // USDC Card — Step 2a
-                                    {if is_dev_mode {
+                                    {if show_usdc {
                                         view! {
                                             <div class="card">
                                                 <div class="card-header">
