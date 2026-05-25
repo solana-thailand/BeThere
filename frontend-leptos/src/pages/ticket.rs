@@ -27,7 +27,10 @@ const POLL_MAX_MS: u32 = 300_000; // 5 minutes
 extern "C" {
     #[wasm_bindgen(js_name = "downloadDataUrl")]
     fn download_data_url(data_url: &str, filename: &str);
+}
 
+#[wasm_bindgen(module = "/js/qr_generate.js")]
+extern "C" {
     #[wasm_bindgen(js_name = "copyToClipboard")]
     fn copy_to_clipboard_js(text: &str) -> bool;
 }
