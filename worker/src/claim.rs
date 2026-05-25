@@ -32,6 +32,16 @@ pub(crate) fn claim_lock_key(event_id: &str, token: &str) -> String {
     format!("event:{event_id}:claim_lock:{token}")
 }
 
+/// Build an Orb Markets explorer URL for the claimed NFT.
+fn orb_nft_url(asset_id: &str, cluster: &str) -> String {
+    let cluster_param = if cluster == "mainnet-beta" {
+        "?cluster=mainnet"
+    } else {
+        "?cluster=devnet"
+    };
+    format!("https://orbmarkets.io/token/{asset_id}/metadata{cluster_param}")
+}
+
 /// Try to acquire a claim lock. Returns Ok(()) if acquired, Err if already locked.
 /// Sets a 5-minute TTL as safety net.
 ///
@@ -759,10 +769,19 @@ pub async fn execute_claim(
     // 10. Mark as claimed in Google Sheet (uses pre-resolved mapping)
     let claimed_at = Utc::now().to_rfc3339();
 
+    // Compute cluster for Orb explorer proof URL
+    let cluster = if config.solana.rpc_url.contains("mainnet") {
+        "mainnet-beta"
+    } else {
+        "devnet"
+    };
+    let nft_proof_url = orb_nft_url(&mint_result.asset_id, cluster);
+
     if let Err(ref e) = crate::sheets::mark_claimed(
         attendee.row_index,
         wallet_address,
         &claimed_at,
+        &nft_proof_url,
         &mapping,
         state,
         &event.sheet_id,
@@ -802,12 +821,7 @@ pub async fn execute_claim(
         "claim fulfilled"
     );
 
-    // 12. Return result
-    let cluster = if config.solana.rpc_url.contains("mainnet") {
-        "mainnet-beta"
-    } else {
-        "devnet"
-    };
+    // 12. Return result (cluster already computed above for proof URL)
 
     Ok(ClaimResult {
         name: display_name,

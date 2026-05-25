@@ -205,13 +205,14 @@ pub async fn clear_checked_in(
     Ok(())
 }
 
-/// Mark an attendee as claimed by writing wallet and claimed_at columns.
+/// Mark an attendee as claimed by writing wallet, claimed_at, and nft_proof_url columns.
 /// Called after a successful cNFT mint to persist the claim on the Google Sheet.
 #[allow(clippy::too_many_arguments)]
 pub async fn mark_claimed(
     row_index: usize,
     wallet_address: &str,
     claimed_at: &str,
+    nft_proof_url: &str,
     mapping: &ColumnMapping,
     state: &AppState,
     sheet_id: &str,
@@ -224,6 +225,7 @@ pub async fn mark_claimed(
 
     let col_solana = mapping.column_letter(CK::SolanaAddress);
     let col_claimed_at = mapping.column_letter(CK::ClaimedAt);
+    let col_nft_proof_url = mapping.column_letter(CK::NftProofUrl);
 
     let data = vec![
         ValueRange {
@@ -233,6 +235,10 @@ pub async fn mark_claimed(
         ValueRange {
             range: format!("{sheet_name}!{col_claimed_at}{row_index}"),
             values: vec![vec![claimed_at.to_string()]],
+        },
+        ValueRange {
+            range: format!("{sheet_name}!{col_nft_proof_url}{row_index}"),
+            values: vec![vec![nft_proof_url.to_string()]],
         },
     ];
 
@@ -246,7 +252,7 @@ pub async fn mark_claimed(
 
     batch_update_sheet(&url, &body, &access_token).await?;
 
-    tracing::info!(row_index = row_index, wallet_address = %wallet_address, "marked row as claimed");
+    tracing::info!(row_index = row_index, wallet_address = %wallet_address, nft_proof_url = %nft_proof_url, "marked row as claimed");
 
     invalidate_attendee_cache(kv, sheet_id, sheet_name).await;
     Ok(claimed_at.to_string())

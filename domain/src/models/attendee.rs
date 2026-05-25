@@ -68,7 +68,8 @@ pub struct Attendee {
     pub qr_code_url: Option<String>,
     pub claim_token: Option<String>,
     pub claimed_at: Option<String>,
-    // Section 6: Bank & Refund (X–AB)
+    pub nft_proof_url: Option<String>,
+    // Section 6: Bank & Refund (Y–AC)
     pub bank_account: Option<String>,
     pub bank_name: Option<String>,
     pub account_name: Option<String>,
@@ -150,7 +151,8 @@ pub enum ColumnKey {
     QrCodeUrl,
     ClaimToken,
     ClaimedAt,
-    // Section 6: Bank & Refund (X–AB)
+    NftProofUrl,
+    // Section 6: Bank & Refund (Y–AC)
     BankAccount,
     BankName,
     AccountName,
@@ -190,7 +192,8 @@ impl ColumnKey {
             ColumnKey::QrCodeUrl,
             ColumnKey::ClaimToken,
             ColumnKey::ClaimedAt,
-            // Section 6: Bank & Refund (X–AB)
+            ColumnKey::NftProofUrl,
+            // Section 6: Bank & Refund (Y–AC)
             ColumnKey::BankAccount,
             ColumnKey::BankName,
             ColumnKey::AccountName,
@@ -248,7 +251,8 @@ impl ColumnKey {
             ColumnKey::QrCodeUrl => &["qr_code_url", "qr_code", "qr_url"],
             ColumnKey::ClaimToken => &["claim_token"],
             ColumnKey::ClaimedAt => &["claimed_at"],
-            // Section 6: Bank & Refund (X–AB)
+            ColumnKey::NftProofUrl => &["nft_proof_url", "nft_link", "proof_url"],
+            // Section 6: Bank & Refund (Y–AC)
             ColumnKey::BankAccount => &["bank_account", "bank_account_number"],
             ColumnKey::BankName => &["bank_name", "bank"],
             ColumnKey::AccountName => &["account_name", "account_holder"],
@@ -279,8 +283,8 @@ impl ColumnMapping {
     ///   Section 2 — Registration (F–I):  ticket_name, registration_date, approval_status, participation_type
     ///   Section 3 — Contact (J–L):  phone, contact_channel, contact_handle
     ///   Section 4 — Deposit (M–Q):  deposit_agreed, deposit_method, deposit_amount, deposit_tx_signature, deposit_verified
-    ///   Section 5 — Lifecycle (R–W):  checked_in_at, checked_in_by, solana_address, qr_code_url, claim_token, claimed_at
-    ///   Section 6 — Bank & Refund (X–AB):  bank_account, bank_name, account_name, refund_status, send_email_status
+    ///   Section 5 — Lifecycle (R–X):  checked_in_at, checked_in_by, solana_address, qr_code_url, claim_token, claimed_at, nft_proof_url
+    ///   Section 6 — Bank & Refund (Y–AC):  bank_account, bank_name, account_name, refund_status, send_email_status
     pub fn hardcoded() -> Self {
         // Section 1: Attendee Identity (A–E)
         let mut map = HashMap::new();
@@ -311,15 +315,16 @@ impl ColumnMapping {
         map.insert("qr_code_url".into(), 20); // U
         map.insert("claim_token".into(), 21); // V
         map.insert("claimed_at".into(), 22); // W
-        // Section 6: Bank & Refund (X–AB)
-        map.insert("bank_account".into(), 23); // X
-        map.insert("bank_name".into(), 24); // Y
-        map.insert("account_name".into(), 25); // Z
-        map.insert("refund_status".into(), 26); // AA
-        map.insert("send_email_status".into(), 27); // AB
+        map.insert("nft_proof_url".into(), 23); // X
+        // Section 6: Bank & Refund (Y–AC)
+        map.insert("bank_account".into(), 24); // Y
+        map.insert("bank_name".into(), 25); // Z
+        map.insert("account_name".into(), 26); // AA
+        map.insert("refund_status".into(), 27); // AB
+        map.insert("send_email_status".into(), 28); // AC
         Self {
             map,
-            total_columns: 28,
+            total_columns: 29,
         }
     }
 
@@ -452,7 +457,8 @@ pub struct AttendeeRow {
     pub qr_code_url: Option<String>,
     pub claim_token: Option<String>,
     pub claimed_at: Option<String>,
-    // Section 6: Bank & Refund (X–AB)
+    pub nft_proof_url: Option<String>,
+    // Section 6: Bank & Refund (Y–AC)
     pub bank_account: Option<String>,
     pub bank_name: Option<String>,
     pub account_name: Option<String>,
@@ -506,6 +512,7 @@ impl AttendeeRow {
         let qr_code_url = get_opt(idx(ColumnKey::QrCodeUrl));
         let claim_token = get_opt(idx(ColumnKey::ClaimToken));
         let claimed_at = get_opt(idx(ColumnKey::ClaimedAt));
+        let nft_proof_url = get_opt(idx(ColumnKey::NftProofUrl));
         let checked_in_at = get_opt(idx(ColumnKey::CheckedInAt));
         let checked_in_by = get_opt(idx(ColumnKey::CheckedInBy));
 
@@ -550,6 +557,7 @@ impl AttendeeRow {
             qr_code_url,
             claim_token,
             claimed_at,
+            nft_proof_url,
             bank_account,
             bank_name,
             account_name,
@@ -590,6 +598,7 @@ impl AttendeeRow {
             qr_code_url: self.qr_code_url.clone(),
             claim_token: self.claim_token.clone(),
             claimed_at: self.claimed_at.clone(),
+            nft_proof_url: self.nft_proof_url.clone(),
             bank_account: self.bank_account.clone(),
             bank_name: self.bank_name.clone(),
             account_name: self.account_name.clone(),
@@ -655,6 +664,7 @@ mod tests {
             qr_code_url: None,
             claim_token: None,
             claimed_at: None,
+            nft_proof_url: None,
             bank_account: None,
             bank_name: None,
             account_name: None,
@@ -743,12 +753,13 @@ mod tests {
         assert_eq!(mapping.get(ColumnKey::SolanaAddress), Some(19)); // T
         assert_eq!(mapping.get(ColumnKey::ClaimToken), Some(21)); // V
         // Section 6: Bank & Refund
-        assert_eq!(mapping.get(ColumnKey::BankAccount), Some(23)); // X
-        assert_eq!(mapping.get(ColumnKey::BankName), Some(24)); // Y
-        assert_eq!(mapping.get(ColumnKey::AccountName), Some(25)); // Z
-        assert_eq!(mapping.get(ColumnKey::RefundStatus), Some(26)); // AA
-        assert_eq!(mapping.get(ColumnKey::SendEmailStatus), Some(27)); // AB
-        assert_eq!(mapping.total_columns, 28);
+        assert_eq!(mapping.get(ColumnKey::NftProofUrl), Some(23)); // X
+        assert_eq!(mapping.get(ColumnKey::BankAccount), Some(24)); // Y
+        assert_eq!(mapping.get(ColumnKey::BankName), Some(25)); // Z
+        assert_eq!(mapping.get(ColumnKey::AccountName), Some(26)); // AA
+        assert_eq!(mapping.get(ColumnKey::RefundStatus), Some(27)); // AB
+        assert_eq!(mapping.get(ColumnKey::SendEmailStatus), Some(28)); // AC
+        assert_eq!(mapping.total_columns, 29);
     }
 
     #[test]
@@ -863,8 +874,8 @@ mod tests {
     #[test]
     fn test_last_column_letter_hardcoded() {
         let mapping = ColumnMapping::hardcoded();
-        // 28 columns → last index 27 → "AB"
-        assert_eq!(mapping.last_column_letter(), "AB");
+        // 29 columns → last index 28 → "AC"
+        assert_eq!(mapping.last_column_letter(), "AC");
     }
 
     #[test]

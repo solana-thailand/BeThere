@@ -53,6 +53,7 @@ fn walkin_to_attendee(w: &WalkinAttendee, row_index: usize) -> Attendee {
         qr_code_url: None,
         claim_token: Some(w.claim_token.clone()),
         claimed_at: w.claimed_at.clone(),
+        nft_proof_url: None,
         bank_account: None,
         bank_name: None,
         account_name: None,

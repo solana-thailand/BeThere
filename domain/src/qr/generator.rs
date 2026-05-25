@@ -83,6 +83,7 @@ mod tests {
             solana_address: None,
             claim_token: None,
             claimed_at: None,
+            nft_proof_url: None,
             bank_account: None,
             bank_name: None,
             account_name: None,
