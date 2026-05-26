@@ -64,3 +64,6 @@ __pycache__/
 # Academic deliverables (internal, not for public repo)
 .deliverables/
 .issues/031_*
+
+.dev.vars*
+!.dev.vars.example
