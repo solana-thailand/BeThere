@@ -411,6 +411,34 @@ pub async fn get_public_ticket(
         (None, None)
     };
 
+    // Rollover target event: find an upcoming event by the same organizer where the
+    // attendee can roll over their verified USDC deposit from this past event.
+    let now_ms = chrono::Utc::now().timestamp_millis();
+    let rollover_target_event = if let Some(kv_ref) = kv {
+        let ds = deposit_status.as_ref();
+        let is_usdc_verified = ds.is_some_and(|d| {
+            d.verified && d.method == event_checkin_domain::models::deposit::DepositMethod::Usdc
+        });
+        let is_not_refunded = ds.is_some_and(|_| {
+            // For USDC, refund is tracked on-chain (escrow indexer). The deposit_status
+            // itself doesn't carry a `refunded` flag, so we check thb_deposit as a
+            // fallback — USDC deposits won't have a thb_deposit record, so this is None.
+            thb_deposit.is_none() || !thb_deposit.as_ref().is_some_and(|t| t.refunded)
+        });
+
+        if is_usdc_verified
+            && attendee.is_checked_in()
+            && is_not_refunded
+            && event.event_end_ms < now_ms
+        {
+            find_rollover_target(kv_ref, &event, &attendee.api_id, now_ms).await
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
     let data = json!({
         "attendee": response,
         "qr_image": qr_image,
@@ -440,6 +468,7 @@ pub async fn get_public_ticket(
         "event_slug": event.slug,
         "refund_link": attendee.refund_link,
         "escrow_status": format!("{}", event.escrow_status),
+        "rollover_target_event": rollover_target_event,
     });
     Ok(ApiOk::new(data))
 }
@@ -493,6 +522,89 @@ async fn get_cached_qr_image(
     }
 
     Some(image)
+}
+
+/// Find an upcoming event by the same organizer that qualifies as a rollover target.
+///
+/// Criteria:
+/// - Same organizer (matched via `organization_id` or `organizer_emails` overlap)
+/// - Deposits enabled with escrow initialized/active
+/// - Event is upcoming (`event_end_ms > now_ms`)
+/// - Same `deposit_amount_usdc`
+/// - Attendee does NOT already have a deposit on that event
+async fn find_rollover_target(
+    kv: &KvStore,
+    source_event: &event_checkin_domain::models::event::EventConfig,
+    attendee_id: &str,
+    now_ms: i64,
+) -> Option<serde_json::Value> {
+    let all_events = crate::event_store::list_events(kv).await.ok()?;
+
+    for meta in &all_events {
+        // Skip same event
+        if meta.id == source_event.id {
+            continue;
+        }
+
+        // Must be upcoming
+        if meta.event_end_ms <= now_ms {
+            continue;
+        }
+
+        // Deposits enabled
+        if !meta.deposit_enabled {
+            continue;
+        }
+
+        // Escrow initialized or active
+        if !matches!(
+            meta.escrow_status,
+            event_checkin_domain::models::event::EscrowStatus::Initialized
+        ) {
+            continue;
+        }
+
+        // Same organizer: match via organization_id or overlapping organizer_emails
+        let same_org = !source_event.organization_id.is_empty()
+            && source_event.organization_id == meta.organization_id;
+        let same_emails = !source_event.organizer_emails.is_empty()
+            && source_event
+                .organizer_emails
+                .iter()
+                .any(|e| meta.organizer_emails.contains(e));
+        if !same_org && !same_emails {
+            continue;
+        }
+
+        // Load full config to check deposit_amount_usdc
+        let target_config = crate::event_store::get_event_config(kv, &meta.id)
+            .await
+            .ok()??;
+
+        // Same deposit amount
+        if target_config.deposit_amount_usdc != source_event.deposit_amount_usdc {
+            continue;
+        }
+
+        // Attendee does NOT already have a deposit on this event
+        let existing = crate::event_store::get_deposit_status(kv, &meta.id, attendee_id)
+            .await
+            .ok()
+            .flatten();
+        if existing.is_some() {
+            continue;
+        }
+
+        // Found a match
+        return Some(serde_json::json!({
+            "event_id": meta.id,
+            "event_name": meta.name,
+            "event_slug": meta.slug,
+            "deposit_amount_usdc": target_config.deposit_amount_usdc,
+        }));
+    }
+
+    None
 }
 
 /// POST /api/admin/flush-cache

@@ -64,6 +64,7 @@ pub fn InPersonView(
         nft_image_url,
         deposit_href,
         orb_link,
+        rollover_target_event,
         ..
     } = view_data;
 
@@ -218,6 +219,26 @@ pub fn InPersonView(
                         view! {
                             <DepositPendingCard method=dep.method.clone() />
                         }.into_any()
+                    }}
+                    // Rollover opportunity (checked-in with verified USDC deposit and target event available)
+                    {if let Some(ref target) = rollover_target_event {
+                        if dep.verified && is_checked_in {
+                            let target_name = target.event_name.clone();
+                            let target_event_id = target.event_id.clone();
+                            view! {
+                                <RolloverActionCard
+                                    target_event_name=target_name
+                                    on_rollover=Box::new(move || {
+                                        // TODO: trigger wallet signing flow
+                                        log::info!("[rollover] clicked for target event: {}", target_event_id);
+                                    })
+                                />
+                            }.into_any()
+                        } else {
+                            view! { <div></div> }.into_any()
+                        }
+                    } else {
+                        view! { <div></div> }.into_any()
                     }}
                     {if dep.refunded {
                         view! {

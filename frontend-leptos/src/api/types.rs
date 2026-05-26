@@ -242,6 +242,15 @@ pub struct AttendeesData {
     pub has_more: bool,
 }
 
+/// Eligible rollover target event info (returned when attendee has a verified USDC deposit on a past event).
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct RolloverTargetEvent {
+    pub event_id: String,
+    pub event_name: String,
+    pub event_slug: String,
+    pub deposit_amount_usdc: u64,
+}
+
 /// Deposit status info (optional — only for events with deposit enabled).
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct DepositInfo {
@@ -332,6 +341,9 @@ pub struct AttendeeData {
     /// Event slug for navigation.
     #[serde(default)]
     pub event_slug: String,
+    /// Eligible rollover target event (present when attendee has verified USDC deposit on a past event).
+    #[serde(default)]
+    pub rollover_target_event: Option<RolloverTargetEvent>,
     /// Refund link filled in by organizer (e.g., bank transfer receipt link).
     #[serde(default)]
     pub refund_link: Option<String>,
