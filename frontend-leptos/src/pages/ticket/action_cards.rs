@@ -7,14 +7,31 @@ use leptos::prelude::*;
 /// Deposit required action card — prompts attendee to pay their deposit.
 #[component]
 pub fn DepositActionCard(
-    /// Deposit amount in THB (0 = no amount shown)
+    /// Deposit amount in USDC (smallest unit, e.g. 15000000 = 15 USDC). 0 = not configured.
+    amount_usdc: u64,
+    /// Deposit amount in THB. 0 = not configured.
     amount_thb: u64,
+    /// Whether the on-chain escrow is closed (USDC deposit unavailable).
+    #[prop(default = false)]
+    escrow_closed: bool,
     /// Deadline in hours after registration
     deadline_hours: Option<u32>,
     /// Link to the deposit page
     #[prop(into)]
     deposit_href: String,
 ) -> impl IntoView {
+    let show_usdc = amount_usdc > 0 && !escrow_closed;
+    let show_thb = amount_thb > 0;
+
+    // Build primary label
+    let primary_label = if show_thb {
+        format!("{amount_thb} THB")
+    } else if show_usdc {
+        format!("${:.2} USDC", amount_usdc as f64 / 1_000_000.0)
+    } else {
+        "Deposit Required".to_string()
+    };
+
     view! {
         <div class="ticket-action-card ticket-action-card--deposit">
             <div class="ticket-action-icon">
@@ -22,12 +39,29 @@ pub fn DepositActionCard(
             </div>
             <div>
                 <div class="ticket-action-title">
-                    {if amount_thb > 0 {
-                        format!("Deposit Required: {amount_thb} THB")
-                    } else {
-                        "Deposit Required".to_string()
-                    }}
+                    {format!("Deposit Required: {primary_label}")}
                 </div>
+                // Show secondary payment method when both are available
+                {if show_thb && show_usdc {
+                    let usdc_str = format!("${:.2} USDC", amount_usdc as f64 / 1_000_000.0);
+                    view! {
+                        <div class="ticket-action-desc" style="margin-bottom:0.25rem;">
+                            <span style="color:var(--text-secondary);font-size:0.8rem;">
+                                "Also payable as "{usdc_str}" via Solana"
+                            </span>
+                        </div>
+                    }.into_any()
+                } else if amount_usdc > 0 && escrow_closed {
+                    view! {
+                        <div class="ticket-action-desc" style="margin-bottom:0.25rem;">
+                            <span style="color:var(--text-secondary);font-size:0.8rem;">
+                                "USDC deposit is no longer available (escrow closed)"
+                            </span>
+                        </div>
+                    }.into_any()
+                } else {
+                    view! { <div></div> }.into_any()
+                }}
                 <div class="ticket-action-desc">
                     {if let Some(hours) = deadline_hours {
                         format!("Complete your deposit within {hours} hours of registration to keep your in-person spot.")

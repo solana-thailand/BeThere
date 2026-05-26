@@ -433,6 +433,7 @@ pub async fn get_public_ticket(
         "cluster": cluster,
         "deposit_enabled": event.deposit_enabled,
         "deposit_deadline_hours": event.deposit_deadline_hours,
+        "deposit_amount_usdc": event.deposit_amount_usdc,
         "deposit_amount_thb": event.deposit_amount_thb,
         "deadline_expired": deadline_expired,
         "in_person_available": in_person_available,

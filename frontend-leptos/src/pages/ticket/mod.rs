@@ -1,7 +1,11 @@
 pub mod action_cards;
 pub mod event_context;
 pub mod hero;
+pub mod in_person_view;
 pub mod nft_badge;
+pub mod online_view;
 pub mod page;
+pub mod qr_section;
 pub mod timeline;
 pub mod video_section;
+pub mod view_data;

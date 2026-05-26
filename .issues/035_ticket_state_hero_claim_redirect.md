@@ -8,6 +8,13 @@ The ticket page for in-person attendees has several UX problems:
 - Duplicate claim CTA — banner at top AND button in status section
 - Backend ID (`api_id`) shown to attendees (irrelevant)
 
+### Additional Deposit UX Improvements (added 2026-05)
+- **Escrow-aware deposit display** — When on-chain escrow is closed/cancelled, USDC deposit is no longer available. The public event page and ticket page now hide USDC and show only THB when escrow is closed.
+- **Clearer payment method labels** — Deposit section on public event page shows THB (via PromptPay) and USDC (via Solana) as separate labeled lines instead of a single combined string.
+- **USDC struck-through when escrow closed** — Shows as crossed-out with "(closed)" label so attendees understand what happened.
+- **Backend: `deposit_amount_usdc` added to ticket API response** — The ticket endpoint now returns both USDC and THB amounts.
+- **Backend: `escrow_status` added to public event API response** — Frontend can now detect escrow state.
+
 The claim page also has redundancy:
 - "Already Claimed" state duplicates what the ticket page already shows
 - No easy way to get back to the ticket page after claiming
@@ -48,24 +55,43 @@ Previous session already updated:
 - `solanafm.com/token/` → `orbmarkets.io/token/{id}/metadata?cluster=...`
 - Renamed `solanafm_asset_url` → `orb_nft_url` in `utils.rs`
 
-## Files to Change
+## Files Changed
 
 | File | Change |
 |------|--------|
-| `frontend-leptos/src/pages/ticket.rs` | State-driven hero, collapsible QR, remove ID row, remove duplicate CTA |
+| `frontend-leptos/src/pages/ticket/page.rs` | State-driven hero, collapsible QR, polling, delegates to OnlineView/InPersonView (420 lines) |
+| `frontend-leptos/src/pages/ticket/view_data.rs` | Shared `TicketViewData` struct with `from_data()` builder (161 lines) |
+| `frontend-leptos/src/pages/ticket/qr_section.rs` | QR section (collapsible + fullscreen overlay) extracted (179 lines) |
+| `frontend-leptos/src/pages/ticket/online_view.rs` | Online attendee view extracted (260 lines) |
+| `frontend-leptos/src/pages/ticket/in_person_view.rs` | In-person attendee view extracted (384 lines) |
+| `frontend-leptos/src/pages/ticket/action_cards.rs` | Deposit card: escrow-aware, show USDC+THB separately |
+| `frontend-leptos/src/pages/public_event.rs` | Deposit section: escrow-aware, labeled payment methods |
+| `frontend-leptos/src/api/types.rs` | Add `deposit_amount_usdc` to `AttendeeData` |
+| `worker/src/handlers/attendee.rs` | Add `deposit_amount_usdc` to ticket API response |
+| `worker/src/handlers/public_event.rs` | Add `escrow_status` to public event API response |
 | `frontend-leptos/src/pages/claim.rs` | AlreadyClaimed → redirect, Success → add back link |
 
 ## Acceptance Criteria
 
-- [ ] Pre-check-in: QR code is the hero, no claim/NFT distractions
-- [ ] Post-check-in, not claimed: Claim CTA is the hero, QR collapsed
-- [ ] Post-check-in, claimed: NFT badge card is the hero with Orb link, QR collapsed
-- [ ] Collapsible QR toggle works (expand/collapse after check-in)
-- [ ] No duplicate claim CTAs
-- [ ] No backend ID shown in info rows
-- [ ] AlreadyClaimed on claim page redirects to ticket page
-- [ ] Claim success shows "Back to Ticket" link
-- [ ] `cargo check --target wasm32-unknown-unknown` passes
+### Ticket Page
+- [x] Pre-check-in: QR code is the hero, no claim/NFT distractions
+- [x] Post-check-in, not claimed: Claim CTA is the hero, QR collapsed
+- [x] Post-check-in, claimed: NFT badge card is the hero with Orb link, QR collapsed
+- [x] Collapsible QR toggle works (expand/collapse after check-in)
+- [x] No duplicate claim CTAs
+- [x] No backend ID shown in info rows
+
+### Deposit UX (Escrow-Aware)
+- [x] Public event page shows THB (via PromptPay) and USDC (via Solana) as separate labeled lines
+- [x] When escrow closed, USDC is hidden/struck-through, only THB shown
+- [x] Ticket deposit card shows both payment methods when escrow is open
+- [x] Ticket deposit card shows USDC unavailable message when escrow is closed
+- [x] Registration form deposit label is escrow-aware
+- [x] `cargo check --target wasm32-unknown-unknown` passes (WASM build verified green, zero errors/warnings)
+
+### Claim Page
+- [x] AlreadyClaimed on claim page redirects to ticket page
+- [x] Claim success shows "Back to Ticket" link
 
 ## Out of Scope
 

@@ -317,6 +317,9 @@ pub struct AttendeeData {
     /// Deposit deadline in hours after registration.
     #[serde(default)]
     pub deposit_deadline_hours: Option<u32>,
+    /// Deposit amount in USDC (smallest unit, e.g. 15000000 = 15 USDC).
+    #[serde(default)]
+    pub deposit_amount_usdc: u64,
     /// Deposit amount in THB.
     #[serde(default)]
     pub deposit_amount_thb: u64,
