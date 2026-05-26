@@ -8,6 +8,9 @@ use worker::D1Database;
 use worker::d1::D1Type;
 
 /// A claim lock row read from D1.
+///
+/// Used by D1-first claim reads (Phase 2 migration).
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 pub(crate) struct ClaimLockRow {
     pub lock_id: String,
@@ -195,6 +198,9 @@ pub(crate) async fn get_global_audit_entries(
 
 /// Look up a claim lock by event_id and token.
 /// Returns `Ok(None)` if no row found.
+///
+/// Used by D1-first claim reads (Phase 2 migration).
+#[allow(dead_code)]
 pub(crate) async fn get_claim_lock(
     db: &D1Database,
     event_id: &str,
