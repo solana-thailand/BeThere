@@ -1726,3 +1726,197 @@ pub async fn escrow_health_handler(
         diagnosis,
     }))
 }
+
+// ---------------------------------------------------------------------------
+// POST /api/escrow/rollover-deposit — Roll deposit to next event
+// ---------------------------------------------------------------------------
+
+/// Request body for rollover deposit transaction.
+#[derive(Debug, serde::Deserialize)]
+pub struct RolloverDepositTxRequest {
+    /// Source event ID (past event with checked-in deposit).
+    pub source_event_id: String,
+    /// Target event ID (new event to roll deposit into).
+    pub target_event_id: String,
+    /// Attendee API ID.
+    pub attendee_id: String,
+    /// Attendee's wallet address (base58).
+    pub wallet_address: String,
+}
+
+/// Response for rollover deposit transaction.
+#[derive(Debug, serde::Serialize)]
+pub struct RolloverDepositTxResponse {
+    /// Base64-encoded serialized transaction (unsigned).
+    pub transaction: String,
+    /// Human-readable message.
+    pub message: String,
+}
+
+/// Build a rollover_deposit transaction for an attendee.
+///
+/// The attendee signs the transaction, which atomically moves their USDC
+/// deposit from the source event vault to the target event vault.
+///
+/// **Prerequisites** (validated on-chain by the program):
+/// - Attendee was checked in on the source event
+/// - Source and target events have the same organizer
+/// - Source and target events have the same deposit amount
+/// - Target event is active (accepting deposits)
+///
+/// **Auth**: Attendee-authenticated (JWT identity must match the attendee).
+#[worker::send]
+pub async fn rollover_deposit_tx_handler(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Json(body): Json<RolloverDepositTxRequest>,
+) -> Result<ApiOk<RolloverDepositTxResponse>, WorkerError> {
+    let kv = state
+        .events_kv
+        .as_ref()
+        .ok_or_else(|| AppError::Internal("EVENTS KV not configured".to_string()))?;
+
+    // Resolve source event
+    let source_event = event_store::get_event_config(kv, &body.source_event_id)
+        .await
+        .map_err(AppError::Internal)?
+        .ok_or_else(|| {
+            AppError::NotFound(format!("source event '{}' not found", body.source_event_id))
+        })?;
+
+    // Resolve target event
+    let target_event = event_store::get_event_config(kv, &body.target_event_id)
+        .await
+        .map_err(AppError::Internal)?
+        .ok_or_else(|| {
+            AppError::NotFound(format!("target event '{}' not found", body.target_event_id))
+        })?;
+
+    // Both events must have deposits enabled
+    if !source_event.deposit_enabled || !target_event.deposit_enabled {
+        return Err(AppError::Validation(
+            "both source and target events must have deposits enabled".to_string(),
+        )
+        .into());
+    }
+
+    // Both events must have escrow initialized
+    if source_event.escrow_address.is_empty() || target_event.escrow_address.is_empty() {
+        return Err(AppError::Validation(
+            "both events must have escrow initialized on-chain".to_string(),
+        )
+        .into());
+    }
+
+    // Same organizer required
+    if source_event.organizer_wallet != target_event.organizer_wallet {
+        return Err(AppError::Validation(
+            "source and target events must have the same organizer".to_string(),
+        )
+        .into());
+    }
+
+    // Validate wallet address
+    crate::solana::validate_wallet_address(&body.wallet_address).map_err(AppError::Validation)?;
+
+    // Verify attendee has a verified USDC deposit on source event
+    let deposit_status = event_store::get_deposit_status(kv, &source_event.id, &body.attendee_id)
+        .await
+        .map_err(AppError::Internal)?;
+
+    let status = deposit_status.ok_or_else(|| {
+        AppError::NotFound(format!(
+            "no deposit found for attendee '{}' on source event",
+            body.attendee_id
+        ))
+    })?;
+
+    if !status.verified {
+        return Err(AppError::Validation(
+            "source deposit not verified — cannot rollover".to_string(),
+        )
+        .into());
+    }
+
+    if status.method != DepositMethod::Usdc {
+        return Err(
+            AppError::Validation("rollover only supported for USDC deposits".to_string()).into(),
+        );
+    }
+
+    // Verify no existing deposit on target event
+    let target_deposit = event_store::get_deposit_status(kv, &target_event.id, &body.attendee_id)
+        .await
+        .map_err(AppError::Internal)?;
+
+    if target_deposit.is_some() {
+        return Err(AppError::Validation(
+            "attendee already has a deposit on the target event".to_string(),
+        )
+        .into());
+    }
+
+    // Derive on-chain event IDs
+    let source_on_chain_id = if source_event.on_chain_event_id != 0 {
+        source_event.on_chain_event_id
+    } else {
+        super::derive_on_chain_event_id(&source_event.id)
+    };
+
+    let target_on_chain_id = if target_event.on_chain_event_id != 0 {
+        target_event.on_chain_event_id
+    } else {
+        super::derive_on_chain_event_id(&target_event.id)
+    };
+
+    // Organizer pubkey for PDA derivation
+    let organizer_pubkey = if source_event.organizer_wallet.is_empty() {
+        return Err(AppError::Internal(
+            "source event has no organizer wallet configured".to_string(),
+        )
+        .into());
+    } else {
+        crate::solana::validate_wallet_address(&source_event.organizer_wallet)
+            .map_err(|e| AppError::Validation(format!("invalid organizer_wallet: {e}")))?;
+        &source_event.organizer_wallet
+    };
+
+    let rpc_url = state.config.solana.full_rpc_url();
+
+    let tx = crate::solana_escrow::build_rollover_deposit_transaction(
+        &rpc_url,
+        Some(kv),
+        organizer_pubkey,
+        source_on_chain_id,
+        target_on_chain_id,
+        &body.wallet_address,
+    )
+    .await
+    .map_err(|e| AppError::Internal(format!("failed to build rollover TX: {e}")))?;
+
+    tracing::info!(
+        attendee_id = %body.attendee_id,
+        source_event_id = %source_event.id,
+        target_event_id = %target_event.id,
+        "Rollover deposit TX built for attendee"
+    );
+
+    // Audit log
+    let _ = crate::audit_store::append_event_audit(
+        kv,
+        &source_event.id,
+        crate::audit_store::create_entry(
+            &claims.email,
+            crate::audit_store::AuditAction::EscrowRolloverInitiated,
+            &body.attendee_id,
+            &format!("rollover deposit to event {}", target_event.id),
+        ),
+        state.d1.as_deref(),
+    )
+    .await;
+
+    Ok(ApiOk::new(RolloverDepositTxResponse {
+        transaction: tx.transaction_b64,
+        message: tx.message,
+    }))
+}

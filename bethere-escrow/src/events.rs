@@ -52,3 +52,11 @@ pub struct DepositClosed {
     pub escrow: Address,
     pub attendee: Address,
 }
+
+#[event(discriminator = 8)]
+pub struct DepositRolledOver {
+    pub source_escrow: Address,
+    pub target_escrow: Address,
+    pub attendee: Address,
+    pub amount: u64,
+}
