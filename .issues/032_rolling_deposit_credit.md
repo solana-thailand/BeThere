@@ -120,3 +120,53 @@ Exit (any time):
 
 - Issue #030 (Master Contacts Sheet) — ✅ activated
 - Issue #029 (Per-Org Contacts) — optional, for multi-organizer credit isolation
+
+---
+
+## Architecture Decision (2026-05-26)
+
+After evaluating 3 options for on-chain rolling deposits:
+
+### Option A: Off-chain Only (original plan)
+Refund USDC to wallet, track credit in Google Sheets. Simple but not trustless — attendee must re-deposit.
+
+### Option B: On-chain Rollover Instruction (CHOSEN)
+New `rollover_deposit` instruction in escrow program. Atomically transfers USDC from Event 1 vault → Event 2 vault. Attendee's USDC never touches their wallet.
+
+**Implementation:** `bethere-escrow/src/instructions/rollover_deposit.rs`
+- Seeds: uses existing `EventEscrow` + `AttendeeDeposit` PDAs (no schema change)
+- Same organizer required for both events (PDA seed binding)
+- Checked-in only (no-shows must refund or forfeit)
+- v1: same deposit_amount on both events
+- Discriminator: 8
+
+**New instruction accounts:**
+- `attendee: Signer`
+- `source_event_escrow` + `source_attendee_deposit` + `source_vault`
+- `target_event_escrow` + `target_attendee_deposit` (init) + `target_vault`
+- `deposit_mint` + `token_program` + `system_program`
+
+**Time estimate:** 3-5 days (program + worker tx builder + frontend button)
+
+### Option C: Organization-Level Vault (future)
+Single `OrgEscrow` PDA per organizer with persistent vault. Events become "rounds". Deposit once, attend many.
+
+**Deferred because:**
+- Full program rewrite (all 9 instructions)
+- PDA schema migration on devnet
+- 3-4 weeks of work
+- Plan for when 3+ organizers are active
+
+### THB Deposits
+On-chain rollover only works for USDC. THB (cash) credit tracking stays as the off-chain plan from Phase 1 above.
+
+### Program Optimization Note
+The current program uses `AttendeeDeposit` PDAs (96 bytes per attendee) for trustless check-in tracking.
+A future "just token account with authority" optimization could eliminate these PDAs entirely, moving
+attendee state to D1. This saves rent but requires trusting the organizer for check-in verification.
+Viable for v2 after mainnet validation.
+
+### Refs
+- Chainstack Solana Escrow Pattern: https://docs.chainstack.com/docs/solana-escrow-pattern
+- Current escrow state: `bethere-escrow/src/state.rs`
+- Worker tx builders: `worker/src/solana_escrow/tx_builders.rs`

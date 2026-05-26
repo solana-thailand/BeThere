@@ -442,3 +442,32 @@ Image storage: Cloudflare R2 (free tier: 10 GB storage, 10M reads/month).
 See `.handovers/035_fix_refund_tx_builder_account_ordering.md` for Phase 4 E2E validation details.
 See `.handovers/034_fix_illegal_owner_dual_instruction_bug.md` for create_vault_ata/create_event fixes.
 See `.handovers/033_complete_escrow_tx_builders.md` for all TX builder implementations.
+
+---
+
+## Future Optimization: "Just Token Account with Authority"
+
+**Status:** Research phase — planned for v2 after mainnet validation.
+
+Current program uses `EventEscrow` (192 bytes) + `AttendeeDeposit` (96 bytes × N) PDAs.
+The canonical Solana escrow pattern (per Chainstack/Anchor docs) shows that the only
+on-chain requirement is a **PDA-owned vault token account** with a minimal config PDA.
+
+### What could be eliminated
+- `AttendeeDeposit` PDAs entirely — all attendee state (deposited, checked_in, refunded)
+  moves to D1 (already partially tracked via Google Sheets)
+- `EventEscrow` shrinks from 192 → ~100 bytes (remove totals — tracked off-chain)
+
+### Tradeoff
+- Current: trustless (on-chain `checked_in` flag prevents organizer fraud)
+- Optimized: trusted organizer (check-in tracked off-chain, program can't verify)
+- Acceptable for BeThere where Solana Thailand IS the organizer
+
+### Rent savings (per 500-attendee event)
+- Current: 500 × 96 bytes ≈ 0.02 SOL × 500 = ~10 SOL in rent-locked PDAs
+- Optimized: 0 SOL per attendee (just 1 config PDA + 1 vault)
+
+### Blocked by
+- Mainnet deployment and validation of current architecture first
+- D1 migration of attendee state (Issue 037 Phase 2)
+- See Issue 032 for rolling deposit / rollover instruction design
