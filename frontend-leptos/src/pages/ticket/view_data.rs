@@ -61,6 +61,9 @@ pub struct TicketViewData {
     // Deposit href
     pub deposit_href: String,
 
+    // Event ID (source event for rollover)
+    pub event_id: String,
+
     // Rollover
     pub rollover_target_event: Option<crate::api::RolloverTargetEvent>,
 
@@ -158,6 +161,7 @@ impl TicketViewData {
             nft_image_url: data.nft_image_url.clone(),
             is_in_person: data.is_in_person,
             deposit_href: String::new(), // set after construction
+            event_id: data.event_id.clone(),
             rollover_target_event: data.rollover_target_event.clone(),
             orb_link,
         }

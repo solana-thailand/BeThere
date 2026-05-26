@@ -466,6 +466,7 @@ pub async fn get_public_ticket(
         "deadline_expired": deadline_expired,
         "in_person_available": in_person_available,
         "event_slug": event.slug,
+        "event_id": event.id,
         "refund_link": attendee.refund_link,
         "escrow_status": format!("{}", event.escrow_status),
         "rollover_target_event": rollover_target_event,

@@ -1,8 +1,18 @@
 //! Action card components for deposit, refund, claim, and reclaim flows.
 
-use crate::api::DepositMethod;
-use crate::icons::{Icon, IconName};
+use crate::api::{self, DepositMethod, RolloverDepositRequest};
+use crate::components::{self, ToastType};
+use crate::icons::{Icon, IconName, wallet_icon_name};
+use crate::utils;
+use crate::wallet_error;
 use leptos::prelude::*;
+use wasm_bindgen::prelude::*;
+
+#[wasm_bindgen(module = "/js/solana_wallet.js")]
+extern "C" {
+    #[wasm_bindgen(js_name = "getDetectedWallets")]
+    fn get_detected_wallets_js() -> Vec<String>;
+}
 
 /// Deposit required action card — prompts attendee to pay their deposit.
 #[component]
@@ -231,37 +241,305 @@ pub fn MovedOnlineCard() -> impl IntoView {
     }
 }
 
-/// Rollover deposit CTA — shown when attendee has a verified deposit on a past event
+/// Rollover flow state machine.
+#[derive(Clone)]
+enum RolloverState {
+    /// Initial CTA — prompts attendee to start.
+    Ready,
+    /// Choosing wallet to connect.
+    ChooseWallet,
+    /// Wallet connected, ready to sign.
+    WalletConnected(String, String), // (wallet_name, public_key)
+    /// Signing and sending TX.
+    Signing(String, String), // (wallet_name, public_key)
+    /// TX confirmed on-chain.
+    Confirmed(String), // (tx_signature)
+    /// Error state.
+    Error(String),
+}
+
+/// Rollover deposit card — self-contained wallet signing flow.
+///
+/// Shown when attendee has a verified USDC deposit on a past event
 /// and a new event from the same organizer is available.
 #[component]
 pub fn RolloverActionCard(
     /// Name of the target event to roll deposit into.
     #[prop(into)]
     target_event_name: String,
-    /// Callback invoked when attendee clicks "Roll to next event".
-    on_rollover: Box<dyn Fn()>,
+    /// Target event ID.
+    #[prop(into)]
+    target_event_id: String,
+    /// Source event ID (current/past event).
+    #[prop(into)]
+    source_event_id: String,
+    /// Attendee API ID.
+    #[prop(into)]
+    attendee_id: String,
 ) -> impl IntoView {
+    let (state, set_state) = signal(RolloverState::Ready);
+    let (toast, set_toast) = signal(None::<components::ToastMessage>);
+
+    // Detect wallets on mount
+    let (detected_wallets, _) = signal({
+        let mut wallets = get_detected_wallets_js();
+        if wallets.is_empty() {
+            // Synchronous check only — if wallets inject late, user can retry
+            wallets = get_detected_wallets_js();
+        }
+        wallets
+    });
+
+    // Connect wallet handler
+    let handle_connect = move |wallet_name: String| {
+        let wn = wallet_name.clone();
+        leptos::task::spawn_local(async move {
+            match crate::pages::escrow_init::connect_wallet_js(&wn).await {
+                wallet_error::WalletResult::Success(pk) => {
+                    log::info!("[rollover] wallet connected: {} ({})", wn, pk);
+                    set_state.set(RolloverState::WalletConnected(wn, pk));
+                }
+                wallet_error::WalletResult::Error(e) => {
+                    log::error!("[rollover] wallet connect error: {:?}", e.code);
+                    components::show_toast(
+                        &set_toast,
+                        &wallet_error::user_friendly_message(&e),
+                        ToastType::Error,
+                    );
+                }
+                wallet_error::WalletResult::UnknownFailure => {
+                    components::show_toast(
+                        &set_toast,
+                        "Failed to connect wallet. Please try again.",
+                        ToastType::Error,
+                    );
+                }
+            }
+        });
+    };
+
+    // Sign and send rollover TX handler
+    let handle_sign_and_send = move |wallet_name: String, public_key: String| {
+        let wn = wallet_name.clone();
+        let pk = public_key.clone();
+        let source_eid = source_event_id.clone();
+        let target_eid = target_event_id.clone();
+        let aid = attendee_id.clone();
+
+        set_state.set(RolloverState::Signing(wallet_name, public_key));
+
+        leptos::task::spawn_local(async move {
+            // Step 1: Build rollover TX via API
+            let body = RolloverDepositRequest {
+                source_event_id: source_eid,
+                target_event_id: target_eid,
+                attendee_id: aid,
+                wallet_address: pk.clone(),
+            };
+            let resp = match api::rollover_deposit(&body).await {
+                Ok(r) => r,
+                Err(e) => {
+                    log::error!("[rollover] TX build failed: {e}");
+                    set_state.set(RolloverState::Error(format!("Failed to build transaction: {e}")));
+                    return;
+                }
+            };
+
+            let tx_b64 = resp.transaction;
+            if tx_b64.is_empty() {
+                set_state.set(RolloverState::Error("Transaction was empty.".to_string()));
+                return;
+            }
+
+            // Step 2: Verify wallet cluster
+            let expected_cluster = crate::utils::get_cluster();
+            if let Err(cluster_err) =
+                crate::pages::escrow_init::check_wallet_cluster(&wn, &expected_cluster).await
+            {
+                log::error!("[rollover] cluster mismatch: {cluster_err}");
+                set_state.set(RolloverState::Error(cluster_err));
+                return;
+            }
+
+            // Step 3: Pre-sign simulation
+            match crate::pages::escrow_init::simulate_transaction_js(&wn, &tx_b64).await {
+                Ok(sim) if sim.ok => {}
+                Ok(sim) => {
+                    let err_msg = sim.error.unwrap_or_else(|| "Simulation failed".to_string());
+                    log::error!("[rollover] simulation failed: {err_msg}");
+                    set_state.set(RolloverState::Error(format!("Transaction would fail: {err_msg}")));
+                    return;
+                }
+                Err(e) => {
+                    log::warn!("[rollover] simulate error (not blocking): {e}");
+                }
+            }
+
+            // Step 4: Sign and send
+            match crate::pages::escrow_init::sign_and_send_tx_js(&wn, &tx_b64).await {
+                wallet_error::WalletResult::Success(signature) => {
+                    log::info!("[rollover] TX confirmed: {}", signature);
+                    set_state.set(RolloverState::Confirmed(signature));
+                }
+                wallet_error::WalletResult::Error(e) => {
+                    log::error!("[rollover] sign+send error: {:?}", e.code);
+                    set_state.set(RolloverState::Error(
+                        wallet_error::user_friendly_message(&e),
+                    ));
+                }
+                wallet_error::WalletResult::UnknownFailure => {
+                    set_state.set(RolloverState::Error(
+                        "Transaction failed. Please try again.".to_string(),
+                    ));
+                }
+            }
+        });
+    };
+
     view! {
         <div class="ticket-action-card ticket-action-card--rollover">
             <div class="ticket-action-icon">
                 <Icon icon=IconName::Refresh class="icon-sm" />
             </div>
             <div>
-                <div class="ticket-action-title">"Roll Deposit to Next Event"</div>
-                <div class="ticket-action-desc">
-                    {format!(
-                        "Your deposit is ready to roll over to {}. \
-                         No extra payment needed — your USDC transfers atomically.",
-                        target_event_name
-                    )}
-                </div>
-                <button
-                    class="btn btn-primary btn-sm ticket-action-btn"
-                    on:click=move |_| on_rollover()
-                >
-                    <Icon icon=IconName::Refresh class="icon-sm" />
-                    " Roll to Next Event"
-                </button>
+                {move || match &state.get() {
+                    RolloverState::Ready => view! {
+                        <div class="ticket-action-title">"Roll Deposit to Next Event"</div>
+                        <div class="ticket-action-desc">
+                            {format!(
+                                "Your deposit is ready to roll over to {}. \
+                                 No extra payment needed — your USDC transfers atomically.",
+                                target_event_name
+                            )}
+                        </div>
+                        <button
+                            class="btn btn-primary btn-sm ticket-action-btn"
+                            on:click=move |_| set_state.set(RolloverState::ChooseWallet)
+                        >
+                            <Icon icon=IconName::Refresh class="icon-sm" />
+                            " Roll to Next Event"
+                        </button>
+                    }.into_any(),
+
+                    RolloverState::ChooseWallet => {
+                        let wallets = detected_wallets.get();
+                        view! {
+                            <div class="ticket-action-title">"Connect Wallet to Rollover"</div>
+                            <div class="ticket-action-desc">
+                                "Connect the wallet you used for the original deposit."
+                            </div>
+                            {if wallets.is_empty() {
+                                view! {
+                                    <p class="ticket-action-desc" style="color:var(--text-secondary);">
+                                        "No wallet detected. Install Phantom/Backpack/Solflare and refresh."
+                                    </p>
+                                }.into_any()
+                            } else {
+                                let btns: Vec<_> = wallets.into_iter().map(|w| {
+                                    let w_click = w.clone();
+                                    let w_label = w.clone();
+                                    let wi = wallet_icon_name(&w);
+                                    view! {
+                                        <button
+                                            class="btn btn-primary btn-sm"
+                                            style="margin-right:0.25rem;margin-bottom:0.25rem;"
+                                            on:click=move |_| handle_connect(w_click.clone())
+                                        >
+                                            <Icon icon=wi class="icon-sm" />
+                                            " "{w_label}
+                                        </button>
+                                    }
+                                }).collect();
+                                view! { <div>{btns}</div> }.into_any()
+                            }}
+                            <button
+                                class="btn btn-outline btn-xs"
+                                style="margin-top:0.5rem;"
+                                on:click=move |_| set_state.set(RolloverState::Ready)
+                            >
+                                "Cancel"
+                            </button>
+                        }.into_any()
+                    },
+
+                    RolloverState::WalletConnected(wn, _pk) => {
+                        let wn_send = wn.clone();
+                        let pk_send = _pk.clone();
+                        let wn_display = wn.clone();
+                        view! {
+                            <div class="ticket-action-title">
+                                {format!("Connected via {}", wn_display)}
+                            </div>
+                            <div class="ticket-action-desc">
+                                "Click below to sign and send the rollover transaction."
+                            </div>
+                            <button
+                                class="btn btn-success btn-sm ticket-action-btn"
+                                on:click=move |_| handle_sign_and_send(wn_send.clone(), pk_send.clone())
+                            >
+                                <Icon icon=IconName::Refresh class="icon-sm" />
+                                " Sign & Send Rollover"
+                            </button>
+                            <button
+                                class="btn btn-outline btn-xs"
+                                style="margin-top:0.25rem;"
+                                on:click=move |_| set_state.set(RolloverState::Ready)
+                            >
+                                "Cancel"
+                            </button>
+                        }.into_any()
+                    },
+
+                    RolloverState::Signing(_, _) => view! {
+                        <div class="ticket-action-title">"Processing Rollover..."</div>
+                        <div class="ticket-action-desc" style="display:flex;align-items:center;gap:0.5rem;">
+                            <span class="spinner spinner-sm"></span>
+                            "Please approve the transaction in your wallet..."
+                        </div>
+                    }.into_any(),
+
+                    RolloverState::Confirmed(sig) => {
+                        let solscan = utils::solscan_tx_url(sig, &utils::get_cluster());
+                        let sig_short = if sig.len() > 20 {
+                            format!("{}...{}", &sig[..8], &sig[sig.len()-8..])
+                        } else {
+                            sig.clone()
+                        };
+                        view! {
+                            <div class="ticket-action-title" style="color:var(--success);">
+                                "Deposit Rolled Over ✓"
+                            </div>
+                            <div class="ticket-action-desc">
+                                {format!(
+                                    "Your deposit has been moved to {}. TX: {}",
+                                    target_event_name, sig_short
+                                )}
+                            </div>
+                            <a
+                                href=solscan
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                class="ticket-action-link"
+                            >
+                                "View on Solscan →"
+                            </a>
+                        }.into_any()
+                    },
+
+                    RolloverState::Error(msg) => view! {
+                        <div class="ticket-action-title" style="color:var(--danger);">
+                            "Rollover Failed"
+                        </div>
+                        <div class="ticket-action-desc">{msg.clone()}</div>
+                        <button
+                            class="btn btn-outline btn-xs"
+                            style="margin-top:0.25rem;"
+                            on:click=move |_| set_state.set(RolloverState::Ready)
+                        >
+                            "Try Again"
+                        </button>
+                    }.into_any(),
+                }}
             </div>
         </div>
     }

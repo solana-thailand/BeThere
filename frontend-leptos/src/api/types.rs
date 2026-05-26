@@ -341,6 +341,9 @@ pub struct AttendeeData {
     /// Event slug for navigation.
     #[serde(default)]
     pub event_slug: String,
+    /// Event ID (for rollover and other API calls).
+    #[serde(default)]
+    pub event_id: String,
     /// Eligible rollover target event (present when attendee has verified USDC deposit on a past event).
     #[serde(default)]
     pub rollover_target_event: Option<RolloverTargetEvent>,
