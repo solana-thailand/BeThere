@@ -243,6 +243,103 @@ pub async fn put_admin_quiz(config: &QuizConfigAdmin, event_id: Option<&str>) ->
     api_post_json(&path, config).await
 }
 
+/// DELETE /api/admin/quiz/questions/{id} — delete a single question.
+pub async fn delete_quiz_question(
+    question_id: &str,
+    event_id: Option<&str>,
+) -> Result<(), ApiError> {
+    let path = match event_id {
+        Some(eid) if !eid.is_empty() => format!("/admin/quiz/questions/{question_id}?event_id={eid}"),
+        _ => format!("/admin/quiz/questions/{question_id}"),
+    };
+    let response = super::api_delete(&path).await?;
+    if !response.ok() {
+        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
+            success: false,
+            data: None,
+            error: Some("Delete failed".to_string()),
+            correlation_id: None,
+        });
+        return Err(ApiError {
+            message: body.error.unwrap_or("Delete failed".to_string()),
+            status: response.status(),
+        });
+    }
+    Ok(())
+}
+
+/// PATCH /api/admin/quiz/questions/{id}/toggle — toggle question enabled state.
+pub async fn toggle_quiz_question(
+    question_id: &str,
+    event_id: Option<&str>,
+) -> Result<QuizQuestionAdmin, ApiError> {
+    let path = match event_id {
+        Some(eid) if !eid.is_empty() => {
+            format!("/admin/quiz/questions/{question_id}/toggle?event_id={eid}")
+        }
+        _ => format!("/admin/quiz/questions/{question_id}/toggle"),
+    };
+    let url = format!("{}{path}", super::api_base());
+    let token = crate::auth::get_token();
+    let mut req = gloo::net::http::Request::patch(&url);
+    if let Some(ref t) = token {
+        req = req.header("Authorization", &format!("Bearer {t}"));
+    }
+    req = req.header("Content-Type", "application/json");
+    let response = req.body("").map_err(|e| ApiError {
+        message: format!("Failed to build request: {e:?}"),
+        status: 0,
+    })?.send().await?;
+
+    if response.status() == 401 {
+        crate::auth::clear_token();
+        return Err(ApiError {
+            message: "Session expired".to_string(),
+            status: 401,
+        });
+    }
+
+    if !response.ok() {
+        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
+            success: false,
+            data: None,
+            error: Some("Toggle failed".to_string()),
+            correlation_id: None,
+        });
+        return Err(ApiError {
+            message: body.error.unwrap_or("Toggle failed".to_string()),
+            status: response.status(),
+        });
+    }
+
+    // Backend returns { success: true, data: { question: {...} } }
+    let raw: serde_json::Value = response.json().await.map_err(|e| ApiError {
+        message: format!("Failed to parse toggle response: {e}"),
+        status: 0,
+    })?;
+
+    if !raw["success"].as_bool().unwrap_or(false) {
+        let err_msg = raw["error"].as_str().unwrap_or("Toggle failed");
+        return Err(ApiError {
+            message: err_msg.to_string(),
+            status: 0,
+        });
+    }
+
+    let question_val = raw
+        .get("data")
+        .and_then(|d| d.get("question"))
+        .ok_or_else(|| ApiError {
+            message: "No question data in response".to_string(),
+            status: 0,
+        })?;
+
+    serde_json::from_value(question_val.clone()).map_err(|e| ApiError {
+        message: format!("Failed to deserialize question: {e}"),
+        status: 0,
+    })
+}
+
 // ===== Adventure Admin API =====
 
 /// GET /api/admin/adventure

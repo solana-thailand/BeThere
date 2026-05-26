@@ -1,7 +1,9 @@
 # Issue 034: Quiz CRUD, Enable/Disable & Bulk Import
 
-> **Status: ✅ Phase 1 COMPLETE** — Enable/Disable toggle, Import JSON (merge + replace), Clear All, and bug fixes done.
-> Phase 2 (Individual CRUD API) and Phase 3 (Export) remain.
+> **Status: ✅ Phase 1 + Phase 2 + Phase 3 COMPLETE**
+> Phase 1: Enable/Disable toggle, Import JSON (merge + replace), Clear All, bug fixes
+> Phase 2: Individual CRUD API endpoints (POST/PUT/DELETE/PATCH)
+> Phase 3: Export JSON button
 
 ## Problem
 
@@ -134,15 +136,16 @@ QuizQuestionPublic {
 - [x] Fix blank first question persisting after import — auto-remove blank placeholders
 - [x] Update `.issues/002_quiz_gated_claim.md` data model section
 
-### Phase 2 — Individual CRUD API (~2 hours)
-- [ ] `POST /api/admin/quiz/questions`
-- [ ] `PUT /api/admin/quiz/questions/{id}`
-- [ ] `DELETE /api/admin/quiz/questions/{id}`
-- [ ] `PATCH /api/admin/quiz/questions/{id}/toggle`
+### Phase 2 — Individual CRUD API ✅
+- [x] `POST /api/admin/quiz/questions`
+- [x] `PUT /api/admin/quiz/questions/{id}`
+- [x] `DELETE /api/admin/quiz/questions/{id}`
+- [x] `PATCH /api/admin/quiz/questions/{id}/toggle`
+- [x] Frontend API client: `delete_quiz_question`, `toggle_quiz_question`
 
-### Phase 3 — Export + Polish (~30 min)
-- [ ] Export JSON button
-- [ ] Disabled question visual polish (opacity, badge)
+### Phase 3 — Export + Polish ✅
+- [x] Export JSON button (downloads `quiz-config.json`)
+- [x] Disabled question visual (opacity + toggle styling already done in Phase 1)
 
 ## Backward Compatibility
 

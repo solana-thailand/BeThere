@@ -21,7 +21,7 @@ pub mod walkin;
 use crate::state::AppState;
 use axum::{
     Router, middleware,
-    routing::{delete, get, post},
+    routing::{delete, get, patch, post, put},
 };
 
 pub fn routes(state: AppState) -> Router<()> {
@@ -162,6 +162,16 @@ pub fn routes(state: AppState) -> Router<()> {
         .route(
             "/admin/quiz",
             get(quiz::get_admin_quiz).post(quiz::put_quiz),
+        )
+        // Individual quiz question CRUD (Issue 034 Phase 2)
+        .route("/admin/quiz/questions", post(quiz::add_quiz_question))
+        .route(
+            "/admin/quiz/questions/{id}",
+            put(quiz::update_quiz_question).delete(quiz::delete_quiz_question),
+        )
+        .route(
+            "/admin/quiz/questions/{id}/toggle",
+            patch(quiz::toggle_quiz_question),
         )
         // Admin adventure management (protected — organizer configures adventure)
         .route(

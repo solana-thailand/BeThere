@@ -12,6 +12,7 @@ use leptos::prelude::*;
 use crate::api::{self, QuizConfigAdmin, QuizQuestionAdmin};
 use crate::icons::{Icon, IconName};
 use crate::components::{self, ToastType};
+use wasm_bindgen::JsCast;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -61,6 +62,41 @@ fn format_attempts(n: u8) -> String {
         1 => "1 attempt".to_string(),
         n => format!("{n} attempts"),
     }
+}
+
+/// Download a JSON string as a file.
+fn export_json_download(json_str: &str, filename: &str) {
+    let window = match web_sys::window() {
+        Some(w) => w,
+        None => return,
+    };
+    let document = match window.document() {
+        Some(d) => d,
+        None => return,
+    };
+
+    let blob_parts = js_sys::Array::new();
+    blob_parts.push(&js_sys::JsString::from(json_str).into());
+    let blob = match web_sys::Blob::new_with_str_sequence(&blob_parts) {
+        Ok(b) => b,
+        Err(_) => return,
+    };
+
+    let url = match web_sys::Url::create_object_url_with_blob(&blob) {
+        Ok(u) => u,
+        Err(_) => return,
+    };
+
+    let a = match document.create_element("a") {
+        Ok(el) => el,
+        Err(_) => return,
+    };
+    let _ = a.set_attribute("href", &url);
+    let _ = a.set_attribute("download", filename);
+    let a_el: &web_sys::HtmlElement = a.unchecked_ref();
+    a_el.click();
+
+    web_sys::Url::revoke_object_url(&url).unwrap();
 }
 
 // ---------------------------------------------------------------------------
@@ -484,6 +520,18 @@ pub fn QuizEditor(
                                 on:click=move |_: web_sys::MouseEvent| { set_show_import.set(true); }
                             >
                                 "Import"
+                            </button>
+                            <button
+                                class="btn btn-outline btn-sm"
+                                on:click=move |_: web_sys::MouseEvent| {
+                                    let cfg = config.get();
+                                    if let Some(c) = cfg {
+                                        let json_str = serde_json::to_string_pretty(&c).unwrap_or_default();
+                                        export_json_download(&json_str, "quiz-config.json");
+                                    }
+                                }
+                            >
+                                "Export"
                             </button>
                             {
                                 let sc = set_config;

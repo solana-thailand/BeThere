@@ -15,8 +15,8 @@ use chrono::Utc;
 use worker::KvStore;
 
 use event_checkin_domain::models::api::{
-    QuestionExplanation, QuizAnswer, QuizAttempt, QuizConfig, QuizProgress, QuizQuestionPublic,
-    QuizQuestionsResponse, QuizStatus, QuizSubmitResponse,
+    QuestionExplanation, QuizAnswer, QuizAttempt, QuizConfig, QuizProgress, QuizQuestion,
+    QuizQuestionPublic, QuizQuestionsResponse, QuizStatus, QuizSubmitResponse,
 };
 
 use crate::event_store::{quiz_progress_key, quiz_questions_key};
@@ -24,6 +24,16 @@ use crate::event_store::{quiz_progress_key, quiz_questions_key};
 // No TTL on quiz progress.
 // Attendees may pass the quiz and claim their NFT hours later.
 // If progress expired before claiming, they'd have to redo the quiz.
+
+/// Default empty quiz config.
+fn default_config() -> QuizConfig {
+    QuizConfig {
+        questions: Vec::new(),
+        passing_score_percent: 60,
+        max_attempts: 3,
+        time_limit_seconds: None,
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Quiz config (questions)
@@ -61,6 +71,107 @@ pub async fn save_quiz_config(
         .execute()
         .await
         .map_err(|e| format!("failed to write quiz config to KV: {e:?}"))
+}
+
+/// Add a single question to the quiz config.
+/// Generates a sequential ID if not provided.
+pub async fn add_question(
+    kv: &KvStore,
+    event_id: &str,
+    mut question: QuizQuestion,
+) -> Result<QuizQuestion, String> {
+    let mut config = get_quiz_config(kv, event_id)
+        .await?
+        .unwrap_or_else(default_config);
+
+    // Generate ID if empty
+    if question.id.is_empty() {
+        let max_num = config
+            .questions
+            .iter()
+            .filter_map(|q| q.id.strip_prefix('q').and_then(|n| n.parse::<u32>().ok()))
+            .max()
+            .unwrap_or(0);
+        question.id = format!("q{}", max_num + 1);
+    }
+
+    // Check for duplicate ID
+    if config.questions.iter().any(|q| q.id == question.id) {
+        return Err(format!("question id '{}' already exists", question.id));
+    }
+
+    config.questions.push(question.clone());
+    save_quiz_config(kv, event_id, &config).await?;
+    Ok(question)
+}
+
+/// Update a single question by ID.
+pub async fn update_question(
+    kv: &KvStore,
+    event_id: &str,
+    question_id: &str,
+    updated: QuizQuestion,
+) -> Result<QuizQuestion, String> {
+    let mut config = get_quiz_config(kv, event_id)
+        .await?
+        .ok_or_else(|| "no quiz configured".to_string())?;
+
+    let question = config
+        .questions
+        .iter_mut()
+        .find(|q| q.id == question_id)
+        .ok_or_else(|| format!("question '{}' not found", question_id))?;
+
+    // Preserve the original ID (path takes precedence)
+    let preserved_id = question_id.to_string();
+    *question = updated;
+    question.id = preserved_id;
+
+    let result = question.clone();
+    save_quiz_config(kv, event_id, &config).await?;
+    Ok(result)
+}
+
+/// Delete a single question by ID.
+pub async fn delete_question(
+    kv: &KvStore,
+    event_id: &str,
+    question_id: &str,
+) -> Result<(), String> {
+    let mut config = get_quiz_config(kv, event_id)
+        .await?
+        .ok_or_else(|| "no quiz configured".to_string())?;
+
+    let original_len = config.questions.len();
+    config.questions.retain(|q| q.id != question_id);
+    if config.questions.len() == original_len {
+        return Err(format!("question '{}' not found", question_id));
+    }
+
+    save_quiz_config(kv, event_id, &config).await?;
+    Ok(())
+}
+
+/// Toggle the enabled state of a single question.
+pub async fn toggle_question(
+    kv: &KvStore,
+    event_id: &str,
+    question_id: &str,
+) -> Result<QuizQuestion, String> {
+    let mut config = get_quiz_config(kv, event_id)
+        .await?
+        .ok_or_else(|| "no quiz configured".to_string())?;
+
+    let question = config
+        .questions
+        .iter_mut()
+        .find(|q| q.id == question_id)
+        .ok_or_else(|| format!("question '{}' not found", question_id))?;
+
+    question.enabled = !question.enabled;
+    let result = question.clone();
+    save_quiz_config(kv, event_id, &config).await?;
+    Ok(result)
 }
 
 /// Convert full quiz config to public response (strips correct answers and disabled questions).

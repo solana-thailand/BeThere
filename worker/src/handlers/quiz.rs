@@ -17,7 +17,7 @@ use axum::{
 use serde_json::json;
 
 use event_checkin_domain::models::api::{
-    QuizConfig, QuizStatus, QuizSubmitRequest, QuizSubmitResponse,
+    QuizConfig, QuizQuestion, QuizStatus, QuizSubmitRequest, QuizSubmitResponse,
 };
 use event_checkin_domain::models::auth::Claims;
 use event_checkin_domain::models::error::AppError;
@@ -437,5 +437,165 @@ pub async fn put_quiz(
         "questions_count": body.questions.len(),
         "passing_score_percent": body.passing_score_percent,
         "max_attempts": body.max_attempts,
+    })))
+}
+
+/// POST /api/admin/quiz/questions
+/// Add a single question to the quiz.
+#[worker::send]
+pub async fn add_quiz_question(
+    State(state): State<AppState>,
+    Extension(_claims): Extension<Claims>,
+    Query(query): Query<EventIdQuery>,
+    Json(body): Json<QuizQuestion>,
+) -> Result<ApiOk<serde_json::Value>, WorkerError> {
+    tracing::info!(
+        staff_email = %_claims.email,
+        question_id = %body.id,
+        "admin quiz add question"
+    );
+
+    let event = resolve_event(&state, query.event_id.as_deref()).await?;
+    let kv = state
+        .events_kv
+        .as_ref()
+        .or(state.quiz_kv.as_ref())
+        .ok_or_else(|| AppError::Internal("quiz KV not configured".to_string()))?;
+
+    // Validate: at least 2 options
+    if body.options.len() < 2 {
+        return Err(
+            AppError::Validation("question must have at least 2 options".to_string()).into(),
+        );
+    }
+    if (body.correct_index as usize) >= body.options.len() {
+        return Err(AppError::Validation(format!(
+            "correct_index {} out of range",
+            body.correct_index
+        ))
+        .into());
+    }
+    if body.text.trim().is_empty() {
+        return Err(AppError::Validation("question text must not be empty".to_string()).into());
+    }
+
+    let question = quiz::add_question(kv, event.id.as_str(), body)
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+
+    tracing::info!(question_id = %question.id, "question added");
+    Ok(ApiOk::new(json!({
+        "question": question,
+    })))
+}
+
+/// PUT /api/admin/quiz/questions/{id}
+/// Update a single question by ID.
+#[worker::send]
+pub async fn update_quiz_question(
+    State(state): State<AppState>,
+    Extension(_claims): Extension<Claims>,
+    Path(question_id): Path<String>,
+    Query(query): Query<EventIdQuery>,
+    Json(body): Json<QuizQuestion>,
+) -> Result<ApiOk<serde_json::Value>, WorkerError> {
+    tracing::info!(
+        staff_email = %_claims.email,
+        question_id = %question_id,
+        "admin quiz update question"
+    );
+
+    let event = resolve_event(&state, query.event_id.as_deref()).await?;
+    let kv = state
+        .events_kv
+        .as_ref()
+        .or(state.quiz_kv.as_ref())
+        .ok_or_else(|| AppError::Internal("quiz KV not configured".to_string()))?;
+
+    // Validate
+    if body.options.len() < 2 {
+        return Err(
+            AppError::Validation("question must have at least 2 options".to_string()).into(),
+        );
+    }
+    if (body.correct_index as usize) >= body.options.len() {
+        return Err(AppError::Validation(format!(
+            "correct_index {} out of range",
+            body.correct_index
+        ))
+        .into());
+    }
+
+    let question = quiz::update_question(kv, event.id.as_str(), &question_id, body)
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+
+    tracing::info!(question_id = %question.id, "question updated");
+    Ok(ApiOk::new(json!({
+        "question": question,
+    })))
+}
+
+/// DELETE /api/admin/quiz/questions/{id}
+/// Delete a single question by ID.
+#[worker::send]
+pub async fn delete_quiz_question(
+    State(state): State<AppState>,
+    Extension(_claims): Extension<Claims>,
+    Path(question_id): Path<String>,
+    Query(query): Query<EventIdQuery>,
+) -> Result<ApiOk<serde_json::Value>, WorkerError> {
+    tracing::info!(
+        staff_email = %_claims.email,
+        question_id = %question_id,
+        "admin quiz delete question"
+    );
+
+    let event = resolve_event(&state, query.event_id.as_deref()).await?;
+    let kv = state
+        .events_kv
+        .as_ref()
+        .or(state.quiz_kv.as_ref())
+        .ok_or_else(|| AppError::Internal("quiz KV not configured".to_string()))?;
+
+    quiz::delete_question(kv, event.id.as_str(), &question_id)
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+
+    tracing::info!(question_id = %question_id, "question deleted");
+    Ok(ApiOk::new(json!({
+        "deleted": question_id,
+    })))
+}
+
+/// PATCH /api/admin/quiz/questions/{id}/toggle
+/// Toggle the enabled state of a single question.
+#[worker::send]
+pub async fn toggle_quiz_question(
+    State(state): State<AppState>,
+    Extension(_claims): Extension<Claims>,
+    Path(question_id): Path<String>,
+    Query(query): Query<EventIdQuery>,
+) -> Result<ApiOk<serde_json::Value>, WorkerError> {
+    tracing::info!(
+        staff_email = %_claims.email,
+        question_id = %question_id,
+        "admin quiz toggle question"
+    );
+
+    let event = resolve_event(&state, query.event_id.as_deref()).await?;
+    let kv = state
+        .events_kv
+        .as_ref()
+        .or(state.quiz_kv.as_ref())
+        .ok_or_else(|| AppError::Internal("quiz KV not configured".to_string()))?;
+
+    let question = quiz::toggle_question(kv, event.id.as_str(), &question_id)
+        .await
+        .map_err(|e| AppError::Internal(e.to_string()))?;
+
+    tracing::info!(question_id = %question.id, enabled = question.enabled, "question toggled");
+    Ok(ApiOk::new(json!({
+        "question": question,
     })))
 }
