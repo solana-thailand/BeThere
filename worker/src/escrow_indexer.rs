@@ -63,6 +63,7 @@ pub enum EscrowInstruction {
     CloseEvent,
     DeactivateEvent,
     CloseDeposit,
+    RolloverDeposit,
     Unknown,
 }
 
@@ -77,6 +78,7 @@ impl From<u8> for EscrowInstruction {
             5 => Self::CloseEvent,
             6 => Self::DeactivateEvent,
             7 => Self::CloseDeposit,
+            8 => Self::RolloverDeposit,
             _ => Self::Unknown,
         }
     }
@@ -143,6 +145,12 @@ impl EscrowInstruction {
             Self::CloseDeposit => {
                 let signer = accounts.first().cloned();
                 (None, signer, None)
+            }
+            // rollover_deposit(8): [attendee, source_escrow, target_escrow, source_deposit, target_deposit, usdc_mint, source_vault, target_vault, token_program, ...]
+            // data: disc(1) + source_event_id(8) + target_event_id(8)
+            Self::RolloverDeposit => {
+                let attendee = accounts.first().cloned();
+                (None, attendee, None)
             }
             Self::Unknown => (None, None, None),
         }
@@ -1050,6 +1058,10 @@ mod tests {
             EscrowInstruction::DeactivateEvent
         );
         assert_eq!(EscrowInstruction::from(7), EscrowInstruction::CloseDeposit);
+        assert_eq!(
+            EscrowInstruction::from(8),
+            EscrowInstruction::RolloverDeposit
+        );
         assert_eq!(EscrowInstruction::from(99), EscrowInstruction::Unknown);
     }
 
@@ -1072,6 +1084,10 @@ mod tests {
             "deactivate_event"
         );
         assert_eq!(EscrowInstruction::CloseDeposit.to_string(), "close_deposit");
+        assert_eq!(
+            EscrowInstruction::RolloverDeposit.to_string(),
+            "rollover_deposit"
+        );
     }
 
     #[test]
