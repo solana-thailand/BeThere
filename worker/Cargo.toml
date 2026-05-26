@@ -6,7 +6,7 @@ description = "Cloudflare Worker for event-checkin with Axum-on-Workers"
 
 [dependencies]
 # Cloudflare Workers SDK
-worker = { version = "0.8", features = ["http"] }
+worker = { version = "0.8", features = ["http", "d1"] }
 
 # Web framework (Axum-on-Workers via http feature)
 # Note: no tower/axum defaults that pull in tokio — Workers runtime handles async

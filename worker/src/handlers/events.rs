@@ -255,6 +255,7 @@ pub async fn create_event(
             &config.id,
             &format!("event '{}' created", config.name),
         ),
+        state.d1.as_deref(),
     )
     .await;
 
@@ -430,6 +431,7 @@ pub async fn update_event(
             &config.id,
             &format!("event '{}' updated", config.name),
         ),
+        state.d1.as_deref(),
     )
     .await;
 
@@ -453,6 +455,7 @@ pub async fn update_event(
                     existing_event.escrow_status
                 ),
             ),
+            state.d1.as_deref(),
         )
         .await;
     }
@@ -525,6 +528,7 @@ pub async fn archive_event(
             &id,
             "event archived",
         ),
+        state.d1.as_deref(),
     )
     .await;
 
@@ -588,6 +592,7 @@ pub async fn restore_event(
             &id,
             "event restored from archive",
         ),
+        state.d1.as_deref(),
     )
     .await;
 
@@ -686,6 +691,7 @@ pub async fn hard_delete_event(
             "event permanently deleted",
             serde_json::json!({"force": force}),
         ),
+        state.d1.as_deref(),
     )
     .await;
 
@@ -725,7 +731,7 @@ pub async fn get_event_audit(
         );
     }
 
-    let entries = crate::audit_store::get_event_audit(kv, &id, 100)
+    let entries = crate::audit_store::get_event_audit(kv, &id, 100, state.d1.as_deref())
         .await
         .map_err(|e| {
             tracing::error!(event_id = %id, error = %e, "failed to get audit log");
@@ -761,7 +767,7 @@ pub async fn get_global_audit(
         );
     }
 
-    let entries = crate::audit_store::get_global_audit(kv, 200)
+    let entries = crate::audit_store::get_global_audit(kv, 200, state.d1.as_deref())
         .await
         .map_err(|e| {
             tracing::error!(error = %e, "failed to get global audit log");

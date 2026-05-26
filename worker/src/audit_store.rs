@@ -177,7 +177,29 @@ pub async fn append_event_audit(
     kv: &KvStore,
     event_id: &str,
     entry: AuditEntry,
+    d1: Option<&worker::D1Database>,
 ) -> Result<(), String> {
+    // D1 path: O(1) INSERT — always attempt if available
+    if let Some(db) = d1 {
+        let action_str = serde_json::to_string(&entry.action)
+            .unwrap_or_default()
+            .trim_matches('"')
+            .to_string();
+        let metadata_str = entry.metadata.as_ref().map(|v| v.to_string());
+        let _ = crate::db::append_audit(
+            db,
+            event_id,
+            &entry.actor,
+            &action_str,
+            &entry.target,
+            &entry.description,
+            metadata_str.as_deref(),
+        )
+        .await;
+        // Fire-and-forget D1 write — KV is still the primary read source
+    }
+
+    // KV fallback (always runs for read compatibility)
     let key = format!("event:{event_id}:audit");
     let mut entries = read_entries(kv, &key).await;
     entries.push(entry);
@@ -185,7 +207,31 @@ pub async fn append_event_audit(
 }
 
 /// Append an audit entry to the global audit log (max 1000 entries).
-pub async fn append_global_audit(kv: &KvStore, entry: AuditEntry) -> Result<(), String> {
+pub async fn append_global_audit(
+    kv: &KvStore,
+    entry: AuditEntry,
+    d1: Option<&worker::D1Database>,
+) -> Result<(), String> {
+    // D1 path: append to global audit using "__global__" event_id
+    if let Some(db) = d1 {
+        let action_str = serde_json::to_string(&entry.action)
+            .unwrap_or_default()
+            .trim_matches('"')
+            .to_string();
+        let metadata_str = entry.metadata.as_ref().map(|v| v.to_string());
+        let _ = crate::db::append_audit(
+            db,
+            "__global__",
+            &entry.actor,
+            &action_str,
+            &entry.target,
+            &entry.description,
+            metadata_str.as_deref(),
+        )
+        .await;
+    }
+
+    // KV fallback (always runs for read compatibility)
     let key = "audit:global";
     let mut entries = read_entries(kv, key).await;
     entries.push(entry);
@@ -197,7 +243,31 @@ pub async fn get_event_audit(
     kv: &KvStore,
     event_id: &str,
     limit: usize,
+    d1: Option<&worker::D1Database>,
 ) -> Result<Vec<AuditEntry>, String> {
+    // D1 path: try D1 first
+    if let Some(db) = d1
+        && let Ok(rows) = crate::db::get_audit_entries(db, event_id, limit).await
+        && !rows.is_empty()
+    {
+        return Ok(rows
+            .into_iter()
+            .filter_map(|r| {
+                let action: Option<AuditAction> =
+                    serde_json::from_str(&format!("\"{}\"", r.action)).ok();
+                Some(AuditEntry {
+                    timestamp: r.timestamp,
+                    actor: r.actor,
+                    action: action?,
+                    target: r.target,
+                    description: r.description,
+                    metadata: r.metadata.and_then(|s| serde_json::from_str(&s).ok()),
+                })
+            })
+            .collect());
+    }
+
+    // KV fallback
     let key = format!("event:{event_id}:audit");
     let mut entries = read_entries(kv, &key).await;
     entries.reverse();
@@ -205,7 +275,34 @@ pub async fn get_event_audit(
 }
 
 /// Get global audit entries, newest first (up to `limit`).
-pub async fn get_global_audit(kv: &KvStore, limit: usize) -> Result<Vec<AuditEntry>, String> {
+pub async fn get_global_audit(
+    kv: &KvStore,
+    limit: usize,
+    d1: Option<&worker::D1Database>,
+) -> Result<Vec<AuditEntry>, String> {
+    // D1 path: try D1 first
+    if let Some(db) = d1
+        && let Ok(rows) = crate::db::get_global_audit_entries(db, limit).await
+        && !rows.is_empty()
+    {
+        return Ok(rows
+            .into_iter()
+            .filter_map(|r| {
+                let action: Option<AuditAction> =
+                    serde_json::from_str(&format!("\"{}\"", r.action)).ok();
+                Some(AuditEntry {
+                    timestamp: r.timestamp,
+                    actor: r.actor,
+                    action: action?,
+                    target: r.target,
+                    description: r.description,
+                    metadata: r.metadata.and_then(|s| serde_json::from_str(&s).ok()),
+                })
+            })
+            .collect());
+    }
+
+    // KV fallback
     let mut entries = read_entries(kv, "audit:global").await;
     entries.reverse();
     Ok(entries.into_iter().take(limit).collect())

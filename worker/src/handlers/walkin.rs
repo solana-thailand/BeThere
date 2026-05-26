@@ -487,6 +487,7 @@ pub async fn register_walkin(
                 &email_lower,
                 "walk-in attendee registered",
             ),
+            state.d1.as_deref(),
         )
         .await;
     }
@@ -673,6 +674,7 @@ pub async fn walkin_export_csv_handler(
                 &format!("{} attendees", count),
                 "walk-in CSV exported",
             ),
+            state.d1.as_deref(),
         )
         .await;
     }
@@ -837,6 +839,7 @@ pub async fn walkin_sync_handler(
                 &format!("synced={synced} skipped={skipped} errors={}", errors.len()),
                 "walk-in attendees synced to Google Sheet",
             ),
+            state.d1.as_deref(),
         )
         .await;
     }

@@ -134,6 +134,7 @@ pub async fn onchain_webhook_handler(
                             "amount": event.amount,
                         }),
                     ),
+                    state.d1.as_deref(),
                 )
                 .await;
 
@@ -253,6 +254,7 @@ pub async fn escrow_sync_handler(
                 "errors": summary.errors,
             }),
         ),
+        state.d1.as_deref(),
     )
     .await;
 

@@ -489,6 +489,7 @@ pub async fn verify_thb_slip_handler(
                 }
             ),
         ),
+        state.d1.as_deref(),
     )
     .await;
 
@@ -738,6 +739,7 @@ pub async fn mark_refund_handler(
             &attendee_id,
             "refund marked complete",
         ),
+        state.d1.as_deref(),
     )
     .await;
 
@@ -817,6 +819,7 @@ pub async fn batch_thb_refund_handler(
             &event.id,
             &format!("batch THB refund: {refunded} refunded, {skipped} skipped"),
         ),
+        state.d1.as_deref(),
     )
     .await;
 
@@ -1111,6 +1114,7 @@ pub async fn mark_manual_refund_handler(
                 body.refund_status, attendee.name, attendee_id
             ),
         ),
+        state.d1.as_deref(),
     )
     .await;
 

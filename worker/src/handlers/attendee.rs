@@ -688,6 +688,7 @@ pub async fn delete_attendee(
                 &id,
                 &format!("attendee deleted (source={source})"),
             ),
+            state.d1.as_deref(),
         )
         .await;
     }

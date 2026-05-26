@@ -197,23 +197,23 @@ Update handler call sites to pass `db` alongside `kv`. Both available during mig
 ## Acceptance Criteria
 
 ### Functional
-- [ ] Claim lock acquisition is atomic — no TOCTOU race possible
-- [ ] Claim lock release on mint failure works
-- [ ] Claim lock finalization stores asset_id + signature
-- [ ] Audit entries append in O(1)
-- [ ] Audit queries return newest-first with correct limit
-- [ ] Existing claim lock KV keys still readable (backward compat during rollout)
-- [ ] All 68 existing tests pass unchanged
+- [x] Claim lock acquisition is atomic — D1 INSERT ON CONFLICT DO NOTHING
+- [x] Claim lock release on mint failure works
+- [x] Claim lock finalization stores asset_id + signature
+- [x] Audit entries append in O(1) via D1 INSERT
+- [x] Audit queries return newest-first with correct limit
+- [x] Existing claim lock KV keys still readable (dual-write to KV maintained)
+- [ ] All existing tests pass unchanged (pending verification)
 
 ### Configuration
-- [ ] D1 binding is optional — worker starts fine without it (graceful fallback to KV)
-- [ ] `wrangler.toml` has `[[d1_databases]]` section
-- [ ] Migration script is idempotent (safe to re-run)
+- [x] D1 binding is optional — worker starts fine without it (graceful fallback to KV)
+- [x] `wrangler.toml` has `[[d1_databases]]` section
+- [x] Migration script is idempotent (IF NOT EXISTS)
 
 ### Performance
-- [ ] Claim lock acquisition latency < 10ms (D1 indexed query)
-- [ ] Audit append latency < 10ms
-- [ ] No regression on check-in latency (< 500ms end-to-end)
+- [ ] Claim lock acquisition latency < 10ms (D1 indexed query — pending deployment test)
+- [ ] Audit append latency < 10ms (pending deployment test)
+- [ ] No regression on check-in latency (< 500ms end-to-end — pending deployment test)
 
 ## Pricing Estimate
 

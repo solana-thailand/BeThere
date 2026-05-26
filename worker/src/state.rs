@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::sync::{Arc, OnceLock};
 
-use worker::{Context, Env, KvStore};
+use worker::{Context, D1Database, Env, KvStore};
 
 use event_checkin_domain::config::{
     AppConfig, EventDefaults, GoogleOAuthConfig, GoogleServiceAccountConfig, NftConfig,
@@ -35,6 +35,10 @@ pub struct AppState {
     /// KV namespace for event registry and per-event config (Issue 004).
     /// `None` if the `EVENTS` binding is not configured in `wrangler.toml`.
     pub events_kv: Option<KvStore>,
+    /// D1 database for claim locks and audit trail (Issue 037).
+    /// `None` if the `DB` binding is not configured in `wrangler.toml`.
+    /// Wrapped in `Arc` because `D1Database` is not `Clone`.
+    pub d1: Option<Arc<D1Database>>,
     /// Shared secret for validating webhook `Authorization: Bearer <token>` header.
     /// If empty, webhook auth validation is skipped (backward compatible).
     pub webhook_secret: String,
@@ -197,6 +201,8 @@ impl AppState {
         let quiz_kv = env.kv("QUIZ").ok();
         let events_kv = env.kv("EVENTS").ok();
 
+        let d1 = env.d1("DB").ok().map(Arc::new);
+
         let webhook_secret = get_var(env, "WEBHOOK_SECRET").unwrap_or_default();
         if webhook_secret.is_empty() {
             // Only warn once per isolate to avoid log spam
@@ -209,6 +215,7 @@ impl AppState {
             config,
             quiz_kv,
             events_kv,
+            d1,
             webhook_secret,
             worker_ctx: None,
         })

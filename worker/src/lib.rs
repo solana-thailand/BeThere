@@ -4,6 +4,7 @@ mod auth;
 mod claim;
 mod cleanup;
 mod crypto;
+mod db;
 mod error;
 mod escrow_indexer;
 mod event_store;

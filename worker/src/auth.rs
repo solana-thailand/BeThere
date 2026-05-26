@@ -563,6 +563,7 @@ mod tests {
             config: std::sync::Arc::new(config),
             quiz_kv: None,
             events_kv: None,
+            d1: None,
             webhook_secret: String::new(),
             worker_ctx: None,
         }

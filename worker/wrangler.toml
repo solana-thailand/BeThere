@@ -98,3 +98,12 @@ preview_id = "ec705e432a5b47adae937878c1402174"
 binding = "EVENTS"
 id = "c8a6a87f9ed34ce0a3c8e48b84039214"
 preview_id = "7d74e1f62fb545be811eaefc8b059dee"
+
+# D1 Database (Issue 037 — claim locks + audit trail)
+# Create with: npx wrangler d1 create bethere-db
+# Then paste the returned database_id below.
+[[d1_databases]]
+binding = "DB"
+database_name = "bethere-db"
+database_id = "98d09542-e7d8-4413-ac34-4276a50d126c"
+migrations_dir = "migrations"

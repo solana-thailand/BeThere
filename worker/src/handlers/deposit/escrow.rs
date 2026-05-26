@@ -167,6 +167,7 @@ pub async fn init_escrow_tx_handler(
             &event.id,
             "escrow PDA initialization TX built",
         ),
+        state.d1.as_deref(),
     )
     .await;
 
@@ -859,6 +860,7 @@ pub async fn deactivate_event_tx_handler(
             &event.id,
             "escrow deactivation TX built",
         ),
+        state.d1.as_deref(),
     )
     .await;
 
@@ -978,6 +980,7 @@ pub async fn close_event_tx_handler(
             &event.id,
             "escrow close TX built",
         ),
+        state.d1.as_deref(),
     )
     .await;
 
@@ -1156,6 +1159,7 @@ pub async fn claim_forfeited_tx_handler(
                 forfeited.len()
             ),
         ),
+        state.d1.as_deref(),
     )
     .await;
 
@@ -1560,6 +1564,7 @@ pub async fn confirm_escrow_init_handler(
                 &event.id,
                 "escrow init confirmed on-chain and persisted server-side",
             ),
+            state.d1.as_deref(),
         )
         .await;
     } else {

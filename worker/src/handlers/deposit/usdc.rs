@@ -430,6 +430,7 @@ pub async fn deposit_usdc_handler(
                 event.deposit_amount_usdc
             ),
         ),
+        state.d1.as_deref(),
     )
     .await;
 
@@ -973,6 +974,7 @@ async fn verify_and_confirm_deposit(state: &AppState, body: &UpdateDepositSignat
                             "confirmed": true,
                         }),
                     ),
+                    state.d1.as_deref(),
                 )
                 .await;
 

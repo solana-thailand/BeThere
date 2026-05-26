@@ -11,6 +11,7 @@ use event_checkin_domain::models::api::{EventConfig as ApiEventConfig, QuizStatu
 use event_checkin_domain::models::attendee::WalkinAttendee;
 use event_checkin_domain::models::error::AppError;
 
+use crate::db;
 use crate::handlers::ext::{resolve_event, resolve_kv};
 use crate::solana::{self, MintRequest};
 use crate::state::AppState;
@@ -53,10 +54,46 @@ pub(crate) async fn acquire_claim_lock(
     event_id: &str,
     token: &str,
     wallet: &str,
+    d1: Option<&worker::D1Database>,
 ) -> Result<(), String> {
+    // D1 path: atomic INSERT ON CONFLICT DO NOTHING
+    if let Some(db) = d1 {
+        let lock_id = uuid::Uuid::now_v7().to_string();
+        let expires_at = (chrono::Utc::now() + chrono::Duration::seconds(300)).to_rfc3339();
+        let acquired =
+            db::acquire_claim_lock(db, event_id, token, &lock_id, wallet, &expires_at).await?;
+
+        if !acquired {
+            tracing::warn!(
+                claim_token = %token,
+                "claim lock race: already locked (D1)"
+            );
+            return Err("claim is already being processed or has been completed".to_string());
+        }
+
+        // D1 lock acquired — also write KV for read compatibility
+        let key = claim_lock_key(event_id, token);
+        let kv_lock = serde_json::json!({
+            "lock_id": lock_id,
+            "wallet": wallet,
+            "started_at": chrono::Utc::now().to_rfc3339(),
+        })
+        .to_string();
+        if let Ok(builder) = kv.put(&key, &kv_lock) {
+            let _ = builder.expiration_ttl(300).execute().await;
+        }
+
+        tracing::info!(
+            claim_token = %token,
+            lock_id = %lock_id,
+            "claim lock acquired (D1+KV)"
+        );
+        return Ok(());
+    }
+
+    // KV fallback: write-first, verify-after
     let key = claim_lock_key(event_id, token);
 
-    // Write-first, verify-after: eliminate TOCTOU window between check and write.
     // Generate a unique lock ID so we can verify we won the race.
     let lock_id = uuid::Uuid::now_v7().to_string();
     let lock_value = serde_json::json!({
@@ -126,7 +163,15 @@ pub(crate) async fn finalize_claim_lock(
     wallet: &str,
     asset_id: &str,
     signature: &str,
+    d1: Option<&worker::D1Database>,
 ) -> Result<(), String> {
+    // D1 path: UPDATE claim_locks
+    if let Some(db) = d1 {
+        let claimed_at = chrono::Utc::now().to_rfc3339();
+        db::finalize_claim_lock(db, event_id, token, asset_id, signature, &claimed_at).await?;
+    }
+
+    // Always finalize in KV (dual-write for read compatibility)
     let key = claim_lock_key(event_id, token);
 
     let lock_value = serde_json::json!({
@@ -153,7 +198,15 @@ pub(crate) async fn release_claim_lock(
     kv: &KvStore,
     event_id: &str,
     token: &str,
+    d1: Option<&worker::D1Database>,
 ) -> Result<(), String> {
+    // D1 path: DELETE
+    if let Some(db) = d1 {
+        db::release_claim_lock(db, event_id, token).await?;
+        tracing::info!(claim_token = %token, "claim lock released (D1+KV)");
+    }
+
+    // Always delete from KV
     let key = claim_lock_key(event_id, token);
     kv.delete(&key)
         .await
@@ -727,10 +780,11 @@ pub async fn execute_claim(
         }
     }
 
-    // 8. Claim dedup lock — prevent concurrent double-claim (KV-based mutex)
+    // 8. Claim dedup lock — prevent concurrent double-claim
     let lock_kv: Option<&KvStore> = resolve_kv(state);
     if let Some(kv) = lock_kv
-        && let Err(e) = acquire_claim_lock(kv, &event.id, token, wallet_address).await
+        && let Err(e) =
+            acquire_claim_lock(kv, &event.id, token, wallet_address, state.d1.as_deref()).await
     {
         return Err(AppError::RateLimited(e));
     }
@@ -756,7 +810,7 @@ pub async fn execute_claim(
             tracing::error!(claim_token = %token, error = %e, "mint failed");
             // Release lock so attendee can retry
             if let Some(kv) = lock_kv {
-                let _ = release_claim_lock(kv, &event.id, token).await;
+                let _ = release_claim_lock(kv, &event.id, token, state.d1.as_deref()).await;
             }
             return Err(AppError::External {
                 service: "helius".into(),
@@ -807,6 +861,7 @@ pub async fn execute_claim(
             wallet_address,
             &mint_result.asset_id,
             &mint_result.signature,
+            state.d1.as_deref(),
         )
         .await
     {
@@ -858,7 +913,9 @@ async fn execute_walkin_claim(
     }
 
     // Claim dedup lock
-    if let Err(e) = acquire_claim_lock(kv, &event.id, token, wallet_address).await {
+    if let Err(e) =
+        acquire_claim_lock(kv, &event.id, token, wallet_address, state.d1.as_deref()).await
+    {
         return Err(AppError::RateLimited(e));
     }
 
@@ -882,7 +939,7 @@ async fn execute_walkin_claim(
         Ok(result) => result,
         Err(ref e) => {
             tracing::error!(claim_token = %token, error = %e, "walk-in mint failed");
-            let _ = release_claim_lock(kv, &event.id, token).await;
+            let _ = release_claim_lock(kv, &event.id, token, state.d1.as_deref()).await;
             return Err(AppError::External {
                 service: "helius".into(),
                 status: 502,
@@ -917,6 +974,7 @@ async fn execute_walkin_claim(
         wallet_address,
         &mint_result.asset_id,
         &mint_result.signature,
+        state.d1.as_deref(),
     )
     .await
     {

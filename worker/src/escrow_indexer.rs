@@ -662,6 +662,7 @@ pub async fn index_helius_transactions(
                             "amount": event.amount,
                         }),
                     ),
+                    None,
                 )
                 .await;
 

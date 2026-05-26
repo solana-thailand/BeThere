@@ -201,6 +201,7 @@ pub async fn check_in(
                     if query.online { "online" } else { "in-person" }
                 ),
             ),
+            state.d1.as_deref(),
         )
         .await;
     }
@@ -309,6 +310,7 @@ pub async fn undo_check_in(
                 &id,
                 "check-in undone",
             ),
+            state.d1.as_deref(),
         )
         .await;
     }
