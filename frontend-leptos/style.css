@@ -9338,3 +9338,347 @@ nav a.active {
     font-weight: 600;
     color: var(--accent, #6366f1);
 }
+
+/* ===== iOS Auto-Zoom Prevention ===== */
+/* iOS Safari auto-zooms into inputs with font-size < 16px and never zooms back out.
+   This global rule ensures all form elements use 16px minimum on touch devices. */
+@supports (-webkit-touch-callout: none) {
+    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not(
+            [type="submit"]
+        ):not([type="button"]):not([type="reset"]):not([type="hidden"]),
+    select,
+    textarea {
+        font-size: 16px !important;
+    }
+}
+
+/* ===== Public Event Page (.pe-) ===== */
+
+/* Card wrapper */
+.pe-card {
+    width: 100%;
+    background: var(--bg-card);
+    border-radius: var(--radius);
+    padding: 1.25rem;
+    margin-bottom: 1rem;
+    box-shadow: var(--shadow);
+}
+
+/* Section title */
+.pe-section-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #fff;
+    margin-bottom: 0.75rem;
+}
+
+/* Hero */
+.pe-hero {
+    width: 100%;
+    text-align: center;
+    margin-bottom: 1.5rem;
+}
+
+.pe-hero-img {
+    max-width: 180px;
+    max-height: 180px;
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+}
+
+/* Event name + tagline */
+.pe-name-block {
+    width: 100%;
+    text-align: center;
+    margin-bottom: 1.5rem;
+}
+
+.pe-name {
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 0.4rem;
+    line-height: 1.25;
+}
+
+.pe-tagline {
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+    margin: 0;
+}
+
+/* Share row */
+.pe-share-row {
+    width: 100%;
+    text-align: center;
+    margin-bottom: 1rem;
+}
+
+.pe-share-copied {
+    color: var(--success);
+    font-size: 0.8rem;
+    margin-left: 0.5rem;
+}
+
+/* Detail rows */
+.pe-detail-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+}
+
+.pe-detail-text {
+    color: var(--text-primary);
+    font-size: 0.95rem;
+}
+
+.pe-detail-secondary {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+/* Capacity */
+.pe-capacity-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* Deposit method rows */
+.pe-method-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+}
+
+.pe-method-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.pe-method-row--closed {
+    opacity: 0.5;
+}
+
+.pe-method-label {
+    background: var(--bg-hover);
+    border-radius: var(--radius-sm);
+    padding: 0.15rem 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.pe-method-label--closed {
+    text-decoration: line-through;
+}
+
+.pe-method-amount {
+    color: var(--text-primary);
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+.pe-method-amount--closed {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    text-decoration: line-through;
+}
+
+.pe-method-via {
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+}
+
+/* Refund items */
+.pe-refund-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.pe-refund-item {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.pe-check {
+    color: #34d399;
+}
+
+.pe-refund-text {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+}
+
+/* Hybrid note */
+.pe-hybrid-note {
+    margin-top: 0.75rem;
+    padding-top: 0.6rem;
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: flex-start;
+    gap: 0.4rem;
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    line-height: 1.4;
+}
+
+/* Auth bar */
+.pe-auth-bar {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--bg-card);
+    border-radius: var(--radius);
+    padding: 0.6rem 1rem;
+    margin-bottom: 0.75rem;
+    box-shadow: var(--shadow);
+}
+
+/* Signed-in indicator */
+.pe-signed-in-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    background: rgba(52, 211, 153, 0.1);
+    border-radius: var(--radius);
+}
+
+/* Form elements */
+.pe-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.pe-input {
+    width: 100%;
+    padding: 0.6rem 0.8rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    outline: none;
+}
+
+.pe-input--error {
+    border-color: #f87171;
+}
+
+.pe-input--locked {
+    color: var(--text-muted);
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+
+.pe-label {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.pe-required {
+    color: #f87171;
+}
+
+.pe-field-error {
+    color: #f87171;
+    font-size: 0.8rem;
+}
+
+.pe-checkbox-label {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+
+.pe-checkbox {
+    margin-top: 0.2rem;
+    accent-color: var(--accent);
+}
+
+.pe-submit-btn {
+    width: 100%;
+    padding: 0.75rem;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius);
+    font-weight: 600;
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: opacity 0.2s;
+}
+
+.pe-error-box {
+    padding: 0.75rem;
+    background: rgba(239, 68, 68, 0.1);
+    border-radius: var(--radius);
+    margin-bottom: 1rem;
+    color: #f87171;
+    font-size: 0.85rem;
+}
+
+/* Loading / error states */
+.pe-loading {
+    text-align: center;
+    padding: 3rem 0;
+}
+
+.pe-error-title {
+    font-size: 1.5rem;
+    color: var(--text-primary);
+    margin-bottom: 0.5rem;
+}
+
+/* Footer */
+.pe-footer {
+    width: 100%;
+    margin-top: 2rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border);
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+}
+
+/* Misc */
+.pe-back-link {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+}
+
+.pe-description {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    line-height: 1.6;
+    white-space: pre-line;
+    margin: 0;
+}
+
+.pe-nft-img {
+    max-width: 120px;
+    border-radius: var(--radius);
+}
+
+.pe-ext-link {
+    color: var(--accent);
+    text-decoration: none;
+    font-size: 0.9rem;
+    font-weight: 500;
+}

@@ -180,6 +180,7 @@ pub async fn get_public_event(
         "status": config.status.as_str(),
         "event_start_ms": config.event_start_ms,
         "event_end_ms": config.event_end_ms,
+        "time_tba": config.time_tba,
         "deposit_enabled": config.deposit_enabled,
         "deposit_amount_usdc": config.deposit_amount_usdc,
         "deposit_amount_thb": config.deposit_amount_thb,
@@ -206,6 +207,7 @@ pub async fn get_public_event(
         "online_available": online_available,
         "online_open_mode": config.online_open_mode.as_str(),
         "visibility": config.visibility.as_str(),
+        "escrow_status": config.escrow_status.as_str(),
     })))
 }
 

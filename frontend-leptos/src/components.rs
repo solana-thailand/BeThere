@@ -176,10 +176,11 @@ pub fn AppHeader(
 
 /// Auth guard wrapper component.
 ///
-/// On mount:
-/// - Checks `is_authenticated()` and redirects to `/` if not
-/// - Loads user email + role via `GET /api/auth/me`
-/// - Provides the user email and role to children via context
+/// On mount, calls `GET /api/auth/me` to verify the session:
+/// - If valid: provides user email + role via context and renders children.
+/// - If invalid: redirects to `/login`.
+/// - Children are **not rendered** until auth succeeds (prevents flash of
+///   protected UI when session is stale or user lacks the required role).
 ///
 /// Children can access the user email and role via:
 /// ```ignore
@@ -191,9 +192,9 @@ pub fn ProtectedRoute(children: Children) -> impl IntoView {
     let navigate = use_navigate();
     let (user_email, set_user_email) = signal(String::new());
     let (user_role, set_user_role) = signal(String::new());
+    let (authed, set_authed) = signal(false);
 
-    // On mount: check auth via cookie by calling /api/auth/me
-    // Renders children immediately; redirects to / if cookie is invalid.
+    // On mount: check auth via /api/auth/me — gates rendering until resolved.
     Effect::new(move |_| {
         let nav = navigate.clone();
         leptos::task::spawn_local(async move {
@@ -206,6 +207,7 @@ pub fn ProtectedRoute(children: Children) -> impl IntoView {
                     );
                     set_user_email.set(me.email);
                     set_user_role.set(me.role);
+                    set_authed.set(true);
                 }
                 Err(e) => {
                     log::warn!("[protected] auth check failed: {e}");
@@ -219,5 +221,26 @@ pub fn ProtectedRoute(children: Children) -> impl IntoView {
     provide_context(user_email);
     provide_context(user_role);
 
-    children()
+    // Children is FnOnce (single call). <Show> requires Fn (re-callable).
+    // Solution: render children once into the DOM, toggle visibility via CSS.
+    // The Effect above redirects to /login on auth failure, so hidden children
+    // are never visible to unauthenticated users.
+    let child_view = children();
+
+    view! {
+        // Spinner shown while auth is pending, hidden once authed
+        <div
+            class="page-loading"
+            style:display=move || if authed.get() { "none" } else { "" }
+        >
+            <span class="spinner spinner-lg"></span>
+            " Authenticating..."
+        </div>
+        // Children hidden until auth succeeds
+        <div
+            style:display=move || if authed.get() { "" } else { "none" }
+        >
+            {child_view}
+        </div>
+    }
 }
