@@ -89,6 +89,7 @@ pub fn QuizEditor(
     let (show_import, set_show_import) = signal(false);
     let (import_json, set_import_json) = signal(String::new());
     let (import_mode, set_import_mode) = signal(false); // false = merge, true = replace
+    let (confirm_clear_all, set_confirm_clear_all) = signal(false);
 
     // Dirty tracking: compare serialized current config vs original
     let is_dirty = Memo::new(move |_| {
@@ -372,25 +373,24 @@ pub fn QuizEditor(
 
         set_config.update(|c| {
             if let Some(c) = c {
+                // Remove any blank placeholder questions (empty text) that were auto-generated
+                c.questions.retain(|q| !q.text.trim().is_empty());
+
                 if import_mode.get() {
                     // Replace mode: overwrite questions, keep settings
                     c.questions = imported_questions;
                 } else {
-                    // Merge mode: append, re-number IDs to avoid collisions
-                    let existing_ids: Vec<String> =
-                        c.questions.iter().map(|q| q.id.clone()).collect();
-                    let max_num = existing_ids
+                    // Merge mode: append, always assign new sequential IDs to guarantee uniqueness
+                    let max_num = c
+                        .questions
                         .iter()
-                        .filter_map(|id| id.strip_prefix('q').and_then(|n| n.parse::<u32>().ok()))
+                        .filter_map(|id| id.id.strip_prefix('q').and_then(|n| n.parse::<u32>().ok()))
                         .max()
                         .unwrap_or(0);
 
                     for (i, mut q) in imported_questions.into_iter().enumerate() {
                         let new_num = max_num + i as u32 + 1;
-                        // Only re-ID if collides
-                        if existing_ids.contains(&q.id) {
-                            q.id = format!("q{new_num}");
-                        }
+                        q.id = format!("q{new_num}");
                         c.questions.push(q);
                     }
                 }
@@ -485,6 +485,32 @@ pub fn QuizEditor(
                             >
                                 "Import"
                             </button>
+                            {
+                                let sc = set_config;
+                                let is_confirming = confirm_clear_all;
+                                let set_ca = set_confirm_clear_all;
+                                view! {
+                                    <button
+                                        class=move || if is_confirming.get() { "btn btn-danger btn-sm" } else { "btn btn-outline btn-sm" }
+                                        on:click=move |_| {
+                                            if !is_confirming.get() {
+                                                set_ca.set(true);
+                                                let reset = set_confirm_clear_all;
+                                                gloo::timers::callback::Timeout::new(3000, move || {
+                                                    reset.set(false);
+                                                }).forget();
+                                            } else {
+                                                set_ca.set(false);
+                                                sc.update(|c| {
+                                                    if let Some(c) = c {
+                                                        c.questions = vec![blank_question("q1".to_string())];
+                                                    }
+                                                });
+                                            }
+                                        }
+                                    >{move || if is_confirming.get() { "⚠ Confirm Clear All" } else { "Clear All" }}</button>
+                                }
+                            }
                             <button
                                 class="btn btn-primary btn-sm"
                                 on:click=handle_save

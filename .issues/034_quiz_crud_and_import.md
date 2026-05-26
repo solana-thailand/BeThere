@@ -1,6 +1,7 @@
 # Issue 034: Quiz CRUD, Enable/Disable & Bulk Import
 
-> **Status: 📋 PLANNED**
+> **Status: ✅ Phase 1 COMPLETE** — Enable/Disable toggle, Import JSON (merge + replace), Clear All, and bug fixes done.
+> Phase 2 (Individual CRUD API) and Phase 3 (Export) remain.
 
 ## Problem
 
@@ -123,12 +124,15 @@ QuizQuestionPublic {
 
 ## Implementation Phases
 
-### Phase 1 — Enable/Disable + Import (~1.5 hours)
-- [ ] Add `enabled: bool` to domain types
-- [ ] Filter disabled questions in `to_public_questions()`
-- [ ] Add toggle in quiz editor UI
-- [ ] Add Import JSON modal (merge + replace modes)
-- [ ] Update `.issues/002_quiz_gated_claim.md` data model section
+### Phase 1 — Enable/Disable + Import + Clear All ✅
+- [x] Add `enabled: bool` to domain types
+- [x] Filter disabled questions in `to_public_questions()`
+- [x] Add toggle in quiz editor UI
+- [x] Add Import JSON modal (merge + replace modes)
+- [x] Add "Clear All" button with two-click confirmation
+- [x] Fix merge mode duplicate ID bug — always assign new sequential IDs
+- [x] Fix blank first question persisting after import — auto-remove blank placeholders
+- [x] Update `.issues/002_quiz_gated_claim.md` data model section
 
 ### Phase 2 — Individual CRUD API (~2 hours)
 - [ ] `POST /api/admin/quiz/questions`
