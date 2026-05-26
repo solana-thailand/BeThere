@@ -230,3 +230,39 @@ pub fn MovedOnlineCard() -> impl IntoView {
         </div>
     }
 }
+
+/// Rollover deposit CTA — shown when attendee has a verified deposit on a past event
+/// and a new event from the same organizer is available.
+#[component]
+pub fn RolloverActionCard(
+    /// Name of the target event to roll deposit into.
+    #[prop(into)]
+    target_event_name: String,
+    /// Callback invoked when attendee clicks "Roll to next event".
+    on_rollover: Box<dyn Fn()>,
+) -> impl IntoView {
+    view! {
+        <div class="ticket-action-card ticket-action-card--rollover">
+            <div class="ticket-action-icon">
+                <Icon icon=IconName::Refresh class="icon-sm" />
+            </div>
+            <div>
+                <div class="ticket-action-title">"Roll Deposit to Next Event"</div>
+                <div class="ticket-action-desc">
+                    {format!(
+                        "Your deposit is ready to roll over to {}. \
+                         No extra payment needed — your USDC transfers atomically.",
+                        target_event_name
+                    )}
+                </div>
+                <button
+                    class="btn btn-primary btn-sm ticket-action-btn"
+                    on:click=move |_| on_rollover()
+                >
+                    <Icon icon=IconName::Refresh class="icon-sm" />
+                    " Roll to Next Event"
+                </button>
+            </div>
+        </div>
+    }
+}

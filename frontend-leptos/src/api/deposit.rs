@@ -525,3 +525,32 @@ pub async fn close_deposit(body: &CloseDepositRequest) -> Result<CloseDepositRes
 pub async fn claim_forfeited(body: &ClaimForfeitedRequest) -> Result<ClaimForfeitedResponse, ApiError> {
     api_post_json("/escrow/claim-forfeited", body).await
 }
+
+// ===== Rollover API =====
+
+/// Request body for rollover deposit transaction.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct RolloverDepositRequest {
+    /// Source event ID (past event with checked-in deposit).
+    pub source_event_id: String,
+    /// Target event ID (new event to roll deposit into).
+    pub target_event_id: String,
+    /// Attendee API ID.
+    pub attendee_id: String,
+    /// Attendee's wallet address (base58).
+    pub wallet_address: String,
+}
+
+/// Response for rollover deposit transaction.
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+pub struct RolloverDepositResponse {
+    /// Base64-encoded serialized transaction (unsigned).
+    pub transaction: String,
+    /// Human-readable message.
+    pub message: String,
+}
+
+/// POST /api/escrow/rollover-deposit — build rollover_deposit TX
+pub async fn rollover_deposit(body: &RolloverDepositRequest) -> Result<RolloverDepositResponse, ApiError> {
+    api_post_json("/escrow/rollover-deposit", body).await
+}

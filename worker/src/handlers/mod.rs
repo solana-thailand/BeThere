@@ -135,6 +135,11 @@ pub fn routes(state: AppState) -> Router<()> {
             "/deposit/credit-balance",
             get(deposit::credit_balance_handler),
         )
+        // Roll deposit to next event (attendee-authed — attendee signs the TX)
+        .route(
+            "/escrow/rollover-deposit",
+            post(deposit::rollover_deposit_tx_handler),
+        )
         .layer(middleware::from_fn_with_state(
             state.clone(),
             crate::auth::require_identity,

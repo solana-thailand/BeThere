@@ -6,6 +6,7 @@ pub mod deactivate_event;
 pub mod deposit;
 pub mod mark_checked_in;
 pub mod refund;
+pub mod rollover_deposit;
 
 pub use claim_forfeited::*;
 pub use close_deposit::*;
@@ -15,6 +16,7 @@ pub use deactivate_event::*;
 pub use deposit::*;
 pub use mark_checked_in::*;
 pub use refund::*;
+pub use rollover_deposit::*;
 
 use quasar_lang::prelude::*;
 

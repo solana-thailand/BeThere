@@ -23,7 +23,7 @@ pub use tx_builders::{
     build_close_deposit_transaction, build_close_event_transaction,
     build_deactivate_event_transaction, build_deposit_transaction, build_init_escrow_transaction,
     build_mark_checked_in_transaction, build_refund_and_close_transaction,
-    build_refund_transaction,
+    build_refund_transaction, build_rollover_deposit_transaction,
 };
 #[allow(unused_imports)]
 pub use wire::{check_escrow_pda_available, derive_escrow_address, verify_escrow_account_exists};
@@ -130,6 +130,14 @@ pub struct CloseDepositTransaction {
 
 /// Response for a combined refund + close_deposit transaction.
 pub struct RefundAndCloseTransaction {
+    /// Base64-encoded serialized transaction (unsigned).
+    pub transaction_b64: String,
+    /// Human-readable message for wallet confirmation.
+    pub message: String,
+}
+
+/// Result of building a rollover_deposit transaction.
+pub struct RolloverDepositTransaction {
     /// Base64-encoded serialized transaction (unsigned).
     pub transaction_b64: String,
     /// Human-readable message for wallet confirmation.

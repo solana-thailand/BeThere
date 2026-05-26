@@ -98,4 +98,15 @@ mod bethere_escrow {
     pub fn close_deposit(ctx: Ctx<CloseDeposit>, _event_id: u64) -> Result<(), ProgramError> {
         ctx.accounts.close_deposit()
     }
+
+    /// Roll a checked-in attendee's deposit from one event to another.
+    /// Same organizer, same deposit amount required. Atomic vault-to-vault transfer.
+    #[instruction(discriminator = 8)]
+    pub fn rollover_deposit(
+        ctx: Ctx<RolloverDeposit>,
+        _source_event_id: u64,
+        _target_event_id: u64,
+    ) -> Result<(), ProgramError> {
+        ctx.accounts.validate_and_update(&ctx.bumps)
+    }
 }
