@@ -278,7 +278,12 @@ pub fn RolloverActionCard(
     attendee_id: String,
 ) -> impl IntoView {
     let (state, set_state) = signal(RolloverState::Ready);
-    let (toast, set_toast) = signal(None::<components::ToastMessage>);
+    let (_toast, set_toast) = signal(None::<components::ToastMessage>);
+
+    // Store non-Copy props so they can be accessed from multiple closures
+    let source_eid = StoredValue::new(source_event_id);
+    let target_eid = StoredValue::new(target_event_id);
+    let aid_stored = StoredValue::new(attendee_id);
 
     // Detect wallets on mount
     let (detected_wallets, _) = signal({
@@ -318,91 +323,13 @@ pub fn RolloverActionCard(
         });
     };
 
-    // Sign and send rollover TX handler
-    let handle_sign_and_send = move |wallet_name: String, public_key: String| {
-        let wn = wallet_name.clone();
-        let pk = public_key.clone();
-        let source_eid = source_event_id.clone();
-        let target_eid = target_event_id.clone();
-        let aid = attendee_id.clone();
-
-        set_state.set(RolloverState::Signing(wallet_name, public_key));
-
-        leptos::task::spawn_local(async move {
-            // Step 1: Build rollover TX via API
-            let body = RolloverDepositRequest {
-                source_event_id: source_eid,
-                target_event_id: target_eid,
-                attendee_id: aid,
-                wallet_address: pk.clone(),
-            };
-            let resp = match api::rollover_deposit(&body).await {
-                Ok(r) => r,
-                Err(e) => {
-                    log::error!("[rollover] TX build failed: {e}");
-                    set_state.set(RolloverState::Error(format!("Failed to build transaction: {e}")));
-                    return;
-                }
-            };
-
-            let tx_b64 = resp.transaction;
-            if tx_b64.is_empty() {
-                set_state.set(RolloverState::Error("Transaction was empty.".to_string()));
-                return;
-            }
-
-            // Step 2: Verify wallet cluster
-            let expected_cluster = crate::utils::get_cluster();
-            if let Err(cluster_err) =
-                crate::pages::escrow_init::check_wallet_cluster(&wn, &expected_cluster).await
-            {
-                log::error!("[rollover] cluster mismatch: {cluster_err}");
-                set_state.set(RolloverState::Error(cluster_err));
-                return;
-            }
-
-            // Step 3: Pre-sign simulation
-            match crate::pages::escrow_init::simulate_transaction_js(&wn, &tx_b64).await {
-                Ok(sim) if sim.ok => {}
-                Ok(sim) => {
-                    let err_msg = sim.error.unwrap_or_else(|| "Simulation failed".to_string());
-                    log::error!("[rollover] simulation failed: {err_msg}");
-                    set_state.set(RolloverState::Error(format!("Transaction would fail: {err_msg}")));
-                    return;
-                }
-                Err(e) => {
-                    log::warn!("[rollover] simulate error (not blocking): {e}");
-                }
-            }
-
-            // Step 4: Sign and send
-            match crate::pages::escrow_init::sign_and_send_tx_js(&wn, &tx_b64).await {
-                wallet_error::WalletResult::Success(signature) => {
-                    log::info!("[rollover] TX confirmed: {}", signature);
-                    set_state.set(RolloverState::Confirmed(signature));
-                }
-                wallet_error::WalletResult::Error(e) => {
-                    log::error!("[rollover] sign+send error: {:?}", e.code);
-                    set_state.set(RolloverState::Error(
-                        wallet_error::user_friendly_message(&e),
-                    ));
-                }
-                wallet_error::WalletResult::UnknownFailure => {
-                    set_state.set(RolloverState::Error(
-                        "Transaction failed. Please try again.".to_string(),
-                    ));
-                }
-            }
-        });
-    };
-
     view! {
         <div class="ticket-action-card ticket-action-card--rollover">
             <div class="ticket-action-icon">
                 <Icon icon=IconName::Refresh class="icon-sm" />
             </div>
             <div>
-                {move || match &state.get() {
+                {move || match state.get() {
                     RolloverState::Ready => view! {
                         <div class="ticket-action-title">"Roll Deposit to Next Event"</div>
                         <div class="ticket-action-desc">
@@ -463,9 +390,11 @@ pub fn RolloverActionCard(
                     },
 
                     RolloverState::WalletConnected(wn, _pk) => {
-                        let wn_send = wn.clone();
-                        let pk_send = _pk.clone();
                         let wn_display = wn.clone();
+                        let sv_source = source_eid;
+                        let sv_target = target_eid;
+                        let sv_aid = aid_stored;
+                        let ss = set_state;
                         view! {
                             <div class="ticket-action-title">
                                 {format!("Connected via {}", wn_display)}
@@ -475,7 +404,72 @@ pub fn RolloverActionCard(
                             </div>
                             <button
                                 class="btn btn-success btn-sm ticket-action-btn"
-                                on:click=move |_| handle_sign_and_send(wn_send.clone(), pk_send.clone())
+                                on:click=move |_| {
+                                    let wn_c = wn.clone();
+                                    let pk_c = _pk.clone();
+                                    let s_eid = sv_source.get_value();
+                                    let t_eid = sv_target.get_value();
+                                    let a_id = sv_aid.get_value();
+                                    ss.set(RolloverState::Signing(wn_c.clone(), pk_c.clone()));
+                                    leptos::task::spawn_local(async move {
+                                        let body = RolloverDepositRequest {
+                                            source_event_id: s_eid,
+                                            target_event_id: t_eid,
+                                            attendee_id: a_id,
+                                            wallet_address: pk_c.clone(),
+                                        };
+                                        let resp = match api::rollover_deposit(&body).await {
+                                            Ok(r) => r,
+                                            Err(e) => {
+                                                log::error!("[rollover] TX build failed: {e}");
+                                                ss.set(RolloverState::Error(format!("Failed to build transaction: {e}")));
+                                                return;
+                                            }
+                                        };
+                                        let tx_b64 = resp.transaction;
+                                        if tx_b64.is_empty() {
+                                            ss.set(RolloverState::Error("Transaction was empty.".to_string()));
+                                            return;
+                                        }
+                                        let expected_cluster = crate::utils::get_cluster();
+                                        if let Err(cluster_err) =
+                                            crate::pages::escrow_init::check_wallet_cluster(&wn_c, &expected_cluster).await
+                                        {
+                                            log::error!("[rollover] cluster mismatch: {cluster_err}");
+                                            ss.set(RolloverState::Error(cluster_err));
+                                            return;
+                                        }
+                                        match crate::pages::escrow_init::simulate_transaction_js(&wn_c, &tx_b64).await {
+                                            Ok(sim) if sim.ok => {}
+                                            Ok(sim) => {
+                                                let err_msg = sim.error.unwrap_or_else(|| "Simulation failed".to_string());
+                                                log::error!("[rollover] simulation failed: {err_msg}");
+                                                ss.set(RolloverState::Error(format!("Transaction would fail: {err_msg}")));
+                                                return;
+                                            }
+                                            Err(e) => {
+                                                log::warn!("[rollover] simulate error (not blocking): {e}");
+                                            }
+                                        }
+                                        match crate::pages::escrow_init::sign_and_send_tx_js(&wn_c, &tx_b64).await {
+                                            wallet_error::WalletResult::Success(signature) => {
+                                                log::info!("[rollover] TX confirmed: {}", signature);
+                                                ss.set(RolloverState::Confirmed(signature));
+                                            }
+                                            wallet_error::WalletResult::Error(e) => {
+                                                log::error!("[rollover] sign+send error: {:?}", e.code);
+                                                ss.set(RolloverState::Error(
+                                                    wallet_error::user_friendly_message(&e),
+                                                ));
+                                            }
+                                            wallet_error::WalletResult::UnknownFailure => {
+                                                ss.set(RolloverState::Error(
+                                                    "Transaction failed. Please try again.".to_string(),
+                                                ));
+                                            }
+                                        }
+                                    });
+                                }
                             >
                                 <Icon icon=IconName::Refresh class="icon-sm" />
                                 " Sign & Send Rollover"
@@ -499,7 +493,7 @@ pub fn RolloverActionCard(
                     }.into_any(),
 
                     RolloverState::Confirmed(sig) => {
-                        let solscan = utils::solscan_tx_url(sig, &utils::get_cluster());
+                        let solscan = utils::solscan_tx_url(&sig, &utils::get_cluster());
                         let sig_short = if sig.len() > 20 {
                             format!("{}...{}", &sig[..8], &sig[sig.len()-8..])
                         } else {

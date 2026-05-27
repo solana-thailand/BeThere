@@ -65,6 +65,7 @@ pub fn InPersonView(
         deposit_href,
         orb_link,
         event_id,
+        api_id,
         rollover_target_event,
         ..
     } = view_data;
