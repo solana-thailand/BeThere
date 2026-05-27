@@ -388,6 +388,39 @@ Floating overlay, bottom-right corner. Auto-shows on touch devices (`@media (hov
 
 ---
 
+## Competency Outcomes & Credit Mapping
+
+Each adventure level maps to a competency-based learning outcome aligned with Bloom's Taxonomy. This positions Rust Adventures as a **micro-credential system** where levels = modular learning units earning verifiable credits (backed by on-chain cNFT badges).
+
+### Learning Outcomes per Level
+
+| Level | Bloom Level | Learning Outcome | Credit |
+|-------|-------------|-----------------|--------|
+| 1 — Hello World | Remember | Recall basic Rust program structure (`fn`, `let`, `println!`) | 0.5 |
+| 2 — Variables | Understand | Explain immutability, mutability, and shadowing semantics | 0.5 |
+| 3 — Types | Understand | Identify primitive types, type inference, and `as` casts | 0.5 |
+| 4 — Control Flow | Apply | Write correct `if`/`match`/`loop`/`for` constructs for given scenarios | 1.0 |
+| 5 — Functions | Apply | Implement functions with parameters, return types, and visibility | 1.0 |
+| 6 — Ownership | Apply | Apply ownership rules: move, borrow (`&`/`&mut`), clone semantics | 1.5 |
+| 7 — Structs & Enums | Analyze | Design data structures using `struct`, `enum`, and `impl` blocks | 1.5 |
+| 8 — Pattern Matching | Analyze | Destructure complex types with `match`, guards, `Some`/`None`/`Ok`/`Err` | 1.5 |
+| 9 — Error Handling | Evaluate | Choose appropriate error strategies: `Result`, `Option`, `?` operator | 1.5 |
+| 10 — Traits | Create | Define and implement traits with `impl`, `derive` for abstractions | 2.0 |
+
+**Total credits for full completion: 11.5**
+
+### Stackable Credentials (Future)
+
+| Certificate | Required Levels | Credits | Meaning |
+|-------------|----------------|---------|----------|
+| Rust Foundations | 1–5 | 3.5 | Can read and write basic Rust programs |
+| Rust Core | 1–7 | 6.5 | Understands ownership and data design |
+| Rust Practitioner | 1–10 | 11.5 | Full intermediate Rust competency |
+
+> **Note**: Credit values and certificates are a design reference, not yet implemented. See `.issues/038_curriculum_design_vision.md` for the full curriculum architecture plan.
+
+---
+
 ## Risks
 
 | Risk | Mitigation |

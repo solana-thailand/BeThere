@@ -522,3 +522,34 @@ Submit the on-chain escrow program to a Solana audit firm (e.g., Audit Arena, Ot
 
 ### ✅ LM-0. Admin Attendee List Redesign
 **Done**: Two-row card layout. Name is hero element. Commit `ef2aa89`.
+
+---
+
+## P2.5 — Learning & Credentials UX (Issue 038)
+
+> **Prerequisite**: Phases 10–12 shipped (mainnet, platform fees, multi-org). Curriculum features are future work.
+> Full vision: `.issues/038_curriculum_design_vision.md`
+
+### LC-1. Learning Pathway Progress
+**Current**: Adventure shows completed levels in a flat list. No sense of progression toward a credential.
+**Target**: Visual progress bar or pathway map showing levels completed → credits earned → certificates unlocked.
+**Impact**: Motivates completion. Turns a game into a credential pursuit.
+**Effort**: ~4h (frontend signal + progress bar component)
+
+### LC-2. Credit Balance Display
+**Current**: No concept of learning credits anywhere in the UI.
+**Target**: "My Credits" section in landing page (auth-aware nav) showing accumulated credits from adventure levels + events attended.
+**Impact**: Makes credits tangible. First step toward stackable credentials.
+**Effort**: ~1d (backend credit aggregation + frontend display)
+
+### LC-3. Certificate / Badge Gallery
+**Current**: NFT badges exist on-chain but there's no user-facing gallery.
+**Target**: "My Badges" page showing earned cNFT badges organized by credential tier (Foundations → Core → Practitioner).
+**Impact**: Social proof, shareable credentials, LinkedIn integration potential.
+**Effort**: ~2d (new page + Solana RPC for badge metadata)
+
+### LC-4. Admin: Curriculum Dashboard
+**Current**: Admin shows event stats (checked-in, deposits). No learning analytics.
+**Target**: Per-event competency dashboard — pass rates per level, average completion time, credit distribution.
+**Impact**: Organizers see educational outcomes, not just attendance.
+**Effort**: ~3d (new admin tab + analytics queries)

@@ -540,5 +540,8 @@ See [`docs/security_audit.md`](docs/security_audit.md) for the full escrow secur
 | **10** | **Mainnet deployment** | 📋 Next (~1.5 SOL cost) |
 | **11** | Platform fees (1-2% on forfeited deposits) | 📋 Planned |
 | **12** | Multi-organizer SaaS | 📋 Planned |
+| **13** | Learning & Credentials — reposition adventure + quiz + cNFT as micro-credential system; add credit tracking, stackable certificates | 🔮 Future |
+| **14** | Curriculum Design — OBE framework, modular learning units, TQF/AUN-QA compliance, RPL assessment | 🔮 Future |
 
 See **[DISCUSSION.md](./DISCUSSION.md)** for the full architecture direction and decisions.
+See **[.issues/038_curriculum_design_vision.md](./.issues/038_curriculum_design_vision.md)** for the curriculum design vision.
