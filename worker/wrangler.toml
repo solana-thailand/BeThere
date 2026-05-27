@@ -112,10 +112,3 @@ binding = "DB"
 database_name = "bethere-db"
 database_id = "98d09542-e7d8-4413-ac34-4276a50d126c"
 migrations_dir = "migrations"
-
-# Phase 9: R2 bucket for NFT metadata, badge SVGs, slip images, refund proofs (Issue #039)
-# Create with: npx wrangler r2 bucket create bethere-assets
-# Free tier: 10GB storage, 1M Class A ops/mo, 10M Class B ops/mo, zero egress.
-[[r2_buckets]]
-binding = "ASSETS"
-bucket_name = "bethere-assets"
