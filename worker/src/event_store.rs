@@ -1340,3 +1340,24 @@ async fn add_to_deposit_list(
 
     Ok(())
 }
+
+/// Find attendee API ID by wallet address within a specific event's deposit records.
+///
+/// Scans `DepositStatus` entries for the event and matches on `wallet_address`.
+/// Returns the first matching `attendee_id` (API ID from Sheets).
+pub async fn find_attendee_by_wallet(
+    kv: &KvStore,
+    event_id: &str,
+    wallet_address: &str,
+) -> Result<Option<String>, String> {
+    if wallet_address.is_empty() {
+        return Ok(None);
+    }
+    let deposits = list_deposit_statuses(kv, event_id).await?;
+    for d in &deposits {
+        if d.wallet_address.as_deref() == Some(wallet_address) {
+            return Ok(Some(d.attendee_id.clone()));
+        }
+    }
+    Ok(None)
+}
