@@ -46,6 +46,11 @@ pub struct AppState {
     /// tasks (e.g. Google Sheets sync) so the HTTP response returns immediately.
     /// `None` outside the fetch lifecycle (tests, scheduled events).
     pub worker_ctx: Option<Arc<Context>>,
+    /// R2 bucket for NFT metadata, badge SVGs, slip images, refund proofs (Issue #039).
+    /// `None` if the `ASSETS` binding is not configured or worker crate doesn't expose R2 yet.
+    /// TODO: Activate when worker crate v0.9+ with R2 support is available.
+    #[allow(dead_code)]
+    pub r2: Option<()>,
 }
 
 impl AppState {
@@ -203,6 +208,9 @@ impl AppState {
 
         let d1 = env.d1("DB").ok().map(Arc::new);
 
+        // R2 binding — not yet available in worker crate v0.8
+        let r2 = None;
+
         let webhook_secret = get_var(env, "WEBHOOK_SECRET").unwrap_or_default();
         if webhook_secret.is_empty() {
             // Only warn once per isolate to avoid log spam
@@ -216,6 +224,7 @@ impl AppState {
             quiz_kv,
             events_kv,
             d1,
+            r2,
             webhook_secret,
             worker_ctx: None,
         })

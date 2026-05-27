@@ -80,6 +80,11 @@ EVENT_END_MS = "1777183200000"
 [triggers]
 crons = ["0 3 * * *"]
 
+# Smart Placement — co-locate Worker close to backends (D1, Google Sheets, Helius RPC)
+# Reduces check-in latency by minimizing network round-trips. Zero cost on all plans.
+[placement]
+mode = "smart"
+
 # Phase 4: Quiz KV namespace (Issue 002 — activity-gated claim)
 # Create with: npx wrangler kv namespace create QUIZ
 # Then paste the returned ID below.
@@ -107,3 +112,10 @@ binding = "DB"
 database_name = "bethere-db"
 database_id = "98d09542-e7d8-4413-ac34-4276a50d126c"
 migrations_dir = "migrations"
+
+# Phase 9: R2 bucket for NFT metadata, badge SVGs, slip images, refund proofs (Issue #039)
+# Create with: npx wrangler r2 bucket create bethere-assets
+# Free tier: 10GB storage, 1M Class A ops/mo, 10M Class B ops/mo, zero egress.
+[[r2_buckets]]
+binding = "ASSETS"
+bucket_name = "bethere-assets"

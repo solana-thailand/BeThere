@@ -50,6 +50,7 @@ fn app_router(state: AppState) -> Router {
         // Any path not matched by the API routes gets the SPA shell.
         // Leptos router handles /staff, /admin, /claim/xxx client-side.
         .fallback(spa_fallback)
+        .layer(axum::middleware::from_fn(middleware::rate_limit_layer))
         .layer(axum::middleware::from_fn(middleware::correlation_id_layer))
         .layer(axum::middleware::from_fn(
             middleware::security_headers_layer,

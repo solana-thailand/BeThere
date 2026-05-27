@@ -564,6 +564,7 @@ mod tests {
             quiz_kv: None,
             events_kv: None,
             d1: None,
+            r2: None,
             webhook_secret: String::new(),
             worker_ctx: None,
         }
