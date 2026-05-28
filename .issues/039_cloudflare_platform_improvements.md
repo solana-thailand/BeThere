@@ -226,7 +226,7 @@ class_name = "EscrowWorkflow"
 
 #### 6. Gradual Deployments
 
-**Status**: Not mentioned anywhere in project.
+**Status**: ✅ Runbook created at `docs/gradual_deploy_runbook.md`
 
 **What**: Use Wrangler's gradual deployment for Phase 10 (mainnet rollout).
 
@@ -247,6 +247,10 @@ npx wrangler deployments create --version <id> --percentage 10  # 10% traffic
 **Effort**: ~30 min (Wrangler config + rollback procedure documentation).
 
 **Blocks**: Phase 10 (mainnet deployment).
+
+**Deliverables**: `docs/gradual_deploy_runbook.md` (mermaid flow, pre-deploy checklist, monitoring commands, rollback procedure, post-deploy verification).
+
+Also created `docs/cloudflare_bug_report_10013.md` — ready to file at https://github.com/cloudflare/workers-sdk/issues/new/choose
 
 ---
 
