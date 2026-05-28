@@ -229,7 +229,8 @@ m = {
     'bindings': [
         {'type': 'kv_namespace', 'name': 'QUIZ', 'namespace_id': 'faf9eebaa53d46f9a82c1f6db6dfbc05'},
         {'type': 'kv_namespace', 'name': 'EVENTS', 'namespace_id': 'c8a6a87f9ed34ce0a3c8e48b84039214'},
-        {'type': 'd1', 'name': 'DB', 'id': '98d09542-e7d8-4413-ac34-4276a50d126c'}
+        {'type': 'd1', 'name': 'DB', 'id': '98d09542-e7d8-4413-ac34-4276a50d126c'},
+        {'type': 'r2_bucket', 'name': 'ASSETS_BUCKET', 'bucket_name': 'bethere-assets'}
     ],
     'assets': {
         'jwt': '${ASSETS_JWT}',

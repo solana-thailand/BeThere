@@ -109,6 +109,20 @@ pub fn routes(state: AppState) -> Router<()> {
         .route(
             "/escrow/onchain-webhook",
             post(escrow_index::onchain_webhook_handler),
+        )
+        // R2 object serving — separate routes per prefix to avoid SPA fallback shadowing
+        // the {key:path} wildcard. Each route maps to a specific R2 prefix.
+        .route(
+            "/storage/slips/{event_id}/{attendee_id}",
+            get(crate::storage::serve_slip),
+        )
+        .route(
+            "/storage/refunds/{event_id}/{attendee_id}",
+            get(crate::storage::serve_refund),
+        )
+        .route(
+            "/storage/badges/{event_id}",
+            get(crate::storage::serve_badge),
         );
 
     // Attendee-authenticated routes — require JWT identity but NOT staff status.

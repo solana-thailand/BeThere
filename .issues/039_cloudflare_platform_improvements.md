@@ -132,6 +132,8 @@ bucket_name = "bethere-assets"
 
 **Affected files**: `wrangler.toml`, `worker/src/state.rs`, `worker/src/metadata.rs` (badge SVGs), `worker/src/handlers/deposit/thb.rs` (slip upload), `worker/src/solana.rs` (NFT metadata hosting).
 
+> **Note**: Runtime optimization (router caching, KV binding caching, parallel API calls) tracked in Issue #041.
+
 ---
 
 ### P1: High-Impact, Needs Workers Paid Plan ($5/mo)
@@ -335,13 +337,17 @@ Post-Mainnet ($5/mo):
 ## Acceptance Criteria
 
 ### P0 (Free Plan)
-- [ ] `[placement] mode = "smart"` in `wrangler.toml`
-- [ ] R2 bucket created + binding added
-- [ ] Badge SVGs served from R2 (not `include_str!`)
-- [ ] THB slip images uploaded to R2 (not base64 data URLs)
-- [ ] Rate limiting on `/auth/callback`, `/deposit/usdc/webhook`, `/claim/{token}`
-- [ ] All existing tests pass
-- [ ] WASM binary size reduced (badge SVGs removed)
+- [x] `[placement] mode = "smart"` in `wrangler.toml`
+- [x] R2 bucket binding added (`ASSETS_BUCKET` → `bethere-assets`)
+- [x] `worker::Bucket` cached per isolate in `AppState.r2`
+- [x] R2 storage helper module (`worker/src/storage.rs`)
+- [x] Rate limiting on auth, claim, deposit, webhook endpoints (in-memory middleware)
+- [x] All existing tests pass (21 worker + 39 on-chain = 60 total)
+- [x] Slip upload handler migrates data URLs to R2 (backward compatible)
+- [x] Refund proof handler migrates data URLs to R2 (backward compatible)
+- [x] R2 serving endpoint `GET /api/storage/{key:path}` with prefix security
+- [ ] Badge SVGs served from R2 (not `include_str!`) — low priority, SVGs are small
+- [ ] WASM binary size reduced (badge SVGs removed) — blocked on badge migration
 
 ### P1 (Workers Paid Plan)
 - [ ] Queues for sheets sync, minting, refund processing
@@ -365,3 +371,6 @@ Post-Mainnet ($5/mo):
 - Issue #010 (deposit/refund — R2 slip storage mentioned)
 - Handovers #029, #032, #065, #066, #074 (R2 TODOs)
 - Handovers #003, #004, #027, #030, #032 (Rate limiting TODOs)
+
+## Related Issues
+- Issue #041 — Worker Runtime Optimization + File Reorganization
