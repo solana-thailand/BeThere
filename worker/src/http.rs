@@ -44,7 +44,7 @@ pub async fn post_form<T: DeserializeOwned>(
     url: &str,
     form_data: &[(&str, &str)],
 ) -> Result<T, String> {
-    let body = url::form_urlencoded::Serializer::new(String::new())
+    let body = form_urlencoded::Serializer::new(String::new())
         .extend_pairs(form_data.iter().copied())
         .finish();
 

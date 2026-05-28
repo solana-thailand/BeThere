@@ -10,13 +10,12 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
 # QR code generation — pure Rust, WASM-compatible
-qrcode = "0.14"
+qrcode = { version = "0.14", default-features = false, features = ["svg"] }
 
 # Encoding — WASM-compatible
 base64 = "0.22"
 
-# URL handling — WASM-compatible
-url = "2"
+# URL encoding — WASM-compatible (used by worker for Google Sheets ranges)
 urlencoding = "2"
 
 # Time — WASM-compatible

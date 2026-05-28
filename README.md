@@ -5,7 +5,7 @@
 [![Solana](https://img.shields.io/badge/Solana-Devnet-9945FF?logo=solana)](https://solana.com)
 [![Rust](https://img.shields.io/badge/Rust-100%25-000000?logo=rust)](https://www.rust-lang.org/)
 [![Cloudflare Workers](https://img.shields.io/badge/Edge-Cloudflare-F38020?logo=cloudflare)](https://workers.cloudflare.com/)
-[![Tests](https://img.shields.io/badge/tests-29%20passing-success)](./scripts/e2e/)
+[![Tests](https://img.shields.io/badge/tests-85%20passing-success)](./scripts/e2e/)
 
 
 > Free events have **30-40% no-show rates**. BeThere fixes this with **USDC deposit commitments** — attendees get their money back when they show up, forfeit if they don't. Built on Solana for **$0.001 NFT badges**, **$0.00087 on-chain costs**, and **< 500ms check-in** at the edge.
@@ -34,7 +34,7 @@
 | NFT mint cost | **$0.001** per badge |
 | Transaction cost | **$0.00087** (at $172/SOL) |
 | Check-in latency | **< 500ms** (edge worker) |
-| Tests | **68 passing** (39 worker + 29 on-chain) |
+| Tests | **85 passing** (47 unit + 38 on-chain SVM) |
 | Program ID (devnet) | `C6HDeZES9aPpNwe3UvS9ecmfcRhH1XeJb8PGJmLG3z3T` |
 
 ### 🎮 Live Demo Flow (Devnet)
@@ -144,13 +144,15 @@ A separate **"staff"** sheet tab (configurable via `GOOGLE_STAFF_SHEET_NAME`) ho
 
 ```bash
 # Build frontend (if changed)
-cd frontend-leptos && trunk build && cd ..
+cd frontend-leptos && bash build.sh && cd ..
 
 # Deploy to Cloudflare Workers
 cd worker && ./deploy.sh
 ```
 
-The `deploy.sh` script handles the Yarn PnP conflict automatically. Alternatively, you can run `npx wrangler deploy` directly if you don't have `~/.pnp.cjs`.
+The `deploy.sh` script tries `npx wrangler deploy` first. If Cloudflare's versions API fails (error 10013), it falls back to a direct API deployment using BLAKE3 asset manifests. Requires `pip3 install blake3` for the fallback path.
+
+**Pre-deploy check**: Ensure `frontend-leptos/dist/` is non-empty before deploying — the worker embeds `index.html` at compile time.
 
 Non-secret vars are in `worker/wrangler.toml` `[vars]`:
 
@@ -394,21 +396,22 @@ The escrow system uses PDAs (Program Derived Addresses) to hold attendee USDC de
 ## Tests
 
 ```bash
-# All unit tests
-cargo test
+# All unit tests (47 total)
+cargo test -p event-checkin-domain   # 26 tests — shared types, QR logic
+cargo test -p event-checkin-worker   # 21 tests — crypto, auth, sheets, events
 
-# Individual crates
-cargo test -p event-checkin-domain   # Shared types, QR logic
-cargo test -p event-checkin-worker   # Crypto, auth, sheets, events
+# On-chain SVM tests (38 total)
+cd bethere-escrow && quasar test     # All 9 escrow instructions + rollover lifecycle
 
-# Full 10-step E2E test (requires running worker + worker/.dev.vars with HELIUS_API_KEY)
-./scripts/e2e/test_full_e2e.sh
-
-# Devnet API test suite (7 tests, no browser needed)
-./scripts/e2e/test_devnet.sh
-
-# Mint-only test (single cNFT mint on devnet)
-./scripts/e2e/test_devnet.sh --mint-only
+# E2E devnet scripts
+./scripts/e2e/run_all_e2e.sh                      # Run all E2E scripts
+./scripts/e2e/run_all_e2e.sh --only rollover      # Single script
+./scripts/e2e/test_escrow_devnet.sh               # 5-step escrow flow
+./scripts/e2e/test_rollover_devnet.sh             # Rollover + refund lifecycle
+./scripts/e2e/test_rollover_full_lifecycle.sh     # 2-attendee full lifecycle
+./scripts/e2e/test_full_e2e.sh                    # Browser E2E
+./scripts/e2e/test_devnet.sh                      # API test suite
+./scripts/e2e/test_lifecycle.sh                   # Create → close (no deposits)
 
 # Worker WASM build check
 cargo check -p event-checkin-worker --target wasm32-unknown-unknown
@@ -416,15 +419,6 @@ cargo check -p event-checkin-worker --target wasm32-unknown-unknown
 # Clippy
 cargo clippy --all-targets
 ```
-
-### Devnet Escrow E2E
-
-```bash
-# Full 5-step escrow E2E on Solana devnet (requires USDC-funded attendee wallet)
-ATTENDEE_WALLET=~/.config/solana/id.json bash scripts/e2e/test_escrow_devnet.sh
-```
-
-See `scripts/e2e/test_escrow_devnet.sh` for the complete test flow. All 24 tests validated on devnet.
 
 ## Features
 
@@ -513,7 +507,7 @@ See [`docs/security_audit.md`](docs/security_audit.md) for the full escrow secur
 | Event cancellation | ✅ | THB batch refund, USDC refund queue, status tracking |
 | Wallet error recovery | ✅ | Structured error classification + user-friendly guidance |
 | Security audit | ✅ | 11 findings, 8 fixed, SEC-001–011 addressed |
-| E2E tests | ✅ | 68 tests (39 worker + 29 on-chain), devnet validated |
+| E2E tests | ✅ | 85 tests (47 unit + 38 on-chain SVM), 7 devnet E2E scripts |
 
 ## 📈 Competitive Landscape
 

@@ -2,17 +2,21 @@
 # ============================================================================
 # BeThere Devnet Rollover Deposit E2E Test
 # ============================================================================
-# Tests the full rollover_deposit flow on Solana devnet:
+# Tests the full rollover_deposit lifecycle on Solana devnet:
 #   0. Prerequisites check + wallet setup
 #   1. Create Source Event (past) with escrow
 #   2. Create Target Event (future) with escrow — same organizer + deposit amount
-#   3. Deposit USDC on Source Event (attendee signs)
-#   4. Mark Attendee Checked-In on Source Event (organizer signs)
-#   5. (Optional) Wait for Source Event End
-#   6. Build & Submit Rollover Deposit TX (attendee signs)
-#   7. Verify deposit on Target Event
-#   8. Verify vault balances
+#   3. Init Escrow for both events
+#   4. Deposit USDC on Source Event (attendee signs)
+#   5. Mark Attendee Checked-In on Source Event (organizer signs)
+#   6. (No wait needed — rollover works after check-in)
+#   7. Build & Submit Rollover Deposit TX (attendee signs)
+#   8. Verify post-rollover state (vaults, indexer)
 #   9. Verify Target Event DepositStatus (indexer fix validation)
+#  10. Refund Attendee from Target Event (attendee signs)
+#  11. Verify post-refund vault balances
+#  12. Deactivate both events
+#  13. Close both events (reclaim rent)
 #
 # Prerequisites:
 #   - `cd worker && npx wrangler dev --port 8787` running
@@ -747,6 +751,219 @@ if [ "$TGT_HAS_DEPOSIT" = "yes" ]; then
     pass "Target event has deposit/rollover events in escrow history"
 else
     warn "No deposit/rollover events found for target event (may not be indexed yet)"
+fi
+
+# ============================================================================
+# Step 10: Refund from Target Event (attendee claims refund from target)
+# ============================================================================
+section "Step 10: Refund Attendee from Target Event"
+
+info "Requesting refund+close TX from target event for attendee..."
+info "  Target event: $TARGET_EVENT_ID"
+info "  Attendee:     $ATTENDEE_WALLET"
+info "  Attendee ID:  $TEST_ATTENDEE_ID"
+
+REFUND_RESPONSE=$(curl -s -X POST "$BASE_URL/api/escrow/refund" \
+    -H "Content-Type: application/json" \
+    -d "{
+        \"event_id\": \"$TARGET_EVENT_ID\",
+        \"attendee_id\": \"$TEST_ATTENDEE_ID\",
+        \"wallet_address\": \"$ATTENDEE_WALLET\"
+    }")
+
+REFUND_SUCCESS=$(echo "$REFUND_RESPONSE" | python3 -c "import sys,json; print(str(json.load(sys.stdin).get('success','')).lower())" 2>/dev/null || echo "false")
+
+if [ "$REFUND_SUCCESS" = "true" ]; then
+    REFUND_TX_B64=$(echo "$REFUND_RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['transaction'])" 2>/dev/null || echo "")
+    REFUND_MSG=$(echo "$REFUND_RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['message'])" 2>/dev/null || echo "")
+
+    pass "Refund+close TX built from target event"
+    info "Message: $REFUND_MSG"
+
+    # Attendee signs the refund TX
+    ATT_KEYPAIR_JSON=$(cat "$ATTENDEE_KEYPAIR")
+    REFUND_SUBMIT=$(sign_and_submit_tx "$REFUND_TX_B64" "$ATT_KEYPAIR_JSON")
+    info "Refund submit: $REFUND_SUBMIT"
+
+    if echo "$REFUND_SUBMIT" | grep -q "SIGNATURE="; then
+        REFUND_SIG=$(echo "$REFUND_SUBMIT" | grep "SIGNATURE=" | cut -d= -f2)
+        pass "Refund TX submitted from target event!"
+        info "Signature: $REFUND_SIG"
+        info "View: https://solscan.io/tx/$REFUND_SIG?cluster=devnet"
+        sleep 8
+    else
+        fail "Refund TX submission failed"
+        echo "   $REFUND_SUBMIT" | head -c 500
+        # Non-fatal — continue with cleanup
+    fi
+else
+    ERR=$(echo "$REFUND_RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('error', d.get('message', str(d)[:300])))" 2>/dev/null || echo "unknown")
+    fail "Refund TX build failed: $ERR"
+    info "This may happen if the target event has not ended yet on-chain."
+    info "The refund instruction requires the event deadline to have passed."
+fi
+
+# ============================================================================
+# Step 11: Verify Post-Refund Vault Balances
+# ============================================================================
+section "Step 11: Verify Post-Refund Vault Balances"
+
+# Source vault should still be empty (was drained by rollover)
+info "Checking source vault balance..."
+SRC_VAULT_POST=$(spl-token balance "$USDC_MINT" --url devnet --owner "$SOURCE_ESCROW_ADDR" 2>&1 || echo "0 (no vault / empty)")
+info "Source vault USDC (post-refund): $SRC_VAULT_POST"
+
+if echo "$SRC_VAULT_POST" | grep -qE "^0|^0\.0|no vault|empty|not found|Insufficient"; then
+    pass "Source vault is empty (as expected after rollover)"
+else
+    warn "Source vault has unexpected balance: $SRC_VAULT_POST"
+fi
+
+# Target vault should now be empty (refunded to attendee)
+info "Checking target vault balance..."
+TGT_VAULT_POST=$(spl-token balance "$USDC_MINT" --url devnet --owner "$TARGET_ESCROW_ADDR" 2>&1 || echo "0 (no vault / empty)")
+info "Target vault USDC (post-refund): $TGT_VAULT_POST"
+
+if echo "$TGT_VAULT_POST" | grep -qE "^0|^0\.0|no vault|empty|not found|Insufficient"; then
+    pass "Target vault is empty (deposit refunded to attendee)"
+else
+    warn "Target vault still has balance: $TGT_VAULT_POST"
+fi
+
+# Attendee should have their USDC back
+ATT_USDC_POST=$(spl-token balance "$USDC_MINT" --url devnet --owner "$ATTENDEE_WALLET" 2>&1 | awk '{print $1}' || echo "?")
+info "Attendee USDC (post-refund): $ATT_USDC_POST"
+
+# ============================================================================
+# Step 12: Deactivate Both Events
+# ============================================================================
+section "Step 12: Deactivate Both Events"
+
+ORG_KEYPAIR_JSON=$(cat ~/.config/solana/id.json)
+
+# --- Deactivate Source Event ---
+info "Deactivating source event..."
+SRC_DEACT=$(curl -s -X POST "$BASE_URL/api/escrow/deactivate-event" \
+    -H "Authorization: Bearer dev-token" \
+    -H "Content-Type: application/json" \
+    -d "{\"event_id\": \"$SOURCE_EVENT_ID\"}")
+
+SRC_DEACT_SUCCESS=$(echo "$SRC_DEACT" | python3 -c "import sys,json; print(str(json.load(sys.stdin).get('success','')).lower())" 2>/dev/null || echo "false")
+
+if [ "$SRC_DEACT_SUCCESS" = "true" ]; then
+    SRC_DEACT_TX=$(echo "$SRC_DEACT" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['transaction'])" 2>/dev/null || echo "")
+    SRC_DEACT_SUBMIT=$(sign_and_submit_tx "$SRC_DEACT_TX" "$ORG_KEYPAIR_JSON")
+
+    if echo "$SRC_DEACT_SUBMIT" | grep -q "SIGNATURE="; then
+        SRC_DEACT_SIG=$(echo "$SRC_DEACT_SUBMIT" | grep "SIGNATURE=" | cut -d= -f2)
+        pass "Source event deactivated: $SRC_DEACT_SIG"
+        info "View: https://solscan.io/tx/$SRC_DEACT_SIG?cluster=devnet"
+        sleep 5
+    else
+        fail "Source deactivate TX failed: $SRC_DEACT_SUBMIT"
+    fi
+else
+    ERR=$(echo "$SRC_DEACT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('error', d.get('message', str(d)[:200])))" 2>/dev/null || echo "unknown")
+    warn "Source deactivate build failed: $ERR (may already be inactive)"
+fi
+
+# --- Deactivate Target Event ---
+info "Deactivating target event..."
+TGT_DEACT=$(curl -s -X POST "$BASE_URL/api/escrow/deactivate-event" \
+    -H "Authorization: Bearer dev-token" \
+    -H "Content-Type: application/json" \
+    -d "{\"event_id\": \"$TARGET_EVENT_ID\"}")
+
+TGT_DEACT_SUCCESS=$(echo "$TGT_DEACT" | python3 -c "import sys,json; print(str(json.load(sys.stdin).get('success','')).lower())" 2>/dev/null || echo "false")
+
+if [ "$TGT_DEACT_SUCCESS" = "true" ]; then
+    TGT_DEACT_TX=$(echo "$TGT_DEACT" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['transaction'])" 2>/dev/null || echo "")
+    TGT_DEACT_SUBMIT=$(sign_and_submit_tx "$TGT_DEACT_TX" "$ORG_KEYPAIR_JSON")
+
+    if echo "$TGT_DEACT_SUBMIT" | grep -q "SIGNATURE="; then
+        TGT_DEACT_SIG=$(echo "$TGT_DEACT_SUBMIT" | grep "SIGNATURE=" | cut -d= -f2)
+        pass "Target event deactivated: $TGT_DEACT_SIG"
+        info "View: https://solscan.io/tx/$TGT_DEACT_SIG?cluster=devnet"
+        sleep 5
+    else
+        fail "Target deactivate TX failed: $TGT_DEACT_SUBMIT"
+    fi
+else
+    ERR=$(echo "$TGT_DEACT" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('error', d.get('message', str(d)[:200])))" 2>/dev/null || echo "unknown")
+    warn "Target deactivate build failed: $ERR (may already be inactive)"
+fi
+
+# ============================================================================
+# Step 13: Close Both Events (reclaim rent)
+# ============================================================================
+section "Step 13: Close Both Events (Reclaim Rent)"
+
+# --- Close Source Event ---
+info "Closing source event..."
+SRC_CLOSE=$(curl -s -X POST "$BASE_URL/api/escrow/close-event" \
+    -H "Authorization: Bearer dev-token" \
+    -H "Content-Type: application/json" \
+    -d "{\"event_id\": \"$SOURCE_EVENT_ID\"}")
+
+SRC_CLOSE_SUCCESS=$(echo "$SRC_CLOSE" | python3 -c "import sys,json; print(str(json.load(sys.stdin).get('success','')).lower())" 2>/dev/null || echo "false")
+
+if [ "$SRC_CLOSE_SUCCESS" = "true" ]; then
+    SRC_CLOSE_TX=$(echo "$SRC_CLOSE" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['transaction'])" 2>/dev/null || echo "")
+    SRC_CLOSE_SUBMIT=$(sign_and_submit_tx "$SRC_CLOSE_TX" "$ORG_KEYPAIR_JSON")
+
+    if echo "$SRC_CLOSE_SUBMIT" | grep -q "SIGNATURE="; then
+        SRC_CLOSE_SIG=$(echo "$SRC_CLOSE_SUBMIT" | grep "SIGNATURE=" | cut -d= -f2)
+        pass "Source event closed: $SRC_CLOSE_SIG"
+        info "View: https://solscan.io/tx/$SRC_CLOSE_SIG?cluster=devnet"
+        sleep 5
+
+        # Verify source escrow is gone
+        SRC_ESCROW_CHECK=$(solana account "$SOURCE_ESCROW_ADDR" --url devnet 2>&1 || echo "CLOSED")
+        if echo "$SRC_ESCROW_CHECK" | grep -qi "error\|not found\|CLOSED"; then
+            pass "Source escrow account closed — rent reclaimed"
+        else
+            warn "Source escrow still exists (may need vault to be empty first)"
+        fi
+    else
+        fail "Source close TX failed: $SRC_CLOSE_SUBMIT"
+    fi
+else
+    ERR=$(echo "$SRC_CLOSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('error', d.get('message', str(d)[:200])))" 2>/dev/null || echo "unknown")
+    warn "Source close build failed: $ERR (may need vault emptied first)"
+fi
+
+# --- Close Target Event ---
+info "Closing target event..."
+TGT_CLOSE=$(curl -s -X POST "$BASE_URL/api/escrow/close-event" \
+    -H "Authorization: Bearer dev-token" \
+    -H "Content-Type: application/json" \
+    -d "{\"event_id\": \"$TARGET_EVENT_ID\"}")
+
+TGT_CLOSE_SUCCESS=$(echo "$TGT_CLOSE" | python3 -c "import sys,json; print(str(json.load(sys.stdin).get('success','')).lower())" 2>/dev/null || echo "false")
+
+if [ "$TGT_CLOSE_SUCCESS" = "true" ]; then
+    TGT_CLOSE_TX=$(echo "$TGT_CLOSE" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['transaction'])" 2>/dev/null || echo "")
+    TGT_CLOSE_SUBMIT=$(sign_and_submit_tx "$TGT_CLOSE_TX" "$ORG_KEYPAIR_JSON")
+
+    if echo "$TGT_CLOSE_SUBMIT" | grep -q "SIGNATURE="; then
+        TGT_CLOSE_SIG=$(echo "$TGT_CLOSE_SUBMIT" | grep "SIGNATURE=" | cut -d= -f2)
+        pass "Target event closed: $TGT_CLOSE_SIG"
+        info "View: https://solscan.io/tx/$TGT_CLOSE_SIG?cluster=devnet"
+        sleep 5
+
+        # Verify target escrow is gone
+        TGT_ESCROW_CHECK=$(solana account "$TARGET_ESCROW_ADDR" --url devnet 2>&1 || echo "CLOSED")
+        if echo "$TGT_ESCROW_CHECK" | grep -qi "error\|not found\|CLOSED"; then
+            pass "Target escrow account closed — rent reclaimed"
+        else
+            warn "Target escrow still exists (may need vault to be empty first)"
+        fi
+    else
+        fail "Target close TX failed: $TGT_CLOSE_SUBMIT"
+    fi
+else
+    ERR=$(echo "$TGT_CLOSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('error', d.get('message', str(d)[:200])))" 2>/dev/null || echo "unknown")
+    warn "Target close build failed: $ERR (may need vault emptied first)"
 fi
 
 # ============================================================================

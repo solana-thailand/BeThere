@@ -26,7 +26,7 @@ use crate::state::AppState;
 /// This URL redirects the user to Google's consent screen.
 pub fn get_auth_url(state: &AppState, redirect: Option<&str>) -> String {
     let config = &state.config.google_oauth;
-    let mut serializer = url::form_urlencoded::Serializer::new(String::new());
+    let mut serializer = form_urlencoded::Serializer::new(String::new());
     serializer
         .append_pair("client_id", &config.client_id)
         .append_pair("redirect_uri", &config.redirect_uri)

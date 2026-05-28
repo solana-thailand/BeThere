@@ -6,7 +6,7 @@ use event_checkin_domain::models::auth::Claims;
 use event_checkin_domain::models::deposit::{DepositMethod, DepositStatus};
 use event_checkin_domain::models::error::AppError;
 use event_checkin_domain::models::event::EscrowStatus;
-use futures::stream::{self, StreamExt};
+use futures_util::stream::{self, StreamExt};
 
 use crate::error::{ApiOk, WorkerError};
 use crate::event_store;
@@ -1370,7 +1370,7 @@ pub async fn cancel_status_handler(
         crate::handlers::ext::resolve_event_with_access(&state, &claims, query.event_id.as_deref())
             .await?;
 
-    let (deposits_res, thb_res) = futures::join!(
+    let (deposits_res, thb_res) = futures_util::join!(
         event_store::list_deposit_statuses(kv, &event.id),
         event_store::list_thb_deposits(kv, &event.id),
     );

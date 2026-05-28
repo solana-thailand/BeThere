@@ -44,12 +44,49 @@ Implemented the full `rollover_deposit` instruction across all three layers (on-
 - **Missing event_id**: `AttendeeData` didn't include source `event_id` — added to both worker JSON response and frontend types
 - **Wallet flow on ticket page**: Ticket page is simple (no wallet infra). Solved by making `RolloverActionCard` self-contained with its own wallet detection, connection, and signing — reusing `escrow_init` module's wallet helpers
 
+## Pre-Mainnet Test Gap Analysis (2026-05-27)
+
+### On-chain SVM Tests — Coverage Matrix
+
+| Instruction | Happy | Error | Lifecycle Integration |
+|-------------|-------|-------|--------------------|
+| `create_event` | ✅ | ✅ bad deadline | ✅ |
+| `deposit` | ✅ | ✅ event not active | ✅ |
+| `mark_checked_in` | ✅ | ✅ wrong organizer | ✅ |
+| `refund` | ✅ | ✅ not checked in, already refunded, after deadline | ✅ |
+| `claim_forfeited` | ✅ | ✅ before deadline, nothing to claim, checked-in rejected | ✅ |
+| `deactivate_event` | ✅ | ✅ wrong organizer, already inactive | ✅ |
+| `close_event` | ✅ | ✅ still active, vault not empty | ✅ |
+| `close_deposit` | ✅ | ✅ not refunded, wrong signer, GC | ✅ |
+| `rollover_deposit` | ✅ | ✅ not checked in, already refunded, target not active, different org | ✅ (4 lifecycle tests) |
+
+### Identified Gaps
+
+| # | Gap | Risk | Added Test |
+|---|-----|------|----------|
+| 1 | No rollover in full lifecycle SVM test | Medium | ✅ `test_rollover_then_refund_from_target` |
+| 2 | No double-rollover rejection test | Medium | ✅ `test_double_rollover_rejected` |
+| 3 | No rollover → claim-forfeited path | Medium | ✅ `test_rollover_then_claim_forfeited_target` |
+| 4 | No rollover → close source event cleanup | Low | ✅ `test_rollover_then_close_source` |
+
+### Devnet E2E Script Gaps
+
+| Gap | Action |
+|-----|--------|
+| No refund-from-target after rollover | Extend `test_rollover_devnet.sh` or create new script |
+| No full lifecycle with rollover | Create `test_rollover_full_lifecycle.sh` |
+| No orchestrator for all E2E scripts | Create `run_all_e2e.sh` |
+
+See **Issue #040** for the full pre-mainnet test plan.
+
 ## Remain Work
 
-### Devnet Testing
-- [ ] Redeploy escrow program to devnet with new instruction (discriminator 8)
-- [ ] E2E test: deposit → check-in → event ends → rollover card appears → sign TX → verify new deposit on target event
-- [ ] Verify indexer picks up `DepositRolledOver` events
+### Pre-Mainnet Testing (Issue #040)
+- [x] Add 4 missing SVM lifecycle tests (Phase A)
+- [ ] Extend rollover E2E script with refund-from-target (Phase B)
+- [ ] Create full rollover lifecycle E2E script (Phase B)
+- [ ] Create E2E orchestrator script (Phase B)
+- [ ] Manual browser test of full rollover flow
 
 ### Mainnet Deployment
 - [ ] Obtain mainnet authority keypair with SOL (~3-5 SOL)
@@ -65,6 +102,7 @@ Implemented the full `rollover_deposit` instruction across all three layers (on-
 ## Issues Ref
 - Issue 032 — Rolling Deposit / Credit
 - Issue 010 — Escrow operations (architecture decision)
+- Issue 040 — Pre-Mainnet Escrow Test Coverage
 
 ## How to Dev/Test
 

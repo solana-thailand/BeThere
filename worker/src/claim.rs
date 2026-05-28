@@ -712,7 +712,7 @@ pub async fn execute_claim(
         }
     };
 
-    let (quiz_result, adv_result) = futures::join!(quiz_fut, adv_fut);
+    let (quiz_result, adv_result) = futures_util::join!(quiz_fut, adv_fut);
 
     // Check quiz gate
     if let Some(quiz_status) = quiz_result {

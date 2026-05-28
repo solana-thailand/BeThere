@@ -29,9 +29,11 @@ curve25519-dalek = { version = "4.1", default-features = false }
 # Encoding — WASM-compatible
 base64 = "0.22"
 
-# URL handling — WASM-compatible
-url = "2"
+# URL encoding — WASM-compatible
 urlencoding = "2"
+
+# Form URL encoding (lightweight, replaces heavy `url` crate's re-export)
+form_urlencoded = "1"
 
 # Shared domain types
 event-checkin-domain = { path = "../domain" }
@@ -48,11 +50,10 @@ uuid = { version = "1", features = ["v7", "serde", "js"] }
 chrono = { version = "0.4", features = ["serde"] }
 
 # Async utilities (join! for concurrent KV reads)
-futures = "0.3"
+futures-util = "0.3"
 
 # Logging
 tracing = "0.1"
-tracing-wasm = "0.2"
 console_log = "1"
 log = "0.4"
 

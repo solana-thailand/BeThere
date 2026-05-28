@@ -36,19 +36,26 @@ For BeThere's scale (< 100 concurrent claims per event), D1's near-atomic `ON CO
 
 ### Full Cloudflare Storage Landscape
 
-No D0 or D2 products exist. The complete lineup:
+No D0 or D2 products exist. The complete lineup (updated 2026-05 — see Issue #039 for detailed improvement plan):
 
 | Product | Purpose | BeThere relevance |
 |---------|---------|------------------|
-| KV | Eventually-consistent key-value | ✅ Already using (caches) |
-| D1 | Managed SQLite database | ✅ Planned (this issue) |
-| Durable Objects | Single-threaded stateful compute + SQLite | Considered, too complex for now |
-| R2 | S3-compatible object storage | ❌ No large files |
+| KV | Eventually-consistent key-value | ✅ Using (caches, quiz, events) |
+| D1 | Managed SQLite database | ✅ Done — claim locks + audit trail (this issue) |
+| Durable Objects | Single-threaded stateful compute + SQLite | 🟡 P2 — Phase 12 multi-org SaaS |
+| R2 | S3-compatible object storage, zero egress | 🟡 P0 — slip images, badge SVGs, NFT metadata (see Issue #039) |
 | Hyperdrive | Accelerate existing Postgres/MySQL | ❌ No external DB |
-| Queues | Message queuing | ❌ No async jobs (yet) |
+| Queues | Message queuing, guaranteed delivery, retries | 🟡 P1 — sheets sync, minting, refund queue (see Issue #039) |
 | Vectorize | Vector embeddings DB | ❌ No AI search |
 | Pipelines | Streaming ingestion → R2 | ❌ No streaming |
-| Analytics Engine | Time-series metrics | ❌ No analytics dashboard |
+| Analytics Engine | Time-series metrics | 🟡 P2 — Phase 13 learning platform |
+| Workflows | Durable multi-step orchestration with sleep/retry | 🟡 P1 — escrow lifecycle automation (see Issue #039) |
+| Smart Placement | Auto-co-locate Worker with backends | 🟡 P0 — reduce latency, zero cost (see Issue #039) |
+| Rate Limiting | Per-Worker rate limiting (built-in) | 🟡 P0 — public endpoint protection (see Issue #039) |
+| Gradual Deploy | Incremental traffic rollout + rollback | 🟡 P1 — safe mainnet deployment (see Issue #039) |
+| OpenTelemetry | Export traces/logs to external services | 🟡 P2 — production observability |
+
+> **Note**: The original table (pre-2026) listed R2 as "❌ No large files", Queues as "❌ No async jobs (yet)", and Durable Objects as "Considered, too complex for now". These assessments are now outdated — the deposit/refund/escrow features added since then have introduced slip image storage, async Google Sheets writes via `wait_until()`, and on-chain TX retry needs. See Issue #039 for the consolidated improvement plan with pricing analysis.
 
 ### KV Pain Points Being Solved
 

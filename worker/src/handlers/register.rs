@@ -9,7 +9,7 @@ use axum::{
     Extension, Json,
     extract::{Path, State},
 };
-use futures::future::join_all;
+use futures_util::future::join_all;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -279,15 +279,15 @@ pub async fn register_attendee(
                 &email,
             )
             .await
-            {
-                let required_thb = config.deposit_amount_thb;
-                let required_usdc = config.deposit_amount_usdc;
-                if required_thb > 0 && credit_thb >= required_thb {
-                    credit_covered_method = Some("credit_thb".to_string());
-                } else if required_usdc > 0 && credit_usdc >= required_usdc {
-                    credit_covered_method = Some("credit_usdc".to_string());
-                }
+        {
+            let required_thb = config.deposit_amount_thb;
+            let required_usdc = config.deposit_amount_usdc;
+            if required_thb > 0 && credit_thb >= required_thb {
+                credit_covered_method = Some("credit_thb".to_string());
+            } else if required_usdc > 0 && credit_usdc >= required_usdc {
+                credit_covered_method = Some("credit_usdc".to_string());
             }
+        }
         if let Some(ref method) = credit_covered_method {
             tracing::info!(%email, %slug, %method, "deposit covered by rolling credit");
         }
