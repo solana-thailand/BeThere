@@ -18,12 +18,20 @@ mod sheets;
 mod solana;
 mod solana_escrow;
 mod state;
+mod storage;
+
+use std::sync::OnceLock;
 
 use axum::Router;
 use tower_service::Service;
 use worker::*;
 
-use crate::state::AppState;
+/// Logger initialized once per Workers isolate.
+static LOG_INITIALIZED: OnceLock<()> = OnceLock::new();
+
+/// Cached router skeleton — route definitions + middleware layers are static.
+/// Only the per-request state (worker_ctx) changes, injected via Extension.
+static CACHED_ROUTER: OnceLock<Router> = OnceLock::new();
 
 /// Embedded `index.html` for SPA fallback — serves the Leptos WASM frontend
 /// for any non-API route (e.g. `/staff`, `/admin`, `/claim/xxx`).
@@ -42,13 +50,12 @@ async fn spa_fallback() -> axum::response::Html<&'static str> {
     axum::response::Html(INDEX_HTML)
 }
 
-fn app_router(state: AppState) -> Router {
-    let api_routes = handlers::routes(state);
-
+/// Build the router skeleton — route definitions + middleware layers.
+///
+/// Route tables and middleware stacks are identical across all requests.
+/// State is injected per-request via `Extension` for `worker_ctx`.
+fn build_router_skeleton() -> Router {
     Router::new()
-        .merge(api_routes)
-        // Any path not matched by the API routes gets the SPA shell.
-        // Leptos router handles /staff, /admin, /claim/xxx client-side.
         .fallback(spa_fallback)
         .layer(axum::middleware::from_fn(middleware::rate_limit_layer))
         .layer(axum::middleware::from_fn(middleware::correlation_id_layer))
@@ -63,11 +70,25 @@ async fn fetch(
     env: Env,
     _ctx: Context,
 ) -> Result<axum::http::Response<axum::body::Body>> {
-    console_log::init_with_level(log::Level::Info).ok();
+    // H3: Initialize logger once per isolate, not per request
+    let _ = LOG_INITIALIZED.get_or_init(|| {
+        console_log::init_with_level(log::Level::Info).ok();
+    });
 
     let state = state::AppState::from_env(&env)?.with_ctx(_ctx);
 
-    let mut router = app_router(state);
+    // H1: Cache router skeleton — routes + middleware are static
+    let router = match CACHED_ROUTER.get() {
+        Some(cached) => cached.clone(),
+        None => {
+            let skeleton = build_router_skeleton();
+            let _ = CACHED_ROUTER.set(skeleton.clone());
+            skeleton
+        }
+    };
+
+    // Merge state-dependent API routes per request
+    let mut router = router.merge(handlers::routes(state));
     Ok(router.call(req).await?)
 }
 

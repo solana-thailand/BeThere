@@ -1,7 +1,24 @@
 use std::collections::HashSet;
 use std::sync::{Arc, OnceLock};
 
-use worker::{Context, D1Database, Env, KvStore};
+use worker::{Bucket, Context, D1Database, Env, KvStore};
+
+// ---------------------------------------------------------------------------
+// Cached bindings — stable per Workers isolate, avoid JS interop on every request
+// ---------------------------------------------------------------------------
+
+/// Cached stable bindings (KV + D1) — read once per isolate, not per request.
+///
+/// `env.kv()` and `env.d1()` cross the WASM↔JS boundary. Since bindings
+/// don't change within an isolate's lifetime, cache them alongside config.
+struct CachedBindings {
+    quiz_kv: Option<KvStore>,
+    events_kv: Option<KvStore>,
+    d1: Option<Arc<D1Database>>,
+    r2: Option<Bucket>,
+}
+
+static CACHED_BINDINGS: OnceLock<CachedBindings> = OnceLock::new();
 
 use event_checkin_domain::config::{
     AppConfig, EventDefaults, GoogleOAuthConfig, GoogleServiceAccountConfig, NftConfig,
@@ -47,10 +64,9 @@ pub struct AppState {
     /// `None` outside the fetch lifecycle (tests, scheduled events).
     pub worker_ctx: Option<Arc<Context>>,
     /// R2 bucket for NFT metadata, badge SVGs, slip images, refund proofs (Issue #039).
-    /// `None` if the `ASSETS` binding is not configured or worker crate doesn't expose R2 yet.
-    /// TODO: Activate when worker crate v0.9+ with R2 support is available.
+    /// `None` if the `ASSETS_BUCKET` binding is not configured.
     #[allow(dead_code)]
-    pub r2: Option<()>,
+    pub r2: Option<Bucket>,
 }
 
 impl AppState {
@@ -202,14 +218,25 @@ impl AppState {
             }
         };
 
-        // Per-request bindings — cheap single calls, not cached
-        let quiz_kv = env.kv("QUIZ").ok();
-        let events_kv = env.kv("EVENTS").ok();
+        // Bindings are stable per isolate — cache to avoid JS interop on every request
+        let bindings = match CACHED_BINDINGS.get() {
+            Some(cached) => cached,
+            None => {
+                let b = CachedBindings {
+                    quiz_kv: env.kv("QUIZ").ok(),
+                    events_kv: env.kv("EVENTS").ok(),
+                    d1: env.d1("DB").ok().map(Arc::new),
+                    r2: env.bucket("ASSETS_BUCKET").ok(),
+                };
+                let _ = CACHED_BINDINGS.set(b);
+                CACHED_BINDINGS.get().unwrap()
+            }
+        };
 
-        let d1 = env.d1("DB").ok().map(Arc::new);
-
-        // R2 binding — not yet available in worker crate v0.8
-        let r2 = None;
+        let quiz_kv = bindings.quiz_kv.clone();
+        let events_kv = bindings.events_kv.clone();
+        let d1 = bindings.d1.clone();
+        let r2 = bindings.r2.clone();
 
         let webhook_secret = get_var(env, "WEBHOOK_SECRET").unwrap_or_default();
         if webhook_secret.is_empty() {

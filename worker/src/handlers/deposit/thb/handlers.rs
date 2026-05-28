@@ -27,7 +27,7 @@ use crate::state::AppState;
 /// - Data URLs are within size limits (decoded ≤ 5MB, encoded ≤ 7MB)
 /// - SVG is rejected (XSS risk)
 /// - External URLs use HTTPS
-fn validate_slip_url(slip_url: &str) -> Result<(), AppError> {
+pub(crate) fn validate_slip_url(slip_url: &str) -> Result<(), AppError> {
     if slip_url.is_empty() {
         return Err(AppError::Validation("slip URL is empty".to_string()));
     }
@@ -77,6 +77,77 @@ fn validate_slip_url(slip_url: &str) -> Result<(), AppError> {
 }
 
 // ---------------------------------------------------------------------------
+// R2 upload helper
+// ---------------------------------------------------------------------------
+
+/// Upload a data URL to R2 if available. Returns the R2 key on success,
+/// or the original URL if R2 is not available or it's not a data URL.
+async fn maybe_upload_to_r2(
+    state: &AppState,
+    event_id: &str,
+    attendee_id: &str,
+    url: &str,
+    prefix: &str,
+) -> String {
+    // Only process data URLs
+    if !url.starts_with("data:") {
+        return url.to_string();
+    }
+
+    let Some(bucket) = state.r2.as_ref() else {
+        tracing::debug!("R2 bucket not available, storing slip URL as-is");
+        return url.to_string();
+    };
+
+    // Parse data URL: data:<mime>;base64,<data>
+    let rest = url.strip_prefix("data:").unwrap_or("");
+    let Some((header, data)) = rest.split_once(',') else {
+        return url.to_string();
+    };
+
+    // Decode base64
+    use base64::Engine;
+    let bytes = match base64::engine::general_purpose::STANDARD.decode(data.trim()) {
+        Ok(b) => b,
+        Err(e) => {
+            tracing::warn!(error = %e, "failed to decode base64 data URL, storing as-is");
+            return url.to_string();
+        }
+    };
+
+    // Determine extension from MIME type
+    let mime = header.split(';').next().unwrap_or("image/jpeg");
+    let ext = match mime {
+        "image/png" => "png",
+        "image/webp" => "webp",
+        _ => "jpg",
+    };
+
+    // Upload to R2
+    let key = format!("{prefix}{event_id}/{attendee_id}.{ext}");
+    match crate::storage::put_bytes(bucket, &key, bytes, mime).await {
+        Ok(_) => {
+            tracing::info!(key = %key, "uploaded slip image to R2");
+            // Return the serving URL path — route format depends on prefix
+            match prefix {
+                crate::storage::PREFIX_SLIPS => {
+                    // /api/storage/slips/{event_id}/{attendee_id} (ext stripped for route)
+                    format!("/api/storage/slips/{event_id}/{attendee_id}")
+                }
+                crate::storage::PREFIX_REFUNDS => {
+                    format!("/api/storage/refunds/{event_id}/{attendee_id}")
+                }
+                _ => format!("/api/storage/{key}"),
+            }
+        }
+        Err(e) => {
+            tracing::warn!(key = %key, error = %e, "R2 upload failed, storing data URL as-is");
+            url.to_string()
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // POST /api/deposit/thb/upload
 // ---------------------------------------------------------------------------
 
@@ -117,6 +188,16 @@ pub async fn upload_thb_slip_handler(
 
     // Validate slip URL for safety (MIME type, size, no SVG/XSS)
     validate_slip_url(&body.slip_url)?;
+
+    // Upload data URL to R2 if bucket is available (reduces KV storage by ~6x)
+    let slip_url = maybe_upload_to_r2(
+        &state,
+        &event.id,
+        &body.attendee_id,
+        &body.slip_url,
+        crate::storage::PREFIX_SLIPS,
+    )
+    .await;
 
     // Bank info is required for THB refund processing
     if body
@@ -228,7 +309,7 @@ pub async fn upload_thb_slip_handler(
         attendee_id: body.attendee_id.clone(),
         event_id: event.id.clone(),
         amount_thb: event.deposit_amount_thb,
-        slip_url: Some(body.slip_url.clone()),
+        slip_url: Some(slip_url),
         verified: false,
         verified_by: None,
         verified_at: None,
@@ -677,10 +758,20 @@ pub async fn mark_refund_handler(
         return Err(AppError::Validation("refund_proof_url is required".to_string()).into());
     }
 
+    // Upload refund proof data URL to R2 if available
+    let refund_proof_url = maybe_upload_to_r2(
+        &state,
+        &event.id,
+        &attendee_id,
+        &body.refund_proof_url,
+        crate::storage::PREFIX_REFUNDS,
+    )
+    .await;
+
     let now = Utc::now().to_rfc3339();
     thb_deposit.refunded = true;
     thb_deposit.refunded_at = Some(now.clone());
-    thb_deposit.refund_proof_url = Some(body.refund_proof_url.clone());
+    thb_deposit.refund_proof_url = Some(refund_proof_url.clone());
 
     event_store::save_thb_deposit(kv, &thb_deposit)
         .await
@@ -718,7 +809,7 @@ pub async fn mark_refund_handler(
         &event.sheet_name,
         Some(kv),
         &attendee_id,
-        &body.refund_proof_url,
+        &refund_proof_url,
     )
     .await
     {
@@ -999,42 +1090,6 @@ pub async fn credit_balance_handler(
 }
 
 // ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/// Resolve attendee display names from Google Sheets for a list of deposits.
-/// Returns a map of `attendee_id → display_name`.
-/// Silently skips attendees not found — the frontend falls back to showing the raw ID.
-async fn resolve_attendee_names(
-    state: &AppState,
-    sheet_id: &str,
-    sheet_name: &str,
-    deposits: &[ThbDeposit],
-) -> std::collections::HashMap<String, String> {
-    use crate::handlers::ext::resolve_kv;
-    use crate::sheets;
-
-    if deposits.is_empty() {
-        return std::collections::HashMap::new();
-    }
-
-    let kv = resolve_kv(state);
-    match sheets::get_attendees_map(state, sheet_id, sheet_name, kv).await {
-        Ok(map) => deposits
-            .iter()
-            .filter_map(|d| {
-                map.get(&d.attendee_id)
-                    .map(|a| (d.attendee_id.clone(), a.display_name().to_string()))
-            })
-            .collect(),
-        Err(e) => {
-            tracing::warn!(error = %e, "failed to resolve attendee names for deposits");
-            std::collections::HashMap::new()
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------
 // Manual refund (no deposit required)
 // ---------------------------------------------------------------------------
 
@@ -1131,4 +1186,40 @@ pub async fn mark_manual_refund_handler(
         "refund_status": body.refund_status,
         "refund_link": body.refund_link,
     })))
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/// Resolve attendee display names from Google Sheets for a list of deposits.
+/// Returns a map of `attendee_id → display_name`.
+/// Silently skips attendees not found — the frontend falls back to showing the raw ID.
+pub(crate) async fn resolve_attendee_names(
+    state: &AppState,
+    sheet_id: &str,
+    sheet_name: &str,
+    deposits: &[ThbDeposit],
+) -> std::collections::HashMap<String, String> {
+    use crate::handlers::ext::resolve_kv;
+    use crate::sheets;
+
+    if deposits.is_empty() {
+        return std::collections::HashMap::new();
+    }
+
+    let kv = resolve_kv(state);
+    match sheets::get_attendees_map(state, sheet_id, sheet_name, kv).await {
+        Ok(map) => deposits
+            .iter()
+            .filter_map(|d| {
+                map.get(&d.attendee_id)
+                    .map(|a| (d.attendee_id.clone(), a.display_name().to_string()))
+            })
+            .collect(),
+        Err(e) => {
+            tracing::warn!(error = %e, "failed to resolve attendee names for deposits");
+            std::collections::HashMap::new()
+        }
+    }
 }
