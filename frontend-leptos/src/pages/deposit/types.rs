@@ -105,6 +105,57 @@ pub enum DepositPageState {
     CloseDepositConfirmed(DepositStatusResponse, String),
 }
 
+/// Which deposit flow the user is in.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum DepositFlow {
+    /// No flow active (loading, error, already deposited, etc.).
+    None,
+    /// USDC wallet or QR payment flow.
+    Usdc,
+    /// THB PromptPay slip upload flow.
+    Thb,
+    /// Refund flow.
+    Refund,
+    /// Close deposit / reclaim rent flow.
+    CloseDeposit,
+}
+
+/// Compute the current step (1-based) within the active flow.
+/// Returns (flow, current_step, total_steps) — None if no stepper should show.
+pub fn deposit_step(state: &DepositPageState) -> Option<(DepositFlow, usize, usize)> {
+    match state {
+        // USDC flow: Choose → Connect → Pay → Confirm (4 steps)
+        DepositPageState::ChoosePayment(_) => Some((DepositFlow::Usdc, 1, 4)),
+        DepositPageState::WalletConnected(_, _, _) => Some((DepositFlow::Usdc, 2, 4)),
+        DepositPageState::AwaitingConfirmation(_, _, _) | DepositPageState::UsdcQrReady(_, _) => {
+            Some((DepositFlow::Usdc, 3, 4))
+        }
+        DepositPageState::DepositConfirmed(_, _) => Some((DepositFlow::Usdc, 4, 4)),
+
+        // THB flow: Choose → Upload → Submitted (3 steps)
+        DepositPageState::ThbUploading(_) => Some((DepositFlow::Thb, 2, 3)),
+        DepositPageState::ThbUploaded(_, _, _) => Some((DepositFlow::Thb, 3, 3)),
+
+        // Refund flow: Connect → Sign → Confirmed (3 steps)
+        DepositPageState::RefundChooseWallet(_) => Some((DepositFlow::Refund, 1, 3)),
+        DepositPageState::RefundWalletConnected(_, _, _)
+        | DepositPageState::RefundSigning(_, _, _) => Some((DepositFlow::Refund, 2, 3)),
+        DepositPageState::RefundConfirmed(_, _) => Some((DepositFlow::Refund, 3, 3)),
+
+        // Close deposit flow: Connect → Sign → Confirmed (3 steps)
+        DepositPageState::CloseDepositChooseWallet(_) => Some((DepositFlow::CloseDeposit, 1, 3)),
+        DepositPageState::CloseDepositWalletConnected(_, _, _)
+        | DepositPageState::CloseDepositSigning(_, _, _) => Some((DepositFlow::CloseDeposit, 2, 3)),
+        DepositPageState::CloseDepositConfirmed(_, _) => Some((DepositFlow::CloseDeposit, 3, 3)),
+
+        // No stepper for terminal / pre-flow states
+        DepositPageState::Loading
+        | DepositPageState::Error(_)
+        | DepositPageState::NotEnabled
+        | DepositPageState::AlreadyDeposited(_) => None,
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Helper functions
 // ---------------------------------------------------------------------------

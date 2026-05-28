@@ -174,6 +174,37 @@ USDC payment card on the deposit page is hidden unless the backend returns `dev_
 
 ---
 
+## P0.9 — PDPA Consent & Data Collection (Issue 043)
+
+> **Priority**: P1 — pre-mainnet legal compliance. Thailand PDPA effective June 1, 2022.
+> Full plan: `.issues/043_pdpa_consent_data_collection.md`
+
+### PDPA-1. Data Collection Consent Checkbox
+**Current**: Registration form (`registration_form.rs`) has no consent checkbox. Personal data (name, email, phone, contact handle) is collected without explicit consent.
+**Target**: Mandatory consent checkbox before submit. "I consent to BeThere collecting my name, email, and contact information for event registration, check-in, and NFT issuance."
+**Impact**: PDPA Section 19 compliance. Cannot legally collect data without it.
+**Effort**: ~3h (UI + backend validation + new sheet column AE)
+
+### PDPA-2. Photo/Media Consent (Per-Event)
+**Current**: No photo consent mechanism. Most Thai events take photos.
+**Target**: Organizer enables "Collect photo consent" per event. Attendee sees opt-in checkbox: "I consent to being photographed/filmed during the event."
+**Impact**: PDPA Section 20 (sensitive data). Photo consent is legally separate from data collection consent.
+**Effort**: ~3.5h (event config + UI + new sheet column AF)
+
+### PDPA-3. Privacy Policy Page (`/privacy`)
+**Current**: No privacy policy page exists.
+**Target**: Public `/privacy` route with data practices disclosure — what we collect, why, where it's stored, blockchain immutability notice, data subject rights, contact info.
+**Impact**: PDPA Section 23 (privacy notice before collection). Legal requirement.
+**Effort**: ~2.75h (new page + route + footer link)
+
+### PDPA-4. Data Retention & Deletion
+**Current**: No deletion mechanism. Data lives forever in Google Sheets and on-chain.
+**Target**: `POST /api/privacy/delete-request` clears PII from sheet row + KV. On-chain data disclosed as immutable in privacy policy.
+**Impact**: PDPA Section 29 (right to erasure). Can ship post-mainnet.
+**Effort**: ~4h (API + UI + policy update)
+
+---
+
 ## P1 — High Impact
 
 ### P1-1. Scanner Haptic/Audio Feedback
@@ -351,10 +382,19 @@ Show "X people have secured their spot" on the deposit page. Leverages social pr
 
 ### P3-2. PWA Install Prompt
 
+> **Upgraded to P1** — now part of Solana Mobile support ([Issue 042](../.issues/042_solana_mobile_support.md) Phase B).
+> PWA is a prerequisite for Solana dApp Store listing.
+
 Mobile scanner users (staff) often use the browser. A PWA install prompt would let them add it to their home screen for faster access and full-screen mode.
 
 **Leptos libraries to evaluate**:
 - `leptos-use` — provides `use_window_size` and browser API hooks useful for PWA detection
+
+**PWA requirements for Solana Mobile:**
+- `manifest.json` with `display: standalone`, icons (192x192, 512x512)
+- Service worker for shell caching
+- `<meta name="apple-mobile-web-app-*">` tags for iOS
+- HTTPS (already served via Cloudflare Workers)
 
 ---
 
@@ -447,6 +487,8 @@ Submit the on-chain escrow program to a Solana audit firm (e.g., Audit Arena, Ot
 | `docs/devnet_e2e_walkthrough.md` | E2E testing guide — new features need test flows added |
 | `.issues/014_walkin_attendee_flow.md` | Walk-in Phase 4 (P2-5) |
 | `docs/research_technology_review.md` §14 | Leptos ecosystem library analysis and rationale |
+| `.issues/042_solana_mobile_support.md` | Full Solana Mobile plan (MWA + PWA + dApp Store) — P2.6 section |
+| `.issues/043_pdpa_consent_data_collection.md` | PDPA compliance plan (consent + photo + privacy policy + deletion) — P0.9 section |
 
 ---
 
@@ -553,3 +595,43 @@ Submit the on-chain escrow program to a Solana audit firm (e.g., Audit Arena, Ot
 **Target**: Per-event competency dashboard — pass rates per level, average completion time, credit distribution.
 **Impact**: Organizers see educational outcomes, not just attendance.
 **Effort**: ~3d (new admin tab + analytics queries)
+
+---
+
+## P2.6 — Solana Mobile UX (Issue 042)
+
+> **Prerequisite**: Phase 10 (mainnet deployment). Mobile wallet integration is post-mainnet.
+> Full plan: `.issues/042_solana_mobile_support.md`
+
+### MOB-1. Mobile Wallet Adapter Registration
+**Current**: Wallet detection only checks `window.solana` / `window.phantom` (browser extensions). No mobile wallet support.
+**Target**: Register `@solana-mobile/wallet-standard-mobile` in `index.html`. MWA wallets (Phantom, Solflare, Seed Vault Wallet) appear as connectable options on Android Chrome.
+**Impact**: Unblocks all wallet-dependent flows on mobile (deposit, claim, refund, escrow init, on-chain check-in).
+**Effort**: ~5h (JS interop + wallet detection update + manual testing)
+
+### MOB-2. Mobile Wallet Error Messages
+**Current**: Wallet errors show generic "Failed to connect" messages. No mobile-specific guidance.
+**Target**: Detect Android Chrome context. Show contextual messages:
+- "Install Phantom or Solflare from Google Play" (no wallet detected on mobile)
+- "Open this page in Chrome to connect your wallet" (non-Chrome browser)
+- "Wallet not found" → link to MWA-compatible wallet list
+**Impact**: Reduces support burden. Mobile users are new to Solana — need hand-holding.
+**Effort**: ~2h (context detection + conditional error messages)
+
+### MOB-3. Responsive Deposit Page (Mobile-First)
+**Current**: Deposit page works on desktop. Mobile layout has cramped wallet selector + Solana Pay QR.
+**Target**: Stack layout for mobile — wallet selector → amount → confirm → TX status. Larger touch targets. Sticky bottom CTA.
+**Impact**: Deposit is the highest-friction mobile flow. Better layout = higher conversion.
+**Effort**: ~4h (CSS refactor + mobile-specific layout)
+
+### MOB-4. PWA Home-Screen Install
+**Current**: No PWA manifest or service worker.
+**Target**: Add `manifest.json`, service worker, PWA icons. Show install prompt on 2nd visit.
+**Impact**: Staff can install scanner app. Attendees can add ticket page to home screen.
+**Effort**: ~4.5h (see P3-2 upgrade above)
+
+### MOB-5. Solana dApp Store Listing
+**Current**: Not listed anywhere outside direct URL.
+**Target**: Submit BeThere as a web app to Solana dApp Store. Prepare app metadata, screenshots, and description.
+**Impact**: Discovery channel for Solana Mobile users (Seeker, Saga). Free distribution.
+**Effort**: ~3h (listing only, no TWA wrapper)

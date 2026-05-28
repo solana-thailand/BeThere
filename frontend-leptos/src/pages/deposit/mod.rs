@@ -1057,6 +1057,17 @@ pub fn Deposit() -> impl IntoView {
                     }
                 }}
 
+                // Step progress indicator
+                {move || {
+                    let s = state.get();
+                    match deposit_step(&s) {
+                        Some((flow, current, total)) => {
+                            components::deposit_stepper(flow, current, total)
+                        }
+                        None => ().into_any(),
+                    }
+                }}
+
                 {move || {
                     let s = state.get();
                     match s {

@@ -532,10 +532,12 @@ See [`docs/security_audit.md`](docs/security_audit.md) for the full escrow secur
 | **7** | NFT config + production deployment | 🟡 Devnet working |
 | **8–9** | USDC escrow + security hardening | ✅ Done (devnet deployed) |
 | **10** | **Mainnet deployment** | 📋 Next (~1.5 SOL cost) |
+| **10.5** | **PDPA Compliance** — consent checkbox + photo consent + privacy policy + deletion API | 📋 Pre-mainnet ([Issue 043](.issues/043_pdpa_consent_data_collection.md)) |
 | **11** | Platform fees (1-2% on forfeited deposits) | 📋 Planned |
 | **12** | Multi-organizer SaaS | 📋 Planned |
-| **13** | Learning & Credentials — reposition adventure + quiz + cNFT as micro-credential system; add credit tracking, stackable certificates | 🔮 Future |
-| **14** | Curriculum Design — OBE framework, modular learning units, TQF/AUN-QA compliance, RPL assessment | 🔮 Future |
+| **13** | **Solana Mobile** — MWA Web + PWA + dApp Store listing (Android) | 📋 Planned ([Issue 042](.issues/042_solana_mobile_support.md)) |
+| **14** | Learning & Credentials — reposition adventure + quiz + cNFT as micro-credential system; add credit tracking, stackable certificates | 🔮 Future |
+| **15** | Curriculum Design — OBE framework, modular learning units, TQF/AUN-QA compliance, RPL assessment | 🔮 Future |
 
 See **[DISCUSSION.md](./DISCUSSION.md)** for the full architecture direction and decisions.
 See **[.issues/038_curriculum_design_vision.md](./.issues/038_curriculum_design_vision.md)** for the curriculum design vision.
