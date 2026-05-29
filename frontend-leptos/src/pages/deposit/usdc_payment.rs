@@ -204,7 +204,6 @@ pub fn deposit_confirmed_view(
 pub fn usdc_qr_ready_view(
     data: &DepositStatusResponse,
     pay_url: &str,
-    qr_ready: ReadSignal<bool>,
     pay_url_copied: ReadSignal<bool>,
     state: ReadSignal<DepositPageState>,
     set_state: WriteSignal<DepositPageState>,
@@ -283,21 +282,13 @@ pub fn usdc_qr_ready_view(
                 "Scan this QR code with a Solana wallet, or copy the link below:"
             </p>
             {move || {
-                if qr_ready.get() {
-                    match js_interop::generate_qr_data_url(&pay_url_qr, 256) {
-                        Some(url) => view! {
-                            <div class="qr-wrapper">
-                                <img src=url alt="Solana Pay QR" class="qr-img-lg" />
-                            </div>
-                        }.into_any(),
-                        None => view! { <div></div> }.into_any(),
-                    }
-                } else {
-                    view! {
-                        <div class="qr-wrapper qr-loading">
-                            <div class="qr-loading-spinner"></div>
+                match js_interop::generate_qr_data_url(&pay_url_qr, 256) {
+                    Some(url) => view! {
+                        <div class="qr-wrapper">
+                            <img src=url alt="Solana Pay QR" class="qr-img-lg" />
                         </div>
-                    }.into_any()
+                    }.into_any(),
+                    None => view! { <div></div> }.into_any(),
                 }
             }}
             <div class="tx-pay-url-box">

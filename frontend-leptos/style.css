@@ -8371,6 +8371,48 @@ nav a.active {
     color: white;
 }
 
+/* --- Slip Preview --- */
+.slip-preview-container {
+    position: relative;
+    display: inline-block;
+    margin-top: 0.5rem;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    border: 1px solid var(--border);
+    background: var(--bg-secondary);
+}
+
+.slip-preview-img {
+    display: block;
+    max-width: 100%;
+    max-height: 220px;
+    object-fit: contain;
+    border-radius: var(--radius-sm);
+}
+
+.slip-preview-remove {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 24px;
+    height: 24px;
+    border: none;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.6);
+    color: #fff;
+    font-size: 0.75rem;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s;
+}
+
+.slip-preview-remove:hover {
+    background: rgba(220, 38, 38, 0.85);
+}
+
 /* --- Google Sheet Quick Guide --- */
 .sheet-guide-box {
     padding: 0.75rem 1rem;

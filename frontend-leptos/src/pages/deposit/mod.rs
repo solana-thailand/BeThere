@@ -68,14 +68,7 @@ pub fn Deposit() -> impl IntoView {
     let (show_bank_dropdown, set_show_bank_dropdown) = signal(false);
     let (payment_choice, set_payment_choice) = signal(None::<PaymentChoice>);
     let file_input_ref = NodeRef::<leptos::html::Input>::new();
-    let (qr_ready, set_qr_ready) = signal(false);
-
-    // Preload QR libraries on mount
-    leptos::task::spawn_local(async move {
-        self::js_interop::preload_qr_libraries_js().await;
-        set_qr_ready.set(true);
-        log::info!("[deposit] QR libraries loaded, qr_ready = true");
-    });
+    let (slip_preview, set_slip_preview) = signal(None::<String>);
 
     // Extract attendee_id from URL path and event_id from query params, then fetch status
     Effect::new(move |_| {
@@ -1322,40 +1315,31 @@ pub fn Deposit() -> impl IntoView {
                                                         {format!("Scan to pay {} THB", pp_amount_display)}
                                                     </p>
                                                     {move || {
-                                                        if qr_ready.get() {
-                                                            let pp_qr_string = self::js_interop::generate_promptpay_qr(&pp_id, pp_amount, &pp_reference);
-                                                            let pp_qr_image = pp_qr_string.as_string().and_then(|s| self::js_interop::generate_qr_data_url(&s, 256));
-                                                            match pp_qr_image {
-                                                                Some(url) => {
-                                                                    let url_for_save = url.clone();
-                                                                    let pp_amount_for_filename = pp_amount_display;
-                                                                    view! {
-                                                                        <div class="qr-wrapper">
-                                                                            <img src=url alt="PromptPay QR" class="qr-img-md" />
-                                                                        </div>
-                                                                        <button
-                                                                            class="btn btn-outline btn-sm u-mt-sm"
-                                                                            on:click=move |_| {
-                                                                                self::js_interop::download_data_url(&url_for_save, &format!("promptpay-{pp_amount_for_filename}THB-qr.png"));
-                                                                            }
-                                                                        >
-                                                                            <Icon icon=IconName::Save class="icon-sm" />
-                                                                            " Save QR Code"
-                                                                        </button>
-                                                                    }.into_any()
-                                                                },
-                                                                None => view! {
-                                                                    <p class="hint-2xs">"QR generation failed — please pay manually."
-                                                                    </p>
-                                                                }.into_any(),
-                                                            }
-                                                        } else {
-                                                            view! {
-                                                                <div class="qr-wrapper qr-loading">
-                                                                    <div class="qr-loading-spinner"></div>
-                                                                    <p class="hint-2xs">"Loading QR generator..."</p>
-                                                                </div>
-                                                            }.into_any()
+                                                        let pp_qr_string = self::js_interop::generate_promptpay_qr(&pp_id, pp_amount, &pp_reference);
+                                                        let pp_qr_image = pp_qr_string.and_then(|s| self::js_interop::generate_qr_data_url(&s, 256));
+                                                        match pp_qr_image {
+                                                            Some(url) => {
+                                                                let url_for_save = url.clone();
+                                                                let pp_amount_for_filename = pp_amount_display;
+                                                                view! {
+                                                                    <div class="qr-wrapper">
+                                                                        <img src=url alt="PromptPay QR" class="qr-img-md" />
+                                                                    </div>
+                                                                    <button
+                                                                        class="btn btn-outline btn-sm u-mt-sm"
+                                                                        on:click=move |_| {
+                                                                            self::js_interop::download_data_url(&url_for_save, &format!("promptpay-{pp_amount_for_filename}THB-qr.png"));
+                                                                        }
+                                                                    >
+                                                                        <Icon icon=IconName::Save class="icon-sm" />
+                                                                        " Save QR Code"
+                                                                    </button>
+                                                                }.into_any()
+                                                            },
+                                                            None => view! {
+                                                                <p class="hint-2xs">"QR generation failed — please pay manually."
+                                                                </p>
+                                                            }.into_any(),
                                                         }
                                                     }}
                                                     <p class="qr-hint-text">
@@ -1379,7 +1363,39 @@ pub fn Deposit() -> impl IntoView {
                                                 accept="image/jpeg,image/png,image/webp"
                                                 node_ref=file_input_ref
                                                 class="file-input-styled"
+                                                on:change=move |_| {
+                                                    let file_ref = file_input_ref.clone();
+                                                    leptos::task::spawn_local(async move {
+                                                        if let Some(el) = file_ref.get() {
+                                                            let js_val: wasm_bindgen::JsValue = el.into();
+                                                            let preview = self::js_interop::read_file_as_data_url(&js_val).await;
+                                                            set_slip_preview.set(preview);
+                                                        }
+                                                    });
+                                                }
                                             />
+
+                                            {move || {
+                                                match slip_preview.get() {
+                                                    Some(url) => view! {
+                                                        <div class="slip-preview-container">
+                                                            <img src=&url class="slip-preview-img" />
+                                                            <button
+                                                                class="slip-preview-remove"
+                                                                on:click=move |_| {
+                                                                    set_slip_preview.set(None);
+                                                                    if let Some(el) = file_input_ref.get() {
+                                                                        el.set_value("");
+                                                                    }
+                                                                }
+                                                            >
+                                                                "✕"
+                                                            </button>
+                                                        </div>
+                                                    }.into_any(),
+                                                    None => view! { <div></div> }.into_any(),
+                                                }
+                                            }}
 
                                             <details class="u-mt-xs">
                                                 <summary class="details-summary-text">
@@ -1564,7 +1580,6 @@ pub fn Deposit() -> impl IntoView {
                             usdc_payment::usdc_qr_ready_view(
                                 &data,
                                 &pay_url,
-                                qr_ready,
                                 pay_url_copied,
                                 state,
                                 set_state,

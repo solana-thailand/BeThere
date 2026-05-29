@@ -61,30 +61,22 @@ extern "C" {
     fn is_scanner_active_js() -> bool;
 }
 
-// ===== QR Code Generation JS Interop =====
-// Uses the QRious library (lazy-loaded by lazy_assets.js) to generate QR code images
-// as base64 data URLs. The JS module at frontend-leptos/js/qr_generate.js provides:
-// - preloadQrLibraries()        — async: loads jsQR + QRious from CDN (call on mount)
-// - generateQrDataUrl(text, size) — sync: returns base64 PNG data URL (null if not loaded)
-// - copyToClipboard(text)         — copies text to system clipboard
+// ===== QR Code Generation (Rust) =====
+// QR codes are generated using the `qrcode` Rust crate.
+// No CDN dependency — generates PNG data URLs synchronously.
+
+/// Generate a QR code image as a base64 PNG data URL.
+///
+/// Returns something like "data:image/png;base64,..." or None if
+/// the input is too long for a QR code.
+fn generate_qr_data_url(text: &str, size: u32) -> Option<String> {
+    crate::utils::qr_gen::generate_qr_data_url(text, size)
+}
+
+// ===== Clipboard JS Interop =====
 
 #[wasm_bindgen(module = "/js/qr_generate.js")]
 extern "C" {
-    /// Preload jsQR and QRious libraries from CDN.
-    ///
-    /// Call this on component mount for pages that render QR codes.
-    /// Deduplicates — safe to call multiple times. Libraries load in parallel.
-    /// After resolution, `generate_qr_data_url` will return valid data URLs.
-    #[wasm_bindgen(js_name = "preloadQrLibraries")]
-    async fn preload_qr_libraries_js();
-
-    /// Generate a QR code image as a base64 PNG data URL.
-    ///
-    /// Returns something like "data:image/png;base64,..." or null if
-    /// the QRious library hasn't loaded yet.
-    #[wasm_bindgen(js_name = "generateQrDataUrl")]
-    fn generate_qr_data_url(text: &str, size: u32) -> Option<String>;
-
     /// Copy text to the system clipboard.
     ///
     /// Uses the Clipboard API with a textarea fallback for older browsers.
@@ -323,14 +315,6 @@ pub fn Scanner() -> impl IntoView {
     on_cleanup(move || {
         log::info!("[scanner] component unmounting — stopping camera");
         stop_camera_js();
-    });
-
-    // Preload jsQR + QRious libraries on mount.
-    // startCamera() also awaits them, but preloading here ensures they're
-    // ready by the time the claim QR card needs QRious after check-in.
-    leptos::task::spawn_local(async {
-        preload_qr_libraries_js().await;
-        log::info!("[scanner] QR libraries preloaded");
     });
 
     // Camera lifecycle: start when Idle, stop when showing results.

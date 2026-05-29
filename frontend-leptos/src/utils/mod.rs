@@ -1,5 +1,8 @@
 //! Shared utility functions extracted from scanner and admin pages.
 
+pub mod promptpay;
+pub mod qr_gen;
+
 use std::cell::RefCell;
 
 // ---------------------------------------------------------------------------

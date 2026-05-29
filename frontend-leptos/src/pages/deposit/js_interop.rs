@@ -3,22 +3,14 @@
 use wasm_bindgen::prelude::*;
 
 // ---------------------------------------------------------------------------
-// QR generation + clipboard
+// Clipboard
 // ---------------------------------------------------------------------------
 
 #[wasm_bindgen(module = "/js/qr_generate.js")]
 extern "C" {
-    /// Preload jsQR and QRious libraries from CDN.
-    #[wasm_bindgen(js_name = "preloadQrLibraries")]
-    fn preload_qr_libraries_js_raw() -> js_sys::Promise;
-
     /// Copy text to the system clipboard.
     #[wasm_bindgen(js_name = "copyToClipboard")]
     fn copy_to_clipboard_js(text: &str) -> bool;
-
-    /// Generate a QR data URL from a string payload.
-    #[wasm_bindgen(js_name = "generateQrDataUrl")]
-    fn generate_qr_data_url_js(data: &str, size: u32) -> Option<String>;
 }
 
 // ---------------------------------------------------------------------------
@@ -34,19 +26,8 @@ extern "C" {
 }
 
 // ---------------------------------------------------------------------------
-// PromptPay QR generation
+// PromptPay QR generation (Rust implementation, no JS dependency)
 // ---------------------------------------------------------------------------
-
-#[wasm_bindgen(module = "/js/promptpay_qr.js")]
-extern "C" {
-    /// Generate an EMVCo QR string for Thai PromptPay payments.
-    #[wasm_bindgen(js_name = "generatePromptPayQr")]
-    fn generate_promptpay_qr_js(
-        id: &str,
-        amount: f64,
-        reference: &str,
-    ) -> JsValue;
-}
 
 // ---------------------------------------------------------------------------
 // Download
@@ -70,24 +51,20 @@ extern "C" {
     fn read_file_as_data_url_js_raw(input_element: &JsValue) -> js_sys::Promise;
 }
 
-pub async fn preload_qr_libraries_js() {
-    let _ = wasm_bindgen_futures::JsFuture::from(preload_qr_libraries_js_raw()).await;
-}
-
 pub fn copy_to_clipboard(text: &str) -> bool {
     copy_to_clipboard_js(text)
 }
 
 pub fn generate_qr_data_url(data: &str, size: u32) -> Option<String> {
-    generate_qr_data_url_js(data, size)
+    crate::utils::qr_gen::generate_qr_data_url(data, size)
 }
 
 pub fn navigate_to(url: &str) {
     navigate_to_js(url);
 }
 
-pub fn generate_promptpay_qr(id: &str, amount: f64, reference: &str) -> JsValue {
-    generate_promptpay_qr_js(id, amount, reference)
+pub fn generate_promptpay_qr(id: &str, amount: f64, reference: &str) -> Option<String> {
+    crate::utils::promptpay::generate_promptpay_qr(id, amount, reference)
 }
 
 pub fn download_data_url(data_url: &str, filename: &str) {
