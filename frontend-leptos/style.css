@@ -16,6 +16,8 @@
     --text-muted: #666;
     --accent: #6366f1;
     --accent-hover: #818cf8;
+    --accent-bg: rgba(99, 102, 241, 0.08);
+    --accent-border: rgba(99, 102, 241, 0.25);
     --success: #22c55e;
     --success-bright: #4ade80;
     --success-bg: rgba(34, 197, 94, 0.12);
@@ -9349,6 +9351,80 @@ nav a.active {
     font-size: 0.85rem;
 }
 
+/* ===== THB Payment Flow ===== */
+
+/* How-to-pay instruction box */
+.thb-how-to-pay {
+    background: rgba(255, 255, 255, 0.04);
+    border-radius: var(--radius);
+    padding: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.thb-how-to-pay-title {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 0.5rem;
+}
+
+.thb-how-to-pay ol {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin: 0;
+    padding-left: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+/* Slip upload hint below file input */
+.thb-slip-hint {
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+    margin: 0.25rem 0 0.5rem;
+}
+
+/* Bank info section divider */
+.thb-bank-section {
+    margin-top: 1rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    padding-top: 0.75rem;
+}
+
+.thb-bank-label {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    margin-bottom: 0.5rem;
+}
+
+/* Small centered disclaimer under upload button */
+.thb-upload-disclaimer {
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+    text-align: center;
+    margin-top: 0.25rem;
+    margin-bottom: 0;
+}
+
+/* THB uploaded success card */
+.thb-success-card {
+    margin-top: 2rem;
+    text-align: center;
+}
+
+.thb-success-card .badge {
+    margin-top: 0.5rem;
+}
+
+.thb-success-redirect {
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    margin-top: 0.75rem;
+}
+
+/* ===== End THB Payment Flow ===== */
+
 /* Quiz session grouping */
 .quiz-preview-session-header {
     margin: 1rem 0 0.5rem;
@@ -9723,4 +9799,1147 @@ nav a.active {
     text-decoration: none;
     font-size: 0.9rem;
     font-weight: 500;
+}
+
+/* ── Landing Page Layout ─────────────────────────────────────────── */
+
+.landing-page {
+    min-height: 100vh;
+    width: 100%;
+}
+
+.landing-nav {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(15, 15, 15, 0.85);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+}
+
+.landing-nav-inner {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 0.85rem 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.landing-nav-brand {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.landing-nav-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+/* ── Landing Brand Gradient ──────────────────────────────────────── */
+
+.landing-brand-gradient {
+    background: linear-gradient(135deg, #818cf8 0%, #6366f1 40%, #a78bfa 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.landing-brand-name {
+    font-size: 1.25rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+}
+
+.landing-hero-brand {
+    font-size: 1.1rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    margin-bottom: 0.75rem;
+}
+
+.landing-footer-brand-name {
+    font-weight: 800;
+    font-size: 1.1rem;
+}
+
+/* ── Landing Sections ────────────────────────────────────────────── */
+
+.landing-section {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 3rem 1.5rem 4rem;
+}
+
+.landing-section-sm {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 1rem 1.5rem 3rem;
+}
+
+.landing-section-how {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 4rem 1.5rem;
+}
+
+.landing-section-narrow {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 3rem 1.5rem 4rem;
+}
+
+/* ── Landing Section Headers ─────────────────────────────────────── */
+
+.landing-section-header {
+    text-align: center;
+    margin-bottom: 2.5rem;
+}
+
+.landing-section-header-sm {
+    text-align: center;
+    margin-bottom: 1.5rem;
+}
+
+.landing-section-header-md {
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+.landing-section-header-center {
+    text-align: center;
+    max-width: 480px;
+    margin: 0 auto;
+}
+
+/* ── Landing Typography ──────────────────────────────────────────── */
+
+.landing-h2 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 0.5rem;
+}
+
+.landing-subtitle {
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+}
+
+.landing-email-text {
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+}
+
+/* ── Landing Hero ────────────────────────────────────────────────── */
+
+.landing-hero {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 5rem 1.5rem 3rem;
+    text-align: center;
+}
+
+.landing-hero-h1 {
+    font-size: clamp(1.75rem, 5vw, 2.75rem);
+    font-weight: 800;
+    line-height: 1.15;
+    margin-bottom: 1rem;
+    color: #fff;
+}
+
+.landing-hero-gradient {
+    background: linear-gradient(135deg, #818cf8, #6366f1, #a78bfa);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.landing-hero-desc {
+    font-size: 1.05rem;
+    color: var(--text-secondary);
+    max-width: 500px;
+    margin: 0 auto 2rem;
+    line-height: 1.6;
+}
+
+/* ── Landing 3-Step Flow ─────────────────────────────────────────── */
+
+.landing-steps {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    flex-wrap: wrap;
+    margin-bottom: 2.25rem;
+}
+
+.landing-step-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.4rem;
+    width: 140px;
+}
+
+.landing-step-circle {
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.landing-step-circle--indigo {
+    background: rgba(99, 102, 241, 0.15);
+    border: 1.5px solid rgba(99, 102, 241, 0.4);
+}
+
+.landing-step-circle--amber {
+    background: rgba(245, 158, 11, 0.15);
+    border: 1.5px solid rgba(245, 158, 11, 0.4);
+}
+
+.landing-step-circle--green {
+    background: rgba(34, 197, 94, 0.15);
+    border: 1.5px solid rgba(34, 197, 94, 0.4);
+}
+
+.landing-step-title {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #fff;
+}
+
+.landing-step-subtitle {
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    line-height: 1.3;
+}
+
+.landing-step-arrow {
+    display: flex;
+    align-items: center;
+    padding: 0 0.25rem;
+    color: var(--border);
+}
+
+/* ── Landing CTAs ─────────────────────────────────────────────────── */
+
+.landing-ctas {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    justify-content: center;
+}
+
+.landing-cta-link {
+    padding: 0.85rem 2rem;
+    font-size: 1rem;
+    text-decoration: none;
+}
+
+/* ── Landing Features ────────────────────────────────────────────── */
+
+.landing-features-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 1rem;
+}
+
+.landing-feature-card {
+    text-align: center;
+    padding: 1.5rem;
+}
+
+.landing-feature-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #fff;
+    margin-bottom: 0.4rem;
+}
+
+.landing-feature-desc {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    line-height: 1.5;
+}
+
+/* ── Landing How-It-Works Swimlane ───────────────────────────────── */
+
+.landing-role-tabs {
+    display: flex;
+    justify-content: center;
+    gap: 0.5rem;
+    margin-bottom: 2rem;
+}
+
+.landing-role-tab {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.5rem 1rem;
+    border-radius: 9999px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.landing-step-flow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    margin-bottom: 1.5rem;
+}
+
+.landing-step-flow-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.35rem;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+}
+
+.landing-step-flow-dot {
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.85rem;
+    transition: all 0.15s;
+}
+
+.landing-step-flow-dot-inner {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.landing-step-flow-label {
+    font-size: 0.65rem;
+    max-width: 4.5rem;
+    text-align: center;
+    line-height: 1.2;
+}
+
+.landing-step-flow-line {
+    width: 2rem;
+    height: 2px;
+    flex-shrink: 0;
+}
+
+/* ── Landing Swimlane Mini ───────────────────────────────────────── */
+
+.landing-swimlane-mini-list {
+    margin-top: 2.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.landing-swimlane-mini-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.65rem 0.85rem;
+    border-radius: var(--radius);
+    cursor: pointer;
+    width: 100%;
+    text-align: left;
+    transition: all 0.15s;
+}
+
+.landing-swimlane-mini-label {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    min-width: 5.5rem;
+}
+
+.landing-swimlane-mini-dots {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.landing-swimlane-mini-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+}
+
+.landing-swimlane-mini-arrow {
+    width: 0.75rem;
+    height: 1px;
+    background: var(--border);
+}
+
+.landing-swimlane-mini-viewing {
+    font-size: 0.6rem;
+    margin-left: auto;
+    font-weight: 600;
+}
+
+/* ── Landing Mockup ──────────────────────────────────────────────── */
+
+.landing-mockup-wrapper {
+    max-width: 340px;
+    margin: 0 auto;
+}
+
+.landing-mockup {
+    transition:
+        opacity 0.2s ease,
+        transform 0.2s ease;
+}
+
+.landing-mockup-desc {
+    text-align: center;
+    margin-top: 0.75rem;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+/* ── Swimlane Mockup Cards ─────────────────────────────────────── */
+
+/* Card container */
+.landing-mock-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.25rem;
+    font-size: 0.8rem;
+}
+.landing-mock-card--center {
+    text-align: center;
+}
+.landing-mock-card--success {
+    border-color: var(--success-border);
+}
+
+/* Card heading */
+.landing-mock-h {
+    font-weight: 600;
+    color: var(--text-heading);
+    margin-bottom: 0.75rem;
+}
+.landing-mock-h--icon {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+}
+.landing-mock-h--sm {
+    margin-bottom: 0.5rem;
+}
+
+/* Value text (bold numbers/amounts) */
+.landing-mock-val {
+    font-weight: 700;
+}
+.landing-mock-val--accent {
+    color: var(--accent-hover);
+    font-size: 1.1rem;
+    font-weight: 700;
+}
+.landing-mock-val--success {
+    color: var(--success);
+    font-size: 1.1rem;
+    font-weight: 700;
+}
+.landing-mock-val--heading {
+    color: var(--text-heading);
+    font-size: 1.1rem;
+    font-weight: 700;
+}
+.landing-mock-val--danger {
+    color: var(--danger);
+    font-size: 1.1rem;
+    font-weight: 700;
+}
+.landing-mock-val--warning {
+    color: var(--warning);
+    font-size: 1.1rem;
+    font-weight: 700;
+}
+
+/* Secondary / muted text */
+.landing-mock-sub {
+    color: var(--text-secondary);
+    font-size: 0.7rem;
+}
+.landing-mock-sub-xs {
+    color: var(--text-secondary);
+    font-size: 0.65rem;
+}
+.landing-mock-sub-right {
+    color: var(--text-secondary);
+    font-size: 0.7rem;
+    margin-top: 0.35rem;
+    text-align: right;
+}
+.landing-mock-sub-after {
+    color: var(--text-secondary);
+    font-size: 0.7rem;
+    margin-top: 0.35rem;
+}
+
+/* Form input surfaces */
+.landing-mock-input {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 0.5rem 0.65rem;
+    color: var(--text-secondary);
+}
+.landing-mock-input--accent {
+    background: var(--accent-bg);
+    border-color: var(--accent-border);
+    color: var(--accent-hover);
+    font-weight: 500;
+}
+.landing-mock-input--success {
+    background: var(--success-bg);
+    border-color: var(--success-border);
+    color: var(--success);
+}
+.landing-mock-input--flex {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+/* CTA buttons inside mockup cards */
+.landing-mock-cta {
+    border-radius: var(--radius-sm);
+    padding: 0.5rem;
+    text-align: center;
+    font-weight: 600;
+}
+.landing-mock-cta--accent {
+    background: var(--accent);
+    color: var(--text-heading);
+    margin-top: 0.75rem;
+}
+.landing-mock-cta--success {
+    background: var(--success);
+    color: var(--text-heading);
+    margin-top: 0.65rem;
+    font-size: 0.75rem;
+}
+
+/* Stat grid cells (dashboard) */
+.landing-mock-stat {
+    text-align: center;
+    border-radius: var(--radius-sm);
+    padding: 0.5rem;
+}
+.landing-mock-stat--accent {
+    background: var(--accent-bg);
+}
+.landing-mock-stat--success {
+    background: var(--success-bg);
+}
+.landing-mock-stat--danger {
+    background: var(--danger-bg);
+}
+
+/* Progress bar */
+.landing-mock-bar {
+    border-radius: 9999px;
+    height: 6px;
+    overflow: hidden;
+}
+.landing-mock-bar--accent {
+    background: rgba(99, 102, 241, 0.1);
+}
+.landing-mock-bar--success {
+    background: rgba(34, 197, 94, 0.1);
+}
+.landing-mock-bar-fill--accent {
+    width: 75%;
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--accent-hover));
+    border-radius: 9999px;
+}
+.landing-mock-bar-fill--success {
+    width: 95%;
+    height: 100%;
+    background: linear-gradient(90deg, var(--success), var(--success-bright));
+    border-radius: 9999px;
+}
+
+/* Scanner frame + corners */
+.landing-mock-scan-frame {
+    background: var(--bg-primary);
+    border: 2px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.5rem 1rem;
+    margin-bottom: 0.75rem;
+    position: relative;
+}
+.landing-mock-scan-corner {
+    position: absolute;
+    width: 24px;
+    height: 24px;
+}
+.landing-mock-scan-corner--tl {
+    top: 8px;
+    left: 8px;
+    border-top: 3px solid var(--warning);
+    border-left: 3px solid var(--warning);
+    border-radius: 4px 0 0 0;
+}
+.landing-mock-scan-corner--tr {
+    top: 8px;
+    right: 8px;
+    border-top: 3px solid var(--warning);
+    border-right: 3px solid var(--warning);
+    border-radius: 0 4px 0 0;
+}
+.landing-mock-scan-corner--bl {
+    bottom: 8px;
+    left: 8px;
+    border-bottom: 3px solid var(--warning);
+    border-left: 3px solid var(--warning);
+    border-radius: 0 0 0 4px;
+}
+.landing-mock-scan-corner--br {
+    bottom: 8px;
+    right: 8px;
+    border-bottom: 3px solid var(--warning);
+    border-right: 3px solid var(--warning);
+    border-radius: 0 0 4px 0;
+}
+.landing-mock-scan-label {
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.25rem;
+}
+.landing-mock-scan-status {
+    color: var(--warning);
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+/* Success circle (check icon container) */
+.landing-mock-circle {
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 50%;
+    background: rgba(34, 197, 94, 0.15);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.25rem;
+    margin-bottom: 0.5rem;
+}
+
+/* NFT badge (Attendee claim) */
+.landing-mock-badge {
+    display: inline-block;
+    background: linear-gradient(135deg, var(--success), var(--success-bright));
+    border-radius: var(--radius);
+    padding: 0.65rem 1rem;
+    margin-bottom: 0.65rem;
+}
+.landing-mock-badge-title {
+    font-weight: 700;
+    color: var(--text-heading);
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+.landing-mock-badge-sub {
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 0.6rem;
+}
+
+/* Quiz option rows */
+.landing-mock-quiz-opt {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 0.4rem 0.6rem;
+    color: var(--text-secondary);
+    font-size: 0.7rem;
+}
+.landing-mock-quiz-opt--selected {
+    background: var(--success-bg);
+    border-color: var(--success-border);
+    color: var(--success);
+    font-weight: 600;
+}
+
+/* Wallet pill row */
+.landing-mock-wallet {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--border);
+    border-radius: 9999px;
+    padding: 0.3rem 0.65rem;
+    margin-bottom: 0.65rem;
+}
+.landing-mock-wallet-dot {
+    color: var(--accent-light);
+}
+
+/* Payout sub-cards (Organizer step 3) */
+.landing-mock-payout {
+    border-radius: var(--radius-sm);
+    padding: 0.65rem;
+}
+.landing-mock-payout--success {
+    background: var(--success-bg);
+    border: 1px solid rgba(34, 197, 94, 0.2);
+}
+.landing-mock-payout--warning {
+    background: var(--warning-bg);
+    border: 1px solid rgba(245, 158, 11, 0.2);
+}
+.landing-mock-payout-label {
+    font-weight: 600;
+    font-size: 0.7rem;
+    margin-bottom: 0.35rem;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+.landing-mock-payout-label--success {
+    color: var(--success);
+}
+.landing-mock-payout-label--warning {
+    color: var(--warning);
+}
+
+/* QR code frame + grid */
+.landing-mock-qr-frame {
+    display: inline-block;
+    background: var(--text-heading);
+    border-radius: var(--radius);
+    padding: 0.75rem;
+    margin-bottom: 0.75rem;
+}
+.landing-mock-qr-grid {
+    width: 80px;
+    height: 80px;
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 1px;
+}
+.landing-mock-qr-pixel {
+    width: 8px;
+    height: 8px;
+    border-radius: 1px;
+}
+
+/* Claim title (Attendee step 4) */
+.landing-mock-claim-title {
+    color: var(--text-heading);
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.3rem;
+}
+
+/* Layout helpers */
+.landing-mock-flex-col {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+.landing-mock-flex-row {
+    display: flex;
+    gap: 0.5rem;
+}
+.landing-mock-flex-row-lg {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 0.75rem;
+}
+.landing-mock-flex-center {
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+    margin-bottom: 0.5rem;
+}
+.landing-mock-grid-3 {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+}
+.landing-mock-grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+}
+.landing-mock-grow {
+    flex: 1;
+}
+.landing-mock-right {
+    text-align: right;
+}
+
+/* Margin utilities for mockup cards */
+.landing-mock-mb-xs {
+    margin-bottom: 0.25rem;
+}
+.landing-mock-mb-sm {
+    margin-bottom: 0.65rem;
+}
+.landing-mock-mb-md {
+    margin-bottom: 0.75rem;
+}
+.landing-mock-mt-xs {
+    margin-top: 0.25rem;
+}
+.landing-mock-mt-xxs {
+    margin-top: 0.15rem;
+}
+.landing-mock-circle--empty {
+    background: transparent;
+}
+.landing-mock-sub--success-bold {
+    color: var(--success);
+    font-weight: 600;
+}
+
+/* ── Landing FAQ ─────────────────────────────────────────────────── */
+
+.landing-faq-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.landing-faq-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.25rem 1.5rem;
+}
+
+.landing-faq-q {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #fff;
+    margin-bottom: 0.4rem;
+}
+
+.landing-faq-a {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    line-height: 1.6;
+}
+
+.landing-faq-cta {
+    text-align: center;
+    margin-top: 2rem;
+}
+
+.landing-faq-cta-link {
+    padding: 0.75rem 1.5rem;
+    text-decoration: none;
+}
+
+/* ── Landing Waitlist ────────────────────────────────────────────── */
+
+.landing-waitlist-inner {
+    text-align: center;
+    max-width: 480px;
+    margin: 0 auto;
+}
+
+.landing-waitlist-form {
+    display: flex;
+    gap: 0.5rem;
+    max-width: 400px;
+    margin: 0 auto;
+}
+
+.landing-waitlist-input {
+    flex: 1;
+    min-width: 0;
+    padding: 0.75rem 1rem;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    outline: none;
+}
+
+.landing-waitlist-submit {
+    white-space: nowrap;
+    padding: 0.75rem 1.25rem;
+}
+
+.landing-waitlist-success {
+    padding: 1.5rem;
+    background: var(--success-bg);
+    border: 1px solid var(--success-border);
+    border-radius: var(--radius);
+    text-align: center;
+}
+
+.landing-waitlist-success-icon {
+    font-size: 1.25rem;
+    margin-bottom: 0.5rem;
+}
+
+.landing-waitlist-success-title {
+    font-weight: 600;
+    color: var(--success);
+    margin-bottom: 0.25rem;
+}
+
+.landing-waitlist-success-desc {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.landing-waitlist-error {
+    color: var(--danger);
+    font-size: 0.8rem;
+    margin-top: 0.5rem;
+}
+
+/* ── Landing Events ──────────────────────────────────────────────── */
+
+.landing-events-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1rem;
+}
+
+.landing-events-loading {
+    text-align: center;
+    padding: 2rem 0;
+}
+
+.landing-events-loading-spinner {
+    display: inline-block;
+    width: 1.5rem;
+    height: 1.5rem;
+    border: 2px solid var(--border-color);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+}
+
+.landing-events-loading-text {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    margin-top: 0.75rem;
+}
+
+.landing-events-empty {
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+}
+
+.landing-event-card {
+    text-align: left;
+    padding: 1.25rem 1.5rem;
+}
+
+.landing-event-badge-img {
+    margin-bottom: 0.5rem;
+}
+
+.landing-event-badge-img img {
+    width: 100%;
+    height: 80px;
+    object-fit: cover;
+    border-radius: 6px 6px 0 0;
+    display: block;
+}
+
+.landing-event-name {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #fff;
+    margin-bottom: 0.35rem;
+}
+
+.landing-event-tagline {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.35rem;
+    font-style: italic;
+}
+
+.landing-event-meta {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.35rem;
+}
+
+.landing-event-location {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.25rem;
+}
+
+.landing-event-deposit {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.landing-inline-icon {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+/* ── Landing Registrations ───────────────────────────────────────── */
+
+.landing-reg-section {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 1rem 1.5rem 2rem;
+}
+
+.landing-reg-card {
+    background: var(--bg-card);
+    border-radius: var(--radius);
+    padding: 1rem 1.25rem;
+    box-shadow: var(--shadow);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.landing-reg-empty {
+    background: var(--bg-card);
+    border-radius: var(--radius);
+    padding: 1.25rem;
+    box-shadow: var(--shadow);
+    text-align: center;
+}
+
+.landing-reg-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+}
+
+.landing-reg-title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #fff;
+}
+
+.landing-reg-user {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.landing-reg-grid {
+    display: grid;
+    gap: 0.75rem;
+}
+
+.landing-reg-event-name {
+    color: #fff;
+    font-weight: 600;
+    text-decoration: none;
+    font-size: 0.95rem;
+}
+
+.landing-reg-event-date {
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    margin-top: 0.15rem;
+}
+
+.landing-reg-event-status {
+    font-size: 0.75rem;
+    margin-top: 0.1rem;
+    text-transform: capitalize;
+    font-weight: 500;
+}
+
+.landing-reg-empty-user {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    margin-bottom: 0.5rem;
+}
+
+.landing-reg-empty-text {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+}
+
+.landing-reg-signout-btn {
+    margin-top: 0.75rem;
+}
+.landing-reg-action {
+    text-decoration: none;
+    font-size: 0.85rem;
+}
+
+/* ── Landing Social Proof ────────────────────────────────────────── */
+
+.landing-social-pill-solana {
+    text-decoration: none;
+    color: var(--text-secondary);
+    border-color: rgba(99, 102, 241, 0.3);
+}
+
+.landing-social-pill-cta {
+    text-decoration: none;
+    color: var(--accent);
+    border-color: rgba(99, 102, 241, 0.4);
+    cursor: pointer;
+}
+
+/* ── Landing Footer ──────────────────────────────────────────────── */
+
+.landing-footer-built-with {
+    margin-top: 0.5rem;
+}
+
+.landing-footer-crab {
+    color: var(--accent);
+    display: inline-flex;
+    align-items: center;
+}
+
+/* ── Landing Mobile Menu ─────────────────────────────────────────── */
+
+.landing-mobile-divider {
+    border-top: 1px solid var(--border);
+    padding-top: 0.5rem;
+    margin-top: 0.25rem;
+}
+
+.landing-mobile-signout {
+    margin-top: 0.5rem;
+    width: 100%;
 }
