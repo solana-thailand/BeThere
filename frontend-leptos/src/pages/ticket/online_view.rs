@@ -12,7 +12,7 @@ use super::view_data::TicketViewData;
 use crate::icons::{Icon, IconName};
 use crate::utils;
 
-#[wasm_bindgen(module = "/js/qr_generate.js")]
+#[wasm_bindgen(module = "/js/clipboard.js")]
 extern "C" {
     #[wasm_bindgen(js_name = "copyToClipboard")]
     fn copy_to_clipboard_js(text: &str) -> bool;

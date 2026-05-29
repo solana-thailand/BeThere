@@ -3,9 +3,11 @@
 //! Accessible at `/ticket/:attendee_id?event_id=xxx`.
 //! No auth required — uses the public `/api/public/ticket/{id}` endpoint.
 //!
-//! Smart auto-refresh: polls every 10s when awaiting deposit verification or
-//! check-in. Stops polling once QR appears or attendee is checked in.
-//! 5-minute max polling window, then shows manual refresh button.
+//! Two-tier auto-refresh polling:
+//!   Tier 1 (10s): waiting for deposit verification or QR generation
+//!   Tier 2 (30s): has QR, waiting for staff check-in at venue
+//! Both tiers stop when attendee is checked in.
+//! Tier 1 has a 5-minute cap; Tier 2 polls indefinitely until check-in.
 
 use leptos::prelude::*;
 use leptos_meta::Title;
@@ -22,10 +24,27 @@ use super::online_view::OnlineView;
 use super::qr_section::FullscreenQrOverlay;
 use super::view_data::TicketViewData;
 
-/// Polling interval for auto-refresh.
-const POLL_INTERVAL_MS: u32 = 10_000;
-/// Maximum duration for auto-refresh polling before stopping.
-const POLL_MAX_MS: u32 = 300_000; // 5 minutes
+/// Tier 1 interval: waiting for deposit verification / QR generation (10s).
+const POLL_TIER1_INTERVAL_MS: u32 = 10_000;
+/// Tier 2 interval: waiting for staff check-in at venue (30s).
+const POLL_TIER2_INTERVAL_MS: u32 = 30_000;
+/// Maximum duration for Tier 1 polling before stopping.
+const POLL_TIER1_MAX_MS: u32 = 300_000; // 5 minutes
+
+// ---------------------------------------------------------------------------
+// Polling tier
+// ---------------------------------------------------------------------------
+
+/// Two-tier polling strategy for the ticket page.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum PollingTier {
+    /// Tier 1: no QR yet, waiting for deposit verification or QR generation.
+    /// Fast interval (10s), capped at 5 minutes.
+    AwaitingDeposit,
+    /// Tier 2: has QR, deposit verified, waiting for staff check-in.
+    /// Slower interval (30s), no cap (attendee may wait hours at venue).
+    AwaitingCheckIn,
+}
 
 // ---------------------------------------------------------------------------
 // URL params
@@ -87,24 +106,26 @@ pub fn Ticket() -> impl IntoView {
     let (polling_active, set_polling_active) = signal(false);
     let (polling_expired, set_polling_expired) = signal(false);
 
-    // Helper: determine if current state needs polling
-    let needs_polling = |data: &api::AttendeeData| -> bool {
+    // Helper: determine which polling tier applies (or None to stop polling)
+    let polling_tier = |data: &api::AttendeeData| -> Option<PollingTier> {
         // Online attendees never get QR/deposit — polling is pointless
         if !data.is_in_person {
-            return false;
+            return None;
         }
+        // Checked in — no further polling needed
         if data.is_checked_in {
-            return false;
+            return None;
         }
-        // No QR yet — likely waiting for deposit verification or QR generation
+        // No QR yet — waiting for deposit verification or QR generation
         if data.qr_image.is_none() {
-            return true;
+            return Some(PollingTier::AwaitingDeposit);
         }
-        // Has deposit but not verified — still waiting
+        // Has deposit but not verified — still fast polling
         if data.deposit_info.as_ref().is_some_and(|d| !d.verified) {
-            return true;
+            return Some(PollingTier::AwaitingDeposit);
         }
-        false
+        // Has QR and verified deposit — waiting for staff to scan at venue
+        Some(PollingTier::AwaitingCheckIn)
     };
 
     // Extract attendee_id from URL and event_id from query, then fetch ticket data
@@ -144,7 +165,7 @@ pub fn Ticket() -> impl IntoView {
                         "[ticket] loaded ticket for {}",
                         data.attendee.name
                     );
-                    let should_poll = needs_polling(&data);
+                    let should_poll = polling_tier(&data).is_some();
                     set_state.set(TicketState::Found(data));
                     set_polling_active.set(should_poll);
                 }
@@ -166,14 +187,30 @@ pub fn Ticket() -> impl IntoView {
         });
     });
 
-    // Smart auto-refresh polling — only when waiting for deposit verification or QR
-    // Stops when: QR appears, checked in, or 5 min elapsed
+    // Two-tier auto-refresh polling:
+    //   Tier 1 (AwaitingDeposit): 10s interval, 5-min cap → then manual refresh
+    //   Tier 2 (AwaitingCheckIn): 30s interval, no cap → polls until check-in
     // Uses raw web_sys::Window timers (gloo Interval is !Send, incompatible with on_cleanup)
     Effect::new(move |_| {
         // Only run when polling is active
         if !polling_active.get() {
             return;
         }
+
+        // Determine current tier from latest state
+        let current_tier = match &state.get() {
+            TicketState::Found(data) => polling_tier(data),
+            _ => None,
+        };
+
+        let tier = match current_tier {
+            Some(t) => t,
+            None => {
+                // State resolved (e.g. checked in) — stop polling
+                set_polling_active.set(false);
+                return;
+            }
+        };
 
         let attendee_id = match params.get() {
             Ok(p) => p.attendee_id.unwrap_or_default(),
@@ -199,6 +236,11 @@ pub fn Ticket() -> impl IntoView {
             _ => format!("/public/ticket/{attendee_id}"),
         };
 
+        let interval_ms = match tier {
+            PollingTier::AwaitingDeposit => POLL_TIER1_INTERVAL_MS,
+            PollingTier::AwaitingCheckIn => POLL_TIER2_INTERVAL_MS,
+        };
+
         // Poll callback — invalidate cache and refetch
         let interval_cb = {
             let cache_key = cache_key.clone();
@@ -212,11 +254,21 @@ pub fn Ticket() -> impl IntoView {
                 leptos::task::spawn_local(async move {
                     match api::get_public_ticket(&aid, eid.as_deref()).await {
                         Ok(data) => {
-                            let still_needs = needs_polling(&data);
+                            let new_tier = polling_tier(&data);
                             set_state.set(TicketState::Found(data));
-                            if !still_needs {
-                                log::info!("[ticket] polling stopped — state resolved");
-                                set_polling_active.set(false);
+                            match new_tier {
+                                None => {
+                                    log::info!("[ticket] polling stopped — state resolved");
+                                    set_polling_active.set(false);
+                                }
+                                Some(PollingTier::AwaitingCheckIn) if tier == PollingTier::AwaitingDeposit => {
+                                    // Tier upgrade: Tier 1 → Tier 2
+                                    // Restart the effect to pick up new interval
+                                    log::info!("[ticket] deposit verified — switching to check-in polling");
+                                    set_polling_active.set(false);
+                                    set_polling_active.set(true);
+                                }
+                                _ => {} // same tier, keep polling
                             }
                         }
                         Err(e) => {
@@ -232,33 +284,42 @@ pub fn Ticket() -> impl IntoView {
             .unwrap()
             .set_interval_with_callback_and_timeout_and_arguments_0(
                 interval_cb.as_ref().unchecked_ref(),
-                POLL_INTERVAL_MS as i32,
+                interval_ms as i32,
             )
             .unwrap();
 
-        // Max timeout — stop after 5 minutes
-        let timeout_cb = Closure::<dyn Fn()>::new(move || {
-            log::info!("[ticket] polling expired after {}s", POLL_MAX_MS / 1000);
-            set_polling_active.set(false);
-            set_polling_expired.set(true);
-        });
-        let timeout_id = web_sys::window()
-            .unwrap()
-            .set_timeout_with_callback_and_timeout_and_arguments_0(
-                timeout_cb.as_ref().unchecked_ref(),
-                POLL_MAX_MS as i32,
-            )
-            .unwrap();
+        // Max timeout — only for Tier 1 (deposit verification)
+        // Tier 2 (check-in) has no cap — attendee may wait hours at venue
+        let timeout_id = match tier {
+            PollingTier::AwaitingDeposit => {
+                let timeout_cb = Closure::<dyn Fn()>::new(move || {
+                    log::info!("[ticket] tier 1 polling expired after {}s", POLL_TIER1_MAX_MS / 1000);
+                    set_polling_active.set(false);
+                    set_polling_expired.set(true);
+                });
+                let id = web_sys::window()
+                    .unwrap()
+                    .set_timeout_with_callback_and_timeout_and_arguments_0(
+                        timeout_cb.as_ref().unchecked_ref(),
+                        POLL_TIER1_MAX_MS as i32,
+                    )
+                    .unwrap();
+                timeout_cb.forget();
+                Some(id)
+            }
+            PollingTier::AwaitingCheckIn => None,
+        };
 
-        // Must keep closures alive for the lifetime of the timers
+        // Must keep interval closure alive for the lifetime of the timer
         interval_cb.forget();
-        timeout_cb.forget();
 
         // Cleanup when this effect re-runs or component unmounts
         on_cleanup(move || {
             let _ = web_sys::window().map(|w| {
                 w.clear_interval_with_handle(interval_id);
-                w.clear_timeout_with_handle(timeout_id);
+                if let Some(tid) = timeout_id {
+                    w.clear_timeout_with_handle(tid);
+                }
             });
         });
     });
@@ -294,7 +355,7 @@ pub fn Ticket() -> impl IntoView {
 
             match api::get_public_ticket(&attendee_id, event_id.as_deref()).await {
                 Ok(data) => {
-                    let still_needs = needs_polling(&data);
+                    let still_needs = polling_tier(&data).is_some();
                     set_state.set(TicketState::Found(data));
                     if still_needs {
                         // Restart polling on manual refresh
@@ -380,13 +441,24 @@ pub fn Ticket() -> impl IntoView {
                     }.into_any(),
                 }}
 
-                // Auto-refresh polling indicator
+                // Auto-refresh polling indicator (tier-aware message)
                 <Show
                     when=move || polling_active.get()
                     fallback=|| view! { <div></div> }
                 >
                     <div class="ticket-poll">
-                        "Checking for updates..."
+                        {move || match &state.get() {
+                            TicketState::Found(data) => match polling_tier(data) {
+                                Some(PollingTier::AwaitingDeposit) => {
+                                    "Checking for deposit verification...".into_any()
+                                }
+                                Some(PollingTier::AwaitingCheckIn) => {
+                                    "Waiting for check-in at venue...".into_any()
+                                }
+                                None => view! { <div></div> }.into_any(),
+                            },
+                            _ => "Checking for updates...".into_any(),
+                        }}
                     </div>
                 </Show>
 

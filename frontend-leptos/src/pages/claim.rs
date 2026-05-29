@@ -29,7 +29,7 @@ type QuizAnswers = std::collections::HashMap<String, String>;
 // JS interop
 // ---------------------------------------------------------------------------
 
-#[wasm_bindgen(module = "/js/qr_generate.js")]
+#[wasm_bindgen(module = "/js/clipboard.js")]
 extern "C" {
     /// Copy text to the system clipboard.
     ///

@@ -49,9 +49,17 @@ pub fn Login() -> impl IntoView {
         let nav = navigate.clone();
         leptos::task::spawn_local(async move {
             match crate::api::get_me().await {
-                Ok(_) => {
-                    log::info!("[login] already authenticated via cookie, redirecting to /staff");
-                    nav("/staff", Default::default());
+                Ok(me) => {
+                    let target = match me.role.as_str() {
+                        "super_admin" | "organizer" => "/admin",
+                        "staff" => "/staff",
+                        _ => "/",
+                    };
+                    log::info!(
+                        "[login] already authenticated via cookie (role={}), redirecting to {target}",
+                        me.role
+                    );
+                    nav(target, Default::default());
                 }
                 Err(_) => {
                     log::info!("[login] not authenticated, showing login form");

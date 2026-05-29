@@ -52,7 +52,7 @@ pub async fn auth_url(
 /// 1. Exchanges the authorization code for tokens
 /// 2. Fetches user info from Google
 /// 3. Creates a JWT session token for ALL users (staff and non-staff)
-/// 4. Redirects staff to `/staff`, non-staff to the `state` param (or `/`)
+/// 4. Redirects admins/organizers to `/admin`, staff to `/staff`, non-staff to the `state` param (or `/`)
 /// 5. Sets HttpOnly cookie with JWT
 #[worker::send]
 pub async fn auth_callback(
@@ -79,7 +79,31 @@ pub async fn auth_callback(
         }
     };
 
+    // Resolve role using the same hierarchy as auth_me:
+    // super_admin → organizer → staff → attendee
+    let is_super_admin = state
+        .config
+        .super_admin_emails
+        .iter()
+        .any(|e| e.eq_ignore_ascii_case(&user_info.email));
+
     let is_staff_user = auth::is_staff(&user_info.email, &state).await;
+
+    let role = if is_super_admin {
+        "super_admin"
+    } else if !is_staff_user {
+        "attendee"
+    } else {
+        match auth::get_staff_role(&user_info.email, &state)
+            .await
+            .as_deref()
+        {
+            Some("admin" | "organizer") => "organizer",
+            Some("staff") => "staff",
+            None if auth::is_event_organizer_any(&user_info.email, &state).await => "organizer",
+            Some(_) | None => "staff",
+        }
+    };
 
     // Create JWT session token for ALL users (staff and non-staff)
     let token =
@@ -97,16 +121,26 @@ pub async fn auth_callback(
     // fall back to role-based defaults.
     let redirect_url = if let Some(ref state_url) = query.state {
         tracing::info!(
-            "login successful with redirect: {} (staff={})",
+            "login successful with redirect: {} (role={role})",
             state_url,
-            is_staff_user
         );
         state_url.clone()
     } else if is_staff_user {
-        tracing::info!("staff login successful: {}", user_info.email);
-        "/staff".to_string()
+        let dashboard = if matches!(role, "super_admin" | "organizer") {
+            "/admin"
+        } else {
+            "/staff"
+        };
+        tracing::info!(
+            "staff login successful: {} (role={role}, redirect={dashboard})",
+            user_info.email,
+        );
+        dashboard.to_string()
     } else {
-        tracing::info!("attendee login successful: {}", user_info.email);
+        tracing::info!(
+            "attendee login successful: {} (role={role})",
+            user_info.email,
+        );
         "/".to_string()
     };
 

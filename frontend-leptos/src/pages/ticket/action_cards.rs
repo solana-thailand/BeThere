@@ -251,6 +251,7 @@ enum RolloverState {
     /// Wallet connected, ready to sign.
     WalletConnected(String, String), // (wallet_name, public_key)
     /// Signing and sending TX.
+    #[allow(dead_code)]
     Signing(String, String), // (wallet_name, public_key)
     /// TX confirmed on-chain.
     Confirmed(String), // (tx_signature)

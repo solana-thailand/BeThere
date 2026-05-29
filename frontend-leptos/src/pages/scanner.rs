@@ -75,7 +75,7 @@ fn generate_qr_data_url(text: &str, size: u32) -> Option<String> {
 
 // ===== Clipboard JS Interop =====
 
-#[wasm_bindgen(module = "/js/qr_generate.js")]
+#[wasm_bindgen(module = "/js/clipboard.js")]
 extern "C" {
     /// Copy text to the system clipboard.
     ///
