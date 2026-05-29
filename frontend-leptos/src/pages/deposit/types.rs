@@ -122,10 +122,29 @@ pub enum DepositFlow {
 
 /// Compute the current step (1-based) within the active flow.
 /// Returns (flow, current_step, total_steps) — None if no stepper should show.
-pub fn deposit_step(state: &DepositPageState) -> Option<(DepositFlow, usize, usize)> {
+///
+/// `payment_choice` is used to determine the flow when state is `ChoosePayment`
+/// (before the state machine transitions to a flow-specific variant).
+pub fn deposit_step(
+    state: &DepositPageState,
+    payment_choice: Option<PaymentChoice>,
+) -> Option<(DepositFlow, usize, usize)> {
     match state {
+        // ChoosePayment: step 1 of whichever flow the user picked
+        DepositPageState::ChoosePayment(_) => {
+            let flow = match payment_choice {
+                Some(PaymentChoice::Thb) => DepositFlow::Thb,
+                _ => DepositFlow::Usdc, // default / USDC
+            };
+            let total = match flow {
+                DepositFlow::Usdc => 4,
+                DepositFlow::Thb => 3,
+                _ => 4,
+            };
+            Some((flow, 1, total))
+        }
+
         // USDC flow: Choose → Connect → Pay → Confirm (4 steps)
-        DepositPageState::ChoosePayment(_) => Some((DepositFlow::Usdc, 1, 4)),
         DepositPageState::WalletConnected(_, _, _) => Some((DepositFlow::Usdc, 2, 4)),
         DepositPageState::AwaitingConfirmation(_, _, _) | DepositPageState::UsdcQrReady(_, _) => {
             Some((DepositFlow::Usdc, 3, 4))

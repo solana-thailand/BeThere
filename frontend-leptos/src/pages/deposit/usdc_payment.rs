@@ -2,7 +2,7 @@
 
 use leptos::prelude::*;
 
-use crate::api::{ConfirmDepositResponse, DepositStatusResponse};
+use crate::api::DepositStatusResponse;
 use crate::icons::{Icon, IconName};
 
 use super::components;
@@ -205,65 +205,20 @@ pub fn usdc_qr_ready_view(
     data: &DepositStatusResponse,
     pay_url: &str,
     pay_url_copied: ReadSignal<bool>,
-    state: ReadSignal<DepositPageState>,
-    set_state: WriteSignal<DepositPageState>,
-    _set_toast: WriteSignal<Option<crate::components::ToastMessage>>,
-    params: DepositParamsSignal,
     handle_copy_url: impl Fn(String) + Clone + 'static,
+    handle_qr_poll: impl Fn() + Clone + 'static,
 ) -> AnyView {
     let pay_url_display = pay_url.to_string();
     let pay_url_copy = pay_url.to_string();
     let pay_url_qr = pay_url.to_string();
     let usdc_fmt = format_usdc(data.deposit_amount_usdc);
 
-    // Poll for payment confirmation
-    let eid_poll = extract_event_id_from_url().unwrap_or_default();
-    let aid_poll = match params.get() {
-        Ok(p) => p.attendee_id.unwrap_or_default(),
-        Err(_) => String::new(),
-    };
-    let deposit_data_poll = data.clone();
-
+    // Trigger QR confirmation polling on mount
+    let poll = handle_qr_poll.clone();
     Effect::new(move |_| {
-        let eid_c = eid_poll.clone();
-        let aid_c = aid_poll.clone();
-        let dd = deposit_data_poll.clone();
+        let poll = poll.clone();
         leptos::task::spawn_local(async move {
-            let mut attempts = 0u32;
-            let max_attempts = 100u32;
-            while attempts < max_attempts {
-                let still_qr = matches!(&state.get(), DepositPageState::UsdcQrReady(_, _));
-                if !still_qr {
-                    break;
-                }
-                match crate::api::confirm_deposit(&eid_c, &aid_c).await {
-                    Ok(ConfirmDepositResponse {
-                        confirmed: true,
-                        tx_signature: Some(sig),
-                        ..
-                    }) => {
-                        log::info!("[deposit] QR payment confirmed: {}", sig);
-                        set_state.set(DepositPageState::DepositConfirmed(dd, sig));
-                        return;
-                    }
-                    Ok(_) => {
-                        attempts += 1;
-                        if attempts < max_attempts {
-                            gloo::timers::future::TimeoutFuture::new(3000).await;
-                        }
-                    }
-                    Err(e) => {
-                        log::warn!("[deposit] QR poll error: {e}");
-                        attempts += 1;
-                        if attempts < max_attempts {
-                            gloo::timers::future::TimeoutFuture::new(3000).await;
-                        }
-                    }
-                }
-            }
-            if attempts >= max_attempts {
-                log::warn!("[deposit] QR poll timed out after 5 min");
-            }
+            poll();
         });
     });
 

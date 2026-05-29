@@ -1,14 +1,14 @@
 /**
- * QR code image generation module.
+ * Clipboard and QR code utilities.
  *
- * Uses the QRious library (lazy-loaded by lazy_assets.js) to generate
- * QR code images as base64 data URLs for display in the frontend.
+ * Primary export: `copyToClipboard()` — used by 5 Rust modules via
+ * `#[wasm_bindgen(module = "/js/clipboard.js")]`.
  *
- * Imported via `#[wasm_bindgen(module = "/js/qr_generate.js")]` in Rust.
- * This avoids `js_sys::eval()` which would require `'unsafe-eval'` in CSP.
+ * Also contains QR code generation helpers (`generateQrDataUrl`,
+ * `preloadQrLibraries`) using QRious (lazy-loaded by lazy_assets.js).
  *
- * The QRious library creates a canvas element internally and renders
- * the QR code, then exports it as a PNG data URL.
+ * Uses wasm_bindgen module imports instead of `js_sys::eval()`
+ * to avoid requiring `'unsafe-eval'` in CSP.
  */
 
 /**

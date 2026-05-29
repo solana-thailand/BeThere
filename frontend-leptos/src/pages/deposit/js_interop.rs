@@ -6,7 +6,7 @@ use wasm_bindgen::prelude::*;
 // Clipboard
 // ---------------------------------------------------------------------------
 
-#[wasm_bindgen(module = "/js/qr_generate.js")]
+#[wasm_bindgen(module = "/js/clipboard.js")]
 extern "C" {
     /// Copy text to the system clipboard.
     #[wasm_bindgen(js_name = "copyToClipboard")]
