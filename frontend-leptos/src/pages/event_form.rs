@@ -848,15 +848,15 @@ pub fn EventFormComponent(
                         />
                         <span class="quiz-setting-hint">"Times in your local timezone"</span>
                     </div>
-                    <div class="quiz-setting-item" style="grid-column: 1 / -1;">
-                        <label style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;">
+                    <div class="quiz-setting-item event-form-span-full">
+                        <label class="event-form-tba-label">
                             <input
                                 type="checkbox"
                                 prop:checked=move || form.get().time_tba
                                 on:change=move |ev| set_form.update(|f| f.time_tba = event_target_checked(&ev))
                             />
-                            <span class="quiz-field-label" style="margin:0;">"Time TBA (To Be Announced)"</span>
-                            <span class="form-hint" style="margin:0;">"Show \"TBA\" instead of specific time"</span>
+                            <span class="quiz-field-label event-form-tba-field-label">"Time TBA (To Be Announced)"</span>
+                            <span class="form-hint event-form-tba-hint">"Show \"TBA\" instead of specific time"</span>
                         </label>
                     </div>
                     <Show
@@ -871,7 +871,7 @@ pub fn EventFormComponent(
                             "Event end must be after event start"
                         </div>
                     </Show>
-                    <div class="quiz-setting-item" style="grid-column:1/-1">
+                    <div class="quiz-setting-item event-form-span-full">
                         <label class="quiz-field-label">"Location"<span class="field-optional-badge">"Optional"</span></label>
                         <input
                             type="text"
@@ -882,7 +882,7 @@ pub fn EventFormComponent(
                         />
                         <span class="quiz-setting-hint">"Venue name and address for in-person events"</span>
                     </div>
-                    <div class="quiz-setting-item" style="grid-column:1/-1">
+                    <div class="quiz-setting-item event-form-span-full">
                         <label class="quiz-field-label">"Video / Livestream URL"<span class="field-optional-badge">"Optional"</span></label>
                         <input
                             type="url"
@@ -907,7 +907,7 @@ pub fn EventFormComponent(
                 </div>
                 <div class="form-section-body" class:form-section-body-hidden=move || !sec_sheets_open.get()>
                     // ── Quick Guide: How to get Google Sheet ID ──
-                    <div class="sheet-guide-box" style="margin-bottom:0.75rem">
+                    <div class="sheet-guide-box event-form-sheet-guide">
                         <div class="sheet-guide-heading"><Icon icon=IconName::Copy class="icon-sm"/>" Quick Guide"</div>
                         <ol class="sheet-guide-steps">
                             <li>
@@ -976,11 +976,11 @@ pub fn EventFormComponent(
                 </div>
                 <div class="form-section-body" class:form-section-body-hidden=move || !sec_nft_open.get()>
                     // ── Quick-fill default badge ──
-                    <div class="quiz-setting-item" style="grid-column:1/-1">
-                        <div class="hint-info" style="margin-bottom:var(--space-2xs)">
+                    <div class="quiz-setting-item event-form-span-full">
+                        <div class="hint-info event-form-nft-intro">
                             "NFT badges reward attendees for showing up. Use the default BeThere badge or skip if you don't need one."
                         </div>
-                        <div style="display:flex;gap:var(--space-xs);align-items:center;flex-wrap:wrap">
+                        <div class="event-form-nft-actions">
                             <button
                                 class="btn btn-outline btn-sm"
                                 on:click=move |_| {
@@ -1023,9 +1023,9 @@ pub fn EventFormComponent(
                                 <img
                                     src=move || form.get().nft_image_url
                                     alt="NFT badge preview"
-                                    style="width:48px;height:48px;border-radius:8px;border:1px solid var(--border,rgba(255,255,255,0.1))"
+                                    class="event-form-badge-preview"
                                 />
-                                <span style="font-size:var(--text-xs);color:var(--text-muted,#888)">
+                                <span class="event-form-badge-type-label">
                                     {move || {
                                         let url = form.get().nft_image_url;
                                         if url.contains("/api/badge") { "Default badge" } else { "Custom badge" }.to_string()
@@ -1055,7 +1055,7 @@ pub fn EventFormComponent(
                                 "Invalid base58 characters detected (expected Solana address format)"
                             </div>
                         </Show>
-                        <div class="quiz-setting-hint" style="display:flex;justify-content:space-between;align-items:center;">
+                        <div class="quiz-setting-hint event-form-hint-row">
                             <span>"Solana mint address (base58)"</span>
                             <Show
                                 when=move || !form.get().nft_collection_mint.trim().is_empty()
@@ -1065,7 +1065,7 @@ pub fn EventFormComponent(
                                     href=move || crate::utils::metaplex_explorer_url(&form.get().nft_collection_mint.trim(), &crate::utils::get_cluster())
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    style="font-size:0.75rem;color:var(--info);text-decoration:none;"
+                                    class="event-form-link-sm"
                                 >
                                     "Verify on Metaplex ↗"
                                 </a>
@@ -1202,13 +1202,13 @@ pub fn EventFormComponent(
                         />
                         <span class="quiz-setting-hint">
                             "The base URL for attendee claim links (e.g. "
-                            <code style="font-size:inherit">"https://bethere.solana-thailand.workers.dev/claim"</code>
+                            <code class="event-form-code-inherit">"https://bethere.solana-thailand.workers.dev/claim"</code>
                             "). Leave empty — the system auto-generates claim links from your current domain."
                         </span>
                         </div>
                         <div class="quiz-setting-item">
                             <label class="quiz-field-label">"Quiz Enabled"</label>
-                            <label class="quiz-toggle-label" style="cursor:pointer;padding-top:0.3rem">
+                            <label class="quiz-toggle-label event-form-toggle-label">
                                 <input
                                     type="checkbox"
                                     class="quiz-toggle-checkbox"
@@ -1226,7 +1226,7 @@ pub fn EventFormComponent(
                         </div>
                         <div class="quiz-setting-item">
                             <label class="quiz-field-label">"Require Contact Info"</label>
-                            <label class="quiz-toggle-label" style="cursor:pointer;padding-top:0.3rem">
+                            <label class="quiz-toggle-label event-form-toggle-label">
                                 <input
                                     type="checkbox"
                                     class="quiz-toggle-checkbox"
@@ -1418,7 +1418,7 @@ pub fn EventFormComponent(
                             <Show when=move || form.get().online_open_mode == api::OnlineOpenMode::Manual && form.get().event_format == api::EventFormat::Hybrid fallback=|| view! { <div></div> }>
                                 <div class="quiz-setting-item">
                                     <label class="quiz-field-label">"Online Registration Open"</label>
-                                    <label class="quiz-toggle-label" style="cursor:pointer;padding-top:0.3rem">
+                                    <label class="quiz-toggle-label event-form-toggle-label">
                                         <input
                                             type="checkbox"
                                             class="quiz-toggle-checkbox"
@@ -1580,7 +1580,7 @@ pub fn EventFormComponent(
                                     <span class="readonly-value-mono">{move || form.get().organizer_wallet}</span>
                                     <span class="readonly-badge">"Locked"</span>
                                 </div>
-                                <span class="quiz-setting-hint" style="color:var(--success,green)">"Wallet locked — set by escrow panel"</span>
+                                <span class="quiz-setting-hint event-form-hint-success">"Wallet locked — set by escrow panel"</span>
                             </div>
                         </Show>
 
@@ -1664,7 +1664,7 @@ pub fn EventFormComponent(
                         let f = form.get();
                         f.deposit_enabled && is_create
                     }>
-                        <div class="panel-box-dashed" style="margin-top:0.75rem">
+                        <div class="panel-box-dashed event-form-escrow-panel">
                             <div class="panel-label">
                                 "Escrow Setup"
                             </div>
@@ -1720,7 +1720,7 @@ pub fn EventFormComponent(
 
                             // Wallet connected — show confirmation
                             <Show when=move || !create_wallet_pk.get().is_empty() fallback=|| view! { <div></div> }>
-                                <div class="wallet-connected-bar" style="margin-bottom:0">
+                                <div class="wallet-connected-bar event-form-wallet-bar-no-gap">
                                     <div class="wallet-info-left">
                                         <div class="wallet-label">
                                             {move || format!("{} connected", create_wallet_name.get())}
@@ -1739,7 +1739,7 @@ pub fn EventFormComponent(
                                         "Disconnect"
                                     </button>
                                 </div>
-                                <div class="hint-success-sm" style="margin-top:0.5rem">
+                                <div class="hint-success-sm event-form-hint-after-wallet">
                                     "Creating event will also initialize escrow on-chain (wallet signature required)."
                                 </div>
                             </Show>

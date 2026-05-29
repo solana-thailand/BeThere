@@ -323,7 +323,7 @@ pub fn EscrowInitPanel(
     view! {
         // ===== Idle: wallet detection + connect buttons =====
         <Show when=is_idle>
-            <div class="panel-box-dashed" style="margin-top:1rem">
+            <div class="panel-box-dashed escrow-panel-mt">
                 <div class="panel-label">
                     "On-Chain Escrow Setup"
                 </div>
@@ -412,7 +412,7 @@ pub fn EscrowInitPanel(
                 let set_t = set_t;
                 let set_f = set_f;
                 view! {
-                    <div class="panel-box-dashed" style="margin-top:1rem">
+                    <div class="panel-box-dashed escrow-panel-mt">
                         <div class="flex-row-center u-mb-sm">
                             <div>
                                 <div class="panel-label u-mb-0">
@@ -641,11 +641,11 @@ pub fn EscrowInitPanel(
 
         // ===== Sync/Recover: no wallet needed, server-side on-chain verification =====
         <Show when=is_idle>
-            <div class="panel-box-dashed" style="margin-top:0.75rem; border-color: var(--warning-border, #f59e0b);">
-                <div class="panel-label" style="font-size:0.8rem;">
+            <div class="panel-box-dashed escrow-sync-panel">
+                <div class="panel-label escrow-sync-label">
                     "Escrow already exists on-chain?"
                 </div>
-                <div class="panel-hint u-mt-2xs" style="font-size:0.75rem;">
+                <div class="panel-hint u-mt-2xs escrow-sync-hint">
                     "If you already initialized escrow but the page lost sync, click below to verify on-chain and restore the state."
                 </div>
                 {move || {
@@ -656,8 +656,7 @@ pub fn EscrowInitPanel(
                     let sync_eid = eid.clone();
                     view! {
                         <button
-                            class="btn btn-outline btn-sm u-mt-xs"
-                            style="font-size:0.8rem;"
+                            class="btn btn-outline btn-sm u-mt-xs escrow-sync-btn"
                             on:click=move |_| {
                                 let eid = sync_eid.clone();
                                 let set_s = set_s;
@@ -720,7 +719,7 @@ pub fn EscrowInitPanel(
                     _ => String::new(),
                 };
                 view! {
-                    <div class="panel-box-dashed" style="margin-top:1rem">
+                    <div class="panel-box-dashed escrow-panel-mt">
                         <div class="flex-row-gap">
                             <span class="spinner spinner-sm"></span>
                             <span class="panel-label u-mb-0">
@@ -754,7 +753,7 @@ pub fn EscrowInitPanel(
                 let dw = detected_wallets.get();
                 let has_wallet = !wn.is_empty();
                 view! {
-                    <div class="panel-success" style="margin-top:0.75rem">
+                    <div class="panel-success escrow-panel-mt-sm">
                         <div class="step-card-title badge-done">
                             "Escrow initialized on-chain"
                         </div>
@@ -778,7 +777,7 @@ pub fn EscrowInitPanel(
                         // Wallet connect or Deactivate button
                         {if has_wallet {
                             view! {
-                                <div class="flex-wrap-row u-mt-sm" style="gap:0.5rem">
+                                <div class="flex-wrap-row escrow-gap-sm u-mt-sm">
                                     <button
                                         class="btn btn-outline btn-sm btn-danger"
                                         on:click=move |_| {
@@ -873,10 +872,10 @@ pub fn EscrowInitPanel(
                             // No wallet connected — show connect buttons
                             view! {
                                 <div class="u-mt-sm">
-                                    <div class="panel-hint u-mb-xs" style="color:var(--text-muted)">
+                                    <div class="panel-hint escrow-text-muted u-mb-xs">
                                         "Connect wallet to deactivate or close this escrow."
                                     </div>
-                                    <div class="flex-wrap-row" style="gap:0.5rem">
+                                    <div class="flex-wrap-row escrow-gap-sm">
                                         {dw.iter().map(|w| {
                                             let wname = w.clone();
                                             let set_wn = set_wn;
@@ -920,7 +919,7 @@ pub fn EscrowInitPanel(
                                 </div>
                             }.into_any()
                         }}
-                        <div class="panel-hint u-mt-xs" style="color:var(--text-muted)">
+                        <div class="panel-hint escrow-text-muted u-mt-xs">
                             "Deactivate stops new deposits. Refunds still allowed. Then close to reclaim rent SOL."
                         </div>
                     </div>
@@ -937,7 +936,7 @@ pub fn EscrowInitPanel(
                     _ => String::new(),
                 };
                 view! {
-                    <div class="panel-box-dashed" style="margin-top:1rem">
+                    <div class="panel-box-dashed escrow-panel-mt">
                         <div class="flex-row-gap">
                             <span class="spinner spinner-sm"></span>
                             <span class="panel-label u-mb-0">
@@ -960,17 +959,17 @@ pub fn EscrowInitPanel(
                 let set_s = set_state;
                 let set_t = set_t;
                 view! {
-                    <div class="panel-warning" style="margin-top:0.75rem">
-                        <div class="step-card-title" style="color:var(--warning,orange)">
+                    <div class="panel-warning">
+                        <div class="step-card-title escrow-title-warning">
                             "Escrow deactivated"
                         </div>
                         <div class="panel-hint u-mt-2xs">
                             "Event escrow is no longer accepting deposits. Refunds are still allowed."
                         </div>
-                        <div class="panel-hint u-mt-xs" style="color:var(--warning,orange)">
+                        <div class="panel-hint escrow-hint-warning u-mt-xs">
                             "Vault must be empty (all USDC refunded/claimed) before closing."
                         </div>
-                        <div class="flex-wrap-row u-mt-sm" style="gap:0.5rem">
+                        <div class="flex-wrap-row escrow-gap-sm u-mt-sm">
                             <button
                                 class="btn btn-primary btn-sm"
                                 on:click=move |_| {
@@ -1074,7 +1073,7 @@ pub fn EscrowInitPanel(
                     _ => String::new(),
                 };
                 view! {
-                    <div class="panel-box-dashed" style="margin-top:1rem">
+                    <div class="panel-box-dashed escrow-panel-mt">
                         <div class="flex-row-gap">
                             <span class="spinner spinner-sm"></span>
                             <span class="panel-label u-mb-0">
@@ -1099,7 +1098,7 @@ pub fn EscrowInitPanel(
                 };
                 let solscan = crate::utils::solscan_tx_url(&sig, &crate::utils::get_cluster());
                 view! {
-                    <div class="panel-success" style="margin-top:0.75rem">
+                    <div class="panel-success escrow-panel-mt-sm">
                         <div class="step-card-title badge-done">
                             "Escrow closed — rent reclaimed!"
                         </div>
@@ -1111,7 +1110,7 @@ pub fn EscrowInitPanel(
                                 "View on Solscan ↗"
                             </a>
                         </div>
-                        <div class="flex-wrap-row u-mt-sm" style="gap:0.5rem">
+                        <div class="flex-wrap-row escrow-gap-sm u-mt-sm">
                             <button
                                 class="btn btn-outline btn-sm"
                                 on:click=move |_| {
@@ -1169,8 +1168,8 @@ pub fn EscrowInitPanel(
                     _ => String::new(),
                 };
                 view! {
-                    <div class="panel-error" style="margin-top:1rem">
-                        <div class="panel-hint" style="color:var(--error,red)">
+                    <div class="panel-error escrow-panel-mt">
+                        <div class="panel-hint escrow-text-error">
                             {format!("{msg}")}
                         </div>
                         <button

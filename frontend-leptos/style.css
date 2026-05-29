@@ -11329,3 +11329,243 @@ nav a.active {
     font-size: 0.7rem;
     color: var(--text-secondary);
 }
+
+/* ===== Event Form ===== */
+.event-form-span-full {
+    grid-column: 1 / -1;
+}
+
+.event-form-tba-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+}
+
+.event-form-tba-field-label {
+    margin: 0;
+}
+
+.event-form-tba-hint {
+    margin: 0;
+}
+
+.event-form-sheet-guide {
+    margin-bottom: 0.75rem;
+}
+
+.event-form-nft-intro {
+    margin-bottom: var(--space-2xs, 0.25rem);
+}
+
+.event-form-nft-actions {
+    display: flex;
+    gap: var(--space-xs, 0.5rem);
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.event-form-badge-preview {
+    width: 48px;
+    height: 48px;
+    border-radius: 8px;
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.1));
+}
+
+.event-form-badge-type-label {
+    font-size: var(--text-xs, 0.75rem);
+    color: var(--text-muted, #888);
+}
+
+.event-form-hint-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.event-form-link-sm {
+    font-size: 0.75rem;
+    color: var(--info);
+    text-decoration: none;
+}
+
+.event-form-code-inherit {
+    font-size: inherit;
+}
+
+.event-form-toggle-label {
+    cursor: pointer;
+    padding-top: 0.3rem;
+}
+
+.event-form-hint-success {
+    color: var(--success);
+}
+
+.event-form-escrow-panel {
+    margin-top: 0.75rem;
+}
+
+.event-form-wallet-bar-no-gap {
+    margin-bottom: 0;
+}
+
+.event-form-hint-after-wallet {
+    margin-top: 0.5rem;
+}
+
+/* --- Escrow Init Panel --- */
+.escrow-panel-mt {
+    margin-top: 1rem;
+}
+
+.escrow-panel-mt-sm {
+    margin-top: 0.75rem;
+}
+
+.escrow-sync-panel {
+    margin-top: 0.75rem;
+    border-color: var(--warning-border, var(--warning));
+}
+
+.escrow-sync-label {
+    font-size: 0.8rem;
+}
+
+.escrow-sync-hint {
+    font-size: 0.75rem;
+}
+
+.escrow-sync-btn {
+    font-size: 0.8rem;
+}
+
+.escrow-gap-sm {
+    gap: 0.5rem;
+}
+
+.escrow-text-muted {
+    color: var(--text-muted);
+}
+
+.escrow-title-warning {
+    color: var(--warning);
+}
+
+.escrow-hint-warning {
+    color: var(--warning);
+}
+
+.escrow-text-error {
+    color: var(--danger);
+}
+
+.panel-warning {
+    margin-top: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--warning);
+    border-radius: var(--radius-sm);
+    background: var(--warning-bg);
+}
+
+/* On-chain events panel */
+.onchain-panel {
+    margin-top: 1rem;
+}
+.onchain-icon {
+    background: var(--accent);
+}
+.onchain-badge-count {
+    background: var(--accent-bg);
+    color: var(--accent);
+}
+.onchain-loading {
+    text-align: center;
+    padding: 1rem;
+    color: var(--text-muted);
+}
+.onchain-error {
+    color: var(--danger-hover);
+    padding: 0.5rem;
+}
+.onchain-empty {
+    text-align: center;
+    padding: 1rem;
+    color: var(--text-muted);
+}
+.onchain-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+    padding: 0.5rem;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-sm);
+}
+.onchain-timeline {
+    max-height: 400px;
+    overflow-y: auto;
+}
+.onchain-event-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.85rem;
+}
+.onchain-event-dot {
+    flex-shrink: 0;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-top: 4px;
+}
+.onchain-event-time {
+    flex-shrink: 0;
+    width: 80px;
+    color: var(--text-muted);
+}
+.onchain-event-badge-wrap {
+    flex-shrink: 0;
+}
+.onchain-event-badge {
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: white;
+}
+.onchain-event-details {
+    flex: 1;
+    color: var(--text-primary);
+    min-width: 0;
+}
+.onchain-event-amount {
+    font-weight: 600;
+}
+.onchain-event-attendee {
+    color: var(--text-muted);
+    margin-left: 0.25rem;
+}
+.onchain-event-tx-link {
+    flex-shrink: 0;
+    color: var(--info);
+    font-size: 0.75rem;
+    text-decoration: none;
+}
+.onchain-event-tx-link:hover {
+    text-decoration: underline;
+}
+.onchain-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+.onchain-legend-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}

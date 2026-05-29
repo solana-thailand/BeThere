@@ -36,7 +36,7 @@ pub fn OnchainEventsPanel(event_id: String) -> impl IntoView {
     };
 
     view! {
-        <div class="form-section" style="margin-top: 1rem">
+        <div class="form-section onchain-panel">
             <div class="form-section-header" on:click=move |_| {
                 let was_open = open.get();
                 set_open.set(!was_open);
@@ -44,9 +44,9 @@ pub fn OnchainEventsPanel(event_id: String) -> impl IntoView {
                     load_events();
                 }
             }>
-                <span class="form-section-icon" style="background: #6366f1">"⛓"</span>
+                <span class="form-section-icon onchain-icon">"⛓"</span>
                 <span class="form-section-title">"On-Chain Events"</span>
-                <span class="form-section-badge" style="background: #eef2ff; color: #4f46e5">
+                <span class="form-section-badge onchain-badge-count">
                     {move || {
                         let count = events.get().len();
                         if count > 0 { format!("{count} events") } else { "Click to load".to_string() }
@@ -56,24 +56,24 @@ pub fn OnchainEventsPanel(event_id: String) -> impl IntoView {
             </div>
             <div class="form-section-body" class:form-section-body-hidden=move || !open.get()>
                 <Show when=move || loading.get() fallback=|| view! { <div></div> }>
-                    <div style="text-align: center; padding: 1rem; color: #6b7280">
+                    <div class="onchain-loading">
                         <span class="spinner spinner-md"></span>
                         " Loading on-chain events..."
                     </div>
                 </Show>
                 <Show when=move || error.get().is_some() && !loading.get() fallback=|| view! { <div></div> }>
-                    <div style="color: #dc2626; padding: 0.5rem">
+                    <div class="onchain-error">
                         {move || error.get().unwrap_or_default()}
                     </div>
                 </Show>
                 <Show when=move || !loading.get() && error.get().is_none() && events.get().is_empty() fallback=|| view! { <div></div> }>
-                    <div style="text-align: center; padding: 1rem; color: #6b7280">
+                    <div class="onchain-empty">
                         "No on-chain events indexed yet. Click Sync to poll for recent transactions."
                     </div>
                 </Show>
                 <Show when=move || !events.get().is_empty() && !loading.get() fallback=|| view! { <div></div> }>
                     // Legend
-                    <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.75rem; padding: 0.5rem; background: #f9fafb; border-radius: 6px">
+                    <div class="onchain-legend">
                         <LegendItem color=EscrowInstruction::CreateEvent.color().to_string() label="Create" />
                         <LegendItem color=EscrowInstruction::Deposit.color().to_string() label="Deposit" />
                         <LegendItem color=EscrowInstruction::MarkCheckedIn.color().to_string() label="Check-in" />
@@ -83,7 +83,7 @@ pub fn OnchainEventsPanel(event_id: String) -> impl IntoView {
                         <LegendItem color=EscrowInstruction::CloseEvent.color().to_string() label="Close" />
                     </div>
                     // Timeline
-                    <div class="onchain-timeline" style="max-height: 400px; overflow-y: auto">
+                    <div class="onchain-timeline">
                         {move || events.get().into_iter().map(|e| {
                             let label = e.instruction.label().to_string();
                             let time = format_block_time(e.block_time);
@@ -91,40 +91,40 @@ pub fn OnchainEventsPanel(event_id: String) -> impl IntoView {
                             let amount_str = e.amount.map(|a| format_usdc_amount(a)).unwrap_or_default();
                             let attendee_short = e.attendee.as_ref().map(|a| truncate_address(a)).unwrap_or_default();
                             let solscan_url = crate::utils::solscan_tx_url(&e.signature, "devnet");
-                            let dot_style = format!("flex-shrink: 0; width: 10px; height: 10px; border-radius: 50%; background: {}; margin-top: 4px", e.instruction.color());
-                            let badge_style = format!("padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600; color: white; background: {}", e.instruction.color());
+                            let dot_style = format!("background: {}", e.instruction.color());
+                            let badge_style = format!("background: {}", e.instruction.color());
 
                             view! {
-                                <div class="onchain-event-item" style="display: flex; align-items: flex-start; gap: 0.75rem; padding: 0.5rem 0; border-bottom: 1px solid #f3f4f6; font-size: 0.85rem">
+                                <div class="onchain-event-item">
                                     // Color dot
-                                    <div style=dot_style></div>
+                                    <div class="onchain-event-dot" style=dot_style></div>
                                     // Time
-                                    <div style="flex-shrink: 0; width: 80px; color: #6b7280">{time}</div>
+                                    <div class="onchain-event-time">{time}</div>
                                     // Badge
-                                    <div style="flex-shrink: 0">
-                                        <span style=badge_style>
+                                    <div class="onchain-event-badge-wrap">
+                                        <span class="onchain-event-badge" style=badge_style>
                                             {label}
                                         </span>
                                     </div>
                                     // Details
-                                    <div style="flex: 1; color: #374151; min-width: 0">
+                                    <div class="onchain-event-details">
                                         {if !amount_str.is_empty() {
-                                            view! { <span style="font-weight: 600">{amount_str.clone()}</span> }.into_any()
+                                            view! { <span class="onchain-event-amount">{amount_str.clone()}</span> }.into_any()
                                         } else {
                                             view! { <span></span> }.into_any()
                                         }}
                                         {if !attendee_short.is_empty() {
-                                            view! { <span style="color: #6b7280; margin-left: 0.25rem">{attendee_short.clone()}</span> }.into_any()
+                                            view! { <span class="onchain-event-attendee">{attendee_short.clone()}</span> }.into_any()
                                         } else {
                                             view! { <span></span> }.into_any()
                                         }}
                                     </div>
                                     // TX link
                                     <a
+                                        class="onchain-event-tx-link"
                                         href=solscan_url
                                         target="_blank"
                                         rel="noopener noreferrer"
-                                        style="flex-shrink: 0; color: #3b82f6; font-size: 0.75rem; text-decoration: none"
                                     >
                                         {sig_short}
                                     </a>
@@ -141,10 +141,10 @@ pub fn OnchainEventsPanel(event_id: String) -> impl IntoView {
 /// Legend item for the color key.
 #[component]
 fn LegendItem(color: String, label: &'static str) -> impl IntoView {
-    let dot_style = format!("width: 8px; height: 8px; border-radius: 50%; background: {color}");
+    let dot_style = format!("background: {color}");
     view! {
-        <div style="display: flex; align-items: center; gap: 4px; font-size: 0.75rem; color: #4b5563">
-            <div style=dot_style></div>
+        <div class="onchain-legend-item">
+            <div class="onchain-legend-dot" style=dot_style></div>
             {label}
         </div>
     }
