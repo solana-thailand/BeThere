@@ -150,7 +150,7 @@ pub fn AdminCancel(
             <Show when=move || has_event() fallback=|| view! { <div></div> }>
 
                 // Refresh button
-                <div class="admin-actions-row" style="margin-bottom:0.75rem">
+                <div class="admin-actions-row admin-cancel-actions-row">
                     <button class="btn btn-outline btn-sm" on:click=handle_refresh disabled=move || loading.get()>
                         {move || if loading.get() { "Loading..." } else { "Refresh Status" }}
                     </button>
@@ -158,7 +158,7 @@ pub fn AdminCancel(
 
                 // Loading state
                 <Show when=move || loading.get() && cancel_status.get().is_none() fallback=|| view! { <div></div> }>
-                    <div class="page-loading" style="padding:1rem">
+                    <div class="page-loading admin-cancel-loading">
                         <span class="spinner spinner-sm"></span>
                         "Loading cancellation status..."
                     </div>
@@ -187,32 +187,32 @@ pub fn AdminCancel(
 
                         view! {
                             // ── Status Overview ──
-                            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:0.5rem;margin-bottom:0.75rem">
-                                <div style="padding:0.5rem;border:1px solid var(--border);border-radius:6px;background:var(--bg-primary);text-align:center">
-                                    <div style="font-size:1.2rem;font-weight:700;color:var(--text-primary)">{status.usdc_deposits}</div>
-                                    <div style="font-size:0.65rem;color:var(--text-secondary)">"USDC Deposits"</div>
+                            <div class="admin-cancel-stats-grid">
+                                <div class="admin-cancel-stat-card">
+                                    <div class="admin-cancel-stat-value">{status.usdc_deposits}</div>
+                                    <div class="admin-cancel-stat-label">"USDC Deposits"</div>
                                 </div>
-                                <div style="padding:0.5rem;border:1px solid var(--border);border-radius:6px;background:var(--bg-primary);text-align:center">
-                                    <div style="font-size:1.2rem;font-weight:700;color:var(--text-primary)">{status.usdc_refundable}</div>
-                                    <div style="font-size:0.65rem;color:var(--text-secondary)">"USDC Refundable"</div>
+                                <div class="admin-cancel-stat-card">
+                                    <div class="admin-cancel-stat-value">{status.usdc_refundable}</div>
+                                    <div class="admin-cancel-stat-label">"USDC Refundable"</div>
                                 </div>
-                                <div style="padding:0.5rem;border:1px solid var(--border);border-radius:6px;background:var(--bg-primary);text-align:center">
-                                    <div style="font-size:1.2rem;font-weight:700;color:var(--text-primary)">{status.thb_deposits}</div>
-                                    <div style="font-size:0.65rem;color:var(--text-secondary)">"THB Deposits"</div>
+                                <div class="admin-cancel-stat-card">
+                                    <div class="admin-cancel-stat-value">{status.thb_deposits}</div>
+                                    <div class="admin-cancel-stat-label">"THB Deposits"</div>
                                 </div>
-                                <div style="padding:0.5rem;border:1px solid var(--border);border-radius:6px;background:var(--bg-primary);text-align:center">
-                                    <div style="font-size:1.2rem;font-weight:700;color:var(--success,green)">{status.thb_refunded}</div>
-                                    <div style="font-size:0.65rem;color:var(--text-secondary)">"THB Refunded"</div>
+                                <div class="admin-cancel-stat-card">
+                                    <div class="admin-cancel-stat-value-success">{status.thb_refunded}</div>
+                                    <div class="admin-cancel-stat-label">"THB Refunded"</div>
                                 </div>
-                                <div style="padding:0.5rem;border:1px solid var(--border);border-radius:6px;background:var(--bg-primary);text-align:center">
-                                    <div style="font-size:1.2rem;font-weight:700;color:var(--warning,orange)">{status.thb_pending_refund}</div>
-                                    <div style="font-size:0.65rem;color:var(--text-secondary)">"THB Pending"</div>
+                                <div class="admin-cancel-stat-card">
+                                    <div class="admin-cancel-stat-value-warning">{status.thb_pending_refund}</div>
+                                    <div class="admin-cancel-stat-label">"THB Pending"</div>
                                 </div>
-                                <div style="padding:0.5rem;border:1px solid var(--border);border-radius:6px;background:var(--bg-primary);text-align:center">
-                                    <div style="font-size:0.85rem">
+                                <div class="admin-cancel-stat-card">
+                                    <div class="admin-cancel-stat-escrow">
                                         <span class=escrow_badge>{escrow_label}</span>
                                     </div>
-                                    <div style="font-size:0.65rem;color:var(--text-secondary)">"Escrow Status"</div>
+                                    <div class="admin-cancel-stat-label">"Escrow Status"</div>
                                 </div>
                             </div>
                         }.into_any()
@@ -220,18 +220,18 @@ pub fn AdminCancel(
 
                     // ── Step 1: Deactivate Escrow (on-chain) ──
                     <Show when=move || can_cancel() && !is_cancelled() fallback=|| view! { <div></div> }>
-                        <div style="margin-bottom:0.75rem;padding:0.75rem;border:1px solid var(--warning,orange);border-radius:8px;background:var(--bg-secondary)">
-                            <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem">
+                        <div class="admin-cancel-warning-card">
+                            <div class="admin-cancel-section-row">
                                 <Icon icon=IconName::AlertTriangle class="icon-sm" />
-                                <span style="font-weight:600;font-size:0.85rem;color:var(--text-primary)">
+                                <span class="admin-cancel-section-title">
                                     "Cancel Event"
                                 </span>
                             </div>
-                            <p style="font-size:0.75rem;color:var(--text-secondary);margin-bottom:0.75rem">
+                            <p class="admin-cancel-desc">
                                 "This will deactivate the on-chain escrow and prepare all deposits for refund. "
                                 "USDC refunds require each attendee to sign a transaction — they cannot be force-refunded."
                             </p>
-                            <div style="font-size:0.75rem;color:var(--text-secondary);margin-bottom:0.5rem">
+                            <div class="admin-cancel-info-text">
                                 {move || {
                                     let status = cancel_status.get().unwrap_or_default();
                                     format!(
@@ -247,11 +247,10 @@ pub fn AdminCancel(
                                 when=move || !confirm_cancel.get()
                                 fallback=|| view! { <div></div> }
                             >
-                                <div style="display:flex;gap:0.5rem;align-items:center">
+                                <div class="admin-cancel-btn-row">
                                     <a
                                         href="#/admin"
-                                        class="btn btn-confirm-danger"
-                                        style="font-size:0.8rem;padding:0.4rem 0.8rem;text-decoration:none"
+                                        class="btn btn-confirm-danger admin-cancel-btn-cancel"
                                         on:click={
                                             let set_cc = set_confirm_cancel;
                                             move |ev: web_sys::MouseEvent| {
@@ -266,7 +265,7 @@ pub fn AdminCancel(
                                     >
                                         "Cancel Event"
                                     </a>
-                                    <span style="font-size:0.7rem;color:var(--text-secondary)">
+                                    <span class="admin-cancel-hint">
                                         "Go to Escrow section → Deactivate first, then return here"
                                     </span>
                                 </div>
@@ -275,16 +274,15 @@ pub fn AdminCancel(
                                 when=move || confirm_cancel.get()
                                 fallback=|| view! { <div></div> }
                             >
-                                <div style="display:flex;gap:0.5rem;align-items:center">
-                                    <span style="font-size:0.8rem;color:var(--error,red);font-weight:600">
+                                <div class="admin-cancel-btn-row">
+                                    <span class="admin-cancel-danger-text">
                                         "⚠ Are you sure?"
                                     </span>
-                                    <span style="font-size:0.7rem;color:var(--text-secondary)">
+                                    <span class="admin-cancel-hint">
                                         "Navigate to Escrow tab and click 'Deactivate' to proceed."
                                     </span>
                                     <button
-                                        class="btn btn-outline btn-sm"
-                                        style="font-size:0.7rem;padding:0.2rem 0.5rem"
+                                        class="btn btn-outline btn-sm admin-cancel-btn-dismiss"
                                         on:click=move |_| set_confirm_cancel.set(false)
                                     >
                                         "Dismiss"
@@ -296,11 +294,11 @@ pub fn AdminCancel(
 
                     // ── Step 2: Batch THB Refund ──
                     <Show when=move || is_cancelled() || can_cancel() fallback=|| view! { <div></div> }>
-                        <div style="margin-bottom:0.75rem;padding:0.75rem;border:1px solid var(--border);border-radius:8px;background:var(--bg-secondary)">
-                            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem">
-                                <div style="display:flex;align-items:center;gap:0.5rem">
-                                    <span style="font-size:1rem">"💰"</span>
-                                    <span style="font-weight:600;font-size:0.85rem;color:var(--text-primary)">
+                        <div class="admin-cancel-panel">
+                            <div class="admin-cancel-panel-header">
+                                <div class="admin-cancel-icon-group">
+                                    <span class="admin-cancel-emoji">"💰"</span>
+                                    <span class="admin-cancel-section-title">
                                         "THB Batch Refund"
                                     </span>
                                 </div>
@@ -318,7 +316,7 @@ pub fn AdminCancel(
                                     }}
                                 </button>
                             </div>
-                            <p style="font-size:0.7rem;color:var(--text-secondary)">
+                            <p class="admin-cancel-hint">
                                 "Marks all verified THB deposits as refunded. No on-chain transaction required — this is a pure database operation."
                             </p>
                         </div>
@@ -333,15 +331,15 @@ pub fn AdminCancel(
                             let has_items = !items.is_empty();
 
                             view! {
-                                <div style="margin-bottom:0.75rem;padding:0.75rem;border:1px solid var(--border);border-radius:8px;background:var(--bg-secondary)">
-                                    <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem">
+                                <div class="admin-cancel-panel">
+                                    <div class="admin-cancel-section-row">
                                         <Icon icon=IconName::Lock class="icon-sm" />
-                                        <span style="font-weight:600;font-size:0.85rem;color:var(--text-primary)">
+                                        <span class="admin-cancel-section-title">
                                             "USDC Refund Queue"
                                         </span>
                                         <span class="badge badge-warning">{format!("{} pending", items_count)}</span>
                                     </div>
-                                    <p style="font-size:0.7rem;color:var(--text-secondary);margin-bottom:0.5rem">
+                                    <p class="admin-cancel-info-text">
                                         "Each attendee must sign a refund transaction from their wallet. Share the refund link with depositors so they can claim their USDC back."
                                     </p>
 
@@ -349,12 +347,12 @@ pub fn AdminCancel(
                                     <Show
                                         when=move || has_items
                                         fallback=|| view! {
-                                            <div style="font-size:0.75rem;color:var(--success,green);padding:0.25rem 0">
+                                            <div class="admin-cancel-success-text">
                                                 "No USDC deposits pending refund."
                                             </div>
                                         }
                                     >
-                                        <div style="max-height:300px;overflow-y:auto">
+                                        <div class="admin-cancel-scroll-list">
                                             {items.iter().map(|item| {
                                                 let wallet_short = item.wallet_address.as_ref()
                                                     .map(|w| {
@@ -367,20 +365,20 @@ pub fn AdminCancel(
                                                     .unwrap_or_default();
                                                 let attendee_id = item.attendee_id.clone();
                                                 view! {
-                                                    <div style="display:flex;align-items:center;justify-content:space-between;padding:0.35rem 0.5rem;border-bottom:1px solid var(--border);font-size:0.75rem">
-                                                        <div style="display:flex;flex-direction:column;gap:0.1rem">
-                                                            <span style="color:var(--text-primary)">
+                                                    <div class="admin-cancel-queue-item">
+                                                        <div class="admin-cancel-queue-left">
+                                                            <span class="admin-cancel-queue-name">
                                                                 {format!("Attendee: {}", &attendee_id[..attendee_id.len().min(12)])}
                                                             </span>
-                                                            <span style="color:var(--text-secondary);font-size:0.65rem">
+                                                            <span class="admin-cancel-queue-wallet">
                                                                 {format!("Wallet: {wallet_short}")}
                                                             </span>
                                                         </div>
-                                                        <div style="display:flex;align-items:center;gap:0.5rem">
-                                                            <span style="color:var(--text-primary);font-weight:600">
+                                                        <div class="admin-cancel-queue-right">
+                                                            <span class="admin-cancel-queue-amount">
                                                                 {format!("{} USDC", item.amount / 1_000_000)}
                                                             </span>
-                                                            <span class="badge badge-warning" style="font-size:0.6rem">
+                                                            <span class="badge badge-warning admin-cancel-badge-xs">
                                                                 "Needs Signature"
                                                             </span>
                                                         </div>
@@ -396,14 +394,14 @@ pub fn AdminCancel(
 
                     // ── Cancelled Status ──
                     <Show when=move || is_cancelled() fallback=|| view! { <div></div> }>
-                        <div style="padding:0.5rem 0.75rem;border:1px dashed var(--success,green);border-radius:6px;background:var(--bg-secondary);font-size:0.7rem;color:var(--text-secondary)">
-                            <strong style="color:var(--success,green)">"Event Cancelled"</strong>
+                        <div class="admin-cancel-cancelled-banner">
+                            <strong>"Event Cancelled"</strong>
                             " — This event has been cancelled. Use the Escrow section to claim forfeited deposits and close the escrow account."
                         </div>
                     </Show>
 
                     // ── Info Note ──
-                    <div style="margin-top:0.75rem;padding:0.5rem 0.75rem;border:1px dashed var(--border);border-radius:6px;background:var(--bg-secondary);font-size:0.7rem;color:var(--text-secondary)">
+                    <div class="admin-cancel-info-note">
                         <strong>"Cancellation Flow:"</strong>
                         " 1) Go to Escrow → Deactivate event. "
                         " 2) Return here → Batch refund THB deposits. "

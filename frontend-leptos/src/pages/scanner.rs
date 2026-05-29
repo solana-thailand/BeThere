@@ -1046,8 +1046,8 @@ pub fn Scanner() -> impl IntoView {
                     }.into_any()
                 } else if active_events.is_empty() {
                     view! {
-                        <div class="scanner-event-bar" style="background:rgba(239,68,68,0.1);border-bottom-color:rgba(239,68,68,0.3);">
-                            <span class="scanner-event-label" style="color:var(--danger);"><Icon icon=IconName::Warning class="icon-sm icon-warning" />" No active events found"</span>
+                        <div class="scanner-event-bar scanner-event-bar--danger">
+                            <span class="scanner-event-label scanner-event-label--danger"><Icon icon=IconName::Warning class="icon-sm icon-warning" />" No active events found"</span>
                         </div>
                     }.into_any()
                 } else if active_events.len() == 1 {
@@ -1056,7 +1056,7 @@ pub fn Scanner() -> impl IntoView {
                     view! {
                         <div class="scanner-event-bar">
                             <span class="scanner-event-label">"Event:"</span>
-                            <span style="font-size:0.85rem;">{name}</span>
+                            <span class="scanner-event-name">{name}</span>
                         </div>
                     }.into_any()
                 } else {
@@ -1124,8 +1124,7 @@ pub fn Scanner() -> impl IntoView {
                     fallback=|| view! { <div></div> }
                 >
                     <div
-                        class="scanner-scan-hint"
-                        style="background:rgba(239,68,68,0.15);border-color:var(--danger-border);color:var(--danger);"
+                        class="scanner-scan-hint scanner-scan-hint--danger"
                     >
                         {move || camera_error.get().unwrap_or_default()}
                     </div>
@@ -1157,13 +1156,12 @@ pub fn Scanner() -> impl IntoView {
                                     <h2>"Register Walk-in Attendee"</h2>
                                 </div>
                                 <form on:submit=handle_walkin_submit>
-                                    <div style="display:flex;flex-direction:column;gap:0.75rem;">
+                                    <div class="scanner-walkin-form-fields">
                                         <div>
-                                            <label style="display:block;font-size:0.85rem;margin-bottom:0.25rem;color:var(--muted);">"Name *"</label>
+                                            <label class="scanner-walkin-label">"Name *"</label>
                                             <input
                                                 type="text"
-                                                class="manual-input"
-                                                style="width:100%;"
+                                                class="manual-input scanner-walkin-input"
                                                 placeholder="Attendee name"
                                                 required=true
                                                 prop:value=move || walkin_name.get()
@@ -1171,11 +1169,10 @@ pub fn Scanner() -> impl IntoView {
                                             />
                                         </div>
                                         <div>
-                                            <label style="display:block;font-size:0.85rem;margin-bottom:0.25rem;color:var(--muted);">"Email *"</label>
+                                            <label class="scanner-walkin-label">"Email *"</label>
                                             <input
                                                 type="email"
-                                                class="manual-input"
-                                                style="width:100%;"
+                                                class="manual-input scanner-walkin-input"
                                                 placeholder="attendee@email.com"
                                                 required=true
                                                 prop:value=move || walkin_email.get()
@@ -1183,11 +1180,10 @@ pub fn Scanner() -> impl IntoView {
                                             />
                                         </div>
                                         <div>
-                                            <label style="display:block;font-size:0.85rem;margin-bottom:0.25rem;color:var(--muted);">"Phone (optional)"</label>
+                                            <label class="scanner-walkin-label">"Phone (optional)"</label>
                                             <input
                                                 type="tel"
-                                                class="manual-input"
-                                                style="width:100%;"
+                                                class="manual-input scanner-walkin-input"
                                                 placeholder="+66..."
                                                 prop:value=move || walkin_phone.get()
                                                 on:input=move |ev| set_walkin_phone.set(event_target_value(&ev))
@@ -1197,14 +1193,12 @@ pub fn Scanner() -> impl IntoView {
                                     <button
                                         class="btn btn-success btn-block"
                                         type="submit"
-                                        style="margin-top:1rem;"
                                     >
                                         "Register"
                                     </button>
                                     <button
                                         class="btn btn-outline btn-block"
                                         type="button"
-                                        style="margin-top:0.5rem;"
                                         on:click=handle_walkin_cancel
                                     >
                                         "Cancel"
@@ -1235,13 +1229,13 @@ pub fn Scanner() -> impl IntoView {
                                     CheckInState::WalkinCapacityWarning { ref pending_name, .. } => {
                                         let name_display = pending_name.clone();
                                         view! {
-                                            <div style="width:100%;background:var(--bg-card);border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;box-shadow:var(--shadow);border:2px solid #f59e0b;">
-                                                <div style="text-align:center;margin-bottom:1rem;">
-                                                    <div style="font-size:2rem;margin-bottom:0.5rem;">"⚠"</div>
-                                                    <h2 style="font-size:1.2rem;font-weight:600;color:#f59e0b;margin:0;">"In-Person Capacity Reached"</h2>
-                                                    <p style="color:var(--muted);margin-top:0.5rem;font-size:0.9rem;">{name_display}" has reached the in-person capacity limit."</p>
+                                            <div class="scanner-capacity-card">
+                                                <div class="scanner-capacity-card-inner">
+                                                    <div class="scanner-capacity-icon">"⚠"</div>
+                                                    <h2 class="scanner-capacity-title">"In-Person Capacity Reached"</h2>
+                                                    <p class="scanner-capacity-desc">{name_display}" has reached the in-person capacity limit."</p>
                                                 </div>
-                                                <div style="display:flex;flex-direction:column;gap:0.5rem;">
+                                                <div class="scanner-capacity-actions">
                                                     <button
                                                         class="btn btn-success btn-block"
                                                         on:click=handle_walkin_override
@@ -1305,7 +1299,6 @@ pub fn Scanner() -> impl IntoView {
                                                 }}
                                                 <button
                                                     class="btn btn-success btn-block"
-                                                    style="margin-top:0.5rem;"
                                                     on:click=handle_reset
                                                 >
                                                     "Scan Another"
@@ -1376,14 +1369,14 @@ pub fn Scanner() -> impl IntoView {
                                 }}
                             </div>
                         </div>
-                        <div style="display:flex;gap:0.5rem;align-items:center;">
+                        <div class="scanner-session-actions">
                             <button
                                 class="scanner-manual-toggle"
                                 on:click=move |_| set_manual_mode.update(|m| *m = !*m)
                             >
                                 {move || if manual_mode.get() { "Cancel" } else { "Enter manually" }}
                             </button>
-                            <div style="position:relative">
+                            <div class="scanner-settings-wrap">
                                 <button
                                     class="scanner-settings-btn"
                                     class:scanner-settings-btn-active=move || settings_open.get()
@@ -1437,11 +1430,11 @@ pub fn Scanner() -> impl IntoView {
                                 <span class="scanner-session-stat-label">"Scanned"</span>
                             </div>
                             <div class="scanner-session-stat">
-                                <span class="scanner-session-stat-value" style="color:var(--success);">{move || session_success.get()}</span>
+                                <span class="scanner-session-stat-value scanner-stat-value--success">{move || session_success.get()}</span>
                                 <span class="scanner-session-stat-label">"Checked In"</span>
                             </div>
                             <div class="scanner-session-stat">
-                                <span class="scanner-session-stat-value" style="color:var(--warning);">{move || session_total.get() - session_success.get()}</span>
+                                <span class="scanner-session-stat-value scanner-stat-value--warning">{move || session_total.get() - session_success.get()}</span>
                                 <span class="scanner-session-stat-label">"Other"</span>
                             </div>
                         </div>
@@ -1478,7 +1471,7 @@ pub fn Scanner() -> impl IntoView {
                         </div>
                     </Show>
                     // Register Walk-in button
-                    <div style="margin-top:0.75rem;padding:0 0.25rem;">
+                    <div class="scanner-walkin-register-wrap">
                         <button
                             class="btn btn-primary btn-block"
                             on:click=handle_walkin_open
@@ -1682,7 +1675,7 @@ where
                             <Icon icon=IconName::Check class="icon-sm icon-success" />" Confirm Check-In"
                         </button>
                     </div>
-                    <button class="btn btn-outline btn-block" style="margin-top:0.5rem;" on:click=on_reset>
+                    <button class="btn btn-outline btn-block scanner-mt-half" on:click=on_reset>
                         "Cancel"
                     </button>
                 </div>
@@ -1737,7 +1730,7 @@ where
                         }
                     }}
 
-                    <button class="btn btn-outline btn-block" style="margin-top:1rem;" on:click=on_reset>
+                    <button class="btn btn-outline btn-block scanner-mt-1" on:click=on_reset>
                         "Scan Another"
                     </button>
                 </div>
@@ -1755,10 +1748,10 @@ where
                         <AttendeeInfoCard name=name email=email />
                         <p class="scanner-result-detail-line">
                             "Status: "
-                            <span style="color:var(--warning);">{status_label}</span>
+                            <span class="scanner-status-warning">{status_label}</span>
                         </p>
                     </div>
-                    <button class="btn btn-outline btn-block" style="margin-top:1rem;" on:click=on_reset>
+                    <button class="btn btn-outline btn-block scanner-mt-1" on:click=on_reset>
                         "Scan Another"
                     </button>
                 </div>
@@ -1778,18 +1771,17 @@ where
                         <div class="scanner-attendee-badges">
                             <span class=format!("badge badge-pill {}", badge.css_class)>{badge.label}</span>
                         </div>
-                        <p class="scanner-hint" style="margin-top:0.75rem;">
+                        <p class="scanner-hint scanner-mt-075">
                             "This attendee registered for the online track. You can perform a virtual check-in to generate their claim link."
                         </p>
                     </div>
                     <button
-                        class="btn btn-primary btn-block"
-                        style="margin-top:1rem;"
+                        class="btn btn-primary btn-block scanner-mt-1"
                         on:click=on_online
                     >
                         <Icon icon=IconName::Globe class="icon-sm" />" Virtual Check-In"
                     </button>
-                    <button class="btn btn-outline btn-block" style="margin-top:0.5rem;" on:click=on_reset>
+                    <button class="btn btn-outline btn-block scanner-mt-half" on:click=on_reset>
                         "Scan Another"
                     </button>
                 </div>
@@ -1805,8 +1797,7 @@ where
                     </div>
                 </div>
                 <button
-                    class="btn btn-outline btn-block"
-                    style="margin-top:1rem;"
+                    class="btn btn-outline btn-block scanner-mt-1"
                     on:click=on_reset
                 >
                     "Try Again"
@@ -1877,8 +1868,7 @@ where
                     {if show_escrow {
                         view! {
                             <button
-                                class="btn btn-outline btn-block"
-                                style="margin-top:0.75rem;border-color:var(--accent);color:var(--accent);"
+                                class="btn btn-outline btn-block scanner-btn-escrow"
                                 on:click=on_escrow_check_in
                             >
                                 <Icon icon=IconName::Lock class="icon-sm" />" Mark Checked In On-Chain"
@@ -1888,7 +1878,7 @@ where
                         view! { <div></div> }.into_any()
                     }}
 
-                    <button class="btn btn-success btn-block" style="margin-top:0.5rem;" on:click=on_reset>
+                    <button class="btn btn-success btn-block scanner-mt-half" on:click=on_reset>
                         "Scan Next"
                     </button>
 
@@ -1902,26 +1892,24 @@ where
                         } else if confirmed {
                             view! {
                                 <button
-                                    class="btn btn-danger btn-block"
-                                    style="margin-top:0.5rem;font-size:0.85rem;"
+                                    class="btn btn-danger btn-block scanner-undo-confirm"
                                     on:click=on_undo.clone()
                                 >
                                     "\u{26a0} Confirm Undo?"
                                 </button>
-                                <p class="scanner-hint" style="margin-top:0.25rem;">
+                                <p class="scanner-hint scanner-hint-timer">
                                     {format!("Undo available for {}s", secs)}
                                 </p>
                             }.into_any()
                         } else {
                             view! {
                                 <button
-                                    class="btn btn-danger btn-sm btn-block"
-                                    style="margin-top:0.5rem;font-size:0.8rem;opacity:0.8;"
+                                    class="btn btn-danger btn-sm btn-block scanner-undo-btn"
                                     on:click=on_undo.clone()
                                 >
                                     "\u{21a9} Undo Check-In"
                                 </button>
-                                <p class="scanner-hint" style="margin-top:0.25rem;">
+                                <p class="scanner-hint scanner-hint-timer">
                                     {format!("Undo available for {}s", secs)}
                                 </p>
                             }.into_any()
@@ -1940,8 +1928,7 @@ where
                     </div>
                 </div>
                 <button
-                    class="btn btn-outline btn-block"
-                    style="margin-top:1rem;"
+                    class="btn btn-outline btn-block scanner-mt-1"
                     on:click=on_reset
                 >
                     "Try Again"
@@ -1968,11 +1955,11 @@ where
                         </div>
                     </div>
 
-                    <div style="margin-top:1rem;">
+                    <div class="scanner-mt-1">
                         {if wallets.is_empty() {
                             view! {
-                                <div class="result-warning" style="padding:0.75rem;">
-                                    <p style="margin:0;">"No Solana wallet detected. Install Phantom or Solflare."</p>
+                                <div class="result-warning scanner-wallet-warning">
+                                    <p class="scanner-wallet-warning-text">"No Solana wallet detected. Install Phantom or Solflare."</p>
                                 </div>
                             }
                                 .into_any()
@@ -1985,8 +1972,7 @@ where
                                     let cb = cb.clone();
                                     view! {
                                         <button
-                                            class="btn btn-outline btn-block"
-                                            style="margin-bottom:0.5rem;border-color:var(--accent);color:var(--accent);"
+                                            class="btn btn-outline btn-block scanner-wallet-connect-btn"
                                             on:click=move |_| cb(w_clone.clone())
                                         >
                                             {format!("Connect {}", w)}
@@ -1998,7 +1984,7 @@ where
                         }}
                     </div>
 
-                    <button class="btn btn-outline btn-block" style="margin-top:0.5rem;" on:click=on_reset>
+                    <button class="btn btn-outline btn-block scanner-mt-half" on:click=on_reset>
                         "Skip & Scan Next"
                     </button>
                 </div>
@@ -2025,20 +2011,19 @@ where
                         <div class="result-details">
                             <p class="scanner-attendee-name">{name}</p>
                             <p>
-                                <span style="color:var(--muted);">{format!("{} ({})", wallet_label, short_pk)}</span>
+                                <span class="scanner-muted-text">{format!("{} ({})", wallet_label, short_pk)}</span>
                             </p>
                         </div>
                     </div>
 
                     <button
-                        class="btn btn-primary btn-block"
-                        style="margin-top:1rem;"
+                        class="btn btn-primary btn-block scanner-mt-1"
                         on:click=on_escrow_sign
                     >
                         <Icon icon=IconName::Lock class="icon-sm" />" Sign On-Chain Check-In"
                     </button>
 
-                    <button class="btn btn-outline btn-block" style="margin-top:0.5rem;" on:click=on_reset>
+                    <button class="btn btn-outline btn-block scanner-mt-half" on:click=on_reset>
                         "Skip & Scan Next"
                     </button>
                 </div>
@@ -2072,21 +2057,21 @@ where
                         <h2>"On-Chain Check-In Confirmed!"</h2>
                         <div class="result-details">
                             <p class="scanner-attendee-name">{name}</p>
-                            <p style="font-size:0.8rem;color:var(--muted);word-break:break-all;">
+                            <p class="scanner-tx-detail">
                                 {format!("TX: {}", short_sig)}
                             </p>
                             <a
                                 href={utils::solscan_tx_url(&signature, &utils::get_cluster())}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                style="font-size:0.8rem;color:var(--accent);"
+                                class="scanner-solscan-link"
                             >
                                 "View on Solscan ↗"
                             </a>
                         </div>
                     </div>
 
-                    <button class="btn btn-success btn-block" style="margin-top:1rem;" on:click=on_reset>
+                    <button class="btn btn-success btn-block scanner-mt-1" on:click=on_reset>
                         "Scan Next"
                     </button>
                 </div>
@@ -2101,13 +2086,13 @@ where
                         <h2>"On-Chain Check-In Failed"</h2>
                         <div class="result-details">
                             <p class="scanner-attendee-name">{name}</p>
-                            <p style="font-size:0.85rem;color:var(--warning);">
+                            <p class="scanner-error-warning">
                                 {message}
                             </p>
                         </div>
                     </div>
 
-                    <button class="btn btn-outline btn-block" style="margin-top:1rem;" on:click=on_reset>
+                    <button class="btn btn-outline btn-block scanner-mt-1" on:click=on_reset>
                         "Skip & Scan Next"
                     </button>
                 </div>

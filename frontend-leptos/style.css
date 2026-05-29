@@ -10943,3 +10943,389 @@ nav a.active {
     margin-top: 0.5rem;
     width: 100%;
 }
+
+/* ── Scanner Inline Style Extractions ────────────────────────────── */
+
+.scanner-event-bar--danger {
+    background: rgba(239, 68, 68, 0.1);
+    border-bottom-color: rgba(239, 68, 68, 0.3);
+}
+
+.scanner-event-label--danger {
+    color: var(--danger);
+}
+
+.scanner-event-name {
+    font-size: 0.85rem;
+}
+
+.scanner-scan-hint--danger {
+    background: rgba(239, 68, 68, 0.15);
+    border-color: var(--danger-border);
+    color: var(--danger);
+}
+
+.scanner-walkin-form-fields {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.scanner-walkin-label {
+    display: block;
+    font-size: 0.85rem;
+    margin-bottom: 0.25rem;
+    color: var(--muted);
+}
+
+.scanner-walkin-input {
+    width: 100%;
+}
+
+.scanner-session-actions {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.scanner-settings-wrap {
+    position: relative;
+}
+
+.scanner-stat-value--success {
+    color: var(--success);
+}
+
+.scanner-stat-value--warning {
+    color: var(--warning);
+}
+
+.scanner-walkin-register-wrap {
+    margin-top: 0.75rem;
+    padding: 0 0.25rem;
+}
+
+.scanner-status-warning {
+    color: var(--warning);
+}
+
+.scanner-mt-1 {
+    margin-top: 1rem;
+}
+
+.scanner-mt-half {
+    margin-top: 0.5rem;
+}
+
+.scanner-mt-075 {
+    margin-top: 0.75rem;
+}
+
+.scanner-mt-025 {
+    margin-top: 0.25rem;
+}
+
+.scanner-btn-escrow {
+    margin-top: 0.75rem;
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.scanner-undo-confirm {
+    margin-top: 0.5rem;
+    font-size: 0.85rem;
+}
+
+.scanner-undo-btn {
+    margin-top: 0.5rem;
+    font-size: 0.8rem;
+    opacity: 0.8;
+}
+
+.scanner-hint-timer {
+    margin-top: 0.25rem;
+}
+
+.scanner-wallet-warning {
+    padding: 0.75rem;
+}
+
+.scanner-wallet-warning-text {
+    margin: 0;
+}
+
+.scanner-wallet-connect-btn {
+    margin-bottom: 0.5rem;
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.scanner-muted-text {
+    color: var(--muted);
+}
+
+.scanner-tx-detail {
+    font-size: 0.8rem;
+    color: var(--muted);
+    word-break: break-all;
+}
+
+.scanner-solscan-link {
+    font-size: 0.8rem;
+    color: var(--accent);
+}
+
+.scanner-error-warning {
+    font-size: 0.85rem;
+    color: var(--warning);
+}
+
+.scanner-capacity-card {
+    width: 100%;
+    background: var(--bg-card);
+    border-radius: var(--radius);
+    padding: 1.25rem;
+    margin-bottom: 1rem;
+    box-shadow: var(--shadow);
+    border: 2px solid var(--warning);
+}
+
+.scanner-capacity-card-inner {
+    text-align: center;
+    margin-bottom: 1rem;
+}
+
+.scanner-capacity-icon {
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+}
+
+.scanner-capacity-title {
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: var(--warning);
+    margin: 0;
+}
+
+.scanner-capacity-desc {
+    color: var(--muted);
+    margin-top: 0.5rem;
+    font-size: 0.9rem;
+}
+
+.scanner-capacity-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+/* ── Admin Cancel ───────────────────────────────────────────────── */
+
+.admin-cancel-actions-row {
+    margin-bottom: 0.75rem;
+}
+
+.admin-cancel-loading {
+    padding: 1rem;
+}
+
+.admin-cancel-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+}
+
+.admin-cancel-stat-card {
+    padding: 0.5rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-primary);
+    text-align: center;
+}
+
+.admin-cancel-stat-value {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.admin-cancel-stat-label {
+    font-size: 0.65rem;
+    color: var(--text-secondary);
+}
+
+.admin-cancel-stat-value-success {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--success);
+}
+
+.admin-cancel-stat-value-warning {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--warning);
+}
+
+.admin-cancel-stat-escrow {
+    font-size: 0.85rem;
+}
+
+.admin-cancel-warning-card {
+    margin-bottom: 0.75rem;
+    padding: 0.75rem;
+    border: 1px solid var(--warning);
+    border-radius: var(--radius-sm);
+    background: var(--bg-secondary);
+}
+
+.admin-cancel-section-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.admin-cancel-section-title {
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: var(--text-primary);
+}
+
+.admin-cancel-desc {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.75rem;
+}
+
+.admin-cancel-info-text {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.5rem;
+}
+
+.admin-cancel-btn-row {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.admin-cancel-btn-cancel {
+    font-size: 0.8rem;
+    padding: 0.4rem 0.8rem;
+    text-decoration: none;
+}
+
+.admin-cancel-hint {
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+}
+
+.admin-cancel-danger-text {
+    font-size: 0.8rem;
+    color: var(--danger);
+    font-weight: 600;
+}
+
+.admin-cancel-btn-dismiss {
+    font-size: 0.7rem;
+    padding: 0.2rem 0.5rem;
+}
+
+.admin-cancel-panel {
+    margin-bottom: 0.75rem;
+    padding: 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-secondary);
+}
+
+.admin-cancel-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.5rem;
+}
+
+.admin-cancel-icon-group {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.admin-cancel-emoji {
+    font-size: 1rem;
+}
+
+.admin-cancel-success-text {
+    font-size: 0.75rem;
+    color: var(--success);
+    padding: 0.25rem 0;
+}
+
+.admin-cancel-scroll-list {
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.admin-cancel-queue-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.35rem 0.5rem;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.75rem;
+}
+
+.admin-cancel-queue-left {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+}
+
+.admin-cancel-queue-name {
+    color: var(--text-primary);
+}
+
+.admin-cancel-queue-wallet {
+    color: var(--text-secondary);
+    font-size: 0.65rem;
+}
+
+.admin-cancel-queue-right {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.admin-cancel-queue-amount {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.admin-cancel-badge-xs {
+    font-size: 0.6rem;
+}
+
+.admin-cancel-cancelled-banner {
+    padding: 0.5rem 0.75rem;
+    border: 1px dashed var(--success);
+    border-radius: var(--radius-sm);
+    background: var(--bg-secondary);
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+}
+
+.admin-cancel-cancelled-banner strong {
+    color: var(--success);
+}
+
+.admin-cancel-info-note {
+    margin-top: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    border: 1px dashed var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-secondary);
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+}
