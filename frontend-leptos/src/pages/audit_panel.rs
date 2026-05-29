@@ -36,7 +36,7 @@ pub fn AuditPanel(event_id: String) -> impl IntoView {
     };
 
     view! {
-        <div class="form-section" style="margin-top: 1rem">
+        <div class="form-section audit-panel-section">
             <div class="form-section-header" on:click=move |_| {
                 let was_open = open.get();
                 set_open.set(!was_open);
@@ -44,9 +44,9 @@ pub fn AuditPanel(event_id: String) -> impl IntoView {
                     load_audit();
                 }
             }>
-                <span class="form-section-icon" style="background: #6b7280">"📋"</span>
+                <span class="form-section-icon audit-icon-muted">"📋"</span>
                 <span class="form-section-title">"Audit Trail"</span>
-                <span class="form-section-badge" style="background: #f3f4f6; color: #374151">
+                <span class="form-section-badge audit-badge-muted">
                     {move || {
                         let count = entries.get().len();
                         if count > 0 { format!("{count} entries") } else { "Click to load".to_string() }
@@ -56,31 +56,31 @@ pub fn AuditPanel(event_id: String) -> impl IntoView {
             </div>
             <div class="form-section-body" class:form-section-body-hidden=move || !open.get()>
                 <Show when=move || loading.get() fallback=|| view! { <div></div> }>
-                    <div style="text-align: center; padding: 1rem; color: #6b7280">"Loading audit trail..."</div>
+                    <div class="audit-empty-text">"Loading audit trail..."</div>
                 </Show>
                 <Show when=move || error.get().is_some() && !loading.get() fallback=|| view! { <div></div> }>
-                    <div style="color: #dc2626; padding: 0.5rem">
+                    <div class="audit-error-text">
                         {move || error.get().unwrap_or_default()}
                     </div>
                 </Show>
                 <Show when=move || !loading.get() && error.get().is_none() && entries.get().is_empty() fallback=|| view! { <div></div> }>
-                    <div style="text-align: center; padding: 1rem; color: #6b7280">"No audit entries found"</div>
+                    <div class="audit-empty-text">"No audit entries found"</div>
                 </Show>
                 <Show when=move || !entries.get().is_empty() && !loading.get() fallback=|| view! { <div></div> }>
-                    <div class="audit-timeline" style="max-height: 400px; overflow-y: auto">
+                    <div class="audit-timeline">
                         {move || entries.get().into_iter().map(|e| {
                             let ts = format_timestamp(&e.timestamp);
                             let action_class = action_badge_class(&e.action);
                             view! {
-                                <div class="audit-entry" style="display: flex; gap: 0.75rem; padding: 0.5rem 0; border-bottom: 1px solid #f3f4f6; font-size: 0.85rem">
-                                    <div style="flex-shrink: 0; width: 130px; color: #6b7280">{ts}</div>
-                                    <div style="flex-shrink: 0">
-                                        <span class=action_class style="padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; white-space: nowrap">
+                                <div class="audit-entry">
+                                    <div class="audit-entry-time">{ts}</div>
+                                    <div class="audit-entry-action">
+                                        <span class=format!("{action_class} audit-action-badge")>
                                             {format_action(&e.action)}
                                         </span>
                                     </div>
-                                    <div style="flex: 1; color: #374151">{e.description.clone()}</div>
-                                    <div style="flex-shrink: 0; color: #9ca3af; font-size: 0.75rem">{e.actor.clone()}</div>
+                                    <div class="audit-entry-desc">{e.description.clone()}</div>
+                                    <div class="audit-entry-actor">{e.actor.clone()}</div>
                                 </div>
                             }
                         }).collect::<Vec<_>>()}

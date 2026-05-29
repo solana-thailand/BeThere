@@ -58,14 +58,14 @@ pub fn registration_form(
 
                     view! {
                         <div class="pe-card">
-                            <div style="text-align:center;">
-                                <div style="font-size:2rem;margin-bottom:0.5rem;">
+                            <div class="pe-text-center">
+                                <div class="pe-success-icon-lg">
                                     <Icon icon=IconName::Check class="icon-2xl icon-success" />
                                 </div>
-                                <h2 class="pe-section-title" style="color:#34d399;margin-bottom:0.5rem;">
+                                <h2 class="pe-section-title pe-title-success">
                                     "You're registered!"
                                 </h2>
-                                <p class="pe-detail-secondary" style="margin-bottom:1rem;">
+                                <p class="pe-detail-secondary pe-mb-1">
                                     {format!("Welcome, {}!", data.name)}
                                 </p>
                                 <p class="pe-detail-secondary">"Redirecting..."</p>
@@ -94,8 +94,8 @@ pub fn registration_form(
                 }
                 RegState::Submitting => {
                     view! {
-                        <div class="pe-card" style="text-align:center;">
-                            <div style="margin-bottom:0.5rem;"><Icon icon=IconName::Hourglass class="icon-md" /></div>
+                        <div class="pe-card pe-text-center">
+                            <div class="pe-icon-mb-sm"><Icon icon=IconName::Hourglass class="icon-md" /></div>
                             <p class="pe-detail-secondary">"Registering..."</p>
                         </div>
                     }.into_any()
@@ -112,12 +112,12 @@ pub fn registration_form(
                             </h2>
                             // Signed-in indicator
                             <div class="pe-signed-in-row">
-                                <span style="color:#34d399;">"✓"</span>
+                                <span class="pe-checkmark">"✓"</span>
                                 <span class="pe-detail-secondary">
                                     {format!("Signed in as {email_display}")}
                                 </span>
                             </div>
-                            <div style="display:flex;flex-direction:column;gap:0.75rem;">
+                            <div class="pe-flex-col-gap-md">
                                 // Name
                                 <div class="pe-field" id="pe-field-name">
                                     <input
@@ -243,7 +243,7 @@ pub fn registration_form(
                                                 <span>{format!("ยอมรับการจ่ายมัดจำ {} (จะได้รับคืนภายในงาน) / I agree to pay a {} commitment deposit to secure my seat and understand I will receive a refund upon check-in at the venue.", dep_label, dep_label)}</span>
                                             </label>
                                             {move || match &field_errors.get().deposit_agreed {
-                                                Some(err) => view! { <span class="pe-field-error" style="margin-left:1.5rem;">{err.clone()}</span> }.into_any(),
+                                                Some(err) => view! { <span class="pe-field-error pe-field-error-indent">{err.clone()}</span> }.into_any(),
                                                 None => view! { <div></div> }.into_any(),
                                             }}
                                             </div>

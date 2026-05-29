@@ -46,7 +46,7 @@ pub fn details_card(
     view! {
         <div class="pe-card">
             // Format badge
-            <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.75rem;">
+            <div class="pe-badge-row">
                 <div style=format!("display:inline-flex;align-items:center;gap:0.4rem;background:{};border:1px solid {};border-radius:9999px;padding:0.25rem 0.75rem;font-size:0.8rem;font-weight:600;color:{};", badge_bg, badge_border, badge_color)>
                     <Icon icon=badge_icon class="icon-sm" />
                     {fmt_label}
@@ -80,7 +80,7 @@ pub fn details_card(
             </div>
 
             // Time
-            <div style="margin-left:1.6rem;margin-bottom:0.75rem;">
+            <div class="pe-time-indent">
                 <span class="pe-detail-secondary">{time_str}</span>
             </div>
 
@@ -91,7 +91,7 @@ pub fn details_card(
                     view! {
                         <div class="pe-detail-row">
                             <span><Icon icon=IconName::Party class="icon-sm icon-success" /></span>
-                            <span style="color:#34d399;font-weight:600;font-size:0.95rem;">"Event Completed"</span>
+                            <span class="pe-text-success">"Event Completed"</span>
                         </div>
                     }.into_any()
                 } else {
@@ -100,15 +100,15 @@ pub fn details_card(
                         // Countdown ended but event not marked completed — event is live
                         view! {
                             <div class="pe-detail-row">
-                                <span style="font-size:0.9rem;">"🔴"</span>
-                                <span style="color:var(--accent);font-weight:600;font-size:0.95rem;">"Happening now!"</span>
+                                <span class="pe-emoji-icon">"🔴"</span>
+                                <span class="pe-text-accent-bold">"Happening now!"</span>
                             </div>
                         }.into_any()
                     } else {
                         view! {
                             <div class="pe-detail-row">
                                 <span><Icon icon=IconName::Timer class="icon-sm icon-muted" /></span>
-                                <span style="color:var(--accent);font-weight:600;font-size:0.95rem;">
+                                <span class="pe-text-accent-bold">
                                     "Starts in "{cd}
                                 </span>
                             </div>

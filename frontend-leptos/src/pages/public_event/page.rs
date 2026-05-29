@@ -286,10 +286,10 @@ pub fn PublicEvent() -> impl IntoView {
             }
         }}
         <div class="center-page">
-            <div class="container layout-col-center" style="gap:0;">
+            <div class="container layout-col-center pe-container-nogap">
 
                 // Back link
-                <div style="width:100%;margin-bottom:1rem;">
+                <div class="pe-back-wrap">
                     <a href="/" class="pe-back-link">
                         "← Back to BeThere"
                     </a>
@@ -302,7 +302,7 @@ pub fn PublicEvent() -> impl IntoView {
                         PublicEventState::Loading => {
                             view! {
                                 <div class="pe-loading">
-                                    <div style="margin-bottom:1rem;"><Icon icon=IconName::Ticket class="icon-2xl" /></div>
+                                    <div class="pe-icon-mb"><Icon icon=IconName::Ticket class="icon-2xl" /></div>
                                     <p class="pe-detail-secondary">"Loading event..."</p>
                                 </div>
                             }.into_any()
@@ -310,9 +310,9 @@ pub fn PublicEvent() -> impl IntoView {
                         PublicEventState::NotFound => {
                             view! {
                                 <div class="pe-loading">
-                                    <div style="margin-bottom:1rem;"><Icon icon=IconName::Search class="icon-2xl" /></div>
+                                    <div class="pe-icon-mb"><Icon icon=IconName::Search class="icon-2xl" /></div>
                                     <h1 class="pe-error-title">"Event Not Found"</h1>
-                                    <p class="pe-detail-secondary" style="margin-bottom:1.5rem;">
+                                    <p class="pe-detail-secondary pe-msg-mb-lg">
                                         "This event doesn't exist or is not publicly available."
                                     </p>
                                     <a href="/" class="btn btn-primary">"Go Home"</a>
@@ -323,10 +323,10 @@ pub fn PublicEvent() -> impl IntoView {
                             let msg_display = msg.clone();
                             view! {
                                 <div class="pe-loading">
-                                    <div style="margin-bottom:1rem;"><Icon icon=IconName::Warning class="icon-md icon-danger" /></div>
+                                    <div class="pe-icon-mb"><Icon icon=IconName::Warning class="icon-md icon-danger" /></div>
                                     <h1 class="pe-error-title">"Something went wrong"</h1>
-                                    <p class="pe-detail-secondary" style="margin-bottom:1.5rem;">{msg_display}</p>
-                                    <div style="display:flex;gap:0.5rem;">
+                                    <p class="pe-detail-secondary pe-msg-mb-lg">{msg_display}</p>
+                                    <div class="pe-flex-row-gap">
                                         <button
                                             class="btn btn-primary"
                                             on:click=move |_| {
@@ -361,7 +361,7 @@ pub fn PublicEvent() -> impl IntoView {
                 <div class="pe-footer">
                     <p>
                         "Powered by "
-                        <a href="/" style="color:var(--accent);text-decoration:none;">"BeThere"</a>
+                        <a href="/" class="pe-footer-link">"BeThere"</a>
                     </p>
                 </div>
             </div>
@@ -540,7 +540,7 @@ fn render_loaded_event(
                     match &auth {
                         AuthState::Checking => {
                             view! {
-                                <div class="pe-card" style="text-align:center;">
+                                <div class="pe-card pe-text-center">
                                     <p class="pe-detail-secondary">"Checking sign-in status..."</p>
                                 </div>
                             }.into_any()
@@ -552,7 +552,7 @@ fn render_loaded_event(
                                     <h2 class="pe-section-title">
                                         <Icon icon=IconName::Ticket class="icon-md" />" Reserve Your Spot"
                                     </h2>
-                                    <p class="pe-detail-secondary" style="margin-bottom:1rem;">
+                                    <p class="pe-detail-secondary pe-mb-1">
                                         "Sign in with Google to register for this event."
                                     </p>
                                     <button
@@ -597,7 +597,7 @@ fn render_loaded_event(
                             match &lookup {
                                 RegistrationLookup::Pending => {
                                     view! {
-                                        <div class="pe-card" style="text-align:center;">
+                                        <div class="pe-card pe-text-center">
                                             <p class="pe-detail-secondary">"Checking registration..."</p>
                                         </div>
                                     }.into_any()
@@ -665,7 +665,7 @@ fn render_loaded_event(
                     <h2 class="pe-section-title">
                         <Icon icon=IconName::Ticket class="icon-md" />" NFT Badge"
                     </h2>
-                    <p class="pe-detail-secondary" style="margin-bottom:0.75rem;">
+                    <p class="pe-detail-secondary pe-mb-075">
                         {if is_online_only { "Earn this NFT badge when you complete the quest after the event." } else { "Earn a commemorative NFT badge when you attend." }}
                     </p>
                     <img src=url alt="NFT Badge" class="pe-nft-img" />

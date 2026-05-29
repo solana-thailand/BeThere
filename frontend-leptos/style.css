@@ -9801,6 +9801,147 @@ nav a.active {
     font-weight: 500;
 }
 
+/* Back link wrapper */
+.pe-back-wrap {
+    width: 100%;
+    margin-bottom: 1rem;
+}
+
+/* Container with no gap */
+.pe-container-nogap {
+    gap: 0;
+}
+
+/* Text center */
+.pe-text-center {
+    text-align: center;
+}
+
+/* Icon wrapper with margin bottom */
+.pe-icon-mb {
+    margin-bottom: 1rem;
+}
+
+/* Icon wrapper with smaller margin */
+.pe-icon-mb-sm {
+    margin-bottom: 0.5rem;
+}
+
+/* Large success icon wrapper */
+.pe-success-icon-lg {
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+}
+
+/* Error/action message spacing */
+.pe-msg-mb-lg {
+    margin-bottom: 1.5rem;
+}
+
+/* Medium bottom margin */
+.pe-mb-1 {
+    margin-bottom: 1rem;
+}
+
+/* Small bottom margin */
+.pe-mb-075 {
+    margin-bottom: 0.75rem;
+}
+
+/* Tiny bottom margin */
+.pe-mb-025 {
+    margin-bottom: 0.25rem;
+}
+
+/* Top margin */
+.pe-mt-05 {
+    margin-top: 0.5rem;
+}
+
+/* Flex row with small gap */
+.pe-flex-row-gap {
+    display: flex;
+    gap: 0.5rem;
+}
+
+/* Flex column with medium gap */
+.pe-flex-col-gap-md {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+/* Flex column with small gap */
+.pe-flex-col-gap-sm {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+/* Centered button row */
+.pe-btn-row-center {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: center;
+    margin-top: 0.75rem;
+    flex-wrap: wrap;
+}
+
+/* Success colored title */
+.pe-title-success {
+    color: var(--success);
+    margin-bottom: 0.5rem;
+}
+
+/* Success colored text */
+.pe-text-success {
+    color: var(--success);
+    font-weight: 600;
+    font-size: 0.95rem;
+}
+
+/* Accent bold text */
+.pe-text-accent-bold {
+    color: var(--accent);
+    font-weight: 600;
+    font-size: 0.95rem;
+}
+
+/* Format badge row */
+.pe-badge-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+}
+
+/* Time indent */
+.pe-time-indent {
+    margin-left: 1.6rem;
+    margin-bottom: 0.75rem;
+}
+
+/* Emoji icon sizing */
+.pe-emoji-icon {
+    font-size: 0.9rem;
+}
+
+/* Success checkmark */
+.pe-checkmark {
+    color: var(--success);
+}
+
+/* Left margin indent for field errors */
+.pe-field-error-indent {
+    margin-left: 1.5rem;
+}
+
+/* Footer accent link */
+.pe-footer-link {
+    color: var(--accent);
+    text-decoration: none;
+}
+
 /* ── Landing Page Layout ─────────────────────────────────────────── */
 
 .landing-page {
@@ -11568,4 +11709,106 @@ nav a.active {
     width: 8px;
     height: 8px;
     border-radius: 50%;
+}
+
+/* ── Claim page inline style extractions ── */
+.claim-step-check-icon {
+    width: 14px;
+    height: 14px;
+}
+.claim-shimmer-line-60 {
+    width: 60%;
+}
+.claim-shimmer-line-sm-40 {
+    width: 40%;
+}
+.claim-shimmer-line-75 {
+    width: 75%;
+}
+.claim-shimmer-line-sm-50 {
+    width: 50%;
+}
+.claim-shimmer-line-sm-55 {
+    width: 55%;
+}
+.claim-shimmer-btn-full {
+    width: 100%;
+}
+.claim-disconnect-btn {
+    width: 100%;
+    margin-bottom: 0.75rem;
+}
+.claim-success-actions-spaced {
+    margin-top: 0.75rem;
+}
+.claim-redirect-center {
+    text-align: center;
+}
+.claim-redirect-spinner {
+    margin-bottom: 1rem;
+}
+.claim-redirect-title {
+    color: var(--bg-card);
+}
+.claim-redirect-desc {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+.claim-redirect-btn {
+    margin-top: 1rem;
+}
+
+/* ── Audit panel ── */
+.audit-panel-section {
+    margin-top: 1rem;
+}
+.audit-icon-muted {
+    background: var(--text-muted);
+}
+.audit-badge-muted {
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+}
+.audit-empty-text {
+    text-align: center;
+    padding: 1rem;
+    color: var(--text-muted);
+}
+.audit-error-text {
+    color: var(--danger);
+    padding: 0.5rem;
+}
+.audit-timeline {
+    max-height: 400px;
+    overflow-y: auto;
+}
+.audit-entry {
+    display: flex;
+    gap: 0.75rem;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.85rem;
+}
+.audit-entry-time {
+    flex-shrink: 0;
+    width: 130px;
+    color: var(--text-muted);
+}
+.audit-entry-action {
+    flex-shrink: 0;
+}
+.audit-action-badge {
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    white-space: nowrap;
+}
+.audit-entry-desc {
+    flex: 1;
+    color: var(--text-secondary);
+}
+.audit-entry-actor {
+    flex-shrink: 0;
+    color: var(--text-muted);
+    font-size: 0.75rem;
 }

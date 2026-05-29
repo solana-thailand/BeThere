@@ -26,23 +26,23 @@ pub fn registered_state(
 
     view! {
         <div class="pe-card">
-            <div style="text-align:center;">
-                <div style="font-size:2rem;margin-bottom:0.5rem;">
+            <div class="pe-text-center">
+                <div class="pe-success-icon-lg">
                     <Icon icon=IconName::Check class="icon-2xl icon-success" />
                 </div>
-                <h2 class="pe-section-title" style="color:#34d399;margin-bottom:0.5rem;">
+                <h2 class="pe-section-title pe-title-success">
                     "You're already registered!"
                 </h2>
-                <p class="pe-detail-secondary" style="margin-bottom:0.25rem;">
+                <p class="pe-detail-secondary pe-mb-025">
                     {format!("Welcome back, {reg_name}!")}
                 </p>
                 <p class="pe-detail-secondary">
                     {format!("Signed in as {email_display}")}
                 </p>
-                <p class="pe-detail-secondary" style="margin-top:0.5rem;">
+                <p class="pe-detail-secondary pe-mt-05">
                     {move || format!("Continuing in {}...", countdown.get())}
                 </p>
-                <div style="display:flex;gap:0.5rem;justify-content:center;margin-top:0.75rem;flex-wrap:wrap;">
+                <div class="pe-btn-row-center">
                     <button
                         class="btn btn-primary btn-sm"
                         on:click=move |_| navigateTo(&redirect_url)

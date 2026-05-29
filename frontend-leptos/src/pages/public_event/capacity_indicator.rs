@@ -18,7 +18,7 @@ pub fn capacity_indicator(
             <h2 class="pe-section-title">
                 <Icon icon=IconName::Ticket class="icon-md" />" Capacity"
             </h2>
-            <div style="display:flex;flex-direction:column;gap:0.5rem;">
+            <div class="pe-flex-col-gap-sm">
                 {if has_ip_cap {
                     let remaining = in_person_remaining.unwrap_or(0);
                     let (color, label) = if remaining > 0 {

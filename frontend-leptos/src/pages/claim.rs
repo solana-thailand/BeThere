@@ -255,7 +255,7 @@ fn ClaimStepper(current: usize, total: usize, show_quiz: bool) -> impl IntoView 
                             <div class=circle_class>
                                 {if is_completed {
                                     view! {
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="claim-step-check-icon">
                                             <polyline points="20 6 9 17 4 12"></polyline>
                                         </svg>
                                     }.into_any()
@@ -1347,8 +1347,8 @@ pub fn Claim() -> impl IntoView {
                                     <div class="shimmer-card claim-shimmer-row">
                                         <div class="shimmer shimmer-avatar"></div>
                                         <div class="claim-shimmer-col">
-                                            <div class="shimmer shimmer-line" style="width:60%;"></div>
-                                            <div class="shimmer shimmer-line-sm" style="width:40%;"></div>
+                                            <div class="shimmer shimmer-line claim-shimmer-line-60"></div>
+                                            <div class="shimmer shimmer-line-sm claim-shimmer-line-sm-40"></div>
                                         </div>
                                     </div>
 
@@ -1356,20 +1356,20 @@ pub fn Claim() -> impl IntoView {
                                     <div class="shimmer-card claim-shimmer-row">
                                         <div class="shimmer claim-shimmer-nft"></div>
                                         <div class="claim-shimmer-col">
-                                            <div class="shimmer shimmer-line" style="width:75%;"></div>
-                                            <div class="shimmer shimmer-line-sm" style="width:50%;"></div>
+                                            <div class="shimmer shimmer-line claim-shimmer-line-75"></div>
+                                            <div class="shimmer shimmer-line-sm claim-shimmer-line-sm-50"></div>
                                         </div>
                                     </div>
 
                                     // Shimmer: wallet input card (label + input bar + hint)
                                     <div class="shimmer-card u-mb-sm">
-                                        <div class="shimmer shimmer-line-sm u-mb-sm" style="width:40%;"></div>
+                                        <div class="shimmer shimmer-line-sm u-mb-sm claim-shimmer-line-sm-40"></div>
                                         <div class="shimmer claim-shimmer-input"></div>
-                                        <div class="shimmer shimmer-line-sm" style="width:55%;"></div>
+                                        <div class="shimmer shimmer-line-sm claim-shimmer-line-sm-55"></div>
                                     </div>
 
                                     // Shimmer: claim button
-                                    <div class="shimmer shimmer-btn" style="width:100%;"></div>
+                                    <div class="shimmer shimmer-btn claim-shimmer-btn-full"></div>
                                 </div>
                             }
                                 .into_any()
@@ -1519,8 +1519,7 @@ pub fn Claim() -> impl IntoView {
                                                                 <span class="badge badge-success u-ml-auto"><Icon icon=IconName::Check class="icon-sm icon-success" />" Connected"</span>
                                                             </div>
                                                             <button
-                                                                class="btn btn-outline btn-sm"
-                                                                style="width:100%;margin-bottom:0.75rem;"
+                                                                class="btn btn-outline btn-sm claim-disconnect-btn"
                                                                 on:click=move |_| { set_cw_for_connect.set(None); }
                                                                 type="button"
                                                             >
@@ -1867,14 +1866,14 @@ pub fn Claim() -> impl IntoView {
                                     {move || {
                                         if deposit_enabled.get() && !deposit_api_id.get().is_empty() {
                                             view! {
-                                                <div class="success-actions" style="margin-top:0.75rem">
-                                                    <a
-                                                        href=&deposit_link
-                                                        class="btn btn-outline btn-block"
-                                                    >
-                                                        "Deposit & Refund Details →"
-                                                    </a>
-                                                </div>
+                                                <div class="success-actions claim-success-actions-spaced">
+                                                                                                    <a
+                                                                                                        href=&deposit_link
+                                                                                                        class="btn btn-outline btn-block"
+                                                                                                    >
+                                                                                                        "Deposit & Refund Details →"
+                                                                                                    </a>
+                                                                                                </div>
                                             }.into_any()
                                         } else {
                                             view! { <div></div> }.into_any()
@@ -1891,14 +1890,14 @@ pub fn Claim() -> impl IntoView {
                                             format!("/ticket/{api_id}?event_id={event_id}")
                                         };
                                         view! {
-                                            <div class="success-actions" style="margin-top:0.75rem">
-                                                <a
-                                                    href=ticket_href
-                                                    class="btn btn-outline btn-block"
-                                                >
-                                                    "← Back to Ticket"
-                                                </a>
-                                            </div>
+                                            <div class="success-actions claim-success-actions-spaced">
+                                                                                            <a
+                                                                                                href=ticket_href
+                                                                                                class="btn btn-outline btn-block"
+                                                                                            >
+                                                                                                "← Back to Ticket"
+                                                                                            </a>
+                                                                                        </div>
                                         }.into_any()
                                     }
                                 </div>
@@ -1926,16 +1925,15 @@ pub fn Claim() -> impl IntoView {
                             });
 
                             view! {
-                                <div class="claim-state-full" style="text-align:center;">
-                                    <span class="spinner spinner-lg" style="margin-bottom:1rem;"></span>
-                                    <h3 style="color:#fff;">"Already Claimed"</h3>
-                                    <p style="color:var(--text-secondary);font-size:0.9rem;">
-                                        "Redirecting to your ticket..."
-                                    </p>
-                                    <a
-                                        href=ticket_href
-                                        class="btn btn-outline"
-                                        style="margin-top:1rem;"
+                                <div class="claim-state-full claim-redirect-center">
+                                                                    <span class="spinner spinner-lg claim-redirect-spinner"></span>
+                                                                    <h3 class="claim-redirect-title">"Already Claimed"</h3>
+                                                                    <p class="claim-redirect-desc">
+                                                                        "Redirecting to your ticket..."
+                                                                    </p>
+                                                                    <a
+                                                                        href=ticket_href
+                                                                        class="btn btn-outline claim-redirect-btn"
                                     >
                                         "Go to Ticket"
                                     </a>
