@@ -165,7 +165,7 @@ fn EscrowStepCard(
             </div>
             {if done {
                 view! {
-                    <span class="badge-done" style="font-weight:600;font-size:0.85rem">
+                    <span class="badge-done admin-escrow-badge-done">
                         "✓ Done"
                     </span>
                 }.into_any()
@@ -517,7 +517,7 @@ pub fn AdminEscrow(
                 <Show when=move || !is_connected() fallback=|| view! { <div></div> }>
                     <div class="panel-box">
                         <div class="panel-title">"Connect Organizer Wallet"</div>
-                        <div class="hint-text" style="margin-bottom:0.75rem">
+                        <div class="hint-text admin-escrow-hint-mb">
                             "Connect the wallet that created this event's escrow to sign management transactions."
                         </div>
                         <Show when=move || has_wallets() fallback=|| view! {
@@ -532,8 +532,7 @@ pub fn AdminEscrow(
                                         let wn_click = w.clone();
                                         view! {
                                             <button
-                                                class="btn-primary"
-                                                style="font-size:0.8rem;padding:0.4rem 0.8rem"
+                                                class="btn-primary admin-escrow-connect-btn"
                                                 on:click=move |_| handle_connect(wn_click.clone())
                                             >
                                                 {format!("Connect {}", wn)}
@@ -558,8 +557,7 @@ pub fn AdminEscrow(
                             }}
                         </div>
                         <button
-                            class="btn btn-outline"
-                            style="font-size:0.7rem;padding:0.2rem 0.5rem"
+                            class="btn btn-outline admin-escrow-disconnect-btn"
                             on:click=move |_| {
                                 set_wallet_name.set(String::new());
                                 set_wallet_pk.set(String::new());
@@ -662,7 +660,7 @@ pub fn AdminEscrow(
                     </div>
 
                     // ── Info note ──
-                    <div class="info-note" style="margin-top:0.75rem">
+                    <div class="info-note admin-escrow-info-mt">
                         <strong>"Order matters:"</strong>
                         " Deactivate first. Claim Forfeited is optional (skip if no deposits). "
                         "Close reclaims rent and permanently closes the escrow account."

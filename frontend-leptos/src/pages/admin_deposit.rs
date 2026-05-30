@@ -359,7 +359,7 @@ pub fn AdminDeposits(
                                                 <span title={uploaded_formatted.clone()}>{uploaded_ago.clone()}</span>
                                             </div>
                                             <Show when=move || has_slip_url fallback=|| view! { <span></span> }>
-                                                <div style="margin-top:0.25rem">
+                                                <div class="admin-dep-slip-link-row">
                                                     <a
                                                         href=slip_url.clone().unwrap_or_default()
                                                         target="_blank"
@@ -454,7 +454,7 @@ pub fn AdminDeposits(
 
                                             // Slip image link
                                             <Show when=move || has_slip_url fallback=|| view! { <span></span> }>
-                                                <div style="margin-top:0.25rem">
+                                                <div class="admin-dep-slip-link-row">
                                                     <a
                                                         href=slip_url.clone().unwrap_or_default()
                                                         target="_blank"
@@ -467,8 +467,8 @@ pub fn AdminDeposits(
                                             </Show>
 
                                             // Bank info section
-                                            <div style="margin-top:0.5rem;border-top:1px solid rgba(255,255,255,0.1);padding-top:0.5rem;">
-                                                <div class="panel-hint" style="font-weight:600;margin-bottom:0.25rem;">"Refund Bank Info"</div>
+                                            <div class="admin-dep-bank-section">
+                                                <div class="panel-hint admin-dep-bank-label">"Refund Bank Info"</div>
                                                 <Show when=move || has_bank_info fallback=|| view! { <span></span> }>
                                                     <div class="panel-hint">
                                                         {format!("Account: {}", utils::escape_html(display_bank_account.as_deref().unwrap_or("-")))}
@@ -481,7 +481,7 @@ pub fn AdminDeposits(
                                                     </div>
                                                 </Show>
                                                 <Show when=move || !has_bank_info fallback=|| view! { <span></span> }>
-                                                    <div class="badge badge-warning" style="margin-top:0.25rem;">
+                                                    <div class="badge badge-warning admin-dep-badge-row">
                                                         "⚠ No bank info — ask attendee"
                                                     </div>
                                                 </Show>
@@ -512,7 +512,7 @@ pub fn AdminDeposits(
                                                         set_refund_proof_url_input.set(val);
                                                     }
                                                 />
-                                                <div style="display:flex;gap:0.25rem;">
+                                                <div class="admin-dep-confirm-row">
                                                     <button
                                                         class="btn btn-success btn-sm"
                                                         disabled=refund_disabled
@@ -592,7 +592,7 @@ pub fn AdminDeposits(
 
                                             // Slip image link
                                             <Show when=move || has_slip_url fallback=|| view! { <span></span> }>
-                                                <div style="margin-top:0.25rem">
+                                                <div class="admin-dep-slip-link-row">
                                                     <a
                                                         href=slip_url.clone().unwrap_or_default()
                                                         target="_blank"
@@ -605,8 +605,8 @@ pub fn AdminDeposits(
                                             </Show>
 
                                             // Bank info section
-                                            <div style="margin-top:0.5rem;border-top:1px solid rgba(255,255,255,0.1);padding-top:0.5rem;">
-                                                <div class="panel-hint" style="font-weight:600;margin-bottom:0.25rem;">"Refund Bank Info"</div>
+                                            <div class="admin-dep-bank-section">
+                                                <div class="panel-hint admin-dep-bank-label">"Refund Bank Info"</div>
                                                 <Show when=move || has_bank_info fallback=|| view! { <span></span> }>
                                                     <div class="panel-hint">
                                                         {format!("Account: {}", utils::escape_html(display_bank_account.as_deref().unwrap_or("-")))}
@@ -619,7 +619,7 @@ pub fn AdminDeposits(
                                                     </div>
                                                 </Show>
                                                 <Show when=move || !has_bank_info fallback=|| view! { <span></span> }>
-                                                    <div class="badge badge-warning" style="margin-top:0.25rem;">
+                                                    <div class="badge badge-warning admin-dep-badge-row">
                                                         "⚠ No bank info was provided"
                                                     </div>
                                                 </Show>
@@ -627,7 +627,7 @@ pub fn AdminDeposits(
 
                                             // Refund proof link
                                             <Show when=move || has_refund_proof fallback=|| view! { <span></span> }>
-                                                <div style="margin-top:0.25rem">
+                                                <div class="admin-dep-slip-link-row">
                                                     <a
                                                         href=refund_proof_url.clone().unwrap_or_default()
                                                         target="_blank"

@@ -55,16 +55,16 @@ pub fn DepositActionCard(
                 {if show_thb && show_usdc {
                     let usdc_str = format!("${:.2} USDC", amount_usdc as f64 / 1_000_000.0);
                     view! {
-                        <div class="ticket-action-desc" style="margin-bottom:0.25rem;">
-                            <span style="color:var(--text-secondary);font-size:0.8rem;">
+                        <div class="ticket-action-desc ticket-action-alt-desc">
+                            <span class="ticket-action-alt-text">
                                 "Also payable as "{usdc_str}" via Solana"
                             </span>
                         </div>
                     }.into_any()
                 } else if amount_usdc > 0 && escrow_closed {
                     view! {
-                        <div class="ticket-action-desc" style="margin-bottom:0.25rem;">
-                            <span style="color:var(--text-secondary);font-size:0.8rem;">
+                        <div class="ticket-action-desc ticket-action-alt-desc">
+                            <span class="ticket-action-alt-text">
                                 "USDC deposit is no longer available (escrow closed)"
                             </span>
                         </div>
@@ -358,7 +358,7 @@ pub fn RolloverActionCard(
                             </div>
                             {if wallets.is_empty() {
                                 view! {
-                                    <p class="ticket-action-desc" style="color:var(--text-secondary);">
+                                    <p class="ticket-action-desc ticket-action-alt-text">
                                         "No wallet detected. Install Phantom/Backpack/Solflare and refresh."
                                     </p>
                                 }.into_any()
@@ -369,8 +369,7 @@ pub fn RolloverActionCard(
                                     let wi = wallet_icon_name(&w);
                                     view! {
                                         <button
-                                            class="btn btn-primary btn-sm"
-                                            style="margin-right:0.25rem;margin-bottom:0.25rem;"
+                                            class="btn btn-primary btn-sm ticket-action-wallet-btn"
                                             on:click=move |_| handle_connect(w_click.clone())
                                         >
                                             <Icon icon=wi class="icon-sm" />
@@ -381,8 +380,7 @@ pub fn RolloverActionCard(
                                 view! { <div>{btns}</div> }.into_any()
                             }}
                             <button
-                                class="btn btn-outline btn-xs"
-                                style="margin-top:0.5rem;"
+                                class="btn btn-outline btn-xs ticket-action-cancel"
                                 on:click=move |_| set_state.set(RolloverState::Ready)
                             >
                                 "Cancel"
@@ -476,8 +474,7 @@ pub fn RolloverActionCard(
                                 " Sign & Send Rollover"
                             </button>
                             <button
-                                class="btn btn-outline btn-xs"
-                                style="margin-top:0.25rem;"
+                                class="btn btn-outline btn-xs ticket-action-cancel-xs"
                                 on:click=move |_| set_state.set(RolloverState::Ready)
                             >
                                 "Cancel"
@@ -487,7 +484,7 @@ pub fn RolloverActionCard(
 
                     RolloverState::Signing(_, _) => view! {
                         <div class="ticket-action-title">"Processing Rollover..."</div>
-                        <div class="ticket-action-desc" style="display:flex;align-items:center;gap:0.5rem;">
+                        <div class="ticket-action-desc ticket-action-signing-row">
                             <span class="spinner spinner-sm"></span>
                             "Please approve the transaction in your wallet..."
                         </div>
@@ -501,7 +498,7 @@ pub fn RolloverActionCard(
                             sig.clone()
                         };
                         view! {
-                            <div class="ticket-action-title" style="color:var(--success);">
+                            <div class="ticket-action-title ticket-action-title-success">
                                 "Deposit Rolled Over ✓"
                             </div>
                             <div class="ticket-action-desc">
@@ -522,13 +519,12 @@ pub fn RolloverActionCard(
                     },
 
                     RolloverState::Error(msg) => view! {
-                        <div class="ticket-action-title" style="color:var(--danger);">
+                        <div class="ticket-action-title ticket-action-title-danger">
                             "Rollover Failed"
                         </div>
                         <div class="ticket-action-desc">{msg.clone()}</div>
                         <button
-                            class="btn btn-outline btn-xs"
-                            style="margin-top:0.25rem;"
+                            class="btn btn-outline btn-xs ticket-action-cancel-xs"
                             on:click=move |_| set_state.set(RolloverState::Ready)
                         >
                             "Try Again"

@@ -1159,12 +1159,11 @@ pub fn Admin() -> impl IntoView {
                             </div>
                             // Manual refund inline form
                             <Show when=move || show_manual_refund.get() fallback=|| view! { <div></div> }>
-                                <div class="bulk-action-bar" style="margin-top: 4px; flex-wrap: wrap; gap: 8px;">
-                                    <label style="font-size: 0.8rem; color: var(--text-muted);">
+                                <div class="bulk-action-bar admin-refund-form-row">
+                                    <label class="admin-refund-form-label">
                                         "Status:"
                                         <select
-                                            class="admin-event-select"
-                                            style="width: auto; margin-left: 4px;"
+                                            class="admin-event-select admin-refund-form-select"
                                             on:change=move |ev| set_manual_refund_status.set(event_target_value(&ev))
                                         >
                                             <option value="refunded" selected>"refunded"</option>
@@ -1173,12 +1172,12 @@ pub fn Admin() -> impl IntoView {
                                             <option value="failed">"failed"</option>
                                         </select>
                                     </label>
-                                    <label style="font-size: 0.8rem; color: var(--text-muted);">
+                                    <label class="admin-refund-form-label">
                                         "Link (opt):"
                                         <input
                                             type="text"
                                             placeholder="https://..."
-                                            style="width: 200px; margin-left: 4px; padding: 2px 6px; font-size: 0.8rem;"
+                                            class="admin-refund-form-input"
                                             on:input=move |ev| set_manual_refund_link.set(event_target_value(&ev))
                                         />
                                     </label>

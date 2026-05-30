@@ -206,7 +206,7 @@ pub fn EventsPage(
                                 view! {
                                     <div class="event-detail-card">
                                         <div class="event-detail-header">
-                                            <div class="flex-row-gap" style="flex-wrap:wrap;align-items:center">
+                                            <div class="flex-row-gap events-flex-wrap-center">
                                                 <span class="card-title">{ename.clone()}</span>
                                                 <span class=badge_class>{status_text}</span>
                                                 <span class=fmt_badge_class>{fmt_label}</span>
@@ -392,7 +392,7 @@ pub fn EventsPage(
                             <h3>"No Events Yet"</h3>
                             <p>"Create your first event to get started with check-in management."</p>
                             <Show when=move || components::can_manage_events(&user_role.get()) fallback=|| view! { <div></div> }>
-                                <button class="btn btn-primary" style="margin-top:1rem" on:click=handle_create>
+                                <button class="btn btn-primary u-mt-1rem" on:click=handle_create>
                                     "+ Create Event"
                                 </button>
                             </Show>
@@ -454,7 +454,7 @@ pub fn EventsPage(
                             view! {
                                 <div class="card">
                                     <div class="card-header">
-                                        <div class="flex-row-gap" style="flex-wrap:wrap">
+                                        <div class="flex-row-gap events-flex-wrap">
                                             <span class="card-title">{ename.clone()}</span>
                                             <span class=badge_class>{status_text}</span>
                                             <span class=fmt_badge_class>{fmt_label}</span>
@@ -472,7 +472,7 @@ pub fn EventsPage(
                                             }}
                                         </div>
                                         {if can_manage { view! {
-                                        <div class="flex-row-gap" style="gap:0.5rem">
+                                        <div class="flex-row-gap events-flex-gap-sm">
                                             <a
                                                 class="btn btn-outline btn-sm"
                                                 href=format!("/e/{}", event_slug)
@@ -700,8 +700,8 @@ pub fn EventsPage(
                                     >
                                         "← Back"
                                     </button>
-                                    <div class="flex-row-gap" style="align-items:center">
-                                        <span class="card-title" style="font-size:1rem">{ename}</span>
+                                    <div class="flex-row-gap events-flex-wrap-center">
+                                        <span class="card-title events-ctx-title">{ename}</span>
                                         <span class=badge_class>{status_text}</span>
                                         <span class=fmt_badge_class>{fmt_label}</span>
                                         {if evt.visibility == api::EventVisibility::Private {

@@ -11812,3 +11812,150 @@ nav a.active {
     color: var(--text-muted);
     font-size: 0.75rem;
 }
+
+/* ===== ticket-action inline style extractions (action_cards.rs) ===== */
+
+/* Secondary description with bottom spacing */
+.ticket-action-alt-desc {
+    margin-bottom: 0.25rem;
+}
+
+/* Muted secondary text inside action card descriptions */
+.ticket-action-alt-text {
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+}
+
+/* Wallet button row with micro spacing */
+.ticket-action-wallet-btn {
+    margin-right: 0.25rem;
+    margin-bottom: 0.25rem;
+}
+
+/* Cancel/back button with small top margin */
+.ticket-action-cancel {
+    margin-top: 0.5rem;
+}
+
+/* Cancel/back button with minimal top margin */
+.ticket-action-cancel-xs {
+    margin-top: 0.25rem;
+}
+
+/* Signing spinner row with flex alignment */
+.ticket-action-signing-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* Success-colored action title */
+.ticket-action-title-success {
+    color: var(--success);
+}
+
+/* Danger-colored action title */
+.ticket-action-title-danger {
+    color: var(--danger);
+}
+
+/* ===== dep-choose inline style extractions (choose_payment.rs) ===== */
+
+/* dep-info-note with bottom spacing — extends dep-info-note */
+.dep-choose-note-mb {
+    margin-bottom: 1rem;
+}
+
+/* Badge with bottom spacing in choose payment */
+.dep-choose-badge-mb {
+    margin-bottom: 0.5rem;
+}
+
+/* Hint note with top spacing */
+.dep-choose-hint-mt {
+    margin-top: 0.5rem;
+}
+
+/* Change method button spacing */
+.dep-choose-back-btn {
+    margin-bottom: 0.75rem;
+}
+
+/* ===== events inline style extractions (events_page.rs) ===== */
+
+/* Flex row with wrap and center alignment (extends flex-row-gap) */
+.events-flex-wrap-center {
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+/* Flex row with wrap only (extends flex-row-gap) */
+.events-flex-wrap {
+    flex-wrap: wrap;
+}
+
+/* Flex row with small gap (extends flex-row-gap) */
+.events-flex-gap-sm {
+    gap: 0.5rem;
+}
+
+/* Card title at 1rem size in context bar */
+.events-ctx-title {
+    font-size: 1rem;
+}
+.admin-dep-slip-link-row {
+    margin-top: 0.25rem;
+}
+.admin-dep-bank-section {
+    margin-top: 0.5rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    padding-top: 0.5rem;
+}
+.admin-dep-bank-label {
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+}
+.admin-dep-badge-row {
+    margin-top: 0.25rem;
+}
+.admin-dep-confirm-row {
+    display: flex;
+    gap: 0.25rem;
+}
+.admin-refund-form-row {
+    margin-top: 4px;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.admin-refund-form-label {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+.admin-refund-form-select {
+    width: auto;
+    margin-left: 4px;
+}
+.admin-refund-form-input {
+    width: 200px;
+    margin-left: 4px;
+    padding: 2px 6px;
+    font-size: 0.8rem;
+}
+.admin-escrow-badge-done {
+    font-weight: 600;
+    font-size: 0.85rem;
+}
+.admin-escrow-hint-mb {
+    margin-bottom: 0.75rem;
+}
+.admin-escrow-connect-btn {
+    font-size: 0.8rem;
+    padding: 0.4rem 0.8rem;
+}
+.admin-escrow-disconnect-btn {
+    font-size: 0.7rem;
+    padding: 0.2rem 0.5rem;
+}
+.admin-escrow-info-mt {
+    margin-top: 0.75rem;
+}

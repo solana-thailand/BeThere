@@ -56,15 +56,15 @@ pub fn choose_payment_view(
         // Deadline expired banner
         {if deadline_expired && !can_reclaim {
             view! {
-                <div class="dep-info-note" style="margin-bottom:1rem">
-                    <div class="badge badge-warning" style="margin-bottom:0.5rem">
+                <div class="dep-info-note dep-choose-note-mb">
+                    <div class="badge badge-warning dep-choose-badge-mb">
                         "Deadline Expired"
                     </div>
                     <p class="hint-note">
                         <Icon icon=IconName::Clock class="icon-sm" />
                         " Your deposit deadline has passed and in-person spots are now full. You have been moved to the online track."
                     </p>
-                    <p class="hint-note" style="margin-top:0.5rem">
+                    <p class="hint-note dep-choose-hint-mt">
                         "You will be able to claim your NFT after the event ends."
                     </p>
                 </div>
@@ -75,8 +75,8 @@ pub fn choose_payment_view(
 
         {if deadline_expired && can_reclaim {
             view! {
-                <div class="dep-info-note" style="margin-bottom:1rem">
-                    <div class="badge badge-success" style="margin-bottom:0.5rem">
+                <div class="dep-info-note dep-choose-note-mb">
+                    <div class="badge badge-success dep-choose-badge-mb">
                         "Spot Still Available!"
                     </div>
                     <p class="hint-note">
@@ -97,7 +97,7 @@ pub fn choose_payment_view(
                 {if let Some(hours) = deposit_deadline {
                     let label = format_duration_label(hours);
                     view! {
-                        <div class="dep-info-note" style="margin-bottom:1rem">
+                        <div class="dep-info-note dep-choose-note-mb">
                             <p class="hint-note">
                                 <Icon icon=IconName::Clock class="icon-sm" />
                                 " You have "{label}" to complete your deposit. After that, your in-person spot may be released."
@@ -157,7 +157,7 @@ pub fn choose_payment_view(
                 }.into_any(),
 
                 Some(PaymentChoice::Usdc) => view! {
-                    <button class="btn btn-outline btn-sm" style="margin-bottom:0.75rem"
+                    <button class="btn btn-outline btn-sm dep-choose-back-btn"
                         on:click=move |_| set_payment_choice.set(None)>
                         "← Change method"
                     </button>
@@ -174,7 +174,7 @@ pub fn choose_payment_view(
                         <p class="hint-desc">
                             "Pay via Solana. Connect your wallet to send the deposit directly, or use a QR code."
                         </p>
-                        <span class="badge badge-muted" style="margin-bottom:0.5rem;">"🧪 Dev Mode"</span>
+                        <span class="badge badge-muted dep-choose-badge-mb">"🧪 Dev Mode"</span>
 
                         {if has_wallets() {
                             let wallets_for_click = wallets.clone();
@@ -241,7 +241,7 @@ pub fn choose_payment_view(
                 }.into_any(),
 
                 Some(PaymentChoice::Thb) => view! {
-                    <button class="btn btn-outline btn-sm" style="margin-bottom:0.75rem"
+                    <button class="btn btn-outline btn-sm dep-choose-back-btn"
                         on:click=move |_| set_payment_choice.set(None)>
                         "← Change method"
                     </button>
