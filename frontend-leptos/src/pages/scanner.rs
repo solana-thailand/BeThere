@@ -288,7 +288,7 @@ pub fn Scanner() -> impl IntoView {
         let mut wallets = get_detected_wallets_js();
         if wallets.is_empty() {
             for _ in 0..10 {
-                gloo::timers::future::TimeoutFuture::new(300).await;
+                gloo_timers::future::TimeoutFuture::new(300).await;
                 wallets = get_detected_wallets_js();
                 if !wallets.is_empty() {
                     break;
@@ -339,10 +339,10 @@ pub fn Scanner() -> impl IntoView {
 
             leptos::task::spawn_local(async move {
                 // Brief delay for camera to initialize
-                gloo::timers::future::TimeoutFuture::new(500).await;
+                gloo_timers::future::TimeoutFuture::new(500).await;
 
                 loop {
-                    gloo::timers::future::TimeoutFuture::new(300).await;
+                    gloo_timers::future::TimeoutFuture::new(300).await;
 
                     // Stop polling when superseded by a new round
                     if scan_round.get() != round {
@@ -531,7 +531,7 @@ pub fn Scanner() -> impl IntoView {
             let secs_reader = undo_timer_secs;
             let _interval = leptos::task::spawn_local(async move {
                 loop {
-                    gloo::timers::future::TimeoutFuture::new(1000).await;
+                    gloo_timers::future::TimeoutFuture::new(1000).await;
                     // Stop if we're no longer in Success (e.g. user clicked Scan Next)
                     if !matches!(state_check.get(), CheckInState::Success(_)) {
                         break;

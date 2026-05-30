@@ -300,10 +300,10 @@ pub async fn get_claim(token: &str) -> Result<ClaimLookupData, ApiError> {
 /// Public endpoint — no authentication required.
 pub async fn get_quiz() -> Result<QuizQuestionsData, ApiError> {
     let url = format!("{}/quiz", api_base());
-    let response = gloo::net::http::Request::get(&url).send().await?;
+    let response = super::fetch::get(&url, &[]).await?;
 
     if !response.ok() {
-        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
+        let body: ApiResponse<()> = super::fetch::response_json(&response).await.unwrap_or(ApiResponse {
             success: false,
             data: None,
             error: Some("Quiz fetch failed".to_string()),
@@ -316,7 +316,7 @@ pub async fn get_quiz() -> Result<QuizQuestionsData, ApiError> {
     }
 
     let wrapper: ApiResponse<QuizQuestionsData> =
-        response.json().await.map_err(|e| ApiError {
+        super::fetch::response_json(&response).await.map_err(|e| ApiError {
             message: format!("Failed to parse quiz response: {e}"),
             status: 0,
         })?;
@@ -338,19 +338,13 @@ pub async fn submit_quiz(
 ) -> Result<QuizSubmitData, ApiError> {
     let url = format!("{}/quiz/{token}/submit", api_base());
     let body = serde_json::json!({ "answers": answers });
+    let body_str = serde_json::to_string(&body).unwrap_or_default();
+    let hdrs = [("Content-Type", "application/json")];
 
-    let response = gloo::net::http::Request::post(&url)
-        .header("Content-Type", "application/json")
-        .body(serde_json::to_string(&body).unwrap_or_default())
-        .map_err(|e| ApiError {
-            message: format!("Failed to build request: {e}"),
-            status: 0,
-        })?
-        .send()
-        .await?;
+    let response = super::fetch::post(&url, &hdrs, Some(body_str)).await?;
 
     if !response.ok() {
-        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
+        let body: ApiResponse<()> = super::fetch::response_json(&response).await.unwrap_or(ApiResponse {
             success: false,
             data: None,
             error: Some("Quiz submit failed".to_string()),
@@ -363,7 +357,7 @@ pub async fn submit_quiz(
     }
 
     let wrapper: ApiResponse<QuizSubmitData> =
-        response.json().await.map_err(|e| ApiError {
+        super::fetch::response_json(&response).await.map_err(|e| ApiError {
             message: format!("Failed to parse quiz submit response: {e}"),
             status: 0,
         })?;
@@ -380,10 +374,10 @@ pub async fn submit_quiz(
 /// Public endpoint — no authentication required.
 pub async fn get_quiz_status(token: &str) -> Result<QuizStatusData, ApiError> {
     let url = format!("{}/quiz/{token}/status", api_base());
-    let response = gloo::net::http::Request::get(&url).send().await?;
+    let response = super::fetch::get(&url, &[]).await?;
 
     if !response.ok() {
-        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
+        let body: ApiResponse<()> = super::fetch::response_json(&response).await.unwrap_or(ApiResponse {
             success: false,
             data: None,
             error: Some("Quiz status fetch failed".to_string()),
@@ -396,7 +390,7 @@ pub async fn get_quiz_status(token: &str) -> Result<QuizStatusData, ApiError> {
     }
 
     let wrapper: ApiResponse<QuizStatusData> =
-        response.json().await.map_err(|e| ApiError {
+        super::fetch::response_json(&response).await.map_err(|e| ApiError {
             message: format!("Failed to parse quiz status response: {e}"),
             status: 0,
         })?;
@@ -415,19 +409,13 @@ pub async fn get_quiz_status(token: &str) -> Result<QuizStatusData, ApiError> {
 pub async fn post_claim(token: &str, wallet_address: &str) -> Result<ClaimMintData, ApiError> {
     let url = format!("{}/claim/{token}", api_base());
     let body = serde_json::json!({ "wallet_address": wallet_address });
+    let body_str = serde_json::to_string(&body).unwrap_or_default();
+    let hdrs = [("Content-Type", "application/json")];
 
-    let response = gloo::net::http::Request::post(&url)
-        .header("Content-Type", "application/json")
-        .body(serde_json::to_string(&body).unwrap_or_default())
-        .map_err(|e| ApiError {
-            message: format!("Failed to build request: {e}"),
-            status: 0,
-        })?
-        .send()
-        .await?;
+    let response = super::fetch::post(&url, &hdrs, Some(body_str)).await?;
 
     if !response.ok() {
-        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
+        let body: ApiResponse<()> = super::fetch::response_json(&response).await.unwrap_or(ApiResponse {
             success: false,
             data: None,
             error: Some("Claim mint failed".to_string()),
@@ -440,7 +428,7 @@ pub async fn post_claim(token: &str, wallet_address: &str) -> Result<ClaimMintDa
     }
 
     let wrapper: ApiResponse<ClaimMintData> =
-        response.json().await.map_err(|e| ApiError {
+        super::fetch::response_json(&response).await.map_err(|e| ApiError {
             message: format!("Failed to parse mint response: {e}"),
             status: 0,
         })?;
@@ -459,10 +447,10 @@ pub async fn post_claim(token: &str, wallet_address: &str) -> Result<ClaimMintDa
 /// Public endpoint — no authentication required.
 pub async fn get_adventure_status(token: &str) -> Result<AdventureStatusData, ApiError> {
     let url = format!("{}/adventure/{token}/status", api_base());
-    let response = gloo::net::http::Request::get(&url).send().await?;
+    let response = super::fetch::get(&url, &[]).await?;
 
     if !response.ok() {
-        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
+        let body: ApiResponse<()> = super::fetch::response_json(&response).await.unwrap_or(ApiResponse {
             success: false,
             data: None,
             error: Some("Adventure status fetch failed".to_string()),
@@ -475,7 +463,7 @@ pub async fn get_adventure_status(token: &str) -> Result<AdventureStatusData, Ap
     }
 
     let wrapper: ApiResponse<AdventureStatusData> =
-        response.json().await.map_err(|e| ApiError {
+        super::fetch::response_json(&response).await.map_err(|e| ApiError {
             message: format!("Failed to parse adventure status response: {e}"),
             status: 0,
         })?;
@@ -501,19 +489,13 @@ pub async fn save_adventure_progress(
         level_id: level_id.to_string(),
         score: score.clone(),
     };
+    let body_str = serde_json::to_string(&body).unwrap_or_default();
+    let hdrs = [("Content-Type", "application/json")];
 
-    let response = gloo::net::http::Request::post(&url)
-        .header("Content-Type", "application/json")
-        .body(serde_json::to_string(&body).unwrap_or_default())
-        .map_err(|e| ApiError {
-            message: format!("Failed to build request: {e}"),
-            status: 0,
-        })?
-        .send()
-        .await?;
+    let response = super::fetch::post(&url, &hdrs, Some(body_str)).await?;
 
     if !response.ok() {
-        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
+        let body: ApiResponse<()> = super::fetch::response_json(&response).await.unwrap_or(ApiResponse {
             success: false,
             data: None,
             error: Some("Adventure save failed".to_string()),
@@ -532,7 +514,7 @@ pub async fn save_adventure_progress(
         progress: AdventureProgressData,
     }
     let wrapper: ApiResponse<SaveResponse> =
-        response.json().await.map_err(|e| ApiError {
+        super::fetch::response_json(&response).await.map_err(|e| ApiError {
             message: format!("Failed to parse adventure save response: {e}"),
             status: 0,
         })?;

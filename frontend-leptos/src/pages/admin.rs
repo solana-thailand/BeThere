@@ -1365,7 +1365,7 @@ pub fn Admin() -> impl IntoView {
                                                                 } else {
                                                                     set_confirm_delete_id.set(Some(delete_id.clone()));
                                                                     let set_confirm = set_confirm_delete_id;
-                                                                    gloo::timers::callback::Timeout::new(3000, move || {
+                                                                    gloo_timers::callback::Timeout::new(3000, move || {
                                                                         set_confirm.set(None);
                                                                     }).forget();
                                                                 }

@@ -18,7 +18,7 @@ pub fn registered_state(
     let redirect_url_for_timer = redirect_url.clone();
     leptos::task::spawn_local(async move {
         for i in (1..=5).rev() {
-            gloo::timers::future::TimeoutFuture::new(1000).await;
+            gloo_timers::future::TimeoutFuture::new(1000).await;
             set_countdown.set(i - 1);
         }
         navigateTo(&redirect_url_for_timer);

@@ -544,7 +544,7 @@ pub fn QuizEditor(
                                             if !is_confirming.get() {
                                                 set_ca.set(true);
                                                 let reset = set_confirm_clear_all;
-                                                gloo::timers::callback::Timeout::new(3000, move || {
+                                                gloo_timers::callback::Timeout::new(3000, move || {
                                                     reset.set(false);
                                                 }).forget();
                                             } else {
@@ -800,7 +800,7 @@ pub fn QuizEditor(
                                                                     if !is_confirming {
                                                                         set_cq.set(Some(q_id_clone.clone()));
                                                                         let set_reset = set_confirm_delete_q;
-                                                                        gloo::timers::callback::Timeout::new(3000, move || {
+                                                                        gloo_timers::callback::Timeout::new(3000, move || {
                                                                             set_reset.set(None);
                                                                         }).forget();
                                                                     } else {

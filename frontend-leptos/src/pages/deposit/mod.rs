@@ -40,9 +40,9 @@ pub fn Deposit() -> impl IntoView {
                 .origin()
                 .unwrap_or_else(|_| "http://localhost:8787".to_string());
             let url = format!("{origin}/api/auth/me");
-            if let Ok(resp) = gloo::net::http::Request::get(&url).send().await {
+            if let Ok(resp) = crate::api::fetch::get(&url, &[]).await {
                 if resp.status() == 200 {
-                    if let Ok(data) = resp.json::<serde_json::Value>().await {
+                    if let Ok(data) = crate::api::fetch::response_json::<serde_json::Value>(&resp).await {
                         if let Some(email) = data["data"]["email"].as_str() {
                             if !email.is_empty() {
                                 set_signed_in_email.set(Some(email.to_string()));
@@ -118,7 +118,7 @@ pub fn Deposit() -> impl IntoView {
             let mut wallets = self::js_interop::get_detected_wallets();
             if wallets.is_empty() {
                 for _ in 0..10 {
-                    gloo::timers::future::TimeoutFuture::new(300).await;
+                    gloo_timers::future::TimeoutFuture::new(300).await;
                     wallets = self::js_interop::get_detected_wallets();
                     if !wallets.is_empty() {
                         break;
@@ -170,10 +170,8 @@ pub fn Deposit() -> impl IntoView {
                                 class="btn btn-outline btn-xs"
                                 on:click=move |_| {
                                     leptos::task::spawn_local(async move {
-                                        let _ = gloo::net::http::Request::post("/api/auth/logout")
-                                                                                    .send()
-                                                                                    .await;
-                                                                                self::js_interop::navigate_to("/");
+                                        let _ = crate::api::fetch::post("/api/auth/logout", &[], None).await;
+                                        self::js_interop::navigate_to("/");
                                     });
                                 }
                             >

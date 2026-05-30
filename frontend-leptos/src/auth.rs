@@ -223,9 +223,7 @@ pub fn logout() {
         None => return,
     };
     leptos::task::spawn_local(async move {
-        let _ = gloo::net::http::Request::post("/api/auth/logout")
-            .send()
-            .await;
+        let _ = crate::api::fetch::post("/api/auth/logout", &[], None).await;
         let _ = window.location().set_href("/login");
     });
 }

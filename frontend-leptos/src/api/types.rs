@@ -111,15 +111,6 @@ impl std::fmt::Display for ApiError {
     }
 }
 
-impl From<gloo::net::Error> for ApiError {
-    fn from(err: gloo::net::Error) -> Self {
-        Self {
-            message: format!("{err}"),
-            status: 0,
-        }
-    }
-}
-
 /// Generic API response wrapper matching server format.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApiResponse<T> {

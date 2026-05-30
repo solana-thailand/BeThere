@@ -270,14 +270,14 @@ pub async fn poll_deposit_confirmation(
             Ok(_) => {
                 attempts += 1;
                 if attempts < config.max_attempts {
-                    gloo::timers::future::TimeoutFuture::new(config.interval_ok_ms).await;
+                    gloo_timers::future::TimeoutFuture::new(config.interval_ok_ms).await;
                 }
             }
             Err(e) => {
                 log::warn!("[deposit] confirmation poll error: {e}");
                 attempts += 1;
                 if attempts < config.max_attempts {
-                    gloo::timers::future::TimeoutFuture::new(config.interval_err_ms).await;
+                    gloo_timers::future::TimeoutFuture::new(config.interval_err_ms).await;
                 }
             }
         }

@@ -309,7 +309,7 @@ pub fn thb_uploaded_view(
     let aid = attendee_id.to_string();
     let eid = event_id.to_string();
     leptos::task::spawn_local(async move {
-        gloo::timers::future::TimeoutFuture::new(1500).await;
+        gloo_timers::future::TimeoutFuture::new(1500).await;
         js_interop::navigate_to(&format!("/ticket/{aid}?event_id={eid}"));
     });
     view! {

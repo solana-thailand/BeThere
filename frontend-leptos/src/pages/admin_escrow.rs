@@ -225,7 +225,7 @@ fn EscrowStepCard(
                                     set_cc.set(true);
                                     // Auto-reset confirm after 5s
                                     let reset = set_cc_reset.clone();
-                                    gloo::timers::callback::Timeout::new(5000, move || {
+                                    gloo_timers::callback::Timeout::new(5000, move || {
                                         reset.set(false);
                                     }).forget();
                                 } else {
@@ -347,7 +347,7 @@ pub fn AdminEscrow(
             if detected.is_empty() {
                 // Poll up to ~3s (10 attempts × 300ms) for wallet injection
                 for _ in 0..10 {
-                    gloo::timers::future::TimeoutFuture::new(300).await;
+                    gloo_timers::future::TimeoutFuture::new(300).await;
                     detected = get_detected_wallets_js();
                     if !detected.is_empty() {
                         break;

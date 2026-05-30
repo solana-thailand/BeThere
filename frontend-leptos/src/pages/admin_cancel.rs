@@ -257,7 +257,7 @@ pub fn AdminCancel(
                                                 ev.prevent_default();
                                                 set_cc.set(true);
                                                 let reset = set_confirm_cancel;
-                                                gloo::timers::callback::Timeout::new(5000, move || {
+                                                gloo_timers::callback::Timeout::new(5000, move || {
                                                     reset.set(false);
                                                 }).forget();
                                             }

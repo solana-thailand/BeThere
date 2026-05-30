@@ -52,7 +52,7 @@ pub fn registration_form(
 
                     let redirect_url = next_url.clone();
                     leptos::task::spawn_local(async move {
-                        gloo::timers::future::TimeoutFuture::new(800).await;
+                        gloo_timers::future::TimeoutFuture::new(800).await;
                         navigateTo(&redirect_url);
                     });
 
@@ -319,44 +319,38 @@ pub fn registration_form(
                                                     let origin = window.location().origin().unwrap_or_else(|_| "http://localhost:8787".to_string());
                                                     let url = format!("{origin}/api/public/register");
 
-                                                    match gloo::net::http::Request::post(&url)
-                                                        .json(&body)
+                                                    match crate::api::fetch::post(&url, &[("Content-Type", "application/json")], Some(serde_json::to_string(&body).unwrap_or_default())).await
                                                     {
-                                                        Ok(req) => {
-                                                            match req.send().await {
-                                                                Ok(resp) => {
-                                                                    if resp.status() == 401 {
-                                                                        set_reg_state.set(RegState::Error(
-                                                                            "Session expired. Please sign in again.".to_string()
-                                                                        ));
-                                                                        return;
-                                                                    }
-                                                                    match resp.text().await {
-                                                                        Ok(text) => {
-                                                                            match serde_json::from_str::<RegisterResponse>(&text) {
-                                                                                Ok(api_resp) => {
-                                                                                    if api_resp.success {
-                                                                                        if let Some(data) = api_resp.data {
-                                                                                            set_reg_state.set(RegState::Success(data));
-                                                                                        } else {
-                                                                                            set_reg_state.set(RegState::Error("No data returned".to_string()));
-                                                                                        }
-                                                                                    } else {
-                                                                                        set_reg_state.set(RegState::Error(
-                                                                                            api_resp.error.unwrap_or_else(|| "Registration failed".to_string())
-                                                                                        ));
-                                                                                    }
+                                                        Ok(resp) => {
+                                                            if resp.status() == 401 {
+                                                                set_reg_state.set(RegState::Error(
+                                                                    "Session expired. Please sign in again.".to_string()
+                                                                ));
+                                                                return;
+                                                            }
+                                                            match crate::api::fetch::response_text(&resp).await {
+                                                                Ok(text) => {
+                                                                    match serde_json::from_str::<RegisterResponse>(&text) {
+                                                                        Ok(api_resp) => {
+                                                                            if api_resp.success {
+                                                                                if let Some(data) = api_resp.data {
+                                                                                    set_reg_state.set(RegState::Success(data));
+                                                                                } else {
+                                                                                    set_reg_state.set(RegState::Error("No data returned".to_string()));
                                                                                 }
-                                                                                Err(e) => set_reg_state.set(RegState::Error(format!("Parse error: {e}"))),
+                                                                            } else {
+                                                                                set_reg_state.set(RegState::Error(
+                                                                                    api_resp.error.unwrap_or_else(|| "Registration failed".to_string())
+                                                                                ));
                                                                             }
                                                                         }
-                                                                        Err(e) => set_reg_state.set(RegState::Error(format!("Read error: {e}"))),
+                                                                        Err(e) => set_reg_state.set(RegState::Error(format!("Parse error: {e}"))),
                                                                     }
                                                                 }
-                                                                Err(e) => set_reg_state.set(RegState::Error(format!("Network error: {e}"))),
+                                                                Err(e) => set_reg_state.set(RegState::Error(format!("Read error: {e}"))),
                                                             }
                                                         }
-                                                        Err(e) => set_reg_state.set(RegState::Error(format!("Request error: {e}"))),
+                                                        Err(e) => set_reg_state.set(RegState::Error(format!("Network error: {e}"))),
                                                     }
                                                 });
                                             }

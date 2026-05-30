@@ -5,6 +5,7 @@
 
 // ===== Domain modules =====
 
+pub(crate) mod fetch;
 mod types;
 mod event;
 mod attendee;
@@ -24,6 +25,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::time::Duration;
 
+use fetch::{get as http_get, post as http_post, put as http_put, delete as http_delete, response_json, response_text};
 use crate::auth::{clear_token, get_token};
 
 // ---------------------------------------------------------------------------
@@ -108,7 +110,7 @@ pub(crate) async fn cached_get(path: &str) -> Result<String, ApiError> {
     let response = api_get(path).await?;
 
     if !response.ok() {
-        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
+        let body: ApiResponse<()> = response_json(&response).await.unwrap_or(ApiResponse {
             success: false,
             data: None,
             error: Some("Request failed".to_string()),
@@ -120,10 +122,7 @@ pub(crate) async fn cached_get(path: &str) -> Result<String, ApiError> {
         });
     }
 
-    let json = response.text().await.map_err(|e| ApiError {
-        message: format!("Failed to read response: {e}"),
-        status: 0,
-    })?;
+    let json = response_text(&response).await?;
 
     // Store in cache
     cache_put(path, &json);
@@ -146,16 +145,18 @@ pub(crate) fn api_base() -> String {
 // ===== Authenticated request helpers =====
 
 /// Make an authenticated GET request to the API.
-pub(crate) async fn api_get(path: &str) -> Result<gloo::net::http::Response, ApiError> {
+pub(crate) async fn api_get(path: &str) -> Result<web_sys::Response, ApiError> {
     let url = format!("{}{path}", api_base());
     let token = get_token();
 
-    let mut req = gloo::net::http::Request::get(&url);
+    let mut hdrs: Vec<(&str, &str)> = Vec::new();
+    let auth_val;
     if let Some(ref t) = token {
-        req = req.header("Authorization", &format!("Bearer {t}"));
+        auth_val = format!("Bearer {t}");
+        hdrs.push(("Authorization", &auth_val));
     }
 
-    let response = req.send().await?;
+    let response = http_get(&url, &hdrs).await?;
 
     if response.status() == 401 {
         clear_token();
@@ -166,7 +167,7 @@ pub(crate) async fn api_get(path: &str) -> Result<gloo::net::http::Response, Api
     }
 
     if response.status() == 403 {
-        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
+        let body: ApiResponse<()> = response_json(&response).await.unwrap_or(ApiResponse {
             success: false,
             data: None,
             error: Some("Access denied".to_string()),
@@ -182,17 +183,18 @@ pub(crate) async fn api_get(path: &str) -> Result<gloo::net::http::Response, Api
 }
 
 /// Make an authenticated POST request to the API.
-pub(crate) async fn api_post(path: &str) -> Result<gloo::net::http::Response, ApiError> {
+pub(crate) async fn api_post(path: &str) -> Result<web_sys::Response, ApiError> {
     let url = format!("{}{path}", api_base());
     let token = get_token();
 
-    let mut req = gloo::net::http::Request::post(&url);
+    let mut hdrs: Vec<(&str, &str)> = vec![("Content-Type", "application/json")];
+    let auth_val;
     if let Some(ref t) = token {
-        req = req.header("Authorization", &format!("Bearer {t}"));
+        auth_val = format!("Bearer {t}");
+        hdrs.push(("Authorization", &auth_val));
     }
-    req = req.header("Content-Type", "application/json");
 
-    let response = req.send().await?;
+    let response = http_post(&url, &hdrs, None).await?;
 
     if response.status() == 401 {
         clear_token();
@@ -206,16 +208,18 @@ pub(crate) async fn api_post(path: &str) -> Result<gloo::net::http::Response, Ap
 }
 
 /// Make an authenticated DELETE request to the API.
-pub(crate) async fn api_delete(path: &str) -> Result<gloo::net::http::Response, ApiError> {
+pub(crate) async fn api_delete(path: &str) -> Result<web_sys::Response, ApiError> {
     let url = format!("{}{path}", api_base());
     let token = get_token();
 
-    let mut req = gloo::net::http::Request::delete(&url);
+    let mut hdrs: Vec<(&str, &str)> = Vec::new();
+    let auth_val;
     if let Some(ref t) = token {
-        req = req.header("Authorization", &format!("Bearer {t}"));
+        auth_val = format!("Bearer {t}");
+        hdrs.push(("Authorization", &auth_val));
     }
 
-    let response = req.send().await?;
+    let response = http_delete(&url, &hdrs).await?;
 
     if response.status() == 401 {
         clear_token();
@@ -248,23 +252,17 @@ async fn api_json_with_body<T: serde::de::DeserializeOwned + Default>(
         status: 0,
     })?;
 
-    let mut req = match method {
-        HttpMethod::Post => gloo::net::http::Request::post(&url),
-        HttpMethod::Put => gloo::net::http::Request::put(&url),
-    };
+    let mut hdrs: Vec<(&str, &str)> = vec![("Content-Type", "application/json")];
+    let auth_val;
     if let Some(ref t) = token {
-        req = req.header("Authorization", &format!("Bearer {t}"));
+        auth_val = format!("Bearer {t}");
+        hdrs.push(("Authorization", &auth_val));
     }
-    req = req.header("Content-Type", "application/json");
 
-    let response = req
-        .body(&json_body)
-        .map_err(|e| ApiError {
-            message: format!("Failed to set request body: {e:?}"),
-            status: 0,
-        })?
-        .send()
-        .await?;
+    let response = match method {
+        HttpMethod::Post => http_post(&url, &hdrs, Some(json_body)).await?,
+        HttpMethod::Put => http_put(&url, &hdrs, Some(json_body)).await?,
+    };
 
     if response.status() == 401 {
         clear_token();
@@ -275,7 +273,7 @@ async fn api_json_with_body<T: serde::de::DeserializeOwned + Default>(
     }
 
     if !response.ok() {
-        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
+        let body: ApiResponse<()> = response_json(&response).await.unwrap_or(ApiResponse {
             success: false,
             data: None,
             error: Some("Request failed".to_string()),
@@ -289,7 +287,7 @@ async fn api_json_with_body<T: serde::de::DeserializeOwned + Default>(
         });
     }
 
-    let result: ApiResponse<T> = response.json().await.map_err(|e| ApiError {
+    let result: ApiResponse<T> = response_json(&response).await.map_err(|e| ApiError {
         message: format!("Failed to parse response: {e}"),
         status: 0,
     })?;
@@ -329,7 +327,7 @@ pub(crate) async fn api_put_json<T: serde::de::DeserializeOwned + Default>(
 /// Returns the Google OAuth 2.0 authorization URL.
 pub async fn get_auth_url() -> Result<AuthUrlResponse, ApiError> {
     let url = format!("{}/auth/url", api_base());
-    let response = gloo::net::http::Request::get(&url).send().await?;
+    let response = http_get(&url, &[]).await?;
 
     if !response.ok() {
         return Err(ApiError {
@@ -338,7 +336,7 @@ pub async fn get_auth_url() -> Result<AuthUrlResponse, ApiError> {
         });
     }
 
-    let result: ApiResponse<AuthUrlResponse> = response.json().await.map_err(|e| ApiError {
+    let result: ApiResponse<AuthUrlResponse> = response_json(&response).await.map_err(|e| ApiError {
         message: format!("Failed to parse auth URL response: {e}"),
         status: 0,
     })?;
@@ -361,7 +359,7 @@ pub async fn get_me() -> Result<MeResponse, ApiError> {
         });
     }
 
-    let result: ApiResponse<MeResponse> = response.json().await.map_err(|e| ApiError {
+    let result: ApiResponse<MeResponse> = response_json(&response).await.map_err(|e| ApiError {
         message: format!("Failed to parse user info: {e}"),
         status: 0,
     })?;

@@ -360,7 +360,7 @@ fn SessionTimer(start_ms: i64, end_ms: i64) -> impl IntoView {
                 }
                 // 5s interval — reduces re-renders vs 1s; sufficient granularity
                 // for countdown/elapsed display on event time scales (hours).
-                gloo::timers::future::TimeoutFuture::new(5000).await;
+                gloo_timers::future::TimeoutFuture::new(5000).await;
             }
         });
     });
@@ -1069,7 +1069,7 @@ pub fn Claim() -> impl IntoView {
             let mut wallets = get_detected_wallets_js();
             if wallets.is_empty() {
                 for _ in 0..10 {
-                    gloo::timers::future::TimeoutFuture::new(300).await;
+                    gloo_timers::future::TimeoutFuture::new(300).await;
                     wallets = get_detected_wallets_js();
                     if !wallets.is_empty() {
                         break;
@@ -1240,7 +1240,7 @@ pub fn Claim() -> impl IntoView {
             let elapsed = js_sys::Date::now() - start;
             if elapsed < 1500.0 {
                 let wait = (1500.0 - elapsed) as u32;
-                gloo::timers::future::TimeoutFuture::new(wait).await;
+                gloo_timers::future::TimeoutFuture::new(wait).await;
             }
             match result {
                 Ok(mint_data) => {
@@ -1840,7 +1840,7 @@ pub fn Claim() -> impl IntoView {
                                                 let _ = copy_to_clipboard_js(&claim_page_url);
                                                 set_share_copied.set(true);
                                                 leptos::task::spawn_local(async move {
-                                                    gloo::timers::future::TimeoutFuture::new(2000).await;
+                                                    gloo_timers::future::TimeoutFuture::new(2000).await;
                                                     set_share_copied.set(false);
                                                 });
                                             }

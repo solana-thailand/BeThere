@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::types::{ApiError, ApiResponse};
-use super::{api_get, api_post, cache_invalidate, cached_get};
+use super::{api_get, api_post, cache_invalidate, cached_get, fetch::response_json};
 
 // ===== Walk-in Registration Types =====
 
@@ -191,7 +191,7 @@ pub async fn check_in(id: &str, event_id: Option<&str>, online: bool) -> Result<
     let response = api_post(&path).await?;
 
     if !response.ok() {
-        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
+        let body: ApiResponse<()> = response_json(&response).await.unwrap_or(ApiResponse {
             success: false,
             data: None,
             error: Some("Check-in failed".to_string()),
@@ -203,7 +203,7 @@ pub async fn check_in(id: &str, event_id: Option<&str>, online: bool) -> Result<
         });
     }
 
-    let wrapper: ApiResponse<CheckInData> = response.json().await.map_err(|e| ApiError {
+    let wrapper: ApiResponse<CheckInData> = response_json(&response).await.map_err(|e| ApiError {
         message: format!("Failed to parse check-in response: {e}"),
         status: 0,
     })?;
@@ -231,7 +231,7 @@ pub async fn undo_check_in(attendee_id: &str, event_id: Option<&str>) -> Result<
 
     if !response.ok() {
         let status = response.status();
-        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
+        let body: ApiResponse<()> = response_json(&response).await.unwrap_or(ApiResponse {
             success: false,
             data: None,
             error: Some("Undo check-in failed".to_string()),
@@ -255,7 +255,7 @@ pub async fn delete_attendee(attendee_id: &str, event_id: Option<&str>) -> Resul
     };
     let response = super::api_delete(&path).await?;
     if response.status() >= 400 {
-        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
+        let body: ApiResponse<()> = response_json(&response).await.unwrap_or(ApiResponse {
             success: false,
             data: None,
             error: Some("Delete failed".to_string()),
@@ -306,7 +306,7 @@ pub async fn list_walkins(event_id: &str) -> Result<WalkinListResponse, ApiError
 pub async fn export_walkin_csv(event_id: &str) -> Result<WalkinExportResponse, ApiError> {
     let path = format!("/walkin/export?event_id={event_id}");
     let response = api_get(&path).await?;
-    let result: ApiResponse<WalkinExportResponse> = response.json().await.map_err(|e| ApiError {
+    let result: ApiResponse<WalkinExportResponse> = response_json(&response).await.map_err(|e| ApiError {
         message: format!("Failed to parse response: {e}"),
         status: 0,
     })?;
@@ -351,7 +351,7 @@ pub async fn generate_qrs(force: bool, event_id: Option<&str>) -> Result<Generat
     let response = api_post(&path).await?;
 
     if !response.ok() {
-        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
+        let body: ApiResponse<()> = response_json(&response).await.unwrap_or(ApiResponse {
             success: false,
             data: None,
             error: Some("QR generation failed".to_string()),
@@ -363,7 +363,7 @@ pub async fn generate_qrs(force: bool, event_id: Option<&str>) -> Result<Generat
         });
     }
 
-    let wrapper: ApiResponse<GenerateQrData> = response.json().await.map_err(|e| ApiError {
+    let wrapper: ApiResponse<GenerateQrData> = response_json(&response).await.map_err(|e| ApiError {
         message: format!("Failed to parse QR generation response: {e}"),
         status: 0,
     })?;
@@ -383,7 +383,7 @@ pub async fn flush_cache(event_id: Option<&str>) -> Result<bool, ApiError> {
     let response = api_post(&path).await?;
 
     if !response.ok() {
-        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
+        let body: ApiResponse<()> = response_json(&response).await.unwrap_or(ApiResponse {
             success: false,
             data: None,
             error: Some("Flush cache failed".to_string()),

@@ -109,7 +109,7 @@ pub fn Adventure() -> impl IntoView {
             });
             } else {
                 // Restore from localStorage (casual play)
-                let stored = gloo::utils::window()
+                let stored = gloo_utils::window()
                     .local_storage()
                     .ok()
                     .flatten()
@@ -236,7 +236,7 @@ pub fn Adventure() -> impl IntoView {
             // Save to localStorage (casual play)
             let completed = auto_save_completed_read.get();
             if let Ok(json) = serde_json::to_string(&completed) {
-                if let Some(ls) = gloo::utils::window().local_storage().ok().flatten() {
+                if let Some(ls) = gloo_utils::window().local_storage().ok().flatten() {
                     if let Err(_) = ls.set(LS_COMPLETED_KEY, &json) {
                         log::warn!("[adventure] failed to save to localStorage");
                     } else {
@@ -749,7 +749,7 @@ pub fn Adventure() -> impl IntoView {
                                                     <button class="btn btn-outline" on:click=move |_| {
                                                         // Reset all progress and play from level 1
                                                         set_completed_levels.set(HashSet::new());
-                                                        if let Some(ls) = gloo::utils::window().local_storage().ok().flatten() {
+                                                        if let Some(ls) = gloo_utils::window().local_storage().ok().flatten() {
                                                             let _ = ls.remove_item(LS_COMPLETED_KEY);
                                                         }
                                                         if let Some(level) = levels_signal.get().first() {

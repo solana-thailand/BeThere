@@ -154,7 +154,7 @@ pub fn AdminDeposits(
         if confirm_reject_id.get().as_deref() != Some(&attendee_id) {
             set_confirm_reject_id.set(Some(attendee_id.clone()));
             let set_confirm = set_confirm_reject_id;
-            gloo::timers::callback::Timeout::new(3000, move || {
+            gloo_timers::callback::Timeout::new(3000, move || {
                 set_confirm.set(None);
             }).forget();
             return;

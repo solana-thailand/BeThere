@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::types::{ApiError, ApiResponse};
-use super::{api_delete, api_get, api_post, api_post_json, api_put_json};
+use super::{api_delete, api_get, api_post, api_post_json, api_put_json, fetch::response_json};
 
 // ===== Event Management Types =====
 
@@ -519,7 +519,7 @@ pub struct InitEscrowResponse {
 /// GET /api/events — list all events.
 pub async fn list_events() -> Result<EventsListData, ApiError> {
     let response = api_get("/events").await?;
-    let result: ApiResponse<EventsListData> = response.json().await.map_err(|e| ApiError {
+    let result: ApiResponse<EventsListData> = response_json(&response).await.map_err(|e| ApiError {
         message: format!("Failed to parse events response: {e}"),
         status: 0,
     })?;
@@ -541,7 +541,7 @@ pub async fn list_events() -> Result<EventsListData, ApiError> {
 pub async fn get_event_detail(id: &str) -> Result<EventDetailData, ApiError> {
     let path = format!("/events/{id}");
     let response = api_get(&path).await?;
-    let result: ApiResponse<EventDetailData> = response.json().await.map_err(|e| ApiError {
+    let result: ApiResponse<EventDetailData> = response_json(&response).await.map_err(|e| ApiError {
         message: format!("Failed to parse event detail response: {e}"),
         status: 0,
     })?;
@@ -605,7 +605,7 @@ pub async fn archive_event(id: &str) -> Result<EventMutationData, ApiError> {
     let response = api_delete(&path).await?;
 
     if !response.ok() {
-        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
+        let body: ApiResponse<()> = response_json(&response).await.unwrap_or(ApiResponse {
             success: false,
             data: None,
             error: Some("Archive failed".to_string()),
@@ -618,7 +618,7 @@ pub async fn archive_event(id: &str) -> Result<EventMutationData, ApiError> {
     }
 
     let wrapper: ApiResponse<EventMutationData> =
-        response.json().await.map_err(|e| ApiError {
+        response_json(&response).await.map_err(|e| ApiError {
             message: format!("Failed to parse archive response: {e}"),
             status: 0,
         })?;
@@ -639,7 +639,7 @@ pub async fn hard_delete_event(id: &str, force: bool) -> Result<EventMutationDat
     let response = api_delete(&path).await?;
 
     if !response.ok() {
-        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
+        let body: ApiResponse<()> = response_json(&response).await.unwrap_or(ApiResponse {
             success: false,
             data: None,
             error: Some("Delete failed".to_string()),
@@ -652,7 +652,7 @@ pub async fn hard_delete_event(id: &str, force: bool) -> Result<EventMutationDat
     }
 
     let wrapper: ApiResponse<EventMutationData> =
-        response.json().await.map_err(|e| ApiError {
+        response_json(&response).await.map_err(|e| ApiError {
             message: format!("Failed to parse delete response: {e}"),
             status: 0,
         })?;
@@ -669,7 +669,7 @@ pub async fn restore_event(id: &str) -> Result<EventMutationData, ApiError> {
     let response = api_post(&path).await?;
 
     if !response.ok() {
-        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
+        let body: ApiResponse<()> = response_json(&response).await.unwrap_or(ApiResponse {
             success: false,
             data: None,
             error: Some("Restore failed".to_string()),
@@ -682,7 +682,7 @@ pub async fn restore_event(id: &str) -> Result<EventMutationData, ApiError> {
     }
 
     let wrapper: ApiResponse<EventMutationData> =
-        response.json().await.map_err(|e| ApiError {
+        response_json(&response).await.map_err(|e| ApiError {
             message: format!("Failed to parse restore response: {e}"),
             status: 0,
         })?;

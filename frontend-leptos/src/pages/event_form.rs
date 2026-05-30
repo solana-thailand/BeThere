@@ -346,7 +346,7 @@ pub fn EventFormComponent(
             let mut wallets = super::escrow_init::get_detected_wallets_js();
             if wallets.is_empty() {
                 for _ in 0..10 {
-                    gloo::timers::future::TimeoutFuture::new(300).await;
+                    gloo_timers::future::TimeoutFuture::new(300).await;
                     wallets = super::escrow_init::get_detected_wallets_js();
                     if !wallets.is_empty() {
                         break;

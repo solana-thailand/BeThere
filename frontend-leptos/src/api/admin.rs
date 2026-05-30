@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::types::{ApiError, ApiResponse, default_true};
-use super::{api_base, api_get, api_post_json};
+use super::{api_base, api_get, api_post_json, fetch::response_json};
 
 // ===== Admin Quiz Types =====
 
@@ -216,7 +216,7 @@ pub async fn get_admin_quiz(event_id: Option<&str>) -> Result<AdminQuizData, Api
         _ => "/admin/quiz".to_string(),
     };
     let response = api_get(&path).await?;
-    let result: ApiResponse<AdminQuizData> = response.json().await.map_err(|e| ApiError {
+    let result: ApiResponse<AdminQuizData> = response_json(&response).await.map_err(|e| ApiError {
         message: format!("Failed to parse admin quiz response: {e}"),
         status: 0,
     })?;
@@ -254,7 +254,7 @@ pub async fn delete_quiz_question(
     };
     let response = super::api_delete(&path).await?;
     if !response.ok() {
-        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
+        let body: ApiResponse<()> = response_json(&response).await.unwrap_or(ApiResponse {
             success: false,
             data: None,
             error: Some("Delete failed".to_string()),
@@ -281,15 +281,13 @@ pub async fn toggle_quiz_question(
     };
     let url = format!("{}{path}", super::api_base());
     let token = crate::auth::get_token();
-    let mut req = gloo::net::http::Request::patch(&url);
+    let mut hdrs: Vec<(&str, &str)> = vec![("Content-Type", "application/json")];
+    let auth_val;
     if let Some(ref t) = token {
-        req = req.header("Authorization", &format!("Bearer {t}"));
+        auth_val = format!("Bearer {t}");
+        hdrs.push(("Authorization", &auth_val));
     }
-    req = req.header("Content-Type", "application/json");
-    let response = req.body("").map_err(|e| ApiError {
-        message: format!("Failed to build request: {e:?}"),
-        status: 0,
-    })?.send().await?;
+    let response = super::fetch::patch(&url, &hdrs, None).await?;
 
     if response.status() == 401 {
         crate::auth::clear_token();
@@ -300,7 +298,7 @@ pub async fn toggle_quiz_question(
     }
 
     if !response.ok() {
-        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
+        let body: ApiResponse<()> = super::fetch::response_json(&response).await.unwrap_or(ApiResponse {
             success: false,
             data: None,
             error: Some("Toggle failed".to_string()),
@@ -313,7 +311,7 @@ pub async fn toggle_quiz_question(
     }
 
     // Backend returns { success: true, data: { question: {...} } }
-    let raw: serde_json::Value = response.json().await.map_err(|e| ApiError {
+    let raw: serde_json::Value = super::fetch::response_json(&response).await.map_err(|e| ApiError {
         message: format!("Failed to parse toggle response: {e}"),
         status: 0,
     })?;
@@ -351,10 +349,10 @@ pub async fn get_admin_adventure_config(
     if let Some(eid) = event_id {
         url = format!("{url}?event_id={eid}");
     }
-    let response = gloo::net::http::Request::get(&url).send().await?;
+    let response = super::fetch::get(&url, &[]).await?;
 
     if !response.ok() {
-        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
+        let body: ApiResponse<()> = super::fetch::response_json(&response).await.unwrap_or(ApiResponse {
             success: false,
             data: None,
             error: Some("Failed to fetch adventure config".to_string()),
@@ -372,7 +370,7 @@ pub async fn get_admin_adventure_config(
         config: Option<AdventureConfigData>,
     }
 
-    let wrapper: ApiResponse<ConfigResponse> = response.json().await.map_err(|e| ApiError {
+    let wrapper: ApiResponse<ConfigResponse> = super::fetch::response_json(&response).await.map_err(|e| ApiError {
         message: format!("Failed to parse adventure config: {e}"),
         status: 0,
     })?;
@@ -396,18 +394,12 @@ pub async fn put_admin_adventure_config(
     if let Some(eid) = event_id {
         url = format!("{url}?event_id={eid}");
     }
-    let response = gloo::net::http::Request::put(&url)
-        .header("Content-Type", "application/json")
-        .body(serde_json::to_string(config).unwrap_or_default())
-        .map_err(|e| ApiError {
-            message: format!("Failed to build request: {e}"),
-            status: 0,
-        })?
-        .send()
-        .await?;
+    let body_str = serde_json::to_string(config).unwrap_or_default();
+    let hdrs = [("Content-Type", "application/json")];
+    let response = super::fetch::put(&url, &hdrs, Some(body_str)).await?;
 
     if !response.ok() {
-        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
+        let body: ApiResponse<()> = super::fetch::response_json(&response).await.unwrap_or(ApiResponse {
             success: false,
             data: None,
             error: Some("Failed to save adventure config".to_string()),
@@ -431,7 +423,7 @@ pub async fn get_event_audit(event_id: &str) -> Result<AuditResponse, ApiError> 
     let response = api_get(&path).await?;
 
     if !response.ok() {
-        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
+        let body: ApiResponse<()> = response_json(&response).await.unwrap_or(ApiResponse {
             success: false,
             data: None,
             error: Some("Failed to fetch audit trail".to_string()),
@@ -443,7 +435,7 @@ pub async fn get_event_audit(event_id: &str) -> Result<AuditResponse, ApiError> 
         });
     }
 
-    let result: ApiResponse<AuditResponse> = response.json().await.map_err(|e| ApiError {
+    let result: ApiResponse<AuditResponse> = response_json(&response).await.map_err(|e| ApiError {
         message: format!("Failed to parse audit response: {e}"),
         status: 0,
     })?;
@@ -469,7 +461,7 @@ pub async fn get_onchain_events(event_id: &str) -> Result<OnchainEventsResponse,
     let response = api_get(&path).await?;
 
     if !response.ok() {
-        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
+        let body: ApiResponse<()> = response_json(&response).await.unwrap_or(ApiResponse {
             success: false,
             data: None,
             error: Some("Failed to fetch on-chain events".to_string()),
@@ -481,7 +473,7 @@ pub async fn get_onchain_events(event_id: &str) -> Result<OnchainEventsResponse,
         });
     }
 
-    let result: ApiResponse<OnchainEventsResponse> = response.json().await.map_err(|e| ApiError {
+    let result: ApiResponse<OnchainEventsResponse> = response_json(&response).await.map_err(|e| ApiError {
         message: format!("Failed to parse on-chain events: {e}"),
         status: 0,
     })?;
@@ -513,7 +505,7 @@ pub async fn get_usdc_refund_queue(event_id: &str) -> Result<UsdcRefundQueueResp
     let response = api_get(&path).await?;
 
     if !response.ok() {
-        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
+        let body: ApiResponse<()> = response_json(&response).await.unwrap_or(ApiResponse {
             success: false,
             data: None,
             error: Some("Failed to get refund queue".to_string()),
@@ -526,7 +518,7 @@ pub async fn get_usdc_refund_queue(event_id: &str) -> Result<UsdcRefundQueueResp
     }
 
     let wrapper: ApiResponse<UsdcRefundQueueResponse> =
-        response.json().await.map_err(|e| ApiError {
+        response_json(&response).await.map_err(|e| ApiError {
             message: format!("Failed to parse refund queue: {e}"),
             status: 0,
         })?;
@@ -543,7 +535,7 @@ pub async fn get_cancel_status(event_id: &str) -> Result<CancelStatusResponse, A
     let response = api_get(&path).await?;
 
     if !response.ok() {
-        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
+        let body: ApiResponse<()> = response_json(&response).await.unwrap_or(ApiResponse {
             success: false,
             data: None,
             error: Some("Failed to get cancel status".to_string()),
@@ -556,7 +548,7 @@ pub async fn get_cancel_status(event_id: &str) -> Result<CancelStatusResponse, A
     }
 
     let wrapper: ApiResponse<CancelStatusResponse> =
-        response.json().await.map_err(|e| ApiError {
+        response_json(&response).await.map_err(|e| ApiError {
             message: format!("Failed to parse cancel status: {e}"),
             status: 0,
         })?;

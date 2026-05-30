@@ -3,7 +3,7 @@
 // serde derives used via full path in attribute macros
 
 use super::types::{ApiError, ApiResponse};
-use super::{api_get, api_post_json};
+use super::{api_get, api_post_json, fetch::response_json};
 
 // ===== Deposit/Refund Types =====
 
@@ -273,7 +273,7 @@ pub async fn get_deposit_status(
     let response = api_get(&path).await?;
 
     if !response.ok() {
-        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
+        let body: ApiResponse<()> = response_json(&response).await.unwrap_or(ApiResponse {
             success: false,
             data: None,
             error: Some("Failed to get deposit status".to_string()),
@@ -286,7 +286,7 @@ pub async fn get_deposit_status(
     }
 
     let wrapper: ApiResponse<DepositStatusResponse> =
-        response.json().await.map_err(|e| ApiError {
+        response_json(&response).await.map_err(|e| ApiError {
             message: format!("Failed to parse deposit status: {e}"),
             status: 0,
         })?;
@@ -325,7 +325,7 @@ pub async fn confirm_deposit(
     let response = api_get(&path).await?;
 
     if !response.ok() {
-        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
+        let body: ApiResponse<()> = response_json(&response).await.unwrap_or(ApiResponse {
             success: false,
             data: None,
             error: Some("Failed to check deposit confirmation".to_string()),
@@ -338,7 +338,7 @@ pub async fn confirm_deposit(
     }
 
     let wrapper: ApiResponse<ConfirmDepositResponse> =
-        response.json().await.map_err(|e| ApiError {
+        response_json(&response).await.map_err(|e| ApiError {
             message: format!("Failed to parse deposit confirmation: {e}"),
             status: 0,
         })?;
@@ -368,7 +368,7 @@ pub async fn get_pending_slips(event_id: Option<&str>) -> Result<PendingSlipResp
     let response = api_get(&path).await?;
 
     if !response.ok() {
-        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
+        let body: ApiResponse<()> = response_json(&response).await.unwrap_or(ApiResponse {
             success: false,
             data: None,
             error: Some("Failed to get pending slips".to_string()),
@@ -381,7 +381,7 @@ pub async fn get_pending_slips(event_id: Option<&str>) -> Result<PendingSlipResp
     }
 
     let wrapper: ApiResponse<PendingSlipResponse> =
-        response.json().await.map_err(|e| ApiError {
+        response_json(&response).await.map_err(|e| ApiError {
             message: format!("Failed to parse pending slips: {e}"),
             status: 0,
         })?;
@@ -401,7 +401,7 @@ pub async fn get_refund_queue(event_id: Option<&str>) -> Result<RefundQueueRespo
     let response = api_get(&path).await?;
 
     if !response.ok() {
-        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
+        let body: ApiResponse<()> = response_json(&response).await.unwrap_or(ApiResponse {
             success: false,
             data: None,
             error: Some("Failed to get refund queue".to_string()),
@@ -414,7 +414,7 @@ pub async fn get_refund_queue(event_id: Option<&str>) -> Result<RefundQueueRespo
     }
 
     let wrapper: ApiResponse<RefundQueueResponse> =
-        response.json().await.map_err(|e| ApiError {
+        response_json(&response).await.map_err(|e| ApiError {
             message: format!("Failed to parse refund queue: {e}"),
             status: 0,
         })?;
@@ -470,7 +470,7 @@ pub async fn get_refunded_list(
     let response = api_get(&path).await?;
 
     if !response.ok() {
-        let body: ApiResponse<()> = response.json().await.unwrap_or(ApiResponse {
+        let body: ApiResponse<()> = response_json(&response).await.unwrap_or(ApiResponse {
             success: false,
             data: None,
             error: Some("Failed to get refunded list".to_string()),
@@ -483,7 +483,7 @@ pub async fn get_refunded_list(
     }
 
     let wrapper: ApiResponse<RefundedListResponse> =
-        response.json().await.map_err(|e| ApiError {
+        response_json(&response).await.map_err(|e| ApiError {
             message: format!("Failed to parse refunded list: {e}"),
             status: 0,
         })?;

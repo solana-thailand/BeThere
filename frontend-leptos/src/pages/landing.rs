@@ -36,9 +36,9 @@ fn trigger_landing_oauth() {
             "{origin}/api/auth/url?redirect={}",
             urlencoding::encode("/")
         );
-        match gloo::net::http::Request::get(&api_url).send().await {
+        match crate::api::fetch::get(&api_url, &[]).await {
             Ok(resp) => {
-                if let Ok(body) = resp.text().await {
+                if let Ok(body) = crate::api::fetch::response_text(&resp).await {
                     if let Ok(json) = serde_json::from_str::<serde_json::Value>(&body) {
                         if let Some(auth_url) =
                             json.get("data").and_then(|d| d.get("auth_url")).and_then(|u| u.as_str())
@@ -61,9 +61,7 @@ fn trigger_landing_oauth() {
 /// Sign out: clear cookie + reload.
 fn trigger_landing_signout() {
     leptos::task::spawn_local(async move {
-        let _ = gloo::net::http::Request::post("/api/auth/logout")
-            .send()
-            .await;
+        let _ = crate::api::fetch::post("/api/auth/logout", &[], None).await;
         let window = web_sys::window().expect("no window");
         let _ = window.location().reload();
     });
@@ -96,24 +94,14 @@ fn WaitlistForm() -> impl IntoView {
             let url = format!("{origin}/api/waitlist");
 
             let body = serde_json::json!({ "email": email_val });
+            let body_str = serde_json::to_string(&body).unwrap_or_default();
+            let hdrs = [("Content-Type", "application/json")];
 
-            let request = match gloo::net::http::Request::post(&url)
-                .header("Content-Type", "application/json")
-                .body(serde_json::to_string(&body).unwrap_or_default())
-            {
-                Ok(req) => req,
-                Err(e) => {
-                    set_error.set(Some(format!("Failed to submit: {e}")));
-                    set_submitting.set(false);
-                    return;
-                }
-            };
-
-            match request.send().await {
+            match crate::api::fetch::post(&url, &hdrs, Some(body_str)).await {
                 Ok(response) => {
                     // Parse JSON body regardless of HTTP status
                     let status = response.status();
-                    match response.json::<serde_json::Value>().await {
+                    match crate::api::fetch::response_json::<serde_json::Value>(&response).await {
                         Ok(body) => {
                             if body.get("success").and_then(|v| v.as_bool()) == Some(true) {
                                 set_submitted.set(true);
@@ -563,9 +551,9 @@ fn UpcomingEvents() -> impl IntoView {
                 .unwrap_or_else(|_| "http://localhost:8787".to_string());
             let url = format!("{origin}/api/public/events");
 
-            match gloo::net::http::Request::get(&url).send().await {
+            match crate::api::fetch::get(&url, &[]).await {
                 Ok(resp) if resp.status() == 200 => {
-                    match resp.json::<ApiResponse<PublicEventsResponse>>().await {
+                    match crate::api::fetch::response_json::<ApiResponse<PublicEventsResponse>>(&resp).await {
                         Ok(wrapper) => {
                             if let Some(data) = wrapper.data {
                                 set_events.set(data.events);
@@ -761,7 +749,7 @@ fn MyRegistrations() -> impl IntoView {
 
             // Check auth status
             let auth_url = format!("{origin}/api/auth/me");
-            let auth_resp = match gloo::net::http::Request::get(&auth_url).send().await {
+            let auth_resp = match crate::api::fetch::get(&auth_url, &[]).await {
                 Ok(r) => r,
                 Err(_) => return,
             };
@@ -770,7 +758,7 @@ fn MyRegistrations() -> impl IntoView {
                 return;
             }
 
-            let auth_data: serde_json::Value = match auth_resp.json().await {
+            let auth_data: serde_json::Value = match crate::api::fetch::response_json(&auth_resp).await {
                 Ok(d) => d,
                 Err(_) => return,
             };
@@ -782,11 +770,11 @@ fn MyRegistrations() -> impl IntoView {
 
             // Fetch my registrations
             let regs_url = format!("{origin}/api/my-registrations");
-            match gloo::net::http::Request::get(&regs_url).send().await {
+            match crate::api::fetch::get(&regs_url, &[]).await {
                 Ok(resp) if resp.status() == 200 => {
-                    if let Ok(data) = resp
-                        .json::<ApiResponse<Vec<MyRegistrationItem>>>()
-                        .await
+                    if let Ok(data) =
+                        crate::api::fetch::response_json::<ApiResponse<Vec<MyRegistrationItem>>>(&resp)
+                            .await
                     {
                         set_registrations.set(Some(data.data.unwrap_or_default()));
                     }
@@ -818,9 +806,7 @@ fn MyRegistrations() -> impl IntoView {
                                 class="btn btn-outline btn-xs landing-reg-signout-btn"
                                 on:click=move |_| {
                                     leptos::task::spawn_local(async move {
-                                        let _ = gloo::net::http::Request::post("/api/auth/logout")
-                                            .send()
-                                            .await;
+                                        let _ = crate::api::fetch::post("/api/auth/logout", &[], None).await;
                                         let window = web_sys::window().expect("no window");
                                         let _ = window.location().reload();
                                     });
@@ -840,14 +826,12 @@ fn MyRegistrations() -> impl IntoView {
                                 "Your Events"
                             </h2>
                             <div class="landing-reg-user">
-                                <span class="landing-email-text">{format!("👤 {user}")}</span>
+                                <span class="landing-email-text">{format!("\u{1f464} {user}")}</span>
                                 <button
                                     class="btn btn-outline btn-xs"
                                     on:click=move |_| {
                                         leptos::task::spawn_local(async move {
-                                            let _ = gloo::net::http::Request::post("/api/auth/logout")
-                                                .send()
-                                                .await;
+                                            let _ = crate::api::fetch::post("/api/auth/logout", &[], None).await;
                                             let window = web_sys::window().expect("no window");
                                             let _ = window.location().reload();
                                         });
@@ -927,9 +911,9 @@ pub fn Landing() -> impl IntoView {
                 .origin()
                 .unwrap_or_else(|_| "http://localhost:8787".to_string());
             let url = format!("{origin}/api/auth/me");
-            match gloo::net::http::Request::get(&url).send().await {
+            match crate::api::fetch::get(&url, &[]).await {
                 Ok(resp) if resp.status() == 200 => {
-                    if let Ok(data) = resp.json::<serde_json::Value>().await {
+                    if let Ok(data) = crate::api::fetch::response_json::<serde_json::Value>(&resp).await {
                         let email = data["data"]["email"]
                             .as_str()
                             .unwrap_or("")

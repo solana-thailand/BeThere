@@ -61,7 +61,7 @@ pub fn PublicEvent() -> impl IntoView {
             let url = format!("{origin}/api/public/event/{slug_clone}");
             log::info!("[public_event] fetch URL: {url}");
 
-            match gloo::net::http::Request::get(&url).send().await {
+            match crate::api::fetch::get(&url, &[]).await {
                 Ok(resp) => {
                     log::info!("[public_event] response status: {}", resp.status());
                     if resp.status() == 404 {
@@ -69,7 +69,7 @@ pub fn PublicEvent() -> impl IntoView {
                         return;
                     }
 
-                    match resp.text().await {
+                    match crate::api::fetch::response_text(&resp).await {
                         Ok(body) => {
                             log::info!("[public_event] body length: {}", body.len());
                             match serde_json::from_str::<PublicEventResponse>(&body) {
@@ -147,10 +147,10 @@ pub fn PublicEvent() -> impl IntoView {
             .unwrap_or_else(|_| "http://localhost:8787".to_string());
         let url = format!("{origin}/api/auth/me");
 
-        match gloo::net::http::Request::get(&url).send().await {
+        match crate::api::fetch::get(&url, &[]).await {
             Ok(resp) => {
                 if resp.status() == 200 {
-                    if let Ok(body) = resp.text().await {
+                    if let Ok(body) = crate::api::fetch::response_text(&resp).await {
                         if let Ok(api_resp) = serde_json::from_str::<serde_json::Value>(&body) {
                             let email = api_resp
                                 .get("data")
@@ -203,7 +203,7 @@ pub fn PublicEvent() -> impl IntoView {
                             .unwrap_or_else(|_| "http://localhost:8787".to_string());
                         let url = format!("{origin}/api/my-registration/{slug}");
 
-                        match gloo::net::http::Request::get(&url).send().await {
+                        match crate::api::fetch::get(&url, &[]).await {
                             Ok(resp) => {
                                 if resp.status() == 404 {
                                     log::info!(
@@ -211,7 +211,7 @@ pub fn PublicEvent() -> impl IntoView {
                                     );
                                     set_reg_lookup.set(RegistrationLookup::NotRegistered);
                                 } else if resp.status() == 200 {
-                                    if let Ok(body) = resp.text().await {
+                                    if let Ok(body) = crate::api::fetch::response_text(&resp).await {
                                         match serde_json::from_str::<MyRegistrationResponse>(&body) {
                                             Ok(api_resp) => {
                                                 if let Some(data) = api_resp.data {
@@ -512,9 +512,7 @@ fn render_loaded_event(
                                 class="btn btn-outline btn-xs"
                                 on:click=move |_| {
                                     leptos::task::spawn_local(async move {
-                                        let _ = gloo::net::http::Request::post("/api/auth/logout")
-                                            .send()
-                                            .await;
+                                        let _ = crate::api::fetch::post("/api/auth/logout", &[], None).await;
                                         navigateTo("/");
                                     });
                                 }
@@ -567,9 +565,9 @@ fn render_loaded_event(
                                                     "{origin}/api/auth/url?redirect={}",
                                                     urlencoding::encode(&redirect)
                                                 );
-                                                match gloo::net::http::Request::get(&api_url).send().await {
+                                                match crate::api::fetch::get(&api_url, &[]).await {
                                                     Ok(resp) => {
-                                                        if let Ok(body) = resp.text().await {
+                                                        if let Ok(body) = crate::api::fetch::response_text(&resp).await {
                                                             if let Ok(json) = serde_json::from_str::<serde_json::Value>(&body) {
                                                                 if let Some(auth_url) = json.get("data").and_then(|d| d.get("auth_url")).and_then(|u| u.as_str()) {
                                                                     navigateTo(auth_url);

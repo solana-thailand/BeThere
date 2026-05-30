@@ -23,8 +23,8 @@ pub async fn fetch_cluster() -> String {
     let url = format!("{origin}/api/health");
 
     let cluster = async {
-        let resp = gloo::net::http::Request::get(&url).send().await.ok()?;
-        let body = resp.text().await.ok()?;
+        let resp = crate::api::fetch::get(&url, &[]).await.ok()?;
+        let body = crate::api::fetch::response_text(&resp).await.ok()?;
         let val: serde_json::Value = serde_json::from_str(&body).ok()?;
         val.get("cluster")?.as_str().map(String::from)
     }

@@ -27,7 +27,7 @@ pub fn share_button(
                             share_event_js(&share_name, &url)
                         ).await;
                         set_c.set(true);
-                        gloo::timers::future::TimeoutFuture::new(2000).await;
+                        gloo_timers::future::TimeoutFuture::new(2000).await;
                         set_c.set(false);
                     });
                 }
