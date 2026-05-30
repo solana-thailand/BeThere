@@ -58,6 +58,9 @@
     --color-x-brand: #1da1f2;
     --solana-green: #14f195;
     --header-height: 80px;
+    /* Typography scale tokens */
+    --text-xs: 0.7rem;
+    --text-sm: 0.8rem;
 }
 
 html {

@@ -97,6 +97,16 @@ typography:
     fontSize: 0.75rem
     fontWeight: "600"
     letterSpacing: "0.08em"
+  text-sm:
+    fontFamily: Inter
+    fontSize: 0.8rem
+    fontWeight: "400"
+    lineHeight: "1.4"
+  text-xs:
+    fontFamily: Inter
+    fontSize: 0.7rem
+    fontWeight: "400"
+    lineHeight: "1.3"
   brand-logo:
     fontFamily: Inter
     fontSize: 1.5rem
@@ -224,6 +234,8 @@ The palette is built on cool-toned dark backgrounds with high-contrast neutrals 
 - **H3**: `1rem`, weight 600 — card titles, subsection labels
 - **Body**: `0.9–0.95rem`, weight 400 — readable at 1.5–1.6 line-height
 - **Labels**: `0.75rem`, weight 600, `0.08em` tracking — uppercase badges and meta
+- **Text SM**: `0.8rem` (`--text-sm`), weight 400 — secondary text, small labels, badge text
+- **Text XS**: `0.7rem` (`--text-xs`), weight 400 — fine print, hints, mockup micro-text
 - **Brand logo**: `1.5rem`, weight 800, `0.08em` tracking — rendered as gradient text
 
 ## Layout
