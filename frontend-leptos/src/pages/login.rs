@@ -94,7 +94,7 @@ pub fn Login() -> impl IntoView {
 
     view! {
         <div class="center-page">
-            <div class="container" style="display:flex;flex-direction:column;align-items:center;">
+            <div class="container login-center-col">
                 // Logo
                 <div class="brand-logo">"BeThere"</div>
                 <div class="brand-logo-sub">"Proof of Attendance"</div>
@@ -144,7 +144,7 @@ pub fn Login() -> impl IntoView {
                 </Show>
 
                 // Back to landing
-                <a href="/" style="color:var(--text-secondary);font-size:0.85rem;margin-top:1rem;text-decoration:none;">
+                <a href="/" class="login-back-link">
                     "← Back to home"
                 </a>
 

@@ -11959,3 +11959,37 @@ nav a.active {
 .admin-escrow-info-mt {
     margin-top: 0.75rem;
 }
+
+/* ===== Login ===== */
+.login-center-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+.login-back-link {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    margin-top: 1rem;
+    text-decoration: none;
+}
+
+/* ===== Adventure ===== */
+.adventure-quiz-preview {
+    margin-top: 1rem;
+}
+
+/* ===== Deposit misc ===== */
+.dep-note-text {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+}
+.dep-check-svg {
+    width: 14px;
+    height: 14px;
+}
+.dep-badge-mt {
+    margin-top: 0.5rem;
+}
+.dep-refund-badge-mb {
+    margin-bottom: 0.75rem;
+}

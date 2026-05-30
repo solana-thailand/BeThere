@@ -163,7 +163,7 @@ pub fn Deposit() -> impl IntoView {
                 {move || match signed_in_email.get() {
                     Some(email) => view! {
                         <div class="logout-btn-wrapper">
-                            <span style="color:var(--text-secondary);font-size:0.85rem;">
+                            <span class="dep-note-text">
                                 {format!("Welcome, {email}")}
                             </span>
                             <button

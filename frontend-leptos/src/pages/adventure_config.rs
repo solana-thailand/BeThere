@@ -201,7 +201,7 @@ pub fn AdventureConfigEditor(
                     </div>
 
                     // Preview
-                    <div class="quiz-preview card" style="margin-top: 1rem;">
+                    <div class="quiz-preview card adventure-quiz-preview">
                         <div class="quiz-section-heading">"Preview"</div>
                         <div class="quiz-preview-info">
                             <div class="quiz-preview-stat">

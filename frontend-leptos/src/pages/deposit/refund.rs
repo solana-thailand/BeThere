@@ -39,7 +39,7 @@ pub fn refund_choose_wallet_view(
                 view! { <div></div> }.into_any()
             } else {
                 view! {
-                    <div class="badge badge-warning" style="margin-bottom:0.75rem">
+                    <div class="badge badge-warning dep-refund-badge-mb">
                         "Non-refundable deposit — no refund available"
                     </div>
                 }.into_any()

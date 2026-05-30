@@ -193,7 +193,7 @@ pub fn deposit_stepper(flow: DepositFlow, current: usize, _total: usize) -> AnyV
                             <div class=circle_class>
                                 {if is_completed {
                                     view! {
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="dep-check-svg">
                                             <polyline points="20 6 9 17 4 12"></polyline>
                                         </svg>
                                     }.into_any()

@@ -151,12 +151,12 @@ pub fn deposit_confirmed_view(
                 let status = &data_clone.status;
                 match status {
                     Some(s) if !s.refundable => view! {
-                        <div class="badge badge-warning" style="margin-top:0.5rem">
+                        <div class="badge badge-warning dep-badge-mt">
                             "Non-refundable (#" {s.deposit_order} ") — no refund on check-in"
                         </div>
                     }.into_any(),
                     Some(s) => view! {
-                        <div class="badge badge-success" style="margin-top:0.5rem">
+                        <div class="badge badge-success dep-badge-mt">
                             "Refundable (#" {s.deposit_order} ") — check in to get your deposit back"
                         </div>
                     }.into_any(),
