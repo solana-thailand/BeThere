@@ -49,6 +49,9 @@ pub struct SheetsConfig {
     pub contacts_sheet_name: String,
     /// Tab name for the events registry in the contacts sheet. Defaults to "Events".
     pub events_sheet_name: String,
+    /// Google Sheet ID for platform-level data (users, waitlist, audit log).
+    /// If empty, user logging and waitlist fall back to `sheet_id`.
+    pub platform_sheet_id: String,
 }
 
 /// Solana/Helius RPC configuration.

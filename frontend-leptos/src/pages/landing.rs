@@ -181,337 +181,6 @@ fn WaitlistForm() -> impl IntoView {
     }
 }
 
-// ── Swimlane Types ──────────────────────────────────────────────────────────
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum SwimlaneRole {
-    Organizer,
-    Staff,
-    Attendee,
-}
-
-impl SwimlaneRole {
-    fn label(self) -> &'static str {
-        match self {
-            Self::Organizer => "Organizer",
-            Self::Staff => "Staff",
-            Self::Attendee => "Attendee",
-        }
-    }
-
-    fn icon_name(self) -> IconName {
-        match self {
-            Self::Organizer => IconName::Target,
-            Self::Staff => IconName::Phone,
-            Self::Attendee => IconName::Ticket,
-        }
-    }
-
-    fn accent(self) -> &'static str {
-        match self {
-            Self::Organizer => "#6366f1",
-            Self::Staff => "#f59e0b",
-            Self::Attendee => "#22c55e",
-        }
-    }
-
-    fn accent_bg(self) -> &'static str {
-        match self {
-            Self::Organizer => "rgba(99,102,241,0.12)",
-            Self::Staff => "rgba(245,158,11,0.12)",
-            Self::Attendee => "rgba(34,197,94,0.12)",
-        }
-    }
-
-    fn accent_border(self) -> &'static str {
-        match self {
-            Self::Organizer => "rgba(99,102,241,0.35)",
-            Self::Staff => "rgba(245,158,11,0.35)",
-            Self::Attendee => "rgba(34,197,94,0.35)",
-        }
-    }
-
-    fn steps(self) -> &'static [SwimlaneStep] {
-        static ORG: &[SwimlaneStep] = &[
-            SwimlaneStep { icon: IconName::Copy, title: "Create Event", desc: "Set name, capacity, and deposit" },
-            SwimlaneStep { icon: IconName::Coin, title: "150 Registered", desc: "Deposits pool to 1.5 SOL + $1,950" },
-            SwimlaneStep { icon: IconName::Chart, title: "Live Dashboard", desc: "Track check-ins & no-shows" },
-            SwimlaneStep { icon: IconName::MoneyWings, title: "Auto Payout", desc: "Refund attendees, keep no-shows" },
-        ];
-        static STAFF: &[SwimlaneStep] = &[
-            SwimlaneStep { icon: IconName::Camera, title: "Open Scanner", desc: "Point camera at attendee QR" },
-            SwimlaneStep { icon: IconName::Check, title: "Instant Confirm", desc: "Verified in < 2 seconds" },
-            SwimlaneStep { icon: IconName::Party, title: "Session Done", desc: "142 checked in, all smooth" },
-        ];
-        static ATT: &[SwimlaneStep] = &[
-            SwimlaneStep { icon: IconName::Ticket, title: "Register & Deposit", desc: "Lock 0.01 SOL + $13 USDC" },
-            SwimlaneStep { icon: IconName::Phone, title: "Show QR Code", desc: "At venue, display check-in code" },
-            SwimlaneStep { icon: IconName::Check, title: "Get Scanned", desc: "Staff scans — instant confirm" },
-            SwimlaneStep { icon: IconName::Brain, title: "Quick Quiz", desc: "Prove you paid attention" },
-            SwimlaneStep { icon: IconName::Coin, title: "Claim Refund + Badge", desc: "Deposit back + cNFT forever" },
-        ];
-        match self {
-            Self::Organizer => ORG,
-            Self::Staff => STAFF,
-            Self::Attendee => ATT,
-        }
-    }
-}
-
-struct SwimlaneStep {
-    icon: IconName,
-    title: &'static str,
-    desc: &'static str,
-}
-
-/// Render the mockup card for a given role + step index.
-fn swimlane_mockup(role: SwimlaneRole, step: usize) -> impl IntoView {
-    match role {
-        SwimlaneRole::Organizer => match step {
-            // Create Event — form card
-            0 => view! {
-                <div class="landing-mock-card">
-                    <div class="landing-mock-h">"New Event"</div>
-                    <div class="landing-mock-flex-col">
-                        <div class="landing-mock-input">"Solana Bangkok Meetup 2026"</div>
-                        <div class="landing-mock-flex-row">
-                            <div class="landing-mock-input landing-mock-input--flex landing-mock-grow">
-                                <Icon icon=IconName::Pin class="icon-xs"/>" Bangkok"
-                            </div>
-                            <div class="landing-mock-input landing-mock-grow">"Cap: 200"</div>
-                        </div>
-                        <div class="landing-mock-input landing-mock-input--accent">
-                            "Deposit: 0.01 SOL + $13 USDC"
-                        </div>
-                    </div>
-                    <div class="landing-mock-cta landing-mock-cta--accent">"Create Event"</div>
-                </div>
-            }.into_any(),
-            // Registrations — deposit pool
-            1 => view! {
-                <div class="landing-mock-card">
-                    <div class="landing-mock-h landing-mock-h--icon">
-                        <span><Icon icon=IconName::Coin class="icon-sm"/></span>
-                        <span>"Deposit Pool"</span>
-                    </div>
-                    <div class="landing-mock-flex-row-lg">
-                        <div>
-                            <div class="landing-mock-val--accent">"1.5 SOL"</div>
-                            <div class="landing-mock-sub">"+ $1,950 USDC"</div>
-                        </div>
-                        <div class="landing-mock-grow"></div>
-                        <div class="landing-mock-right">
-                            <div class="landing-mock-val--heading">"150"</div>
-                            <div class="landing-mock-sub">"attendees"</div>
-                        </div>
-                    </div>
-                    <div class="landing-mock-bar landing-mock-bar--accent">
-                        <div class="landing-mock-bar-fill--accent"></div>
-                    </div>
-                    <div class="landing-mock-sub-right">"75% of capacity"</div>
-                </div>
-            }.into_any(),
-            // Dashboard — live stats
-            2 => view! {
-                <div class="landing-mock-card">
-                    <div class="landing-mock-h landing-mock-h--icon">
-                        <Icon icon=IconName::Chart class="icon-sm"/>" Live Dashboard"
-                    </div>
-                    <div class="landing-mock-grid-3">
-                        <div class="landing-mock-stat landing-mock-stat--accent">
-                            <div class="landing-mock-val--accent">"150"</div>
-                            <div class="landing-mock-sub-xs">"registered"</div>
-                        </div>
-                        <div class="landing-mock-stat landing-mock-stat--success">
-                            <div class="landing-mock-val--success">"142"</div>
-                            <div class="landing-mock-sub-xs">"checked in"</div>
-                        </div>
-                        <div class="landing-mock-stat landing-mock-stat--danger">
-                            <div class="landing-mock-val--danger">"8"</div>
-                            <div class="landing-mock-sub-xs">"no-show"</div>
-                        </div>
-                    </div>
-                    <div class="landing-mock-bar landing-mock-bar--success">
-                        <div class="landing-mock-bar-fill--success"></div>
-                    </div>
-                    <div class="landing-mock-sub-after">"95% attendance"</div>
-                </div>
-            }.into_any(),
-            // Payout — refund + received
-            _ => view! {
-                <div class="landing-mock-card">
-                    <div class="landing-mock-h landing-mock-h--icon">
-                        <Icon icon=IconName::MoneyWings class="icon-sm"/>" Payout Summary"
-                    </div>
-                    <div class="landing-mock-grid-2">
-                        <div class="landing-mock-payout landing-mock-payout--success">
-                            <div class="landing-mock-payout-label landing-mock-payout-label--success">
-                                <Icon icon=IconName::Check class="icon-xs"/>" Refunded"
-                            </div>
-                            <div class="landing-mock-val">"142"</div>
-                            <div class="landing-mock-sub">"1.42 SOL + $1,846"</div>
-                        </div>
-                        <div class="landing-mock-payout landing-mock-payout--warning">
-                            <div class="landing-mock-payout-label landing-mock-payout-label--warning">
-                                <Icon icon=IconName::Coin class="icon-xs"/>" You Received"
-                            </div>
-                            <div class="landing-mock-val">"8"</div>
-                            <div class="landing-mock-sub">"0.08 SOL + $104"</div>
-                        </div>
-                    </div>
-                </div>
-            }.into_any(),
-        },
-        SwimlaneRole::Staff => match step {
-            // Scan — camera frame
-            0 => view! {
-                <div class="landing-mock-card landing-mock-card--center">
-                    <div class="landing-mock-scan-frame">
-                        <div class="landing-mock-scan-corner landing-mock-scan-corner--tl"></div>
-                        <div class="landing-mock-scan-corner landing-mock-scan-corner--tr"></div>
-                        <div class="landing-mock-scan-corner landing-mock-scan-corner--bl"></div>
-                        <div class="landing-mock-scan-corner landing-mock-scan-corner--br"></div>
-                        <div class="landing-mock-scan-label">
-                            <Icon icon=IconName::Camera class="icon-xs"/>" Point at attendee QR code"
-                        </div>
-                    </div>
-                    <div class="landing-mock-scan-status">"Scanning..."</div>
-                </div>
-            }.into_any(),
-            // Confirmed — success card
-            1 => view! {
-                <div class="landing-mock-card landing-mock-card--center landing-mock-card--success">
-                    <div class="landing-mock-circle">
-                        <Icon icon=IconName::Check class="icon-md"/>
-                    </div>
-                    <div class="landing-mock-val--success landing-mock-mb-xs">"Checked In!"</div>
-                    <div class="landing-mock-val">"Alex Chen"</div>
-                    <div class="landing-mock-sub">"Solana Bangkok 2026"</div>
-                    <div class="landing-mock-sub landing-mock-mt-xs">
-                        "Jul 15 \u{00b7} 2:03 PM"
-                    </div>
-                </div>
-            }.into_any(),
-            // Done — summary
-            _ => view! {
-                <div class="landing-mock-card landing-mock-card--center">
-                    <div class="landing-mock-circle landing-mock-circle--empty">
-                        <Icon icon=IconName::Party class="icon-md"/>
-                    </div>
-                    <div class="landing-mock-val--heading landing-mock-mb-xs">
-                        "Session Complete"
-                    </div>
-                    <div class="landing-mock-flex-center">
-                        <div>
-                            <div class="landing-mock-val--warning">"142"</div>
-                            <div class="landing-mock-sub-xs">"checked in"</div>
-                        </div>
-                        <div>
-                            <div class="landing-mock-val--heading">"< 2s"</div>
-                            <div class="landing-mock-sub-xs">"avg time"</div>
-                        </div>
-                    </div>
-                    <div class="landing-mock-sub">
-                        "Lost QR? Search by name \u{2192}"
-                    </div>
-                </div>
-            }.into_any(),
-        },
-        SwimlaneRole::Attendee => match step {
-            // Register & Deposit
-            0 => view! {
-                <div class="landing-mock-card">
-                    <div class="landing-mock-h landing-mock-h--sm">"Solana Bangkok Meetup 2026"</div>
-                    <div class="landing-mock-sub landing-mock-mb-md">
-                        "Jul 15 \u{00b7} Bangkok, Thailand"
-                    </div>
-                    <div class="landing-mock-wallet">
-                        <span class="landing-mock-wallet-dot">"\u{25cf}"</span>
-                        <span class="landing-mock-sub">"Phantom \u{2014} 7xK9...f3Pz"</span>
-                    </div>
-                    <div class="landing-mock-input landing-mock-input--success">
-                        <div class="landing-mock-sub landing-mock-sub--success-bold">
-                            "Deposit to lock"
-                        </div>
-                        <div class="landing-mock-val">"0.01 SOL + $13 USDC"</div>
-                    </div>
-                    <div class="landing-mock-cta landing-mock-cta--success">"Confirm Deposit"</div>
-                </div>
-            }.into_any(),
-            // Show QR
-            1 => view! {
-                <div class="landing-mock-card landing-mock-card--center">
-                    <div class="landing-mock-qr-frame">
-                        <div class="landing-mock-qr-grid">
-                            {(0..64).map(|i| view! {
-                                <div
-                                    class="landing-mock-qr-pixel"
-                                    style=format!(
-                                        "background:{};",
-                                        if i % 3 == 0 { "#000" } else if i % 5 == 0 { "#333" } else { "#fff" }
-                                    )
-                                ></div>
-                            }).collect_view()}
-                        </div>
-                    </div>
-                    <div class="landing-mock-val">"Alex Chen"</div>
-                    <div class="landing-mock-sub">"Solana Bangkok 2026"</div>
-                </div>
-            }.into_any(),
-            // Get Scanned
-            2 => view! {
-                <div class="landing-mock-card landing-mock-card--center landing-mock-card--success">
-                    <div class="landing-mock-circle">
-                        <Icon icon=IconName::Check class="icon-md"/>
-                    </div>
-                    <div class="landing-mock-val--success landing-mock-mb-xs">
-                        "Checked In!"
-                    </div>
-                    <div class="landing-mock-sub">"Jul 15, 2026 \u{00b7} 2:03 PM"</div>
-                    <div class="landing-mock-sub landing-mock-mt-xxs">
-                        "Solana Bangkok Meetup"
-                    </div>
-                </div>
-            }.into_any(),
-            // Quiz
-            3 => view! {
-                <div class="landing-mock-card">
-                    <div class="landing-mock-h landing-mock-h--sm landing-mock-h--icon">
-                        <Icon icon=IconName::Brain class="icon-sm"/>" Event Quiz"
-                    </div>
-                    <div class="landing-mock-sub landing-mock-mb-sm">
-                        "What does BeThere use to prove attendance?"
-                    </div>
-                    <div class="landing-mock-flex-col">
-                        <div class="landing-mock-quiz-opt">"\u{25cb} PDF certificate"</div>
-                        <div class="landing-mock-quiz-opt landing-mock-quiz-opt--selected">
-                            "\u{25cf} Compressed NFT badge"
-                        </div>
-                        <div class="landing-mock-quiz-opt">"\u{25cb} Email receipt"</div>
-                        <div class="landing-mock-quiz-opt">"\u{25cb} Paper ticket"</div>
-                    </div>
-                </div>
-            }.into_any(),
-            // Claim Refund + Badge
-            _ => view! {
-                <div class="landing-mock-card landing-mock-card--center">
-                    <div class="landing-mock-badge">
-                        <div class="landing-mock-badge-title">
-                            <Icon icon=IconName::Ticket class="icon-sm"/>" BeThere"
-                        </div>
-                        <div class="landing-mock-badge-sub">"cNFT \u{00b7} Solana"</div>
-                    </div>
-                    <div class="landing-mock-claim-title">
-                        <Icon icon=IconName::Coin class="icon-sm"/>" Refund Claimed!"
-                    </div>
-                    <div class="landing-mock-sub">"0.01 SOL + $13 USDC returned"</div>
-                    <div class="landing-mock-cta landing-mock-cta--success">"Claim to Wallet"</div>
-                </div>
-            }.into_any(),
-        },
-    }
-}
-
 /// Lightweight event item from the public events API.
 #[derive(Clone, Deserialize)]
 struct PublicEventItem {
@@ -606,7 +275,14 @@ fn UpcomingEvents() -> impl IntoView {
                     <section id="events" class="landing-section-sm">
                         {heading}
                         <div class="landing-events-loading">
-                            <p class="landing-events-empty">"No upcoming events right now. Check back soon!"</p>
+                            <p class="landing-events-empty">"No upcoming events right now."</p>
+                            <p class="landing-events-empty-sub">"Follow us on "
+                                <a href="https://x.com/ozoneRatchapon" target="_blank" rel="noopener noreferrer">"X/Twitter"</a>
+                                " or host your own event ↓"
+                            </p>
+                            <a href="#waitlist" class="btn btn-outline btn-sm landing-events-empty-cta">
+                                "Organize an Event"
+                            </a>
                         </div>
                     </section>
                 }.into_any()
@@ -894,8 +570,6 @@ fn MyRegistrations() -> impl IntoView {
 /// Landing page component.
 #[component]
 pub fn Landing() -> impl IntoView {
-    let (active_role, set_active_role) = signal(SwimlaneRole::Attendee);
-    let (active_step, set_active_step) = signal(0usize);
     let (mobile_menu_open, set_mobile_menu_open) = signal(false);
 
     // Auth state for nav bar
@@ -952,9 +626,9 @@ pub fn Landing() -> impl IntoView {
                         </span>
                     </div>
                     <div class="landing-nav-links">
-                        <a href="#features">"Features"</a>
                         <a href="#how-it-works">"How it works"</a>
                         <a href="#faq">"FAQ"</a>
+                        <a href="#waitlist">"For Organizers"</a>
                     </div>
                     // Hamburger button — visible only on mobile
                     <button
@@ -1035,10 +709,9 @@ pub fn Landing() -> impl IntoView {
                     if open {
                         view! {
                             <div class="landing-nav-mobile-menu">
-                                <a href="#features" on:click=move |_| set_mobile_menu_open.set(false)>"Features"</a>
                                 <a href="#how-it-works" on:click=move |_| set_mobile_menu_open.set(false)>"How it works"</a>
                                 <a href="#faq" on:click=move |_| set_mobile_menu_open.set(false)>"FAQ"</a>
-                                <a href="#waitlist" on:click=move |_| set_mobile_menu_open.set(false)>"Join Waitlist"</a>
+                                <a href="#waitlist" on:click=move |_| set_mobile_menu_open.set(false)>"For Organizers"</a>
                                 {move || match auth_state.get() {
                                     AuthState::NotSignedIn | AuthState::Checking => {
                                         view! {
@@ -1092,11 +765,7 @@ pub fn Landing() -> impl IntoView {
 
             // ===== Hero =====
             <section class="landing-hero">
-                // Solana pill badge
-                <div class="solana-pill">
-                    <Icon icon=IconName::Solana />
-                    "Built on Solana"
-                </div>
+
 
                 // BeThere name + tagline
                 <div class="landing-hero-brand landing-brand-gradient">
@@ -1113,6 +782,11 @@ pub fn Landing() -> impl IntoView {
                 <p class="landing-hero-desc">
                     "Put down a deposit to reserve your spot. Show up, take a quick quiz, and get every cent back — plus a digital badge you own forever."
                 </p>
+                // Solana pill badge
+                <div class="solana-pill">
+                    "Built on Solana"
+                    <Icon icon=IconName::Solana />
+                </div>
 
                 // Compact 3-step flow visual
                 <div class="landing-steps">
@@ -1150,12 +824,51 @@ pub fn Landing() -> impl IntoView {
                 </div>
 
                 <div class="landing-ctas">
-                    <a href="#waitlist" class="btn btn-primary landing-cta-link">
-                        "Join Waitlist →"
-                    </a>
-                    <a href="#events" class="btn btn-outline landing-cta-link">
-                        "Find Events ↓"
-                    </a>
+                    {move || {
+                        let state = auth_state.get();
+                        let role = user_role.get();
+                        match &state {
+                            AuthState::SignedIn(_) if is_admin_role(&role) || role == "organizer" => {
+                                view! {
+                                    <A href="/admin" attr:class="btn btn-primary landing-cta-link">
+                                        "Go to Dashboard →"
+                                    </A>
+                                }.into_any()
+                            }
+                            AuthState::SignedIn(_) if role == "staff" => {
+                                view! {
+                                    <A href="/staff" attr:class="btn btn-primary landing-cta-link">
+                                        "Open Scanner →"
+                                    </A>
+                                }.into_any()
+                            }
+                            AuthState::SignedIn(_) => {
+                                view! {
+                                    <a href="#events" class="btn btn-primary landing-cta-link">
+                                        "Find Events ↓"
+                                    </a>
+                                }.into_any()
+                            }
+                            _ => {
+                                view! {
+                                    <button
+                                        class="btn btn-primary landing-cta-link"
+                                        on:click=move |_| trigger_landing_oauth()
+                                    >
+                                        "Sign In to Create Events →"
+                                    </button>
+                                }.into_any()
+                            }
+                        }
+                    }}
+                    {move || match auth_state.get() {
+                        AuthState::SignedIn(_) => ().into_any(),
+                        _ => view! {
+                            <a href="#events" class="btn btn-outline landing-cta-link">
+                                "Find Events ↓"
+                            </a>
+                        }.into_any(),
+                    }}
                 </div>
             </section>
 
@@ -1165,247 +878,61 @@ pub fn Landing() -> impl IntoView {
             // ===== My Registrations (visible when signed in) =====
             <MyRegistrations />
 
-            // ===== Social Proof =====
-            // Social proof — real users + CTA for organizers
-            <section class="social-proof">
-                <div class="social-proof-label">"Alpha · Building with"</div>
-                <div class="social-proof-logos">
-                    <a
-                        href="https://github.com/solana-thailand"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        class="social-proof-pill landing-social-pill-solana"
-                    >
-                        "Solana Developer Thailand"
-                    </a>
-                    <a href="#waitlist" class="social-proof-pill landing-social-pill-cta">
-                        "Want to join? → Get in touch"
-                    </a>
-                </div>
-            </section>
-
-            // ===== Problem / Features =====
-            <section id="features" class="landing-section">
+            // ===== How It Works =====
+            <section id="how-it-works" class="landing-section">
                 <div class="landing-section-header">
                     <h2 class="landing-h2">
-                        "Events have a no-show problem"
+                        "How it works"
                     </h2>
                     <p class="landing-subtitle">
-                        "Up to 40% of registered attendees don't show up. Organizers pay for empty seats."
+                        "One platform, three perspectives."
                     </p>
                 </div>
                 <div class="landing-features-grid">
 
                     <div class="card landing-feature-card">
-                        <div class="landing-svg-icon icon-clipboard">
-                            <svg viewBox="0 0 24 24">
-                                <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
-                                <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
-                            </svg>
+                        <div class="landing-feature-icon landing-feature-icon--indigo">
+                            <Icon icon=IconName::Target class="icon-md"/>
                         </div>
                         <h3 class="landing-feature-title">
-                            "Paper wristbands"
+                            "For Organizers"
                         </h3>
-                        <p class="landing-feature-desc">
-                            "Tear, rip, disappear. No proof you attended a week later."
-                        </p>
+                        <ul class="landing-feature-list">
+                            <li>"Create event and set deposit amount"</li>
+                            <li>"Track check-ins on a live dashboard"</li>
+                            <li>"No-show deposits auto-payout to you"</li>
+                            <li>"Compressed NFT badges minted for attendees"</li>
+                        </ul>
                     </div>
 
                     <div class="card landing-feature-card">
-                        <div class="landing-svg-icon icon-chart">
-                            <svg viewBox="0 0 24 24">
-                                <line x1="18" y1="20" x2="18" y2="10"/>
-                                <line x1="12" y1="20" x2="12" y2="4"/>
-                                <line x1="6" y1="20" x2="6" y2="14"/>
-                            </svg>
+                        <div class="landing-feature-icon landing-feature-icon--green">
+                            <Icon icon=IconName::Ticket class="icon-md"/>
                         </div>
                         <h3 class="landing-feature-title">
-                            "Spreadsheets"
+                            "For Attendees"
                         </h3>
-                        <p class="landing-feature-desc">
-                            "Manual entry, typos, and data that lives on someone's laptop."
-                        </p>
+                        <ul class="landing-feature-list">
+                            <li>"Pay deposit to reserve your spot"</li>
+                            <li>"Show QR at venue — scanned in < 2 sec"</li>
+                            <li>"Full refund + compressed NFT badge"</li>
+                        </ul>
                     </div>
 
                     <div class="card landing-feature-card">
-                        <div class="landing-svg-icon icon-proof">
-                            <svg viewBox="0 0 24 24">
-                                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-                            </svg>
+                        <div class="landing-feature-icon landing-feature-icon--amber">
+                            <Icon icon=IconName::Camera class="icon-md"/>
                         </div>
                         <h3 class="landing-feature-title">
-                            "No-shows waste money"
+                            "For Staff"
                         </h3>
-                        <p class="landing-feature-desc">
-                            "Registered attendees who don't show up cost organizers real money — food, swag, venue. There's no accountability."
-                        </p>
+                        <ul class="landing-feature-list">
+                            <li>"Open scanner on any phone"</li>
+                            <li>"Point at attendee QR — instant confirm"</li>
+                            <li>"Manual search fallback for lost QR"</li>
+                        </ul>
                     </div>
 
-                </div>
-            </section>
-
-            // ===== How It Works — Swimlane =====
-            <section id="how-it-works" class="landing-section-how">
-                <div class="landing-section-header-md">
-                    <h2 class="landing-h2">
-                        "How it works"
-                    </h2>
-                    <p class="landing-subtitle">
-                        "Three perspectives. One seamless event."
-                    </p>
-                </div>
-
-                <div class="landing-role-tabs">
-                    {move || {
-                        let active = active_role.get();
-                        [SwimlaneRole::Organizer, SwimlaneRole::Staff, SwimlaneRole::Attendee].into_iter().map(|r| {
-                            let is_active = r == active;
-                            let accent = r.accent();
-                            let bg = r.accent_bg();
-                            let border = r.accent_border();
-                            view! {
-                                <button
-                                    class="landing-role-tab"
-                                    style=format!(
-                                        "border:1px solid {};background:{};color:{};",
-                                        if is_active { border } else { "var(--border)" },
-                                        if is_active { bg } else { "transparent" },
-                                        if is_active { accent } else { "var(--text-secondary)" },
-                                    )
-                                    on:click=move |_| set_active_role.set(r)
-                                >
-                                    <Icon icon=r.icon_name() class="icon-sm"/>
-                                    <span>{r.label()}</span>
-                                </button>
-                            }
-                        }).collect_view()
-                    }}
-                </div>
-
-                <div class="landing-step-flow">
-                    {move || {
-                        let role = active_role.get();
-                        let step = active_step.get();
-                        let steps = role.steps();
-                        let accent = role.accent();
-                        steps.iter().enumerate().map(|(i, s)| {
-                            let is_active = i == step;
-                            let is_past = i < step;
-                            let steps_len = steps.len();
-                            view! {
-                                <button class="landing-step-flow-btn"
-                                    on:click=move |_| set_active_step.set(i)
-                                >
-                                    <div class="landing-step-flow-dot" style=format!(
-                                        "border:2px solid {};background:{};",
-                                        if is_active { accent } else if is_past { accent } else { "var(--border)" },
-                                        if is_active { role.accent_bg().to_string() } else if is_past { "rgba(255,255,255,0.04)".to_string() } else { "transparent".to_string() }
-                                    )>
-                                        <span class="landing-step-flow-dot-inner" style=format!("color:{};", if is_active || is_past { accent } else { "var(--text-secondary)" })><Icon icon=s.icon class="icon-sm"/></span>
-                                    </div>
-                                    <span class="landing-step-flow-label" style=format!(
-                                        "font-weight:{};color:{};",
-                                        if is_active { "600" } else { "500" },
-                                        if is_active { "#fff" } else { "var(--text-secondary)" },
-                                    )>{s.title}</span>
-                                </button>
-                                {if i < steps_len - 1 {
-                                    let line_color = if is_past { accent } else { "var(--border)" }.to_string();
-                                    view! {
-                                        <div class="landing-step-flow-line" style=format!("background:{};", line_color)></div>
-                                    }.into_any()
-                                } else {
-                                    ().into_any()
-                                }}
-                            }
-                        }).collect_view()
-                    }}
-                </div>
-
-                <div class="landing-mockup-wrapper">
-                    {move || {
-                        let role = active_role.get();
-                        let step_idx = active_step.get();
-                        let steps = role.steps();
-                        let step_data = steps.get(step_idx);
-                        view! {
-                            <div class="landing-mockup">
-                                {swimlane_mockup(role, step_idx)}
-                                <div class="landing-mockup-desc">
-                                    {step_data.map(|s| s.desc).unwrap_or("")}
-                                </div>
-                            </div>
-                        }
-                    }}
-                </div>
-
-                <div class="landing-swimlane-mini-list">
-                    {move || {
-                        let active = active_role.get();
-                        [SwimlaneRole::Organizer, SwimlaneRole::Staff, SwimlaneRole::Attendee].into_iter().map(|r| {
-                            let is_active = r == active;
-                            let steps = r.steps();
-                            let accent = r.accent();
-                            let bg = r.accent_bg();
-                            let border = r.accent_border();
-                            view! {
-                                <button
-                                    class="landing-swimlane-mini-btn"
-                                    style=format!(
-                                        "border:1px solid {};background:{};",
-                                        if is_active { border } else { "var(--border)" },
-                                        if is_active { bg } else { "transparent" },
-                                    )
-                                    on:click=move |_| {
-                                        set_active_role.set(r);
-                                        set_active_step.set(0);
-                                    }
-                                >
-                                    <span class="landing-swimlane-mini-label"><Icon icon=r.icon_name() class="icon-sm"/><span>{r.label()}</span></span>
-                                    <div class="landing-swimlane-mini-dots">
-                                        {steps.iter().enumerate().map(|(i, s)| {
-                                            view! {
-                                                <>
-                                                    <div class="landing-swimlane-mini-dot" style=format!(
-                                                        "background:{};",
-                                                        if is_active { accent } else { "var(--border)" },
-                                                    ) title=s.title></div>
-                                                    {if i < steps.len() - 1 {
-                                                        view! {
-                                                            <div class="landing-swimlane-mini-arrow"></div>
-                                                        }.into_any()
-                                                    } else {
-                                                        ().into_any()
-                                                    }}
-                                                </>
-                                            }
-                                        }).collect_view()}
-                                    </div>
-                                    {if is_active {
-                                        view! {
-                                            <span class="landing-swimlane-mini-viewing" style=format!("color:{};", accent)>"viewing"</span>
-                                        }.into_any()
-                                    } else {
-                                        ().into_any()
-                                    }}
-                                </button>
-                            }
-                        }).collect_view()
-                    }}
-                </div>
-
-            </section>
-
-            // ===== Waitlist =====
-            <section id="waitlist" class="landing-section">
-                <div class="landing-waitlist-inner">
-                    <h2 class="landing-h2">
-                        "Ready to end no-shows?"
-                    </h2>
-                    <p class="landing-faq-a">
-                        "Join the waitlist to bring deposit-backed events to your community."
-                    </p>
-                    <WaitlistForm />
                 </div>
             </section>
 
@@ -1416,7 +943,7 @@ pub fn Landing() -> impl IntoView {
                         "Frequently asked questions"
                     </h2>
                     <p class="landing-subtitle">
-                        "Everything you need to know about BeThere."
+                        "Everything you need to know."
                     </p>
                 </div>
 
@@ -1427,7 +954,7 @@ pub fn Landing() -> impl IntoView {
                             "What is BeThere?"
                         </h3>
                         <p class="landing-faq-a">
-                            "BeThere is a deposit-backed event check-in platform built on Solana. Attendees put down a small deposit when they register. If they show up and complete a short quiz, they get their deposit back automatically — plus a compressed NFT badge as proof of attendance. If they don't show up, the organizer keeps the deposit."
+                            "A deposit-backed event check-in platform on Solana. Attendees lock a deposit, show up, get scanned, and receive a full refund plus a compressed NFT badge. No-shows forfeit their deposit to the organizer."
                         </p>
                     </div>
 
@@ -1436,7 +963,7 @@ pub fn Landing() -> impl IntoView {
                             "Do attendees need a crypto wallet?"
                         </h3>
                         <p class="landing-faq-a">
-                            "Not to check in! QR scanning works with any phone — no wallet required at the door. The wallet is only needed when claiming the NFT badge and deposit refund afterward. We support Phantom, Solflare, Backpack, or you can just paste your wallet address."
+                            "Not to check in! QR scanning works on any phone. A wallet is only needed when claiming the NFT badge and deposit refund afterward."
                         </p>
                     </div>
 
@@ -1445,43 +972,16 @@ pub fn Landing() -> impl IntoView {
                             "How does the deposit work?"
                         </h3>
                         <p class="landing-faq-a">
-                            "Organizers set a deposit amount (e.g., 500 THB / ~$15). Attendees pay it when registering. After check-in and completing the quiz, the deposit is refunded on-chain as SOL + USDC directly to the attendee's wallet. No-shows forfeit their deposit to the organizer."
+                            "Organizers set a deposit amount (e.g., 500 THB / ~$15). After check-in, the deposit is refunded on-chain. No-shows forfeit to the organizer."
                         </p>
                     </div>
 
                     <div class="landing-faq-card">
                         <h3 class="landing-faq-q">
-                            "What is a compressed NFT badge?"
+                            "Is it only for crypto events?"
                         </h3>
                         <p class="landing-faq-a">
-                            "It's a digital collectible on Solana that proves you attended an event. Unlike regular NFTs, compressed NFTs cost a fraction of a cent to mint (~$0.001) using Merkle trees. Each badge is unique to the event and lives in your wallet forever — think of it as a digital ticket stub that can't be faked."
-                        </p>
-                    </div>
-
-                    <div class="landing-faq-card">
-                        <h3 class="landing-faq-q">
-                            "What's the quiz?"
-                        </h3>
-                        <p class="landing-faq-a">
-                            "Organizers can set a short quiz (e.g., 3-5 questions) about the event content. Attendees answer after check-in. It proves they actually paid attention — not just physically showed up. The passing threshold is configurable by the organizer."
-                        </p>
-                    </div>
-
-                    <div class="landing-faq-card">
-                        <h3 class="landing-faq-q">
-                            "How much does it cost for organizers?"
-                        </h3>
-                        <p class="landing-faq-a">
-                            "BeThere is free during beta. We cover cNFT minting costs (fractions of a cent per badge). Future pricing will be per-event with a generous free tier. No per-attendee charge during beta."
-                        </p>
-                    </div>
-
-                    <div class="landing-faq-card">
-                        <h3 class="landing-faq-q">
-                            "Is BeThere only for crypto events?"
-                        </h3>
-                        <p class="landing-faq-a">
-                            "It works great for any event! The deposit + check-in flow solves no-shows for meetups, workshops, conferences, and hackathons. The Solana/NFT part happens behind the scenes — attendees don't need to know anything about crypto."
+                            "It works for any event — meetups, workshops, conferences, hackathons. The blockchain part runs behind the scenes; attendees don't need to know anything about crypto."
                         </p>
                     </div>
 
@@ -1489,8 +989,53 @@ pub fn Landing() -> impl IntoView {
 
                 <div class="landing-faq-cta">
                     <a href="#waitlist" class="btn btn-outline landing-faq-cta-link">
-                        "Ready to try? Join the waitlist →"
+                        "Want to host events? Learn more ↓"
                     </a>
+                </div>
+            </section>
+
+            // ===== Waitlist (organizer-focused) =====
+            <section id="waitlist" class="landing-section">
+                <div class="landing-waitlist-inner">
+                    <h2 class="landing-h2">
+                        "Bring deposit-backed events to your community"
+                    </h2>
+                    <p class="landing-faq-a">
+                        "Stop losing money to no-shows. Set a deposit, track check-ins live, and auto-refund attendees who show up."
+                    </p>
+                    {move || {
+                        let state = auth_state.get();
+                        let role = user_role.get();
+                        match &state {
+                            AuthState::SignedIn(_) if is_admin_role(&role) || role == "organizer" => {
+                                view! {
+                                    <A href="/admin" attr:class="btn btn-primary landing-waitlist-submit">
+                                        "Go to Dashboard →"
+                                    </A>
+                                }.into_any()
+                            }
+                            AuthState::SignedIn(_) => {
+                                view! {
+                                    <div class="landing-waitlist-signed-in">
+                                        <p class="landing-faq-a">
+                                            "Signed in! Contact us to get organizer access."
+                                        </p>
+                                        <a
+                                            href="https://x.com/ozoneRatchapon"
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            class="btn btn-outline btn-sm"
+                                        >
+                                            "DM us on X/Twitter"
+                                        </a>
+                                    </div>
+                                }.into_any()
+                            }
+                            _ => {
+                                view! { <WaitlistForm /> }.into_any()
+                            }
+                        }
+                    }}
                 </div>
             </section>
 
@@ -1498,7 +1043,7 @@ pub fn Landing() -> impl IntoView {
             <footer class="landing-footer">
                 <div class="landing-footer-grid">
 
-                    // Column 1 — Brand
+                    // Column 1 — Brand + social proof
                     <div class="landing-footer-col">
                         <span class="landing-footer-brand-name landing-brand-gradient">
                             "BeThere"
@@ -1511,12 +1056,19 @@ pub fn Landing() -> impl IntoView {
                             <span class="landing-footer-crab"><Icon icon=IconName::Crab class="icon-sm"/></span>
                             " Rust & Solana"
                         </div>
+                        <a
+                            href="https://github.com/solana-thailand"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            class="landing-footer-partner"
+                        >
+                            "Alpha partner: Solana Developer Thailand"
+                        </a>
                     </div>
 
                     // Column 2 — Product
                     <div class="landing-footer-col">
                         <h4>"Product"</h4>
-                        <a href="#features">"Features"</a>
                         <a href="#how-it-works">"How It Works"</a>
                         <a href="#faq">"FAQ"</a>
                         <A href="/login">"Staff Portal"</A>
@@ -1526,8 +1078,7 @@ pub fn Landing() -> impl IntoView {
                     <div class="landing-footer-col">
                         <h4>"Community"</h4>
                         <a href="https://x.com/ozoneRatchapon" target="_blank" rel="noopener noreferrer">"X / Twitter"</a>
-                        <a href="https://github.com/solana-thailand" target="_blank" rel="noopener noreferrer">"GitHub"</a>
-                        <a href="https://github.com/solana-thailand/BeThere" target="_blank" rel="noopener noreferrer">"Source Code"</a>
+                        <a href="https://github.com/solana-thailand/BeThere" target="_blank" rel="noopener noreferrer">"GitHub"</a>
                     </div>
 
                 </div>
@@ -1536,8 +1087,8 @@ pub fn Landing() -> impl IntoView {
                 <div class="landing-footer-bottom">
                     <span class="landing-footer-copy">"© 2026 BeThere. All rights reserved."</span>
                     <span class="landing-footer-powered">
-                        <Icon icon=IconName::Solana />
                         "Built on Solana"
+                        <Icon icon=IconName::Solana />
                     </span>
                 </div>
             </footer>

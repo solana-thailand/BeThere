@@ -45,6 +45,7 @@ SERVER_URL = "https://bethere.solana-thailand.workers.dev"
 CLAIM_BASE_URL = "https://bethere.solana-thailand.workers.dev/claim"
 GOOGLE_SHEET_NAME = "Attendees"
 GOOGLE_STAFF_SHEET_NAME = "staff"
+PLATFORM_SHEET_ID = "1oF54ia6mquO_kB869aQxmz3RD8nDcTRWfXIX0VmndxM"
 DEV_MODE = "0"
 DEV_EMAIL = "ratchapon.poc@gmail.com"
 SUPER_ADMIN_EMAILS = "ratchapon.poc@gmail.com,hackathon@colosseum.org"
@@ -66,6 +67,7 @@ EVENT_END_MS = "1777183200000"
 # - GOOGLE_SERVICE_ACCOUNT_TOKEN_URI
 # - GOOGLE_SHEET_ID
 # - STAFF_EMAILS
+# - PLATFORM_SHEET_ID (env var, not secret — set in [vars])
 
 # Phase 2 secrets (Solana / Helius NFT minting):
 # - HELIUS_RPC_URL          (optional — defaults to https://devnet.helius-rpc.com)

@@ -15,6 +15,7 @@ pub mod public_event;
 pub mod qr;
 pub mod quiz;
 pub mod register;
+pub mod user_log;
 pub mod waitlist;
 pub mod walkin;
 

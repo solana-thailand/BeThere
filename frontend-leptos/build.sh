@@ -67,7 +67,7 @@ if [[ "${1:-}" == "--watch" ]]; then
     echo ""
     ~/.cargo/bin/cargo-watch \
         -w src \
-        -w ../style.css \
+        -w style.css \
         -w index.html \
         -s 'bash build.sh'
 else

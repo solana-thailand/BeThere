@@ -98,6 +98,7 @@ impl AppState {
                 .unwrap_or_else(|_| "Contacts".to_string()),
             events_sheet_name: get_var(env, "EVENTS_SHEET_NAME")
                 .unwrap_or_else(|_| "Events".to_string()),
+            platform_sheet_id: get_var(env, "PLATFORM_SHEET_ID").unwrap_or_default(),
         };
 
         let staff_emails_str = get_secret(env, "STAFF_EMAILS")?;

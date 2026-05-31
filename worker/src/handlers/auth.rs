@@ -105,6 +105,14 @@ pub async fn auth_callback(
         }
     };
 
+    // Log user sign-in to Google Sheet (fire-and-forget — errors don't block login)
+    if let Err(e) =
+        crate::handlers::user_log::upsert_user_log(&user_info.email, &user_info.id, role, &state)
+            .await
+    {
+        tracing::warn!(error = ?e, "user log upsert failed");
+    }
+
     // Create JWT session token for ALL users (staff and non-staff)
     let token =
         match auth::create_session_jwt(&user_info.email, &user_info.id, &state.config.jwt_secret)

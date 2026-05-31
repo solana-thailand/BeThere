@@ -524,6 +524,7 @@ mod tests {
                 contacts_sheet_id: String::new(),
                 contacts_sheet_name: "Contacts".to_string(),
                 events_sheet_name: "Events".to_string(),
+                platform_sheet_id: String::new(),
             },
             jwt_secret: "test-jwt-secret".to_string(),
             staff_emails: [

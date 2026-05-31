@@ -219,7 +219,7 @@ for file_hash, content_b64 in manifest.items():
     exit 1
   fi
 
-  # Build metadata JSON with assets JWT
+  # Build metadata JSON with assets JWT + env vars from wrangler.toml
   METADATA=$(python3 -c "
 import json
 m = {
@@ -232,6 +232,21 @@ m = {
         {'type': 'd1', 'name': 'DB', 'id': '98d09542-e7d8-4413-ac34-4276a50d126c'},
         {'type': 'r2_bucket', 'name': 'ASSETS_BUCKET', 'bucket_name': 'bethere-assets'}
     ],
+    'vars': {
+        'SERVER_URL': 'https://bethere.solana-thailand.workers.dev',
+        'CLAIM_BASE_URL': 'https://bethere.solana-thailand.workers.dev/claim',
+        'GOOGLE_SHEET_NAME': 'Attendees',
+        'GOOGLE_STAFF_SHEET_NAME': 'staff',
+        'PLATFORM_SHEET_ID': '1oF54ia6mquO_kB869aQxmz3RD8nDcTRWfXIX0VmndxM',
+        'DEV_MODE': '0',
+        'DEV_EMAIL': 'ratchapon.poc@gmail.com',
+        'SUPER_ADMIN_EMAILS': 'ratchapon.poc@gmail.com,hackathon@colosseum.org',
+        'EVENT_NAME': 'Solana x AI Builders: The Road to Mainnet #1 (Bangkok)',
+        'EVENT_TAGLINE': 'Deep Dive into Rust, AI Agents, and the Solana Ecosystem',
+        'EVENT_LINK': 'https://solana-thailand.github.io/genesis/events/road-to-mainnet-1-bangkok/',
+        'EVENT_START_MS': '1777170600000',
+        'EVENT_END_MS': '1777183200000',
+    },
     'assets': {
         'jwt': '${ASSETS_JWT}',
         'router_config': {
