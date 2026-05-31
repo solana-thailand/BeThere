@@ -59,7 +59,7 @@ pub fn close_deposit_choose_wallet_view(
             <button
                 class="btn btn-outline btn-sm"
                 on:click=move |_| {
-                    set_state.set(DepositPageState::RefundChooseWallet(data_for_back.clone()));
+                    set_state.set(DepositPageState::CloseDepositChooseWallet(data_for_back.clone()));
                 }
             >
                 "← Go Back"

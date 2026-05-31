@@ -284,7 +284,7 @@ pub fn thb_payment_form_view(
 /// THB uploading spinner view.
 pub fn thb_uploading_view() -> AnyView {
     view! {
-        <div class="card dep-card-error">
+        <div class="card dep-card">
             <div class="card-header">
                 <h2 class="card-title">
                     <span class="spinner spinner-lg"></span>
@@ -328,6 +328,52 @@ pub fn thb_uploaded_view(
                 " Pending Verification"
             </span>
             <p class="thb-success-redirect">"Redirecting to your ticket..."</p>
+        </div>
+    }
+        .into_any()
+}
+
+// ---------------------------------------------------------------------------
+// THB slip rejected — re-upload prompt
+// ---------------------------------------------------------------------------
+
+/// THB slip was rejected by admin. Shows rejection notice with re-upload CTA.
+pub fn thb_rejected_view(
+    data: &DepositStatusResponse,
+    set_state: WriteSignal<DepositPageState>,
+    set_payment_choice: WriteSignal<Option<PaymentChoice>>,
+) -> AnyView {
+    let amount_thb = data.deposit_amount_thb;
+    let data_clone = data.clone();
+
+    view! {
+        <div class="card dep-card-error">
+            <div class="card-header">
+                <h2 class="card-title">
+                    <Icon icon=IconName::Warning class="icon-sm icon-danger" />
+                    " Slip Rejected"
+                </h2>
+                <span class="badge badge-danger">
+                    {format!("{amount_thb} THB")}
+                </span>
+            </div>
+            <p class="hint-desc">
+                "Your payment slip was reviewed and could not be verified. This can happen if the slip is unreadable, the amount doesn't match, or the transfer wasn't completed."
+            </p>
+            <div class="dep-info-note">
+                <p class="hint-note">
+                    "Please make a new transfer and upload the correct payment slip."
+                </p>
+            </div>
+            <button
+                class="btn btn-primary btn-block btn-action-lg"
+                on:click=move |_| {
+                    set_payment_choice.set(Some(PaymentChoice::Thb));
+                    set_state.set(DepositPageState::ChoosePayment(data_clone.clone()));
+                }
+            >
+                "Re-upload Payment Slip"
+            </button>
         </div>
     }
         .into_any()

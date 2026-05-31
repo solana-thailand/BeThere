@@ -259,6 +259,7 @@ pub async fn deposit_usdc_handler(
         wallet_address: Some(body.wallet_address.clone()),
         deposit_order,
         refundable,
+        rejected: false,
     };
 
     event_store::save_deposit_status(kv, &deposit_status)

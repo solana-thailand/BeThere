@@ -139,6 +139,7 @@ pub(crate) async fn apply_rollover_deposit_status(kv: &KvStore, event: &OnChainE
         wallet_address: event.attendee.clone(),
         deposit_order: 0,
         refundable: true,
+        rejected: false,
     };
 
     match crate::event_store::save_deposit_status(kv, &deposit_status).await {

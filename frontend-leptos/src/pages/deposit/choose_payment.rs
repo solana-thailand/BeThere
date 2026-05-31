@@ -45,9 +45,8 @@ pub fn choose_payment_view(
     let data_clone = data.clone();
     let event_slug = data_clone.event_slug.clone();
     let wallets = detected_wallets.get();
-    let is_dev_mode = data.dev_mode;
     let usdc_accepted = data.usdc_deposits_accepted;
-    let show_usdc = is_dev_mode && usdc_accepted;
+    let show_usdc = usdc_accepted;
     let deposit_deadline = data_clone.deposit_deadline_hours;
     let deadline_expired = data_clone.deadline_expired;
     let can_reclaim = data_clone.in_person_available.unwrap_or(false);

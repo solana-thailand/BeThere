@@ -60,6 +60,10 @@ pub struct DepositStatus {
     /// Whether this deposit is in the refundable tier (order <= max_refundable_deposits).
     #[serde(default = "default_true")]
     pub refundable: bool,
+    /// Whether the deposit was explicitly rejected by admin (THB slips only).
+    /// When false + verified false, the slip is still pending review.
+    #[serde(default)]
+    pub rejected: bool,
 }
 
 /// THB deposit record (stored in KV, no on-chain record).

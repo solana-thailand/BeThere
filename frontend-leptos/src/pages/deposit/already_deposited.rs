@@ -79,7 +79,7 @@ pub fn already_deposited_view(
 
     let set_state = *set_state;
     view! {
-        <div class="card dep-card-error">
+        <div class="card dep-card">
             <div class="card-header">
                 <h2 class="card-title"><Icon icon=IconName::Ticket class="icon-sm" />" Spot Reserved"</h2>
             </div>

@@ -16,6 +16,7 @@ pub fn wallet_connected_view(
     public_key: &str,
     handle_send_deposit: impl Fn(String, String) + Clone + 'static,
     set_state: WriteSignal<DepositPageState>,
+    set_payment_choice: WriteSignal<Option<PaymentChoice>>,
 ) -> AnyView {
     let wallet_name_send = wallet_name.to_string();
     let pk_send = public_key.to_string();
@@ -44,6 +45,7 @@ pub fn wallet_connected_view(
             <button
                 class="btn btn-outline btn-sm btn-action-secondary"
                 on:click=move |_| {
+                    set_payment_choice.set(None);
                     set_state.set(DepositPageState::ChoosePayment(data_clone.clone()));
                 }
             >

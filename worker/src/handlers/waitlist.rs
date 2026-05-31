@@ -55,8 +55,15 @@ pub async fn join_waitlist(
             }
         }
         Err(e) => {
-            // Log but don't block — if we can't read, still allow signup
-            tracing::warn!(error = ?e, "could not fetch existing waitlist emails for dedup");
+            // If the 'waitlist' tab doesn't exist, auto-create it and continue
+            if e.contains("Unable to parse range") || e.contains("Unable to find sheet") {
+                tracing::info!("waitlist: tab not found, auto-creating");
+                if let Err(create_err) = create_waitlist_tab(&state).await {
+                    tracing::warn!(error = %create_err, "waitlist: failed to auto-create tab");
+                }
+            } else {
+                tracing::warn!(error = ?e, "could not fetch existing waitlist emails for dedup");
+            }
         }
     }
 
@@ -76,7 +83,7 @@ pub async fn join_waitlist(
 /// Returns a Vec of lowercased email strings for dedup comparison.
 async fn get_existing_waitlist_emails(state: &AppState) -> Result<Vec<String>, String> {
     let access_token = get_access_token(state).await?;
-    let sheet_id = &state.config.sheets.sheet_id;
+    let sheet_id = crate::handlers::user_log::resolve_platform_sheet_id(state);
     let sheet_name = "waitlist";
     let range = format!("{sheet_name}!A2:A");
     let url = format!(
@@ -110,7 +117,7 @@ async fn get_existing_waitlist_emails(state: &AppState) -> Result<Vec<String>, S
 async fn append_to_waitlist(email: &str, state: &AppState) -> Result<(), String> {
     let access_token = get_access_token(state).await?;
     let timestamp = chrono::Utc::now().to_rfc3339();
-    let sheet_id = &state.config.sheets.sheet_id;
+    let sheet_id = crate::handlers::user_log::resolve_platform_sheet_id(state);
     let sheet_name = "waitlist"; // Dedicated tab name
 
     // Use Google Sheets append API
@@ -126,5 +133,44 @@ async fn append_to_waitlist(email: &str, state: &AppState) -> Result<(), String>
     // POST as JSON with auth
     post_json::<serde_json::Value>(&url, &body, Some(&access_token)).await?;
 
+    Ok(())
+}
+
+/// Create the "waitlist" sheet tab with a header row.
+async fn create_waitlist_tab(state: &AppState) -> Result<(), String> {
+    use crate::http::put_json;
+
+    let access_token = get_access_token(state).await?;
+    let sheet_id = crate::handlers::user_log::resolve_platform_sheet_id(state);
+
+    // Add a new sheet tab via the Sheets API batchUpdate
+    let url = format!("https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}:batchUpdate");
+
+    let body = serde_json::json!({
+        "requests": [{
+            "addSheet": {
+                "properties": {
+                    "title": "waitlist"
+                }
+            }
+        }]
+    });
+
+    post_json::<serde_json::Value>(&url, &body, Some(&access_token)).await?;
+
+    // Write header row
+    let header_body = ValueRange {
+        range: "waitlist!A1:B1".to_string(),
+        values: vec![vec!["email".to_string(), "signed_up_at".to_string()]],
+    };
+
+    let header_url = format!(
+        "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{}",
+        urlencoding::encode("waitlist!A1:B1"),
+    );
+
+    put_json(&header_url, &header_body, &access_token).await?;
+
+    tracing::info!(%sheet_id, "waitlist: created tab with header row");
     Ok(())
 }

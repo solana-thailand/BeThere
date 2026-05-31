@@ -87,6 +87,8 @@ pub enum DepositPageState {
     ThbUploading(DepositStatusResponse),
     /// THB slip uploaded successfully.
     ThbUploaded(String, String, String),
+    /// THB slip was rejected by admin — user can re-upload.
+    ThbRejected(DepositStatusResponse),
     /// Refund flow — choosing wallet to connect.
     RefundChooseWallet(DepositStatusResponse),
     /// Refund flow — wallet connected, ready to claim.
@@ -130,19 +132,12 @@ pub fn deposit_step(
     payment_choice: Option<PaymentChoice>,
 ) -> Option<(DepositFlow, usize, usize)> {
     match state {
-        // ChoosePayment: step 1 of whichever flow the user picked
-        DepositPageState::ChoosePayment(_) => {
-            let flow = match payment_choice {
-                Some(PaymentChoice::Thb) => DepositFlow::Thb,
-                _ => DepositFlow::Usdc, // default / USDC
-            };
-            let total = match flow {
-                DepositFlow::Usdc => 4,
-                DepositFlow::Thb => 3,
-                _ => 4,
-            };
-            Some((flow, 1, total))
-        }
+        // ChoosePayment: show stepper only after user picks a method
+        DepositPageState::ChoosePayment(_) => match payment_choice {
+            Some(PaymentChoice::Thb) => Some((DepositFlow::Thb, 1, 3)),
+            Some(PaymentChoice::Usdc) => Some((DepositFlow::Usdc, 1, 4)),
+            None => None,
+        },
 
         // USDC flow: Choose → Connect → Pay → Confirm (4 steps)
         DepositPageState::WalletConnected(_, _, _) => Some((DepositFlow::Usdc, 2, 4)),
@@ -152,7 +147,9 @@ pub fn deposit_step(
         DepositPageState::DepositConfirmed(_, _) => Some((DepositFlow::Usdc, 4, 4)),
 
         // THB flow: Choose → Upload → Submitted (3 steps)
-        DepositPageState::ThbUploading(_) => Some((DepositFlow::Thb, 2, 3)),
+        DepositPageState::ThbUploading(_) | DepositPageState::ThbRejected(_) => {
+            Some((DepositFlow::Thb, 2, 3))
+        }
         DepositPageState::ThbUploaded(_, _, _) => Some((DepositFlow::Thb, 3, 3)),
 
         // Refund flow: Connect → Sign → Confirmed (3 steps)
@@ -218,6 +215,7 @@ pub fn extract_event_context(state: &DepositPageState) -> Option<(String, String
         | DepositPageState::DepositConfirmed(d, _)
         | DepositPageState::UsdcQrReady(d, _)
         | DepositPageState::ThbUploading(d)
+        | DepositPageState::ThbRejected(d)
         | DepositPageState::RefundChooseWallet(d)
         | DepositPageState::RefundWalletConnected(d, _, _)
         | DepositPageState::RefundSigning(d, _, _)

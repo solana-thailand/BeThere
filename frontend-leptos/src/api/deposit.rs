@@ -25,6 +25,9 @@ pub struct DepositStatusInfo {
     /// Whether this deposit is in the refundable tier.
     #[serde(default = "super::types::default_true")]
     pub refundable: bool,
+    /// Whether the deposit was explicitly rejected by admin (THB slips).
+    #[serde(default)]
+    pub rejected: bool,
 }
 
 #[derive(Debug, Clone, Default, serde::Deserialize)]

@@ -380,6 +380,7 @@ pub async fn upload_thb_slip_handler(
         wallet_address: None,
         deposit_order,
         refundable,
+        rejected: false,
     };
 
     event_store::save_deposit_status(kv, &deposit_status)
@@ -473,6 +474,7 @@ pub async fn verify_thb_slip_handler(
         .map_err(AppError::Internal)?
     {
         status.verified = body.approved;
+        status.rejected = !body.approved;
         event_store::save_deposit_status(kv, &status)
             .await
             .map_err(AppError::Internal)?;

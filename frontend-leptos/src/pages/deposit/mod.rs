@@ -94,8 +94,12 @@ pub fn Deposit() -> impl IntoView {
                 Ok(data) => {
                     if !data.deposit_enabled {
                         set_state.set(DepositPageState::NotEnabled);
-                    } else if data.status.is_some() {
-                        set_state.set(DepositPageState::AlreadyDeposited(data));
+                    } else if let Some(status) = &data.status {
+                        if status.rejected {
+                            set_state.set(DepositPageState::ThbRejected(data));
+                        } else {
+                            set_state.set(DepositPageState::AlreadyDeposited(data));
+                        }
                     } else {
                         set_state.set(DepositPageState::ChoosePayment(data));
                     }
@@ -266,6 +270,7 @@ pub fn Deposit() -> impl IntoView {
                                 &public_key,
                                 handle_send_deposit.clone(),
                                 set_state,
+                                set_payment_choice,
                             )
                         }
 
@@ -307,6 +312,11 @@ pub fn Deposit() -> impl IntoView {
                         // ===== THB Uploaded =====
                         DepositPageState::ThbUploaded(attendee_id, event_id, _event_slug) => {
                             thb_payment::thb_uploaded_view(&attendee_id, &event_id)
+                        }
+
+                        // ===== THB Rejected =====
+                        DepositPageState::ThbRejected(data) => {
+                            thb_payment::thb_rejected_view(&data, set_state, set_payment_choice)
                         }
 
                         // ===== Refund: Choose Wallet =====
