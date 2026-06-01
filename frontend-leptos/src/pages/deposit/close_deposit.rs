@@ -22,13 +22,13 @@ pub fn close_deposit_choose_wallet_view(
     let handle_connect = handle_close_deposit_connect_wallet.clone();
 
     view! {
-        <div class="card dep-card">
-            <div class="card-header">
-                <h2 class="card-title">"Reclaim Deposit Rent"</h2>
+        <div class="dep2-card">
+            <div class="dep2-card-header">
+                <span class="dep2-card-title">"Reclaim Rent"</span>
                 <span class="badge badge-info">"~0.002 SOL"</span>
             </div>
             <p class="hint-desc">
-                "Connect the wallet you used to deposit. This closes your deposit account and returns the rent-exempt SOL."
+                "Close your deposit account to reclaim rent-exempt SOL."
             </p>
             {if wallets.is_empty() {
                 components::wallet_fallback_view()
@@ -81,27 +81,38 @@ pub fn close_deposit_wallet_connected_view(
     let pk_send = public_key.to_string();
     let data_for_back = data.clone();
 
+    let wallet_icon = wallet_icon_name(wallet_name);
+    let pk_display = truncate_pk(public_key);
+
     let set_state = set_state;
     let handle_close = handle_close_deposit.clone();
 
     view! {
-        <div class="card dep-card">
-            <div class="card-header">
-                <h2 class="card-title">"Reclaim Deposit Rent"</h2>
+        <div class="dep2-card">
+            <div class="dep2-card-header">
+                <span class="dep2-card-title">"Reclaim Rent"</span>
                 <span class="badge badge-info">"~0.002 SOL"</span>
             </div>
-            {components::wallet_connected_bar(wallet_name, public_key)}
+            <div class="dep2-wallet-bar">
+                <Icon icon=wallet_icon class="dep2-wallet-bar-icon" />
+                <div class="dep2-wallet-bar-info">
+                    <span class="dep2-wallet-bar-name">{format!("Connected via {}", wallet_name)}</span>
+                    <span class="dep2-wallet-bar-pk">{pk_display}</span>
+                </div>
+                <span class="dep2-wallet-bar-badge">"Connected"</span>
+            </div>
             <p class="hint-desc">
-                "Click below to close your deposit account and reclaim the rent-exempt SOL."
+                "Your deposit account is ready to be closed."
             </p>
             <button
-                class="btn btn-success btn-block btn-action-lg"
+                class="btn btn-success btn-block"
                 on:click=move |_| handle_close(wallet_name_send.clone(), pk_send.clone())
             >
-                <Icon icon=IconName::Recycle class="icon-sm" />" Reclaim ~0.002 SOL Rent"
+                <Icon icon=IconName::Recycle class="icon-sm" />
+                " Reclaim ~0.002 SOL Rent"
             </button>
             <button
-                class="btn btn-outline btn-sm btn-action-secondary"
+                class="btn btn-outline btn-sm"
                 on:click=move |_| {
                     set_state.set(DepositPageState::CloseDepositChooseWallet(data_for_back.clone()));
                 }
@@ -116,15 +127,24 @@ pub fn close_deposit_wallet_connected_view(
 /// Close deposit: Signing TX view.
 pub fn close_deposit_signing_view() -> AnyView {
     view! {
-        <div class="card dep-card">
-            <div class="card-header">
-                <h2 class="card-title"><Icon icon=IconName::Hourglass class="icon-sm icon-warning" />" Closing Deposit..."</h2>
+        <div class="dep2-card">
+            <div class="dep2-card-header">
+                <span class="dep2-card-title">"Closing Deposit..."</span>
                 <span class="badge badge-info">"~0.002 SOL"</span>
             </div>
-            {components::spinner_loading("Please approve the transaction in your wallet...")}
+            <div class="dep2-confirming">
+                <div class="dep2-confirming-dots">
+                    <span class="dep2-confirming-dot"></span>
+                    <span class="dep2-confirming-dot"></span>
+                    <span class="dep2-confirming-dot"></span>
+                </div>
+                <p class="hint-desc">
+                    "Please approve the transaction in your wallet..."
+                </p>
+            </div>
         </div>
     }
-        .into_any()
+    .into_any()
 }
 
 /// Close deposit: Confirmed view.
@@ -133,22 +153,22 @@ pub fn close_deposit_confirmed_view(data: &DepositStatusResponse, tx_sig: &str) 
     let data_slug = data.event_slug.clone();
 
     view! {
-        <div class="card dep-card">
-            <div class="card-header">
-                <h2 class="card-title"><Icon icon=IconName::Party class="icon-sm" />" Rent Reclaimed!"</h2>
-                <span class="badge badge-success">"On-chain verified"</span>
+        <div class="dep2-card">
+            <div class="dep2-success-icon">
+                <Icon icon=IconName::Recycle class="icon-md" />
             </div>
-            {components::celebration_icon(IconName::Recycle)}
-            <p class="success-title">
-                "Deposit account closed"
+            <p class="dep2-amount-hero">
+                "Rent Reclaimed! ~0.002 SOL returned to your wallet."
             </p>
-            <p class="hint-desc">
-                "Your deposit account has been closed and ~0.002 SOL returned to your wallet."
-            </p>
-            {components::tx_hash_box(&sig_display)}
+            <div class="dep2-receipt">
+                <div class="dep2-receipt-row">
+                    <span class="dep2-receipt-label">"TX"</span>
+                    <span class="dep2-receipt-value">{sig_display}</span>
+                </div>
+            </div>
             {components::solscan_link(tx_sig)}
-            <div class="action-row-top-lg">
-                <a href=if data_slug.is_empty() { "/".to_string() } else { format!("/e/{data_slug}") } class="btn btn-primary">"← Back to event"</a>
+            <div class="dep2-back">
+                <a href=if data_slug.is_empty() { "/".to_string() } else { format!("/e/{data_slug}") }>"← Back to event"</a>
             </div>
         </div>
     }

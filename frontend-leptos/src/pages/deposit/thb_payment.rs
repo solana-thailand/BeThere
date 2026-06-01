@@ -41,45 +41,49 @@ pub fn thb_payment_form_view(
     let pp_reference = data.event_name.clone();
     let has_promptpay = !data.promptpay_id.is_empty() && data.deposit_amount_thb > 0;
 
+    log::info!(
+        "[thb_payment] promptpay_id='{}' amount={} has_promptpay={}",
+        &promptpay_id, deposit_amount_thb, has_promptpay
+    );
+
     let handle_upload_slip = handle_upload_slip.clone();
 
+    // Eagerly compute QR — no signals involved, so no need for reactive closure.
+    let pp_qr_image = if has_promptpay {
+        js_interop::generate_promptpay_qr(&promptpay_id, pp_amount, &pp_reference)
+            .and_then(|s| js_interop::generate_qr_data_url(&s, 256))
+    } else {
+        None
+    };
+    log::info!(
+        "[thb_payment] pp_qr_image generated: {}",
+        pp_qr_image.is_some()
+    );
+
     view! {
-        <div class="card">
+        <div class="dep2-card">
             // Card header
-            <div class="card-header">
-                <h2 class="card-title">"Pay with THB"</h2>
+            <div class="dep2-card-header">
+                <h2 class="dep2-card-title">"Pay with THB"</h2>
                 <span class="badge badge-warning">
                     {format!("{deposit_amount_thb} THB")}
                 </span>
             </div>
 
-            // How-to-pay instructions
-            <div class="thb-how-to-pay">
-                <p class="thb-how-to-pay-title">"How to pay:"</p>
-                <ol>
-                    <li>"Scan the QR code below with your banking app"</li>
-                    <li>"Transfer "{format!("{deposit_amount_thb} THB")}" via PromptPay"</li>
-                    <li>"Take a screenshot of the payment confirmation"</li>
-                    <li>"Upload the screenshot below and submit"</li>
-                </ol>
-            </div>
-
-            <p class="hint-desc">"Transfer via PromptPay and upload your payment slip."</p>
-
-            // PromptPay QR code
+            // ── Section 1: Scan QR ──────────────────────────────────────
             {if has_promptpay {
                 view! {
-                    <div class="layout-col-center u-mb-1rem">
-                        <p class="text-amount">
-                            {format!("Scan to pay {deposit_amount_thb} THB")}
-                        </p>
-                        {move || {
-                            let pp_qr_string = js_interop::generate_promptpay_qr(&promptpay_id, pp_amount, &pp_reference);
-                            let pp_qr_image = pp_qr_string.and_then(|s| js_interop::generate_qr_data_url(&s, 256));
-                            match pp_qr_image {
-                                Some(url) => {
-                                    let url_for_save = url.clone();
-                                    view! {
+                    <div class="dep2-section">
+                        <div class="dep2-section-title">
+                            <span class="dep2-step-num">"1"</span>
+                            "Scan & Pay"
+                        </div>
+
+                        {match pp_qr_image {
+                            Some(url) => {
+                                let url_for_save = url.clone();
+                                view! {
+                                    <div class="layout-col-center">
                                         <div class="qr-wrapper">
                                             <img src=url alt="PromptPay QR" class="qr-img-md" />
                                         </div>
@@ -95,25 +99,37 @@ pub fn thb_payment_form_view(
                                             <Icon icon=IconName::Save class="icon-sm" />
                                             " Save QR Code"
                                         </button>
-                                    }.into_any()
-                                },
-                                None => view! {
-                                    <p class="hint-2xs">"QR generation failed — please pay manually."</p>
-                                }.into_any(),
-                            }
+                                    </div>
+                                }.into_any()
+                            },
+                            None => view! {
+                                <p class="hint-2xs">"QR generation failed — please pay manually."</p>
+                            }.into_any(),
                         }}
-                        <p class="qr-hint-text">"Open your banking app → Scan QR → Pay"</p>
+
+                        <p class="hint-desc u-mt-xs">
+                            {format!("Scan with your banking app → Transfer {deposit_amount_thb} THB")}
+                        </p>
                     </div>
                 }.into_any()
             } else {
-                view! { <div></div> }.into_any()
+                view! {
+                    <div class="dep2-section">
+                        <div class="dep2-section-title">
+                            <span class="dep2-step-num">"1"</span>
+                            "Scan & Pay"
+                        </div>
+                        <p class="hint-desc">"PromptPay QR is not available for this event. Please transfer manually and upload your slip below."</p>
+                    </div>
+                }.into_any()
             }}
 
-            // Slip upload section
-            <div class="dep-divider-section">
-                <label class="upload-label">
-                    <Icon icon=IconName::Clip class="icon-sm" />" Upload payment slip"
-                </label>
+            // ── Section 2: Upload Slip ──────────────────────────────────
+            <div class="dep2-section">
+                <div class="dep2-section-title">
+                    <span class="dep2-step-num">"2"</span>
+                    "Upload Slip"
+                </div>
                 <p class="thb-slip-hint">
                     "Take a screenshot or photo of your transfer confirmation. Max 3MB (JPEG, PNG, WebP)."
                 </p>
@@ -169,109 +185,116 @@ pub fn thb_payment_form_view(
                         }
                     />
                 </details>
+            </div>
 
-                // Bank account for refund
-                <div class="thb-bank-section">
-                    <p class="thb-bank-label">"Bank account for refund"</p>
+            // ── Section 3: Refund Account ───────────────────────────────
+            <div class="dep2-section">
+                <div class="dep2-section-title">
+                    <span class="dep2-step-num">"3"</span>
+                    "Refund Account"
+                </div>
+                <p class="hint-desc">"Where should we send your refund?"</p>
+
+                <input
+                    type="text"
+                    class="form-input dep-input u-mt-xs"
+                    placeholder="Bank account number"
+                    prop:value=move || bank_account_input.get()
+                    on:input=move |ev| {
+                        let val = event_target_value(&ev);
+                        set_bank_account_input.set(val);
+                    }
+                />
+
+                // Bank name with autocomplete dropdown
+                <div class="bank-dropdown u-mt-xs">
                     <input
                         type="text"
                         class="form-input dep-input"
-                        placeholder="Bank account number"
-                        prop:value=move || bank_account_input.get()
+                        placeholder="Bank name (e.g. KBank, SCB)"
+                        prop:value=move || bank_name_input.get()
+                        on:focus=move |_| set_show_bank_dropdown.set(true)
                         on:input=move |ev| {
                             let val = event_target_value(&ev);
-                            set_bank_account_input.set(val);
+                            set_bank_name_input.set(val);
+                            set_show_bank_dropdown.set(true);
+                        }
+                        on:blur=move |_| {
+                            set_timeout(
+                                move || set_show_bank_dropdown.set(false),
+                                std::time::Duration::from_millis(200),
+                            );
                         }
                     />
-                    // Bank name with autocomplete dropdown
-                    <div class="bank-dropdown u-mt-xs">
-                        <input
-                            type="text"
-                            class="form-input dep-input"
-                            placeholder="Bank name (e.g. KBank, SCB)"
-                            prop:value=move || bank_name_input.get()
-                            on:focus=move |_| set_show_bank_dropdown.set(true)
-                            on:input=move |ev| {
-                                let val = event_target_value(&ev);
-                                set_bank_name_input.set(val);
-                                set_show_bank_dropdown.set(true);
-                            }
-                            on:blur=move |_| {
-                                set_timeout(
-                                    move || set_show_bank_dropdown.set(false),
-                                    std::time::Duration::from_millis(200),
-                                );
-                            }
-                        />
-                        {move || {
-                            if !show_bank_dropdown.get() {
-                                return view! { <div></div> }.into_any();
-                            }
-                            let query = bank_name_input.get().to_lowercase();
-                            let matches: Vec<&(&str, &str)> = THAI_BANKS
-                                .iter()
-                                .filter(|(code, name)| {
-                                    if query.is_empty() { return true; }
-                                    code.to_lowercase().contains(&query)
-                                        || name.to_lowercase().contains(&query)
-                                })
-                                .collect();
-                            if matches.is_empty() {
-                                return view! { <div></div> }.into_any();
-                            }
-                            let items: Vec<_> = matches.into_iter().map(|bank| {
-                                let bank_val = bank.1.to_string();
-                                view! {
-                                    <div
-                                        class="bank-dropdown-item"
-                                        on:mousedown=move |ev| {
-                                            ev.prevent_default();
-                                            set_bank_name_input.set(bank_val.clone());
-                                            set_show_bank_dropdown.set(false);
-                                        }
-                                    >
-                                        <span class="bank-dropdown-name">{bank_val.clone()}</span>
-                                    </div>
-                                }
-                            }).collect();
+                    {move || {
+                        if !show_bank_dropdown.get() {
+                            return view! { <div></div> }.into_any();
+                        }
+                        let query = bank_name_input.get().to_lowercase();
+                        let matches: Vec<&(&str, &str)> = THAI_BANKS
+                            .iter()
+                            .filter(|(code, name)| {
+                                if query.is_empty() { return true; }
+                                code.to_lowercase().contains(&query)
+                                    || name.to_lowercase().contains(&query)
+                            })
+                            .collect();
+                        if matches.is_empty() {
+                            return view! { <div></div> }.into_any();
+                        }
+                        let items: Vec<_> = matches.into_iter().map(|bank| {
+                            let bank_val = bank.1.to_string();
                             view! {
-                                <div class="bank-dropdown-list">
-                                    {items}
+                                <div
+                                    class="bank-dropdown-item"
+                                    on:mousedown=move |ev| {
+                                        ev.prevent_default();
+                                        set_bank_name_input.set(bank_val.clone());
+                                        set_show_bank_dropdown.set(false);
+                                    }
+                                >
+                                    <span class="bank-dropdown-name">{bank_val.clone()}</span>
                                 </div>
-                            }.into_any()
-                        }}
-                    </div>
-                    <input
-                        type="text"
-                        class="form-input dep-input u-mt-xs"
-                        placeholder="Account holder name"
-                        prop:value=move || account_name_input.get()
-                        on:input=move |ev| {
-                            let val = event_target_value(&ev);
-                            set_account_name_input.set(val);
-                        }
-                    />
+                            }
+                        }).collect();
+                        view! {
+                            <div class="bank-dropdown-list">
+                                {items}
+                            </div>
+                        }.into_any()
+                    }}
                 </div>
 
-                // Submit button
-                <button
-                    class="btn btn-success btn-block btn-action-lg u-mt-1rem"
-                    disabled=move || {
-                        bank_account_input.get().trim().is_empty()
-                        || bank_name_input.get().trim().is_empty()
-                        || account_name_input.get().trim().is_empty()
+                <input
+                    type="text"
+                    class="form-input dep-input u-mt-xs"
+                    placeholder="Account holder name"
+                    prop:value=move || account_name_input.get()
+                    on:input=move |ev| {
+                        let val = event_target_value(&ev);
+                        set_account_name_input.set(val);
                     }
-                    on:click={
-                        let hus = handle_upload_slip.clone();
-                        move |_| hus()
-                    }
-                >
-                    "Upload Slip"
-                </button>
-                <p class="thb-upload-disclaimer">
-                    "Bank account, bank name, and account holder name are required for refund."
-                </p>
+                />
             </div>
+
+            // ── Submit ──────────────────────────────────────────────────
+            <button
+                class="btn btn-success btn-block u-mt-1rem"
+                disabled=move || {
+                    bank_account_input.get().trim().is_empty()
+                    || bank_name_input.get().trim().is_empty()
+                    || account_name_input.get().trim().is_empty()
+                }
+                on:click={
+                    let hus = handle_upload_slip.clone();
+                    move |_| hus()
+                }
+            >
+                "Submit Payment Slip"
+            </button>
+            <p class="thb-upload-disclaimer">
+                "Bank account, bank name, and account holder name are required for refund."
+            </p>
         </div>
     }
         .into_any()
@@ -284,14 +307,15 @@ pub fn thb_payment_form_view(
 /// THB uploading spinner view.
 pub fn thb_uploading_view() -> AnyView {
     view! {
-        <div class="card dep-card">
-            <div class="card-header">
-                <h2 class="card-title">
-                    <span class="spinner spinner-lg"></span>
-                    " Uploading slip..."
-                </h2>
+        <div class="dep2-card">
+            <div class="dep2-confirming">
+                <div class="dep2-confirming-dots">
+                    <span class="dep2-confirming-dot"></span>
+                    <span class="dep2-confirming-dot"></span>
+                    <span class="dep2-confirming-dot"></span>
+                </div>
+                <p class="hint-desc u-mt-xs">"Uploading your slip..."</p>
             </div>
-            <p class="hint-desc">"Please wait while we upload your payment slip."</p>
         </div>
     }
         .into_any()
@@ -313,20 +337,17 @@ pub fn thb_uploaded_view(
         js_interop::navigate_to(&format!("/ticket/{aid}?event_id={eid}"));
     });
     view! {
-        <div class="card thb-success-card">
-            <div class="card-header">
-                <h2 class="card-title">
-                    <Icon icon=IconName::Check class="icon-sm icon-success" />
-                    " Slip Uploaded"
-                </h2>
+        <div class="dep2-card">
+            <div class="dep2-success-icon">
+                <Icon icon=IconName::Check />
             </div>
-            <p class="hint-desc">
-                "Your payment slip has been submitted for verification. You'll be notified once it's confirmed."
+            <h2 class="dep2-card-title" style="text-align:center;margin-top:0.75rem">"Slip Submitted!"</h2>
+            <p class="hint-desc" style="text-align:center">
+                "Your payment slip has been submitted for verification."
             </p>
-            <span class="badge badge-warning">
-                <Icon icon=IconName::Hourglass class="icon-sm icon-warning" />
-                " Pending Verification"
-            </span>
+            <div style="text-align:center">
+                <span class="badge badge-warning">"Pending Verification"</span>
+            </div>
             <p class="thb-success-redirect">"Redirecting to your ticket..."</p>
         </div>
     }
@@ -343,30 +364,20 @@ pub fn thb_rejected_view(
     set_state: WriteSignal<DepositPageState>,
     set_payment_choice: WriteSignal<Option<PaymentChoice>>,
 ) -> AnyView {
-    let amount_thb = data.deposit_amount_thb;
+    let _amount_thb = data.deposit_amount_thb;
     let data_clone = data.clone();
 
     view! {
-        <div class="card dep-card-error">
-            <div class="card-header">
-                <h2 class="card-title">
-                    <Icon icon=IconName::Warning class="icon-sm icon-danger" />
-                    " Slip Rejected"
-                </h2>
-                <span class="badge badge-danger">
-                    {format!("{amount_thb} THB")}
-                </span>
-            </div>
-            <p class="hint-desc">
-                "Your payment slip was reviewed and could not be verified. This can happen if the slip is unreadable, the amount doesn't match, or the transfer wasn't completed."
-            </p>
-            <div class="dep-info-note">
-                <p class="hint-note">
-                    "Please make a new transfer and upload the correct payment slip."
+        <div class="dep2-card">
+            <div class="dep2-deadline dep2-deadline--danger">
+                <Icon icon=IconName::Warning class="dep2-icon--danger" />
+                <p class="dep2-deadline-text">
+                    "Your slip was rejected. Please re-upload."
                 </p>
             </div>
+
             <button
-                class="btn btn-primary btn-block btn-action-lg"
+                class="btn btn-primary btn-block u-mt-1rem"
                 on:click=move |_| {
                     set_payment_choice.set(Some(PaymentChoice::Thb));
                     set_state.set(DepositPageState::ChoosePayment(data_clone.clone()));

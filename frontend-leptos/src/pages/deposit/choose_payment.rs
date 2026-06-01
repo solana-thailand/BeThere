@@ -50,62 +50,56 @@ pub fn choose_payment_view(
     let deposit_deadline = data_clone.deposit_deadline_hours;
     let deadline_expired = data_clone.deadline_expired;
     let can_reclaim = data_clone.in_person_available.unwrap_or(false);
+    let usdc_formatted = format_usdc(data.deposit_amount_usdc);
+    let thb_amount = data_clone.deposit_amount_thb;
 
     view! {
-        // Deadline expired banner
-        {if deadline_expired && !can_reclaim {
+        // Amount hero
+        {if !deadline_expired || can_reclaim {
             view! {
-                <div class="dep-info-note dep-choose-note-mb">
-                    <div class="badge badge-warning dep-choose-badge-mb">
-                        "Deadline Expired"
-                    </div>
-                    <p class="hint-note">
-                        <Icon icon=IconName::Clock class="icon-sm" />
-                        " Your deposit deadline has passed and in-person spots are now full. You have been moved to the online track."
-                    </p>
-                    <p class="hint-note dep-choose-hint-mt">
-                        "You will be able to claim your NFT after the event ends."
-                    </p>
+                <div class="dep2-amount-hero">
+                    {if show_usdc && thb_amount > 0 {
+                        format!("{} THB / {} USDC", thb_amount, usdc_formatted)
+                    } else if show_usdc {
+                        format!("{} USDC", usdc_formatted)
+                    } else {
+                        format!("{} THB", thb_amount)
+                    }}
                 </div>
+                <div class="dep2-amount-unit">"Secure your spot with a deposit"</div>
             }.into_any()
         } else {
             view! { <div></div> }.into_any()
         }}
 
-        {if deadline_expired && can_reclaim {
+        // Deadline banners
+        {if deadline_expired && !can_reclaim {
             view! {
-                <div class="dep-info-note dep-choose-note-mb">
-                    <div class="badge badge-success dep-choose-badge-mb">
-                        "Spot Still Available!"
-                    </div>
-                    <p class="hint-note">
+                <div class="dep2-deadline dep2-deadline--danger">
+                    <span class="dep2-deadline-text">
                         <Icon icon=IconName::Clock class="icon-sm" />
-                        " Your deposit deadline has passed, but in-person spots are still available! Complete your deposit now to reclaim your spot."
-                    </p>
+                        " Your deposit deadline has passed and in-person spots are now full. You have been moved to the online track. You will be able to claim your NFT after the event ends."
+                    </span>
                 </div>
-                <p class="subtitle subtitle-lg">
-                    "Choose your preferred payment method to secure your spot."
-                </p>
             }.into_any()
-        } else if !deadline_expired {
+        } else if deadline_expired && can_reclaim {
             view! {
-                <p class="subtitle subtitle-lg">
-                    "Choose your preferred payment method to secure your spot."
-                </p>
-
-                {if let Some(hours) = deposit_deadline {
-                    let label = format_duration_label(hours);
-                    view! {
-                        <div class="dep-info-note dep-choose-note-mb">
-                            <p class="hint-note">
-                                <Icon icon=IconName::Clock class="icon-sm" />
-                                " You have "{label}" to complete your deposit. After that, your in-person spot may be released."
-                            </p>
-                        </div>
-                    }.into_any()
-                } else {
-                    view! { <div></div> }.into_any()
-                }}
+                <div class="dep2-deadline dep2-deadline--success">
+                    <span class="dep2-deadline-text">
+                        <Icon icon=IconName::Clock class="icon-sm" />
+                        " Your deadline has passed, but in-person spots are still available! Complete your deposit now to reclaim your spot."
+                    </span>
+                </div>
+            }.into_any()
+        } else if let Some(hours) = deposit_deadline {
+            let label = format_duration_label(hours);
+            view! {
+                <div class="dep2-deadline dep2-deadline--warning">
+                    <span class="dep2-deadline-text">
+                        <Icon icon=IconName::Clock class="icon-sm" />
+                        " You have "{label}" to complete your deposit. After that, your in-person spot may be released."
+                    </span>
+                </div>
             }.into_any()
         } else {
             view! { <div></div> }.into_any()
@@ -116,155 +110,143 @@ pub fn choose_payment_view(
             let hqr = handle_pay_usdc_qr.clone();
             let hus = handle_upload_slip.clone();
             view! {
-                <div class="dep-methods">
+                {move || match payment_choice.get() {
+                    None => view! {
+                        <div class="dep2-method-grid">
+                            // THB card — always shown, recommended
+                            <div class="dep2-method-card dep2-method-card--recommended"
+                                on:click=move |_| set_payment_choice.set(Some(PaymentChoice::Thb))>
+                                <div class="dep2-method-icon">
+                                    <Icon icon=IconName::Baht class="icon-md" />
+                                </div>
+                                <div class="dep2-method-name">"THB"</div>
+                                <div class="dep2-method-amount">
+                                    {format!("{} THB", thb_amount)}
+                                </div>
+                                <div class="dep2-method-label">"via PromptPay"</div>
+                            </div>
 
-            {move || match payment_choice.get() {
-                None => view! {
-                    <div class="deposit-method-cards">
+                            // USDC card — only if accepted
+                            {if show_usdc {
+                                view! {
+                                    <div class="dep2-method-card"
+                                        on:click=move |_| set_payment_choice.set(Some(PaymentChoice::Usdc))>
+                                        <div class="dep2-method-icon">
+                                            <Icon icon=IconName::Coin class="icon-md" />
+                                        </div>
+                                        <div class="dep2-method-name">"USDC"</div>
+                                        <div class="dep2-method-amount">
+                                            {format!("{} USDC", usdc_formatted)}
+                                        </div>
+                                        <div class="dep2-method-label">"via Solana"</div>
+                                    </div>
+                                }.into_any()
+                            } else {
+                                view! { <div></div> }.into_any()
+                            }}
+                        </div>
+                    }.into_any(),
+
+                    Some(PaymentChoice::Usdc) => view! {
+                        <button class="dep2-back"
+                            on:click=move |_| set_payment_choice.set(None)>
+                            "← Change method"
+                        </button>
+
                         {if show_usdc {
                             view! {
-                                <div class="deposit-method-card"
-                                    on:click=move |_| set_payment_choice.set(Some(PaymentChoice::Usdc))>
-                                    <div class="deposit-method-header">
-                                        <h3 class="deposit-method-title">"Pay with USDC"</h3>
-                                        <span class="badge badge-info">
-                                            {format!("{:.2} USDC", data.deposit_amount_usdc as f64 / 1_000_000.0)}
-                                        </span>
+                                <div class="dep2-card">
+                                    <div class="dep2-amount-hero">
+                                        {format!("{} USDC", usdc_formatted)}
                                     </div>
-                                    <p class="deposit-method-desc">
-                                        "Pay via Solana wallet or QR code."
-                                    </p>
-                                    <span class="badge badge-muted">"🧪 Dev Mode"</span>
-                                </div>
-                            }.into_any()
-                        } else {
-                            view! { <div></div> }.into_any()
-                        }}
-                        <div class="deposit-method-card"
-                            on:click=move |_| set_payment_choice.set(Some(PaymentChoice::Thb))>
-                            <div class="deposit-method-header">
-                                <h3 class="deposit-method-title">"Pay with THB"</h3>
-                                <span class="badge badge-warning">
-                                    {format!("{} THB", data_clone.deposit_amount_thb)}
-                                </span>
-                            </div>
-                            <p class="deposit-method-desc">
-                                "Transfer via PromptPay and upload your payment slip."
-                            </p>
-                        </div>
-                    </div>
-                }.into_any(),
 
-                Some(PaymentChoice::Usdc) => view! {
-                    <button class="btn btn-outline btn-sm dep-choose-back-btn"
-                        on:click=move |_| set_payment_choice.set(None)>
-                        "← Change method"
-                    </button>
-
-            {if show_usdc {
-                view! {
-                    <div class="card">
-                        <div class="card-header">
-                            <h2 class="card-title">"Pay with USDC"</h2>
-                            <span class="badge badge-info">
-                                {format!("{:.2} USDC", data.deposit_amount_usdc as f64 / 1_000_000.0)}
-                            </span>
-                        </div>
-                        <p class="hint-desc">
-                            "Pay via Solana. Connect your wallet to send the deposit directly, or use a QR code."
-                        </p>
-                        <span class="badge badge-muted dep-choose-badge-mb">"🧪 Dev Mode"</span>
-
-                        {if has_wallets() {
-                            let wallets_for_click = wallets.clone();
-                            view! {
-                                <div class="wallet-list">
-                                    <p class="wallet-prompt">
-                                        <Icon icon=IconName::Link class="icon-sm" />" Connect your Solana wallet:"
-                                    </p>
-                                    {wallets_for_click.into_iter().map(|w| {
-                                        let w_clone = w.clone();
-                                        let wallet_icon = wallet_icon_name(&w);
-                                        let hcw = hcw.clone();
+                                    {if has_wallets() {
+                                        let wallets_for_click = wallets.clone();
                                         view! {
-                                            <button
-                                                class="btn btn-primary btn-block wallet-btn-inner"
-                                                on:click={
-                                                    let w = w.clone();
-                                                    move |_| hcw(w.clone())
+                                            <div class="wallet-list">
+                                                <p class="wallet-prompt">
+                                                    <Icon icon=IconName::Link class="icon-sm" />" Connect your Solana wallet:"
+                                                </p>
+                                                {wallets_for_click.into_iter().map(|w| {
+                                                    let w_clone = w.clone();
+                                                    let wallet_icon = wallet_icon_name(&w);
+                                                    let hcw = hcw.clone();
+                                                    view! {
+                                                        <button
+                                                            class="btn btn-primary btn-block wallet-btn-inner"
+                                                            on:click={
+                                                                let w = w.clone();
+                                                                move |_| hcw(w.clone())
+                                                            }
+                                                        >
+                                                            <Icon icon=wallet_icon class="icon-md wallet-icon-white" />
+                                                            <span>{format!("Connect {}", &w_clone)}</span>
+                                                        </button>
+                                                    }
+                                                }).collect::<Vec<_>>()}
+                                            </div>
+                                        }.into_any()
+                                    } else {
+                                        view! { <div></div> }.into_any()
+                                    }}
+
+                                    <div class="dep2-qr-secondary">
+                                        <p class="dep2-qr-secondary-label">
+                                            <Icon icon=IconName::Phone class="icon-sm" />" No wallet? Use QR code instead:"
+                                        </p>
+                                        <div class="u-mb-sm">
+                                            <input
+                                                type="text"
+                                                class="form-input dep-input"
+                                                placeholder="Enter your Solana wallet address"
+                                                prop:value=move || wallet_input.get()
+                                                on:input=move |ev| {
+                                                    let val = event_target_value(&ev);
+                                                    set_wallet_input.set(val);
                                                 }
-                                            >
-                                                <Icon icon=wallet_icon class="icon-md wallet-icon-white" />
-                                                <span>{format!("Connect {}", &w_clone)}</span>
-                                            </button>
-                                        }
-                                    }).collect::<Vec<_>>()}
+                                            />
+                                        </div>
+                                        <button
+                                            class="btn btn-outline btn-block"
+                                            on:click={
+                                                let hqr = hqr.clone();
+                                                move |_| hqr()
+                                            }
+                                        >
+                                            "Generate QR Code"
+                                        </button>
+                                    </div>
                                 </div>
                             }.into_any()
                         } else {
                             view! { <div></div> }.into_any()
                         }}
+                    }.into_any(),
 
-                        <div class="dep-divider-section">
-                            <p class="hint-sm">
-                                <Icon icon=IconName::Phone class="icon-sm" />" No wallet? Use QR code instead:"
-                            </p>
-                            <div class="u-mb-sm">
-                                <input
-                                    type="text"
-                                    class="form-input dep-input"
-                                    placeholder="Enter your Solana wallet address"
-                                    prop:value=move || wallet_input.get()
-                                    on:input=move |ev| {
-                                        let val = event_target_value(&ev);
-                                        set_wallet_input.set(val);
-                                    }
-                                />
-                            </div>
-                            <button
-                                class="btn btn-outline btn-block"
-                                on:click={
-                                    let hqr = hqr.clone();
-                                    move |_| hqr()
-                                }
-                            >
-                                "Generate QR Code"
-                            </button>
-                        </div>
-                    </div>
-                }.into_any()
-            } else {
-                view! { <div></div> }.into_any()
-            }}
-
-                }.into_any(),
-
-                Some(PaymentChoice::Thb) => view! {
-                    <button class="btn btn-outline btn-sm dep-choose-back-btn"
-                        on:click=move |_| set_payment_choice.set(None)>
-                        "← Change method"
-                    </button>
-                    {super::thb_payment::thb_payment_form_view(
-                        &data_clone,
-                        file_input_ref.clone(),
-                        slip_url_input,
-                        set_slip_url_input,
-                        slip_preview,
-                        set_slip_preview,
-                        bank_account_input,
-                        set_bank_account_input,
-                        bank_name_input,
-                        set_bank_name_input,
-                        account_name_input,
-                        set_account_name_input,
-                        show_bank_dropdown,
-                        set_show_bank_dropdown,
-                        hus.clone(),
-                    )}
-                }.into_any(),
-            }}
-
-        </div>
+                    Some(PaymentChoice::Thb) => view! {
+                        <button class="dep2-back"
+                            on:click=move |_| set_payment_choice.set(None)>
+                            "← Change method"
+                        </button>
+                        {super::thb_payment::thb_payment_form_view(
+                            &data_clone,
+                            file_input_ref.clone(),
+                            slip_url_input,
+                            set_slip_url_input,
+                            slip_preview,
+                            set_slip_preview,
+                            bank_account_input,
+                            set_bank_account_input,
+                            bank_name_input,
+                            set_bank_name_input,
+                            account_name_input,
+                            set_account_name_input,
+                            show_bank_dropdown,
+                            set_show_bank_dropdown,
+                            hus.clone(),
+                        )}
+                    }.into_any(),
+                }}
             }.into_any()
         } else {
             view! { <div></div> }.into_any()
@@ -274,13 +256,13 @@ pub fn choose_payment_view(
         {
             if !event_slug.is_empty() {
                 view! {
-                    <a href=format!("/e/{event_slug}") class="link-back-home">
+                    <a href=format!("/e/{event_slug}") class="dep2-back">
                         "← Back to event"
                     </a>
                 }.into_any()
             } else {
                 view! {
-                    <a href="/" class="link-back-home">
+                    <a href="/" class="dep2-back">
                         "← Back to home"
                     </a>
                 }.into_any()

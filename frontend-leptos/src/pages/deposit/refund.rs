@@ -24,23 +24,22 @@ pub fn refund_choose_wallet_view(
     let handle_connect = handle_refund_connect_wallet.clone();
 
     view! {
-        <div class="card dep-card">
-            <div class="card-header">
-                <h2 class="card-title">"Claim Refund"</h2>
+        <div class="dep2-card">
+            <div class="dep2-card-header">
+                <span class="dep2-card-title">"Claim Refund"</span>
                 <span class="badge badge-info">
                     {format!("{usdc_fmt} USDC")}
                 </span>
             </div>
             <p class="hint-desc">
-                "Connect the wallet you used to deposit. Your refund will be sent to the same wallet."
+                "Connect the wallet you used to deposit. Your refund will be sent there."
             </p>
-            // Non-refundable check
             {if is_refundable {
                 view! { <div></div> }.into_any()
             } else {
                 view! {
-                    <div class="badge badge-warning dep-refund-badge-mb">
-                        "Non-refundable deposit — no refund available"
+                    <div class="dep2-deadline dep2-deadline--warning">
+                        <span class="dep2-deadline-text">"Non-refundable deposit — no refund available"</span>
                     </div>
                 }.into_any()
             }}
@@ -97,27 +96,38 @@ pub fn refund_wallet_connected_view(
     let data_for_back = data.clone();
     let handle_claim_refund = handle_claim_refund.clone();
 
+    let wallet_icon = wallet_icon_name(wallet_name);
+    let pk_display = truncate_pk(public_key);
+
     let set_state = set_state;
     view! {
-        <div class="card dep-card">
-            <div class="card-header">
-                <h2 class="card-title">"Claim Refund"</h2>
+        <div class="dep2-card">
+            <div class="dep2-card-header">
+                <span class="dep2-card-title">"Claim Refund"</span>
                 <span class="badge badge-info">
                     {format!("{usdc_fmt} USDC")}
                 </span>
             </div>
-            {components::wallet_connected_bar(wallet_name, public_key)}
+            <div class="dep2-wallet-bar">
+                <Icon icon=wallet_icon class="dep2-wallet-bar-icon" />
+                <div class="dep2-wallet-bar-info">
+                    <span class="dep2-wallet-bar-name">{format!("Connected via {}", wallet_name)}</span>
+                    <span class="dep2-wallet-bar-pk">{pk_display}</span>
+                </div>
+                <span class="dep2-wallet-bar-badge">"Connected"</span>
+            </div>
             <p class="hint-desc">
-                "Your deposit is waiting to be returned. Click below to claim it."
+                "Your deposit is ready to be returned."
             </p>
             <button
-                class="btn btn-success btn-block btn-action-lg"
+                class="btn btn-success btn-block"
                 on:click=move |_| handle_claim_refund(wallet_name_send.clone(), pk_send.clone())
             >
-                <Icon icon=IconName::Recycle class="icon-sm" />" Claim "{format!("{usdc_fmt} USDC")}" — Don't lose it"
+                <Icon icon=IconName::Recycle class="icon-sm" />
+                " Claim "{format!("{usdc_fmt} USDC")}" USDC"
             </button>
             <button
-                class="btn btn-outline btn-sm btn-action-secondary"
+                class="btn btn-outline btn-sm"
                 on:click=move |_| {
                     set_state.set(DepositPageState::RefundChooseWallet(data_for_back.clone()));
                 }
@@ -133,14 +143,23 @@ pub fn refund_wallet_connected_view(
 pub fn refund_signing_view(data: &DepositStatusResponse) -> AnyView {
     let usdc_fmt = format_usdc(data.deposit_amount_usdc);
     view! {
-        <div class="card dep-card">
-            <div class="card-header">
-                <h2 class="card-title"><Icon icon=IconName::Hourglass class="icon-sm icon-warning" />" Processing Refund..."</h2>
+        <div class="dep2-card">
+            <div class="dep2-card-header">
+                <span class="dep2-card-title">"Processing Refund..."</span>
                 <span class="badge badge-info">
                     {format!("{usdc_fmt} USDC")}
                 </span>
             </div>
-            {components::spinner_loading("Please approve the transaction in your wallet...")}
+            <div class="dep2-confirming">
+                <div class="dep2-confirming-dots">
+                    <span class="dep2-confirming-dot"></span>
+                    <span class="dep2-confirming-dot"></span>
+                    <span class="dep2-confirming-dot"></span>
+                </div>
+                <p class="hint-desc">
+                    "Please approve the transaction in your wallet..."
+                </p>
+            </div>
         </div>
     }
         .into_any()
@@ -153,22 +172,25 @@ pub fn refund_confirmed_view(data: &DepositStatusResponse, tx_sig: &str) -> AnyV
     let data_slug = data.event_slug.clone();
 
     view! {
-        <div class="card dep-card">
-            <div class="card-header">
-                <h2 class="card-title"><Icon icon=IconName::Party class="icon-sm" />" Refund Recovered & Rent Reclaimed!"</h2>
-                <span class="badge badge-success">"On-chain verified"</span>
+        <div class="dep2-card">
+            <div class="dep2-success-icon">
+                <Icon icon=IconName::Recycle class="icon-md" />
             </div>
-            {components::celebration_icon(IconName::Recycle)}
-            <p class="success-title">
-                {format!("{usdc_fmt} USDC + ~0.002 SOL returned to your wallet")}
+            <p class="dep2-amount-hero">
+                {format!("{usdc_fmt} USDC + ~0.002 SOL returned")}
             </p>
             <p class="hint-desc">
-                "Your refund has been confirmed on Solana and your deposit account has been closed. Both the USDC refund and rent lamports should appear in your wallet shortly."
+                "Your refund has been confirmed on Solana."
             </p>
-            {components::tx_hash_box(&sig_display)}
+            <div class="dep2-receipt">
+                <div class="dep2-receipt-row">
+                    <span class="dep2-receipt-label">"TX"</span>
+                    <span class="dep2-receipt-value">{sig_display}</span>
+                </div>
+            </div>
             {components::solscan_link(tx_sig)}
-            <div class="action-row-top-lg">
-                <a href=if data_slug.is_empty() { "/".to_string() } else { format!("/e/{data_slug}") } class="btn btn-primary">"← Back to event"</a>
+            <div class="dep2-back">
+                <a href=if data_slug.is_empty() { "/".to_string() } else { format!("/e/{data_slug}") }>"← Back to event"</a>
             </div>
         </div>
     }

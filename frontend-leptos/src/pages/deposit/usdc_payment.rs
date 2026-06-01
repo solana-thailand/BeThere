@@ -3,7 +3,7 @@
 use leptos::prelude::*;
 
 use crate::api::DepositStatusResponse;
-use crate::icons::{Icon, IconName};
+use crate::icons::{wallet_icon_name, Icon, IconName};
 
 use super::components;
 use super::js_interop;
@@ -23,27 +23,38 @@ pub fn wallet_connected_view(
     let usdc_fmt = format_usdc(data.deposit_amount_usdc);
     let data_clone = data.clone();
     let handle_send_deposit = handle_send_deposit.clone();
+    let wallet_icon = wallet_icon_name(wallet_name);
+    let pk_short = truncate_pk(public_key);
 
     view! {
-        <div class="card dep-card">
-            <div class="card-header">
-                <h2 class="card-title">"USDC Deposit"</h2>
-                <span class="badge badge-info">
-                    {format!("{usdc_fmt} USDC")}
-                </span>
+        <div class="dep2-card">
+            <div class="dep2-card-header">
+                <span class="dep2-card-title">"USDC Deposit"</span>
+                <span class="badge badge-info">{format!("{usdc_fmt} USDC")}</span>
             </div>
-            {components::wallet_connected_bar(wallet_name, public_key)}
+            <div class="dep2-amount-hero">
+                {format!("{usdc_fmt}")}
+                <span class="dep2-amount-unit">" USDC"</span>
+            </div>
+            <div class="dep2-wallet-bar">
+                <Icon icon=wallet_icon class="dep2-wallet-bar-icon wallet-icon-white" />
+                <div class="dep2-wallet-bar-info">
+                    <div class="dep2-wallet-bar-name">{format!("Connected via {wallet_name}")}</div>
+                    <div class="dep2-wallet-bar-pk">{pk_short}</div>
+                </div>
+                <span class="dep2-wallet-bar-badge">"Connected"</span>
+            </div>
             <p class="hint-desc">
-                "Click below to send your deposit transaction. You'll be asked to approve the transaction in your wallet."
+                "Tap below to approve the transaction in your wallet."
             </p>
             <button
-                class="btn btn-primary btn-block btn-action-lg"
+                class="btn btn-success btn-block"
                 on:click=move |_| handle_send_deposit(wallet_name_send.clone(), pk_send.clone())
             >
-                "Send " {format!("{usdc_fmt} USDC")} " Deposit"
+                {format!("Send {usdc_fmt} USDC")}
             </button>
             <button
-                class="btn btn-outline btn-sm btn-action-secondary"
+                class="btn btn-outline btn-sm"
                 on:click=move |_| {
                     set_payment_choice.set(None);
                     set_state.set(DepositPageState::ChoosePayment(data_clone.clone()));
@@ -91,25 +102,23 @@ pub fn awaiting_confirmation_view(
     });
 
     view! {
-        <div class="card dep-card">
-            <div class="card-header">
-                <h2 class="card-title"><Icon icon=IconName::Hourglass class="icon-sm icon-warning" />" Confirming Deposit..."</h2>
-                <span class="badge badge-info">
-                    {format!("{usdc_fmt} USDC")}
-                </span>
+        <div class="dep2-card">
+            <div class="dep2-card-header">
+                <span class="dep2-card-title">"Confirming Deposit..."</span>
+                <span class="badge badge-info">{format!("{usdc_fmt} USDC")}</span>
             </div>
-            <div class="spinner-wrap">
-                <span class="spinner spinner-lg spinner-xl"></span>
+            <div class="dep2-confirming">
+                <div class="dep2-confirming-dots">
+                    <span class="dep2-confirming-dot"></span>
+                    <span class="dep2-confirming-dot"></span>
+                    <span class="dep2-confirming-dot"></span>
+                </div>
+                <p>"Waiting for on-chain confirmation..."</p>
+                <p class="hint-xs">"Usually 5-15 seconds. Don't close this page."</p>
             </div>
-            <p class="hint-sm">
-                "Your transaction has been submitted! Waiting for on-chain confirmation..."
-            </p>
             <div class="tx-hash-box-top">
                 {format!("TX: {}", &sig_display)}
             </div>
-            <p class="hint-xs">
-                "This usually takes 5-15 seconds. Don't close this page."
-            </p>
         </div>
     }
         .into_any()
@@ -136,64 +145,68 @@ pub fn deposit_confirmed_view(
     let data_clone_slug = data.clone();
 
     view! {
-        <div class="card dep-card">
-            <div class="card-header">
-                <h2 class="card-title"><Icon icon=IconName::Ticket class="icon-sm" />" Spot Reserved!"</h2>
-                <span class="badge badge-success">"On-chain verified"</span>
+        <div class="dep2-card">
+            <div class="dep2-success-icon">
+                <Icon icon=IconName::Check class="icon-lg" />
             </div>
-            {components::celebration_icon(IconName::Party)}
-            <p class="success-title">
-                {format!("{usdc_fmt} USDC deposited")}
-            </p>
+            <div class="dep2-amount-hero">
+                {format!("{usdc_fmt}")}
+                <span class="dep2-amount-unit">" USDC deposited"</span>
+            </div>
             <p class="hint-desc">
                 "You're confirmed! Your spot is secured on Solana."
             </p>
-            // Tier badge
-            {
-                let status = &data_clone.status;
-                match status {
-                    Some(s) if !s.refundable => view! {
-                        <div class="badge badge-warning dep-badge-mt">
-                            "Non-refundable (#" {s.deposit_order} ") — no refund on check-in"
-                        </div>
-                    }.into_any(),
-                    Some(s) => view! {
-                        <div class="badge badge-success dep-badge-mt">
-                            "Refundable (#" {s.deposit_order} ") — check in to get your deposit back"
-                        </div>
-                    }.into_any(),
-                    _ => view! { <div></div> }.into_any(),
+            <div class="dep2-receipt">
+                {
+                    let status = &data_clone.status;
+                    let status_row = match status {
+                        Some(s) if !s.refundable => view! {
+                            <div class="dep2-receipt-row">
+                                <span class="dep2-receipt-label">"Status"</span>
+                                <span class="dep2-receipt-value">
+                                    <span class="badge badge-warning">
+                                        "Non-refundable (#" {s.deposit_order} ")"
+                                    </span>
+                                </span>
+                            </div>
+                        }.into_any(),
+                        Some(s) => view! {
+                            <div class="dep2-receipt-row">
+                                <span class="dep2-receipt-label">"Status"</span>
+                                <span class="dep2-receipt-value">
+                                    <span class="badge badge-success">
+                                        "Refundable (#" {s.deposit_order} ")"
+                                    </span>
+                                </span>
+                            </div>
+                        }.into_any(),
+                        _ => view! { <div></div> }.into_any(),
+                    };
+                    status_row
                 }
-            }
-            {components::tx_hash_box(&sig_display)}
-            {components::solscan_link(tx_sig)}
-            // Ownership + deal framing
-            <div class="dep-info-note-lg">
-                <p class="hint-note">
-                    {format!("Show up → get your {usdc_fmt} USDC back. That's the deal.")}
-                </p>
+                <div class="dep2-receipt-row">
+                    <span class="dep2-receipt-label">"TX"</span>
+                    <span class="dep2-receipt-value">{sig_display.clone()}</span>
+                </div>
             </div>
+            {components::solscan_link(tx_sig)}
             // Refund deadline info
             {match refund_info {
                 Some((deadline_date, duration_label)) => view! {
-                    <div class="dep-info-note">
+                    <div class="dep2-deadline--warning">
                         <p class="hint-note">
-                            <Icon icon=IconName::Coin class="icon-sm" />" "{format!("Refund window: {duration_label} after the event ends ({deadline_date}). Don't lose your deposit — claim it back.")}
+                            {format!("Refund window: {duration_label} after the event ends ({deadline_date}). Don't lose your deposit — claim it back.")}
                         </p>
                     </div>
                 }.into_any(),
                 None => view! {
-                    <div class="dep-info-note">
-                        <p class="hint-note">
-                            <Icon icon=IconName::Coin class="icon-sm" />" Refund will be available after the event."
-                        </p>
+                    <div class="dep2-deadline--warning">
+                        <p class="hint-note">"Refund will be available after the event."</p>
                     </div>
                 }.into_any(),
             }}
             <div class="action-row-top-lg">
-                <a href=ticket_href class="btn btn-primary">
-                    <Icon icon=IconName::Ticket class="icon-sm" />" View Your Ticket →"
-                </a>
+                <a href=ticket_href class="btn btn-primary">"View Your Ticket →"</a>
                 <a href=if data_clone_slug.event_slug.is_empty() { "/".to_string() } else { format!("/e/{}", data_clone_slug.event_slug) } class="btn btn-outline">"← Back to event"</a>
             </div>
         </div>
@@ -210,7 +223,7 @@ pub fn usdc_qr_ready_view(
     handle_copy_url: impl Fn(String) + Clone + 'static,
     handle_qr_poll: impl Fn() + Clone + 'static,
 ) -> AnyView {
-    let pay_url_display = pay_url.to_string();
+    let _pay_url_display = pay_url.to_string();
     let pay_url_copy = pay_url.to_string();
     let pay_url_qr = pay_url.to_string();
     let usdc_fmt = format_usdc(data.deposit_amount_usdc);
@@ -228,37 +241,31 @@ pub fn usdc_qr_ready_view(
     let data_slug = data.event_slug.clone();
 
     view! {
-        <div class="card dep-card">
-            <div class="card-header">
-                <h2 class="card-title"><Icon icon=IconName::Coin class="icon-sm" />" USDC Payment Ready"</h2>
-                <span class="badge badge-info">
-                    {format!("{usdc_fmt} USDC")}
-                </span>
+        <div class="dep2-card">
+            <div class="dep2-card-header">
+                <span class="dep2-card-title">"Scan to Pay"</span>
+                <span class="badge badge-info">{format!("{usdc_fmt} USDC")}</span>
             </div>
-            <p class="hint-desc">
-                "Scan this QR code with a Solana wallet, or copy the link below:"
-            </p>
-            {move || {
-                match js_interop::generate_qr_data_url(&pay_url_qr, 256) {
-                    Some(url) => view! {
-                        <div class="qr-wrapper">
-                            <img src=url alt="Solana Pay QR" class="qr-img-lg" />
-                        </div>
-                    }.into_any(),
-                    None => view! { <div></div> }.into_any(),
-                }
-            }}
-            <div class="tx-pay-url-box">
-                {pay_url_display.clone()}
+            <div class="dep2-qr-primary">
+                {move || {
+                    match js_interop::generate_qr_data_url(&pay_url_qr, 256) {
+                        Some(url) => view! {
+                            <div class="qr-wrapper">
+                                <img src=url alt="Solana Pay QR" class="qr-img-lg" />
+                            </div>
+                        }.into_any(),
+                        None => view! { <div></div> }.into_any(),
+                    }
+                }}
+                <button
+                    class=move || if pay_url_copied.get() { "btn btn-success btn-sm" } else { "btn btn-outline btn-sm" }
+                    on:click=move |_| handle_copy_url(pay_url_copy.clone())
+                >
+                    {move || view! { <Icon icon=if pay_url_copied.get() { IconName::Check } else { IconName::Copy } class="icon-sm" /> }}
+                    " " {move || if pay_url_copied.get() { "Copied!" } else { "Copy Link" }}
+                </button>
             </div>
-            <button
-                class=move || if pay_url_copied.get() { "btn btn-success btn-sm" } else { "btn btn-outline btn-sm" }
-                on:click=move |_| handle_copy_url(pay_url_copy.clone())
-            >
-                {move || view! { <Icon icon=if pay_url_copied.get() { IconName::Check } else { IconName::Copy } class="icon-sm" /> }}
-                " " {move || if pay_url_copied.get() { "Copied!" } else { "Copy Link" }}
-            </button>
-            <div class="dep-qr-polling">
+            <div class="dep2-qr-polling">
                 <span class="spinner spinner-sm"></span>
                 " Checking for payment..."
             </div>
@@ -267,7 +274,9 @@ pub fn usdc_qr_ready_view(
             </p>
         </div>
 
-        {components::back_to_event_link(&data_slug)}
+        <a href=if data_slug.is_empty() { "/".to_string() } else { format!("/e/{data_slug}") } class="dep2-back">
+            "← Back to event"
+        </a>
     }
         .into_any()
 }
