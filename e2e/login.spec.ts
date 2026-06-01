@@ -3,7 +3,9 @@ import { test, expect } from "@playwright/test";
 test.describe("Login page", () => {
   test("shows sign-in form", async ({ page }) => {
     await page.goto("/login");
-    await expect(page.locator("text=Sign in with Google")).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Sign in with Google" }),
+    ).toBeVisible();
   });
 
   test("has back to home link", async ({ page }) => {

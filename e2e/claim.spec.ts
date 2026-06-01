@@ -5,9 +5,9 @@ test.describe("Claim page", () => {
     await page.goto("/claim/invalid-token-12345");
 
     // Should show either "not found", "invalid", or "expired" error
-    const errorIndicator = page.locator(
-      ".error, .error-msg, [role='alert'], text=not found, text=invalid, text=expired, text=error"
-    );
+    const errorIndicator = page
+      .locator(".error, .error-msg, [role='alert']")
+      .or(page.getByText(/not found|invalid|expired|error/i));
     await expect(errorIndicator.first()).toBeVisible({ timeout: 10000 });
   });
 

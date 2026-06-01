@@ -4,7 +4,7 @@ test.describe("Landing page", () => {
   test("loads and shows hero content", async ({ page }) => {
     await page.goto("/");
     await expect(page).toHaveTitle(/BeThere/);
-    await expect(page.locator("text=BeThere")).toBeVisible();
+    await expect(page.locator(".landing-hero-brand")).toBeVisible();
   });
 
   test("navigates to login page", async ({ page }) => {
