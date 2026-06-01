@@ -107,7 +107,14 @@ pub fn already_deposited_view(
 
             // Amount hero
             <div class="dep2-amount-hero">
-                {format!("{} {}", info_clone.as_ref().unwrap().amount, info_clone.as_ref().unwrap().currency)}
+                {{
+                    let info = info_clone.as_ref().unwrap();
+                    if info.currency == "THB" {
+                        format!("฿{}", info.amount)
+                    } else {
+                        format!("{} {}", info.amount, info.currency)
+                    }
+                }}
                 " deposited"
             </div>
 
@@ -122,7 +129,14 @@ pub fn already_deposited_view(
                 <div class="dep2-receipt-row">
                     <span class="dep2-receipt-label">"Amount"</span>
                     <span class="dep2-receipt-value">
-                        {format!("{} {}", info_clone.as_ref().unwrap().amount, info_clone.as_ref().unwrap().currency)}
+                        {{
+                            let info = info_clone.as_ref().unwrap();
+                            if info.currency == "THB" {
+                                format!("฿{}", info.amount)
+                            } else {
+                                format!("{} {}", info.amount, info.currency)
+                            }
+                        }}
                     </span>
                 </div>
                 <div class="dep2-receipt-row">

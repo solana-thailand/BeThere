@@ -59,11 +59,11 @@ pub fn choose_payment_view(
             view! {
                 <div class="dep2-amount-hero">
                     {if show_usdc && thb_amount > 0 {
-                        format!("{} THB / {} USDC", thb_amount, usdc_formatted)
+                        format!("฿{} / {} USDC", thb_amount, usdc_formatted)
                     } else if show_usdc {
                         format!("{} USDC", usdc_formatted)
                     } else {
-                        format!("{} THB", thb_amount)
+                        format!("฿{}", thb_amount)
                     }}
                 </div>
                 <div class="dep2-amount-unit">"Secure your spot with a deposit"</div>

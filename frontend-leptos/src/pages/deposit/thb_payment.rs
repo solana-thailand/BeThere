@@ -66,7 +66,7 @@ pub fn thb_payment_form_view(
             <div class="dep2-card-header">
                 <h2 class="dep2-card-title">"Pay with THB"</h2>
                 <span class="badge badge-warning">
-                    {format!("{deposit_amount_thb} THB")}
+                    {format!("฿{deposit_amount_thb}")}
                 </span>
             </div>
 
@@ -92,7 +92,7 @@ pub fn thb_payment_form_view(
                                             on:click=move |_| {
                                                 js_interop::download_data_url(
                                                     &url_for_save,
-                                                    &format!("promptpay-{deposit_amount_thb}THB-qr.png"),
+                                                    &format!("promptpay-{deposit_amount_thb}-qr.png")
                                                 );
                                             }
                                         >
@@ -108,7 +108,7 @@ pub fn thb_payment_form_view(
                         }}
 
                         <p class="hint-desc u-mt-xs">
-                            {format!("Scan with your banking app → Transfer {deposit_amount_thb} THB")}
+                            {format!("Scan with your banking app → Transfer ฿{deposit_amount_thb}")}
                         </p>
                     </div>
                 }.into_any()
