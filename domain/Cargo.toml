@@ -4,16 +4,21 @@ version = "0.1.0"
 edition = "2024"
 description = "Shared domain types and logic for event-checkin (compiles x86_64 + wasm32)"
 
+[features]
+default = ["qr"]
+# QR code generation (SVG + URL builder). Used by worker for batch QR generation.
+qr = ["dep:qrcode", "dep:base64"]
+
 [dependencies]
 # Serialization — WASM-compatible
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
-# QR code generation — pure Rust, WASM-compatible
-qrcode = { version = "0.14", default-features = false, features = ["svg"] }
+# QR code generation — pure Rust, WASM-compatible (feature-gated)
+qrcode = { version = "0.14", default-features = false, features = ["svg"], optional = true }
 
-# Encoding — WASM-compatible
-base64 = "0.22"
+# Encoding — WASM-compatible (used by QR module)
+base64 = { version = "0.22", optional = true }
 
 # URL encoding — WASM-compatible (used by worker for Google Sheets ranges)
 urlencoding = "2"

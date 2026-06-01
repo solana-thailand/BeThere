@@ -36,7 +36,8 @@ urlencoding = "2"
 form_urlencoded = "1"
 
 # Shared domain types
-event-checkin-domain = { path = "../domain" }
+# Enable QR feature for batch QR generation + SVG badge rendering
+event-checkin-domain = { path = "../domain", features = ["qr"] }
 
 # WASM/JS interop for SubtleCrypto bridge
 wasm-bindgen = "0.2"
