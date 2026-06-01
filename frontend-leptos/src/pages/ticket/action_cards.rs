@@ -151,7 +151,7 @@ pub fn RefundCard(
                 <Icon icon=IconName::Recycle class="icon-sm" />
             </div>
             <div>
-                <div class="ticket-action-title">"Refund: Processed ✓"</div>
+                <div class="ticket-action-title">"RSVP Deposit Returned ✓"</div>
                 {if !url.is_empty() {
                     view! {
                         <a

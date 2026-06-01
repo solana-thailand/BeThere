@@ -68,12 +68,11 @@ pub fn thb_payment_form_view(
                 </span>
             </div>
 
-            // ── Section 1: Scan QR ──────────────────────────────────────
+            // ── Section A: Scan QR ──────────────────────────────────────
             {if has_promptpay {
                 view! {
                     <div class="dep2-section">
                         <div class="dep2-section-title">
-                            <span class="dep2-step-num">"1"</span>
                             "Scan & Pay"
                         </div>
 
@@ -86,7 +85,7 @@ pub fn thb_payment_form_view(
                                             <img src=url alt="PromptPay QR" class="qr-img-md" />
                                         </div>
                                         <button
-                                            class="btn btn-outline btn-sm u-mt-xs"
+                                            class="btn btn-primary btn-sm u-mt-xs dep2-save-qr-btn"
                                             on:click=move |_| {
                                                 js_interop::download_data_url(
                                                     &url_for_save,
@@ -94,7 +93,7 @@ pub fn thb_payment_form_view(
                                                 );
                                             }
                                         >
-                                            "Save QR Code"
+                                            "⬇ Save QR Code"
                                         </button>
                                     </div>
                                 }.into_any()
@@ -105,7 +104,7 @@ pub fn thb_payment_form_view(
                         }}
 
                         <p class="hint-desc u-mt-xs">
-                            {format!("Scan with your banking app → Transfer ฿{deposit_amount_thb}")}
+                            {format!("Scan with your banking app → Transfer ฿{} THB", deposit_amount_thb)}
                         </p>
                     </div>
                 }.into_any()
@@ -113,7 +112,6 @@ pub fn thb_payment_form_view(
                 view! {
                     <div class="dep2-section">
                         <div class="dep2-section-title">
-                            <span class="dep2-step-num">"1"</span>
                             "Scan & Pay"
                         </div>
                         <p class="hint-desc">"PromptPay QR is not available for this event. Please transfer manually and upload your slip below."</p>
@@ -121,11 +119,10 @@ pub fn thb_payment_form_view(
                 }.into_any()
             }}
 
-            // ── Section 2: Upload Slip ──────────────────────────────────
+            // ── Section B: Upload Slip ──────────────────────────────────
             <div class="dep2-section">
                 <div class="dep2-section-title">
-                    <span class="dep2-step-num">"2"</span>
-                    "Upload Slip"
+                    "Upload Payment Slip"
                 </div>
                 <p class="thb-slip-hint">
                     "Take a screenshot or photo of your transfer confirmation. Max 3MB (JPEG, PNG, WebP)."
@@ -168,9 +165,9 @@ pub fn thb_payment_form_view(
                     None => view! { <div></div> }.into_any(),
                 }}
 
-                // Manual URL fallback
-                <details class="u-mt-xs">
-                    <summary class="details-summary-text">"Or paste slip URL manually"</summary>
+                // Manual URL fallback — advanced option
+                <details class="u-mt-xs dep2-advanced-toggle">
+                    <summary class="details-summary-text hint-muted">"Advanced: paste slip image URL"</summary>
                     <input
                         type="text"
                         class="form-input dep-input u-mt-xs"
@@ -184,13 +181,12 @@ pub fn thb_payment_form_view(
                 </details>
             </div>
 
-            // ── Section 3: Refund Account ───────────────────────────────
+            // ── Section C: Refund Account ───────────────────────────────
             <div class="dep2-section">
                 <div class="dep2-section-title">
-                    <span class="dep2-step-num">"3"</span>
                     "Refund Account"
                 </div>
-                <p class="hint-desc">"Where should we send your refund?"</p>
+                <p class="hint-desc">"Where should we send your refund after the event?"</p>
 
                 <input
                     type="text"

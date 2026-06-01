@@ -134,7 +134,7 @@ pub fn deposit_step(
     match state {
         // ChoosePayment: show stepper only after user picks a method
         DepositPageState::ChoosePayment(_) => match payment_choice {
-            Some(PaymentChoice::Thb) => Some((DepositFlow::Thb, 1, 3)),
+            Some(PaymentChoice::Thb) => Some((DepositFlow::Thb, 2, 3)),
             Some(PaymentChoice::Usdc) => Some((DepositFlow::Usdc, 1, 4)),
             None => None,
         },

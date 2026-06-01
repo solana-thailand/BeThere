@@ -281,7 +281,8 @@ print(json.dumps(m))
 
     # Verify assets are served
     sleep 3
-    JS_SIZE=$(curl -s -o /dev/null -w "%{size_download}" "https://${WORKER_NAME}.solana-thailand.workers.dev/event-checkin-frontend-41b6f7dcd92eacc4.js")
+    JS_FILE=$(grep -o 'event-checkin-frontend-[a-z0-9]*\.js' "${DIST_DIR}/index.html" | head -1)
+    JS_SIZE=$(curl -s -o /dev/null -w "%{size_download}" "https://${WORKER_NAME}.solana-thailand.workers.dev/${JS_FILE}")
     if [ "$JS_SIZE" -gt 10000 ]; then
       echo "   ✅ Frontend assets served correctly (${JS_SIZE} bytes)"
     else

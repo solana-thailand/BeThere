@@ -109,15 +109,23 @@ pub fn choose_payment_view(
             view! {
                 {move || match payment_choice.get() {
                     None => view! {
-                        <div class="dep2-method-grid">
+                        <div class="dep2-method-grid"
+                            class:dep2-method-grid--single={!show_usdc}>
                             // THB card — always shown, recommended
                             <div class="dep2-method-card dep2-method-card--recommended"
                                 on:click=move |_| set_payment_choice.set(Some(PaymentChoice::Thb))>
                                 <div class="dep2-method-name">"THB"</div>
                                 <div class="dep2-method-amount">
-                                    {format!("฿{}", thb_amount)}
+                                    {format!("฿{} THB", thb_amount)}
                                 </div>
                                 <div class="dep2-method-label">"via PromptPay"</div>
+                                <button class="dep2-method-cta"
+                                    on:click=move |ev| {
+                                        ev.stop_propagation();
+                                        set_payment_choice.set(Some(PaymentChoice::Thb));
+                                    }>
+                                    "Pay with PromptPay →"
+                                </button>
                             </div>
 
                             // USDC card — only if accepted

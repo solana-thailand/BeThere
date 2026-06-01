@@ -301,27 +301,8 @@ pub fn InPersonView(
                 view! { <div></div> }.into_any()
             }}
 
-            // Status badge
-            {if is_checked_in {
-                let detail = status_detail.clone();
-                view! {
-                    <div class="ticket-action-card ticket-action-card--verified">
-                        <div class="ticket-action-icon">
-                            <Icon icon=IconName::Check class="icon-sm" />
-                        </div>
-                        <div>
-                            <div class="ticket-action-title">"Checked In"</div>
-                            {if !detail.is_empty() {
-                                view! {
-                                    <div class="ticket-action-desc">{detail}</div>
-                                }.into_any()
-                            } else {
-                                view! { <div></div> }.into_any()
-                            }}
-                        </div>
-                    </div>
-                }.into_any()
-            } else if !is_approved {
+            // Status badge (only for non-checked-in states — hero already shows checked-in status)
+            {if !is_approved {
                 view! {
                     <div class="ticket-action-card ticket-action-card--pending">
                         <div class="ticket-action-icon">
@@ -349,7 +330,7 @@ pub fn InPersonView(
                         </div>
                     </div>
                 }.into_any()
-            } else {
+            } else if !is_checked_in {
                 view! {
                     <div class="ticket-action-card ticket-action-card--ready">
                         <div class="ticket-action-icon">
@@ -363,6 +344,8 @@ pub fn InPersonView(
                         </div>
                     </div>
                 }.into_any()
+            } else {
+                view! { <div></div> }.into_any()
             }}
         </div>
 
