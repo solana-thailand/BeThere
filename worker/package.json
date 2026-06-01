@@ -2,8 +2,14 @@
   "name": "event-checkin-worker",
   "private": true,
   "description": "Cloudflare Worker for event-checkin — local wrangler avoids global Yarn PnP issues",
+  "scripts": {
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:debug": "playwright test --debug"
+  },
   "devDependencies": {
     "@cloudflare/unenv-preset": "^2.16.0",
+    "@playwright/test": "^1.60.0",
     "wrangler": "^4.95.0"
   }
 }
