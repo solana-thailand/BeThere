@@ -7,6 +7,7 @@ pub fn registration_form(
     locked_email: String,
     is_hybrid: bool,
     require_contact: bool,
+    require_photo_consent: bool,
     has_deposit: bool,
     deposit_label: String,
     in_person_available: bool,
@@ -25,6 +26,10 @@ pub fn registration_form(
     set_reg_contact_handle: WriteSignal<String>,
     reg_deposit_agreed: ReadSignal<bool>,
     set_reg_deposit_agreed: WriteSignal<bool>,
+    reg_consent_given: ReadSignal<bool>,
+    set_reg_consent_given: WriteSignal<bool>,
+    reg_photo_consent_given: ReadSignal<bool>,
+    set_reg_photo_consent_given: WriteSignal<bool>,
     reg_state: ReadSignal<RegState>,
     set_reg_state: WriteSignal<RegState>,
 ) -> AnyView {
@@ -223,6 +228,52 @@ pub fn registration_form(
                                         None => view! { <div></div> }.into_any(),
                                     }}
                                 </div>
+                                // PDPA Consent
+                                <div id="pe-field-consent">
+                                    <label class="pe-checkbox-label">
+                                        <input
+                                            type="checkbox"
+                                            class="pe-checkbox"
+                                            checked=move || reg_consent_given.get()
+                                            on:change=move |ev| {
+                                                set_reg_consent_given.set(event_target_checked(&ev));
+                                                set_field_errors.update(|e| e.consent_given = None);
+                                            }
+                                        />
+                                        <span>"I consent to BeThere collecting my name, email, and contact information for event registration, check-in, and NFT issuance. I understand my wallet address and transaction data will be recorded on the Solana blockchain (public, immutable). "<a href="/privacy" target="_blank" class="pe-ext-link">"View Privacy Policy"</a></span>
+                                    </label>
+                                    {move || match &field_errors.get().consent_given {
+                                        Some(err) => view! { <span class="pe-field-error pe-field-error-indent">{err.clone()}</span> }.into_any(),
+                                        None => view! { <div></div> }.into_any(),
+                                    }}
+                                </div>
+                                // Photo Consent (conditional)
+                                {move || {
+                                    if require_photo_consent {
+                                        view! {
+                                            <div id="pe-field-photo-consent">
+                                                <label class="pe-checkbox-label">
+                                                    <input
+                                                        type="checkbox"
+                                                        class="pe-checkbox"
+                                                        checked=move || reg_photo_consent_given.get()
+                                                        on:change=move |ev| {
+                                                            set_reg_photo_consent_given.set(event_target_checked(&ev));
+                                                            set_field_errors.update(|e| e.photo_consent_given = None);
+                                                        }
+                                                    />
+                                                    <span>"(Optional) I consent to being photographed/filmed during the event. Photos may be used for event promotion on social media and marketing materials."</span>
+                                                </label>
+                                                {move || match &field_errors.get().photo_consent_given {
+                                                    Some(err) => view! { <span class="pe-field-error pe-field-error-indent">{err.clone()}</span> }.into_any(),
+                                                    None => view! { <div></div> }.into_any(),
+                                                }}
+                                            </div>
+                                        }.into_any()
+                                    } else {
+                                        ().into_any()
+                                    }
+                                }}
                                 // Deposit Agreement
                                 {move || {
                                     let is_online_track = is_hybrid && reg_participation.get().to_lowercase().contains("online");
@@ -277,6 +328,14 @@ pub fn registration_form(
                                                 if require_contact && handle_val.trim().is_empty() {
                                                     errors.contact_handle = Some("Please provide your contact info".to_string());
                                                 }
+                                                let consent_val = reg_consent_given.get();
+                                                if !consent_val {
+                                                    errors.consent_given = Some("You must consent to data collection".to_string());
+                                                }
+                                                let photo_consent_val = reg_photo_consent_given.get();
+                                                if require_photo_consent && !photo_consent_val {
+                                                    errors.photo_consent_given = Some("You must consent to photo/media capture".to_string());
+                                                }
                                                 let is_online_track = is_hybrid && part_val.to_lowercase().contains("online");
                                                 if has_deposit && !is_online_track && !deposit_val {
                                                     errors.deposit_agreed = Some("You must agree to the deposit".to_string());
@@ -285,6 +344,8 @@ pub fn registration_form(
                                                 let has_errors = errors.name.is_some()
                                                     || errors.contact_channel.is_some()
                                                     || errors.contact_handle.is_some()
+                                                    || errors.consent_given.is_some()
+                                                    || errors.photo_consent_given.is_some()
                                                     || errors.deposit_agreed.is_some();
 
                                                 // Determine scroll target before moving errors
@@ -292,6 +353,8 @@ pub fn registration_form(
                                                     .map(|_| "pe-field-name")
                                                     .or(errors.contact_channel.as_ref().map(|_| "pe-field-channel"))
                                                     .or(errors.contact_handle.as_ref().map(|_| "pe-field-handle"))
+                                                    .or(errors.consent_given.as_ref().map(|_| "pe-field-consent"))
+                                                    .or(errors.photo_consent_given.as_ref().map(|_| "pe-field-photo-consent"))
                                                     .or(errors.deposit_agreed.as_ref().map(|_| "pe-field-deposit"));
 
                                                 set_field_errors.set(errors);
@@ -312,6 +375,8 @@ pub fn registration_form(
                                                     contact_channel: if channel_val.trim().is_empty() { None } else { Some(channel_val.trim().to_string()) },
                                                     contact_handle: if handle_val.trim().is_empty() { None } else { Some(handle_val.trim().to_string()) },
                                                     deposit_agreed: if deposit_val { Some(true) } else { None },
+                                                    consent_given: if consent_val { Some(true) } else { None },
+                                                    photo_consent_given: if photo_consent_val { Some(true) } else { None },
                                                 };
 
                                                 leptos::task::spawn_local(async move {

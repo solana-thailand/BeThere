@@ -42,6 +42,7 @@ pub struct EventForm {
     pub deposit_amount_usdc: String,
     pub deposit_amount_thb: String,
     pub require_contact_info: bool,
+    pub require_photo_consent: bool,
     pub promptpay_id: String,
     pub escrow_address: String,
     pub escrow_status: api::EscrowStatus,
@@ -177,6 +178,7 @@ pub fn default_form() -> EventForm {
         deposit_amount_usdc: String::new(),
         deposit_amount_thb: String::new(),
         require_contact_info: true,
+        require_photo_consent: false,
         promptpay_id: String::new(),
         escrow_address: String::new(),
         escrow_status: api::EscrowStatus::None,
@@ -242,6 +244,7 @@ pub fn form_from_detail(detail: &api::EventDetail) -> EventForm {
         deposit_amount_usdc: if detail.deposit_amount_usdc > 0 { format!("{:.6}", detail.deposit_amount_usdc as f64 / 1_000_000.0).trim_end_matches('0').trim_end_matches('.').to_string() } else { String::new() },
         deposit_amount_thb: if detail.deposit_amount_thb > 0 { detail.deposit_amount_thb.to_string() } else { String::new() },
         require_contact_info: detail.require_contact_info,
+        require_photo_consent: detail.require_photo_consent,
         promptpay_id: detail.promptpay_id.clone(),
         escrow_address: detail.escrow_address.clone(),
         escrow_status: detail.escrow_status.clone(),
@@ -534,6 +537,7 @@ pub fn EventFormComponent(
                 max_refundable_deposits: current_form.max_refundable_deposits.parse::<u32>().unwrap_or(0),
                 event_format: current_form.event_format.clone(),
                 require_contact_info: current_form.require_contact_info,
+                require_photo_consent: current_form.require_photo_consent,
                 time_tba,
                 location: if current_form.location.trim().is_empty() { None } else { Some(current_form.location.trim().to_string()) },
                 video_url: current_form.video_url.trim().to_string(),
@@ -702,6 +706,7 @@ pub fn EventFormComponent(
                 expected_updated_at: if current_form.updated_at.is_empty() { None } else { Some(current_form.updated_at.clone()) },
                 event_format: Some(current_form.event_format.clone()),
                 require_contact_info: Some(current_form.require_contact_info),
+                require_photo_consent: Some(current_form.require_photo_consent),
                 time_tba: Some(time_tba),
                 location: if current_form.location.trim().is_empty() { None } else { Some(current_form.location.trim().to_string()) },
                 video_url: Some(current_form.video_url.trim().to_string()),
@@ -1243,6 +1248,27 @@ pub fn EventFormComponent(
                             </label>
                             <span class="quiz-setting-hint">
                                 "When enabled, self-registration requires attendees to provide a contact channel (Telegram/Line/Facebook/X) and username. Disable for events that don't need it."
+                            </span>
+                        </div>
+                        <div class="quiz-setting-item">
+                            <label class="quiz-field-label">"Require Photo Consent (PDPA)"</label>
+                            <label class="quiz-toggle-label event-form-toggle-label">
+                                <input
+                                    type="checkbox"
+                                    class="quiz-toggle-checkbox"
+                                    prop:checked=move || form.get().require_photo_consent
+                                    on:change=move |ev| {
+                                        let checked = event_target_checked(&ev);
+                                        set_form.update(|f| f.require_photo_consent = checked);
+                                    }
+                                />
+                                <span class="quiz-toggle-switch"></span>
+                                <span class="quiz-toggle-text">
+                                    {move || if form.get().require_photo_consent { "Yes" } else { "No" }}
+                                </span>
+                            </label>
+                            <span class="quiz-setting-hint">
+                                "When enabled, attendees must consent to photo/video capture during the event. Required for Thai events with photography (PDPA compliance)."
                             </span>
                         </div>
                         // Status selector (edit only)

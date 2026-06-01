@@ -259,6 +259,8 @@ pub struct EventDetail {
     #[serde(default = "default_true_fn")]
     pub require_contact_info: bool,
     #[serde(default)]
+    pub require_photo_consent: bool,
+    #[serde(default)]
     pub location: String,
     #[serde(default)]
     pub video_url: String,
@@ -361,6 +363,8 @@ pub struct CreateEventBody {
     pub event_format: EventFormat,
     #[serde(default = "default_true_fn")]
     pub require_contact_info: bool,
+    #[serde(default)]
+    pub require_photo_consent: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub location: Option<String>,
     #[serde(default)]
@@ -455,6 +459,8 @@ pub struct UpdateEventBody {
     pub event_format: Option<EventFormat>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub require_contact_info: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub require_photo_consent: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub location: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]

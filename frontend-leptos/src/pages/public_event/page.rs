@@ -423,6 +423,7 @@ fn render_loaded_event(
 
     let show_reg_form = !event_completed.get();
     let require_contact = data.require_contact_info;
+    let require_photo_consent = data.require_photo_consent;
 
     let in_person_available = data.in_person_available;
     let online_available = data.online_available;
@@ -437,6 +438,8 @@ fn render_loaded_event(
     let (reg_contact_channel, set_reg_contact_channel) = signal(String::new());
     let (reg_contact_handle, set_reg_contact_handle) = signal(String::new());
     let (reg_deposit_agreed, set_reg_deposit_agreed) = signal(false);
+    let (reg_consent_given, set_reg_consent_given) = signal(false);
+    let (reg_photo_consent_given, set_reg_photo_consent_given) = signal(false);
     let (reg_state, set_reg_state) = signal(RegState::Idle);
 
     let slug_for_signin = current_slug.clone();
@@ -611,6 +614,7 @@ fn render_loaded_event(
                                         email_val,
                                         is_hybrid,
                                         require_contact,
+                                        require_photo_consent,
                                         has_deposit,
                                         deposit_label.clone(),
                                         in_person_available,
@@ -623,6 +627,8 @@ fn render_loaded_event(
                                         reg_contact_channel, set_reg_contact_channel,
                                         reg_contact_handle, set_reg_contact_handle,
                                         reg_deposit_agreed, set_reg_deposit_agreed,
+                                        reg_consent_given, set_reg_consent_given,
+                                        reg_photo_consent_given, set_reg_photo_consent_given,
                                         reg_state, set_reg_state,
                                     )
                                 }
@@ -633,6 +639,7 @@ fn render_loaded_event(
                                         email_val,
                                         is_hybrid,
                                         require_contact,
+                                        require_photo_consent,
                                         has_deposit,
                                         deposit_label.clone(),
                                         in_person_available,
@@ -645,6 +652,8 @@ fn render_loaded_event(
                                         reg_contact_channel, set_reg_contact_channel,
                                         reg_contact_handle, set_reg_contact_handle,
                                         reg_deposit_agreed, set_reg_deposit_agreed,
+                                        reg_consent_given, set_reg_consent_given,
+                                        reg_photo_consent_given, set_reg_photo_consent_given,
                                         reg_state, set_reg_state,
                                     )
                                 }

@@ -198,6 +198,7 @@ pub async fn create_event(
         video_url: req.video_url.trim().to_string(),
         event_format: req.event_format.clone(),
         require_contact_info: req.require_contact_info,
+        require_photo_consent: req.require_photo_consent,
         in_person_capacity: req.in_person_capacity,
         online_capacity: req.online_capacity,
         online_open_mode: req.online_open_mode.clone(),
@@ -462,6 +463,9 @@ pub async fn update_event(
     }
     if let Some(v) = req.require_contact_info {
         config.require_contact_info = v;
+    }
+    if let Some(v) = req.require_photo_consent {
+        config.require_photo_consent = v;
     }
 
     // Capacity settings
@@ -777,6 +781,7 @@ pub async fn seed_from_config(
         video_url: String::new(),
         event_format: event_checkin_domain::models::event::EventFormat::InPerson,
         require_contact_info: true,
+        require_photo_consent: false,
         in_person_capacity: None,
         online_capacity: None,
         online_open_mode: event_checkin_domain::models::event::OnlineOpenMode::default(),

@@ -160,6 +160,9 @@ pub enum ColumnKey {
     RefundStatus,
     RefundLink,
     SendEmailStatus,
+    // Section 7: Consent & Compliance (AE–AF)
+    ConsentGiven,
+    PhotoConsent,
 }
 
 impl ColumnKey {
@@ -202,6 +205,9 @@ impl ColumnKey {
             ColumnKey::RefundStatus,
             ColumnKey::RefundLink,
             ColumnKey::SendEmailStatus,
+            // Section 7: Consent & Compliance (AE–AF)
+            ColumnKey::ConsentGiven,
+            ColumnKey::PhotoConsent,
         ]
     }
 
@@ -262,6 +268,9 @@ impl ColumnKey {
             ColumnKey::RefundStatus => &["refund_status", "refund_state"],
             ColumnKey::RefundLink => &["refund_link", "refund_url", "refund_proof_link"],
             ColumnKey::SendEmailStatus => &["send_email_status", "email_status", "email_sent"],
+            // Section 7: Consent & Compliance (AE)
+            ColumnKey::ConsentGiven => &["consent_given", "pdpa_consent", "data_consent"],
+            ColumnKey::PhotoConsent => &["photo_consent", "photo_consent_given", "media_consent"],
         }
     }
 }
@@ -279,7 +288,7 @@ pub struct ColumnMapping {
 }
 
 impl ColumnMapping {
-    /// Hardcoded fallback mapping for the 30-column layout (A–AD).
+    /// Hardcoded fallback mapping for the 32-column layout (A–AF).
     /// Used for sheets without recognizable headers or when header reading fails.
     ///
     /// Layout:
@@ -289,6 +298,7 @@ impl ColumnMapping {
     ///   Section 4 — Deposit (M–Q):  deposit_agreed, deposit_method, deposit_amount, deposit_tx_signature, deposit_verified
     ///   Section 5 — Lifecycle (R–X):  checked_in_at, checked_in_by, solana_address, qr_code_url, claim_token, claimed_at, nft_proof_url
     ///   Section 6 — Bank & Refund (Y–AD):  bank_account, bank_name, account_name, refund_status, refund_link, send_email_status
+    ///   Section 7 — Consent (AE–AF):  consent_given, photo_consent
     pub fn hardcoded() -> Self {
         // Section 1: Attendee Identity (A–E)
         let mut map = HashMap::new();
@@ -327,9 +337,12 @@ impl ColumnMapping {
         map.insert("refund_status".into(), 27); // AB
         map.insert("refund_link".into(), 28); // AC
         map.insert("send_email_status".into(), 29); // AD
+        // Section 7: Consent & Compliance (AE–AF)
+        map.insert("consent_given".into(), 30); // AE
+        map.insert("photo_consent".into(), 31); // AF
         Self {
             map,
-            total_columns: 30,
+            total_columns: 32,
         }
     }
 
@@ -770,7 +783,10 @@ mod tests {
         assert_eq!(mapping.get(ColumnKey::RefundStatus), Some(27)); // AB
         assert_eq!(mapping.get(ColumnKey::RefundLink), Some(28)); // AC
         assert_eq!(mapping.get(ColumnKey::SendEmailStatus), Some(29)); // AD
-        assert_eq!(mapping.total_columns, 30);
+        // Section 7: Consent & Compliance
+        assert_eq!(mapping.get(ColumnKey::ConsentGiven), Some(30)); // AE
+        assert_eq!(mapping.get(ColumnKey::PhotoConsent), Some(31)); // AF
+        assert_eq!(mapping.total_columns, 32);
     }
 
     #[test]
@@ -885,8 +901,8 @@ mod tests {
     #[test]
     fn test_last_column_letter_hardcoded() {
         let mapping = ColumnMapping::hardcoded();
-        // 30 columns → last index 29 → "AD"
-        assert_eq!(mapping.last_column_letter(), "AD");
+        // 32 columns → last index 31 → "AF"
+        assert_eq!(mapping.last_column_letter(), "AF");
     }
 
     #[test]
@@ -983,10 +999,10 @@ mod tests {
 
     #[test]
     fn test_from_sheet_values_hardcoded_compat() {
-        // 28-column layout using hardcoded mapping
+        // 32-column layout using hardcoded mapping
         let mapping = ColumnMapping::hardcoded();
 
-        let mut row_data = vec![String::new(); 30];
+        let mut row_data = vec![String::new(); 32];
         row_data[0] = "gst-legacy".into(); // A: api_id
         row_data[1] = "Jane Smith".into(); // B: name
         row_data[2] = "Jane".into(); // C: first_name
@@ -998,6 +1014,8 @@ mod tests {
         row_data[17] = "2025-01-01T00:00:00Z".into(); // R: checked_in_at
         row_data[19] = "7xKXtg2CW87d97TXJSDpbD5jBkheTqA85T".into(); // T: solana_address
         row_data[21] = "tok-legacy".into(); // V: claim_token
+        row_data[30] = "Yes".into(); // AE: consent_given
+        row_data[31] = "No".into(); // AF: photo_consent
 
         let data_rows: Vec<Vec<String>> = vec![row_data];
 

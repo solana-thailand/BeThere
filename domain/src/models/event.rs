@@ -397,6 +397,10 @@ pub struct EventConfig {
     /// Defaults to true. Organizers can disable for events that don't need it.
     #[serde(default = "default_true")]
     pub require_contact_info: bool,
+    /// Whether photo/media consent is collected during registration (PDPA).
+    /// Defaults to false. Organizers enable it for events with photography.
+    #[serde(default)]
+    pub require_photo_consent: bool,
 
     // ── Capacity settings ─────────────────────────────────────────────
     /// Maximum number of in-person attendees. None = unlimited.
@@ -563,6 +567,7 @@ impl EventConfig {
             video_url: String::new(),
             event_format: EventFormat::InPerson,
             require_contact_info: true,
+            require_photo_consent: false,
             in_person_capacity: None,
             online_capacity: None,
             online_open_mode: OnlineOpenMode::default(),
@@ -689,6 +694,9 @@ pub struct CreateEventRequest {
     /// Whether contact info is required during self-registration (defaults to true).
     #[serde(default = "default_true")]
     pub require_contact_info: bool,
+    /// Whether photo/media consent is collected during registration (PDPA).
+    #[serde(default)]
+    pub require_photo_consent: bool,
 
     // ── Capacity settings ─────────────────────────────────────────────
     /// Maximum number of in-person attendees. None = unlimited.
@@ -700,10 +708,11 @@ pub struct CreateEventRequest {
     /// Controls when online registration opens for hybrid events.
     #[serde(default)]
     pub online_open_mode: OnlineOpenMode,
-    /// Manual toggle for online registration.
+    /// Manual toggle for online registration (used when `online_open_mode = Manual`).
     #[serde(default)]
     pub online_registration_open: bool,
-    /// Hours after registration to auto-switch from in-person to online.
+    /// Hours after registration to auto-switch from in-person to online track.
+    /// None = no deadline (in-person spot held held indefinitely).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub deposit_deadline_hours: Option<u32>,
     /// Event visibility — public (shown on landing) or private (auth required).
@@ -834,6 +843,9 @@ pub struct UpdateEventRequest {
     /// Whether contact info is required during self-registration.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub require_contact_info: Option<bool>,
+    /// Whether photo/media consent is collected during registration.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub require_photo_consent: Option<bool>,
 
     // ── Capacity settings ─────────────────────────────────────────────
     /// Maximum number of in-person attendees. None = unlimited.

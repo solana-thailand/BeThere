@@ -192,6 +192,7 @@ pub async fn get_public_event(
         "quiz_enabled": config.quiz_enabled,
         "refund_deadline_hours": config.refund_deadline_hours,
         "require_contact_info": config.require_contact_info,
+        "require_photo_consent": config.require_photo_consent,
         "description": config.description,
         "location": config.location,
         "created_at": config.created_at,

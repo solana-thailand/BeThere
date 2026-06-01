@@ -327,6 +327,8 @@ pub async fn append_attendee_row(
     contact_channel: Option<&str>,
     contact_handle: Option<&str>,
     deposit_agreed: bool,
+    consent_given: bool,
+    photo_consent_given: bool,
     mapping: &ColumnMapping,
     state: &AppState,
     sheet_id: &str,
@@ -338,7 +340,7 @@ pub async fn append_attendee_row(
     use event_checkin_domain::models::attendee::ColumnKey as CK;
 
     // Determine row width: at least enough for all mapped columns
-    let row_len = mapping.total_columns.max(28);
+    let row_len = mapping.total_columns.max(31);
     let mut row = vec![String::new(); row_len];
 
     let set = |row: &mut Vec<String>, key: CK, val: String| {
@@ -374,6 +376,12 @@ pub async fn append_attendee_row(
     }
     if deposit_agreed {
         set(&mut row, CK::DepositAgreed, "Yes".to_string());
+    }
+    if consent_given {
+        set(&mut row, CK::ConsentGiven, "Yes".to_string());
+    }
+    if photo_consent_given {
+        set(&mut row, CK::PhotoConsent, "Yes".to_string());
     }
 
     // Determine the last non-empty column to build the range

@@ -44,6 +44,12 @@ pub struct RegisterRequest {
     /// Whether the attendee agreed to the deposit commitment.
     /// Required when event has `deposit_enabled` enabled.
     pub deposit_agreed: Option<bool>,
+    /// Whether the attendee consented to personal data collection (PDPA).
+    /// Always required for registration.
+    pub consent_given: Option<bool>,
+    /// Whether the attendee consented to photo/media capture (PDPA).
+    /// Required when event has `require_photo_consent` enabled.
+    pub photo_consent_given: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -167,7 +173,23 @@ pub async fn register_attendee(
     let participation_type =
         resolve_participation_type(&config.event_format, body.participation_type.as_deref())?;
 
-    // 3d. Validate deposit agreement if deposit is enabled — skip for Online attendees
+    // 3d. Validate PDPA consent — always required
+    if body.consent_given != Some(true) {
+        return Err(AppError::Validation(
+            "you must consent to data collection to register".to_string(),
+        )
+        .into());
+    }
+
+    // 3d2. Validate photo consent if event requires it
+    if config.require_photo_consent && body.photo_consent_given != Some(true) {
+        return Err(AppError::Validation(
+            "you must consent to photo/media capture to register".to_string(),
+        )
+        .into());
+    }
+
+    // 3e. Validate deposit agreement if deposit is enabled — skip for Online attendees
     if config.deposit_enabled
         && !is_online_participation(&participation_type)
         && body.deposit_agreed != Some(true)
@@ -331,6 +353,8 @@ pub async fn register_attendee(
         contact_channel,
         contact_handle,
         body.deposit_agreed.unwrap_or(false),
+        body.consent_given.unwrap_or(false),
+        body.photo_consent_given.unwrap_or(false),
         &mapping,
         &state,
         &config.sheet_id,

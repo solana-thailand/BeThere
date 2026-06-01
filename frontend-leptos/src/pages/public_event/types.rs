@@ -45,6 +45,8 @@ pub struct RegisterBody {
     pub contact_channel: Option<String>,
     pub contact_handle: Option<String>,
     pub deposit_agreed: Option<bool>,
+    pub consent_given: Option<bool>,
+    pub photo_consent_given: Option<bool>,
 }
 
 /// Next step returned after registration.
@@ -90,6 +92,8 @@ pub struct FieldErrors {
     pub contact_channel: Option<String>,
     pub contact_handle: Option<String>,
     pub deposit_agreed: Option<String>,
+    pub consent_given: Option<String>,
+    pub photo_consent_given: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -169,6 +173,7 @@ pub struct PublicEventData {
     pub quiz_enabled: bool,
     pub refund_deadline_hours: u32,
     pub require_contact_info: bool,
+    pub require_photo_consent: bool,
     pub description: String,
     pub location: String,
     pub created_at: String,
