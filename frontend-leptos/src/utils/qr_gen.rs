@@ -36,7 +36,7 @@ fn encode_qr_png(code: &QrCode, pixels_per_module: u32) -> Option<Vec<u8>> {
     let raw = qr_scanlines(code, size, pixels_per_module);
 
     // Wrap raw scanlines in a stored (uncompressed) DEFLATE block.
-    // Format: 0x00 (final block, stored) + LEN (LE u16) + NLEN (LE u16) + data
+    // Format: 0x01 (final block, stored) + LEN (LE u16) + NLEN (LE u16) + data
     // This avoids pulling in miniz_oxide / flate2 for tiny QR images.
     let raw_len = raw.len();
     if raw_len > 65535 {
@@ -49,8 +49,25 @@ fn encode_qr_png(code: &QrCode, pixels_per_module: u32) -> Option<Vec<u8>> {
     deflated.extend_from_slice(&(raw_len as u16 ^ 0xFFFF).to_le_bytes());
     deflated.extend_from_slice(&raw);
 
+    // Wrap DEFLATE in zlib (RFC 1950): CMF + FLG + DEFLATE + Adler-32
+    // PNG IDAT requires zlib, not raw DEFLATE.
+    let mut zlib = Vec::with_capacity(deflated.len() + 6);
+    zlib.push(0x78); // CMF: deflate, window 32K
+    zlib.push(0x01); // FLG: no dict, check (0x78*256+0x01) % 31 == 0
+    zlib.extend_from_slice(&deflated);
+
+    // Adler-32 checksum of the uncompressed data
+    let mut s1: u32 = 1;
+    let mut s2: u32 = 0;
+    for &byte in &raw {
+        s1 = (s1 + byte as u32) % 65521;
+        s2 = (s2 + s1) % 65521;
+    }
+    let adler32 = (s2 << 16) | s1;
+    zlib.extend_from_slice(&adler32.to_be_bytes());
+
     // Build minimal PNG: signature + IHDR + IDAT + IEND.
-    let mut out = Vec::with_capacity(deflated.len() + 64);
+    let mut out = Vec::with_capacity(zlib.len() + 64);
     out.extend_from_slice(b"\x89PNG\r\n\x1a\n");
 
     let mut ihdr = Vec::with_capacity(13);
@@ -58,7 +75,7 @@ fn encode_qr_png(code: &QrCode, pixels_per_module: u32) -> Option<Vec<u8>> {
     ihdr.extend_from_slice(&size.to_be_bytes());
     ihdr.extend_from_slice(&[8, 0, 0, 0, 0]); // 8-bit grayscale, deflate, no filter, no interlace.
     write_png_chunk(&mut out, b"IHDR", &ihdr);
-    write_png_chunk(&mut out, b"IDAT", &deflated);
+    write_png_chunk(&mut out, b"IDAT", &zlib);
     write_png_chunk(&mut out, b"IEND", &[]);
 
     Some(out)
@@ -245,7 +262,7 @@ mod tests {
     }
 
     #[test]
-    fn test_stored_deflate_block_format() {
+    fn test_zlib_header_and_adler32() {
         let code = QrCode::new(b"test").unwrap();
         let png = encode_qr_png(&code, 4).unwrap();
         // Find IDAT chunk data
@@ -255,15 +272,24 @@ mod tests {
             let kind = &png[pos + 4..pos + 8];
             if kind == b"IDAT" {
                 let idat = &png[pos + 8..pos + 8 + len];
-                // Stored block: BFINAL=1, BTYPE=00
-                assert_eq!(idat[0], 0x01, "BFINAL=1, BTYPE=00 (stored)");
-                let stored_len = u16::from_le_bytes([idat[1], idat[2]]);
-                let nlen = u16::from_le_bytes([idat[3], idat[4]]);
+                // Zlib header: CMF=0x78 (deflate, window 32K), FLG=0x01
+                assert_eq!(idat[0], 0x78, "CMF should be 0x78");
+                assert_eq!(idat[1], 0x01, "FLG should be 0x01");
+                // Check header: (CMF*256 + FLG) % 31 == 0
+                assert_eq!((0x78 * 256 + 0x01) % 31, 0, "zlib header check");
+                // Stored DEFLATE block starts after zlib header
+                assert_eq!(idat[2], 0x01, "BFINAL=1, BTYPE=00 (stored)");
+                let stored_len = u16::from_le_bytes([idat[3], idat[4]]);
+                let nlen = u16::from_le_bytes([idat[5], idat[6]]);
                 assert_eq!(
                     stored_len ^ 0xFFFF,
                     nlen,
                     "NLEN should be one's complement of LEN"
                 );
+                // Last 4 bytes should be Adler-32 (big-endian), must be non-zero
+                let adler_bytes = &idat[idat.len() - 4..];
+                let adler = u32::from_be_bytes(adler_bytes.try_into().unwrap());
+                assert_ne!(adler, 0, "Adler-32 should be non-zero");
                 break;
             }
             pos += 12 + len;
