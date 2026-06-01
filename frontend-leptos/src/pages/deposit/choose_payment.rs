@@ -6,7 +6,7 @@
 use leptos::prelude::*;
 
 use crate::api::DepositStatusResponse;
-use crate::icons::{wallet_icon_name, Icon, IconName};
+use crate::icons::{wallet_icon_name, Icon};
 
 use super::types::*;
 
@@ -77,8 +77,7 @@ pub fn choose_payment_view(
             view! {
                 <div class="dep2-deadline dep2-deadline--danger">
                     <span class="dep2-deadline-text">
-                        <Icon icon=IconName::Clock class="icon-sm" />
-                        " Your deposit deadline has passed and in-person spots are now full. You have been moved to the online track. You will be able to claim your NFT after the event ends."
+                        "Your deposit deadline has passed and in-person spots are now full. You have been moved to the online track. You will be able to claim your NFT after the event ends."
                     </span>
                 </div>
             }.into_any()
@@ -86,8 +85,7 @@ pub fn choose_payment_view(
             view! {
                 <div class="dep2-deadline dep2-deadline--success">
                     <span class="dep2-deadline-text">
-                        <Icon icon=IconName::Clock class="icon-sm" />
-                        " Your deadline has passed, but in-person spots are still available! Complete your deposit now to reclaim your spot."
+                        "Your deadline has passed, but in-person spots are still available! Complete your deposit now to reclaim your spot."
                     </span>
                 </div>
             }.into_any()
@@ -96,8 +94,7 @@ pub fn choose_payment_view(
             view! {
                 <div class="dep2-deadline dep2-deadline--warning">
                     <span class="dep2-deadline-text">
-                        <Icon icon=IconName::Clock class="icon-sm" />
-                        " You have "{label}" to complete your deposit. After that, your in-person spot may be released."
+                        {format!("You have {label} to complete your deposit. After that, your in-person spot may be released.")}
                     </span>
                 </div>
             }.into_any()
@@ -116,12 +113,9 @@ pub fn choose_payment_view(
                             // THB card — always shown, recommended
                             <div class="dep2-method-card dep2-method-card--recommended"
                                 on:click=move |_| set_payment_choice.set(Some(PaymentChoice::Thb))>
-                                <div class="dep2-method-icon">
-                                    <Icon icon=IconName::Baht class="icon-md" />
-                                </div>
                                 <div class="dep2-method-name">"THB"</div>
                                 <div class="dep2-method-amount">
-                                    {format!("{} THB", thb_amount)}
+                                    {format!("฿{}", thb_amount)}
                                 </div>
                                 <div class="dep2-method-label">"via PromptPay"</div>
                             </div>
@@ -131,9 +125,6 @@ pub fn choose_payment_view(
                                 view! {
                                     <div class="dep2-method-card"
                                         on:click=move |_| set_payment_choice.set(Some(PaymentChoice::Usdc))>
-                                        <div class="dep2-method-icon">
-                                            <Icon icon=IconName::Coin class="icon-md" />
-                                        </div>
                                         <div class="dep2-method-name">"USDC"</div>
                                         <div class="dep2-method-amount">
                                             {format!("{} USDC", usdc_formatted)}
@@ -165,8 +156,8 @@ pub fn choose_payment_view(
                                         view! {
                                             <div class="wallet-list">
                                                 <p class="wallet-prompt">
-                                                    <Icon icon=IconName::Link class="icon-sm" />" Connect your Solana wallet:"
-                                                </p>
+                                                            "Connect your Solana wallet:"
+                                                        </p>
                                                 {wallets_for_click.into_iter().map(|w| {
                                                     let w_clone = w.clone();
                                                     let wallet_icon = wallet_icon_name(&w);
@@ -192,7 +183,7 @@ pub fn choose_payment_view(
 
                                     <div class="dep2-qr-secondary">
                                         <p class="dep2-qr-secondary-label">
-                                            <Icon icon=IconName::Phone class="icon-sm" />" No wallet? Use QR code instead:"
+                                            "No wallet? Use QR code instead:"
                                         </p>
                                         <div class="u-mb-sm">
                                             <input

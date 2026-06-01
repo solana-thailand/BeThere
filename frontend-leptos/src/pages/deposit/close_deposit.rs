@@ -3,7 +3,7 @@
 use leptos::prelude::*;
 
 use crate::api::DepositStatusResponse;
-use crate::icons::{wallet_icon_name, Icon, IconName};
+use crate::icons::{wallet_icon_name, Icon};
 
 use super::components;
 use super::types::*;
@@ -81,7 +81,7 @@ pub fn close_deposit_wallet_connected_view(
     let pk_send = public_key.to_string();
     let data_for_back = data.clone();
 
-    let wallet_icon = wallet_icon_name(wallet_name);
+    let _wallet_icon = wallet_icon_name(wallet_name);
     let pk_display = truncate_pk(public_key);
 
     let set_state = set_state;
@@ -94,7 +94,6 @@ pub fn close_deposit_wallet_connected_view(
                 <span class="badge badge-info">"~0.002 SOL"</span>
             </div>
             <div class="dep2-wallet-bar">
-                <Icon icon=wallet_icon class="dep2-wallet-bar-icon" />
                 <div class="dep2-wallet-bar-info">
                     <span class="dep2-wallet-bar-name">{format!("Connected via {}", wallet_name)}</span>
                     <span class="dep2-wallet-bar-pk">{pk_display}</span>
@@ -108,8 +107,7 @@ pub fn close_deposit_wallet_connected_view(
                 class="btn btn-success btn-block"
                 on:click=move |_| handle_close(wallet_name_send.clone(), pk_send.clone())
             >
-                <Icon icon=IconName::Recycle class="icon-sm" />
-                " Reclaim ~0.002 SOL Rent"
+                "Reclaim ~0.002 SOL Rent"
             </button>
             <button
                 class="btn btn-outline btn-sm"
@@ -154,9 +152,7 @@ pub fn close_deposit_confirmed_view(data: &DepositStatusResponse, tx_sig: &str) 
 
     view! {
         <div class="dep2-card">
-            <div class="dep2-success-icon">
-                <Icon icon=IconName::Recycle class="icon-md" />
-            </div>
+            <div class="dep2-success-icon">"✓"</div>
             <p class="dep2-amount-hero">
                 "Rent Reclaimed! ~0.002 SOL returned to your wallet."
             </p>

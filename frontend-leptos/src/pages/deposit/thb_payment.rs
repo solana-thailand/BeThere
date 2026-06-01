@@ -6,8 +6,6 @@
 use leptos::prelude::*;
 
 use crate::api::DepositStatusResponse;
-use crate::icons::{Icon, IconName};
-
 use super::js_interop;
 use super::types::*;
 
@@ -96,8 +94,7 @@ pub fn thb_payment_form_view(
                                                 );
                                             }
                                         >
-                                            <Icon icon=IconName::Save class="icon-sm" />
-                                            " Save QR Code"
+                                            "Save QR Code"
                                         </button>
                                     </div>
                                 }.into_any()
@@ -338,9 +335,7 @@ pub fn thb_uploaded_view(
     });
     view! {
         <div class="dep2-card">
-            <div class="dep2-success-icon">
-                <Icon icon=IconName::Check />
-            </div>
+            <div class="dep2-success-icon">"✓"</div>
             <h2 class="dep2-card-title" style="text-align:center;margin-top:0.75rem">"Slip Submitted!"</h2>
             <p class="hint-desc" style="text-align:center">
                 "Your payment slip has been submitted for verification."
@@ -370,7 +365,6 @@ pub fn thb_rejected_view(
     view! {
         <div class="dep2-card">
             <div class="dep2-deadline dep2-deadline--danger">
-                <Icon icon=IconName::Warning class="dep2-icon--danger" />
                 <p class="dep2-deadline-text">
                     "Your slip was rejected. Please re-upload."
                 </p>

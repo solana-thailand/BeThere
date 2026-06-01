@@ -3,7 +3,6 @@
 use leptos::prelude::*;
 
 use crate::api::{DepositMethod, DepositStatusResponse};
-use crate::icons::{Icon, IconName};
 use crate::utils::format_timestamp;
 
 use super::types::*;
@@ -31,7 +30,6 @@ pub fn error_view(msg: &str) -> AnyView {
     view! {
         <div class="dep2-card">
             <div class="dep2-card-header">
-                <Icon icon=IconName::Warning class="icon-sm icon-danger" />
                 <span class="dep2-card-title">"Something went wrong"</span>
             </div>
             <p>{msg}</p>
@@ -46,7 +44,6 @@ pub fn not_enabled_view() -> AnyView {
     view! {
         <div class="dep2-card">
             <div class="dep2-card-header">
-                <Icon icon=IconName::CreditCard class="icon-sm" />
                 <span class="dep2-card-title">"Deposits Not Available"</span>
             </div>
             <p>"Deposits are not enabled for this event."</p>
@@ -62,11 +59,11 @@ pub fn already_deposited_view(
     set_state: &WriteSignal<DepositPageState>,
 ) -> AnyView {
     let info = data.status.as_ref().unwrap();
-    let (method_icon, method_label) = deposit_method_display(&info.method);
-    let (verified_icon, verified_text) = if info.verified {
-        (IconName::Check, "Verified")
+    let (_method_icon, method_label) = deposit_method_display(&info.method);
+    let verified_text = if info.verified {
+        "Verified"
     } else {
-        (IconName::Hourglass, "Pending Verification")
+        "Pending Verification"
     };
     let verified_class = if info.verified {
         "badge badge-success"
@@ -87,19 +84,16 @@ pub fn already_deposited_view(
         <div class="dep2-card">
             // Header: title + badge
             <div class="dep2-card-header">
-                <Icon icon=IconName::Ticket class="icon-sm" />
                 <span class="dep2-card-title">"Spot Reserved"</span>
                 <span class=verified_class>
-                    <Icon icon=verified_icon class="icon-sm" />" "{verified_text}
+                    {verified_text}
                 </span>
             </div>
 
             // Success icon (only if verified)
             {if info.verified {
                 view! {
-                    <div class="dep2-success-icon">
-                        <Icon icon=IconName::Check />
-                    </div>
+                    <div class="dep2-success-icon">"✓"</div>
                 }.into_any()
             } else {
                 ().into_any()
@@ -123,7 +117,7 @@ pub fn already_deposited_view(
                 <div class="dep2-receipt-row">
                     <span class="dep2-receipt-label">"Method"</span>
                     <span class="dep2-receipt-value">
-                        <Icon icon=method_icon class="icon-sm" />" "{method_label}
+                        {method_label}
                     </span>
                 </div>
                 <div class="dep2-receipt-row">
@@ -143,7 +137,7 @@ pub fn already_deposited_view(
                     <span class="dep2-receipt-label">"Status"</span>
                     <span class="dep2-receipt-value">
                         <span class=verified_class>
-                            <Icon icon=verified_icon class="icon-sm" />" "{verified_text}
+                            {verified_text}
                         </span>
                     </span>
                 </div>
@@ -162,7 +156,6 @@ pub fn already_deposited_view(
                 view! {
                     <div class="dep2-info-note">
                         <p class="hint-note">
-                            <Icon icon=IconName::Coin class="icon-sm" />" "
                             {format!("Your {usdc_fmt} USDC is secured on-chain. Show up → get it all back.")}
                         </p>
                     </div>
@@ -213,7 +206,6 @@ pub fn already_deposited_view(
                 view! {
                     <div class="dep2-info-note">
                         <p class="hint-note">
-                            <Icon icon=IconName::Coin class="icon-sm" />" "
                             {format!("Your {usdc_fmt} USDC deposit is secured. Refund will be available after the event.")}
                         </p>
                     </div>

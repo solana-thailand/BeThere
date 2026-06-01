@@ -3,7 +3,7 @@
 use leptos::prelude::*;
 
 use crate::api::DepositStatusResponse;
-use crate::icons::{wallet_icon_name, Icon, IconName};
+use crate::icons::{wallet_icon_name, Icon};
 
 use super::components;
 use super::types::*;
@@ -96,7 +96,7 @@ pub fn refund_wallet_connected_view(
     let data_for_back = data.clone();
     let handle_claim_refund = handle_claim_refund.clone();
 
-    let wallet_icon = wallet_icon_name(wallet_name);
+    let _wallet_icon = wallet_icon_name(wallet_name);
     let pk_display = truncate_pk(public_key);
 
     let set_state = set_state;
@@ -109,7 +109,6 @@ pub fn refund_wallet_connected_view(
                 </span>
             </div>
             <div class="dep2-wallet-bar">
-                <Icon icon=wallet_icon class="dep2-wallet-bar-icon" />
                 <div class="dep2-wallet-bar-info">
                     <span class="dep2-wallet-bar-name">{format!("Connected via {}", wallet_name)}</span>
                     <span class="dep2-wallet-bar-pk">{pk_display}</span>
@@ -123,8 +122,7 @@ pub fn refund_wallet_connected_view(
                 class="btn btn-success btn-block"
                 on:click=move |_| handle_claim_refund(wallet_name_send.clone(), pk_send.clone())
             >
-                <Icon icon=IconName::Recycle class="icon-sm" />
-                " Claim "{format!("{usdc_fmt} USDC")}" USDC"
+                "Claim "{format!("{usdc_fmt} USDC")}" USDC"
             </button>
             <button
                 class="btn btn-outline btn-sm"
@@ -162,7 +160,7 @@ pub fn refund_signing_view(data: &DepositStatusResponse) -> AnyView {
             </div>
         </div>
     }
-        .into_any()
+    .into_any()
 }
 
 /// Refund: Confirmed view.
@@ -173,9 +171,7 @@ pub fn refund_confirmed_view(data: &DepositStatusResponse, tx_sig: &str) -> AnyV
 
     view! {
         <div class="dep2-card">
-            <div class="dep2-success-icon">
-                <Icon icon=IconName::Recycle class="icon-md" />
-            </div>
+            <div class="dep2-success-icon">"✓"</div>
             <p class="dep2-amount-hero">
                 {format!("{usdc_fmt} USDC + ~0.002 SOL returned")}
             </p>
