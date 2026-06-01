@@ -12329,6 +12329,20 @@ nav a.active {
     color: var(--text-secondary);
     line-height: 1.5;
 }
+.dep2-countdown-timer {
+    font-family: var(
+        --font-mono,
+        "SF Mono",
+        "Fira Code",
+        "Fira Mono",
+        "Roboto Mono",
+        monospace
+    );
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--accent);
+    letter-spacing: 0.02em;
+}
 
 /* 7. Confirmation spinner */
 .dep2-confirming {

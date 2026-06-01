@@ -205,6 +205,41 @@ pub fn format_duration_label(hours: u32) -> String {
     }
 }
 
+/// Format remaining seconds into a compact countdown string.
+/// Shows days/hours/minutes if > 1 day, hours/minutes/seconds if < 1 day,
+/// just minutes/seconds if < 1 hour.
+pub fn format_countdown(seconds: i64) -> String {
+    if seconds <= 0 {
+        return String::new();
+    }
+    let days = seconds / 86400;
+    let hours = (seconds % 86400) / 3600;
+    let mins = (seconds % 3600) / 60;
+    let secs = seconds % 60;
+    if days > 0 {
+        format!("{days}d {hours}h {mins}m {secs}s")
+    } else if hours > 0 {
+        format!("{hours}h {mins}m {secs}s")
+    } else {
+        format!("{mins}m {secs}s")
+    }
+}
+
+/// Compute the deposit deadline as epoch milliseconds from registration_date + deadline_hours.
+/// Returns None if either field is missing or parsing fails.
+pub fn compute_deadline_ms(
+    registration_date: &Option<String>,
+    deadline_hours: Option<u32>,
+) -> Option<f64> {
+    let reg_str = registration_date.as_ref()?;
+    let hours = deadline_hours?;
+    let ms = js_sys::Date::parse(reg_str);
+    if ms.is_nan() {
+        return None;
+    }
+    Some(ms + (f64::from(hours) * 3_600_000.0))
+}
+
 /// Extract event context (name, tagline) from the current page state.
 pub fn extract_event_context(state: &DepositPageState) -> Option<(String, String)> {
     let data: &DepositStatusResponse = match state {

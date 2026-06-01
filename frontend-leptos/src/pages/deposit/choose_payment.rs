@@ -53,6 +53,37 @@ pub fn choose_payment_view(
     let usdc_formatted = format_usdc(data.deposit_amount_usdc);
     let thb_amount = data_clone.deposit_amount_thb;
 
+    // Reactive countdown for the deposit deadline banner.
+    // Computes deadline from registration_date + deposit_deadline_hours, then ticks every second.
+    let deadline_ms = compute_deadline_ms(&data_clone.registration_date, deposit_deadline);
+    let (countdown_text, set_countdown_text) = signal(String::new());
+    let (countdown_expired, set_countdown_expired) = signal(false);
+    if let Some(dl_ms) = deadline_ms {
+        let now_ms = js_sys::Date::now();
+        let remaining_ms = dl_ms - now_ms;
+        if remaining_ms <= 0.0 {
+            set_countdown_expired.set(true);
+        } else {
+            let remaining_secs = (remaining_ms / 1000.0) as i64;
+            set_countdown_text.set(format_countdown(remaining_secs));
+            if let Ok(handle) = set_interval_with_handle(
+                move || {
+                    let now = js_sys::Date::now();
+                    let remaining = dl_ms - now;
+                    if remaining <= 0.0 {
+                        set_countdown_text.set(String::new());
+                        set_countdown_expired.set(true);
+                    } else {
+                        set_countdown_text.set(format_countdown((remaining / 1000.0) as i64));
+                    }
+                },
+                std::time::Duration::from_secs(1),
+            ) {
+                on_cleanup(move || handle.clear());
+            }
+        }
+    }
+
     view! {
         // Amount hero
         {if !deadline_expired || can_reclaim {
@@ -89,12 +120,31 @@ pub fn choose_payment_view(
                     </span>
                 </div>
             }.into_any()
-        } else if let Some(hours) = deposit_deadline {
-            let label = format_duration_label(hours);
+        } else if let Some(_hours) = deposit_deadline {
             view! {
                 <div class="dep2-deadline dep2-deadline--warning">
                     <span class="dep2-deadline-text">
-                        {format!("You have {label} to complete your deposit. After that, your in-person spot may be released.")}
+                        {move || {
+                            let ct = countdown_text.get();
+                            let expired = countdown_expired.get();
+                            if expired {
+                                view! {
+                                    "Your deposit deadline has passed. After that, your in-person spot may be released."
+                                }.into_any()
+                            } else if ct.is_empty() {
+                                // Fallback when no registration_date available
+                                let label = format_duration_label(_hours);
+                                view! {
+                                    "You have "{format!("{label}")}" to complete your deposit. After that, your in-person spot may be released."
+                                }.into_any()
+                            } else {
+                                view! {
+                                    "You have "
+                                    <span class="dep2-countdown-timer">{ct}</span>
+                                    " to complete your deposit. After that, your in-person spot may be released."
+                                }.into_any()
+                            }
+                        }}
                     </span>
                 </div>
             }.into_any()

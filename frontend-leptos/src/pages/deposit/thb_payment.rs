@@ -39,7 +39,7 @@ pub fn thb_payment_form_view(
     let pp_reference = data.event_name.clone();
     let has_promptpay = !data.promptpay_id.is_empty() && data.deposit_amount_thb > 0;
 
-    log::info!(
+    log::trace!(
         "[thb_payment] promptpay_id='{}' amount={} has_promptpay={}",
         &promptpay_id, deposit_amount_thb, has_promptpay
     );
@@ -53,7 +53,7 @@ pub fn thb_payment_form_view(
     } else {
         None
     };
-    log::info!(
+    log::trace!(
         "[thb_payment] pp_qr_image generated: {}",
         pp_qr_image.is_some()
     );
