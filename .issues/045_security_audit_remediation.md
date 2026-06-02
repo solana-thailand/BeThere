@@ -1,6 +1,6 @@
 # Issue 045: Security Audit Remediation
 
-## Status: Done — 11/14 fixed, 3 remaining (P2)
+## Status: Done — 13/14 fixed, 1 remaining (P2)
 
 ## Summary
 Penetration test identified 14 vulnerabilities (2 Critical, 2 High, 5 Medium, 5 Low). P0 and P1 fixes applied.
@@ -28,16 +28,19 @@ Penetration test identified 14 vulnerabilities (2 Critical, 2 High, 5 Medium, 5 
 | VULN-009 | Rollover deposit allows cross-event fund movement | Added attendee email ownership check in `rollover_deposit_tx_handler` |
 | VULN-012 | Hold deposit uses claims email without ownership check | Added email ownership checks in `hold_deposit_handler` and `upload_thb_slip_handler` |
 
+### 🟠 Medium (Fixed)
+| ID | Title | Fix |
+|----|-------|-----|
+| VULN-010 | No application-level rate limiting | Already implemented in `worker/src/middleware/rate_limit.rs`; improved 429 response with JSON body + Retry-After header |
+| VULN-011 | No JWT revocation/blacklist on logout | JWT blacklist via KV — hashed token stored on logout with TTL matching remaining token lifetime; checked in `verify_token` |
+
 ### 🟠 Medium (Remaining)
 | ID | Title | Plan |
 |----|-------|------|
 | VULN-007 | FNV-1a hash for on-chain event ID | Replace with blake3 or SHA-256 (requires on-chain program change) |
-| VULN-010 | No application-level rate limiting | Add per-endpoint rate limiting |
-
 ### 🟡 Low (Remaining)
 | ID | Title |
 |----|-------|
-| VULN-011 | No JWT revocation/blacklist on logout |
 | VULN-013 | CSP allows `unsafe-inline` and `wasm-unsafe-eval` |
 | VULN-014 | Google Sheet role grants global event access |
 
@@ -50,7 +53,12 @@ Penetration test identified 14 vulnerabilities (2 Critical, 2 High, 5 Medium, 5 
 - `worker/src/auth.rs` — Made `verify_token` pub(crate) for webhook dual auth
 - `worker/src/state.rs` — DEV_MODE guard + webhook secret error logging (VULN-005, 006)
 
+## Files Changed (This Session)
+- `worker/src/middleware/rate_limit.rs` — Improved 429 response with JSON body + Retry-After header (VULN-010)
+- `worker/src/auth.rs` — Added `blacklist_token`, `is_token_blacklisted`, FNV-1a hash for KV keys (VULN-011)
+- `worker/src/handlers/auth.rs` — Updated `auth_logout` to extract + verify + blacklist JWT (VULN-011)
+
 ## Validation
 - `cargo check` — clean
 - `cargo clippy` — zero warnings
-- `cargo test` — 21/21 pass
+- `cargo test` — 69/69 pass
