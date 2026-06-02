@@ -10,7 +10,7 @@ Penetration test identified 14 vulnerabilities (2 Critical, 2 High, 5 Medium, 5 
 ### 🔴 Critical (Fixed)
 | ID | Title | Fix |
 |----|-------|-----|
-| VULN-001 | Deposit webhook has zero authentication | Added Bearer token auth to `deposit_webhook_handler` — rejects if `WEBHOOK_SECRET` empty |
+| VULN-001 | Deposit webhook has zero authentication | Added dual auth (WEBHOOK_SECRET or JWT) to `deposit_webhook_handler` — rejects anonymous requests |
 | VULN-002 | USDC deposit initiation fully unauthenticated | Moved `POST /deposit/usdc` to `attendee_authed` router |
 
 ### 🔴 High (Fixed)
@@ -43,10 +43,11 @@ Penetration test identified 14 vulnerabilities (2 Critical, 2 High, 5 Medium, 5 
 
 ## Files Changed
 - `worker/src/handlers/mod.rs` — Route reorganization (VULN-002, 004, 008)
-- `worker/src/handlers/deposit/usdc/handlers.rs` — Bearer auth on webhook (VULN-001)
+- `worker/src/handlers/deposit/usdc/handlers.rs` — Dual auth on webhook: WEBHOOK_SECRET or JWT (VULN-001)
 - `worker/src/handlers/deposit/escrow/status.rs` — Attendee ownership check in rollover (VULN-009)
 - `worker/src/handlers/deposit/thb/handlers.rs` — Email ownership checks in hold + THB upload (VULN-012)
 - `worker/src/handlers/escrow_index.rs` — Hardened webhook auth (VULN-005)
+- `worker/src/auth.rs` — Made `verify_token` pub(crate) for webhook dual auth
 - `worker/src/state.rs` — DEV_MODE guard + webhook secret error logging (VULN-005, 006)
 
 ## Validation
