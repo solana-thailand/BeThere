@@ -214,12 +214,20 @@ pub async fn auth_me(
 }
 
 /// GET /api/auth/logout
-/// Clears the session cookie and returns JSON 200 (no redirect).
+/// Clears the session cookie, blacklists the JWT (VULN-011), and returns JSON 200.
 /// The frontend calls this via fetch(), then navigates client-side.
 /// Clears cookies at both Path=/api and Path=/ to handle stale cookies
 /// from earlier development iterations.
 #[worker::send]
-pub async fn auth_logout() -> Response {
+pub async fn auth_logout(State(state): State<AppState>, req: axum::extract::Request) -> Response {
+    // Extract and blacklist the JWT before clearing cookies
+    let token = auth::extract_token_from_request(&req);
+    if let Some(ref token_str) = token
+        && let Ok(claims) = auth::verify_session_jwt(token_str, &state.config.jwt_secret).await
+    {
+        auth::blacklist_token(token_str, &claims, &state).await;
+    }
+
     let cookie_api = "event_checkin_token=; HttpOnly; Secure; SameSite=Lax; Path=/api; Max-Age=0";
     let cookie_root = "event_checkin_token=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0";
 

@@ -1,10 +1,6 @@
 //! Rate limiting middleware (Issue #039).
 
-use axum::{
-    extract::Request,
-    middleware::Next,
-    response::Response,
-};
+use axum::{extract::Request, middleware::Next, response::Response};
 use std::collections::HashMap;
 use std::sync::{LazyLock, Mutex};
 
@@ -144,7 +140,7 @@ fn rate_limit_for_path(path: &str) -> Option<&'static RateLimitConfig> {
     if path.starts_with("/api/deposit/") {
         return Some(&RATE_LIMIT_DEPOSIT);
     }
-    // Escrow webhooks
+    // Escrow webhooks (both on-chain and deposit)
     if path == "/api/escrow/onchain-webhook" {
         return Some(&RATE_LIMIT_WEBHOOK);
     }
@@ -162,9 +158,15 @@ pub async fn rate_limit_layer(req: Request, next: Next) -> Response {
         let ip = extract_client_ip(&req);
 
         if !check_rate_limit(&ip, config) {
+            let body = format!(
+                r#"{{"error":"rate_limit_exceeded","retry_after_secs":{}}}"#,
+                config.window_secs
+            );
             return axum::response::Response::builder()
                 .status(axum::http::StatusCode::TOO_MANY_REQUESTS)
-                .body(axum::body::Body::empty())
+                .header("Content-Type", "application/json")
+                .header("Retry-After", config.window_secs.to_string())
+                .body(axum::body::Body::from(body))
                 .unwrap();
         }
 
