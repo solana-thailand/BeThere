@@ -1,6 +1,6 @@
 # Issue 045: Security Audit Remediation
 
-## Status: Done — 13/14 fixed, 1 remaining (P2)
+## Status: Done — 13/14 fixed, 1 remaining (P2) — **Deployed & Verified on Production**
 
 ## Summary
 Penetration test identified 14 vulnerabilities (2 Critical, 2 High, 5 Medium, 5 Low). P0 and P1 fixes applied.
@@ -57,8 +57,12 @@ Penetration test identified 14 vulnerabilities (2 Critical, 2 High, 5 Medium, 5 
 - `worker/src/middleware/rate_limit.rs` — Improved 429 response with JSON body + Retry-After header (VULN-010)
 - `worker/src/auth.rs` — Added `blacklist_token`, `is_token_blacklisted`, FNV-1a hash for KV keys (VULN-011)
 - `worker/src/handlers/auth.rs` — Updated `auth_logout` to extract + verify + blacklist JWT (VULN-011)
+- `worker/src/lib.rs` — Fixed middleware layers not applying to API routes (rate limit, correlation ID, security headers were skeleton-only)
+- `worker/.dev.vars` — Added `WEBHOOK_SECRET`
 
 ## Validation
 - `cargo check` — clean
 - `cargo clippy` — zero warnings
 - `cargo test` — 69/69 pass
+- **Production security validation passed** — all VULN-001/002/004/005/008 return 401, security headers present, rate limiting active
+- Deployed via `bash deploy.sh` (Cloudflare PUT API fallback)
