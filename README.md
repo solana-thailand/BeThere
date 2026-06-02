@@ -436,7 +436,7 @@ cargo clippy --all-targets
 - **Self-registration** — Attendees register via public event page (`/e/{slug}`) with Google identity
 - **My Registrations** — Signed-in attendees see their events + status on landing page with auth-aware nav
 - **Quiz-gated claim** — Attendees complete quiz before claiming NFT badge
-- **Landing page** — Auth-aware nav bar, upcoming events, interactive swimlane, waitlist, FAQ, social proof
+- **Landing page** — Persona toggle (Attendees/Organizers), synced tabbed timelines, upcoming events, My Registrations with 4-column card grid, sandbox empty state, waitlist, FAQ, social proof
 - **Rust Adventures** — Educational tile-based game teaching Solana/Rust concepts
 - **Security hardened** — Cookie Secure flag, secret redaction in Debug, attendee-validated adventure saves
 - **Automated E2E tests** — 10-step full E2E suite + 7-test devnet suite
@@ -503,6 +503,7 @@ See [`docs/security_audit.md`](docs/security_audit.md) for the full escrow secur
 | Attendee identity | ✅ | Google Sign-In for registration, email locked to JWT |
 | Self-registration | ✅ | Public event page `/e/{slug}` with countdown + deposit CTA |
 | My Registrations | ✅ | Landing page auth-aware nav, event status tracking |
+| Landing page UX | ✅ | Persona toggle, synced tabbed timelines (4-step), 4-col card grid, sandbox empty state |
 | Walk-in management | ✅ | On-the-spot registration, CSV export, Sheet sync |
 | Event cancellation | ✅ | THB batch refund, USDC refund queue, status tracking |
 | Wallet error recovery | ✅ | Structured error classification + user-friendly guidance |
