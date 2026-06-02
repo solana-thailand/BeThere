@@ -55,13 +55,7 @@ async fn spa_fallback() -> axum::response::Html<&'static str> {
 /// Route tables and middleware stacks are identical across all requests.
 /// State is injected per-request via `Extension` for `worker_ctx`.
 fn build_router_skeleton() -> Router {
-    Router::new()
-        .fallback(spa_fallback)
-        .layer(axum::middleware::from_fn(middleware::rate_limit_layer))
-        .layer(axum::middleware::from_fn(middleware::correlation_id_layer))
-        .layer(axum::middleware::from_fn(
-            middleware::security_headers_layer,
-        ))
+    Router::new().fallback(spa_fallback)
 }
 
 #[event(fetch)]
@@ -88,7 +82,15 @@ async fn fetch(
     };
 
     // Merge state-dependent API routes per request
-    let mut router = router.merge(handlers::routes(state));
+    // Middleware from the skeleton covers its own routes (SPA fallback),
+    // but merged routes need their own layer application.
+    let api_routes = handlers::routes(state)
+        .layer(axum::middleware::from_fn(middleware::rate_limit_layer))
+        .layer(axum::middleware::from_fn(middleware::correlation_id_layer))
+        .layer(axum::middleware::from_fn(
+            middleware::security_headers_layer,
+        ));
+    let mut router = router.merge(api_routes);
     Ok(router.call(req).await?)
 }
 
