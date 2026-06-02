@@ -607,38 +607,58 @@ pub async fn confirm_deposit_handler(
 // POST /api/deposit/usdc/webhook — Helius webhook for TX confirmation
 // ---------------------------------------------------------------------------
 
-/// Helius webhook handler for USDC deposit confirmations.
+/// Dual-purpose endpoint for recording USDC deposit TX signatures.
 ///
-/// Called by the frontend after a wallet sends a deposit TX, to record the
-/// TX signature for later on-chain verification. Can also be called by
-/// Helius when a monitored transaction is confirmed on-chain.
+/// Called by:
+/// 1. **Frontend** after a wallet sends a deposit TX — sends JWT Bearer token
+/// 2. **Helius** when a monitored TX is confirmed — sends `WEBHOOK_SECRET` Bearer token
 ///
-/// **Authentication**: Validates `Authorization: Bearer <token>` header
-/// against the `WEBHOOK_SECRET` env var. Rejects requests if the secret is
-/// not configured (VULN-001 remediation).
+/// **Authentication**: Accepts either a valid `WEBHOOK_SECRET` Bearer token or
+/// a valid JWT. Rejects if `WEBHOOK_SECRET` is not configured and the Bearer
+/// token doesn't parse as a valid JWT (VULN-001 remediation).
 #[worker::send]
 pub async fn deposit_webhook_handler(
     State(state): State<AppState>,
     headers: HeaderMap,
     Json(body): Json<UpdateDepositSignatureRequest>,
 ) -> Result<ApiOk<serde_json::Value>, WorkerError> {
-    // Validate Bearer token — reject if WEBHOOK_SECRET is not configured
-    if state.webhook_secret.is_empty() {
-        tracing::error!("deposit webhook rejected: WEBHOOK_SECRET not configured");
-        return Err(event_checkin_domain::models::error::AppError::Unauthorized(
-            "webhook authentication not configured".to_string(),
-        )
-        .into());
-    }
-    let expected = format!("Bearer {}", state.webhook_secret);
+    // Dual auth: accept either WEBHOOK_SECRET or valid JWT
     let auth_header = headers
         .get("authorization")
         .and_then(|v| v.to_str().ok())
         .unwrap_or("");
-    if auth_header != expected {
+
+    let is_webhook_authed = if !state.webhook_secret.is_empty() {
+        let expected = format!("Bearer {}", state.webhook_secret);
+        auth_header == expected
+    } else {
+        false
+    };
+
+    let is_jwt_authed = if !is_webhook_authed {
+        // Try JWT verification
+        let token = auth_header
+            .strip_prefix("Bearer ")
+            .map(|s| Some(s.to_string()))
+            .unwrap_or(None);
+        match crate::auth::verify_token(&token, &state).await {
+            Ok(_) => true,
+            Err(e) => {
+                tracing::debug!(
+                    error = %e,
+                    "deposit webhook: JWT verification failed"
+                );
+                false
+            }
+        }
+    } else {
+        false // already authed via webhook secret, skip JWT check
+    };
+
+    if !is_webhook_authed && !is_jwt_authed {
         tracing::warn!(
             auth = %auth_header,
-            "deposit webhook rejected: invalid or missing Authorization header"
+            "deposit webhook rejected: no valid webhook secret or JWT"
         );
         return Err(event_checkin_domain::models::error::AppError::Unauthorized(
             "invalid or missing Authorization header".to_string(),

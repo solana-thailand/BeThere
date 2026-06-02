@@ -353,7 +353,10 @@ pub fn extract_token_from_request(req: &Request) -> Option<String> {
 ///
 /// In dev mode (`DEV_MODE=1`), accepts the literal string `dev-token`
 /// and returns synthetic Claims with the configured `dev_email`.
-async fn verify_token(token: &Option<String>, state: &AppState) -> Result<Claims, String> {
+pub(crate) async fn verify_token(
+    token: &Option<String>,
+    state: &AppState,
+) -> Result<Claims, String> {
     // Dev mode bypass — accept "dev-token" without JWT verification
     if state.config.dev_mode {
         let token = token.as_ref().ok_or("missing authentication token")?;
