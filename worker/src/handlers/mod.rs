@@ -84,17 +84,14 @@ pub fn routes(state: AppState) -> Router<()> {
         .route("/waitlist", post(waitlist::join_waitlist))
         // Public ticket view (no auth — attendees view their QR slip)
         .route("/public/ticket/{id}", get(attendee::get_public_ticket))
-        // Deposit routes (public — attendee checks/initiates deposit)
+        // Deposit status check (public — attendee checks own deposit status)
         .route(
             "/deposit/status/{attendee_id}",
             get(deposit::get_deposit_status_handler),
         )
-        .route("/deposit/usdc", post(deposit::deposit_usdc_handler))
+        // Deposit TX details (public — returns Solana Pay URL for wallet)
         .route("/deposit/usdc/tx", get(deposit::deposit_usdc_tx_handler))
-        .route(
-            "/deposit/usdc/confirm",
-            get(deposit::confirm_deposit_handler),
-        )
+        // Deposit webhook with Bearer auth (VULN-001 fix — separate from attendee auth)
         .route(
             "/deposit/usdc/webhook",
             post(deposit::deposit_webhook_handler),
@@ -111,16 +108,7 @@ pub fn routes(state: AppState) -> Router<()> {
             "/escrow/onchain-webhook",
             post(escrow_index::onchain_webhook_handler),
         )
-        // R2 object serving — separate routes per prefix to avoid SPA fallback shadowing
-        // the {key:path} wildcard. Each route maps to a specific R2 prefix.
-        .route(
-            "/storage/slips/{event_id}/{attendee_id}",
-            get(crate::storage::serve_slip),
-        )
-        .route(
-            "/storage/refunds/{event_id}/{attendee_id}",
-            get(crate::storage::serve_refund),
-        )
+        // R2 badge serving (public — NFT badge SVGs fetched by wallets/explorers)
         .route(
             "/storage/badges/{event_id}",
             get(crate::storage::serve_badge),
@@ -138,6 +126,13 @@ pub fn routes(state: AppState) -> Router<()> {
         .route("/my-registration/{slug}", get(register::my_registration))
         // All registrations for the signed-in user across all events
         .route("/my-registrations", get(register::my_registrations))
+        // USDC deposit initiation (VULN-002 fix — requires identity to prevent spam)
+        .route("/deposit/usdc", post(deposit::deposit_usdc_handler))
+        // USDC deposit confirmation (VULN-004 fix — requires identity)
+        .route(
+            "/deposit/usdc/confirm",
+            get(deposit::confirm_deposit_handler),
+        )
         // THB slip upload (requires verified email — attendee uploads their own slip)
         .route(
             "/deposit/thb/upload",
@@ -154,6 +149,15 @@ pub fn routes(state: AppState) -> Router<()> {
         .route(
             "/escrow/rollover-deposit",
             post(deposit::rollover_deposit_tx_handler),
+        )
+        // R2 storage — financial docs require identity (VULN-008 fix)
+        .route(
+            "/storage/slips/{event_id}/{attendee_id}",
+            get(crate::storage::serve_slip),
+        )
+        .route(
+            "/storage/refunds/{event_id}/{attendee_id}",
+            get(crate::storage::serve_refund),
         )
         .layer(middleware::from_fn_with_state(
             state.clone(),

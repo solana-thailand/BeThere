@@ -189,24 +189,26 @@ pub async fn onchain_webhook_handler(
     headers: HeaderMap,
     Json(body): Json<OnchainWebhookRequest>,
 ) -> Result<ApiOk<IndexSummary>, WorkerError> {
-    // Validate Bearer token if webhook secret is configured
-    if !state.webhook_secret.is_empty() {
-        let expected = format!("Bearer {}", state.webhook_secret);
-        let auth_header = headers
-            .get("authorization")
-            .and_then(|v| v.to_str().ok())
-            .unwrap_or("");
-
-        if auth_header != expected {
-            tracing::warn!(
-                auth = %auth_header,
-                "webhook rejected: invalid or missing Authorization header"
-            );
-            return Err(AppError::Unauthorized(
-                "invalid or missing Authorization header".to_string(),
-            )
-            .into());
-        }
+    // VULN-005: Always require Bearer token — reject if WEBHOOK_SECRET not configured
+    if state.webhook_secret.is_empty() {
+        tracing::error!("onchain webhook rejected: WEBHOOK_SECRET not configured");
+        return Err(
+            AppError::Unauthorized("webhook authentication not configured".to_string()).into(),
+        );
+    }
+    let expected = format!("Bearer {}", state.webhook_secret);
+    let auth_header = headers
+        .get("authorization")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    if auth_header != expected {
+        tracing::warn!(
+            auth = %auth_header,
+            "onchain webhook rejected: invalid or missing Authorization header"
+        );
+        return Err(
+            AppError::Unauthorized("invalid or missing Authorization header".to_string()).into(),
+        );
     }
     let kv = state
         .events_kv

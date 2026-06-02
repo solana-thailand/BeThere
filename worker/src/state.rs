@@ -178,6 +178,16 @@ impl AppState {
         });
 
         if dev_mode {
+            // VULN-006: Refuse DEV_MODE on production domains
+            let is_production = google_oauth.redirect_uri.contains("bethere")
+                || google_oauth.redirect_uri.contains("workers.dev");
+            if is_production {
+                return Err(
+                    "SECURITY: DEV_MODE=1 is set but redirect_uri looks like a production domain. \
+                     Remove DEV_MODE before deploying to production."
+                        .to_string(),
+                );
+            }
             tracing::warn!(
                 email = %dev_email,
                 "⚠️  DEV_MODE enabled — JWT verification bypassed, accepting \"dev-token\" as valid"
@@ -241,9 +251,14 @@ impl AppState {
 
         let webhook_secret = get_var(env, "WEBHOOK_SECRET").unwrap_or_default();
         if webhook_secret.is_empty() {
-            // Only warn once per isolate to avoid log spam
+            // VULN-005: Only warn in dev mode, but still allow startup.
+            // Production deployments MUST set WEBHOOK_SECRET — the deposit
+            // webhook handler now rejects requests when it's empty.
             let _ = WARNED_WEBHOOK_SECRET.get_or_init(|| {
-                tracing::warn!("WEBHOOK_SECRET not set — webhook auth validation is disabled");
+                tracing::error!(
+                    "WEBHOOK_SECRET not set — deposit webhook handler will reject all requests. \
+                     Set WEBHOOK_SECRET in your environment."
+                );
             });
         }
 

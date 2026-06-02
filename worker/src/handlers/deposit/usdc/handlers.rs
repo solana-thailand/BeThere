@@ -1,6 +1,7 @@
 use axum::{
     Json,
     extract::{Path, Query, State},
+    http::HeaderMap,
 };
 use chrono::Utc;
 use event_checkin_domain::models::deposit::{
@@ -608,16 +609,43 @@ pub async fn confirm_deposit_handler(
 
 /// Helius webhook handler for USDC deposit confirmations.
 ///
-/// Called by Helius when a monitored transaction is confirmed on-chain.
-/// Updates the deposit status in KV to `verified: true`.
+/// Called by the frontend after a wallet sends a deposit TX, to record the
+/// TX signature for later on-chain verification. Can also be called by
+/// Helius when a monitored transaction is confirmed on-chain.
 ///
-/// This endpoint is also called directly by the frontend after a wallet
-/// sends a deposit TX, to record the TX signature for later polling.
+/// **Authentication**: Validates `Authorization: Bearer <token>` header
+/// against the `WEBHOOK_SECRET` env var. Rejects requests if the secret is
+/// not configured (VULN-001 remediation).
 #[worker::send]
 pub async fn deposit_webhook_handler(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(body): Json<UpdateDepositSignatureRequest>,
 ) -> Result<ApiOk<serde_json::Value>, WorkerError> {
+    // Validate Bearer token — reject if WEBHOOK_SECRET is not configured
+    if state.webhook_secret.is_empty() {
+        tracing::error!("deposit webhook rejected: WEBHOOK_SECRET not configured");
+        return Err(event_checkin_domain::models::error::AppError::Unauthorized(
+            "webhook authentication not configured".to_string(),
+        )
+        .into());
+    }
+    let expected = format!("Bearer {}", state.webhook_secret);
+    let auth_header = headers
+        .get("authorization")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    if auth_header != expected {
+        tracing::warn!(
+            auth = %auth_header,
+            "deposit webhook rejected: invalid or missing Authorization header"
+        );
+        return Err(event_checkin_domain::models::error::AppError::Unauthorized(
+            "invalid or missing Authorization header".to_string(),
+        )
+        .into());
+    }
+
     let kv = state.events_kv.as_ref().ok_or_else(|| {
         event_checkin_domain::models::error::AppError::Internal(
             "EVENTS KV not configured".to_string(),
