@@ -448,6 +448,30 @@ pub async fn rollover_deposit_tx_handler(
         .into());
     }
 
+    // VULN-009: Verify the authenticated user owns this attendee record on the source event
+    let source_attendee = crate::sheets::get_attendee_by_id(
+        &body.attendee_id,
+        &state,
+        &source_event.sheet_id,
+        &source_event.sheet_name,
+        Some(kv),
+    )
+    .await
+    .map_err(AppError::Internal)?
+    .ok_or_else(|| AppError::NotFound("attendee not found on source event".to_string()))?;
+
+    if !source_attendee.email.eq_ignore_ascii_case(&claims.email) {
+        tracing::warn!(
+            claims_email = %claims.email,
+            attendee_email = %source_attendee.email,
+            attendee_id = %body.attendee_id,
+            "rollover deposit rejected: email mismatch"
+        );
+        return Err(
+            AppError::Unauthorized("you can only rollover your own deposit".to_string()).into(),
+        );
+    }
+
     // Both events must have escrow initialized
     if source_event.escrow_address.is_empty() || target_event.escrow_address.is_empty() {
         return Err(AppError::Validation(

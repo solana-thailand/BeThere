@@ -186,6 +186,31 @@ pub async fn upload_thb_slip_handler(
         return Err(AppError::Validation("THB deposit amount not configured".to_string()).into());
     }
 
+    // VULN-012: Verify the authenticated user owns this attendee record
+    let upload_attendee = crate::sheets::get_attendee_by_id(
+        &body.attendee_id,
+        &state,
+        &event.sheet_id,
+        &event.sheet_name,
+        Some(kv),
+    )
+    .await
+    .map_err(AppError::Internal)?
+    .ok_or_else(|| AppError::NotFound("attendee not found".to_string()))?;
+
+    if !upload_attendee.email.eq_ignore_ascii_case(&claims.email) {
+        tracing::warn!(
+            claims_email = %claims.email,
+            attendee_email = %upload_attendee.email,
+            attendee_id = %body.attendee_id,
+            "THB slip upload rejected: email mismatch"
+        );
+        return Err(AppError::Unauthorized(
+            "you can only upload slips for your own registration".to_string(),
+        )
+        .into());
+    }
+
     // Validate slip URL for safety (MIME type, size, no SVG/XSS)
     validate_slip_url(&body.slip_url)?;
 
@@ -968,6 +993,30 @@ pub async fn hold_deposit_handler(
 
     if !event.deposit_enabled {
         return Err(AppError::Validation("deposit not enabled for this event".to_string()).into());
+    }
+
+    // VULN-012: Verify the authenticated user owns this attendee record
+    let attendee = crate::sheets::get_attendee_by_id(
+        &body.attendee_id,
+        &state,
+        &event.sheet_id,
+        &event.sheet_name,
+        Some(kv),
+    )
+    .await
+    .map_err(AppError::Internal)?
+    .ok_or_else(|| AppError::NotFound("attendee not found".to_string()))?;
+
+    if !attendee.email.eq_ignore_ascii_case(&claims.email) {
+        tracing::warn!(
+            claims_email = %claims.email,
+            attendee_email = %attendee.email,
+            attendee_id = %body.attendee_id,
+            "hold deposit rejected: email mismatch"
+        );
+        return Err(
+            AppError::Unauthorized("you can only hold your own deposit".to_string()).into(),
+        );
     }
 
     // 2. Look up deposit status
