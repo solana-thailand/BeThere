@@ -456,6 +456,39 @@ create_event → deposit (N times) → deactivate_event
                               close_event (after full settlement)
 ```
 
+### Instruction Introspection
+
+The program can access the **Instructions sysvar** (`Sysvar1nstructions1111111111111111111111111`) to inspect all top-level instructions in the current transaction. This enables structural verification — the program can see what other instructions are in the same transaction and enforce composability constraints.
+
+**Mental model:**
+
+- A transaction is an ordered list of instructions.
+- Each instruction has: program ID, account metas, data bytes.
+- The Instructions sysvar is a read-only account exposing the current instruction list.
+- Programs load instructions by index (0, 1, 2, …) and know which one is currently executing.
+- Verification = comparing what was executed with what the program expects.
+- Limit: only same-transaction top-level instructions are visible (no CPI inner instructions, no history).
+
+**API** (via `solana_instructions_sysvar` crate or Pinocchio equivalent):
+
+| Function | Purpose |
+|---|---|
+| `load_current_index_checked` | Returns index of the currently executing instruction |
+| `load_instruction_at_checked(index)` | Deserializes the instruction at absolute index |
+| `get_instruction_relative(offset)` | Loads instruction relative to current (-1 = previous, +1 = next) |
+
+**Applicable use cases for BeThere escrow:**
+
+| Use Case | What It Enforces | Security Benefit |
+|---|---|---|
+| Refund + close enforcement | `refund` must be paired with `close_deposit` in the same TX | Fixes SEC-010 rent leak at program level |
+| Multi-deposit prevention | Only one `deposit` instruction per event per TX | Prevents vault manipulation / sandwich attacks |
+| CPI detection | Reject or restrict invocations via CPI from other programs | Defense-in-depth against composability attacks |
+| Atomic deposit + check-in | Walk-in attendees: deposit + check-in in one TX | New feature: pay-at-door flow |
+| Rollover integrity | Verify `deactivate_event` for source event in same TX | Strengthens cross-event transfer guarantees |
+
+**Implementation note:** Instruction introspection is a program-side change. It requires adding the Instructions sysvar as an account to any instruction that needs it. No client-side (Worker) changes are needed — the program enforces the constraint regardless of how the transaction is built.
+
 ---
 
 ## 9. Proposed Changes (from Security Audit)
@@ -632,6 +665,10 @@ When creating events, organizers who haven't enabled deposits see: "Events witho
 - [x] On-chain program: 29 SVM unit tests (quasar-svm)
 - [x] On-chain program: 13 Kani formal verification harnesses
 - [ ] On-chain program: `refund_and_close` combined instruction (refund + close_deposit in 1 TX)
+- [ ] On-chain program: instruction introspection — refund + close enforcement (SEC-010 program-level fix)
+- [ ] On-chain program: instruction introspection — multi-deposit prevention per event per TX
+- [ ] On-chain program: instruction introspection — CPI detection / stack height guard
+- [ ] On-chain program: instruction introspection — atomic deposit + check-in for walk-in flow
 
 ### Backend
 

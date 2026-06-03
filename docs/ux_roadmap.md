@@ -192,6 +192,7 @@ USDC payment card on the deposit page is hidden unless the backend returns `dev_
 **Effort**: ~3.5h (event config + UI + new sheet column AF)
 
 ### PDPA-3. Privacy Policy Page (`/privacy`)
+**Status**: ✅ Implemented — `/privacy` route with PDPA-compliant privacy policy (`frontend-leptos/src/pages/privacy.rs`)
 **Current**: No privacy policy page exists.
 **Target**: Public `/privacy` route with data practices disclosure — what we collect, why, where it's stored, blockchain immutability notice, data subject rights, contact info.
 **Impact**: PDPA Section 23 (privacy notice before collection). Legal requirement.
@@ -420,7 +421,7 @@ Translate deposit and claim pages to Thai for local adoption in Thailand. Could 
 
 ### P3-5. Event Cancellation Instruction (`cancel_event`)
 
-**Status**: ✅ Implemented (commit `bd9601e`) — Cancellation workflow with THB batch refund, USDC refund queue, cancel status endpoint, admin UI (Alt+8). Note: USDC refunds still require attendee signature (on-chain constraint).
+**Status**: ✅ Implemented (handover 074 — THB batch refund + USDC refund queue + cancel status). Commit `bd9601e`. Note: USDC refunds still require attendee signature (on-chain constraint).
 
 **Issue ref**: `docs/escrow_protocol.md` Q6
 
@@ -526,7 +527,7 @@ Submit the on-chain escrow program to a Solana audit firm (e.g., Audit Arena, Ot
 
 ---
 
-*Document created from UX audit session. Last updated: 2026-06-12.*
+*Document created from UX audit session. Last updated: 2026-06-02.*
 
 ---
 
@@ -535,7 +536,8 @@ Submit the on-chain escrow program to a Solana audit firm (e.g., Audit Arena, Ot
 > **Philosophy**: Simple is complicated enough at scale. Stop building for 100x. The best engineers use boring technology.
 > Full audit and phased plan: `.issues/033_less_is_more_ui_simplification.md`
 
-### LM-1. Deposit Page → 2-Step Wizard (Phase 1A)
+### LM-1. Deposit Page → 2-Step Wizard (Phase 1A) ✅
+**Status**: ✅ Implemented — Deposit page uses 2-step wizard (`frontend-leptos/src/pages/deposit/`)
 **Current**: 12 interactive elements at once in ChoosePayment state.
 **Target**: Step 1 = pick method (USDC or THB). Step 2 = payment form for chosen method.
 **Impact**: Halves visual complexity on the most intimidating page.
@@ -550,15 +552,18 @@ Submit the on-chain escrow program to a Solana audit firm (e.g., Audit Arena, Ot
 **Target**: NFT claimed ✓ + asset ID + "View NFT" + optional share button.
 **Impact**: Celebration moment stays focused.
 
-### LM-4. Events Page → Extract Form Component (Phase 2A)
+### LM-4. Events Page → Extract Form Component (Phase 2A) ✅
+**Status**: ✅ Implemented — `EventFormComponent` extracted, used by EventsPage (`frontend-leptos/src/pages/event_form.rs`)
 **Current**: 2,572 lines, 35 fields, 9 sections.
 **Target**: `<EventForm>` component, EventsPage ≤1024 lines.
 
-### LM-5. Admin Escrow → Shared Step Component (Phase 2B)
+### LM-5. Admin Escrow → Shared Step Component (Phase 2B) ✅
+**Status**: ✅ Implemented — `EscrowStepCard` shared component (`frontend-leptos/src/pages/admin_escrow.rs`)
 **Current**: 3 identical step cards copy-pasted, 30+ inline styles.
 **Target**: One `<EscrowStep>` component, CSS classes only.
 
-### LM-6. Scanner → Settings Gear (Phase 2C)
+### LM-6. Scanner → Settings Gear (Phase 2C) ✅
+**Status**: ✅ Implemented — Settings gear icon with popover for flash/audio toggles (`frontend-leptos/src/pages/scanner.rs`)
 **Current**: Flash/Audio toggles always visible.
 **Target**: Gear icon popover. Bottom sheet = stats + manual + walk-in.
 

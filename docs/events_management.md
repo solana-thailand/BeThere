@@ -129,6 +129,19 @@ Full configuration with 40+ fields organized in sections:
 | `on_chain_event_id` | On-chain event identifier |
 | `refund_deadline_hours` | Hours after event for refund eligibility |
 
+**R2 Storage:**
+
+| Field | Description |
+|-------|-------------|
+| `ASSETS_BUCKET` | R2 bucket binding for slip images, refund proofs, badge SVGs |
+
+**Rollover & Credit:**
+
+| Field | Description |
+|-------|-------------|
+| `deposit_hold` | Deposit held as rolling credit for next event (attendee choice) |
+| `rollover_target_event` | Target event for atomic deposit rollover |
+
 **Timestamps:**
 
 | Field | Description |
@@ -166,6 +179,29 @@ All protected (require admin auth):
 | `POST` | `/api/escrow/close-event` | Close escrow (reclaim rent SOL) |
 | `GET` | `/api/metadata/{event_id}` | Dynamic Metaplex metadata JSON |
 | `POST` | `/api/walkin/register` | Register walk-in attendee (staff-only) |
+| `POST` | `/api/escrow/confirm-init` | Confirm escrow init after wallet signature |
+| `POST` | `/api/deposit/hold` | Hold deposit as rolling credit (attendee-authed) |
+| `GET` | `/api/deposit/credit-balance` | Check deposit credit balance (attendee-authed) |
+| `POST` | `/api/escrow/rollover-deposit` | Build atomic rollover deposit TX (attendee-authed) |
+| `GET` | `/api/escrow/health` | Escrow health check |
+| `GET` | `/api/refund/refunded` | List already-refunded attendees |
+| `POST` | `/api/refund/manual/{attendee_id}` | Mark manual refund |
+| `PATCH` | `/api/admin/quiz/questions/{id}/toggle` | Toggle quiz question active/inactive |
+| `POST` | `/api/admin/quiz/questions` | Add individual quiz question |
+| `PUT` | `/api/admin/quiz/questions/{id}` | Update individual quiz question |
+| `DELETE` | `/api/admin/quiz/questions/{id}` | Delete individual quiz question |
+| `GET` | `/api/contacts` | List deduplicated master contacts |
+| `GET` | `/api/contacts/events` | List events tab |
+| `GET` | `/api/contacts/stats` | Contacts statistics |
+| `POST` | `/api/contacts/sync` | Sync contacts to sheet |
+| `GET` | `/api/orgs` | List organizations |
+| `POST` | `/api/orgs` | Create organization |
+| `GET` | `/api/orgs/{id}` | Get org details |
+| `PUT` | `/api/orgs/{id}` | Update org |
+| `DELETE` | `/api/orgs/{id}` | Delete org |
+| `GET` | `/api/storage/slips/{event_id}/{attendee_id}` | Serve slip image from R2 |
+| `GET` | `/api/storage/refunds/{event_id}/{attendee_id}` | Serve refund proof from R2 |
+| `GET` | `/api/storage/badges/{event_id}` | Serve badge SVG from R2 |
 
 ---
 
@@ -365,6 +401,19 @@ Walk-in attendees are registered per-event via the scanner UI:
 | `frontend-leptos/src/api.rs` | Frontend API types + functions |
 | `bethere-escrow/src/state.rs` | On-chain `EventEscrow` state |
 | `bethere-escrow/src/lib.rs` | On-chain program (8 instructions) |
+| `worker/src/storage.rs` | R2 storage helpers (slip/refund/badge serving) |
+| `worker/src/db.rs` | D1 claim lock operations |
+| `worker/src/cleanup.rs` | Cron KV cleanup (retention policy) |
+| `worker/src/org_store.rs` | Organization KV store CRUD |
+| `worker/src/escrow_indexer/` | On-chain escrow event indexer (webhook + poller + store) |
+| `worker/src/middleware/` | Cache, rate-limit, security headers, correlation IDs |
+| `worker/src/handlers/contacts.rs` | Master contacts API handlers |
+| `worker/src/handlers/orgs.rs` | Organization CRUD API handlers |
+| `worker/src/handlers/escrow_index.rs` | On-chain event indexing handlers |
+| `worker/src/handlers/user_log.rs` | User sign-in logging to Google Sheets |
+| `worker/src/claim/` | Claim logic (lock, mint, orchestrator) |
+| `domain/src/models/org.rs` | Organization data model |
+| `domain/src/models/deposit.rs` | Deposit data models |
 
 ---
 
@@ -378,3 +427,6 @@ Walk-in attendees are registered per-event via the scanner UI:
 | `.issues/008_nft_config_and_production_readiness.md` | NFT configuration guide |
 | `.issues/014_walkin_attendee_flow.md` | Walk-in attendee implementation |
 | `docs/ux_roadmap.md` | Prioritized UX improvements (public event page, scanner feedback, etc.) |
+| `.issues/032_rolling_deposit_credit.md` | Rolling deposit credit + atomic rollover design |
+| `.handovers/077_rollover_deposit_e2e.md` | Rollover deposit implementation across all 3 layers |
+| `.handovers/080_r2_binding_rate_limiting.md` | R2 storage binding + rate limiting |

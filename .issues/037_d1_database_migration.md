@@ -1,5 +1,8 @@
 # Issue #037: Cloudflare D1 Database Migration (Phase 1 — Claim Locks + Audit Trail)
 
+> **Status: ✅ COMPLETE** — Claim locks and audit trail migrated to D1.
+> Phase 2 (attendees, contacts, events, staff → D1) tracked in **Issue #046**.
+
 ## Summary
 
 Migrate from Cloudflare KV to Cloudflare D1 (SQLite) for claim locks and audit trail — the two highest-value targets where KV's limitations cause correctness and performance issues. Run hybrid: D1 for structured data, keep KV for edge caches.

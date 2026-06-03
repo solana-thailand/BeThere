@@ -553,6 +553,7 @@ Mapped against the [Solana Foundation Security Checklist](https://github.com/sol
 | — | Vault Balance Integrity | ✅ Compliant | `close_event` checks both accounting invariant (`deposited == refunded + forfeited`) AND actual vault token balance (`vault.amount() != 0`). Prevents griefing via external airdrop. | SEC-013 |
 | — | Time-Based State Guards | ✅ Compliant | `create_event`: `event_end > now`. `refund`: `now >= event_end`. `claim_forfeited`: `now >= refund_deadline`. `mark_checked_in`: `now <= event_end`. | SEC-011, SEC-012 |
 | — | Stranded Lamports Recovery | ✅ Compliant | All accounts fully closed (not left rent-exempt alive). `close_account` CPI drains all lamports. No `WithdrawExcessLamports` needed. | SEC-015 |
+| — | Instruction Introspection | 📋 Planned | Instructions sysvar enables structural TX verification: refund+close enforcement, multi-deposit prevention, CPI detection, atomic deposit+check-in. See escrow protocol §8. | — |
 ### Program-Side Checklist
 
 | Check | Status | Evidence |
@@ -578,6 +579,7 @@ Mapped against the [Solana Foundation Security Checklist](https://github.com/sol
 | Gate upgrades and ownership transfers | ✅ | Program upgrade authority is standard Solana BPF loader |
 | Prevent reinitialization of existing accounts | ✅ | `init` constraint on PDA accounts |
 | Recover stranded lamports on token accounts | ✅ | `close_account` CPI in `close_event` drains all lamports; no account left alive with excess |
+| Enforce transaction structure via instruction introspection | 📋 Planned | Instructions sysvar to verify sibling/cousin instructions: refund+close pairing, single-deposit-per-TX, CPI stack height guard |
 ### Client-Side Checklist
 
 | Check | Status | Evidence |

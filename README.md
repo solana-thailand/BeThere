@@ -209,6 +209,25 @@ The frontend is served from `frontend-leptos/dist/` via Workers Assets with SPA 
 | GET | `/api/events/{id}/audit` | Cookie + Organizer | Get audit trail for event |
 | GET | `/api/audit/global` | Cookie + SuperAdmin | Get system-wide audit trail |
 
+### Organizations (SuperAdmin)
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/api/orgs` | Cookie + SuperAdmin | List all organizations |
+| POST | `/api/orgs` | Cookie + SuperAdmin | Create organization |
+| GET | `/api/orgs/{id}` | Cookie + SuperAdmin | Get organization details |
+| PUT | `/api/orgs/{id}` | Cookie + SuperAdmin | Update organization |
+| DELETE | `/api/orgs/{id}` | Cookie + SuperAdmin | Delete organization |
+
+### Contacts (Master Sheet)
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/api/contacts` | Cookie + Staff | List deduplicated master contacts |
+| GET | `/api/contacts/events` | Cookie + Staff | List events tab |
+| GET | `/api/contacts/stats` | Cookie + Staff | Contacts statistics |
+| POST | `/api/contacts/sync` | Cookie + Staff | Sync contacts to Google Sheet |
+
 ### Attendees & Check-In
 
 | Method | Path | Auth | Description |
@@ -237,6 +256,10 @@ The frontend is served from `frontend-leptos/dist/` via Workers Assets with SPA 
 | POST | `/api/quiz/{token}/submit` | No | Submit quiz answers |
 | GET | `/api/quiz/{token}/status` | No | Get quiz progress |
 | PUT | `/api/admin/quiz` | Cookie + Staff | Create/update quiz config |
+| POST | `/api/admin/quiz/questions` | Cookie + Staff | Add individual quiz question |
+| PUT | `/api/admin/quiz/questions/{id}` | Cookie + Staff | Update individual quiz question |
+| DELETE | `/api/admin/quiz/questions/{id}` | Cookie + Staff | Delete individual quiz question |
+| PATCH | `/api/admin/quiz/questions/{id}/toggle` | Cookie + Staff | Toggle quiz question active/inactive |
 | GET | `/api/adventure/{token}/status` | No | Get adventure progress |
 | POST | `/api/adventure/{token}/save` | No | Save adventure progress |
 | GET | `/api/admin/adventure` | Cookie + Staff | Get adventure config |
@@ -258,32 +281,47 @@ The frontend is served from `frontend-leptos/dist/` via Workers Assets with SPA 
 | GET | `/api/deposit/usdc/tx` | No | Solana Pay TX callback (wallet fetches serialized TX) |
 | GET | `/api/deposit/usdc/confirm` | No | Poll deposit TX confirmation via Solana RPC |
 | POST | `/api/deposit/usdc/webhook` | No | Record TX signature, verify on-chain |
-| POST | `/api/deposit/thb/upload` | No | Upload PromptPay slip URL (THB) |
+| POST | `/api/deposit/thb/upload` | Cookie | Upload PromptPay slip image (THB, attendee's own slip) |
 | GET | `/api/deposit/thb/pending` | Cookie + Staff | List pending THB slips |
 | POST | `/api/deposit/thb/verify` | Cookie + Staff | Verify/reject THB slip |
+| POST | `/api/deposit/hold` | Cookie | Hold deposit as rolling credit for next event |
+| GET | `/api/deposit/credit-balance` | Cookie | Check deposit credit balance |
+
+### R2 Storage
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/api/storage/slips/{event_id}/{attendee_id}` | No | Serve slip image from R2 |
+| GET | `/api/storage/refunds/{event_id}/{attendee_id}` | No | Serve refund proof from R2 |
+| GET | `/api/storage/badges/{event_id}` | No | Serve badge SVG from R2 |
 
 ### Escrow (On-Chain)
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | POST | `/api/escrow/init` | Cookie + Organizer | Initialize on-chain escrow PDA + vault ATA (single TX) |
+| POST | `/api/escrow/confirm-init` | Cookie + Organizer | Confirm escrow init after wallet signature |
 | POST | `/api/escrow/mark-checked-in` | Cookie + Organizer | Mark attendee checked-in on-chain |
 | POST | `/api/escrow/refund` | No | Build refund TX for attendee's wallet to sign |
 | POST | `/api/escrow/claim-forfeited` | Cookie + Organizer | Claim forfeited deposit (no-show) |
 | POST | `/api/escrow/deactivate-event` | Cookie + Organizer | Build deactivate escrow TX |
 | POST | `/api/escrow/close-event` | Cookie + Organizer | Build close escrow TX (reclaim rent) |
 | POST | `/api/escrow/close-deposit` | No | Close individual deposit PDA (rent reclaim) |
+| POST | `/api/escrow/rollover-deposit` | Cookie | Build atomic rollover deposit TX (attendee-authed) |
 | POST | `/api/escrow/backfill-wallets` | Cookie + Organizer | Backfill wallet addresses from KV to on-chain |
 | GET | `/api/escrow/events/{event_id}` | Cookie + Organizer | Get on-chain escrow event data |
 | POST | `/api/escrow/sync` | Cookie + Organizer | Sync on-chain escrow events to KV cache |
-| POST | `/api/escrow/onchain-webhook` | No | Webhook for on-chain escrow events |
+| POST | `/api/escrow/onchain-webhook` | No | Webhook for on-chain escrow events (Helius) |
+| GET | `/api/escrow/health` | Cookie + Staff | Escrow health check |
 
 ### Refunds & Cancellation
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | GET | `/api/refund/queue` | Cookie + Staff | List pending refunds |
+| GET | `/api/refund/refunded` | Cookie + Staff | List already-refunded attendees |
 | POST | `/api/refund/mark/{id}` | Cookie + Staff | Mark refund as completed |
+| POST | `/api/refund/manual/{attendee_id}` | Cookie + Staff | Mark manual refund |
 | POST | `/api/refund/batch-thb` | Cookie + Staff | Batch THB refund for event cancellation |
 | GET | `/api/escrow/refund-queue` | Cookie + Staff | USDC refund queue (cancellation workflow) |
 | GET | `/api/escrow/cancel-status` | Cookie + Staff | Event cancellation status overview |
@@ -296,62 +334,93 @@ The frontend is served from `frontend-leptos/dist/` via Workers Assets with SPA 
 | `/login` | Login — Google OAuth sign-in (staff/organizer entry point) | Public |
 | `/e/{slug}` | Public Event — event details, countdown, registration with Google Sign-In | Public |
 | `/deposit/{attendee_id}` | Deposit — wallet adapter + QR for USDC/THB deposit | Public |
-| `/ticket/{attendee_id}` | Ticket — QR code slip with check-in status | Public |
+| `/ticket/{attendee_id}` | Ticket — QR code slip with check-in status + rollover option | Public |
 | `/claim/{token}` | Claim — quiz + NFT badge + refund | Token-gated |
 | `/staff` | Scanner — camera QR + manual lookup + walk-in registration | Staff |
 | `/admin` | Dashboard — attendee list, stats, escrow, cancellation, walk-in export/sync | Staff |
 | `/admin/events` | Events — create, edit, manage events | SuperAdmin |
 | `/adventure` | Rust Adventures — educational game | Public |
+| `/privacy` | Privacy Policy — PDPA compliance | Public |
 
 ## Architecture
 
 ```
 worker/src/             — Cloudflare Worker
-  handlers/             — API endpoints (auth, check-in, QR, attendee, events, quiz, claim, adventure, health)
+  handlers/             — API endpoints
     deposit/              — Deposit/refund handlers (split by payment track)
-      usdc.rs               — USDC deposit flow: status, initiate, TX callback, confirm, webhook
-      thb.rs                — THB slip upload/verify, refund queue, batch refund
-      escrow.rs             — On-chain escrow: init, mark-checked-in, close, claim-forfeited, cancel
+      usdc/                — USDC deposit flow: status, initiate, TX callback, confirm, webhook
+      thb/                 — THB slip upload/verify, refund queue, batch refund
+      escrow/              — On-chain escrow: init, mark-checked-in, close, claim-forfeited, cancel, rollover
     ext.rs              — Shared utilities (EventIdQuery, resolve_event_with_access, resolve_kv)
+    contacts.rs         — Master contacts list management (deduplicated cross-event)
+    escrow_index.rs     — On-chain escrow event indexing (Helius webhook + RPC poller)
+    orgs.rs             — Organization CRUD (SuperAdmin)
+    user_log.rs         — User sign-in logging to Google Sheets
   adventure.rs          — Adventure business logic (save progress, check completion)
   auth.rs               — Google OAuth + JWT + role resolution (super_admin/organizer/staff)
+  claim/                — Claim logic (lock, mint, orchestrator)
+  cleanup.rs            — Cron KV cleanup for expired event data (retention policy)
+  db.rs                 — D1 claim lock operations (atomic double-claim prevention)
   error.rs              — Typed AppError → Axum IntoResponse integration
-  event_store.rs        — KV event registry CRUD, seed, migration, hard_delete_event
+  escrow_indexer/       — On-chain escrow event indexer
+    webhook.rs            — Helius enhanced webhook parsing
+    poller.rs             — RPC-based event poller
+    store.rs              — KV storage for indexed events
+  event_store/          — KV event registry CRUD
+    read.rs               — Event read operations
+    write.rs              — Event write operations + schema
   audit_store.rs        — Append-only audit trail (per-event + global, 27 action types)
+  org_store.rs          — Organization KV store CRUD
   quiz.rs               — Quiz business logic (scoring, KV interaction)
   sheets/               — Google Sheets API
     mod.rs                — Access token, column mapping, attendee/staff queries, KV cache
     write.rs              — Sheet mutations: check-in, claim, QR URLs, row append
+    contacts.rs           — Master contacts deduplication + sync
+    events_tab.rs         — Events tab management
   solana.rs             — Helius cNFT minting (mintCompressedNft RPC, MintRequest struct)
   solana_escrow/        — Solana escrow TX builders
     mod.rs                — Types, constants, EscrowError
     crypto.rs             — SHA-256, base58, PDA/ATA derivation (WASM SubtleCrypto + native)
     wire.rs               — Blockhash cache, tx serialization, message account ordering
-    tx_builders.rs        — 9 build_* functions using shared EscrowCtx + finalize_tx
+    tx_builders/          — Per-instruction builder files
+      init.rs               — create_event + init_escrow
+      deposit.rs            — deposit
+      mark.rs               — mark_checked_in
+      refund.rs             — refund + close_deposit
+      rollover.rs           — rollover_deposit (atomic cross-vault transfer)
+      close.rs              — deactivate_event + close_event + claim_forfeited
+  storage.rs            — R2 storage helpers (slip/refund/badge serving)
   crypto.rs             — SubtleCrypto bridge (RSA-SHA256, HMAC-SHA256)
   http.rs               — HTTP client wrapping worker::Fetch
-  middleware.rs         — Security headers, auth guard, correlation IDs
-  state.rs              — AppState from Env bindings
+  middleware/           — HTTP middleware
+    cache.rs              — Cache-Control layers (public-60, public-120, no-store, no-cache)
+    correlation.rs        — Correlation ID propagation
+    headers.rs            — Security headers
+    rate_limit.rs         — In-memory rate limiting
+  state.rs              — AppState from Env bindings (KV, D1, R2 cached in OnceLock)
 
 domain/src/             — Shared (compiles x86_64 + wasm32)
   config/               — AppConfig (grouped: OAuth, Sheets, Solana, Nft, Server, EventDefaults)
-  models/               — Attendee, Claims, EventConfig, AdventureConfig, AppError, API response types
+  models/               — Attendee, Claims, EventConfig, OrgConfig, Deposit models, AppError, API response types
   qr/                   — QR URL generation + base64 image
 
 frontend-leptos/src/
-  pages/                — Landing, Login, Scanner, Admin, Claim, Quiz Editor, Adventure
+  pages/                — Landing, Login, Scanner, Admin, Claim, Quiz Editor, Adventure, Privacy
   pages/adventure/      — Game engine, level definitions, types
+  pages/deposit/        — Deposit flow subcomponents
+  pages/public_event/   — Public event page subcomponents
+  pages/ticket/         — Ticket/QR slip subcomponents
   api.rs                — API client types and fetch wrappers
   components.rs         — Shared components + role helpers
   utils.rs              — Helpers (timestamps, badges, participation)
-  js/                   — Camera + QR detection module
+  js/                   — Camera + QR detection + Solana wallet adapter module
 ```
 
 ### Solana Escrow Architecture
 
 The escrow system uses PDAs (Program Derived Addresses) to hold attendee USDC deposits on-chain. The escrow program is deployed on devnet at `C6HDeZES9aPpNwe3UvS9ecmfcRhH1XeJb8PGJmLG3z3T`.
 
-**Escrow Flow (5 steps, all validated on devnet):**
+**Escrow Flow (6 steps, all validated on devnet):**
 
 ```
 1. create_event        →  Organizer signs  →  EventEscrow PDA + Vault ATA initialized (single TX)
@@ -359,6 +428,7 @@ The escrow system uses PDAs (Program Derived Addresses) to hold attendee USDC de
 3. mark_checked_in     →  Organizer signs  →  Attendee checked-in on-chain
 4. refund              →  Attendee signs   →  USDC → attendee (after event ends)
 5. claim_forfeited     →  Organizer signs  →  Forfeited deposits → organizer (after refund deadline)
+6. rollover_deposit    →  Attendee signs   →  Atomic deposit transfer → next event's vault (same organizer)
 ```
 
 **PDA Seeds:**
@@ -381,7 +451,7 @@ The escrow system uses PDAs (Program Derived Addresses) to hold attendee USDC de
 | Program ID | `C6HDeZES9aPpNwe3UvS9ecmfcRhH1XeJb8PGJmLG3z3T` | TBD |
 | USDC Mint | `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU` | `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1m` |
 
-**Transaction building:** All TX builders are in `worker/src/solana_escrow/tx_builders.rs`. They share an `EscrowCtx` that resolves program IDs + derives PDAs once, and a `finalize_tx()` helper that handles message building → blockhash → serialization → base64. This eliminates ~480 lines of duplicated boilerplate across the 9 builder functions.
+**Transaction building:** All TX builders are in `worker/src/solana_escrow/tx_builders/`. They share an `EscrowCtx` that resolves program IDs + derives PDAs once, and a `finalize_tx()` helper that handles message building → blockhash → serialization → base64. Each instruction has its own builder file for maintainability.
 
 ### Performance Layers
 
@@ -455,6 +525,16 @@ cargo clippy --all-targets
 - **Audit trail** — Append-only event log tracking all state-changing operations with actor attribution
 - **Dev-mode payment gating** — Solana wallet options hidden in production, shown only when `dev_mode: true`
 - **Attendee flow persistence** — localStorage resume for partial registrations, auto-redirect to deposit/ticket page
+- **Rollover deposits** — Atomic on-chain transfer of checked-in deposit to next event (no withdraw + re-deposit)
+- **D1 claim locks** — Atomic double-claim prevention via Cloudflare D1 SQLite
+- **R2 asset storage** — Zero-egress slip images, refund proofs, badge SVGs on Cloudflare R2
+- **Cron KV cleanup** — Automated retention policy enforcement via Cloudflare Workers cron trigger
+- **Organization management** — Multi-org CRUD with KV store (SuperAdmin)
+- **Master contacts** — Deduplicated cross-event contact sheet with sync to Google Sheets
+- **On-chain event indexer** — Helius webhook + RPC poller for escrow event timeline
+- **Individual quiz CRUD** — Per-question add/edit/delete/toggle (Issue 034 Phase 2)
+- **Rate limiting** — In-memory middleware for API protection
+- **Privacy policy page** — PDPA-compliant `/privacy` route
 
 ## Security
 
@@ -507,7 +587,15 @@ See [`docs/security_audit.md`](docs/security_audit.md) for the full escrow secur
 | Walk-in management | ✅ | On-the-spot registration, CSV export, Sheet sync |
 | Event cancellation | ✅ | THB batch refund, USDC refund queue, status tracking |
 | Wallet error recovery | ✅ | Structured error classification + user-friendly guidance |
-| Security audit | ✅ | 11 findings, 8 fixed, SEC-001–011 addressed |
+| Rollover deposits | ✅ | Atomic on-chain deposit transfer to next event (same organizer) |
+| D1 claim locks | ✅ | Atomic double-claim prevention via Cloudflare D1 SQLite |
+| R2 asset storage | ✅ | Zero-egress slip images, refund proofs, badge SVGs |
+| Cron cleanup | ✅ | Automated KV retention enforcement (Cloudflare Workers cron) |
+| Organization management | ✅ | Multi-org CRUD (SuperAdmin) |
+| Master contacts | ✅ | Deduplicated cross-event contact sheet + Google Sheet sync |
+| On-chain indexer | ✅ | Helius webhook + RPC poller for escrow event timeline |
+| Privacy policy | ✅ | PDPA-compliant `/privacy` route |
+| Security audit | ✅ | 15 findings, 12 fixed, SEC-001–015 addressed |
 | E2E tests | ✅ | 85 tests (47 unit + 38 on-chain SVM), 7 devnet E2E scripts |
 
 ## 📈 Competitive Landscape

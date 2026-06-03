@@ -41,6 +41,11 @@ cd worker && npx wrangler dev --port 8787
 - Show check-in confirmed
 - Key stat: "< 500ms latency, edge-deployed"
 
+### 5.5. Rollover Deposit (Optional — 15 sec)
+- Show attendee's ticket page after check-in
+- Click "Roll Over Deposit" → wallet signs → deposit moves to next event atomically
+- Key stat: "Atomic on-chain rollover — no withdraw + re-deposit needed"
+
 ### 5. Claim Refund + NFT Badge (30 sec)
 - Attendee opens claim page
 - Complete quiz (1-2 questions)
@@ -67,9 +72,9 @@ cd worker && npx wrangler dev --port 8787
 | **Problem** | 30-40% no-show rate for free events |
 | **Solution** | USDC deposit commitment, refundable on check-in |
 | **Cost** | $0.001 NFT, $0.00087 TX — 990x cheaper than alternatives |
-| **Security** | 11 findings audited, 8 fixed, on-chain escrow with time-locked refunds |
-| **Innovation** | Dual-track (USDC + PromptPay THB), quiz/adventure gating, 100% Rust |
-| **Traction** | 61 tests passing, devnet validated, ready for mainnet |
+| **Security** | 15 findings audited, 12 fixed, on-chain escrow with time-locked refunds |
+| **Innovation** | Dual-track (USDC + PromptPay THB), quiz/adventure gating, atomic deposit rollover, 100% Rust |
+| **Traction** | 85 tests (47 unit + 38 on-chain SVM), devnet validated, ready for mainnet |
 
 ## What If Demo Fails?
 
@@ -88,5 +93,6 @@ cd worker && npx wrangler dev --port 8787
 | Deposit | `4cQnNGRa5CHfcuWGzmE2LU7cUj58KreenSswnuypnZyVYTApx2vU7KPqeDYRjNyn8x1WHe6GunnwehS8CUuuoEJe` |
 | Refund | `5PA5wPRnHuhqSrvPs8T7t4nS3yjZtoV3sLzJtwYes3zSyW5sKDZ8CXQj1a1ep7gEyvPoV4UsPvgXwd6KEgGtWVHT` |
 | cNFT mint | `4omCGAuSYEj5yCoif3soUGMGy7sZdXvZvXUfL3dUF5goYhhxrzj6LDrndKohEML6zX96fZSkvBTtJ8riwbBFP2Sh` |
+| Rollover deposit | _(pending — see handover 077)_ |
 
 View on Solscan (devnet): `https://solscan.io/tx/<SIGNATURE>?cluster=devnet`
