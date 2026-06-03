@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fmt;
 use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
@@ -79,6 +80,29 @@ pub struct Attendee {
     pub row_index: usize,
 }
 
+/// Domain error for check-in validation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CheckInError {
+    /// Attendee is not in an approved state.
+    NotApproved(String),
+    /// Attendee was already checked in at the given time.
+    AlreadyCheckedIn(String),
+    /// Online/virtual attendees cannot check in on-site.
+    OnlineAttendee,
+}
+
+impl fmt::Display for CheckInError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::NotApproved(status) => write!(f, "attendee not approved: {status}"),
+            Self::AlreadyCheckedIn(at) => write!(f, "already checked in at {at}"),
+            Self::OnlineAttendee => write!(f, "online/virtual attendees cannot check in on-site"),
+        }
+    }
+}
+
+impl std::error::Error for CheckInError {}
+
 impl Attendee {
     pub fn is_approved(&self) -> bool {
         matches!(
@@ -112,6 +136,42 @@ impl Attendee {
         } else {
             &self.name
         }
+    }
+
+    /// Validate whether this attendee can be checked in on-site.
+    ///
+    /// Checks (in order):
+    /// 1. Not already checked in
+    /// 2. Approval status is Approved or CheckedIn
+    /// 3. Participation type is In-Person
+    pub fn can_check_in(&self) -> Result<(), CheckInError> {
+        if self.is_checked_in() {
+            return Err(CheckInError::AlreadyCheckedIn(
+                self.checked_in_at.clone().unwrap_or_default(),
+            ));
+        }
+        if !self.is_approved() {
+            return Err(CheckInError::NotApproved(self.approval_status.to_string()));
+        }
+        if !self.is_in_person() {
+            return Err(CheckInError::OnlineAttendee);
+        }
+        Ok(())
+    }
+
+    /// Is deposit verified (USDC confirmed on-chain or THB slip approved)?
+    /// The `deposit_verified` field is a string from Google Sheets ("true"/"false"
+    /// or a timestamp). Non-empty means verified.
+    pub fn has_verified_deposit(&self) -> bool {
+        self.deposit_verified
+            .as_ref()
+            .is_some_and(|v| !v.trim().is_empty())
+    }
+
+    /// Is this attendee eligible for refund?
+    /// Requires a verified deposit and not already refunded.
+    pub fn is_refund_eligible(&self) -> bool {
+        self.has_verified_deposit() && self.refund_status.as_deref() != Some("refunded")
     }
 }
 
@@ -696,6 +756,144 @@ mod tests {
             row_index: 2,
         }
     }
+
+    // -----------------------------------------------------------------------
+    // Domain behavior tests: can_check_in, has_verified_deposit, is_refund_eligible
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_can_check_in_approved_in_person() {
+        let a = make_attendee("In-Person");
+        assert!(a.can_check_in().is_ok());
+    }
+
+    #[test]
+    fn test_can_check_in_already_checked_in() {
+        let mut a = make_attendee("In-Person");
+        a.checked_in_at = Some("2025-01-01T12:00:00Z".to_string());
+        let err = a.can_check_in().unwrap_err();
+        assert_eq!(
+            err,
+            CheckInError::AlreadyCheckedIn("2025-01-01T12:00:00Z".to_string())
+        );
+    }
+
+    #[test]
+    fn test_can_check_in_not_approved() {
+        let mut a = make_attendee("In-Person");
+        a.approval_status = CheckInStatus::PendingApproval;
+        let err = a.can_check_in().unwrap_err();
+        assert!(matches!(err, CheckInError::NotApproved(_)));
+    }
+
+    #[test]
+    fn test_can_check_in_online_attendee() {
+        let mut a = make_attendee("Online");
+        a.approval_status = CheckInStatus::Approved;
+        let err = a.can_check_in().unwrap_err();
+        assert_eq!(err, CheckInError::OnlineAttendee);
+    }
+
+    #[test]
+    fn test_can_check_in_priority_already_checked_in() {
+        // Already checked in takes priority over not-approved
+        let mut a = make_attendee("In-Person");
+        a.checked_in_at = Some("2025-01-01T12:00:00Z".to_string());
+        a.approval_status = CheckInStatus::PendingApproval;
+        let err = a.can_check_in().unwrap_err();
+        assert!(matches!(err, CheckInError::AlreadyCheckedIn(_)));
+    }
+
+    #[test]
+    fn test_can_check_in_invited_status_allowed() {
+        // Invited status is NOT in the Approved|CheckedIn match
+        let mut a = make_attendee("In-Person");
+        a.approval_status = CheckInStatus::Invited;
+        let err = a.can_check_in().unwrap_err();
+        assert!(matches!(err, CheckInError::NotApproved(_)));
+    }
+
+    #[test]
+    fn test_has_verified_deposit_none() {
+        let a = make_attendee("In-Person");
+        assert!(!a.has_verified_deposit());
+    }
+
+    #[test]
+    fn test_has_verified_deposit_empty_string() {
+        let mut a = make_attendee("In-Person");
+        a.deposit_verified = Some(String::new());
+        assert!(!a.has_verified_deposit());
+    }
+
+    #[test]
+    fn test_has_verified_deposit_whitespace_only() {
+        let mut a = make_attendee("In-Person");
+        a.deposit_verified = Some("   ".to_string());
+        assert!(!a.has_verified_deposit());
+    }
+
+    #[test]
+    fn test_has_verified_deposit_true_string() {
+        let mut a = make_attendee("In-Person");
+        a.deposit_verified = Some("true".to_string());
+        assert!(a.has_verified_deposit());
+    }
+
+    #[test]
+    fn test_has_verified_deposit_timestamp() {
+        let mut a = make_attendee("In-Person");
+        a.deposit_verified = Some("2025-01-01T12:00:00Z".to_string());
+        assert!(a.has_verified_deposit());
+    }
+
+    #[test]
+    fn test_is_refund_eligible_no_deposit() {
+        let a = make_attendee("In-Person");
+        assert!(!a.is_refund_eligible());
+    }
+
+    #[test]
+    fn test_is_refund_eligible_verified_deposit() {
+        let mut a = make_attendee("In-Person");
+        a.deposit_verified = Some("true".to_string());
+        assert!(a.is_refund_eligible());
+    }
+
+    #[test]
+    fn test_is_refund_eligible_already_refunded() {
+        let mut a = make_attendee("In-Person");
+        a.deposit_verified = Some("true".to_string());
+        a.refund_status = Some("refunded".to_string());
+        assert!(!a.is_refund_eligible());
+    }
+
+    #[test]
+    fn test_is_refund_eligible_pending_refund() {
+        let mut a = make_attendee("In-Person");
+        a.deposit_verified = Some("true".to_string());
+        a.refund_status = Some("pending".to_string());
+        assert!(a.is_refund_eligible());
+    }
+
+    #[test]
+    fn test_check_in_error_display() {
+        assert!(
+            CheckInError::NotApproved("pending".to_string())
+                .to_string()
+                .contains("pending")
+        );
+        assert!(
+            CheckInError::AlreadyCheckedIn("2025-01-01".to_string())
+                .to_string()
+                .contains("2025-01-01")
+        );
+        assert!(CheckInError::OnlineAttendee.to_string().contains("online"));
+    }
+
+    // -----------------------------------------------------------------------
+    // is_in_person tests
+    // -----------------------------------------------------------------------
 
     #[test]
     fn test_is_in_person_exact() {

@@ -66,6 +66,22 @@ pub struct DepositStatus {
     pub rejected: bool,
 }
 
+impl DepositStatus {
+    /// Is this deposit within the refundable tier?
+    /// Compares deposit_order against the max_refundable limit.
+    /// A max_refundable of 0 means all deposits are refundable (unlimited).
+    pub fn is_refundable_tier(&self, max_refundable: u32) -> bool {
+        max_refundable == 0 || self.deposit_order <= max_refundable
+    }
+
+    /// Is the deposit past the refund deadline?
+    /// Deadline = event_end_ms + deadline_hours * 3600_000 ms.
+    pub fn is_past_deadline(&self, event_end_ms: i64, deadline_hours: u32, now_ms: i64) -> bool {
+        let deadline = event_end_ms + (deadline_hours as i64 * 3_600_000);
+        now_ms > deadline
+    }
+}
+
 /// THB deposit record (stored in KV, no on-chain record).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ThbDeposit {
@@ -235,4 +251,95 @@ pub struct ManualRefundRequest {
     /// Optional refund link filled in by organizer.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub refund_link: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_deposit(order: u32) -> DepositStatus {
+        DepositStatus {
+            attendee_id: "gst-test".to_string(),
+            event_id: "evt-test".to_string(),
+            method: DepositMethod::Usdc,
+            amount: 15_000_000,
+            currency: "USDC".to_string(),
+            tx_signature: Some("sig123".to_string()),
+            verified: true,
+            deposited_at: "2025-01-01T00:00:00Z".to_string(),
+            wallet_address: Some("wallet123".to_string()),
+            deposit_order: order,
+            refundable: true,
+            rejected: false,
+        }
+    }
+
+    // ── is_refundable_tier ──────────────────────────────────────────
+
+    #[test]
+    fn test_refundable_tier_unlimited_when_max_zero() {
+        let deposit = make_deposit(999);
+        assert!(deposit.is_refundable_tier(0));
+    }
+
+    #[test]
+    fn test_refundable_tier_within_limit() {
+        let deposit = make_deposit(5);
+        assert!(deposit.is_refundable_tier(10));
+    }
+
+    #[test]
+    fn test_refundable_tier_at_limit() {
+        let deposit = make_deposit(10);
+        assert!(deposit.is_refundable_tier(10));
+    }
+
+    #[test]
+    fn test_refundable_tier_over_limit() {
+        let deposit = make_deposit(11);
+        assert!(!deposit.is_refundable_tier(10));
+    }
+
+    #[test]
+    fn test_refundable_tier_order_one() {
+        let deposit = make_deposit(1);
+        assert!(deposit.is_refundable_tier(5));
+    }
+
+    // ── is_past_deadline ────────────────────────────────────────────
+
+    #[test]
+    fn test_not_past_deadline_within_window() {
+        let deposit = make_deposit(1);
+        let event_end_ms = 2_000_001_000_000_i64;
+        let deadline_hours = 168; // 7 days
+        let deadline_ms = event_end_ms + (168_i64 * 3_600_000);
+        assert!(!deposit.is_past_deadline(event_end_ms, deadline_hours, deadline_ms));
+    }
+
+    #[test]
+    fn test_past_deadline_over() {
+        let deposit = make_deposit(1);
+        let event_end_ms = 2_000_001_000_000_i64;
+        let deadline_hours = 168;
+        let deadline_ms = event_end_ms + (168_i64 * 3_600_000);
+        assert!(deposit.is_past_deadline(event_end_ms, deadline_hours, deadline_ms + 1));
+    }
+
+    #[test]
+    fn test_not_past_deadline_well_before() {
+        let deposit = make_deposit(1);
+        let event_end_ms = 2_000_001_000_000_i64;
+        let now_ms = 2_000_002_000_000_i64;
+        assert!(!deposit.is_past_deadline(event_end_ms, 168, now_ms));
+    }
+
+    #[test]
+    fn test_deadline_zero_hours() {
+        let deposit = make_deposit(1);
+        let event_end_ms = 1_000_000_i64;
+        // 0 hours → deadline == event_end_ms
+        assert!(!deposit.is_past_deadline(event_end_ms, 0, event_end_ms));
+        assert!(deposit.is_past_deadline(event_end_ms, 0, event_end_ms + 1));
+    }
 }

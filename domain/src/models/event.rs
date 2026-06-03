@@ -503,6 +503,52 @@ impl EventConfig {
         }
     }
 
+    // ── Domain behavior methods (Phase 1 DDD) ─────────────────────────
+
+    /// Is this event accepting new registrations?
+    /// Requires Active status and event must not have started (unless start is 0 = TBA).
+    pub fn is_registration_open(&self, now_ms: i64) -> bool {
+        self.status == EventStatus::Active
+            && (self.event_start_ms == 0 || now_ms < self.event_start_ms)
+    }
+
+    /// Is the refund deadline still in the future?
+    /// Deadline = event_end_ms + refund_deadline_hours * 3600_000 ms.
+    pub fn is_refund_eligible(&self, now_ms: i64) -> bool {
+        let deadline = self.event_end_ms + (self.refund_deadline_hours as i64 * 3_600_000);
+        now_ms <= deadline
+    }
+
+    /// Is in-person capacity still available?
+    /// `None` capacity means unlimited.
+    pub fn has_in_person_capacity(&self, current_count: u32) -> bool {
+        self.in_person_capacity
+            .is_none_or(|cap| current_count < cap)
+    }
+
+    /// Is online capacity still available?
+    /// `None` capacity means unlimited.
+    pub fn has_online_capacity(&self, current_count: u32) -> bool {
+        self.online_capacity.is_none_or(|cap| current_count < cap)
+    }
+
+    /// Are USDC deposits accepted? Only when deposit is enabled and escrow is initialized.
+    pub fn accepts_usdc_deposits(&self) -> bool {
+        self.deposit_enabled && self.escrow_status == EscrowStatus::Initialized
+    }
+
+    /// Has the deposit deadline passed for a given registration date?
+    /// Returns `false` if no deadline is configured (`deposit_deadline_hours` is None).
+    pub fn deposit_deadline_passed(&self, registration_date_ms: i64, now_ms: i64) -> bool {
+        match self.deposit_deadline_hours {
+            Some(hours) => {
+                let deadline = registration_date_ms + (hours as i64 * 3_600_000);
+                now_ms > deadline
+            }
+            None => false,
+        }
+    }
+
     /// Create an EventConfig from the global AppConfig (legacy fallback).
     ///
     /// Used when EVENTS KV is not configured — builds a synthetic event
@@ -893,4 +939,231 @@ pub struct CreateEventResponse {
 pub struct UpdateEventResponse {
     pub id: String,
     pub updated_at: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_event() -> EventConfig {
+        EventConfig {
+            id: "test-event".to_string(),
+            name: "Test Event".to_string(),
+            slug: "test-event".to_string(),
+            tagline: String::new(),
+            link: String::new(),
+            status: EventStatus::Active,
+            event_start_ms: 2_000_000_000_000, // ~2033
+            event_end_ms: 2_000_001_000_000,
+            time_tba: false,
+            sheet_id: String::new(),
+            sheet_name: "Attendees".to_string(),
+            staff_sheet_name: "staff".to_string(),
+            quiz_enabled: false,
+            nft_collection_mint: String::new(),
+            nft_metadata_uri: String::new(),
+            nft_image_url: String::new(),
+            nft_name_template: String::new(),
+            nft_symbol: String::new(),
+            nft_description_template: String::new(),
+            merkle_tree: String::new(),
+            organization_id: String::new(),
+            organizer_emails: vec![],
+            staff_emails: vec![],
+            claim_base_url: String::new(),
+            deposit_enabled: false,
+            deposit_amount_usdc: 0,
+            deposit_amount_thb: 0,
+            promptpay_id: String::new(),
+            escrow_address: String::new(),
+            escrow_status: EscrowStatus::None,
+            organizer_wallet: String::new(),
+            on_chain_event_id: 0,
+            refund_deadline_hours: 168, // 7 days
+            max_refundable_deposits: 0,
+            description: String::new(),
+            location: String::new(),
+            video_url: String::new(),
+            visibility: EventVisibility::Public,
+            event_format: EventFormat::InPerson,
+            require_contact_info: true,
+            require_photo_consent: false,
+            in_person_capacity: None,
+            online_capacity: None,
+            online_open_mode: OnlineOpenMode::Always,
+            online_registration_open: false,
+            deposit_deadline_hours: None,
+            created_at: String::new(),
+            updated_at: String::new(),
+            updated_by: String::new(),
+        }
+    }
+
+    // ── is_registration_open ────────────────────────────────────────
+
+    #[test]
+    fn test_registration_open_active_before_start() {
+        let event = make_event();
+        assert!(event.is_registration_open(1_000_000_000_000));
+    }
+
+    #[test]
+    fn test_registration_closed_after_start() {
+        let event = make_event();
+        assert!(!event.is_registration_open(2_500_000_000_000));
+    }
+
+    #[test]
+    fn test_registration_open_when_start_is_zero() {
+        let mut event = make_event();
+        event.event_start_ms = 0; // TBA
+        assert!(event.is_registration_open(2_500_000_000_000));
+    }
+
+    #[test]
+    fn test_registration_closed_when_draft() {
+        let mut event = make_event();
+        event.status = EventStatus::Draft;
+        assert!(!event.is_registration_open(1_000_000_000_000));
+    }
+
+    #[test]
+    fn test_registration_closed_when_completed() {
+        let mut event = make_event();
+        event.status = EventStatus::Completed;
+        assert!(!event.is_registration_open(1_000_000_000_000));
+    }
+
+    // ── is_refund_eligible ──────────────────────────────────────────
+
+    #[test]
+    fn test_refund_eligible_before_deadline() {
+        let event = make_event();
+        // event_end + 168h * 3600_000 = 2_000_001_000_000 + 604_800_000 = 2_000_605_800_000
+        assert!(event.is_refund_eligible(2_000_605_800_000)); // exactly at deadline
+    }
+
+    #[test]
+    fn test_refund_not_eligible_after_deadline() {
+        let event = make_event();
+        assert!(!event.is_refund_eligible(2_000_605_800_001));
+    }
+
+    #[test]
+    fn test_refund_eligible_well_before_deadline() {
+        let event = make_event();
+        assert!(event.is_refund_eligible(2_000_002_000_000));
+    }
+
+    // ── has_in_person_capacity ──────────────────────────────────────
+
+    #[test]
+    fn test_in_person_capacity_unlimited() {
+        let event = make_event(); // in_person_capacity = None
+        assert!(event.has_in_person_capacity(999));
+    }
+
+    #[test]
+    fn test_in_person_capacity_has_room() {
+        let mut event = make_event();
+        event.in_person_capacity = Some(100);
+        assert!(event.has_in_person_capacity(50));
+    }
+
+    #[test]
+    fn test_in_person_capacity_at_limit() {
+        let mut event = make_event();
+        event.in_person_capacity = Some(100);
+        assert!(!event.has_in_person_capacity(100));
+    }
+
+    #[test]
+    fn test_in_person_capacity_over_limit() {
+        let mut event = make_event();
+        event.in_person_capacity = Some(100);
+        assert!(!event.has_in_person_capacity(101));
+    }
+
+    // ── has_online_capacity ─────────────────────────────────────────
+
+    #[test]
+    fn test_online_capacity_unlimited() {
+        let event = make_event(); // online_capacity = None
+        assert!(event.has_online_capacity(999));
+    }
+
+    #[test]
+    fn test_online_capacity_at_limit() {
+        let mut event = make_event();
+        event.online_capacity = Some(50);
+        assert!(!event.has_online_capacity(50));
+    }
+
+    #[test]
+    fn test_online_capacity_has_room() {
+        let mut event = make_event();
+        event.online_capacity = Some(50);
+        assert!(event.has_online_capacity(49));
+    }
+
+    // ── accepts_usdc_deposits ───────────────────────────────────────
+
+    #[test]
+    fn test_accepts_usdc_when_enabled_and_initialized() {
+        let mut event = make_event();
+        event.deposit_enabled = true;
+        event.escrow_status = EscrowStatus::Initialized;
+        assert!(event.accepts_usdc_deposits());
+    }
+
+    #[test]
+    fn test_rejects_usdc_when_deposit_disabled() {
+        let mut event = make_event();
+        event.deposit_enabled = false;
+        event.escrow_status = EscrowStatus::Initialized;
+        assert!(!event.accepts_usdc_deposits());
+    }
+
+    #[test]
+    fn test_rejects_usdc_when_escrow_not_initialized() {
+        let mut event = make_event();
+        event.deposit_enabled = true;
+        event.escrow_status = EscrowStatus::None;
+        assert!(!event.accepts_usdc_deposits());
+    }
+
+    #[test]
+    fn test_rejects_usdc_when_escrow_deactivated() {
+        let mut event = make_event();
+        event.deposit_enabled = true;
+        event.escrow_status = EscrowStatus::Deactivated;
+        assert!(!event.accepts_usdc_deposits());
+    }
+
+    // ── deposit_deadline_passed ─────────────────────────────────────
+
+    #[test]
+    fn test_deadline_not_passed_when_no_deadline_configured() {
+        let event = make_event(); // deposit_deadline_hours = None
+        assert!(!event.deposit_deadline_passed(1_000_000_000_000, 2_000_000_000_000));
+    }
+
+    #[test]
+    fn test_deadline_passed_when_overdue() {
+        let mut event = make_event();
+        event.deposit_deadline_hours = Some(24); // 24h after registration
+        let reg_ms = 1_000_000_000_000_i64;
+        let deadline_ms = reg_ms + (24_i64 * 3_600_000); // +24h
+        assert!(!event.deposit_deadline_passed(reg_ms, deadline_ms)); // exactly at deadline
+        assert!(event.deposit_deadline_passed(reg_ms, deadline_ms + 1)); // just past
+    }
+
+    #[test]
+    fn test_deadline_not_passed_when_within_window() {
+        let mut event = make_event();
+        event.deposit_deadline_hours = Some(48);
+        let reg_ms = 1_000_000_000_000_i64;
+        let within_ms = reg_ms + (12_i64 * 3_600_000); // +12h
+        assert!(!event.deposit_deadline_passed(reg_ms, within_ms));
+    }
 }
