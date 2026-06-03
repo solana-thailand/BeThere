@@ -4,6 +4,7 @@ pub mod close_event;
 pub mod create_event;
 pub mod deactivate_event;
 pub mod deposit;
+pub mod introspection;
 pub mod mark_checked_in;
 pub mod refund;
 pub mod rollover_deposit;

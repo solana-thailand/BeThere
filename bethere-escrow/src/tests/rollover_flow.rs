@@ -126,6 +126,7 @@ fn test_rollover_then_refund_from_target() {
                 attendee_deposit: target_deposit,
                 attendee_ta: ATTENDEE_TA,
                 vault: TARGET_VAULT,
+                instruction_sysvar: INSTRUCTIONS_SYSVAR,
                 rent: RENT,
                 token_program,
                 system_program,
@@ -137,8 +138,20 @@ fn test_rollover_then_refund_from_target() {
         &[4], // attendee_ta
     );
 
-    let result = svm.process_instruction(
-        &refund_ix,
+    let close_deposit_ix = with_signers(
+        CloseDepositInstruction {
+            signer: ATTENDEE,
+            event_escrow: target_escrow,
+            attendee_deposit: target_deposit,
+            system_program,
+            _event_id: TARGET_EVENT_ID,
+        }
+        .into(),
+        &[0],
+    );
+
+    let result = svm.process_instruction_chain(
+        &[refund_ix, close_deposit_ix],
         &[
             signer(ATTENDEE),
             target_escrow_after_rollover,

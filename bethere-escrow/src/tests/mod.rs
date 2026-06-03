@@ -20,6 +20,10 @@ const ATTENDEE_TA: Pubkey = Pubkey::new_from_array([5; 32]);
 const VAULT: Pubkey = Pubkey::new_from_array([6; 32]);
 const WRONG_ORGANIZER: Pubkey = Pubkey::new_from_array([7; 32]);
 const RENT: Pubkey = quasar_svm::solana_sdk_ids::sysvar::rent::ID;
+const INSTRUCTIONS_SYSVAR: Pubkey = Pubkey::new_from_array([
+    6, 167, 213, 23, 24, 123, 209, 102, 53, 218, 212, 4, 85, 253, 194, 192, 193, 36, 198, 143, 33,
+    86, 117, 165, 219, 186, 203, 95, 8, 0, 0, 0,
+]);
 
 const DEPOSIT_AMOUNT: u64 = 15_000_000; // $15 USDC (6 decimals)
 const EVENT_ID: u64 = 42;
@@ -233,6 +237,7 @@ mod checkin;
 mod close;
 mod create_event;
 mod deposit;
+mod introspection;
 mod refund;
 mod rollover;
 mod rollover_flow;
@@ -377,6 +382,7 @@ fn test_full_happy_path() {
                 attendee_deposit: deposit,
                 attendee_ta: ATTENDEE_TA,
                 vault: VAULT,
+                instruction_sysvar: INSTRUCTIONS_SYSVAR,
                 rent: RENT,
                 token_program,
                 system_program,
@@ -388,8 +394,20 @@ fn test_full_happy_path() {
         &[4], // attendee_ta
     );
 
-    let result = svm.process_instruction(
-        &refund_ix,
+    let close_deposit_ix = with_signers(
+        CloseDepositInstruction {
+            signer: ATTENDEE,
+            event_escrow: escrow,
+            attendee_deposit: deposit,
+            system_program,
+            _event_id: EVENT_ID,
+        }
+        .into(),
+        &[0],
+    );
+
+    let result = svm.process_instruction_chain(
+        &[refund_ix, close_deposit_ix],
         &[
             signer(ATTENDEE),
             escrow_after_checkin,
@@ -694,6 +712,7 @@ fn test_full_lifecycle_with_deactivate() {
                 attendee_deposit: deposit,
                 attendee_ta: ATTENDEE_TA,
                 vault: VAULT,
+                instruction_sysvar: INSTRUCTIONS_SYSVAR,
                 rent: RENT,
                 token_program,
                 system_program,
@@ -705,8 +724,20 @@ fn test_full_lifecycle_with_deactivate() {
         &[4],
     );
 
-    let result = svm.process_instruction(
-        &refund_ix,
+    let close_deposit_ix = with_signers(
+        CloseDepositInstruction {
+            signer: ATTENDEE,
+            event_escrow: escrow,
+            attendee_deposit: deposit,
+            system_program,
+            _event_id: EVENT_ID,
+        }
+        .into(),
+        &[0],
+    );
+
+    let result = svm.process_instruction_chain(
+        &[refund_ix, close_deposit_ix],
         &[
             signer(ATTENDEE),
             escrow_after_checkin,

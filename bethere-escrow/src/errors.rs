@@ -46,4 +46,6 @@ pub enum EscrowError {
     EscrowVersionMismatch = 20,
     /// AttendeeDeposit schema version is not supported by this program.
     DepositVersionMismatch = 21,
+    /// Refund instruction must be paired with close_deposit in the same transaction.
+    RefundRequiresClose = 22,
 }
