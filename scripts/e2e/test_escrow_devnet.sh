@@ -384,7 +384,7 @@ else
             sleep 5
             solana confirm "$INIT_SIG" --url devnet 2>&1 || warn "Confirmation check failed (may still be processing)"
 
-            # Update event config with escrow address
+            # Update event config with escrow address (manual update for immediate KV write)
             info "Updating event with escrow_address=$ESCROW_ADDR, on_chain_event_id=$ON_CHAIN_ID..."
             UPDATE_ESCROW=$(curl -s -X PUT "$BASE_URL/api/events/$EVENT_ID" \
                 -H "Authorization: Bearer dev-token" \
@@ -395,6 +395,21 @@ else
                 pass "Event updated with escrow_address"
             else
                 warn "Failed to update escrow_address: $(echo "$UPDATE_ESCROW" | head -c 200)"
+            fi
+
+            # Confirm init with server (verifies on-chain + sets escrow_status=initialized)
+            info "Confirming escrow init with server..."
+            CONFIRM_RESP=$(curl -s -X POST "$BASE_URL/api/escrow/confirm-init" \
+                -H "Authorization: Bearer dev-token" \
+                -H "Content-Type: application/json" \
+                -d "{\"event_id\": \"$EVENT_ID\"}")
+            CONFIRM_OK=$(echo "$CONFIRM_RESP" | python3 -c "import sys,json; print(str(json.load(sys.stdin).get('success','')).lower())" 2>/dev/null || echo "false")
+            if [ "$CONFIRM_OK" = "true" ]; then
+                CONFIRM_STATUS=$(echo "$CONFIRM_RESP" | python3 -c "import sys,json; d=json.load(sys.stdin).get('data',{}); print(d.get('escrow_status',''))" 2>/dev/null || echo "")
+                pass "Escrow init confirmed (status=$CONFIRM_STATUS)"
+            else
+                CONFIRM_ERR=$(echo "$CONFIRM_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('error',''))" 2>/dev/null || echo "unknown")
+                warn "Escrow confirm-init failed: $CONFIRM_ERR"
             fi
         else
             fail "Init escrow TX submission failed"
@@ -527,6 +542,7 @@ info "Requesting deposit TX for attendee $ATTENDEE_WALLET..."
 # Step 7a: Initiate deposit — POST /api/deposit/usdc
 # This creates a pending deposit status and returns a Solana Pay URL.
 DEPOSIT_INIT=$(curl -s -X POST "$BASE_URL/api/deposit/usdc" \
+    -H "Authorization: Bearer dev-token" \
     -H "Content-Type: application/json" \
     -d "{
         \"event_id\": \"$EVENT_ID\",
@@ -581,6 +597,7 @@ if [ "$DEP_INIT_SUCCESS" = "true" ]; then
             # Notify the worker about the TX signature so it can verify on-chain
             info "Notifying worker of deposit TX signature..."
             WEBHOOK_RESPONSE=$(curl -s -X POST "$BASE_URL/api/deposit/usdc/webhook" \
+                -H "Authorization: Bearer dev-token" \
                 -H "Content-Type: application/json" \
                 -d "{
                     \"event_id\": \"$EVENT_ID\",
@@ -866,6 +883,7 @@ section "Step 11: THB Deposit Flow"
 # Test THB slip upload
 info "Testing THB slip upload..."
 SLIP_UPLOAD=$(curl -s -X POST "$BASE_URL/api/deposit/thb/upload" \
+    -H "Authorization: Bearer dev-token" \
     -H "Content-Type: application/json" \
     -d "{
         \"event_id\": \"$EVENT_ID\",
@@ -934,6 +952,18 @@ else
             info "Signature: $DEACTIVATE_SIG"
             info "View: https://solscan.io/tx/$DEACTIVATE_SIG?cluster=devnet"
             sleep 5
+
+            # Sync server-side escrow status to deactivated
+            SYNC_DEACTIVATED=$(curl -s -X PUT "$BASE_URL/api/events/$EVENT_ID" \
+                -H "Authorization: Bearer dev-token" \
+                -H "Content-Type: application/json" \
+                -d '{"escrow_status": "deactivated"}')
+            SYNC_OK=$(echo "$SYNC_DEACTIVATED" | python3 -c "import sys,json; print(str(json.load(sys.stdin).get('success','')).lower())" 2>/dev/null || echo "false")
+            if [ "$SYNC_OK" = "true" ]; then
+                pass "Escrow status updated to deactivated"
+            else
+                warn "Failed to sync escrow status: $(echo "$SYNC_DEACTIVATED" | head -c 200)"
+            fi
         else
             fail "deactivate_event TX submission failed"
             echo "   $DEACTIVATE_SUBMIT" | head -c 500

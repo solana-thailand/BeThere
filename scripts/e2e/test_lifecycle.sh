@@ -32,6 +32,7 @@ NC='\033[0m'
 pass() { echo -e "  ${GREEN}✅ PASS${NC} $1"; }
 fail() { echo -e "  ${RED}❌ FAIL${NC} $1"; }
 info() { echo -e "  ${CYAN}ℹ️  INFO${NC} $1"; }
+warn() { echo -e "  ${YELLOW}⚠️  WARN${NC} $1"; }
 section() { echo -e "\n${CYAN}━━━ $1 ━━━${NC}"; }
 
 sign_and_submit() {
@@ -99,53 +100,26 @@ else
     exit 1
 fi
 
-# --- Step 2: Create Vault ATA ---
-section "Step 2: Create Vault ATA"
+# --- Step 2: Init Escrow (combined ATA + CreateEvent) ---
+section "Step 2: Init Escrow (ATA + CreateEvent)"
 
-VAULT_RESP=$(curl -s -X POST "$BASE_URL/api/escrow/create-vault-ata" \
+INIT_RESP=$(curl -s -X POST "$BASE_URL/api/escrow/init" \
     -H "Authorization: Bearer dev-token" \
     -H "Content-Type: application/json" \
     -d "{\"event_id\": \"$EVENT_ID\"}")
 
-VAULT_SUCCESS=$(echo "$VAULT_RESP" | python3 -c "import sys,json; print(str(json.load(sys.stdin).get('success','')).lower())" 2>/dev/null || echo "false")
-if [ "$VAULT_SUCCESS" = "true" ]; then
-    VAULT_TX=$(echo "$VAULT_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['transaction'])" 2>/dev/null)
-    VAULT_ADDR=$(echo "$VAULT_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['vault_address'])" 2>/dev/null)
-    pass "Vault ATA TX built: ${VAULT_ADDR:0:16}..."
+INIT_SUCCESS=$(echo "$INIT_RESP" | python3 -c "import sys,json; print(str(json.load(sys.stdin).get('success','')).lower())" 2>/dev/null || echo "false")
+if [ "$INIT_SUCCESS" = "true" ]; then
+    INIT_TX=$(echo "$INIT_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['transaction'])" 2>/dev/null)
+    ESCROW_ADDR=$(echo "$INIT_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['escrow_address'])" 2>/dev/null)
+    VAULT_ADDR=$(echo "$INIT_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['vault_address'])" 2>/dev/null)
+    ON_CHAIN_ID=$(echo "$INIT_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['on_chain_event_id'])" 2>/dev/null)
+    pass "Init escrow TX built: escrow=${ESCROW_ADDR:0:16}... vault=${VAULT_ADDR:0:16}... on_chain_id=$ON_CHAIN_ID"
 
-    RESULT=$(sign_and_submit "$VAULT_TX")
+    RESULT=$(sign_and_submit "$INIT_TX")
     if echo "$RESULT" | grep -q "SIGNATURE="; then
         SIG=$(echo "$RESULT" | grep "SIGNATURE=" | cut -d= -f2)
-        pass "Vault ATA created: $SIG"
-        sleep 5
-    else
-        fail "Vault ATA TX: $RESULT"
-    fi
-else
-    ERR=$(echo "$VAULT_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('error',''))" 2>/dev/null || echo "unknown")
-    fail "Vault ATA build: $ERR"
-    exit 1
-fi
-
-# --- Step 3: Create Event Escrow ---
-section "Step 3: Create Event Escrow"
-
-CREATE_RESP=$(curl -s -X POST "$BASE_URL/api/escrow/create-event" \
-    -H "Authorization: Bearer dev-token" \
-    -H "Content-Type: application/json" \
-    -d "{\"event_id\": \"$EVENT_ID\"}")
-
-CREATE_SUCCESS=$(echo "$CREATE_RESP" | python3 -c "import sys,json; print(str(json.load(sys.stdin).get('success','')).lower())" 2>/dev/null || echo "false")
-if [ "$CREATE_SUCCESS" = "true" ]; then
-    CREATE_TX=$(echo "$CREATE_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['transaction'])" 2>/dev/null)
-    ESCROW_ADDR=$(echo "$CREATE_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['escrow_address'])" 2>/dev/null)
-    ON_CHAIN_ID=$(echo "$CREATE_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['on_chain_event_id'])" 2>/dev/null)
-    pass "Create event TX built: escrow=${ESCROW_ADDR:0:16}... on_chain_id=$ON_CHAIN_ID"
-
-    RESULT=$(sign_and_submit "$CREATE_TX")
-    if echo "$RESULT" | grep -q "SIGNATURE="; then
-        SIG=$(echo "$RESULT" | grep "SIGNATURE=" | cut -d= -f2)
-        pass "Event escrow created: $SIG"
+        pass "Init escrow submitted: $SIG"
         info "View: https://solscan.io/tx/$SIG?cluster=devnet"
         sleep 5
 
@@ -157,18 +131,31 @@ if [ "$CREATE_SUCCESS" = "true" ]; then
             fail "Escrow not found: $ESCROW_ADDR"
             echo "   $ESCROW_INFO"
         fi
+
+        # Confirm init with server (saves escrow_address to event config)
+        CONFIRM_RESP=$(curl -s -X POST "$BASE_URL/api/escrow/confirm-init" \
+            -H "Authorization: Bearer dev-token" \
+            -H "Content-Type: application/json" \
+            -d "{\"event_id\": \"$EVENT_ID\", \"escrow_address\": \"$ESCROW_ADDR\", \"vault_address\": \"$VAULT_ADDR\", \"on_chain_event_id\": $ON_CHAIN_ID}")
+        CONFIRM_SUCCESS=$(echo "$CONFIRM_RESP" | python3 -c "import sys,json; print(str(json.load(sys.stdin).get('success','')).lower())" 2>/dev/null || echo "false")
+        if [ "$CONFIRM_SUCCESS" = "true" ]; then
+            pass "Escrow init confirmed with server"
+        else
+            ERR=$(echo "$CONFIRM_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('error',''))" 2>/dev/null || echo "$CONFIRM_RESP")
+            warn "Escrow confirm: $ERR (non-fatal)"
+        fi
     else
-        fail "Create event TX: $RESULT"
+        fail "Init escrow TX: $RESULT"
         exit 1
     fi
 else
-    ERR=$(echo "$CREATE_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('error',''))" 2>/dev/null || echo "unknown")
-    fail "Create event build: $ERR"
+    ERR=$(echo "$INIT_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('error',''))" 2>/dev/null || echo "unknown")
+    fail "Init escrow build: $ERR"
     exit 1
 fi
 
-# --- Step 4: Deactivate Event ---
-section "Step 4: Deactivate Event"
+# --- Step 3: Deactivate Event ---
+section "Step 3: Deactivate Event"
 
 DEACT_RESP=$(curl -s -X POST "$BASE_URL/api/escrow/deactivate-event" \
     -H "Authorization: Bearer dev-token" \
@@ -194,6 +181,20 @@ if [ "$DEACT_SUCCESS" = "true" ]; then
         else
             fail "Deactivate event on-chain result: $CONFIRM"
         fi
+
+        # Update escrow status to deactivated on server
+        sleep 2
+        SYNC_RESP=$(curl -s -X PUT "$BASE_URL/api/events/$EVENT_ID" \
+            -H "Authorization: Bearer dev-token" \
+            -H "Content-Type: application/json" \
+            -d '{"escrow_status": "deactivated"}')
+        SYNC_SUCCESS=$(echo "$SYNC_RESP" | python3 -c "import sys,json; print(str(json.load(sys.stdin).get('success','')).lower())" 2>/dev/null || echo "false")
+        if [ "$SYNC_SUCCESS" = "true" ]; then
+            pass "Escrow status updated to deactivated"
+        else
+            ERR=$(echo "$SYNC_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('error',''))" 2>/dev/null || echo "$SYNC_RESP")
+            warn "Escrow status update: $ERR"
+        fi
     else
         fail "Deactivate event TX: $RESULT"
     fi
@@ -202,8 +203,8 @@ else
     fail "Deactivate event build: $ERR"
 fi
 
-# --- Step 5: Claim Forfeited ---
-section "Step 5: Claim Forfeited Deposits"
+# --- Step 4: Claim Forfeited ---
+section "Step 4: Claim Forfeited Deposits"
 
 CLAIM_RESP=$(curl -s -X POST "$BASE_URL/api/escrow/claim-forfeited" \
     -H "Authorization: Bearer dev-token" \
@@ -240,8 +241,8 @@ else
     info "Claim forfeited build: $ERR (may be expected)"
 fi
 
-# --- Step 6: Close Event ---
-section "Step 6: Close Event & Reclaim Rent"
+# --- Step 5: Close Event ---
+section "Step 5: Close Event & Reclaim Rent"
 
 CLOSE_RESP=$(curl -s -X POST "$BASE_URL/api/escrow/close-event" \
     -H "Authorization: Bearer dev-token" \

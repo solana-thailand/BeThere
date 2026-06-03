@@ -378,6 +378,7 @@ section "Step 4: Deposit — Attendee A on Source"
 ATT_A_KEYPAIR_JSON=$(cat "$ATTENDEE_A_KEYPAIR")
 
 DEPOSIT_A=$(curl -s -X POST "$BASE_URL/api/deposit/usdc" \
+    -H "Authorization: Bearer dev-token" \
     -H "Content-Type: application/json" \
     -d "{
         \"event_id\": \"$SOURCE_EVENT_ID\",
@@ -399,6 +400,7 @@ if [ "$DEP_A_SUCCESS" = "true" ]; then
             info "View: https://solscan.io/tx/$DEP_A_SIG?cluster=devnet"
             sleep 5
             curl -s -X POST "$BASE_URL/api/deposit/usdc/webhook" \
+                -H "Authorization: Bearer dev-token" \
                 -H "Content-Type: application/json" \
                 -d "{\"event_id\": \"$SOURCE_EVENT_ID\", \"attendee_id\": \"$ATTENDEE_A_ID\", \"tx_signature\": \"$DEP_A_SIG\"}" > /dev/null 2>&1
         else
@@ -419,6 +421,7 @@ section "Step 4b: Deposit — Attendee B on Source"
 ATT_B_KEYPAIR_JSON=$(cat "$ATTENDEE_B_KEYPAIR")
 
 DEPOSIT_B=$(curl -s -X POST "$BASE_URL/api/deposit/usdc" \
+    -H "Authorization: Bearer dev-token" \
     -H "Content-Type: application/json" \
     -d "{
         \"event_id\": \"$SOURCE_EVENT_ID\",
@@ -440,6 +443,7 @@ if [ "$DEP_B_SUCCESS" = "true" ]; then
             info "View: https://solscan.io/tx/$DEP_B_SIG?cluster=devnet"
             sleep 5
             curl -s -X POST "$BASE_URL/api/deposit/usdc/webhook" \
+                -H "Authorization: Bearer dev-token" \
                 -H "Content-Type: application/json" \
                 -d "{\"event_id\": \"$SOURCE_EVENT_ID\", \"attendee_id\": \"$ATTENDEE_B_ID\", \"tx_signature\": \"$DEP_B_SIG\"}" > /dev/null 2>&1
         else

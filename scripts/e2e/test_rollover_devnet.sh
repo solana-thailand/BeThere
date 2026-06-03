@@ -108,7 +108,9 @@ if [ -z "$ORGANIZER_WALLET" ]; then
     ORGANIZER_WALLET=$(solana address --url devnet 2>/dev/null || echo "")
 fi
 
-ATTENDEE_KEYPAIR="/tmp/bethere-rollover-e2e-attendee.json"
+if [ -z "$ATTENDEE_KEYPAIR" ]; then
+    ATTENDEE_KEYPAIR="/tmp/bethere-rollover-e2e-attendee.json"
+fi
 if [ -z "$ATTENDEE_WALLET" ]; then
     if [ ! -f "$ATTENDEE_KEYPAIR" ]; then
         solana-keygen new --no-bip39-passphrase --silent --outfile "$ATTENDEE_KEYPAIR" 2>/dev/null
@@ -188,7 +190,10 @@ SOURCE_ON_CHAIN_ID=0
 if [ "$SKIP_SETUP" = true ]; then
     skip "Source event setup — reusing existing"
 else
-    # Source event: event_end_ms = 90 seconds from now (must be in future for on-chain init)
+    # Source event: event_end_ms = 10 minutes from now (must be in future for on-chain init)
+    # Note: on-chain event_end_ms is immutable — set during create_event instruction.
+    # 10 min gives enough time for escrow init + confirm + deposit.
+    SOURCE_EVENT_END_MS=$(($(date +%s) + 600))000
     info "Creating source event '$SOURCE_EVENT_ID'..."
     SOURCE_EVENT_RESPONSE=$(curl -s -X POST "$BASE_URL/api/events" \
         -H "Authorization: Bearer dev-token" \
@@ -200,7 +205,7 @@ else
             \"link\": \"https://example.com/rollover-src\",
             \"sheet_id\": \"rollover-src-dummy\",
             \"event_start_ms\": $(($(date +%s) - 7200))000,
-            \"event_end_ms\": $(($(date +%s) + 90))000,
+            \"event_end_ms\": $SOURCE_EVENT_END_MS,
             \"status\": \"active\",
             \"deposit_enabled\": true,
             \"deposit_amount_usdc\": $DEPOSIT_AMOUNT_USDC,
@@ -327,6 +332,20 @@ else
                 -H "Authorization: Bearer dev-token" \
                 -H "Content-Type: application/json" \
                 -d "{\"escrow_address\": \"$SOURCE_ESCROW_ADDR\", \"on_chain_event_id\": $SOURCE_ON_CHAIN_ID}" > /dev/null 2>&1 || warn "Failed to update source escrow address"
+
+            # Confirm init with server (verifies on-chain + sets escrow_status=initialized)
+            info "Confirming source escrow init..."
+            SRC_CONFIRM_INIT=$(curl -s -X POST "$BASE_URL/api/escrow/confirm-init" \
+                -H "Authorization: Bearer dev-token" \
+                -H "Content-Type: application/json" \
+                -d "{\"event_id\": \"$SOURCE_EVENT_ID\"}")
+            SRC_CI_OK=$(echo "$SRC_CONFIRM_INIT" | python3 -c "import sys,json; print(str(json.load(sys.stdin).get('success','')).lower())" 2>/dev/null || echo "false")
+            if [ "$SRC_CI_OK" = "true" ]; then
+                pass "Source escrow init confirmed"
+            else
+                SRC_CI_ERR=$(echo "$SRC_CONFIRM_INIT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('error',''))" 2>/dev/null || echo "unknown")
+                warn "Source confirm-init: $SRC_CI_ERR"
+            fi
         else
             fail "Source escrow TX submission failed: $SRC_SUBMIT"
         fi
@@ -378,6 +397,20 @@ else
                 -H "Authorization: Bearer dev-token" \
                 -H "Content-Type: application/json" \
                 -d "{\"escrow_address\": \"$TARGET_ESCROW_ADDR\", \"on_chain_event_id\": $TARGET_ON_CHAIN_ID}" > /dev/null 2>&1 || warn "Failed to update target escrow address"
+
+            # Confirm init with server (verifies on-chain + sets escrow_status=initialized)
+            info "Confirming target escrow init..."
+            TGT_CONFIRM_INIT=$(curl -s -X POST "$BASE_URL/api/escrow/confirm-init" \
+                -H "Authorization: Bearer dev-token" \
+                -H "Content-Type: application/json" \
+                -d "{\"event_id\": \"$TARGET_EVENT_ID\"}")
+            TGT_CI_OK=$(echo "$TGT_CONFIRM_INIT" | python3 -c "import sys,json; print(str(json.load(sys.stdin).get('success','')).lower())" 2>/dev/null || echo "false")
+            if [ "$TGT_CI_OK" = "true" ]; then
+                pass "Target escrow init confirmed"
+            else
+                TGT_CI_ERR=$(echo "$TGT_CONFIRM_INIT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('error',''))" 2>/dev/null || echo "unknown")
+                warn "Target confirm-init: $TGT_CI_ERR"
+            fi
         else
             fail "Target escrow TX submission failed: $TGT_SUBMIT"
         fi
@@ -409,6 +442,7 @@ section "Step 4: Deposit USDC on Source Event"
 info "Initiating deposit for attendee $ATTENDEE_WALLET on source event..."
 
 DEPOSIT_INIT=$(curl -s -X POST "$BASE_URL/api/deposit/usdc" \
+    -H "Authorization: Bearer dev-token" \
     -H "Content-Type: application/json" \
     -d "{
         \"event_id\": \"$SOURCE_EVENT_ID\",
@@ -438,12 +472,37 @@ if [ "$DEP_INIT_SUCCESS" = "true" ]; then
             pass "Deposit TX submitted!"
             info "Signature: $DEP_SIG"
             info "View: https://solscan.io/tx/$DEP_SIG?cluster=devnet"
-            sleep 5
+            sleep 8
 
             # Notify worker
             curl -s -X POST "$BASE_URL/api/deposit/usdc/webhook" \
+                -H "Authorization: Bearer dev-token" \
                 -H "Content-Type: application/json" \
                 -d "{\"event_id\": \"$SOURCE_EVENT_ID\", \"attendee_id\": \"$TEST_ATTENDEE_ID\", \"tx_signature\": \"$DEP_SIG\"}" > /dev/null 2>&1
+
+            # Confirm deposit synchronously (verifies on-chain + sets verified=true)
+            # Retry up to 3 times — devnet confirmation can be slow
+            DEP_CONFIRMED="False"
+            for i in 1 2 3; do
+                info "Confirming deposit (attempt $i) via /api/deposit/usdc/confirm..."
+                DEP_CONFIRM=$(curl -s "$BASE_URL/api/deposit/usdc/confirm?event_id=$SOURCE_EVENT_ID&attendee_id=$TEST_ATTENDEE_ID" \
+                    -H "Authorization: Bearer dev-token")
+                DEP_CONFIRM_OK=$(echo "$DEP_CONFIRM" | python3 -c "import sys,json; print(str(json.load(sys.stdin).get('success','')).lower())" 2>/dev/null || echo "false")
+                if [ "$DEP_CONFIRM_OK" = "true" ]; then
+                    DEP_CONFIRMED=$(echo "$DEP_CONFIRM" | python3 -c "import sys,json; d=json.load(sys.stdin).get('data',{}); print(d.get('confirmed',False))" 2>/dev/null || echo "False")
+                    if [ "$DEP_CONFIRMED" = "True" ]; then
+                        pass "Deposit confirmed on-chain: confirmed=$DEP_CONFIRMED"
+                        break
+                    fi
+                fi
+                if [ $i -lt 3 ]; then
+                    info "Deposit not yet confirmed, waiting 5s..."
+                    sleep 5
+                fi
+            done
+            if [ "$DEP_CONFIRMED" != "True" ]; then
+                warn "Deposit confirmation: confirmed=$DEP_CONFIRMED (may still be processing)"
+            fi
 
             # Verify vault balance
             SRC_VAULT_BAL=$(spl-token balance "$USDC_MINT" --url devnet --owner "$SOURCE_ESCROW_ADDR" 2>&1 || echo "0")
@@ -859,6 +918,12 @@ if [ "$SRC_DEACT_SUCCESS" = "true" ]; then
         pass "Source event deactivated: $SRC_DEACT_SIG"
         info "View: https://solscan.io/tx/$SRC_DEACT_SIG?cluster=devnet"
         sleep 5
+
+        # Sync escrow status in KV (on-chain deactivation doesn't auto-update KV)
+        curl -s -X PUT "$BASE_URL/api/events/$SOURCE_EVENT_ID" \
+            -H "Authorization: Bearer dev-token" \
+            -H "Content-Type: application/json" \
+            -d '{"escrow_status": "deactivated"}' > /dev/null 2>&1
     else
         fail "Source deactivate TX failed: $SRC_DEACT_SUBMIT"
     fi
@@ -885,6 +950,12 @@ if [ "$TGT_DEACT_SUCCESS" = "true" ]; then
         pass "Target event deactivated: $TGT_DEACT_SIG"
         info "View: https://solscan.io/tx/$TGT_DEACT_SIG?cluster=devnet"
         sleep 5
+
+        # Sync escrow status in KV (on-chain deactivation doesn't auto-update KV)
+        curl -s -X PUT "$BASE_URL/api/events/$TARGET_EVENT_ID" \
+            -H "Authorization: Bearer dev-token" \
+            -H "Content-Type: application/json" \
+            -d '{"escrow_status": "deactivated"}' > /dev/null 2>&1
     else
         fail "Target deactivate TX failed: $TGT_DEACT_SUBMIT"
     fi

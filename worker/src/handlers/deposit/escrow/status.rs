@@ -2,6 +2,7 @@ use axum::{
     Extension, Json,
     extract::{Query, State},
 };
+use event_checkin_domain::models::attendee::{Attendee, CheckInStatus};
 use event_checkin_domain::models::auth::Claims;
 use event_checkin_domain::models::deposit::DepositMethod;
 use event_checkin_domain::models::error::AppError;
@@ -449,16 +450,58 @@ pub async fn rollover_deposit_tx_handler(
     }
 
     // VULN-009: Verify the authenticated user owns this attendee record on the source event
-    let source_attendee = crate::sheets::get_attendee_by_id(
-        &body.attendee_id,
-        &state,
-        &source_event.sheet_id,
-        &source_event.sheet_name,
-        Some(kv),
-    )
-    .await
-    .map_err(AppError::Internal)?
-    .ok_or_else(|| AppError::NotFound("attendee not found on source event".to_string()))?;
+    let source_attendee = if state.config.dev_mode {
+        // DEV_MODE bypass: skip Google Sheets lookup, trust JWT claims
+        tracing::info!(
+            attendee_id = %body.attendee_id,
+            email = %claims.email,
+            "DEV_MODE: skipping sheet lookup for rollover, using claims email"
+        );
+        Attendee {
+            api_id: body.attendee_id.clone(),
+            first_name: String::new(),
+            last_name: String::new(),
+            name: String::new(),
+            email: claims.email.clone(),
+            ticket_name: String::new(),
+            approval_status: CheckInStatus::Approved,
+            participation_type: String::new(),
+            registration_date: None,
+            phone: None,
+            contact_channel: None,
+            contact_handle: None,
+            deposit_agreed: None,
+            deposit_method: None,
+            deposit_amount: None,
+            deposit_tx_signature: None,
+            deposit_verified: None,
+            checked_in_at: None,
+            checked_in_by: None,
+            solana_address: None,
+            qr_code_url: None,
+            claim_token: None,
+            claimed_at: None,
+            nft_proof_url: None,
+            bank_account: None,
+            bank_name: None,
+            account_name: None,
+            refund_status: None,
+            refund_link: None,
+            send_email_status: None,
+            row_index: 0,
+        }
+    } else {
+        crate::sheets::get_attendee_by_id(
+            &body.attendee_id,
+            &state,
+            &source_event.sheet_id,
+            &source_event.sheet_name,
+            Some(kv),
+        )
+        .await
+        .map_err(AppError::Internal)?
+        .ok_or_else(|| AppError::NotFound("attendee not found on source event".to_string()))?
+    };
 
     if !source_attendee.email.eq_ignore_ascii_case(&claims.email) {
         tracing::warn!(
