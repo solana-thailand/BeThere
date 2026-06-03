@@ -83,12 +83,13 @@ pub async fn list_attendees(
     let kv = resolve_kv(&state);
 
     // 1. Fetch sheet-based attendees
-    let mut attendees = sheets::get_attendees(&state, &event.sheet_id, &event.sheet_name, kv)
-        .await
-        .map_err(|e| {
-            tracing::error!("failed to fetch attendees: {e}");
-            AppError::Internal(format!("failed to fetch attendees: {e}"))
-        })?;
+    let mut attendees =
+        sheets::get_attendees_for_event(&state, &event.sheet_id, &event.sheet_name, kv, &event.id)
+            .await
+            .map_err(|e| {
+                tracing::error!("failed to fetch attendees: {e}");
+                AppError::Internal(format!("failed to fetch attendees: {e}"))
+            })?;
 
     // 2. Merge walk-in attendees from KV (only for this event)
     let sheet_len = attendees.len();
@@ -364,10 +365,16 @@ pub async fn get_public_ticket(
             // Check capacity
             let cap = event.in_person_capacity;
             let available = if let Some(cap) = cap {
-                let count = sheets::get_attendees(&state, &event.sheet_id, &event.sheet_name, kv)
-                    .await
-                    .map(|a| a.iter().filter(|a| a.is_in_person()).count() as u32)
-                    .unwrap_or(u32::MAX);
+                let count = sheets::get_attendees_for_event(
+                    &state,
+                    &event.sheet_id,
+                    &event.sheet_name,
+                    kv,
+                    &event.id,
+                )
+                .await
+                .map(|a| a.iter().filter(|a| a.is_in_person()).count() as u32)
+                .unwrap_or(u32::MAX);
                 count < cap
             } else {
                 true
@@ -726,16 +733,29 @@ pub async fn delete_attendee(
                             event_checkin_domain::models::attendee::ColumnMapping::hardcoded()
                         });
 
-                crate::sheets::write::delete_sheet_row(
-                    attendee.row_index,
-                    &mapping,
-                    &state,
-                    &event.sheet_id,
-                    &event.sheet_name,
-                    kv,
-                )
-                .await
-                .map_err(|e| AppError::Internal(format!("failed to delete sheet row: {e}")))?;
+                // Detach Google Sheets delete — response returns immediately (Phase 2c)
+                if let Some(ctx) = &state.worker_ctx {
+                    ctx.wait_until(crate::sheets::bg_sync::delete_sheet_row(
+                        state.clone(),
+                        attendee.row_index,
+                        mapping.clone(),
+                        event.sheet_id.clone(),
+                        event.sheet_name.clone(),
+                        kv.cloned(),
+                    ));
+                } else {
+                    // Fallback: blocking Sheets write when worker_ctx unavailable (tests)
+                    crate::sheets::write::delete_sheet_row(
+                        attendee.row_index,
+                        &mapping,
+                        &state,
+                        &event.sheet_id,
+                        &event.sheet_name,
+                        kv,
+                    )
+                    .await
+                    .map_err(|e| AppError::Internal(format!("failed to delete sheet row: {e}")))?;
+                };
 
                 // Clean up KV keys for this attendee
                 if let Some(kv) = kv {

@@ -63,12 +63,13 @@ pub async fn generate_qrs(
 
     // Fetch all attendees
     let kv = resolve_kv(&state);
-    let attendees = sheets::get_attendees(&state, &event.sheet_id, &event.sheet_name, kv)
-        .await
-        .map_err(|e| {
-            tracing::error!(error = ?e, "failed to fetch attendees for QR generation");
-            AppError::Internal(format!("failed to fetch attendees: {e}"))
-        })?;
+    let attendees =
+        sheets::get_attendees_for_event(&state, &event.sheet_id, &event.sheet_name, kv, &event.id)
+            .await
+            .map_err(|e| {
+                tracing::error!(error = ?e, "failed to fetch attendees for QR generation");
+                AppError::Internal(format!("failed to fetch attendees: {e}"))
+            })?;
 
     let total_fetched = attendees.len();
 

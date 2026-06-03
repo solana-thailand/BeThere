@@ -159,26 +159,42 @@ pub(crate) async fn check_and_switch_deadline(
         }
     };
 
-    match crate::sheets::write::update_participation_type(
-        attendee.row_index,
-        "Online",
-        &mapping,
-        state,
-        &event.sheet_id,
-        &event.sheet_name,
-        Some(kv),
-    )
-    .await
-    {
-        Ok(()) => tracing::info!(
+    if let Some(ctx) = &state.worker_ctx {
+        ctx.wait_until(crate::sheets::bg_sync::update_participation_type(
+            state.clone(),
+            attendee.row_index,
+            "Online".to_string(),
+            mapping,
+            event.sheet_id.clone(),
+            event.sheet_name.clone(),
+            Some(kv.clone()),
+        ));
+        tracing::info!(
             attendee_id = %attendee.api_id,
-            "deposit deadline: participation_type switched to Online"
-        ),
-        Err(e) => tracing::warn!(
-            attendee_id = %attendee.api_id,
-            error = %e,
-            "deposit deadline: failed to update sheet participation_type"
-        ),
+            "deposit deadline: participation_type switched to Online (bg)"
+        );
+    } else {
+        match crate::sheets::write::update_participation_type(
+            attendee.row_index,
+            "Online",
+            &mapping,
+            state,
+            &event.sheet_id,
+            &event.sheet_name,
+            Some(kv),
+        )
+        .await
+        {
+            Ok(()) => tracing::info!(
+                attendee_id = %attendee.api_id,
+                "deposit deadline: participation_type switched to Online"
+            ),
+            Err(e) => tracing::warn!(
+                attendee_id = %attendee.api_id,
+                error = %e,
+                "deposit deadline: failed to update sheet participation_type"
+            ),
+        }
     }
 
     true
@@ -191,22 +207,27 @@ pub(crate) async fn check_in_person_capacity(
     event: &EventConfig,
     kv: &worker::KvStore,
 ) -> bool {
-    // No capacity limit = always available
-    let Some(cap) = event.in_person_capacity else {
+    // No capacity limit = always available (handled by has_in_person_capacity)
+    if event.in_person_capacity.is_none() {
         return true;
-    };
+    }
 
     // Count in-person attendees from sheet
-    let attendees =
-        match crate::sheets::get_attendees(state, &event.sheet_id, &event.sheet_name, Some(kv))
-            .await
-        {
-            Ok(a) => a,
-            Err(e) => {
-                tracing::warn!(error = %e, "reclaim capacity: failed to get attendees");
-                return false; // Assume full on error
-            }
-        };
+    let attendees = match crate::sheets::get_attendees_for_event(
+        state,
+        &event.sheet_id,
+        &event.sheet_name,
+        Some(kv),
+        &event.id,
+    )
+    .await
+    {
+        Ok(a) => a,
+        Err(e) => {
+            tracing::warn!(error = %e, "reclaim capacity: failed to get attendees");
+            return false; // Assume full on error
+        }
+    };
 
     let in_person_count = attendees.iter().filter(|a| a.is_in_person()).count() as u32;
 
@@ -235,7 +256,7 @@ pub(crate) async fn check_in_person_capacity(
     }
 
     let total = in_person_count + walkin_count;
-    total < cap
+    event.has_in_person_capacity(total)
 }
 
 /// Verify a transaction signature on-chain by checking its confirmation status via RPC.

@@ -16,8 +16,8 @@ use crate::solana::{self, MintRequest};
 use crate::state::AppState;
 
 use super::lock::{
-    acquire_claim_lock, claim_lock_key, finalize_claim_lock, mask_wallet,
-    release_claim_lock, lookup_walkin_by_claim_token, mark_walkin_claimed,
+    acquire_claim_lock, claim_lock_key, finalize_claim_lock, lookup_walkin_by_claim_token,
+    mark_walkin_claimed, mask_wallet, release_claim_lock,
 };
 
 // ---------------------------------------------------------------------------
@@ -141,6 +141,7 @@ pub async fn lookup_claim(
             &event.sheet_id,
             &event.sheet_name,
             kv,
+            Some(&event.id),
         )
         .await
         {
@@ -377,8 +378,28 @@ pub async fn execute_claim(
             // Verify quiz/adventure completion (at least one must be passed)
             let quest_passed = verify_online_quest_completion(state, &event.id, token).await;
             if quest_passed {
-                // Auto virtual check-in — write to Google Sheet (uses pre-resolved mapping)
-                match crate::sheets::mark_virtual_checked_in(
+                // Auto virtual check-in — generate timestamp locally, detach Sheets write
+                let virtual_ts = chrono::Utc::now().to_rfc3339();
+                tracing::info!(
+                    claim_token = %token,
+                    attendee_id = %attendee.api_id,
+                    checked_in_at = %virtual_ts,
+                    "virtual check-in auto-completed for online attendee"
+                );
+                attendee.checked_in_at = Some(virtual_ts.clone());
+
+                // Detach Sheets write
+                if let Some(ctx) = &state.worker_ctx {
+                    ctx.wait_until(crate::sheets::bg_sync::mark_virtual_checked_in(
+                        state.clone(),
+                        attendee.row_index,
+                        mapping.clone(),
+                        event.sheet_id.clone(),
+                        event.sheet_name.clone(),
+                        kv.cloned(),
+                        virtual_ts,
+                    ));
+                } else if let Err(e) = crate::sheets::write::mark_virtual_checked_in(
                     attendee.row_index,
                     &mapping,
                     state,
@@ -388,25 +409,7 @@ pub async fn execute_claim(
                 )
                 .await
                 {
-                    Ok(ts) => {
-                        tracing::info!(
-                            claim_token = %token,
-                            attendee_id = %attendee.api_id,
-                            checked_in_at = %ts,
-                            "virtual check-in auto-completed for online attendee"
-                        );
-                        attendee.checked_in_at = Some(ts);
-                    }
-                    Err(e) => {
-                        tracing::error!(
-                            claim_token = %token,
-                            error = %e,
-                            "failed to auto virtual check-in"
-                        );
-                        return Err(AppError::Internal(format!(
-                            "failed to complete virtual check-in: {e}"
-                        )));
-                    }
+                    tracing::error!(claim_token = %token, error = %e, "virtual check-in sheet write failed (non-fatal)");
                 }
             } else {
                 tracing::warn!(
@@ -562,7 +565,7 @@ pub async fn execute_claim(
         }
     };
 
-    // 10. Mark as claimed in Google Sheet (uses pre-resolved mapping)
+    // 10. Mark as claimed — D1 first, then detach Sheets write (Phase 2c)
     let claimed_at = Utc::now().to_rfc3339();
 
     // Compute cluster for Orb explorer proof URL
@@ -573,7 +576,38 @@ pub async fn execute_claim(
     };
     let nft_proof_url = orb_nft_url(&mint_result.asset_id, cluster);
 
-    if let Err(ref e) = crate::sheets::mark_claimed(
+    // Write to D1 first (source of truth)
+    if let Some(ref d1) = state.d1
+        && let Err(e) = crate::db::attendees::claim_attendee(
+            d1,
+            token,
+            &claimed_at,
+            &mint_result.asset_id,
+            &mint_result.signature,
+        )
+        .await
+    {
+        tracing::warn!(
+            claim_token = %token,
+            error = %e,
+            "D1 claim write failed (non-fatal)"
+        );
+    }
+
+    // Detach Sheets write — non-blocking (Phase 2c)
+    if let Some(ctx) = &state.worker_ctx {
+        ctx.wait_until(crate::sheets::bg_sync::mark_claimed(
+            state.clone(),
+            attendee.row_index,
+            wallet_address.to_string(),
+            claimed_at.clone(),
+            nft_proof_url.clone(),
+            mapping,
+            event.sheet_id.clone(),
+            event.sheet_name.clone(),
+            kv.cloned(),
+        ));
+    } else if let Err(e) = crate::sheets::write::mark_claimed(
         attendee.row_index,
         wallet_address,
         &claimed_at,
@@ -586,12 +620,7 @@ pub async fn execute_claim(
     )
     .await
     {
-        tracing::error!(claim_token = %token, error = %e, "mint succeeded but failed to mark claimed");
-        // Lock will expire via TTL — don't release (mint already happened)
-        return Err(AppError::Internal(format!(
-            "NFT minted but failed to record claim. Asset ID: {}. Error: {e}",
-            mint_result.asset_id
-        )));
+        tracing::error!(claim_token = %token, error = %e, "Sheets mark_claimed failed (non-fatal)");
     }
 
     // 11. Finalize claim lock (permanent record, no TTL) — non-blocking

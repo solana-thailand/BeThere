@@ -201,12 +201,18 @@ pub async fn register_attendee(
     }
 
     // 5. Check for duplicate email in the Google Sheet
-    let attendees = sheets::get_attendees(&state, &config.sheet_id, &config.sheet_name, Some(kv))
-        .await
-        .map_err(|e| {
-            tracing::warn!(error = ?e, "could not fetch attendees for dedup");
-            AppError::Internal(format!("failed to check existing registrations: {e}"))
-        })?;
+    let attendees = sheets::get_attendees_for_event(
+        &state,
+        &config.sheet_id,
+        &config.sheet_name,
+        Some(kv),
+        &config.id,
+    )
+    .await
+    .map_err(|e| {
+        tracing::warn!(error = ?e, "could not fetch attendees for dedup");
+        AppError::Internal(format!("failed to check existing registrations: {e}"))
+    })?;
 
     // Duplicate email check: if already registered, return existing attendee info
     // so the frontend can redirect to the correct step (deposit/ticket) instead of
@@ -340,63 +346,209 @@ pub async fn register_attendee(
         }
     };
 
-    // 9. Append row to Google Sheet
-    sheets::append_attendee_row(
-        &api_id,
-        name,
-        &first_name,
-        &last_name,
-        &email,
-        &claim_token,
-        &participation_type,
-        &now,
-        contact_channel,
-        contact_handle,
-        body.deposit_agreed.unwrap_or(false),
-        body.consent_given.unwrap_or(false),
-        body.photo_consent_given.unwrap_or(false),
-        &mapping,
-        &state,
-        &config.sheet_id,
-        &config.sheet_name,
-        Some(kv),
-    )
-    .await
-    .map_err(|e| {
-        tracing::error!(%email, error = ?e, "failed to append registration row");
-        AppError::Internal(format!("failed to register: {e}"))
-    })?;
+    // 9. Write to D1 first (source of truth), then detach all Sheets writes
 
-    // 9b. Upsert to master contacts sheet (non-fatal)
-    upsert_contact_after_registration(
-        &email,
-        name,
-        &event_id,
-        contact_channel,
-        contact_handle,
-        &state,
-        &config,
-        Some(kv),
-    )
-    .await;
+    // 9a. Dual-write to D1 — attendee row (non-fatal, Phase 2a)
+    if let Some(ref d1) = state.d1 {
+        if let Err(e) = crate::db::attendees::upsert_attendee(
+            d1,
+            &api_id,
+            &event_id,
+            &email,
+            name,
+            "pending", // new registrations start as pending
+            &participation_type,
+            contact_channel.unwrap_or(""),
+            contact_handle.unwrap_or(""),
+        )
+        .await
+        {
+            tracing::warn!(
+                %api_id,
+                %email,
+                error = %e,
+                "D1 attendee upsert failed (non-fatal)"
+            );
+        }
 
-    // 10. Determine next_step based on event format and participation type
-    // 10a. If deposit was covered by rolling credit, skip deposit page
-    //      and write credit method to the attendee's deposit_method column
-    let next_step = if let Some(ref method) = credit_covered_method {
-        // Write deposit_method to the attendee row (update column N)
-        if let Err(e) = sheets::update_deposit_method(
+        // D1 contact upsert (non-fatal)
+        let events_joined = event_id.clone();
+        if let Err(e) = crate::db::contacts::upsert_contact(
+            d1,
+            &email,
+            name,
+            &events_joined,
+            1, // event_count will be updated on subsequent registrations
+            contact_channel.unwrap_or(""),
+            contact_handle.unwrap_or(""),
+        )
+        .await
+        {
+            tracing::warn!(
+                %email,
+                error = %e,
+                "D1 contact upsert failed (non-fatal)"
+            );
+        }
+
+        // 9d. Developer profile + registration responses (Issue #049 Phase 1, non-fatal)
+        write_developer_data(&DeveloperData {
+            d1,
+            email: &email,
+            name,
+            event_id: &event_id,
+            contact_channel: contact_channel.unwrap_or(""),
+            contact_handle: contact_handle.unwrap_or(""),
+            participation_type: &participation_type,
+            consent_given: body.consent_given.unwrap_or(false),
+            photo_consent_given: body.photo_consent_given.unwrap_or(false),
+        })
+        .await;
+    }
+
+    // 9b. Detach Google Sheets writes — response returns immediately (Phase 2c)
+    let bg_credit_method = credit_covered_method.clone();
+    if let Some(ctx) = &state.worker_ctx {
+        let bg_state = state.clone();
+        let bg_api_id = api_id.clone();
+        let bg_name = name.to_string();
+        let bg_first_name = first_name.to_string();
+        let bg_last_name = last_name.to_string();
+        let bg_email = email.clone();
+        let bg_claim_token = claim_token.clone();
+        let bg_participation_type = participation_type.clone();
+        let bg_now = now.clone();
+        let bg_contact_channel = contact_channel.map(String::from);
+        let bg_contact_handle = contact_handle.map(String::from);
+        let bg_deposit_agreed = body.deposit_agreed.unwrap_or(false);
+        let bg_consent_given = body.consent_given.unwrap_or(false);
+        let bg_photo_consent_given = body.photo_consent_given.unwrap_or(false);
+        let bg_mapping = mapping.clone();
+        let bg_sheet_id = config.sheet_id.clone();
+        let bg_sheet_name = config.sheet_name.clone();
+        let bg_kv = Some(kv.clone());
+        let bg_event_id = event_id.clone();
+        let bg_config = config.clone();
+
+        ctx.wait_until(async move {
+            // Append attendee row
+            crate::sheets::bg_sync::append_attendee_row(
+                bg_state.clone(),
+                bg_api_id.clone(),
+                bg_name.to_string(),
+                bg_first_name.clone(),
+                bg_last_name.clone(),
+                bg_email.clone(),
+                bg_claim_token.clone(),
+                bg_participation_type.clone(),
+                bg_now.clone(),
+                bg_contact_channel.clone(),
+                bg_contact_handle.clone(),
+                bg_deposit_agreed,
+                bg_consent_given,
+                bg_photo_consent_given,
+                bg_mapping.clone(),
+                bg_sheet_id.clone(),
+                bg_sheet_name.clone(),
+                bg_kv.clone(),
+            )
+            .await;
+
+            // Upsert to contacts sheet (matches upsert_contact_after_registration)
+            let resolved = if let Some(ref contact_kv) = bg_kv {
+                crate::org_store::resolve_contacts_sheet(
+                    contact_kv,
+                    &bg_config,
+                    &bg_state.config.sheets,
+                )
+                .await
+            } else {
+                event_checkin_domain::models::org::ResolvedContactsSheet {
+                    sheet_id: bg_state.config.sheets.contacts_sheet_id.clone(),
+                    contacts_sheet_name: bg_state.config.sheets.contacts_sheet_name.clone(),
+                    events_sheet_name: bg_state.config.sheets.events_sheet_name.clone(),
+                }
+            };
+            if !resolved.sheet_id.is_empty() {
+                let contact_upsert = crate::sheets::contacts::ContactUpsert {
+                    email: &bg_email,
+                    name: &bg_name,
+                    event_id: &bg_event_id,
+                    contact_channel: bg_contact_channel.as_deref(),
+                    contact_handle: bg_contact_handle.as_deref(),
+                };
+                if let Err(e) = crate::sheets::contacts::upsert_contact(
+                    &contact_upsert,
+                    &bg_state,
+                    &resolved.sheet_id,
+                    &resolved.contacts_sheet_name,
+                    bg_kv.as_ref(),
+                )
+                .await
+                {
+                    tracing::warn!(%bg_email, error = %e, "bg_sync: contacts upsert failed");
+                }
+            }
+
+            // Write deposit_method if credit covered the deposit
+            if let Some(ref method) = bg_credit_method {
+                if let Err(e) = crate::sheets::write::update_deposit_method(
+                    &bg_state,
+                    &bg_sheet_id,
+                    &bg_sheet_name,
+                    bg_kv.as_ref(),
+                    &bg_api_id,
+                    method,
+                )
+                .await
+                {
+                    tracing::warn!(%bg_api_id, error = %e, "bg_sync: deposit_method write failed");
+                }
+            }
+        });
+    } else {
+        // Fallback: blocking Sheets writes when worker_ctx unavailable (tests)
+        if let Err(e) = sheets::append_attendee_row(
+            &api_id,
+            name,
+            &first_name,
+            &last_name,
+            &email,
+            &claim_token,
+            &participation_type,
+            &now,
+            contact_channel,
+            contact_handle,
+            body.deposit_agreed.unwrap_or(false),
+            body.consent_given.unwrap_or(false),
+            body.photo_consent_given.unwrap_or(false),
+            &mapping,
             &state,
             &config.sheet_id,
             &config.sheet_name,
             Some(kv),
-            &api_id,
-            method,
         )
         .await
         {
-            tracing::warn!(%api_id, error = %e, "failed to write credit deposit_method to sheet");
+            tracing::warn!(%email, error = %e, "Sheets append row failed (non-fatal)");
         }
+
+        upsert_contact_after_registration(
+            &email,
+            name,
+            &event_id,
+            contact_channel,
+            contact_handle,
+            &state,
+            &config,
+            Some(kv),
+        )
+        .await;
+    }
+
+    // 10. Determine next_step based on event format and participation type
+    // Note: deposit_method is now written in the background (step 9b)
+    let next_step = if credit_covered_method.is_some() {
         NextStep {
             step_type: "ticket".to_string(),
             url: format!("/ticket/{api_id}?event_id={event_id}"),
@@ -468,12 +620,18 @@ pub async fn my_registration(
     let config = config.ok_or_else(|| AppError::NotFound(format!("event '{slug}' not found")))?;
 
     // Fetch attendees and find by email (case-insensitive)
-    let attendees = sheets::get_attendees(&state, &config.sheet_id, &config.sheet_name, Some(kv))
-        .await
-        .map_err(|e| {
-            tracing::warn!(error = ?e, "could not fetch attendees");
-            AppError::Internal(format!("failed to fetch attendees: {e}"))
-        })?;
+    let attendees = sheets::get_attendees_for_event(
+        &state,
+        &config.sheet_id,
+        &config.sheet_name,
+        Some(kv),
+        &config.id,
+    )
+    .await
+    .map_err(|e| {
+        tracing::warn!(error = ?e, "could not fetch attendees");
+        AppError::Internal(format!("failed to fetch attendees: {e}"))
+    })?;
 
     let attendee = attendees
         .iter()
@@ -611,11 +769,12 @@ pub async fn my_registrations(
                 };
 
                 // Fetch attendees (KV-cached)
-                let attendees = match crate::sheets::get_attendees(
+                let attendees = match crate::sheets::get_attendees_for_event(
                     &state,
                     &config.sheet_id,
                     &config.sheet_name,
                     Some(&kv),
+                    &config.id,
                 )
                 .await
                 {
@@ -791,10 +950,15 @@ async fn enforce_capacity(
         || participation_type.trim().is_empty();
 
     // Count current attendees from sheet
-    let attendees =
-        crate::sheets::get_attendees(state, &config.sheet_id, &config.sheet_name, Some(kv))
-            .await
-            .map_err(|e| AppError::Internal(format!("failed to check capacity: {e}")))?;
+    let attendees = crate::sheets::get_attendees_for_event(
+        state,
+        &config.sheet_id,
+        &config.sheet_name,
+        Some(kv),
+        &config.id,
+    )
+    .await
+    .map_err(|e| AppError::Internal(format!("failed to check capacity: {e}")))?;
 
     let mut in_person_count: u32 = 0;
     let mut online_count: u32 = 0;
@@ -851,9 +1015,7 @@ async fn enforce_capacity(
 
     if is_in_person {
         // Check in-person capacity
-        if let Some(cap) = config.in_person_capacity
-            && in_person_count >= cap
-        {
+        if !config.has_in_person_capacity(in_person_count) {
             return Err(AppError::Validation(
                 "In-person spots are full. Please register for the online track instead."
                     .to_string(),
@@ -861,18 +1023,14 @@ async fn enforce_capacity(
         }
     } else {
         // Check online capacity
-        if let Some(cap) = config.online_capacity
-            && online_count >= cap
-        {
+        if !config.has_online_capacity(online_count) {
             return Err(AppError::Validation(
                 "Online spots are full. Registration is closed.".to_string(),
             ));
         }
 
         // Check online registration gating
-        let in_person_available = config
-            .in_person_capacity
-            .is_none_or(|cap| in_person_count < cap);
+        let in_person_available = config.has_in_person_capacity(in_person_count);
 
         let online_open = match config.online_open_mode {
             OnlineOpenMode::Always => true,
@@ -951,5 +1109,86 @@ async fn upsert_contact_after_registration(
             error = %e,
             "failed to upsert contact to master sheet (non-fatal)"
         );
+    }
+}
+
+/// Input data for writing developer profile + registration responses to D1.
+struct DeveloperData<'a> {
+    d1: &'a worker::D1Database,
+    email: &'a str,
+    name: &'a str,
+    event_id: &'a str,
+    contact_channel: &'a str,
+    contact_handle: &'a str,
+    participation_type: &'a str,
+    consent_given: bool,
+    photo_consent_given: bool,
+}
+
+/// Write developer profile + registration responses to D1 (Issue #049 Phase 1).
+///
+/// Best-effort: each write is individually wrapped in warn-on-error.
+async fn write_developer_data(data: &DeveloperData<'_>) {
+    let DeveloperData {
+        d1,
+        email,
+        name,
+        event_id,
+        contact_channel,
+        contact_handle,
+        participation_type,
+        consent_given,
+        photo_consent_given,
+    } = data;
+
+    // 1. Upsert developer profile (display_name)
+    if let Err(e) =
+        crate::db::developers::upsert_developer_field(d1, email, "display_name", name).await
+    {
+        tracing::warn!(%email, error = %e, "D1 developer display_name upsert failed (non-fatal)");
+    }
+
+    // 2. Store registration responses
+    let responses: Vec<(&str, &str, bool)> = vec![
+        ("participation_type", participation_type, false),
+        ("contact_channel", contact_channel, false),
+        ("contact_handle", contact_handle, false),
+        (
+            "consent_given",
+            if *consent_given { "true" } else { "false" },
+            false,
+        ),
+        (
+            "photo_consent_given",
+            if *photo_consent_given {
+                "true"
+            } else {
+                "false"
+            },
+            false,
+        ),
+    ];
+
+    for (field_key, field_value, is_profile_field) in responses {
+        let id = uuid::Uuid::now_v7().to_string();
+        if let Err(e) = crate::db::developers::insert_registration_response(
+            d1,
+            &id,
+            event_id,
+            email,
+            field_key,
+            field_value,
+            is_profile_field,
+        )
+        .await
+        {
+            tracing::warn!(
+                %email,
+                %event_id,
+                field_key,
+                error = %e,
+                "D1 registration response insert failed (non-fatal)"
+            );
+        }
     }
 }

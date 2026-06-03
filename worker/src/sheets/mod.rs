@@ -4,6 +4,7 @@
 //! `worker::Fetch` (via `crate::http`) and SubtleCrypto (via `crate::crypto`)
 //! instead of `reqwest` and the `rsa` crate.
 
+pub mod bg_sync;
 pub mod contacts;
 pub mod events_tab;
 pub mod write;
@@ -329,6 +330,54 @@ pub async fn get_attendees(
     sheet_name: &str,
     kv: Option<&KvStore>,
 ) -> Result<Vec<Attendee>, String> {
+    get_attendees_inner(state, sheet_id, sheet_name, kv, None).await
+}
+
+/// Fetch all attendees for an event, trying D1 first when available.
+///
+/// Phase 2b: Queries D1 directly by `event_id`, avoiding the Google Sheets API
+/// entirely on D1 hit. Falls back to Sheets on D1 miss/error.
+pub async fn get_attendees_for_event(
+    state: &AppState,
+    sheet_id: &str,
+    sheet_name: &str,
+    kv: Option<&KvStore>,
+    event_id: &str,
+) -> Result<Vec<Attendee>, String> {
+    get_attendees_inner(state, sheet_id, sheet_name, kv, Some(event_id)).await
+}
+
+/// Inner implementation shared between `get_attendees` and `get_attendees_for_event`.
+///
+/// When `event_id` is provided and D1 is configured, tries D1 first.
+/// Otherwise (or on D1 miss/error), falls through to the existing KV → Sheets path.
+async fn get_attendees_inner(
+    state: &AppState,
+    sheet_id: &str,
+    sheet_name: &str,
+    kv: Option<&KvStore>,
+    event_id: Option<&str>,
+) -> Result<Vec<Attendee>, String> {
+    // Phase 2b: D1-first when event_id is available
+    if let (Some(d1), Some(eid)) = (&state.d1, event_id) {
+        match crate::db::attendees::get_attendees_by_event(d1, eid).await {
+            Ok(attendees) if !attendees.is_empty() => {
+                tracing::info!(
+                    count = attendees.len(),
+                    event_id = %eid,
+                    "D1 hit: attendees for event"
+                );
+                return Ok(attendees);
+            }
+            Ok(_) => {
+                tracing::debug!(event_id = %eid, "D1 empty: no attendees for event, falling back to Sheets");
+            }
+            Err(e) => {
+                tracing::warn!(event_id = %eid, error = %e, "D1 error: attendees for event, falling back to Sheets");
+            }
+        }
+    }
+
     let cache_key = attendee_cache_key(sheet_id, sheet_name);
 
     // Try KV cache first
@@ -507,7 +556,9 @@ pub async fn get_claim_map_cached(
     Ok(map)
 }
 
-/// Get a single attendee by their api_id — O(1) via HashMap lookup.
+/// Get a single attendee by their api_id.
+///
+/// Phase 2b: tries D1 first (O(1) by primary key), falls back to Sheets on miss.
 pub async fn get_attendee_by_id(
     api_id: &str,
     state: &AppState,
@@ -515,15 +566,30 @@ pub async fn get_attendee_by_id(
     sheet_name: &str,
     kv: Option<&KvStore>,
 ) -> Result<Option<Attendee>, String> {
+    // D1-first: try by primary key
+    if let Some(ref d1) = state.d1 {
+        match crate::db::attendees::get_attendee_by_id(d1, api_id).await {
+            Ok(Some(attendee)) => {
+                tracing::debug!(attendee_id = %api_id, "D1 hit: attendee by id");
+                return Ok(Some(attendee));
+            }
+            Ok(None) => {
+                tracing::debug!(attendee_id = %api_id, "D1 miss: attendee by id, falling back to Sheets");
+            }
+            Err(e) => {
+                tracing::warn!(attendee_id = %api_id, error = %e, "D1 error: attendee by id, falling back to Sheets");
+            }
+        }
+    }
+
+    // Sheets fallback
     let map = get_attendees_map(state, sheet_id, sheet_name, kv).await?;
     Ok(map.get(api_id).cloned())
 }
 
-/// Find an attendee by their claim token (column L) — O(1) via cached HashMap lookup.
+/// Find an attendee by their claim token.
 ///
-/// Uses a dedicated KV-cached claim map so that the hot claim path avoids
-/// deserializing the full attendee list on every call.
-/// Returns `None` if no attendee has the given token.
+/// Phase 2b: tries D1 first (indexed on claim_token), falls back to Sheets on miss.
 pub async fn get_attendee_by_claim_token(
     claim_token: &str,
     state: &AppState,
@@ -531,20 +597,57 @@ pub async fn get_attendee_by_claim_token(
     sheet_name: &str,
     kv: Option<&KvStore>,
 ) -> Result<Option<Attendee>, String> {
+    // D1-first: try by claim_token index
+    if let Some(ref d1) = state.d1 {
+        match crate::db::attendees::get_attendee_by_claim_token(d1, claim_token).await {
+            Ok(Some(attendee)) => {
+                tracing::debug!(claim_token = %claim_token, "D1 hit: attendee by claim_token");
+                return Ok(Some(attendee));
+            }
+            Ok(None) => {
+                tracing::debug!(claim_token = %claim_token, "D1 miss: attendee by claim_token, falling back to Sheets");
+            }
+            Err(e) => {
+                tracing::warn!(claim_token = %claim_token, error = %e, "D1 error: attendee by claim_token, falling back to Sheets");
+            }
+        }
+    }
+
+    // Sheets fallback
     let map = get_claim_map_cached(state, sheet_id, sheet_name, kv).await?;
     Ok(map.get(claim_token).cloned())
 }
 
-/// Look up an attendee by claim token and return claim counts in a single Sheets API call.
+/// Look up an attendee by claim token and return claim counts.
+///
+/// Phase 2b: tries D1 first (single query by event_id), falls back to Sheets on miss.
 /// Returns `(attendee, total_checked_in, total_claimed)`.
-/// Attendee lookup is O(1) via HashMap; counts iterate the full Vec.
 pub async fn get_attendee_with_claim_counts(
     claim_token: &str,
     state: &AppState,
     sheet_id: &str,
     sheet_name: &str,
     kv: Option<&KvStore>,
+    event_id: Option<&str>,
 ) -> Result<(Option<Attendee>, usize, usize), String> {
+    // D1-first: single query by event_id
+    if let (Some(d1), Some(eid)) = (&state.d1, event_id) {
+        match crate::db::attendees::get_attendee_with_claim_counts(d1, claim_token, eid).await {
+            Ok((Some(attendee), checked_in, claimed)) => {
+                tracing::debug!(claim_token = %claim_token, "D1 hit: attendee with claim counts");
+                return Ok((Some(attendee), checked_in, claimed));
+            }
+            Ok((None, _checked_in, _claimed)) => {
+                tracing::debug!(claim_token = %claim_token, "D1 miss: attendee with claim counts, falling back to Sheets");
+                // D1 returned counts but no attendee — still use counts from Sheets fallback
+            }
+            Err(e) => {
+                tracing::warn!(claim_token = %claim_token, error = %e, "D1 error: attendee with claim counts, falling back to Sheets");
+            }
+        }
+    }
+
+    // Sheets fallback
     let attendees: Vec<Attendee> = get_attendees(state, sheet_id, sheet_name, kv).await?;
     let total_checked_in = attendees
         .iter()

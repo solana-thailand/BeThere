@@ -219,14 +219,21 @@ async fn count_attendees_by_track(
     config: &event_checkin_domain::models::event::EventConfig,
     kv: Option<&worker::kv::KvStore>,
 ) -> (u32, u32) {
-    let attendees =
-        match crate::sheets::get_attendees(state, &config.sheet_id, &config.sheet_name, kv).await {
-            Ok(a) => a,
-            Err(e) => {
-                tracing::warn!(error = %e, "failed to count attendees for capacity");
-                return (0, 0);
-            }
-        };
+    let attendees = match crate::sheets::get_attendees_for_event(
+        state,
+        &config.sheet_id,
+        &config.sheet_name,
+        kv,
+        &config.id,
+    )
+    .await
+    {
+        Ok(a) => a,
+        Err(e) => {
+            tracing::warn!(error = %e, "failed to count attendees for capacity");
+            return (0, 0);
+        }
+    };
 
     let mut in_person_count: u32 = 0;
     let mut online_count: u32 = 0;

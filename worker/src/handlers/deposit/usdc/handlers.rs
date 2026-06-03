@@ -81,6 +81,8 @@ pub async fn get_deposit_status_handler(
         }
     }
 
+    let usdc_deposits_accepted = event.accepts_usdc_deposits();
+
     Ok(ApiOk::new(DepositStatusResponse {
         deposit_enabled: event.deposit_enabled,
         deposit_amount_usdc: event.deposit_amount_usdc,
@@ -98,8 +100,7 @@ pub async fn get_deposit_status_handler(
         deadline_expired,
         registration_date,
         in_person_available,
-        usdc_deposits_accepted: event.escrow_status
-            == event_checkin_domain::models::event::EscrowStatus::Initialized,
+        usdc_deposits_accepted,
     }))
 }
 
@@ -193,26 +194,42 @@ pub async fn deposit_usdc_handler(
                 )
                 .await
                 {
-                    match crate::sheets::write::update_participation_type(
-                        attendee.row_index,
-                        "In-Person",
-                        &mapping,
-                        &state,
-                        &event.sheet_id,
-                        &event.sheet_name,
-                        Some(kv),
-                    )
-                    .await
-                    {
-                        Ok(()) => tracing::info!(
+                    if let Some(ctx) = &state.worker_ctx {
+                        ctx.wait_until(crate::sheets::bg_sync::update_participation_type(
+                            state.clone(),
+                            attendee.row_index,
+                            "In-Person".to_string(),
+                            mapping,
+                            event.sheet_id.clone(),
+                            event.sheet_name.clone(),
+                            Some(kv.clone()),
+                        ));
+                        tracing::info!(
                             attendee_id = %attendee.api_id,
-                            "deposit deadline reclaim: switched back to In-Person"
-                        ),
-                        Err(e) => tracing::warn!(
-                            attendee_id = %attendee.api_id,
-                            error = %e,
-                            "deposit deadline reclaim: failed to switch back to In-Person"
-                        ),
+                            "deposit deadline reclaim: switched back to In-Person (bg)"
+                        );
+                    } else {
+                        match crate::sheets::write::update_participation_type(
+                            attendee.row_index,
+                            "In-Person",
+                            &mapping,
+                            &state,
+                            &event.sheet_id,
+                            &event.sheet_name,
+                            Some(kv),
+                        )
+                        .await
+                        {
+                            Ok(()) => tracing::info!(
+                                attendee_id = %attendee.api_id,
+                                "deposit deadline reclaim: switched back to In-Person"
+                            ),
+                            Err(e) => tracing::warn!(
+                                attendee_id = %attendee.api_id,
+                                error = %e,
+                                "deposit deadline reclaim: failed to switch back to In-Person"
+                            ),
+                        }
                     }
                 }
                 // Continue to accept the deposit
@@ -501,7 +518,27 @@ pub async fn confirm_deposit_handler(
                             "USDC deposit confirmed on-chain"
                         );
 
-                        // H5: Parallelize independent Sheets lookups
+                        // Dual-write to D1 first (source of truth)
+                        if let Some(ref d1) = state.d1
+                            && let Err(e) = crate::db::attendees::verify_deposit(
+                                d1,
+                                &query.attendee_id,
+                                "verified",
+                                sig,
+                                status.amount as i64,
+                                &chrono::Utc::now().to_rfc3339(),
+                                "usdc_on_chain",
+                            )
+                            .await
+                        {
+                            tracing::warn!(
+                                attendee_id = %query.attendee_id,
+                                error = %e,
+                                "D1 USDC deposit verify failed (non-fatal)"
+                            );
+                        }
+
+                        // Detach Google Sheets writes — response returns immediately (Phase 2c)
                         let deposit_amount_str = status.amount.to_string();
                         let (mapping_result, attendee_result) = futures_util::join!(
                             crate::sheets::get_column_mapping(
@@ -520,43 +557,71 @@ pub async fn confirm_deposit_handler(
                         );
                         if let (Ok(mapping), Ok(Some(attendee))) = (mapping_result, attendee_result)
                         {
-                            let ctx = crate::sheets::write::SheetContext {
-                                mapping: &mapping,
-                                state: &state,
-                                sheet_id: &event.sheet_id,
-                                sheet_name: &event.sheet_name,
-                                kv: Some(kv),
-                            };
+                            if let Some(ctx) = &state.worker_ctx {
+                                ctx.wait_until(crate::sheets::bg_sync::write_deposit_verification(
+                                    state.clone(),
+                                    attendee.row_index,
+                                    "USDC".to_string(),
+                                    deposit_amount_str.clone(),
+                                    true,
+                                    mapping.clone(),
+                                    event.sheet_id.clone(),
+                                    event.sheet_name.clone(),
+                                    Some(kv.clone()),
+                                ));
 
-                            // Write deposit columns to sheet
-                            if let Err(e) = crate::sheets::write::write_deposit_verification(
-                                attendee.row_index,
-                                "USDC",
-                                &deposit_amount_str,
-                                true,
-                                &ctx,
-                            )
-                            .await
-                            {
-                                tracing::warn!(error = %e, "failed to write deposit verification to sheet (non-fatal)");
-                            }
+                                // Auto-generate QR if attendee doesn't have one
+                                if attendee.qr_code_url.as_ref().is_none_or(|u| u.is_empty()) {
+                                    let server_url = &state.config.server.url;
+                                    let qr_url =
+                                        format!("{server_url}/staff/?scan={}", attendee.api_id);
+                                    ctx.wait_until(crate::sheets::bg_sync::update_qr_urls(
+                                        state.clone(),
+                                        vec![(attendee.row_index, qr_url)],
+                                        mapping,
+                                        event.sheet_id.clone(),
+                                        event.sheet_name.clone(),
+                                        Some(kv.clone()),
+                                    ));
+                                }
+                            } else {
+                                // Fallback: blocking Sheets writes when worker_ctx unavailable (tests)
+                                let ctx = crate::sheets::write::SheetContext {
+                                    mapping: &mapping,
+                                    state: &state,
+                                    sheet_id: &event.sheet_id,
+                                    sheet_name: &event.sheet_name,
+                                    kv: Some(kv),
+                                };
 
-                            // Auto-generate QR if attendee doesn't have one
-                            if attendee.qr_code_url.as_ref().is_none_or(|u| u.is_empty()) {
-                                let server_url = &state.config.server.url;
-                                let qr_url =
-                                    format!("{server_url}/staff/?scan={}", attendee.api_id);
-                                if let Err(e) = crate::sheets::write::update_qr_urls(
-                                    &[(attendee.row_index, qr_url)],
-                                    &mapping,
-                                    &state,
-                                    &event.sheet_id,
-                                    &event.sheet_name,
-                                    Some(kv),
+                                if let Err(e) = crate::sheets::write::write_deposit_verification(
+                                    attendee.row_index,
+                                    "USDC",
+                                    &deposit_amount_str,
+                                    true,
+                                    &ctx,
                                 )
                                 .await
                                 {
-                                    tracing::warn!(error = %e, "failed to auto-generate QR for verified attendee (non-fatal)");
+                                    tracing::warn!(error = %e, "failed to write deposit verification to sheet (non-fatal)");
+                                }
+
+                                if attendee.qr_code_url.as_ref().is_none_or(|u| u.is_empty()) {
+                                    let server_url = &state.config.server.url;
+                                    let qr_url =
+                                        format!("{server_url}/staff/?scan={}", attendee.api_id);
+                                    if let Err(e) = crate::sheets::write::update_qr_urls(
+                                        &[(attendee.row_index, qr_url)],
+                                        &mapping,
+                                        &state,
+                                        &event.sheet_id,
+                                        &event.sheet_name,
+                                        Some(kv),
+                                    )
+                                    .await
+                                    {
+                                        tracing::warn!(error = %e, "failed to auto-generate QR for verified attendee (non-fatal)");
+                                    }
                                 }
                             }
                         }

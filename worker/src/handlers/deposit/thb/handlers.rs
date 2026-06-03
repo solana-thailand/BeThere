@@ -273,11 +273,12 @@ pub async fn upload_thb_slip_handler(
             // Deadline passed — check if reclaim is possible
             let capacity_available = if let Some(cap) = event.in_person_capacity {
                 // Quick capacity check (sheet only — walk-ins less likely for THB)
-                let in_person_count = crate::sheets::get_attendees(
+                let in_person_count = crate::sheets::get_attendees_for_event(
                     &state,
                     &event.sheet_id,
                     &event.sheet_name,
                     Some(kv),
+                    &event.id,
                 )
                 .await
                 .map(|a| a.iter().filter(|a| a.is_in_person()).count() as u32)
@@ -297,26 +298,42 @@ pub async fn upload_thb_slip_handler(
                 )
                 .await
                 {
-                    match crate::sheets::write::update_participation_type(
-                        attendee.row_index,
-                        "In-Person",
-                        &mapping,
-                        &state,
-                        &event.sheet_id,
-                        &event.sheet_name,
-                        Some(kv),
-                    )
-                    .await
-                    {
-                        Ok(()) => tracing::info!(
+                    if let Some(ctx) = &state.worker_ctx {
+                        ctx.wait_until(crate::sheets::bg_sync::update_participation_type(
+                            state.clone(),
+                            attendee.row_index,
+                            "In-Person".to_string(),
+                            mapping,
+                            event.sheet_id.clone(),
+                            event.sheet_name.clone(),
+                            Some(kv.clone()),
+                        ));
+                        tracing::info!(
                             attendee_id = %attendee.api_id,
-                            "THB deposit deadline reclaim: switched back to In-Person"
-                        ),
-                        Err(e) => tracing::warn!(
-                            attendee_id = %attendee.api_id,
-                            error = %e,
-                            "THB deposit deadline reclaim: failed to switch back"
-                        ),
+                            "THB deposit deadline reclaim: switched back to In-Person (bg)"
+                        );
+                    } else {
+                        match crate::sheets::write::update_participation_type(
+                            attendee.row_index,
+                            "In-Person",
+                            &mapping,
+                            &state,
+                            &event.sheet_id,
+                            &event.sheet_name,
+                            Some(kv),
+                        )
+                        .await
+                        {
+                            Ok(()) => tracing::info!(
+                                attendee_id = %attendee.api_id,
+                                "THB deposit deadline reclaim: switched back to In-Person"
+                            ),
+                            Err(e) => tracing::warn!(
+                                attendee_id = %attendee.api_id,
+                                error = %e,
+                                "THB deposit deadline reclaim: failed to switch back"
+                            ),
+                        }
                     }
                 }
             } else {
@@ -365,24 +382,39 @@ pub async fn upload_thb_slip_handler(
             Some(kv),
         )
         .await
-        && let Err(e) = crate::sheets::write::write_bank_info(
-            attendee.row_index,
-            body.bank_account.as_deref(),
-            body.bank_name.as_deref(),
-            body.account_name.as_deref(),
-            &mapping,
-            &state,
-            &event.sheet_id,
-            &event.sheet_name,
-            Some(kv),
-        )
-        .await
     {
-        tracing::warn!(
-            attendee_id = %body.attendee_id,
-            error = %e,
-            "failed to write bank info to sheet (non-blocking)"
-        );
+        if let Some(ctx) = &state.worker_ctx {
+            ctx.wait_until(crate::sheets::bg_sync::write_bank_info(
+                state.clone(),
+                attendee.row_index,
+                body.bank_account.clone(),
+                body.bank_name.clone(),
+                mapping,
+                event.sheet_id.clone(),
+                event.sheet_name.clone(),
+                Some(kv.clone()),
+            ));
+        } else {
+            if let Err(e) = crate::sheets::write::write_bank_info(
+                attendee.row_index,
+                body.bank_account.as_deref(),
+                body.bank_name.as_deref(),
+                body.account_name.as_deref(),
+                &mapping,
+                &state,
+                &event.sheet_id,
+                &event.sheet_name,
+                Some(kv),
+            )
+            .await
+            {
+                tracing::warn!(
+                    attendee_id = %body.attendee_id,
+                    error = %e,
+                    "failed to write bank info to sheet (non-blocking)"
+                );
+            }
+        }
     }
 
     // Atomically increment deposit counter for this event
@@ -528,42 +560,70 @@ pub async fn verify_thb_slip_handler(
             )
             .await,
         ) {
-            let ctx = crate::sheets::write::SheetContext {
-                mapping: &mapping,
-                state: &state,
-                sheet_id: &event.sheet_id,
-                sheet_name: &event.sheet_name,
-                kv: Some(kv),
-            };
+            if let Some(wctx) = &state.worker_ctx {
+                // Detach deposit verification write
+                wctx.wait_until(crate::sheets::bg_sync::write_deposit_verification(
+                    state.clone(),
+                    attendee.row_index,
+                    "THB".to_string(),
+                    deposit_amount_thb.clone(),
+                    true,
+                    mapping.clone(),
+                    event.sheet_id.clone(),
+                    event.sheet_name.clone(),
+                    Some(kv.clone()),
+                ));
 
-            // Write deposit columns to sheet
-            if let Err(e) = crate::sheets::write::write_deposit_verification(
-                attendee.row_index,
-                "THB",
-                &deposit_amount_thb,
-                true,
-                &ctx,
-            )
-            .await
-            {
-                tracing::warn!(error = %e, "failed to write deposit verification to sheet (non-fatal)");
-            }
+                // Auto-generate QR if attendee doesn't have one
+                if attendee.qr_code_url.as_ref().is_none_or(|u| u.is_empty()) {
+                    let server_url = &state.config.server.url;
+                    let qr_url = format!("{server_url}/staff/?scan={}", attendee.api_id);
+                    wctx.wait_until(crate::sheets::bg_sync::update_qr_urls(
+                        state.clone(),
+                        vec![(attendee.row_index, qr_url)],
+                        mapping,
+                        event.sheet_id.clone(),
+                        event.sheet_name.clone(),
+                        Some(kv.clone()),
+                    ));
+                }
+            } else {
+                // Fallback: blocking Sheets write when worker_ctx unavailable (tests)
+                let ctx = crate::sheets::write::SheetContext {
+                    mapping: &mapping,
+                    state: &state,
+                    sheet_id: &event.sheet_id,
+                    sheet_name: &event.sheet_name,
+                    kv: Some(kv),
+                };
 
-            // Auto-generate QR if attendee doesn't have one
-            if attendee.qr_code_url.as_ref().is_none_or(|u| u.is_empty()) {
-                let server_url = &state.config.server.url;
-                let qr_url = format!("{server_url}/staff/?scan={}", attendee.api_id);
-                if let Err(e) = crate::sheets::write::update_qr_urls(
-                    &[(attendee.row_index, qr_url)],
-                    &mapping,
-                    &state,
-                    &event.sheet_id,
-                    &event.sheet_name,
-                    Some(kv),
+                if let Err(e) = crate::sheets::write::write_deposit_verification(
+                    attendee.row_index,
+                    "THB",
+                    &deposit_amount_thb,
+                    true,
+                    &ctx,
                 )
                 .await
                 {
-                    tracing::warn!(error = %e, "failed to auto-generate QR for verified attendee (non-fatal)");
+                    tracing::warn!(error = %e, "failed to write deposit verification to sheet (non-fatal)");
+                }
+
+                if attendee.qr_code_url.as_ref().is_none_or(|u| u.is_empty()) {
+                    let server_url = &state.config.server.url;
+                    let qr_url = format!("{server_url}/staff/?scan={}", attendee.api_id);
+                    if let Err(e) = crate::sheets::write::update_qr_urls(
+                        &[(attendee.row_index, qr_url)],
+                        &mapping,
+                        &state,
+                        &event.sheet_id,
+                        &event.sheet_name,
+                        Some(kv),
+                    )
+                    .await
+                    {
+                        tracing::warn!(error = %e, "failed to auto-generate QR for verified attendee (non-fatal)");
+                    }
                 }
             }
         }
@@ -574,6 +634,27 @@ pub async fn verify_thb_slip_handler(
     } else {
         "deposit rejected"
     };
+
+    // Dual-write to D1 — deposit verification (non-fatal, Phase 2a)
+    if body.approved
+        && let Some(ref d1) = state.d1
+        && let Err(e) = crate::db::attendees::verify_deposit(
+            d1,
+            &body.attendee_id,
+            "verified",
+            "THB",
+            0, // THB amount tracked in KV, not USDC
+            &Utc::now().to_rfc3339(),
+            &claims.email,
+        )
+        .await
+    {
+        tracing::warn!(
+            attendee_id = %body.attendee_id,
+            error = %e,
+            "D1 deposit verify failed (non-fatal)"
+        );
+    }
 
     // Audit log
     let action = if body.approved {
@@ -811,39 +892,98 @@ pub async fn mark_refund_handler(
         "THB refund marked complete"
     );
 
-    // Write refund_status to Google Sheet
-    if let Err(e) = crate::sheets::write::write_refund_status(
+    // Resolve attendee row_index & column mapping for Sheets write
+    let attendee_row = crate::sheets::get_attendee_by_id(
+        &attendee_id,
         &state,
         &event.sheet_id,
         &event.sheet_name,
         Some(kv),
-        &attendee_id,
-        "refunded",
     )
     .await
+    .ok()
+    .flatten();
+
+    let mapping =
+        crate::sheets::get_column_mapping(&state, &event.sheet_id, &event.sheet_name, Some(kv))
+            .await
+            .unwrap_or_else(|_| event_checkin_domain::models::attendee::ColumnMapping::hardcoded());
+
+    if let Some(ref attendee) = attendee_row
+        && let Some(ctx) = &state.worker_ctx
     {
-        tracing::warn!(
-            attendee_id = %attendee_id,
-            error = %e,
-            "failed to write refund_status to sheet (non-blocking)"
-        );
+        // Detach Google Sheets writes — response returns immediately (Phase 2c)
+        ctx.wait_until(crate::sheets::bg_sync::write_refund_status(
+            state.clone(),
+            event.sheet_id.clone(),
+            event.sheet_name.clone(),
+            Some(kv.clone()),
+            attendee.row_index,
+            "refunded".to_string(),
+            mapping.clone(),
+        ));
+        ctx.wait_until(crate::sheets::bg_sync::write_refund_link(
+            state.clone(),
+            event.sheet_id.clone(),
+            event.sheet_name.clone(),
+            Some(kv.clone()),
+            attendee.row_index,
+            refund_proof_url.clone(),
+            mapping.clone(),
+        ));
+    } else {
+        // Fallback: blocking Sheets write when worker_ctx unavailable (tests)
+        if let Err(e) = crate::sheets::write::write_refund_status(
+            &state,
+            &event.sheet_id,
+            &event.sheet_name,
+            Some(kv),
+            &attendee_id,
+            "refunded",
+        )
+        .await
+        {
+            tracing::warn!(
+                attendee_id = %attendee_id,
+                error = %e,
+                "failed to write refund_status to sheet (non-blocking)"
+            );
+        }
+
+        if let Err(e) = crate::sheets::write::write_refund_link(
+            &state,
+            &event.sheet_id,
+            &event.sheet_name,
+            Some(kv),
+            &attendee_id,
+            &refund_proof_url,
+        )
+        .await
+        {
+            tracing::warn!(
+                attendee_id = %attendee_id,
+                error = %e,
+                "failed to write refund_link to sheet (non-blocking)"
+            );
+        }
     }
 
-    // Write refund_proof_url to refund_link column in Google Sheet
-    if let Err(e) = crate::sheets::write::write_refund_link(
-        &state,
-        &event.sheet_id,
-        &event.sheet_name,
-        Some(kv),
-        &attendee_id,
-        &refund_proof_url,
-    )
-    .await
+    // Dual-write to D1 — refund (non-fatal, Phase 2a)
+    if let Some(ref d1) = state.d1
+        && let Err(e) = crate::db::attendees::mark_refund(
+            d1,
+            &attendee_id,
+            "refunded",
+            &refund_proof_url,
+            &now,
+            &claims.email,
+        )
+        .await
     {
         tracing::warn!(
-            attendee_id = %attendee_id,
+            %attendee_id,
             error = %e,
-            "failed to write refund_link to sheet (non-blocking)"
+            "D1 refund write failed (non-fatal)"
         );
     }
 
@@ -1174,37 +1314,106 @@ pub async fn mark_manual_refund_handler(
     .map_err(|e| AppError::Internal(format!("failed to find attendee: {e}")))?
     .ok_or_else(|| AppError::NotFound(format!("attendee '{attendee_id}' not found")))?;
 
-    // Write refund_status to sheet
-    crate::sheets::write::write_refund_status(
-        &state,
-        &event.sheet_id,
-        &event.sheet_name,
-        Some(kv),
-        &attendee_id,
-        &body.refund_status,
-    )
-    .await
-    .map_err(|e| AppError::Internal(format!("failed to write refund_status: {e}")))?;
+    // Resolve column mapping for Sheets write
+    let mapping =
+        crate::sheets::get_column_mapping(&state, &event.sheet_id, &event.sheet_name, Some(kv))
+            .await
+            .unwrap_or_else(|_| event_checkin_domain::models::attendee::ColumnMapping::hardcoded());
 
-    // Write refund_link if provided
-    if let Some(ref link) = body.refund_link
-        && !link.trim().is_empty()
-    {
-        tracing::info!(
-            %attendee_id,
-            link = %link,
-            "writing refund_link to sheet"
-        );
-        crate::sheets::write::write_refund_link(
+    // Detach Google Sheets writes — response returns immediately (Phase 2c)
+    if let Some(ctx) = &state.worker_ctx {
+        ctx.wait_until(crate::sheets::bg_sync::write_refund_status(
+            state.clone(),
+            event.sheet_id.clone(),
+            event.sheet_name.clone(),
+            Some(kv.clone()),
+            attendee.row_index,
+            body.refund_status.clone(),
+            mapping.clone(),
+        ));
+
+        // Write refund_link if provided
+        if let Some(ref link) = body.refund_link
+            && !link.trim().is_empty()
+        {
+            tracing::info!(
+                %attendee_id,
+                link = %link,
+                "detaching refund_link write to bg_sync"
+            );
+            ctx.wait_until(crate::sheets::bg_sync::write_refund_link(
+                state.clone(),
+                event.sheet_id.clone(),
+                event.sheet_name.clone(),
+                Some(kv.clone()),
+                attendee.row_index,
+                link.clone(),
+                mapping.clone(),
+            ));
+        }
+    } else {
+        // Fallback: blocking Sheets write when worker_ctx unavailable (tests)
+        if let Err(e) = crate::sheets::write::write_refund_status(
             &state,
             &event.sheet_id,
             &event.sheet_name,
             Some(kv),
             &attendee_id,
-            link,
+            &body.refund_status,
         )
         .await
-        .map_err(|e| AppError::Internal(format!("failed to write refund_link: {e}")))?;
+        {
+            tracing::warn!(
+                attendee_id = %attendee_id,
+                error = %e,
+                "failed to write refund_status to sheet (non-blocking)"
+            );
+        }
+
+        if let Some(ref link) = body.refund_link
+            && !link.trim().is_empty()
+        {
+            tracing::info!(
+                %attendee_id,
+                link = %link,
+                "writing refund_link to sheet"
+            );
+            if let Err(e) = crate::sheets::write::write_refund_link(
+                &state,
+                &event.sheet_id,
+                &event.sheet_name,
+                Some(kv),
+                &attendee_id,
+                link,
+            )
+            .await
+            {
+                tracing::warn!(
+                    attendee_id = %attendee_id,
+                    error = %e,
+                    "failed to write refund_link to sheet (non-blocking)"
+                );
+            }
+        }
+    }
+
+    // Dual-write to D1 — manual refund (non-fatal, Phase 2a)
+    if let Some(ref d1) = state.d1
+        && let Err(e) = crate::db::attendees::mark_refund(
+            d1,
+            &attendee_id,
+            &body.refund_status,
+            body.refund_link.as_deref().unwrap_or(""),
+            &chrono::Utc::now().to_rfc3339(),
+            &claims.email,
+        )
+        .await
+    {
+        tracing::warn!(
+            %attendee_id,
+            error = %e,
+            "D1 manual refund write failed (non-fatal)"
+        );
     }
 
     // Audit log

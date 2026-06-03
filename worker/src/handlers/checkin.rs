@@ -74,36 +74,32 @@ pub async fn check_in(
         AppError::NotFound(format!("attendee with id '{id}' not found"))
     })?;
 
-    // Check if attendee is approved
-    if !attendee.is_approved() {
-        tracing::warn!(
-            attendee_id = %attendee.api_id,
-            status = %attendee.approval_status,
-            "check-in denied: attendee not approved",
-        );
-        return Err(AppError::Validation(format!(
-            "attendee is not approved (status: {})",
-            attendee.approval_status
-        ))
-        .into());
-    }
-
-    // Check if attendee is In-Person (not Online).
-    // Online attendees can only be checked in if `?online=true` and the event is Hybrid.
-    if !attendee.is_in_person() {
-        if !query.online {
+    // Validate check-in eligibility using domain logic.
+    // For standard in-person check-in, `can_check_in()` covers all three checks.
+    // For online check-in (hybrid events), we allow online attendees through.
+    if !query.online {
+        // Standard in-person check-in — use domain validation
+        if let Err(e) = attendee.can_check_in() {
             tracing::warn!(
                 attendee_id = %attendee.api_id,
-                participation_type = %attendee.participation_type,
-                "check-in denied: attendee not In-Person",
+                error = %e,
+                "check-in denied",
             );
+            return Err(AppError::Validation(e.to_string()).into());
+        }
+    } else {
+        // Online check-in — still need approval and not already checked in
+        if attendee.is_checked_in() {
+            return Err(AppError::Validation("attendee is already checked in".to_string()).into());
+        }
+        if !attendee.is_approved() {
             return Err(AppError::Validation(format!(
-                "attendee is not In-Person (participation type: {})",
-                attendee.participation_type
+                "attendee is not approved (status: {})",
+                attendee.approval_status
             ))
             .into());
         }
-        // online=true: verify event supports online track
+        // Verify event supports online track
         if !event.event_format.has_online() {
             tracing::warn!(
                 attendee_id = %attendee.api_id,
@@ -122,17 +118,6 @@ pub async fn check_in(
         );
     }
 
-    // Check if already checked in
-    if attendee.is_checked_in() {
-        let checked_in_at = attendee.checked_in_at.as_deref().unwrap_or("unknown time");
-        tracing::info!(
-            attendee_id = %attendee.api_id,
-            checked_in_at = %checked_in_at,
-            "check-in skipped: already checked in",
-        );
-        return Err(AppError::Validation("attendee is already checked in".to_string()).into());
-    }
-
     // Generate claim token (UUID v7) for NFT/refund claim link.
     // Frontend constructs the full claim URL using window.location.origin + /claim/{token}.
     let claim_token = Uuid::now_v7().to_string();
@@ -148,26 +133,61 @@ pub async fn check_in(
         }
     };
 
-    // Update the Google Sheet (writes timestamp, staff email, and claim_token)
-    let timestamp = sheets::mark_checked_in(
-        attendee.row_index,
-        &claims.email,
-        &claim_token,
-        &mapping,
-        &state,
-        &event.sheet_id,
-        &event.sheet_name,
-        kv,
-    )
-    .await
-    .map_err(|e| {
-        tracing::error!(
+    // Generate timestamp locally — response returns immediately, Sheets write is detached
+    let timestamp = chrono::Utc::now().to_rfc3339();
+
+    // Write to D1 first (fast, source of truth)
+    if let Some(ref d1) = state.d1
+        && let Err(e) = crate::db::attendees::check_in_attendee(
+            d1,
+            &attendee.api_id,
+            &timestamp,
+            &claims.email,
+            &claim_token,
+        )
+        .await
+    {
+        tracing::warn!(
             attendee_id = %attendee.api_id,
             error = %e,
-            "check-in failed: could not update sheet",
+            "D1 check-in write failed (non-fatal)"
         );
-        AppError::Internal(format!("failed to record check-in: {e}"))
-    })?;
+    }
+
+    // Detach Google Sheets write — response returns immediately (Phase 2c)
+    if let Some(ctx) = &state.worker_ctx {
+        ctx.wait_until(crate::sheets::bg_sync::mark_checked_in(
+            state.clone(),
+            attendee.row_index,
+            claims.email.clone(),
+            claim_token.clone(),
+            mapping,
+            event.sheet_id.clone(),
+            event.sheet_name.clone(),
+            kv.cloned(),
+            timestamp.clone(),
+        ));
+    } else {
+        // Fallback: blocking Sheets write when worker_ctx unavailable (tests)
+        if let Err(e) = sheets::write::mark_checked_in(
+            attendee.row_index,
+            &claims.email,
+            &claim_token,
+            &mapping,
+            &state,
+            &event.sheet_id,
+            &event.sheet_name,
+            kv,
+        )
+        .await
+        {
+            tracing::warn!(
+                attendee_id = %attendee.api_id,
+                error = %e,
+                "Sheets check-in write failed (non-fatal)"
+            );
+        }
+    }
 
     tracing::info!(
         attendee_id = %attendee.api_id,
@@ -272,25 +292,48 @@ pub async fn undo_check_in(
         }
     };
 
-    // Clear check-in columns in Google Sheet
-    sheets::clear_checked_in(
-        attendee.row_index,
-        &claims.email,
-        &mapping,
-        &state,
-        &event.sheet_id,
-        &event.sheet_name,
-        kv,
-    )
-    .await
-    .map_err(|e| {
-        tracing::error!(
+    // Clear check-in columns in D1 first (source of truth)
+    if let Some(ref d1) = state.d1
+        && let Err(e) = crate::db::attendees::undo_check_in(d1, &attendee.api_id).await
+    {
+        tracing::warn!(
             attendee_id = %attendee.api_id,
             error = %e,
-            "undo check-in failed: could not clear sheet columns",
+            "D1 undo check-in failed (non-fatal)"
         );
-        AppError::Internal(format!("failed to undo check-in: {e}"))
-    })?;
+    }
+
+    // Detach Google Sheets write — response returns immediately (Phase 2c)
+    if let Some(ctx) = &state.worker_ctx {
+        ctx.wait_until(crate::sheets::bg_sync::clear_checked_in(
+            state.clone(),
+            attendee.row_index,
+            claims.email.clone(),
+            mapping,
+            event.sheet_id.clone(),
+            event.sheet_name.clone(),
+            kv.cloned(),
+        ));
+    } else {
+        // Fallback: blocking Sheets write when worker_ctx unavailable (tests)
+        if let Err(e) = sheets::clear_checked_in(
+            attendee.row_index,
+            &claims.email,
+            &mapping,
+            &state,
+            &event.sheet_id,
+            &event.sheet_name,
+            kv,
+        )
+        .await
+        {
+            tracing::warn!(
+                attendee_id = %attendee.api_id,
+                error = %e,
+                "Sheets undo check-in write failed (non-fatal)"
+            );
+        }
+    }
 
     tracing::info!(
         attendee_id = %attendee.api_id,

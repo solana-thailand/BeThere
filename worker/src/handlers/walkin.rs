@@ -869,10 +869,15 @@ async fn enforce_walkin_capacity(
     };
 
     // Count sheet-based in-person attendees
-    let attendees =
-        crate::sheets::get_attendees(state, &config.sheet_id, &config.sheet_name, Some(kv))
-            .await
-            .map_err(|e| AppError::Internal(format!("failed to check capacity: {e}")))?;
+    let attendees = crate::sheets::get_attendees_for_event(
+        state,
+        &config.sheet_id,
+        &config.sheet_name,
+        Some(kv),
+        &config.id,
+    )
+    .await
+    .map_err(|e| AppError::Internal(format!("failed to check capacity: {e}")))?;
 
     let mut in_person_count: u32 = attendees.iter().filter(|a| a.is_in_person()).count() as u32;
 
