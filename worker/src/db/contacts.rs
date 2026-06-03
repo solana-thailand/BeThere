@@ -47,6 +47,7 @@ pub(crate) async fn upsert_contact(
 }
 
 /// Update deposit credit for a contact (rolling balance across events).
+#[allow(dead_code)]
 pub(crate) async fn update_deposit_credit(
     db: &D1Database,
     email: &str,

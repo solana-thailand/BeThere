@@ -14,6 +14,7 @@ use worker::d1::D1Type;
 ///
 /// Used during registration dual-write. If the attendee already exists
 /// (same `id`), updates name and timestamp.
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn upsert_attendee(
     db: &D1Database,
     id: &str,
@@ -203,6 +204,7 @@ pub(crate) async fn undo_check_in(db: &D1Database, id: &str) -> Result<(), Strin
 #[derive(Debug, Clone, Deserialize)]
 struct D1AttendeeRow {
     id: String,
+    #[allow(dead_code)]
     event_id: String,
     email: String,
     name: String,
@@ -213,6 +215,7 @@ struct D1AttendeeRow {
     claim_token: Option<String>,
     claimed_at: Option<String>,
     claim_asset_id: Option<String>,
+    #[allow(dead_code)]
     claim_signature: Option<String>,
     qr_url: Option<String>,
     contact_channel: Option<String>,
@@ -220,6 +223,7 @@ struct D1AttendeeRow {
     deposit_status: Option<String>,
     deposit_amount_usdc: Option<i64>,
     deposit_tx_hash: Option<String>,
+    #[allow(dead_code)]
     refund_tx_hash: Option<String>,
     refund_link: Option<String>,
     bank_name: Option<String>,
@@ -392,6 +396,7 @@ pub(crate) async fn get_attendee_with_claim_counts(
 }
 
 /// Count in-person attendees for an event from D1.
+#[allow(dead_code)]
 pub(crate) async fn count_in_person_attendees(
     db: &D1Database,
     event_id: &str,

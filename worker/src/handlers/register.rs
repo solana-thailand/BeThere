@@ -491,8 +491,8 @@ pub async fn register_attendee(
             }
 
             // Write deposit_method if credit covered the deposit
-            if let Some(ref method) = bg_credit_method {
-                if let Err(e) = crate::sheets::write::update_deposit_method(
+            if let Some(ref method) = bg_credit_method
+                && let Err(e) = crate::sheets::write::update_deposit_method(
                     &bg_state,
                     &bg_sheet_id,
                     &bg_sheet_name,
@@ -501,9 +501,8 @@ pub async fn register_attendee(
                     method,
                 )
                 .await
-                {
-                    tracing::warn!(%bg_api_id, error = %e, "bg_sync: deposit_method write failed");
-                }
+            {
+                tracing::warn!(%bg_api_id, error = %e, "bg_sync: deposit_method write failed");
             }
         });
     } else {

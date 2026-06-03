@@ -13,6 +13,7 @@ use worker::d1::D1Type;
 // ---------------------------------------------------------------------------
 
 /// Developer profile row from D1.
+#[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub(crate) struct DeveloperProfileRow {
     pub email: String,
@@ -37,6 +38,7 @@ pub(crate) struct DeveloperProfileRow {
 }
 
 /// A single registration response row.
+#[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct RegistrationResponseRow {
     pub id: String,
@@ -91,6 +93,7 @@ pub(crate) async fn upsert_developer_field(
 ///
 /// Used when a registration form submits multiple profile fields.
 /// Uses a batch of individual field updates within a single D1 batch.
+#[allow(dead_code)]
 pub(crate) async fn upsert_developer_fields(
     db: &D1Database,
     email: &str,
@@ -103,6 +106,7 @@ pub(crate) async fn upsert_developer_fields(
 }
 
 /// Get a developer profile by email.
+#[allow(dead_code)]
 pub(crate) async fn get_developer_profile(
     db: &D1Database,
     email: &str,
@@ -122,6 +126,7 @@ pub(crate) async fn get_developer_profile(
 }
 
 /// Update wallet address for a developer (set when they connect wallet on claim page).
+#[allow(dead_code)]
 pub(crate) async fn set_developer_wallet(
     db: &D1Database,
     email: &str,
@@ -183,6 +188,7 @@ pub(crate) async fn insert_registration_response(
 }
 
 /// Get all registration responses for a developer in a specific event.
+#[allow(dead_code)]
 pub(crate) async fn get_event_responses(
     db: &D1Database,
     event_id: &str,
@@ -209,6 +215,7 @@ pub(crate) async fn get_event_responses(
 // ---------------------------------------------------------------------------
 
 /// Experience level distribution across all developer profiles.
+#[allow(dead_code)]
 pub(crate) async fn experience_distribution(db: &D1Database) -> Result<Vec<(String, i64)>, String> {
     let rows = db
         .prepare(
@@ -236,6 +243,7 @@ pub(crate) async fn experience_distribution(db: &D1Database) -> Result<Vec<(Stri
 
 /// Tech stack popularity (parsed from JSON arrays in developer_profiles).
 /// Returns top N technologies by developer count.
+#[allow(dead_code, clippy::unnecessary_sort_by)]
 pub(crate) async fn tech_stack_popularity(
     db: &D1Database,
     limit: usize,
@@ -265,12 +273,14 @@ pub(crate) async fn tech_stack_popularity(
 }
 
 /// Helper struct for tech_stack query.
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct TechStackRow {
     tech_stack: String,
 }
 
 /// Total developer profile count.
+#[allow(dead_code)]
 pub(crate) async fn developer_count(db: &D1Database) -> Result<i64, String> {
     let row = db
         .prepare("SELECT COUNT(*) as cnt FROM developer_profiles")
