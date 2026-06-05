@@ -36,6 +36,7 @@ const instance = new WebAssembly.Instance(wasmModule, {
 imports.__wbg_set_wasm(instance.exports);
 
 export default imports;
+export { EventDurableObject } from "./event_checkin_worker_bg.js";
 SHIM
 """
 

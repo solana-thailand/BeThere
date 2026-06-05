@@ -1,6 +1,6 @@
 # Issue #050: Durable Objects + SQLite for ACID Guarantees
 
-> **Status: 📋 PLANNING**
+> **Status: 🔧 IN PROGRESS — Phase 1+2 code done, deployment blocked by CF API**
 > Prerequisite: Issue #046 (D1 as Primary Data Store) — Phase 2a-2c ✅ DEPLOYED
 > CTO decision: Use Durable Objects through D1 to get ACID guarantees.
 
