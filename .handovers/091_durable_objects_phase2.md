@@ -110,7 +110,7 @@ Template: `claim/lock.rs` pattern (DO first, D1 fallback).
 
 ### Non-DO Improvements (can do NOW)
 - [x] Replace O(n) full-table-scan in `get_attendee_with_claim_counts` with targeted SQL (commit `ebf41bf`)
-- [ ] Batch `write_developer_data` 5 sequential inserts into 1 D1 batch (saves 4 round-trips)
+- [x] Batch `write_developer_data` 5 sequential inserts into 1 D1 batch (commit `feca436`, saves 4 round-trips)
 - [ ] Parallelize the 3 D1 writes in `register_attendee` via `join!`
 - [ ] Parallelize quiz+adventure checks with attendee lookup in `execute_claim`
 - [ ] Replace `check_walkin_duplicate` + `upsert_walkin_attendee` with single INSERT ON CONFLICT
