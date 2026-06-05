@@ -242,18 +242,30 @@ pub(crate) async fn acquire_claim_lock(
     }
 }
 
+/// Parameters for finalizing a claim lock after successful mint.
+pub(crate) struct FinalizeClaimLockParams<'a> {
+    pub(crate) event_id: &'a str,
+    pub(crate) token: &'a str,
+    pub(crate) wallet: &'a str,
+    pub(crate) asset_id: &'a str,
+    pub(crate) signature: &'a str,
+}
+
 /// Finalize the claim lock after successful mint (removes TTL, sets final data).
 /// Phase 1 (Issue #050): Routes through DO when available.
 pub(crate) async fn finalize_claim_lock(
     kv: &KvStore,
-    event_id: &str,
-    token: &str,
-    wallet: &str,
-    asset_id: &str,
-    signature: &str,
+    params: FinalizeClaimLockParams<'_>,
     d1: Option<&worker::D1Database>,
     event_do: Option<&ObjectNamespace>,
 ) -> Result<(), String> {
+    let FinalizeClaimLockParams {
+        event_id,
+        token,
+        wallet,
+        asset_id,
+        signature,
+    } = params;
     // DO path
     if let Some(namespace) = event_do {
         let claimed_at = chrono::Utc::now().to_rfc3339();

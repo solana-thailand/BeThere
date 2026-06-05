@@ -101,10 +101,10 @@ pub async fn get_public_event(
     let config = crate::event_store::read::resolve_event_by_slug(
         state.events_kv.as_ref(),
         &slug,
-        state.d1.as_ref().map(|v| &**v),
+        state.d1.as_deref(),
     )
     .await
-    .map_err(|e| AppError::NotFound(e))?;
+    .map_err(AppError::NotFound)?;
 
     // Only show Active or Completed events publicly
     match config.status {

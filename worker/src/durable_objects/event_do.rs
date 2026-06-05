@@ -17,6 +17,7 @@ use worker::{DurableObject, Env, Request, Response, Result, State, durable_objec
 /// RPC request enum — Worker sends these as JSON in the DO fetch body.
 #[derive(Deserialize, Serialize)]
 #[serde(tag = "action")]
+#[allow(clippy::enum_variant_names)]
 pub(crate) enum DoRequest {
     #[serde(rename = "acquire_claim_lock")]
     AcquireClaimLock {

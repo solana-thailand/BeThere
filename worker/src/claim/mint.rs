@@ -16,8 +16,8 @@ use crate::solana::{self, MintRequest};
 use crate::state::AppState;
 
 use super::lock::{
-    acquire_claim_lock, claim_lock_key, finalize_claim_lock, lookup_walkin_by_claim_token,
-    mark_walkin_claimed, mask_wallet, release_claim_lock,
+    FinalizeClaimLockParams, acquire_claim_lock, claim_lock_key, finalize_claim_lock,
+    lookup_walkin_by_claim_token, mark_walkin_claimed, mask_wallet, release_claim_lock,
 };
 
 // ---------------------------------------------------------------------------
@@ -628,11 +628,13 @@ pub async fn execute_claim(
     if let Some(kv) = lock_kv
         && let Err(e) = finalize_claim_lock(
             kv,
-            &event.id,
-            token,
-            wallet_address,
-            &mint_result.asset_id,
-            &mint_result.signature,
+            FinalizeClaimLockParams {
+                event_id: &event.id,
+                token,
+                wallet: wallet_address,
+                asset_id: &mint_result.asset_id,
+                signature: &mint_result.signature,
+            },
             state.d1.as_deref(),
             state.event_do.as_ref(),
         )
@@ -756,11 +758,13 @@ async fn execute_walkin_claim(
     // Finalize claim lock
     if let Err(e) = finalize_claim_lock(
         kv,
-        &event.id,
-        token,
-        wallet_address,
-        &mint_result.asset_id,
-        &mint_result.signature,
+        FinalizeClaimLockParams {
+            event_id: &event.id,
+            token,
+            wallet: wallet_address,
+            asset_id: &mint_result.asset_id,
+            signature: &mint_result.signature,
+        },
         state.d1.as_deref(),
         state.event_do.as_ref(),
     )
