@@ -511,25 +511,192 @@ pub(crate) async fn get_attendees_by_event(
     Ok(rows.into_iter().map(|r| r.to_attendee()).collect())
 }
 
+/// D1 row with aggregate counts for targeted claim lookup.
+#[derive(Deserialize)]
+struct D1AttendeeWithCounts {
+    id: String,
+    #[allow(dead_code)]
+    event_id: String,
+    email: String,
+    name: String,
+    approval_status: String,
+    participation_type: String,
+    checked_in_at: Option<String>,
+    checked_in_by: Option<String>,
+    claim_token: Option<String>,
+    claimed_at: Option<String>,
+    claim_asset_id: Option<String>,
+    #[allow(dead_code)]
+    claim_signature: Option<String>,
+    qr_url: Option<String>,
+    contact_channel: Option<String>,
+    contact_handle: Option<String>,
+    deposit_status: Option<String>,
+    deposit_amount_usdc: Option<i64>,
+    deposit_tx_hash: Option<String>,
+    #[allow(dead_code)]
+    refund_tx_hash: Option<String>,
+    refund_link: Option<String>,
+    bank_name: Option<String>,
+    bank_account_number: Option<String>,
+    bank_account_name: Option<String>,
+    sheet_row_index: Option<i64>,
+    total_checked_in: i64,
+    total_claimed: i64,
+}
+
+impl D1AttendeeWithCounts {
+    fn to_attendee(&self) -> Attendee {
+        let approval = CheckInStatus::from_str(&self.approval_status)
+            .unwrap_or(CheckInStatus::PendingApproval);
+        let deposit_verified = match self.deposit_status.as_deref() {
+            Some("verified" | "confirmed") => Some("true".to_string()),
+            _ => None,
+        };
+        let refund_status = match self.deposit_status.as_deref() {
+            Some("refunded" | "manual_refund") => Some("refunded".to_string()),
+            _ => None,
+        };
+        let nft_proof_url = self
+            .claim_asset_id
+            .as_ref()
+            .map(|id| format!("https://orb.helius.com/nft/{id}"));
+        Attendee {
+            api_id: self.id.clone(),
+            first_name: String::new(),
+            last_name: String::new(),
+            name: self.name.clone(),
+            email: self.email.clone(),
+            ticket_name: self.name.clone(),
+            approval_status: approval,
+            participation_type: self.participation_type.clone(),
+            registration_date: None,
+            phone: None,
+            contact_channel: self.contact_channel.clone(),
+            contact_handle: self.contact_handle.clone(),
+            deposit_agreed: None,
+            deposit_method: None,
+            deposit_amount: self.deposit_amount_usdc.map(|v| v.to_string()),
+            deposit_tx_signature: self.deposit_tx_hash.clone(),
+            deposit_verified,
+            checked_in_at: self.checked_in_at.clone(),
+            checked_in_by: self.checked_in_by.clone(),
+            solana_address: None,
+            qr_code_url: self.qr_url.clone(),
+            claim_token: self.claim_token.clone(),
+            claimed_at: self.claimed_at.clone(),
+            nft_proof_url,
+            bank_account: self.bank_account_number.clone(),
+            bank_name: self.bank_name.clone(),
+            account_name: self.bank_account_name.clone(),
+            refund_status,
+            refund_link: self.refund_link.clone(),
+            send_email_status: None,
+            row_index: self.sheet_row_index.unwrap_or(0) as usize,
+        }
+    }
+}
+
+async fn count_checked_in(db: &D1Database, event_id: &str) -> Result<usize, String> {
+    count_by_status(db, event_id, "checked_in_at").await
+}
+
+async fn count_claimed(db: &D1Database, event_id: &str) -> Result<usize, String> {
+    count_by_status(db, event_id, "claimed_at").await
+}
+
+async fn count_by_status(db: &D1Database, event_id: &str, column: &str) -> Result<usize, String> {
+    #[derive(Deserialize)]
+    struct CountRow {
+        cnt: i64,
+    }
+    let stmt = db.prepare(format!(
+        "SELECT COUNT(*) as cnt FROM attendees WHERE event_id = ?1 AND {column} IS NOT NULL"
+    ));
+    let row = stmt
+        .bind_refs(&[D1Type::Text(event_id)])
+        .map_err(|e| format!("D1 count_by_status bind: {e:?}"))?
+        .first::<CountRow>(Some("cnt"))
+        .await
+        .map_err(|e| format!("D1 count_by_status first: {e:?}"))?;
+    Ok(row.map(|r| r.cnt as usize).unwrap_or(0))
+}
+
 /// Look up attendee by claim token and return event-level claim counts.
 pub(crate) async fn get_attendee_with_claim_counts(
     db: &D1Database,
     claim_token: &str,
     event_id: &str,
 ) -> Result<(Option<Attendee>, usize, usize), String> {
-    // Single query: get all attendees for the event, then find the one with
-    // matching claim token and count checked_in / claimed.
-    let attendees = get_attendees_by_event(db, event_id).await?;
-    let total_checked_in = attendees
-        .iter()
-        .filter(|a| a.checked_in_at.is_some())
-        .count();
-    let total_claimed = attendees.iter().filter(|a| a.claimed_at.is_some()).count();
-    let attendee = attendees
-        .into_iter()
-        .find(|a| a.claim_token.as_deref() == Some(claim_token));
+    // Targeted query: find attendee by claim_token + count aggregates in one D1 call.
+    // Previous version fetched ALL attendees for the event (O(n) data transfer).
+    let stmt = db.prepare(
+        "SELECT a.id, a.event_id, a.email, a.name, a.approval_status, a.participation_type, \
+                a.checked_in_at, a.checked_in_by, a.claim_token, a.claimed_at, a.claim_asset_id, \
+                a.claim_signature, a.qr_url, a.contact_channel, a.contact_handle, \
+                a.deposit_status, a.deposit_amount_usdc, a.deposit_tx_hash, \
+                a.refund_tx_hash, a.refund_link, a.bank_name, a.bank_account_number, \
+                a.bank_account_name, a.sheet_row_index, \
+                (SELECT COUNT(*) FROM attendees WHERE event_id = a.event_id AND checked_in_at IS NOT NULL) AS total_checked_in, \
+                (SELECT COUNT(*) FROM attendees WHERE event_id = a.event_id AND claimed_at IS NOT NULL) AS total_claimed \
+         FROM attendees a \
+         WHERE a.event_id = ?1 AND a.claim_token = ?2",
+    );
 
-    Ok((attendee, total_checked_in, total_claimed))
+    let bound = stmt
+        .bind_refs(&[D1Type::Text(event_id), D1Type::Text(claim_token)])
+        .map_err(|e| format!("D1 get_attendee_with_counts bind: {e:?}"))?;
+
+    // Use JSON.stringify approach (same as get_attendees_by_event) to avoid
+    // D1Result::results() panic on NULL→serde type mismatch.
+    let raw_result = wasm_bindgen_futures::JsFuture::from(
+        bound
+            .inner()
+            .all()
+            .map_err(|e| format!("D1 raw all() call: {e:?}"))?,
+    )
+    .await
+    .map_err(|e| format!("D1 get_attendee_with_counts await: {e:?}"))?;
+
+    let results_val = js_sys::Reflect::get(&raw_result, &js_sys::JsString::from("results"))
+        .map_err(|e| format!("D1 get results property: {e:?}"))?;
+
+    if results_val.is_null() || results_val.is_undefined() {
+        // No attendee with this claim_token — get counts for the event
+        let checked_in = count_checked_in(db, event_id).await?;
+        let claimed = count_claimed(db, event_id).await?;
+        return Ok((None, checked_in, claimed));
+    }
+
+    let results_arr: Array = results_val
+        .dyn_into()
+        .map_err(|e| format!("D1 results is not an array: {e:?}"))?;
+
+    if results_arr.length() == 0 {
+        let checked_in = count_checked_in(db, event_id).await?;
+        let claimed = count_claimed(db, event_id).await?;
+        return Ok((None, checked_in, claimed));
+    }
+
+    // Parse the first (and only) row with counts
+    let js_row = results_arr.get(0);
+    let json_str = js_sys::JSON::stringify(&js_row)
+        .map(|s| s.as_string().unwrap_or_default())
+        .unwrap_or_default();
+
+    let row: D1AttendeeWithCounts = serde_json::from_str(&json_str).map_err(|e| {
+        format!(
+            "D1 attendee_with_counts parse: {e}, json: {}",
+            json_str.chars().take(200).collect::<String>()
+        )
+    })?;
+
+    let attendee = row.to_attendee();
+    Ok((
+        Some(attendee),
+        row.total_checked_in as usize,
+        row.total_claimed as usize,
+    ))
 }
 
 /// Count in-person attendees for an event from D1.
