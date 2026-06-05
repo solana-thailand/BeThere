@@ -230,7 +230,7 @@ m = {
         {'type': 'kv_namespace', 'name': 'EVENTS', 'namespace_id': 'c8a6a87f9ed34ce0a3c8e48b84039214'},
         {'type': 'd1', 'name': 'DB', 'id': '98d09542-e7d8-4413-ac34-4276a50d126c'},
         {'type': 'r2_bucket', 'name': 'ASSETS_BUCKET', 'bucket_name': 'bethere-assets'},
-        # DO binding not supported by PUT API — wrangler deploy handles it
+        # DO binding not supported by PUT API (10021 unknown type) — wrangler deploy handles it
     ],
     'vars': {
         'SERVER_URL': 'https://bethere.solana-thailand.workers.dev',
@@ -251,6 +251,7 @@ m = {
         'EVENT_DEPOSIT_AMOUNT_THB': '0',
         'EVENT_PROMPTPAY_ID': '',
     },
+
     'assets': {
         'jwt': '${ASSETS_JWT}',
         'router_config': {
