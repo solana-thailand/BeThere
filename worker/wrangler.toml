@@ -36,7 +36,6 @@ const instance = new WebAssembly.Instance(wasmModule, {
 imports.__wbg_set_wasm(instance.exports);
 
 export default imports;
-export { EventDurableObject } from "./event_checkin_worker_bg.js";
 SHIM
 """
 
@@ -129,12 +128,15 @@ bucket_name = "bethere-assets"
 # Durable Objects — per-event ACID writes (Issue #050).
 # Each event gets its own DO instance with built-in SQLite storage.
 # Phase 1: claim lock operations (acquire, finalize, release).
-[[durable_objects.bindings]]
-name = "EVENT_DO"
-class_name = "EventDurableObject"
-
-# DO migration — creates the DO class with SQLite storage.
-# `new_sqlite_classes` tells Cloudflare to enable SQLite inside each DO instance.
-[[migrations]]
-tag = "v1"
-new_sqlite_classes = ["EventDurableObject"]
+#
+# BLOCKED: Cloudflare API returns 10013 on non-versioned deployments.
+# DO migrations MUST use non-versioned API. Versions API returns 10211.
+# Uncomment when CF API recovers — code handles event_do=None gracefully.
+#
+# [[durable_objects.bindings]]
+# name = "EVENT_DO"
+# class_name = "EventDurableObject"
+#
+# [[migrations]]
+# tag = "v1"
+# new_sqlite_classes = ["EventDurableObject"]
