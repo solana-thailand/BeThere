@@ -1,24 +1,21 @@
-//! KV-based quiz storage for the activity-gated claim flow (Issue 002).
+//! Quiz storage with D1-first reads and KV fallback (Issue 002, P4).
 //!
-//! Quiz questions and per-attendee progress are stored in a Cloudflare KV
-//! namespace. Key schema depends on multi-event mode:
+//! Quiz questions and per-attendee progress are primarily stored in D1.
+//! KV is used as a fallback when D1 is unavailable or empty.
 //!
-//! **Legacy (event_id = "default"):**
-//!   "questions"                → QuizConfig (JSON)
-//!   "progress:{claim_token}"   → QuizProgress (JSON)
-//!
-//! **Multi-event (event_id = "solana-bangkok-2025"):**
+//! Key schema (KV):
 //!   "event:{id}:quiz:questions"                → QuizConfig (JSON)
 //!   "event:{id}:quiz:progress:{claim_token}"   → QuizProgress (JSON)
 
 use chrono::Utc;
-use worker::KvStore;
+use worker::{D1Database, KvStore};
 
 use event_checkin_domain::models::api::{
     QuestionExplanation, QuizAnswer, QuizAttempt, QuizConfig, QuizProgress, QuizQuestion,
     QuizQuestionPublic, QuizQuestionsResponse, QuizStatus, QuizSubmitResponse,
 };
 
+use crate::db::quiz as d1_quiz;
 use crate::event_store::{quiz_progress_key, quiz_questions_key};
 
 // No TTL on quiz progress.
@@ -39,11 +36,37 @@ fn default_config() -> QuizConfig {
 // Quiz config (questions)
 // ---------------------------------------------------------------------------
 
-/// Read quiz configuration from KV.
-/// Returns `None` if no quiz is configured (key doesn't exist).
-pub async fn get_quiz_config(kv: &KvStore, event_id: &str) -> Result<Option<QuizConfig>, String> {
+/// Read quiz configuration — D1 first, KV fallback.
+/// Returns `None` if no quiz is configured.
+pub async fn get_quiz_config(
+    d1: Option<&D1Database>,
+    kv: Option<&KvStore>,
+    event_id: &str,
+) -> Result<Option<QuizConfig>, String> {
+    // D1 first
+    if let Some(db) = d1 {
+        match d1_quiz::get_quiz_config_from_d1(db, event_id).await {
+            Ok(Some(json_str)) => {
+                if let Ok(config) = serde_json::from_str::<QuizConfig>(&json_str) {
+                    return Ok(Some(config));
+                }
+                // Corrupt JSON — fall through to KV
+                tracing::warn!(event_id, "D1 quiz config JSON corrupt, falling back to KV");
+            }
+            Ok(None) => return Ok(None),
+            Err(e) => {
+                tracing::warn!(event_id, error = %e, "D1 quiz config read failed, falling back to KV");
+            }
+        }
+    }
+
+    // KV fallback
+    let kv_ref = match kv {
+        Some(k) => k,
+        None => return Ok(None),
+    };
     let key = quiz_questions_key(event_id);
-    let raw: Option<String> = kv
+    let raw: Option<String> = kv_ref
         .get(&key)
         .text()
         .await
@@ -57,30 +80,46 @@ pub async fn get_quiz_config(kv: &KvStore, event_id: &str) -> Result<Option<Quiz
     }
 }
 
-/// Write quiz configuration to KV (admin endpoint).
+/// Write quiz configuration — D1 + KV (dual-write).
 pub async fn save_quiz_config(
-    kv: &KvStore,
+    d1: Option<&D1Database>,
+    kv: Option<&KvStore>,
     event_id: &str,
     config: &QuizConfig,
 ) -> Result<(), String> {
-    let key = quiz_questions_key(event_id);
     let json_str = serde_json::to_string(config)
         .map_err(|e| format!("failed to serialize quiz config: {e:?}"))?;
-    kv.put(&key, &json_str)
-        .map_err(|e| format!("failed to build quiz config put: {e:?}"))?
-        .execute()
-        .await
-        .map_err(|e| format!("failed to write quiz config to KV: {e:?}"))
+
+    // D1 write (primary)
+    if let Some(db) = d1
+        && let Err(e) = d1_quiz::upsert_quiz_config_to_d1(db, event_id, &json_str).await
+    {
+        tracing::warn!(event_id, error = %e, "D1 quiz config write failed");
+    }
+
+    // KV write (fallback / legacy)
+    if let Some(kv_ref) = kv {
+        let key = quiz_questions_key(event_id);
+        kv_ref
+            .put(&key, &json_str)
+            .map_err(|e| format!("failed to build quiz config put: {e:?}"))?
+            .execute()
+            .await
+            .map_err(|e| format!("failed to write quiz config to KV: {e:?}"))?;
+    }
+
+    Ok(())
 }
 
 /// Add a single question to the quiz config.
 /// Generates a sequential ID if not provided.
 pub async fn add_question(
-    kv: &KvStore,
+    d1: Option<&D1Database>,
+    kv: Option<&KvStore>,
     event_id: &str,
     mut question: QuizQuestion,
 ) -> Result<QuizQuestion, String> {
-    let mut config = get_quiz_config(kv, event_id)
+    let mut config = get_quiz_config(d1, kv, event_id)
         .await?
         .unwrap_or_else(default_config);
 
@@ -101,18 +140,19 @@ pub async fn add_question(
     }
 
     config.questions.push(question.clone());
-    save_quiz_config(kv, event_id, &config).await?;
+    save_quiz_config(d1, kv, event_id, &config).await?;
     Ok(question)
 }
 
 /// Update a single question by ID.
 pub async fn update_question(
-    kv: &KvStore,
+    d1: Option<&D1Database>,
+    kv: Option<&KvStore>,
     event_id: &str,
     question_id: &str,
     updated: QuizQuestion,
 ) -> Result<QuizQuestion, String> {
-    let mut config = get_quiz_config(kv, event_id)
+    let mut config = get_quiz_config(d1, kv, event_id)
         .await?
         .ok_or_else(|| "no quiz configured".to_string())?;
 
@@ -128,17 +168,18 @@ pub async fn update_question(
     question.id = preserved_id;
 
     let result = question.clone();
-    save_quiz_config(kv, event_id, &config).await?;
+    save_quiz_config(d1, kv, event_id, &config).await?;
     Ok(result)
 }
 
 /// Delete a single question by ID.
 pub async fn delete_question(
-    kv: &KvStore,
+    d1: Option<&D1Database>,
+    kv: Option<&KvStore>,
     event_id: &str,
     question_id: &str,
 ) -> Result<(), String> {
-    let mut config = get_quiz_config(kv, event_id)
+    let mut config = get_quiz_config(d1, kv, event_id)
         .await?
         .ok_or_else(|| "no quiz configured".to_string())?;
 
@@ -148,17 +189,18 @@ pub async fn delete_question(
         return Err(format!("question '{}' not found", question_id));
     }
 
-    save_quiz_config(kv, event_id, &config).await?;
+    save_quiz_config(d1, kv, event_id, &config).await?;
     Ok(())
 }
 
 /// Toggle the enabled state of a single question.
 pub async fn toggle_question(
-    kv: &KvStore,
+    d1: Option<&D1Database>,
+    kv: Option<&KvStore>,
     event_id: &str,
     question_id: &str,
 ) -> Result<QuizQuestion, String> {
-    let mut config = get_quiz_config(kv, event_id)
+    let mut config = get_quiz_config(d1, kv, event_id)
         .await?
         .ok_or_else(|| "no quiz configured".to_string())?;
 
@@ -170,7 +212,7 @@ pub async fn toggle_question(
 
     question.enabled = !question.enabled;
     let result = question.clone();
-    save_quiz_config(kv, event_id, &config).await?;
+    save_quiz_config(d1, kv, event_id, &config).await?;
     Ok(result)
 }
 
@@ -199,15 +241,41 @@ pub fn to_public_questions(config: &QuizConfig) -> QuizQuestionsResponse {
 // Quiz progress (per-attendee)
 // ---------------------------------------------------------------------------
 
-/// Read quiz progress for an attendee.
+/// Read quiz progress for an attendee — D1 first, KV fallback.
 /// Returns `None` if no progress exists yet (hasn't attempted).
 pub async fn get_quiz_progress(
-    kv: &KvStore,
+    d1: Option<&D1Database>,
+    kv: Option<&KvStore>,
     event_id: &str,
     claim_token: &str,
 ) -> Result<Option<QuizProgress>, String> {
+    // D1 first
+    if let Some(db) = d1 {
+        match d1_quiz::get_quiz_progress_from_d1(db, event_id, claim_token).await {
+            Ok(Some(json_str)) => {
+                if let Ok(progress) = serde_json::from_str::<QuizProgress>(&json_str) {
+                    return Ok(Some(progress));
+                }
+                tracing::warn!(
+                    event_id,
+                    claim_token,
+                    "D1 quiz progress JSON corrupt, falling back to KV"
+                );
+            }
+            Ok(None) => return Ok(None),
+            Err(e) => {
+                tracing::warn!(event_id, claim_token, error = %e, "D1 quiz progress read failed, falling back to KV");
+            }
+        }
+    }
+
+    // KV fallback
+    let kv_ref = match kv {
+        Some(k) => k,
+        None => return Ok(None),
+    };
     let key = quiz_progress_key(event_id, claim_token);
-    let raw: Option<String> = kv
+    let raw: Option<String> = kv_ref
         .get(&key)
         .text()
         .await
@@ -221,20 +289,43 @@ pub async fn get_quiz_progress(
     }
 }
 
-/// Write quiz progress for an attendee.
+/// Write quiz progress for an attendee — D1 + KV (dual-write).
 async fn save_quiz_progress(
-    kv: &KvStore,
+    d1: Option<&D1Database>,
+    kv: Option<&KvStore>,
     event_id: &str,
     progress: &QuizProgress,
 ) -> Result<(), String> {
-    let key = quiz_progress_key(event_id, &progress.claim_token);
     let json_str = serde_json::to_string(progress)
         .map_err(|e| format!("failed to serialize quiz progress: {e:?}"))?;
-    kv.put(&key, &json_str)
-        .map_err(|e| format!("failed to build quiz progress put: {e:?}"))?
-        .execute()
+
+    // D1 write (primary)
+    if let Some(db) = d1
+        && let Err(e) = d1_quiz::upsert_quiz_progress_to_d1(
+            db,
+            event_id,
+            &progress.claim_token,
+            &json_str,
+            progress.passed,
+            progress.attempts,
+        )
         .await
-        .map_err(|e| format!("failed to write quiz progress to KV: {e:?}"))
+    {
+        tracing::warn!(event_id, error = %e, "D1 quiz progress write failed");
+    }
+
+    // KV write (fallback / legacy)
+    if let Some(kv_ref) = kv {
+        let key = quiz_progress_key(event_id, &progress.claim_token);
+        kv_ref
+            .put(&key, &json_str)
+            .map_err(|e| format!("failed to build quiz progress put: {e:?}"))?
+            .execute()
+            .await
+            .map_err(|e| format!("failed to write quiz progress to KV: {e:?}"))?;
+    }
+
+    Ok(())
 }
 
 /// Create a fresh quiz progress record for a first-time attempt.
@@ -263,14 +354,15 @@ fn new_progress(claim_token: &str) -> QuizProgress {
 /// Compares selected **text** (not index) against the correct option text,
 /// so frontend option shuffling doesn't break grading.
 pub async fn submit_quiz(
-    kv: &KvStore,
+    d1: Option<&D1Database>,
+    kv: Option<&KvStore>,
     event_id: &str,
     config: &QuizConfig,
     claim_token: &str,
     answers: &[QuizAnswer],
 ) -> Result<QuizSubmitResponse, String> {
     // Load existing progress (or start fresh)
-    let mut progress = get_quiz_progress(kv, event_id, claim_token)
+    let mut progress = get_quiz_progress(d1, kv, event_id, claim_token)
         .await?
         .unwrap_or_else(|| new_progress(claim_token));
 
@@ -353,7 +445,7 @@ pub async fn submit_quiz(
         submitted_at: Utc::now().to_rfc3339(),
     });
 
-    save_quiz_progress(kv, event_id, &progress).await?;
+    save_quiz_progress(d1, kv, event_id, &progress).await?;
 
     let remaining = config.max_attempts.saturating_sub(progress.attempts);
 
@@ -374,20 +466,21 @@ pub async fn submit_quiz(
 
 /// Determine the quiz status for a claim token.
 ///
-/// - `NotRequired` — no quiz config in KV
+/// - `NotRequired` — no quiz config
 /// - `NotStarted`  — quiz exists, attendee hasn't attempted
 /// - `InProgress`  — quiz exists, attempted but not yet passed
 /// - `Passed`      — quiz passed, claim unlocked
 pub async fn get_quiz_status(
-    kv: &KvStore,
+    d1: Option<&D1Database>,
+    kv: Option<&KvStore>,
     event_id: &str,
     claim_token: &str,
 ) -> Result<QuizStatus, String> {
-    let config = get_quiz_config(kv, event_id).await?;
+    let config = get_quiz_config(d1, kv, event_id).await?;
     match config {
         None => Ok(QuizStatus::NotRequired),
         Some(_) => {
-            let progress = get_quiz_progress(kv, event_id, claim_token).await?;
+            let progress = get_quiz_progress(d1, kv, event_id, claim_token).await?;
             match progress {
                 None => Ok(QuizStatus::NotStarted),
                 Some(p) if p.passed => Ok(QuizStatus::Passed),

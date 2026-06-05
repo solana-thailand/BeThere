@@ -48,49 +48,85 @@ pub async fn save_event_config(kv: &KvStore, config: &EventConfig) -> Result<(),
 /// Non-blocking — errors are logged, not propagated, so KV remains the source of truth.
 pub async fn sync_event_to_d1(d1: Option<&worker::D1Database>, config: &EventConfig) {
     if let Some(db) = d1
-        && let Err(e) = crate::db::events::upsert_event(db, config).await {
-            tracing::warn!(event_id = %config.id, error = %e, "D1 event dual-write failed");
-        }
+        && let Err(e) = crate::db::events::upsert_event(db, config).await
+    {
+        tracing::warn!(event_id = %config.id, error = %e, "D1 event dual-write failed");
+    }
 }
 
 /// Dual-write: delete event from D1 alongside KV.
 pub async fn sync_delete_event_from_d1(d1: Option<&worker::D1Database>, event_id: &str) {
     if let Some(db) = d1
-        && let Err(e) = crate::db::events::delete_event(db, event_id).await {
-            tracing::warn!(event_id = %event_id, error = %e, "D1 event delete failed");
-        }
+        && let Err(e) = crate::db::events::delete_event(db, event_id).await
+    {
+        tracing::warn!(event_id = %event_id, error = %e, "D1 event delete failed");
+    }
 }
 
 // ---------------------------------------------------------------------------
 // Escrow index writes
 // ---------------------------------------------------------------------------
 
-/// Write the escrow → event reverse index entry.
+/// Write the escrow → event reverse index entry — D1 + KV (dual-write).
 pub async fn save_escrow_index(
-    kv: &KvStore,
+    d1: Option<&worker::D1Database>,
+    kv: Option<&KvStore>,
     escrow_address: &str,
     event_id: &str,
 ) -> Result<(), String> {
     if escrow_address.is_empty() {
         return Ok(()); // no escrow to index
     }
-    let key = escrow_index_key(escrow_address);
-    kv.put(&key, event_id)
-        .map_err(|e| format!("failed to build escrow index put: {e:?}"))?
-        .execute()
-        .await
-        .map_err(|e| format!("failed to write escrow index to KV: {e:?}"))
+
+    // D1 write (primary)
+    if let Some(db) = d1
+        && let Err(e) =
+            crate::db::escrow_index::upsert_escrow_index_to_d1(db, escrow_address, event_id).await
+    {
+        tracing::warn!(escrow_address, error = %e, "D1 escrow index write failed");
+    }
+
+    // KV write (fallback / legacy)
+    if let Some(kv_ref) = kv {
+        let key = escrow_index_key(escrow_address);
+        kv_ref
+            .put(&key, event_id)
+            .map_err(|e| format!("failed to build escrow index put: {e:?}"))?
+            .execute()
+            .await
+            .map_err(|e| format!("failed to write escrow index to KV: {e:?}"))?;
+    }
+
+    Ok(())
 }
 
-/// Remove the escrow → event reverse index entry.
-pub async fn delete_escrow_index(kv: &KvStore, escrow_address: &str) -> Result<(), String> {
+/// Remove the escrow → event reverse index entry — D1 + KV.
+pub async fn delete_escrow_index(
+    d1: Option<&worker::D1Database>,
+    kv: Option<&KvStore>,
+    escrow_address: &str,
+) -> Result<(), String> {
     if escrow_address.is_empty() {
         return Ok(());
     }
-    let key = escrow_index_key(escrow_address);
-    kv.delete(&key)
-        .await
-        .map_err(|e| format!("failed to delete escrow index: {e:?}"))
+
+    // D1 delete
+    if let Some(db) = d1
+        && let Err(e) =
+            crate::db::escrow_index::delete_escrow_index_from_d1(db, escrow_address).await
+    {
+        tracing::warn!(escrow_address, error = %e, "D1 escrow index delete failed");
+    }
+
+    // KV delete
+    if let Some(kv_ref) = kv {
+        kv_ref
+            .delete(&escrow_index_key(escrow_address))
+            .await
+            .map_err(|e| format!("failed to delete escrow index: {e:?}"))?;
+    }
+
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -255,7 +291,7 @@ pub async fn create_event(
 
         // Maintain escrow reverse index (H7)
         if !config.escrow_address.is_empty() {
-            let _ = save_escrow_index(kv_ref, &config.escrow_address, &config.id).await;
+            let _ = save_escrow_index(d1, Some(kv_ref), &config.escrow_address, &config.id).await;
         }
 
         // Update KV index
@@ -539,7 +575,7 @@ pub async fn update_event(
 
     // Maintain escrow reverse index (H7)
     if !config.escrow_address.is_empty() {
-        save_escrow_index(kv, &config.escrow_address, &config.id).await?;
+        save_escrow_index(None, Some(kv), &config.escrow_address, &config.id).await?;
     }
 
     // Update index entry
@@ -893,7 +929,7 @@ pub async fn hard_delete_event(kv: &KvStore, id: &str, force: bool) -> Result<()
 
     // Clean up escrow reverse index (H7)
     if !config.escrow_address.is_empty() {
-        let _ = delete_escrow_index(kv, &config.escrow_address).await;
+        let _ = delete_escrow_index(None, Some(kv), &config.escrow_address).await;
     }
 
     // Remove from index

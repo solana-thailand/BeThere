@@ -55,11 +55,31 @@ pub async fn get_event_config(kv: &KvStore, id: &str) -> Result<Option<EventConf
 // Escrow index reads
 // ---------------------------------------------------------------------------
 
-/// Look up an event ID by its escrow PDA address via the reverse index.
+/// Look up an event ID by its escrow PDA address — D1 first, KV fallback.
 /// Returns `None` if the escrow address is not indexed.
-pub async fn get_event_id_by_escrow(kv: &KvStore, escrow_address: &str) -> Option<String> {
-    let key = escrow_index_key(escrow_address);
-    kv.get(&key).text().await.ok().flatten()
+pub async fn get_event_id_by_escrow(
+    d1: Option<&D1Database>,
+    kv: Option<&KvStore>,
+    escrow_address: &str,
+) -> Option<String> {
+    // D1 first
+    if let Some(db) = d1 {
+        match crate::db::escrow_index::get_event_id_by_escrow_from_d1(db, escrow_address).await {
+            Ok(Some(event_id)) => return Some(event_id),
+            Ok(None) => return None,
+            Err(e) => {
+                tracing::warn!(escrow_address, error = %e, "D1 escrow index lookup failed, falling back to KV");
+            }
+        }
+    }
+
+    // KV fallback
+    if let Some(kv_ref) = kv {
+        let key = escrow_index_key(escrow_address);
+        return kv_ref.get(&key).text().await.ok().flatten();
+    }
+
+    None
 }
 
 // ---------------------------------------------------------------------------
@@ -207,17 +227,19 @@ pub async fn resolve_event_by_slug(
     if let Some(kv) = events_kv {
         let index = get_event_index(kv).await?;
         if let Some(meta) = index.events.iter().find(|e| e.slug == slug)
-            && let Ok(Some(config)) = get_event_config(kv, &meta.id).await {
-                return Ok(config);
-            }
+            && let Ok(Some(config)) = get_event_config(kv, &meta.id).await
+        {
+            return Ok(config);
+        }
     }
 
     // D1 fallback
     if let Some(db) = d1
-        && let Some(row) = crate::db::events::get_event_by_slug(db, slug).await? {
-            tracing::info!(%slug, event_id = %row.id.clone().unwrap_or_default(), "resolved event by slug from D1");
-            return Ok(row.to_event_config());
-        }
+        && let Some(row) = crate::db::events::get_event_by_slug(db, slug).await?
+    {
+        tracing::info!(%slug, event_id = %row.id.clone().unwrap_or_default(), "resolved event by slug from D1");
+        return Ok(row.to_event_config());
+    }
 
     Err(format!("event '{slug}' not found"))
 }
@@ -413,29 +435,29 @@ pub async fn get_deposit_status_with_fallback(
     // D1 fallback: read deposit columns from attendees table
     if let Some(db) = d1
         && let Some(row) = crate::db::attendees::get_deposit_status_from_d1(db, attendee_id).await?
-        {
-            // Only build DepositStatus if there's an actual deposit record
-            if row.deposit_status.is_some() {
-                let verified = matches!(
-                    row.deposit_status.as_deref(),
-                    Some("verified" | "confirmed")
-                );
-                return Ok(Some(event_checkin_domain::models::deposit::DepositStatus {
-                    attendee_id: row.id,
-                    event_id: row.event_id,
-                    method: event_checkin_domain::models::deposit::DepositMethod::Usdc,
-                    amount: row.deposit_amount_usdc.unwrap_or(0) as u64,
-                    currency: "USDC".to_string(),
-                    tx_signature: row.deposit_tx_hash,
-                    verified,
-                    deposited_at: String::new(), // D1 doesn't store deposited_at separately
-                    wallet_address: None,
-                    deposit_order: 0,
-                    refundable: true, // default
-                    rejected: false,
-                }));
-            }
+    {
+        // Only build DepositStatus if there's an actual deposit record
+        if row.deposit_status.is_some() {
+            let verified = matches!(
+                row.deposit_status.as_deref(),
+                Some("verified" | "confirmed")
+            );
+            return Ok(Some(event_checkin_domain::models::deposit::DepositStatus {
+                attendee_id: row.id,
+                event_id: row.event_id,
+                method: event_checkin_domain::models::deposit::DepositMethod::Usdc,
+                amount: row.deposit_amount_usdc.unwrap_or(0) as u64,
+                currency: "USDC".to_string(),
+                tx_signature: row.deposit_tx_hash,
+                verified,
+                deposited_at: String::new(), // D1 doesn't store deposited_at separately
+                wallet_address: None,
+                deposit_order: 0,
+                refundable: true, // default
+                rejected: false,
+            }));
         }
+    }
 
     Ok(None)
 }
@@ -451,15 +473,17 @@ pub async fn get_event_config_with_fallback(
 ) -> Result<Option<EventConfig>, String> {
     // Try KV first if available
     if let Some(kv) = kv
-        && let Some(config) = get_event_config(kv, event_id).await? {
-            return Ok(Some(config));
-        }
+        && let Some(config) = get_event_config(kv, event_id).await?
+    {
+        return Ok(Some(config));
+    }
 
     // D1 fallback
     if let Some(db) = d1
-        && let Some(row) = crate::db::events::get_event(db, event_id).await? {
-            return Ok(Some(row.to_event_config()));
-        }
+        && let Some(row) = crate::db::events::get_event(db, event_id).await?
+    {
+        return Ok(Some(row.to_event_config()));
+    }
 
     Ok(None)
 }
@@ -514,13 +538,14 @@ pub async fn save_deposit_status_with_fallback(
 
     // KV write (best-effort cache)
     if let Some(kv) = kv
-        && let Err(e) = super::write::save_deposit_status(kv, status).await {
-            tracing::warn!(
-                attendee_id = %status.attendee_id,
-                error = %e,
-                "KV deposit status save failed (non-fatal, D1 is primary)"
-            );
-        }
+        && let Err(e) = super::write::save_deposit_status(kv, status).await
+    {
+        tracing::warn!(
+            attendee_id = %status.attendee_id,
+            error = %e,
+            "KV deposit status save failed (non-fatal, D1 is primary)"
+        );
+    }
 
     Ok(())
 }

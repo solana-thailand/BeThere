@@ -182,20 +182,14 @@ pub async fn lookup_claim(
         .filter(|w| !w.is_empty());
 
     // Determine quiz status (Issue 002 — activity-gated claim)
-    let quiz_status = match &state.events_kv {
-        Some(kv) => {
-            let eid = &event.id;
-            crate::quiz::get_quiz_status(kv, eid, token)
-                .await
-                .unwrap_or(QuizStatus::NotRequired)
-        }
-        None => match &state.quiz_kv {
-            Some(kv) => crate::quiz::get_quiz_status(kv, "default", token)
-                .await
-                .unwrap_or(QuizStatus::NotRequired),
-            None => QuizStatus::NotRequired,
-        },
-    };
+    let quiz_status = crate::quiz::get_quiz_status(
+        state.d1.as_deref(),
+        state.events_kv.as_ref().or(state.quiz_kv.as_ref()),
+        &event.id,
+        token,
+    )
+    .await
+    .unwrap_or(QuizStatus::NotRequired);
 
     // Read finalized claim lock KV for already-claimed attendees
     // to retrieve signature, asset_id, wallet for explorer links
@@ -269,17 +263,19 @@ async fn verify_online_quest_completion(
     event_id: &str,
     claim_token: &str,
 ) -> bool {
-    let kv = match state.events_kv.as_ref().or(state.quiz_kv.as_ref()) {
-        Some(kv) => kv,
-        None => return true, // no KV = no quest required
-    };
+    let d1 = state.d1.as_deref();
+    let kv = state.events_kv.as_ref().or(state.quiz_kv.as_ref());
 
     // Check quiz status first
-    match crate::quiz::get_quiz_status(kv, event_id, claim_token).await {
+    match crate::quiz::get_quiz_status(d1, kv, event_id, claim_token).await {
         Ok(QuizStatus::Passed) => true,
         Ok(QuizStatus::NotRequired) => {
             // Quiz not configured — check adventure
-            match crate::adventure::get_adventure_status(kv, event_id, claim_token).await {
+            let kv_ref = match kv {
+                Some(k) => k,
+                None => return true,
+            };
+            match crate::adventure::get_adventure_status(kv_ref, event_id, claim_token).await {
                 Ok(AdventureStatus::Passed) => true,
                 Ok(AdventureStatus::NotRequired) => true, // no quest configured at all
                 _ => false,
@@ -428,24 +424,15 @@ pub async fn execute_claim(
         }
     }
 
-    // 4+5. Quiz and Adventure gates — run concurrently to parallelize KV reads
-    let quiz_kv = if let Some(ref kv) = state.events_kv {
-        Some((kv, event.id.as_str()))
-    } else {
-        state.quiz_kv.as_ref().map(|kv| (kv, "default"))
-    };
-    let adv_kv = if let Some(ref kv) = state.events_kv {
-        Some(kv)
-    } else {
-        state.quiz_kv.as_ref()
-    };
+    // 4+5. Quiz and Adventure gates — run concurrently to parallelize reads
+    let d1_ref = state.d1.as_deref();
+    let quiz_kv = state.events_kv.as_ref().or(state.quiz_kv.as_ref());
+    let adv_kv = state.events_kv.as_ref().or(state.quiz_kv.as_ref());
 
     let quiz_fut = async {
-        if let Some((kv, eid)) = quiz_kv {
-            crate::quiz::get_quiz_status(kv, eid, token).await.ok()
-        } else {
-            None
-        }
+        crate::quiz::get_quiz_status(d1_ref, quiz_kv, &event.id, token)
+            .await
+            .ok()
     };
     let adv_fut = async {
         if let Some(kv) = adv_kv {

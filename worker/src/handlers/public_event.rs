@@ -14,24 +14,30 @@ use event_checkin_domain::models::event::EventVisibility;
 /// Returns a list of publicly visible events (Active or Completed only).
 /// Sensitive fields (sheet_id, organizer_wallet, staff_emails, etc.) are excluded.
 /// Used by the landing page to display upcoming events.
+///
+/// D1-first: reads from D1 when available, falls back to KV.
 #[worker::send]
 pub async fn list_public_events(
     State(state): State<AppState>,
 ) -> Result<ApiOk<Value>, crate::error::WorkerError> {
-    let kv = state
-        .events_kv
-        .as_ref()
-        .ok_or_else(|| AppError::Internal("events KV namespace not configured".into()))?;
+    let now_ms = chrono::Utc::now().timestamp_millis();
 
-    let index = crate::event_store::get_event_index(kv)
-        .await
-        .map_err(AppError::Internal)?;
+    let metas = if let Some(d1) = &state.d1 {
+        crate::db::events::list_events_as_meta(d1)
+            .await
+            .map_err(AppError::Internal)?
+    } else if let Some(kv) = &state.events_kv {
+        let index = crate::event_store::get_event_index(kv)
+            .await
+            .map_err(AppError::Internal)?;
+        index.events
+    } else {
+        return Err(AppError::Internal("no data store configured".into()).into());
+    };
 
     // Only show Active events whose end time is in the future (upcoming).
     // Sort nearest-first so the soonest event appears at the top.
-    let now_ms = chrono::Utc::now().timestamp_millis();
-    let mut public_events: Vec<Value> = index
-        .events
+    let mut public_events: Vec<Value> = metas
         .into_iter()
         .filter(|e| {
             matches!(
@@ -91,33 +97,14 @@ pub async fn get_public_event(
     Path(slug): Path<String>,
     request: axum::extract::Request,
 ) -> Result<ApiOk<Value>, crate::error::WorkerError> {
-    let kv = state
-        .events_kv
-        .as_ref()
-        .ok_or_else(|| AppError::Internal("events KV namespace not configured".into()))?;
-
-    // Resolve slug → event ID via the index
-    let index = crate::event_store::get_event_index(kv)
-        .await
-        .map_err(AppError::Internal)?;
-
-    let event_id = index
-        .events
-        .iter()
-        .find(|e| e.slug == slug)
-        .map(|e| e.id.clone())
-        .ok_or_else(|| AppError::NotFound(format!("event '{slug}' not found")))?;
-
-    let config = crate::event_store::get_event_config(kv, &event_id)
-        .await
-        .map_err(AppError::Internal)?;
-
-    let config = match config {
-        Some(c) => c,
-        None => {
-            return Err(AppError::NotFound(format!("event '{slug}' not found")).into());
-        }
-    };
+    // Resolve slug → event config via D1-first, KV fallback
+    let config = crate::event_store::read::resolve_event_by_slug(
+        state.events_kv.as_ref(),
+        &slug,
+        state.d1.as_ref().map(|v| &**v),
+    )
+    .await
+    .map_err(|e| AppError::NotFound(e))?;
 
     // Only show Active or Completed events publicly
     match config.status {
@@ -154,7 +141,8 @@ pub async fn get_public_event(
     tracing::info!(slug = %slug, "public event fetched");
 
     // Count attendees for capacity display
-    let (in_person_count, online_count) = count_attendees_by_track(&state, &config, Some(kv)).await;
+    let (in_person_count, online_count) =
+        count_attendees_by_track(&state, &config, state.events_kv.as_ref()).await;
 
     let in_person_remaining = config
         .in_person_capacity

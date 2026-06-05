@@ -27,7 +27,11 @@ use worker::KvStore;
 /// After a `RolloverDeposit` is indexed on the source event, create a
 /// `DepositStatus` on the **target** event so the admin panel and downstream
 /// flows recognize the deposit.
-pub(crate) async fn apply_rollover_deposit_status(kv: &KvStore, event: &OnChainEvent) {
+pub(crate) async fn apply_rollover_deposit_status(
+    d1: Option<&worker::D1Database>,
+    kv: Option<&KvStore>,
+    event: &OnChainEvent,
+) {
     if event.instruction != EscrowInstruction::RolloverDeposit {
         return;
     }
@@ -36,7 +40,7 @@ pub(crate) async fn apply_rollover_deposit_status(kv: &KvStore, event: &OnChainE
         return;
     };
 
-    let target_event_id = escrow_indexer::resolve_event_by_escrow(kv, target_escrow).await;
+    let target_event_id = escrow_indexer::resolve_event_by_escrow(d1, kv, target_escrow).await;
     let Some(target_id) = target_event_id else {
         tracing::warn!(
             sig = %event.signature,
@@ -51,24 +55,35 @@ pub(crate) async fn apply_rollover_deposit_status(kv: &KvStore, event: &OnChainE
     // (the attendee may not have deposited on the target event yet —
     // that's exactly what the rollover is creating).
     let attendee_wallet = event.attendee.as_deref().unwrap_or("");
-    let attendee_api_id =
-        crate::event_store::find_attendee_by_wallet(kv, &target_id, attendee_wallet)
+    let attendee_api_id = if let Some(kv_ref) = kv {
+        crate::event_store::find_attendee_by_wallet(kv_ref, &target_id, attendee_wallet)
             .await
             .ok()
-            .flatten();
+            .flatten()
+    } else {
+        None
+    };
 
     // Fallback: search source event deposit statuses for the attendee
     let attendee_api_id = match attendee_api_id {
         Some(id) => Some(id),
         None => {
             let source_event_id =
-                escrow_indexer::resolve_event_by_escrow(kv, &event.escrow_address).await;
+                escrow_indexer::resolve_event_by_escrow(d1, kv, &event.escrow_address).await;
             match source_event_id {
                 Some(src_id) => {
-                    crate::event_store::find_attendee_by_wallet(kv, &src_id, attendee_wallet)
+                    if let Some(kv_ref) = kv {
+                        crate::event_store::find_attendee_by_wallet(
+                            kv_ref,
+                            &src_id,
+                            attendee_wallet,
+                        )
                         .await
                         .ok()
                         .flatten()
+                    } else {
+                        None
+                    }
                 }
                 None => None,
             }
@@ -87,10 +102,14 @@ pub(crate) async fn apply_rollover_deposit_status(kv: &KvStore, event: &OnChainE
     };
 
     // Check if deposit_status already exists (dedup)
-    let existing = crate::event_store::get_deposit_status(kv, &target_id, &api_id)
-        .await
-        .ok()
-        .flatten();
+    let existing = if let Some(kv_ref) = kv {
+        crate::event_store::get_deposit_status(kv_ref, &target_id, &api_id)
+            .await
+            .ok()
+            .flatten()
+    } else {
+        None
+    };
 
     if existing.is_some() {
         tracing::info!(
@@ -108,10 +127,11 @@ pub(crate) async fn apply_rollover_deposit_status(kv: &KvStore, event: &OnChainE
         _ => {
             let mut found = 0u64;
             let source_event_id =
-                escrow_indexer::resolve_event_by_escrow(kv, &event.escrow_address).await;
+                escrow_indexer::resolve_event_by_escrow(d1, kv, &event.escrow_address).await;
             if let Some(src_id) = source_event_id
+                && let Some(kv_ref) = kv
                 && let Ok(Some(src_status)) =
-                    crate::event_store::get_deposit_status(kv, &src_id, &api_id).await
+                    crate::event_store::get_deposit_status(kv_ref, &src_id, &api_id).await
             {
                 found = src_status.amount;
             }
@@ -142,21 +162,23 @@ pub(crate) async fn apply_rollover_deposit_status(kv: &KvStore, event: &OnChainE
         rejected: false,
     };
 
-    match crate::event_store::save_deposit_status(kv, &deposit_status).await {
-        Ok(()) => {
-            tracing::info!(
-                sig = %event.signature,
-                target_event_id = %target_id,
-                attendee_id = %api_id,
-                "created DepositStatus for rollover target event"
-            );
-        }
-        Err(e) => {
-            tracing::warn!(
-                sig = %event.signature,
-                error = %e,
-                "failed to save DepositStatus for rollover target"
-            );
+    if let Some(kv_ref) = kv {
+        match crate::event_store::save_deposit_status(kv_ref, &deposit_status).await {
+            Ok(()) => {
+                tracing::info!(
+                    sig = %event.signature,
+                    target_event_id = %target_id,
+                    attendee_id = %api_id,
+                    "created DepositStatus for rollover target event"
+                );
+            }
+            Err(e) => {
+                tracing::warn!(
+                    sig = %event.signature,
+                    error = %e,
+                    "failed to save DepositStatus for rollover target"
+                );
+            }
         }
     }
 }
@@ -210,18 +232,16 @@ pub async fn onchain_webhook_handler(
             AppError::Unauthorized("invalid or missing Authorization header".to_string()).into(),
         );
     }
-    let kv = match state.events_kv.as_ref() {
-        Some(kv) => kv,
-        None => {
-            // Without KV, escrow indexing is skipped — on-chain data is still
-            // the source of truth and can be re-indexed later.
-            tracing::warn!(
-                count = body.transactions.len(),
-                "onchain webhook: EVENTS KV not available, skipping escrow indexing"
-            );
-            return Ok(ApiOk::new(IndexSummary::default()));
-        }
-    };
+    let kv = state.events_kv.as_ref();
+    let d1 = state.d1.as_deref();
+
+    if kv.is_none() && d1.is_none() {
+        tracing::warn!(
+            count = body.transactions.len(),
+            "onchain webhook: no KV or D1 available, skipping escrow indexing"
+        );
+        return Ok(ApiOk::new(IndexSummary::default()));
+    }
 
     if body.transactions.is_empty() {
         return Ok(ApiOk::new(IndexSummary::default()));
@@ -248,7 +268,7 @@ pub async fn onchain_webhook_handler(
         };
 
         // Resolve event ID from escrow address (async)
-        let event_id = escrow_indexer::resolve_event_by_escrow(kv, &event.escrow_address).await;
+        let event_id = escrow_indexer::resolve_event_by_escrow(d1, kv, &event.escrow_address).await;
 
         let Some(event_id) = event_id else {
             tracing::warn!(
@@ -260,55 +280,60 @@ pub async fn onchain_webhook_handler(
             continue;
         };
 
-        match escrow_indexer::save_onchain_event(kv, &event_id, event.clone()).await {
-            Ok(true) => {
-                tracing::info!(
-                    sig = %event.signature,
-                    instruction = %event.instruction,
-                    event_id = %event_id,
-                    "indexed on-chain event via webhook"
-                );
+        if let Some(kv_ref) = kv {
+            match escrow_indexer::save_onchain_event(kv_ref, &event_id, event.clone()).await {
+                Ok(true) => {
+                    tracing::info!(
+                        sig = %event.signature,
+                        instruction = %event.instruction,
+                        event_id = %event_id,
+                        "indexed on-chain event via webhook"
+                    );
 
-                // Also append to audit trail
-                let _ = crate::audit_store::append_event_audit(
-                    kv,
-                    &event_id,
-                    crate::audit_store::create_entry_with_meta(
-                        "on-chain",
-                        crate::audit_store::AuditAction::OnChainEventIndexed,
-                        &event.signature,
-                        &format!("on-chain: {}", event.instruction),
-                        serde_json::json!({
-                            "instruction": event.instruction.to_string(),
-                            "escrow_address": event.escrow_address,
-                            "target_escrow_address": event.target_escrow_address,
-                            "slot": event.slot,
-                            "block_time": event.block_time,
-                            "organizer": event.organizer,
-                            "attendee": event.attendee,
-                            "amount": event.amount,
-                        }),
-                    ),
-                    state.d1.as_deref(),
-                )
-                .await;
+                    // Also append to audit trail
+                    let _ = crate::audit_store::append_event_audit(
+                        kv_ref,
+                        &event_id,
+                        crate::audit_store::create_entry_with_meta(
+                            "on-chain",
+                            crate::audit_store::AuditAction::OnChainEventIndexed,
+                            &event.signature,
+                            &format!("on-chain: {}", event.instruction),
+                            serde_json::json!({
+                                "instruction": event.instruction.to_string(),
+                                "escrow_address": event.escrow_address,
+                                "target_escrow_address": event.target_escrow_address,
+                                "slot": event.slot,
+                                "block_time": event.block_time,
+                                "organizer": event.organizer,
+                                "attendee": event.attendee,
+                                "amount": event.amount,
+                            }),
+                        ),
+                        state.d1.as_deref(),
+                    )
+                    .await;
 
-                // For RolloverDeposit: create DepositStatus on the target event
-                apply_rollover_deposit_status(kv, &event).await;
+                    // For RolloverDeposit: create DepositStatus on the target event
+                    apply_rollover_deposit_status(d1, kv, &event).await;
 
-                summary.indexed += 1;
+                    summary.indexed += 1;
+                }
+                Ok(false) => {
+                    summary.duplicates += 1;
+                }
+                Err(e) => {
+                    tracing::error!(
+                        sig = %event.signature,
+                        error = %e,
+                        "failed to save on-chain event"
+                    );
+                    summary.errors += 1;
+                }
             }
-            Ok(false) => {
-                summary.duplicates += 1;
-            }
-            Err(e) => {
-                tracing::error!(
-                    sig = %event.signature,
-                    error = %e,
-                    "failed to save on-chain event"
-                );
-                summary.errors += 1;
-            }
+        } else {
+            // No KV — just count the event as resolved but don't store
+            summary.indexed += 1;
         }
     }
 
@@ -347,15 +372,10 @@ pub async fn escrow_sync_handler(
     Extension(claims): Extension<Claims>,
     Json(body): Json<EscrowSyncRequest>,
 ) -> Result<ApiOk<IndexSummary>, WorkerError> {
-    let kv = state.events_kv.as_ref().ok_or_else(|| {
-        AppError::Internal(
-            "EVENTS KV not configured — escrow sync requires KV to store indexed events"
-                .to_string(),
-        )
-    })?;
+    let kv = state.events_kv.as_ref();
     let d1 = state.d1.as_deref();
 
-    let event = crate::event_store::get_event_config_with_fallback(Some(kv), d1, &body.event_id)
+    let event = crate::event_store::get_event_config_with_fallback(kv, d1, &body.event_id)
         .await
         .map_err(AppError::Internal)?
         .ok_or_else(|| AppError::NotFound(format!("event '{}' not found", body.event_id)))?;
@@ -393,22 +413,32 @@ pub async fn escrow_sync_handler(
         "manual escrow sync triggered"
     );
 
+    let kv_ref = match kv {
+        Some(k) => k,
+        None => {
+            return Err(AppError::Internal(
+                "EVENTS KV not configured — escrow sync requires KV to store indexed events"
+                    .to_string(),
+            )
+            .into());
+        }
+    };
     let summary =
-        escrow_indexer::poll_escrow_events(kv, &rpc_url, &event.escrow_address, &event.id)
+        escrow_indexer::poll_escrow_events(kv_ref, &rpc_url, &event.escrow_address, &event.id)
             .await
             .map_err(AppError::Internal)?;
 
     // Apply rollover deposit status hook for any newly indexed RolloverDeposit events
     if summary.indexed > 0 {
-        let onchain_events = escrow_indexer::read_onchain_events(kv, &event.id).await;
+        let onchain_events = escrow_indexer::read_onchain_events(kv_ref, &event.id).await;
         for ev in &onchain_events {
-            apply_rollover_deposit_status(kv, ev).await;
+            apply_rollover_deposit_status(d1, kv, ev).await;
         }
     }
 
     // Audit log
     let _ = crate::audit_store::append_event_audit(
-        kv,
+        kv_ref,
         &event.id,
         crate::audit_store::create_entry_with_meta(
             &claims.email,

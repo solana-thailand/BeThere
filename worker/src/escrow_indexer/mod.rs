@@ -226,9 +226,14 @@ pub struct IndexSummary {
 ///
 /// Uses the reverse index (`escrow:{address} → event_id`) for O(1) lookup (H7).
 /// Falls back to scanning all event configs if the index misses (migration).
-pub async fn resolve_event_by_escrow(kv: &KvStore, escrow_address: &str) -> Option<String> {
-    // Fast path: reverse index (single KV read)
-    if let Some(event_id) = crate::event_store::get_event_id_by_escrow(kv, escrow_address).await {
+pub async fn resolve_event_by_escrow(
+    d1: Option<&worker::D1Database>,
+    kv: Option<&KvStore>,
+    escrow_address: &str,
+) -> Option<String> {
+    // Fast path: reverse index (D1 then KV)
+    if let Some(event_id) = crate::event_store::get_event_id_by_escrow(d1, kv, escrow_address).await
+    {
         tracing::debug!(
             escrow = %escrow_address,
             event_id = %event_id,
@@ -238,15 +243,16 @@ pub async fn resolve_event_by_escrow(kv: &KvStore, escrow_address: &str) -> Opti
     }
 
     // Slow fallback: scan all event configs (for events created before the index existed)
+    let kv_ref = kv?;
     tracing::debug!(escrow = %escrow_address, "reverse index miss — falling back to full scan");
-    let index = crate::event_store::get_event_index(kv).await.ok()?;
+    let index = crate::event_store::get_event_index(kv_ref).await.ok()?;
 
     for meta in &index.events {
-        if let Ok(Some(config)) = crate::event_store::get_event_config(kv, &meta.id).await
+        if let Ok(Some(config)) = crate::event_store::get_event_config(kv_ref, &meta.id).await
             && config.escrow_address == escrow_address
         {
             // Backfill the reverse index for future lookups
-            let _ = crate::event_store::save_escrow_index(kv, escrow_address, &config.id).await;
+            let _ = crate::event_store::save_escrow_index(d1, kv, escrow_address, &config.id).await;
             return Some(config.id);
         }
     }

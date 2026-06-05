@@ -40,23 +40,11 @@ pub async fn get_quiz(
     // Resolve event (uses events_kv if available, falls back to global config)
     let event = resolve_event(&state, query.event_id.as_deref()).await?;
 
-    // Determine KV namespace for quiz data
-    let kv = match state.events_kv.as_ref().or(state.quiz_kv.as_ref()) {
-        Some(kv) => kv,
-        None => {
-            return Ok(ApiOk::new(json!({
-                "configured": false,
-                "questions": [],
-                "passing_score_percent": 0,
-                "max_attempts": 0,
-                "time_limit_seconds": null,
-            })));
-        }
-    };
-
     let eid = event.id.as_str();
+    let d1 = state.d1.as_deref();
+    let kv = state.events_kv.as_ref().or(state.quiz_kv.as_ref());
 
-    let config = quiz::get_quiz_config(kv, eid)
+    let config = quiz::get_quiz_config(d1, kv, eid)
         .await
         .map_err(|e| AppError::Internal(format!("failed to read quiz: {e}")))?;
 
@@ -103,14 +91,9 @@ pub async fn submit_quiz(
     // Resolve event (uses events_kv if available, falls back to global config)
     let event = resolve_event(&state, query.event_id.as_deref()).await?;
 
-    // Determine KV namespace for quiz data
-    let kv = state
-        .events_kv
-        .as_ref()
-        .or(state.quiz_kv.as_ref())
-        .ok_or_else(|| AppError::Internal("quiz is not configured for this event".to_string()))?;
-
     let eid = event.id.as_str();
+    let d1 = state.d1.as_deref();
+    let kv = state.events_kv.as_ref().or(state.quiz_kv.as_ref());
 
     // Verify claim token exists (attendee must be checked in)
     let sheets_kv = state.events_kv.as_ref().or(state.quiz_kv.as_ref());
@@ -138,7 +121,7 @@ pub async fn submit_quiz(
     }
 
     // Load quiz config
-    let config = match quiz::get_quiz_config(kv, eid).await {
+    let config = match quiz::get_quiz_config(d1, kv, eid).await {
         Ok(Some(c)) => c,
         Ok(None) => {
             return Err(AppError::NotFound("no quiz configured for this event".to_string()).into());
@@ -186,7 +169,7 @@ pub async fn submit_quiz(
     }
 
     // Score and persist
-    let result = quiz::submit_quiz(kv, eid, &config, &token, &body.answers)
+    let result = quiz::submit_quiz(d1, kv, eid, &config, &token, &body.answers)
         .await
         .map_err(|e| {
             tracing::error!(claim_token = %token, error = ?e, "quiz submit failed");
@@ -219,25 +202,11 @@ pub async fn get_quiz_status(
     // Resolve event (uses events_kv if available, falls back to global config)
     let event = resolve_event(&state, query.event_id.as_deref()).await?;
 
-    // Determine KV namespace for quiz data
-    let kv = match state.events_kv.as_ref().or(state.quiz_kv.as_ref()) {
-        Some(kv) => kv,
-        None => {
-            return Ok(ApiOk::new(json!({
-                "configured": false,
-                "quiz_status": "not_required",
-                "attempts": 0,
-                "max_attempts": 0,
-                "best_score_percent": 0,
-                "passed": false,
-                "passing_threshold_percent": 0,
-            })));
-        }
-    };
-
     let eid = event.id.as_str();
+    let d1 = state.d1.as_deref();
+    let kv = state.events_kv.as_ref().or(state.quiz_kv.as_ref());
 
-    let config = match quiz::get_quiz_config(kv, eid).await {
+    let config = match quiz::get_quiz_config(d1, kv, eid).await {
         Ok(Some(c)) => c,
         Ok(None) => {
             return Ok(ApiOk::new(json!({
@@ -256,12 +225,14 @@ pub async fn get_quiz_status(
         }
     };
 
-    let status = quiz::get_quiz_status(kv, eid, &token).await.map_err(|e| {
-        tracing::error!(claim_token = %token, error = ?e, "quiz status failed");
-        AppError::Internal(e.to_string())
-    })?;
+    let status = quiz::get_quiz_status(d1, kv, eid, &token)
+        .await
+        .map_err(|e| {
+            tracing::error!(claim_token = %token, error = ?e, "quiz status failed");
+            AppError::Internal(e.to_string())
+        })?;
 
-    let progress = quiz::get_quiz_progress(kv, eid, &token)
+    let progress = quiz::get_quiz_progress(d1, kv, eid, &token)
         .await
         .unwrap_or(None);
 
@@ -302,23 +273,11 @@ pub async fn get_admin_quiz(
     // Resolve event (uses events_kv if available, falls back to global config)
     let event = resolve_event(&state, query.event_id.as_deref()).await?;
 
-    // Determine KV namespace for quiz data
-    let kv = match state.events_kv.as_ref().or(state.quiz_kv.as_ref()) {
-        Some(kv) => kv,
-        None => {
-            return Ok(ApiOk::new(json!({
-                "configured": false,
-                "questions": [],
-                "passing_score_percent": 0,
-                "max_attempts": 0,
-                "time_limit_seconds": null,
-            })));
-        }
-    };
-
     let eid = event.id.as_str();
+    let d1 = state.d1.as_deref();
+    let kv = state.events_kv.as_ref().or(state.quiz_kv.as_ref());
 
-    let config = quiz::get_quiz_config(kv, eid).await.map_err(|e| {
+    let config = quiz::get_quiz_config(d1, kv, eid).await.map_err(|e| {
         tracing::error!(error = ?e, "failed to read quiz config");
         AppError::Internal(format!("failed to read quiz: {e}"))
     })?;
@@ -362,18 +321,9 @@ pub async fn put_quiz(
     // Resolve event (uses events_kv if available, falls back to global config)
     let event = resolve_event(&state, query.event_id.as_deref()).await?;
 
-    // Determine KV namespace for quiz data
-    let kv = state
-        .events_kv
-        .as_ref()
-        .or(state.quiz_kv.as_ref())
-        .ok_or_else(|| {
-            AppError::Internal(
-                "quiz KV namespace not configured — add QUIZ binding in wrangler.toml".to_string(),
-            )
-        })?;
-
     let eid = event.id.as_str();
+    let d1 = state.d1.as_deref();
+    let kv = state.events_kv.as_ref().or(state.quiz_kv.as_ref());
 
     // Validate: at least 1 question
     if body.questions.is_empty() {
@@ -421,10 +371,12 @@ pub async fn put_quiz(
         }
     }
 
-    quiz::save_quiz_config(kv, eid, &body).await.map_err(|e| {
-        tracing::error!(error = ?e, "failed to save quiz");
-        AppError::Internal(format!("failed to save quiz: {e}"))
-    })?;
+    quiz::save_quiz_config(d1, kv, eid, &body)
+        .await
+        .map_err(|e| {
+            tracing::error!(error = ?e, "failed to save quiz");
+            AppError::Internal(format!("failed to save quiz: {e}"))
+        })?;
 
     tracing::info!(
         question_count = body.questions.len(),
@@ -456,11 +408,8 @@ pub async fn add_quiz_question(
     );
 
     let event = resolve_event(&state, query.event_id.as_deref()).await?;
-    let kv = state
-        .events_kv
-        .as_ref()
-        .or(state.quiz_kv.as_ref())
-        .ok_or_else(|| AppError::Internal("quiz KV not configured".to_string()))?;
+    let d1 = state.d1.as_deref();
+    let kv = state.events_kv.as_ref().or(state.quiz_kv.as_ref());
 
     // Validate: at least 2 options
     if body.options.len() < 2 {
@@ -479,7 +428,7 @@ pub async fn add_quiz_question(
         return Err(AppError::Validation("question text must not be empty".to_string()).into());
     }
 
-    let question = quiz::add_question(kv, event.id.as_str(), body)
+    let question = quiz::add_question(d1, kv, event.id.as_str(), body)
         .await
         .map_err(|e| AppError::Internal(e.to_string()))?;
 
@@ -506,11 +455,8 @@ pub async fn update_quiz_question(
     );
 
     let event = resolve_event(&state, query.event_id.as_deref()).await?;
-    let kv = state
-        .events_kv
-        .as_ref()
-        .or(state.quiz_kv.as_ref())
-        .ok_or_else(|| AppError::Internal("quiz KV not configured".to_string()))?;
+    let d1 = state.d1.as_deref();
+    let kv = state.events_kv.as_ref().or(state.quiz_kv.as_ref());
 
     // Validate
     if body.options.len() < 2 {
@@ -526,7 +472,7 @@ pub async fn update_quiz_question(
         .into());
     }
 
-    let question = quiz::update_question(kv, event.id.as_str(), &question_id, body)
+    let question = quiz::update_question(d1, kv, event.id.as_str(), &question_id, body)
         .await
         .map_err(|e| AppError::Internal(e.to_string()))?;
 
@@ -552,13 +498,10 @@ pub async fn delete_quiz_question(
     );
 
     let event = resolve_event(&state, query.event_id.as_deref()).await?;
-    let kv = state
-        .events_kv
-        .as_ref()
-        .or(state.quiz_kv.as_ref())
-        .ok_or_else(|| AppError::Internal("quiz KV not configured".to_string()))?;
+    let d1 = state.d1.as_deref();
+    let kv = state.events_kv.as_ref().or(state.quiz_kv.as_ref());
 
-    quiz::delete_question(kv, event.id.as_str(), &question_id)
+    quiz::delete_question(d1, kv, event.id.as_str(), &question_id)
         .await
         .map_err(|e| AppError::Internal(e.to_string()))?;
 
@@ -584,13 +527,10 @@ pub async fn toggle_quiz_question(
     );
 
     let event = resolve_event(&state, query.event_id.as_deref()).await?;
-    let kv = state
-        .events_kv
-        .as_ref()
-        .or(state.quiz_kv.as_ref())
-        .ok_or_else(|| AppError::Internal("quiz KV not configured".to_string()))?;
+    let d1 = state.d1.as_deref();
+    let kv = state.events_kv.as_ref().or(state.quiz_kv.as_ref());
 
-    let question = quiz::toggle_question(kv, event.id.as_str(), &question_id)
+    let question = quiz::toggle_question(d1, kv, event.id.as_str(), &question_id)
         .await
         .map_err(|e| AppError::Internal(e.to_string()))?;
 
