@@ -1169,7 +1169,7 @@ async fn write_developer_data(data: &DeveloperData<'_>) {
         tracing::warn!(%email, error = %e, "D1 developer display_name upsert failed (non-fatal)");
     }
 
-    // 2. Store registration responses
+    // 2. Store registration responses (single batch INSERT — 1 D1 call instead of 5)
     let responses: Vec<(&str, &str, bool)> = vec![
         ("participation_type", participation_type, false),
         ("contact_channel", contact_channel, false),
@@ -1190,26 +1190,15 @@ async fn write_developer_data(data: &DeveloperData<'_>) {
         ),
     ];
 
-    for (field_key, field_value, is_profile_field) in responses {
-        let id = uuid::Uuid::now_v7().to_string();
-        if let Err(e) = crate::db::developers::insert_registration_response(
-            d1,
-            &id,
-            event_id,
-            email,
-            field_key,
-            field_value,
-            is_profile_field,
-        )
-        .await
-        {
-            tracing::warn!(
-                %email,
-                %event_id,
-                field_key,
-                error = %e,
-                "D1 registration response insert failed (non-fatal)"
-            );
-        }
+    if let Err(e) =
+        crate::db::developers::batch_insert_registration_responses(d1, event_id, email, &responses)
+            .await
+    {
+        tracing::warn!(
+            %email,
+            %event_id,
+            error = %e,
+            "D1 batch registration responses failed (non-fatal)"
+        );
     }
 }

@@ -158,7 +158,8 @@ pub(crate) async fn set_developer_wallet(
 /// Store a registration form response.
 ///
 /// Each field answer is stored individually so queries can aggregate
-/// by field_key across events.
+/// by field key across events.
+#[allow(dead_code)]
 pub(crate) async fn insert_registration_response(
     db: &D1Database,
     id: &str,
@@ -185,6 +186,54 @@ pub(crate) async fn insert_registration_response(
     .run()
     .await
     .map_err(|e| format!("D1 insert_registration_response run: {e:?}"))?;
+
+    Ok(())
+}
+
+/// Batch-insert multiple registration responses in a single D1 call.
+/// Each tuple is (field_key, field_value, is_profile_field).
+pub(crate) async fn batch_insert_registration_responses(
+    db: &D1Database,
+    event_id: &str,
+    developer_email: &str,
+    responses: &[(&str, &str, bool)],
+) -> Result<(), String> {
+    if responses.is_empty() {
+        return Ok(());
+    }
+
+    // Generate all IDs upfront, then build SQL + params referencing them.
+    let ids: Vec<String> = (0..responses.len())
+        .map(|_| uuid::Uuid::now_v7().to_string())
+        .collect();
+
+    let mut sql = String::from(
+        "INSERT INTO registration_responses \
+         (id, event_id, developer_email, field_key, field_value, is_profile_field, answered_at) VALUES ",
+    );
+    for i in 0..responses.len() {
+        if i > 0 {
+            sql.push_str(", ");
+        }
+        sql.push_str("(?, ?, ?, ?, ?, ?, datetime('now'))");
+    }
+
+    let mut params: Vec<D1Type> = Vec::with_capacity(responses.len() * 6);
+    for (i, (field_key, field_value, is_profile_field)) in responses.iter().enumerate() {
+        params.push(D1Type::Text(ids[i].as_str()));
+        params.push(D1Type::Text(event_id));
+        params.push(D1Type::Text(developer_email));
+        params.push(D1Type::Text(field_key));
+        params.push(D1Type::Text(field_value));
+        params.push(D1Type::Integer(if *is_profile_field { 1 } else { 0 }));
+    }
+
+    db.prepare(&sql)
+        .bind_refs(&params)
+        .map_err(|e| format!("D1 batch_insert_registration_responses bind: {e:?}"))?
+        .run()
+        .await
+        .map_err(|e| format!("D1 batch_insert_registration_responses run: {e:?}"))?;
 
     Ok(())
 }
