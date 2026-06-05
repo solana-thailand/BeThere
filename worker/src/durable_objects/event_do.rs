@@ -406,3 +406,211 @@ struct ClaimLockSyncRow {
     claimed_at: Option<String>,
     expires_at: Option<String>,
 }
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Helper: serialize then deserialize and verify equality.
+    fn assert_round_trip(expected_json: &str, value: &DoRequest) {
+        let serialized =
+            serde_json::to_string(value).unwrap_or_else(|e| panic!("Failed to serialize: {e}"));
+        assert_eq!(serialized, expected_json, "serialization mismatch");
+
+        let deserialized: DoRequest = serde_json::from_str(expected_json)
+            .unwrap_or_else(|e| panic!("Failed to deserialize: {e}"));
+        assert_eq!(
+            serde_json::to_string(&deserialized).unwrap(),
+            expected_json,
+            "round-trip deserialization mismatch"
+        );
+    }
+
+    // ==========================================================================
+    // AcquireClaimLock serde
+    // ==========================================================================
+
+    #[test]
+    fn acquire_claim_lock_round_trip() {
+        let json = r#"{"action":"acquire_claim_lock","lock_id":"lid-1","event_id":"evt-1","token":"tok-1","wallet":"wallet-addr","expires_at":"2025-01-01T00:00:00Z"}"#;
+        let value = DoRequest::AcquireClaimLock {
+            lock_id: "lid-1".to_string(),
+            event_id: "evt-1".to_string(),
+            token: "tok-1".to_string(),
+            wallet: "wallet-addr".to_string(),
+            expires_at: "2025-01-01T00:00:00Z".to_string(),
+        };
+        assert_round_trip(json, &value);
+    }
+
+    #[test]
+    fn acquire_claim_lock_action_tag_is_snake_case() {
+        let value = DoRequest::AcquireClaimLock {
+            lock_id: "lid".to_string(),
+            event_id: "evt".to_string(),
+            token: "tok".to_string(),
+            wallet: "w".to_string(),
+            expires_at: "exp".to_string(),
+        };
+        let serialized = serde_json::to_string(&value).unwrap();
+        assert!(
+            serialized.contains("\"action\":\"acquire_claim_lock\""),
+            "action tag must be acquire_claim_lock, got: {serialized}"
+        );
+    }
+
+    #[test]
+    fn acquire_claim_lock_all_fields_present() {
+        let value = DoRequest::AcquireClaimLock {
+            lock_id: "lid".to_string(),
+            event_id: "evt".to_string(),
+            token: "tok".to_string(),
+            wallet: "w".to_string(),
+            expires_at: "exp".to_string(),
+        };
+        let serialized = serde_json::to_string(&value).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&serialized).unwrap();
+        assert!(v.get("lock_id").is_some(), "missing lock_id");
+        assert!(v.get("event_id").is_some(), "missing event_id");
+        assert!(v.get("token").is_some(), "missing token");
+        assert!(v.get("wallet").is_some(), "missing wallet");
+        assert!(v.get("expires_at").is_some(), "missing expires_at");
+    }
+
+    // ==========================================================================
+    // FinalizeClaimLock serde
+    // ==========================================================================
+
+    #[test]
+    fn finalize_claim_lock_round_trip() {
+        let json = r#"{"action":"finalize_claim_lock","event_id":"evt-1","token":"tok-1","asset_id":"asset-1","signature":"sig-1","claimed_at":"2025-01-01T00:00:00Z"}"#;
+        let value = DoRequest::FinalizeClaimLock {
+            event_id: "evt-1".to_string(),
+            token: "tok-1".to_string(),
+            asset_id: "asset-1".to_string(),
+            signature: "sig-1".to_string(),
+            claimed_at: "2025-01-01T00:00:00Z".to_string(),
+        };
+        assert_round_trip(json, &value);
+    }
+
+    #[test]
+    fn finalize_claim_lock_action_tag_is_snake_case() {
+        let value = DoRequest::FinalizeClaimLock {
+            event_id: "evt".to_string(),
+            token: "tok".to_string(),
+            asset_id: "a".to_string(),
+            signature: "s".to_string(),
+            claimed_at: "c".to_string(),
+        };
+        let serialized = serde_json::to_string(&value).unwrap();
+        assert!(
+            serialized.contains("\"action\":\"finalize_claim_lock\""),
+            "action tag must be finalize_claim_lock, got: {serialized}"
+        );
+    }
+
+    #[test]
+    fn finalize_claim_lock_all_fields_present() {
+        let value = DoRequest::FinalizeClaimLock {
+            event_id: "evt".to_string(),
+            token: "tok".to_string(),
+            asset_id: "a".to_string(),
+            signature: "s".to_string(),
+            claimed_at: "c".to_string(),
+        };
+        let serialized = serde_json::to_string(&value).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&serialized).unwrap();
+        assert!(v.get("event_id").is_some(), "missing event_id");
+        assert!(v.get("token").is_some(), "missing token");
+        assert!(v.get("asset_id").is_some(), "missing asset_id");
+        assert!(v.get("signature").is_some(), "missing signature");
+        assert!(v.get("claimed_at").is_some(), "missing claimed_at");
+    }
+
+    // ==========================================================================
+    // ReleaseClaimLock serde
+    // ==========================================================================
+
+    #[test]
+    fn release_claim_lock_round_trip() {
+        let json = r#"{"action":"release_claim_lock","event_id":"evt-1","token":"tok-1"}"#;
+        let value = DoRequest::ReleaseClaimLock {
+            event_id: "evt-1".to_string(),
+            token: "tok-1".to_string(),
+        };
+        assert_round_trip(json, &value);
+    }
+
+    #[test]
+    fn release_claim_lock_action_tag_is_snake_case() {
+        let value = DoRequest::ReleaseClaimLock {
+            event_id: "evt".to_string(),
+            token: "tok".to_string(),
+        };
+        let serialized = serde_json::to_string(&value).unwrap();
+        assert!(
+            serialized.contains("\"action\":\"release_claim_lock\""),
+            "action tag must be release_claim_lock, got: {serialized}"
+        );
+    }
+
+    #[test]
+    fn release_claim_lock_all_fields_present() {
+        let value = DoRequest::ReleaseClaimLock {
+            event_id: "evt".to_string(),
+            token: "tok".to_string(),
+        };
+        let serialized = serde_json::to_string(&value).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&serialized).unwrap();
+        assert!(v.get("event_id").is_some(), "missing event_id");
+        assert!(v.get("token").is_some(), "missing token");
+    }
+
+    // ==========================================================================
+    // Unknown action rejection
+    // ==========================================================================
+
+    #[test]
+    fn unknown_action_rejected() {
+        let json = r#"{"action":"do_something","event_id":"evt","token":"tok"}"#;
+        let result = serde_json::from_str::<DoRequest>(json);
+        assert!(
+            result.is_err(),
+            "expected deserialization failure for unknown action"
+        );
+    }
+
+    #[test]
+    fn missing_action_rejected() {
+        let json = r#"{"event_id":"evt","token":"tok"}"#;
+        let result = serde_json::from_str::<DoRequest>(json);
+        assert!(
+            result.is_err(),
+            "expected deserialization failure for missing action"
+        );
+    }
+
+    // ==========================================================================
+    // DoResponse
+    // ==========================================================================
+
+    #[test]
+    fn do_response_ok_serializes() {
+        let resp = DoResponse::ok();
+        let json = serde_json::to_string(&resp).unwrap();
+        assert_eq!(json, "{\"success\":true}");
+    }
+
+    #[test]
+    fn do_response_err_serializes() {
+        let resp = DoResponse::err("something went wrong");
+        let json = serde_json::to_string(&resp).unwrap();
+        assert!(json.contains("\"success\":false"));
+        assert!(json.contains("\"error\":\"something went wrong\""));
+    }
+}

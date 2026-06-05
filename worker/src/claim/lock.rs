@@ -463,3 +463,77 @@ pub(crate) async fn mark_walkin_claimed(
 
     Ok(())
 }
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ==========================================================================
+    // claim_lock_key
+    // ==========================================================================
+
+    #[test]
+    fn claim_lock_key_format() {
+        let key = claim_lock_key("evt-123", "tok-abc");
+        assert_eq!(key, "event:evt-123:claim_lock:tok-abc");
+    }
+
+    #[test]
+    fn claim_lock_key_with_special_chars() {
+        let key = claim_lock_key("evt_2025", "token-uuid-v7");
+        assert_eq!(key, "event:evt_2025:claim_lock:token-uuid-v7");
+    }
+
+    #[test]
+    fn claim_lock_key_with_empty_inputs() {
+        let key = claim_lock_key("", "");
+        assert_eq!(key, "event::claim_lock:");
+    }
+
+    // ==========================================================================
+    // mask_wallet
+    // ==========================================================================
+
+    #[test]
+    fn mask_wallet_normal_address() {
+        let addr = "BxRWqK3KjF8Mn2dTsUfMZ8xJbQHvYC3KjF";
+        let masked = mask_wallet(addr);
+        assert_eq!(masked, "BxRW...3KjF");
+    }
+
+    #[test]
+    fn mask_wallet_exactly_8_chars() {
+        let addr = "12345678";
+        let masked = mask_wallet(addr);
+        assert_eq!(masked, "****");
+    }
+
+    #[test]
+    fn mask_wallet_9_chars() {
+        let addr = "123456789";
+        let masked = mask_wallet(addr);
+        assert_eq!(masked, "1234...6789");
+    }
+
+    #[test]
+    fn mask_wallet_short_address() {
+        let masked = mask_wallet("short");
+        assert_eq!(masked, "****");
+    }
+
+    #[test]
+    fn mask_wallet_single_char() {
+        let masked = mask_wallet("A");
+        assert_eq!(masked, "****");
+    }
+
+    #[test]
+    fn mask_wallet_empty_string() {
+        let masked = mask_wallet("");
+        assert_eq!(masked, "****");
+    }
+}
