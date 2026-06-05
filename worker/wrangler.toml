@@ -93,14 +93,13 @@ crons = ["0 3 * * *"]
 [placement]
 mode = "smart"
 
-# Phase 4: Quiz KV namespace (Issue 002 — activity-gated claim)
-# Create with: npx wrangler kv namespace create QUIZ
-# Then paste the returned ID below.
-# Preview: npx wrangler kv namespace create QUIZ --preview
-[[kv_namespaces]]
-binding = "QUIZ"
-id = "faf9eebaa53d46f9a82c1f6db6dfbc05"
-preview_id = "ec705e432a5b47adae937878c1402174"
+# Phase 4: Quiz KV namespace — REMOVED (Option C).
+# Quiz data is now D1-only. QUIZ KV binding removed from wrangler.toml.
+# If needed for rollback, restore:
+# [[kv_namespaces]]
+# binding = "QUIZ"
+# id = "faf9eebaa53d46f9a82c1f6db6dfbc05"
+# preview_id = "ec705e432a5b47adae937878c1402174"
 
 # Phase 4: Events KV namespace (Issue 004 — multi-event / organizer management)
 # P5: Kept in wrangler.toml to match production bindings (Cloudflare versions API

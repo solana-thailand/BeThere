@@ -541,6 +541,29 @@ pub async fn update_event(
     // D1 dual-write
     crate::event_store::sync_event_to_d1(state.d1.as_deref(), &config).await;
 
+    // Escrow reverse index dual-write (when escrow address set or changed)
+    if !config.escrow_address.is_empty() {
+        let _ = crate::event_store::save_escrow_index(
+            state.d1.as_deref(),
+            kv,
+            &config.escrow_address,
+            &config.id,
+        )
+        .await;
+    }
+
+    // Update KV index entry (if KV available)
+    if let Some(kv_ref) = kv
+        && let Ok(mut index) = crate::event_store::get_event_index(kv_ref).await
+    {
+        if let Some(entry) = index.events.iter_mut().find(|e| e.id == id) {
+            *entry = config.to_meta();
+        }
+        if let Err(e) = crate::event_store::save_event_index(kv_ref, &index).await {
+            tracing::warn!(event_id = %id, error = %e, "KV index update failed");
+        }
+    }
+
     tracing::info!(
         event_id = %config.id,
         status = %config.status.as_str(),

@@ -317,12 +317,13 @@ pub async fn create_event(
 /// Only provided (non-None) fields are updated.
 /// Returns the updated EventConfig.
 pub async fn update_event(
-    kv: &KvStore,
+    kv: Option<&KvStore>,
+    d1: Option<&worker::D1Database>,
     id: &str,
     req: &UpdateEventRequest,
     updated_by: &str,
 ) -> Result<EventConfig, String> {
-    let mut config = read_mod::get_event_config(kv, id)
+    let mut config = crate::event_store::get_event_config_with_fallback(kv, d1, id)
         .await?
         .ok_or_else(|| format!("event '{id}' not found"))?;
 
@@ -570,20 +571,27 @@ pub async fn update_event(
     config.updated_at = chrono::Utc::now().to_rfc3339();
     config.updated_by = updated_by.to_string();
 
-    // Save updated config
-    save_event_config(kv, &config).await?;
+    // D1 write (primary — always if available)
+    sync_event_to_d1(d1, &config).await;
 
-    // Maintain escrow reverse index (H7)
+    // KV write-through cache (if available)
+    if let Some(kv_ref) = kv {
+        save_event_config(kv_ref, &config).await?;
+    }
+
+    // Maintain escrow reverse index (D1 + KV dual-write)
     if !config.escrow_address.is_empty() {
-        save_escrow_index(None, Some(kv), &config.escrow_address, &config.id).await?;
+        save_escrow_index(d1, kv, &config.escrow_address, &config.id).await?;
     }
 
-    // Update index entry
-    let mut index = get_event_index(kv).await?;
-    if let Some(entry) = index.events.iter_mut().find(|e| e.id == id) {
-        *entry = config.to_meta();
+    // Update KV index entry (if KV available)
+    if let Some(kv_ref) = kv {
+        let mut index = get_event_index(kv_ref).await?;
+        if let Some(entry) = index.events.iter_mut().find(|e| e.id == id) {
+            *entry = config.to_meta();
+        }
+        save_event_index(kv_ref, &index).await?;
     }
-    save_event_index(kv, &index).await?;
 
     tracing::info!(event_id = %id, "event updated");
 

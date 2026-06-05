@@ -3,12 +3,12 @@
 -- EventConfig can be fully round-tripped through D1.
 --
 -- All new columns have defaults so existing rows (if any) are unaffected.
-
--- Existing columns (from 0002): id, name, slug, status, event_format,
--- event_start_ms, event_end_ms, deposit_enabled, deposit_amount_usdc,
--- deposit_amount_thb, escrow_status, escrow_pda, location, tagline,
--- organizer_emails, organization_id, video_url, sheet_id, sheet_name,
--- staff_sheet_name, capacity, total_attendees, created_at, updated_at
+--
+-- NOTE: This migration is NOT idempotent — ALTER TABLE ADD COLUMN fails
+-- if the column already exists. It relies on the d1_migrations tracker
+-- to prevent re-execution. For databases with manually-created columns,
+-- insert a record into d1_migrations before running:
+--   INSERT INTO d1_migrations (id, name) VALUES (3, '0003_events_full_schema.sql');
 
 ALTER TABLE events ADD COLUMN link TEXT NOT NULL DEFAULT '';
 ALTER TABLE events ADD COLUMN time_tba INTEGER NOT NULL DEFAULT 0;

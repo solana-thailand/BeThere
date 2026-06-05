@@ -136,10 +136,8 @@ pub async fn confirm_escrow_init_handler(
 ) -> Result<ApiOk<ConfirmEscrowInitResponse>, WorkerError> {
     use event_checkin_domain::models::event::UpdateEventRequest;
 
-    let kv = state
-        .events_kv
-        .as_ref()
-        .ok_or_else(|| AppError::Internal("EVENTS KV not configured".to_string()))?;
+    let kv = state.events_kv.as_ref();
+    let d1 = state.d1.as_deref();
 
     // 1. Resolve event with access check
     let event =
@@ -246,23 +244,25 @@ pub async fn confirm_escrow_init_handler(
             visibility: None,
         };
 
-        event_store::update_event(kv, &event.id, &update_req, &claims.email)
+        event_store::update_event(kv, d1, &event.id, &update_req, &claims.email)
             .await
             .map_err(|e| AppError::Internal(format!("failed to persist escrow state: {e}")))?;
 
         // Audit log
-        let _ = crate::audit_store::append_event_audit(
-            kv,
-            &event.id,
-            crate::audit_store::create_entry(
-                &claims.email,
-                crate::audit_store::AuditAction::EscrowInitialized,
+        if let Some(kv_ref) = kv {
+            let _ = crate::audit_store::append_event_audit(
+                kv_ref,
                 &event.id,
-                "escrow init confirmed on-chain and persisted server-side",
-            ),
-            state.d1.as_deref(),
-        )
-        .await;
+                crate::audit_store::create_entry(
+                    &claims.email,
+                    crate::audit_store::AuditAction::EscrowInitialized,
+                    &event.id,
+                    "escrow init confirmed on-chain and persisted server-side",
+                ),
+                state.d1.as_deref(),
+            )
+            .await;
+        }
     } else {
         tracing::debug!(
             event_id = %event.id,
