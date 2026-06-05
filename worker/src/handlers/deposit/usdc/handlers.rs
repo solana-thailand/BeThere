@@ -31,18 +31,15 @@ pub async fn get_deposit_status_handler(
     Path(attendee_id): Path<String>,
     Query(query): Query<EventIdQuery>,
 ) -> Result<ApiOk<DepositStatusResponse>, WorkerError> {
-    let kv = state.events_kv.as_ref().ok_or_else(|| {
-        event_checkin_domain::models::error::AppError::Internal(
-            "EVENTS KV not configured".to_string(),
-        )
-    })?;
+    let kv = state.events_kv.as_ref();
+    let d1 = state.d1.as_deref();
 
     let event =
-        event_store::resolve_event_or_fallback(Some(kv), query.event_id.as_deref(), &state.config)
+        event_store::resolve_event_or_fallback(kv, query.event_id.as_deref(), &state.config, d1)
             .await
             .map_err(event_checkin_domain::models::error::AppError::Internal)?;
 
-    let status = event_store::get_deposit_status(kv, &event.id, &attendee_id)
+    let status = event_store::get_deposit_status_with_fallback(kv, d1, &event.id, &attendee_id)
         .await
         .map_err(event_checkin_domain::models::error::AppError::Internal)?;
 
@@ -60,7 +57,7 @@ pub async fn get_deposit_status_handler(
             &state,
             &event.sheet_id,
             &event.sheet_name,
-            Some(kv),
+            kv,
         )
         .await
         {
@@ -124,13 +121,10 @@ pub async fn deposit_usdc_handler(
     State(state): State<AppState>,
     Json(body): Json<UsdcDepositRequest>,
 ) -> Result<ApiOk<UsdcDepositResponse>, WorkerError> {
-    let kv = state.events_kv.as_ref().ok_or_else(|| {
-        event_checkin_domain::models::error::AppError::Internal(
-            "EVENTS KV not configured".to_string(),
-        )
-    })?;
+    let kv = state.events_kv.as_ref();
+    let d1 = state.d1.as_deref();
 
-    let event = event_store::get_event_config(kv, &body.event_id)
+    let event = event_store::get_event_config_with_fallback(kv, d1, &body.event_id)
         .await
         .map_err(event_checkin_domain::models::error::AppError::Internal)?
         .ok_or_else(|| {
@@ -174,7 +168,7 @@ pub async fn deposit_usdc_handler(
             &state,
             &event.sheet_id,
             &event.sheet_name,
-            Some(kv),
+            kv,
         )
         .await
         && let Some(reg_str) = &attendee.registration_date
@@ -190,7 +184,7 @@ pub async fn deposit_usdc_handler(
                     &state,
                     &event.sheet_id,
                     &event.sheet_name,
-                    Some(kv),
+                    kv,
                 )
                 .await
                 {
@@ -202,7 +196,7 @@ pub async fn deposit_usdc_handler(
                             mapping,
                             event.sheet_id.clone(),
                             event.sheet_name.clone(),
-                            Some(kv.clone()),
+                            kv.cloned(),
                         ));
                         tracing::info!(
                             attendee_id = %attendee.api_id,
@@ -216,7 +210,7 @@ pub async fn deposit_usdc_handler(
                             &state,
                             &event.sheet_id,
                             &event.sheet_name,
-                            Some(kv),
+                            kv,
                         )
                         .await
                         {
@@ -246,9 +240,10 @@ pub async fn deposit_usdc_handler(
         .map_err(event_checkin_domain::models::error::AppError::Validation)?;
 
     // Check if already deposited
-    let existing = event_store::get_deposit_status(kv, &event.id, &body.attendee_id)
-        .await
-        .map_err(event_checkin_domain::models::error::AppError::Internal)?;
+    let existing =
+        event_store::get_deposit_status_with_fallback(kv, d1, &event.id, &body.attendee_id)
+            .await
+            .map_err(event_checkin_domain::models::error::AppError::Internal)?;
 
     if existing.is_some() {
         return Err(event_checkin_domain::models::error::AppError::Validation(
@@ -258,7 +253,7 @@ pub async fn deposit_usdc_handler(
     }
 
     // Atomically increment deposit counter for this event
-    let deposit_order = event_store::increment_deposit_counter(kv, &event.id)
+    let deposit_order = event_store::increment_deposit_counter_with_fallback(kv, d1, &event.id)
         .await
         .map_err(event_checkin_domain::models::error::AppError::Internal)?;
     let refundable =
@@ -280,7 +275,7 @@ pub async fn deposit_usdc_handler(
         rejected: false,
     };
 
-    event_store::save_deposit_status(kv, &deposit_status)
+    event_store::save_deposit_status_with_fallback(kv, d1, &deposit_status)
         .await
         .map_err(event_checkin_domain::models::error::AppError::Internal)?;
 
@@ -306,21 +301,23 @@ pub async fn deposit_usdc_handler(
     );
 
     // Audit log
-    let _ = crate::audit_store::append_event_audit(
-        kv,
-        &event.id,
-        crate::audit_store::create_entry(
-            "attendee",
-            crate::audit_store::AuditAction::DepositSubmitted,
-            &body.attendee_id,
-            &format!(
-                "USDC deposit initiated: {} lamports",
-                event.deposit_amount_usdc
+    if let Some(kv) = kv {
+        let _ = crate::audit_store::append_event_audit(
+            kv,
+            &event.id,
+            crate::audit_store::create_entry(
+                "attendee",
+                crate::audit_store::AuditAction::DepositSubmitted,
+                &body.attendee_id,
+                &format!(
+                    "USDC deposit initiated: {} lamports",
+                    event.deposit_amount_usdc
+                ),
             ),
-        ),
-        state.d1.as_deref(),
-    )
-    .await;
+            d1,
+        )
+        .await;
+    }
 
     Ok(ApiOk::new(UsdcDepositResponse {
         transaction: String::new(), // Transaction is built on-demand by the callback endpoint
@@ -349,13 +346,10 @@ pub async fn deposit_usdc_tx_handler(
     State(state): State<AppState>,
     Query(query): Query<DepositTxQuery>,
 ) -> Result<Json<DepositTxResponse>, WorkerError> {
-    let kv = state.events_kv.as_ref().ok_or_else(|| {
-        event_checkin_domain::models::error::AppError::Internal(
-            "EVENTS KV not configured".to_string(),
-        )
-    })?;
+    let kv = state.events_kv.as_ref();
+    let d1 = state.d1.as_deref();
 
-    let event = event_store::get_event_config(kv, &query.event_id)
+    let event = event_store::get_event_config_with_fallback(kv, d1, &query.event_id)
         .await
         .map_err(event_checkin_domain::models::error::AppError::Internal)?
         .ok_or_else(|| {
@@ -384,9 +378,10 @@ pub async fn deposit_usdc_tx_handler(
         .map_err(event_checkin_domain::models::error::AppError::Validation)?;
 
     // Verify deposit is still pending (not already completed)
-    let existing = event_store::get_deposit_status(kv, &event.id, &query.attendee_id)
-        .await
-        .map_err(event_checkin_domain::models::error::AppError::Internal)?;
+    let existing =
+        event_store::get_deposit_status_with_fallback(kv, d1, &event.id, &query.attendee_id)
+            .await
+            .map_err(event_checkin_domain::models::error::AppError::Internal)?;
 
     if let Some(status) = &existing
         && status.verified
@@ -427,7 +422,7 @@ pub async fn deposit_usdc_tx_handler(
     // Build the deposit transaction
     let tx = crate::solana_escrow::build_deposit_transaction(
         &rpc_url,
-        Some(kv),
+        kv,
         organizer_pubkey,
         on_chain_event_id,
         &query.wallet,
@@ -466,13 +461,10 @@ pub async fn confirm_deposit_handler(
     State(state): State<AppState>,
     Query(query): Query<ConfirmDepositQuery>,
 ) -> Result<ApiOk<ConfirmDepositResponse>, WorkerError> {
-    let kv = state.events_kv.as_ref().ok_or_else(|| {
-        event_checkin_domain::models::error::AppError::Internal(
-            "EVENTS KV not configured".to_string(),
-        )
-    })?;
+    let kv = state.events_kv.as_ref();
+    let d1 = state.d1.as_deref();
 
-    let event = event_store::get_event_config(kv, &query.event_id)
+    let event = event_store::get_event_config_with_fallback(kv, d1, &query.event_id)
         .await
         .map_err(event_checkin_domain::models::error::AppError::Internal)?
         .ok_or_else(|| {
@@ -482,10 +474,11 @@ pub async fn confirm_deposit_handler(
             ))
         })?;
 
-    // Check deposit status in KV
-    let deposit_status = event_store::get_deposit_status(kv, &event.id, &query.attendee_id)
-        .await
-        .map_err(event_checkin_domain::models::error::AppError::Internal)?;
+    // Check deposit status
+    let deposit_status =
+        event_store::get_deposit_status_with_fallback(kv, d1, &event.id, &query.attendee_id)
+            .await
+            .map_err(event_checkin_domain::models::error::AppError::Internal)?;
 
     match deposit_status {
         Some(status) if status.verified => {
@@ -508,7 +501,7 @@ pub async fn confirm_deposit_handler(
                         // Update the deposit status to verified
                         let mut updated = status.clone();
                         updated.verified = true;
-                        event_store::save_deposit_status(kv, &updated)
+                        event_store::save_deposit_status_with_fallback(kv, d1, &updated)
                             .await
                             .map_err(event_checkin_domain::models::error::AppError::Internal)?;
 
@@ -519,9 +512,9 @@ pub async fn confirm_deposit_handler(
                         );
 
                         // Dual-write to D1 first (source of truth)
-                        if let Some(ref d1) = state.d1
+                        if let Some(db) = d1
                             && let Err(e) = crate::db::attendees::verify_deposit(
-                                d1,
+                                db,
                                 &query.attendee_id,
                                 "verified",
                                 sig,
@@ -545,14 +538,14 @@ pub async fn confirm_deposit_handler(
                                 &state,
                                 &event.sheet_id,
                                 &event.sheet_name,
-                                Some(kv),
+                                kv,
                             ),
                             crate::sheets::get_attendee_by_id(
                                 &query.attendee_id,
                                 &state,
                                 &event.sheet_id,
                                 &event.sheet_name,
-                                Some(kv),
+                                kv,
                             )
                         );
                         if let (Ok(mapping), Ok(Some(attendee))) = (mapping_result, attendee_result)
@@ -567,7 +560,7 @@ pub async fn confirm_deposit_handler(
                                     mapping.clone(),
                                     event.sheet_id.clone(),
                                     event.sheet_name.clone(),
-                                    Some(kv.clone()),
+                                    kv.cloned(),
                                 ));
 
                                 // Auto-generate QR if attendee doesn't have one
@@ -581,7 +574,7 @@ pub async fn confirm_deposit_handler(
                                         mapping,
                                         event.sheet_id.clone(),
                                         event.sheet_name.clone(),
-                                        Some(kv.clone()),
+                                        kv.cloned(),
                                     ));
                                 }
                             } else {
@@ -591,7 +584,7 @@ pub async fn confirm_deposit_handler(
                                     state: &state,
                                     sheet_id: &event.sheet_id,
                                     sheet_name: &event.sheet_name,
-                                    kv: Some(kv),
+                                    kv,
                                 };
 
                                 if let Err(e) = crate::sheets::write::write_deposit_verification(
@@ -616,7 +609,7 @@ pub async fn confirm_deposit_handler(
                                         &state,
                                         &event.sheet_id,
                                         &event.sheet_name,
-                                        Some(kv),
+                                        kv,
                                     )
                                     .await
                                     {
@@ -731,28 +724,26 @@ pub async fn deposit_webhook_handler(
         .into());
     }
 
-    let kv = state.events_kv.as_ref().ok_or_else(|| {
-        event_checkin_domain::models::error::AppError::Internal(
-            "EVENTS KV not configured".to_string(),
-        )
-    })?;
+    let kv = state.events_kv.as_ref();
+    let d1 = state.d1.as_deref();
 
     // Get existing deposit status
-    let mut deposit_status = event_store::get_deposit_status(kv, &body.event_id, &body.attendee_id)
-        .await
-        .map_err(event_checkin_domain::models::error::AppError::Internal)?
-        .ok_or_else(|| {
-            event_checkin_domain::models::error::AppError::NotFound(format!(
-                "no deposit record for attendee '{}' in event '{}'",
-                body.attendee_id, body.event_id
-            ))
-        })?;
+    let mut deposit_status =
+        event_store::get_deposit_status_with_fallback(kv, d1, &body.event_id, &body.attendee_id)
+            .await
+            .map_err(event_checkin_domain::models::error::AppError::Internal)?
+            .ok_or_else(|| {
+                event_checkin_domain::models::error::AppError::NotFound(format!(
+                    "no deposit record for attendee '{}' in event '{}'",
+                    body.attendee_id, body.event_id
+                ))
+            })?;
 
     // Update with TX signature
     deposit_status.tx_signature = Some(body.tx_signature.clone());
 
     // Save immediately so the frontend sees the TX signature (H8: verification detached)
-    event_store::save_deposit_status(kv, &deposit_status)
+    event_store::save_deposit_status_with_fallback(kv, d1, &deposit_status)
         .await
         .map_err(event_checkin_domain::models::error::AppError::Internal)?;
 

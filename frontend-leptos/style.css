@@ -3842,6 +3842,35 @@ nav a.active {
     margin-left: 0.35rem;
 }
 
+.badge-refunded {
+    color: var(--text-muted);
+    background: rgba(148, 163, 184, 0.12);
+    border-color: rgba(148, 163, 184, 0.3);
+}
+
+.badge-nft {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.15rem 0.5rem;
+    border-radius: var(--radius);
+    font-size: 0.65rem;
+    font-weight: 700;
+    color: #a855f7;
+    background: rgba(168, 85, 247, 0.12);
+    border: 1px solid rgba(168, 85, 247, 0.3);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-left: 0.35rem;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.badge-nft:hover {
+    background: rgba(168, 85, 247, 0.2);
+    border-color: rgba(168, 85, 247, 0.5);
+}
+
 /* ===== Social Proof ===== */
 .social-proof {
     max-width: 960px;

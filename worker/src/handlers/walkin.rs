@@ -331,19 +331,32 @@ pub async fn register_walkin(
     }
 
     let email_lower = email.to_lowercase();
-    let kv = state.events_kv.as_ref().ok_or_else(|| {
-        tracing::error!("EVENTS KV namespace not configured");
-        AppError::Internal("EVENTS KV namespace not configured".to_string())
-    })?;
+    let kv = state.events_kv.as_ref();
 
-    // 2. Check for duplicate
-    let wkey = walkin_key(&event.id, &email_lower);
-    let existing: Option<String> = kv.get(&wkey).text().await.map_err(|e| {
-        tracing::error!(key = %wkey, error = ?e, "failed to check walkin duplicate");
-        AppError::Internal(format!("KV read failed: {e:?}"))
-    })?;
+    // 2. Check for duplicate (KV → D1 fallback)
+    let is_duplicate = if let Some(kv) = kv {
+        let wkey = walkin_key(&event.id, &email_lower);
+        let existing: Option<String> = kv.get(&wkey).text().await.map_err(|e| {
+            tracing::error!(key = %wkey, error = ?e, "failed to check walkin duplicate");
+            AppError::Internal(format!("KV read failed: {e:?}"))
+        })?;
+        existing.is_some()
+    } else if let Some(db) = state.d1.as_deref() {
+        crate::db::attendees::check_walkin_duplicate(db, &event.id, &email_lower)
+            .await
+            .map_err(|e| {
+                tracing::error!(event_id = %event.id, email = %email_lower, error = %e, "D1 walkin duplicate check failed");
+                AppError::Internal(format!("D1 duplicate check failed: {e}"))
+            })?
+    } else {
+        tracing::error!("Neither EVENTS KV nor D1 available for walkin duplicate check");
+        return Err(AppError::Internal(
+            "no storage backend available for walkin registration".to_string(),
+        )
+        .into());
+    };
 
-    if existing.is_some() {
+    if is_duplicate {
         tracing::warn!(
             event_id = %event.id,
             email = %email_lower,
@@ -388,40 +401,67 @@ pub async fn register_walkin(
         claimed_at: None,
     };
 
-    // 5. Write walk-in record to KV
-    let json = serde_json::to_string(&attendee).map_err(|e| {
-        tracing::error!(error = %e, "failed to serialize walkin attendee");
-        AppError::Internal(format!("serialization failed: {e}"))
-    })?;
-
-    kv.put(&wkey, &json)
-        .map_err(|e| {
-            tracing::error!(key = %wkey, error = ?e, "failed to build walkin put");
-            AppError::Internal(format!("KV put failed: {e:?}"))
-        })?
-        .expiration_ttl(WALKIN_TTL_SECS)
-        .execute()
-        .await
-        .map_err(|e| {
-            tracing::error!(key = %wkey, error = ?e, "failed to write walkin record");
-            AppError::Internal(format!("KV write failed: {e:?}"))
+    // 5. Persist walk-in record (KV best-effort, D1 fallback)
+    if let Some(kv) = kv {
+        let wkey = walkin_key(&event.id, &email_lower);
+        let json = serde_json::to_string(&attendee).map_err(|e| {
+            tracing::error!(error = %e, "failed to serialize walkin attendee");
+            AppError::Internal(format!("serialization failed: {e}"))
         })?;
 
-    // 6. Write reverse mapping: claim_walkin:{token} → {event_id}:{email_lower}
-    let reverse_value = format!("{}:{}", event.id, email_lower);
-    let rkey = claim_walkin_key(&claim_token);
-    kv.put(&rkey, &reverse_value)
-        .map_err(|e| {
-            tracing::error!(key = %rkey, error = ?e, "failed to build reverse mapping put");
-            AppError::Internal(format!("KV put failed: {e:?}"))
-        })?
-        .expiration_ttl(WALKIN_TTL_SECS)
-        .execute()
+        kv.put(&wkey, &json)
+            .map_err(|e| {
+                tracing::error!(key = %wkey, error = ?e, "failed to build walkin put");
+                AppError::Internal(format!("KV put failed: {e:?}"))
+            })?
+            .expiration_ttl(WALKIN_TTL_SECS)
+            .execute()
+            .await
+            .map_err(|e| {
+                tracing::error!(key = %wkey, error = ?e, "failed to write walkin record");
+                AppError::Internal(format!("KV write failed: {e:?}"))
+            })?;
+
+        // 6. Write reverse mapping: claim_walkin:{token} → {event_id}:{email_lower}
+        let reverse_value = format!("{}:{}", event.id, email_lower);
+        let rkey = claim_walkin_key(&claim_token);
+        kv.put(&rkey, &reverse_value)
+            .map_err(|e| {
+                tracing::error!(key = %rkey, error = ?e, "failed to build reverse mapping put");
+                AppError::Internal(format!("KV put failed: {e:?}"))
+            })?
+            .expiration_ttl(WALKIN_TTL_SECS)
+            .execute()
+            .await
+            .map_err(|e| {
+                tracing::error!(key = %rkey, error = ?e, "failed to write reverse mapping");
+                AppError::Internal(format!("KV write failed: {e:?}"))
+            })?;
+    } else if let Some(db) = state.d1.as_deref() {
+        crate::db::attendees::upsert_walkin_attendee(
+            db,
+            &claim_token,
+            &event.id,
+            &email_lower,
+            name,
+            attendee.phone.as_deref(),
+            &attendee.checked_in_at,
+            &claims.email,
+            &claim_token,
+        )
         .await
         .map_err(|e| {
-            tracing::error!(key = %rkey, error = ?e, "failed to write reverse mapping");
-            AppError::Internal(format!("KV write failed: {e:?}"))
+            tracing::error!(event_id = %event.id, email = %email_lower, error = %e, "D1 walkin write failed");
+            AppError::Internal(format!("D1 walkin write failed: {e}"))
         })?;
+        tracing::info!(event_id = %event.id, email = %email_lower, "walkin registered to D1 (no KV)");
+    } else {
+        tracing::error!("Neither EVENTS KV nor D1 available for walkin write");
+        return Err(AppError::Internal(
+            "no storage backend available for walkin registration".to_string(),
+        )
+        .into());
+    }
 
     // 7. Build claim URL
     let claim_url = format!("{}/{}", state.config.server.claim_base_url, claim_token);
@@ -574,12 +614,18 @@ pub async fn list_walkin_handler(
 
     let event = resolve_event_with_access(&state, &claims, Some(event_id)).await?;
 
-    let kv = state.events_kv.as_ref().ok_or_else(|| {
-        tracing::error!("EVENTS KV namespace not configured");
-        AppError::Internal("EVENTS KV namespace not configured".to_string())
-    })?;
+    let kv = state.events_kv.as_ref();
 
-    let attendees = list_walkin_attendees(kv, &event.id).await?;
+    let attendees = if let Some(kv) = kv {
+        list_walkin_attendees(kv, &event.id).await?
+    } else if let Some(db) = state.d1.as_deref() {
+        crate::db::attendees::get_walkin_attendees(db, &event.id)
+            .await
+            .map_err(|e| AppError::Internal(format!("D1 walkin list failed: {e}")))?
+    } else {
+        tracing::warn!("Neither EVENTS KV nor D1 available, returning empty walkin list");
+        Vec::new()
+    };
     let count = attendees.len();
 
     tracing::info!(
@@ -627,12 +673,18 @@ pub async fn walkin_export_csv_handler(
 
     let event = resolve_event_with_access(&state, &claims, Some(event_id)).await?;
 
-    let kv = state.events_kv.as_ref().ok_or_else(|| {
-        tracing::error!("EVENTS KV namespace not configured");
-        AppError::Internal("EVENTS KV namespace not configured".to_string())
-    })?;
+    let kv = state.events_kv.as_ref();
 
-    let attendees = list_walkin_attendees(kv, &event.id).await?;
+    let attendees = if let Some(kv) = kv {
+        list_walkin_attendees(kv, &event.id).await?
+    } else if let Some(db) = state.d1.as_deref() {
+        crate::db::attendees::get_walkin_attendees(db, &event.id)
+            .await
+            .map_err(|e| AppError::Internal(format!("D1 walkin list failed: {e}")))?
+    } else {
+        tracing::warn!("Neither EVENTS KV nor D1 available, returning empty walkin list");
+        Vec::new()
+    };
 
     // Build CSV
     let mut csv =
@@ -714,10 +766,23 @@ pub async fn walkin_sync_handler(
 ) -> Result<ApiOk<WalkinSyncResponse>, crate::error::WorkerError> {
     let event = resolve_event_with_access(&state, &claims, Some(&body.event_id)).await?;
 
-    let kv = state.events_kv.as_ref().ok_or_else(|| {
-        tracing::error!("EVENTS KV namespace not configured");
-        AppError::Internal("EVENTS KV namespace not configured".to_string())
-    })?;
+    let kv = match state.events_kv.as_ref() {
+        Some(kv) => kv,
+        None => {
+            // Sync is inherently KV-to-sheet. If no KV, D1 walkins are already
+            // persisted directly and don't need sheet syncing.
+            tracing::info!(
+                event_id = %event.id,
+                "walkin sync skipped: no KV available (D1 walkins are already persisted)"
+            );
+            return Ok(ApiOk::new(WalkinSyncResponse {
+                synced: 0,
+                skipped: 0,
+                errors: vec![],
+                total_walkins: 0,
+            }));
+        }
+    };
 
     let attendees = list_walkin_attendees(kv, &event.id).await?;
 
@@ -860,7 +925,7 @@ pub async fn walkin_sync_handler(
 async fn enforce_walkin_capacity(
     state: &AppState,
     config: &event_checkin_domain::models::event::EventConfig,
-    kv: &worker::kv::KvStore,
+    kv: Option<&worker::kv::KvStore>,
 ) -> Result<(), AppError> {
     // Only enforce when a capacity limit is set
     let cap = match config.in_person_capacity {
@@ -873,7 +938,7 @@ async fn enforce_walkin_capacity(
         state,
         &config.sheet_id,
         &config.sheet_name,
-        Some(kv),
+        kv,
         &config.id,
     )
     .await
@@ -881,32 +946,45 @@ async fn enforce_walkin_capacity(
 
     let mut in_person_count: u32 = attendees.iter().filter(|a| a.is_in_person()).count() as u32;
 
-    // Count UNSYNCED walk-in attendees (avoid double-counting with sheet)
-    let walkin_prefix = format!("walkin:{}:", config.id);
-    let mut walkin_cursor: Option<String> = None;
-    loop {
-        let mut builder = kv.list().prefix(walkin_prefix.clone());
-        if let Some(c) = walkin_cursor.take() {
-            builder = builder.cursor(c);
-        }
-        match builder.execute().await {
-            Ok(resp) => {
-                for key in &resp.keys {
-                    let email = key.name.strip_prefix(&walkin_prefix).unwrap_or("");
-                    let sync_key = format!("walkin_synced:{}:{}", config.id, email);
-                    let synced: Option<bool> = kv.get(&sync_key).json().await.ok().flatten();
-                    if synced != Some(true) {
-                        in_person_count += 1;
+    // Count UNSYNCED walk-in attendees
+    if let Some(kv) = kv {
+        // KV path: count unsynced walkins (avoid double-counting with sheet)
+        let walkin_prefix = format!("walkin:{}:", config.id);
+        let mut walkin_cursor: Option<String> = None;
+        loop {
+            let mut builder = kv.list().prefix(walkin_prefix.clone());
+            if let Some(c) = walkin_cursor.take() {
+                builder = builder.cursor(c);
+            }
+            match builder.execute().await {
+                Ok(resp) => {
+                    for key in &resp.keys {
+                        let email = key.name.strip_prefix(&walkin_prefix).unwrap_or("");
+                        let sync_key = format!("walkin_synced:{}:{}", config.id, email);
+                        let synced: Option<bool> = kv.get(&sync_key).json().await.ok().flatten();
+                        if synced != Some(true) {
+                            in_person_count += 1;
+                        }
                     }
+                    if resp.list_complete {
+                        break;
+                    }
+                    walkin_cursor = resp.cursor;
                 }
-                if resp.list_complete {
+                Err(e) => {
+                    tracing::warn!(error = ?e, "failed to list walk-in keys for capacity");
                     break;
                 }
-                walkin_cursor = resp.cursor;
+            }
+        }
+    } else if let Some(db) = state.d1.as_deref() {
+        // D1 fallback: count walkin attendees (they are all "unsynced" from sheet perspective)
+        match crate::db::attendees::get_walkin_attendees(db, &config.id).await {
+            Ok(walkins) => {
+                in_person_count += walkins.len() as u32;
             }
             Err(e) => {
-                tracing::warn!(error = ?e, "failed to list walk-in keys for capacity");
-                break;
+                tracing::warn!(error = %e, "D1 walkin count for capacity failed, skipping");
             }
         }
     }

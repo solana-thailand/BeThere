@@ -148,6 +148,14 @@ pub struct EventDefaults {
     pub link: String,
     pub start_ms: i64,
     pub end_ms: i64,
+    /// Whether deposits are enabled for the seeded event.
+    pub deposit_enabled: bool,
+    /// Deposit amount in USDC smallest unit (6 decimals).
+    pub deposit_amount_usdc: u64,
+    /// Deposit amount in Thai Baht (for PromptPay track).
+    pub deposit_amount_thb: u64,
+    /// PromptPay ID for THB payments.
+    pub promptpay_id: String,
 }
 
 impl fmt::Debug for EventDefaults {
@@ -158,6 +166,10 @@ impl fmt::Debug for EventDefaults {
             .field("link", &self.link)
             .field("start_ms", &self.start_ms)
             .field("end_ms", &self.end_ms)
+            .field("deposit_enabled", &self.deposit_enabled)
+            .field("deposit_amount_usdc", &self.deposit_amount_usdc)
+            .field("deposit_amount_thb", &self.deposit_amount_thb)
+            .field("promptpay_id", &self.promptpay_id)
             .finish()
     }
 }

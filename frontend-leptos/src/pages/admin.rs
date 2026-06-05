@@ -92,7 +92,7 @@ fn is_vip_ticket(ticket_name: &str) -> bool {
 /// Generate CSV content from a filtered attendee list.
 fn generate_csv(attendees: &[AttendeeListItem]) -> String {
     let mut csv = String::from(
-        "Name,Email,Ticket,Participation,Status,Checked In At,Checked In By,API ID\n",
+        "Name,Email,Ticket,Participation,Status,Checked In At,Checked In By,API ID,Deposit Status,Deposit Amount,Deposit TX,NFT,Refund Status\n",
     );
     for a in attendees {
         let status = if a.checked_in_at.is_some() {
@@ -102,6 +102,11 @@ fn generate_csv(attendees: &[AttendeeListItem]) -> String {
         };
         let checked_at = a.checked_in_at.as_deref().unwrap_or("");
         let checked_by = a.checked_in_by.as_deref().unwrap_or("");
+        let deposit_status = a.deposit_status.as_deref().unwrap_or("");
+        let deposit_amount = a.deposit_amount.as_deref().unwrap_or("");
+        let deposit_tx = a.deposit_tx_signature.as_deref().unwrap_or("");
+        let nft = if a.nft_proof_url.is_some() { "Yes" } else { "" };
+        let refund_status = a.refund_status.as_deref().unwrap_or("");
         // Escape CSV fields containing commas or quotes
         let escape = |s: &str| -> String {
             if s.contains(',') || s.contains('"') || s.contains('\n') {
@@ -111,7 +116,7 @@ fn generate_csv(attendees: &[AttendeeListItem]) -> String {
             }
         };
         csv.push_str(&format!(
-            "{},{},{},{},{},{},{},{}\n",
+            "{},{},{},{},{},{},{},{},{},{},{},{},{}\n",
             escape(&a.name),
             escape(&a.email),
             escape(&a.ticket_name),
@@ -120,6 +125,11 @@ fn generate_csv(attendees: &[AttendeeListItem]) -> String {
             escape(checked_at),
             escape(checked_by),
             escape(&a.api_id),
+            deposit_status,
+            deposit_amount,
+            escape(deposit_tx),
+            nft,
+            refund_status,
         ));
     }
     csv
@@ -1237,6 +1247,20 @@ pub fn Admin() -> impl IntoView {
                                         Some(ref eid) => format!("/ticket/{api_id}?event_id={eid}"),
                                         None => format!("/ticket/{api_id}"),
                                     };
+                                    // Deposit/NFT/Refund badge state
+                                    let has_deposit = attendee.deposit_amount.is_some();
+                                    let is_deposit_verified = attendee.deposit_verified.as_deref() == Some("true");
+                                    let deposit_badge = if attendee.refund_status.is_some() {
+                                        Some(("badge badge-refunded", "Refunded"))
+                                    } else if is_deposit_verified {
+                                        Some(("badge badge-success", "Deposit ✓"))
+                                    } else if has_deposit {
+                                        Some(("badge badge-warning", "Deposit pending"))
+                                    } else {
+                                        None
+                                    };
+                                    let has_nft = attendee.nft_proof_url.is_some();
+                                    let nft_url = attendee.nft_proof_url.clone();
 
                                     view! {
                                         <div class="attendee-item" class:vip=is_vip class:selected=is_selected>
@@ -1265,6 +1289,34 @@ pub fn Admin() -> impl IntoView {
                                                     fallback=|| view! { <span></span> }
                                                 >
                                                     <span class="walkin-badge">"Walk-in"</span>
+                                                </Show>
+                                                <Show
+                                                    when=move || deposit_badge.is_some()
+                                                    fallback=|| view! { <span></span> }
+                                                >
+                                                    {
+                                                        let (cls, txt) = deposit_badge.unwrap_or(("", ""));
+                                                        view! { <span class=cls.to_string()>{txt}</span> }
+                                                    }
+                                                </Show>
+                                                <Show
+                                                    when=move || has_nft
+                                                    fallback=|| view! { <span></span> }
+                                                >
+                                                    {
+                                                        let nft_href = nft_url.clone().unwrap_or_default();
+                                                        view! {
+                                                            <a
+                                                                href=nft_href
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                class="badge badge-nft"
+                                                                title="View NFT"
+                                                            >
+                                                                "NFT ✦"
+                                                            </a>
+                                                        }
+                                                    }
                                                 </Show>
                                             </div>
                                             // Row 2: email + ticket + time ago + action buttons

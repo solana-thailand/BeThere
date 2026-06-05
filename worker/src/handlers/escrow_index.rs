@@ -210,10 +210,18 @@ pub async fn onchain_webhook_handler(
             AppError::Unauthorized("invalid or missing Authorization header".to_string()).into(),
         );
     }
-    let kv = state
-        .events_kv
-        .as_ref()
-        .ok_or_else(|| AppError::Internal("EVENTS KV not configured".to_string()))?;
+    let kv = match state.events_kv.as_ref() {
+        Some(kv) => kv,
+        None => {
+            // Without KV, escrow indexing is skipped — on-chain data is still
+            // the source of truth and can be re-indexed later.
+            tracing::warn!(
+                count = body.transactions.len(),
+                "onchain webhook: EVENTS KV not available, skipping escrow indexing"
+            );
+            return Ok(ApiOk::new(IndexSummary::default()));
+        }
+    };
 
     if body.transactions.is_empty() {
         return Ok(ApiOk::new(IndexSummary::default()));
@@ -339,12 +347,15 @@ pub async fn escrow_sync_handler(
     Extension(claims): Extension<Claims>,
     Json(body): Json<EscrowSyncRequest>,
 ) -> Result<ApiOk<IndexSummary>, WorkerError> {
-    let kv = state
-        .events_kv
-        .as_ref()
-        .ok_or_else(|| AppError::Internal("EVENTS KV not configured".to_string()))?;
+    let kv = state.events_kv.as_ref().ok_or_else(|| {
+        AppError::Internal(
+            "EVENTS KV not configured — escrow sync requires KV to store indexed events"
+                .to_string(),
+        )
+    })?;
+    let d1 = state.d1.as_deref();
 
-    let event = crate::event_store::get_event_config(kv, &body.event_id)
+    let event = crate::event_store::get_event_config_with_fallback(Some(kv), d1, &body.event_id)
         .await
         .map_err(AppError::Internal)?
         .ok_or_else(|| AppError::NotFound(format!("event '{}' not found", body.event_id)))?;
@@ -443,12 +454,10 @@ pub async fn get_onchain_events_handler(
     Extension(claims): Extension<Claims>,
     Path(event_id): Path<String>,
 ) -> Result<ApiOk<OnchainEventsResponse>, WorkerError> {
-    let kv = state
-        .events_kv
-        .as_ref()
-        .ok_or_else(|| AppError::Internal("EVENTS KV not configured".to_string()))?;
+    let kv = state.events_kv.as_ref();
+    let d1 = state.d1.as_deref();
 
-    let event = crate::event_store::get_event_config(kv, &event_id)
+    let event = crate::event_store::get_event_config_with_fallback(kv, d1, &event_id)
         .await
         .map_err(AppError::Internal)?
         .ok_or_else(|| AppError::NotFound(format!("event '{}' not found", event_id)))?;
@@ -468,7 +477,16 @@ pub async fn get_onchain_events_handler(
         return Err(AppError::Forbidden("insufficient permissions".to_string()).into());
     }
 
-    let events = escrow_indexer::get_onchain_events(kv, &event.id, 100).await;
+    let events = match kv {
+        Some(kv_ref) => escrow_indexer::get_onchain_events(kv_ref, &event.id, 100).await,
+        None => {
+            tracing::warn!(
+                event_id = %event.id,
+                "no KV available, returning empty on-chain events"
+            );
+            vec![]
+        }
+    };
 
     Ok(ApiOk::new(OnchainEventsResponse {
         event_id: event.id,

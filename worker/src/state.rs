@@ -163,6 +163,18 @@ impl AppState {
                 .ok()
                 .and_then(|s| s.parse::<i64>().ok())
                 .unwrap_or(1_777_183_200_000),
+            deposit_enabled: get_var(env, "EVENT_DEPOSIT_ENABLED")
+                .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+                .unwrap_or(false),
+            deposit_amount_usdc: get_var(env, "EVENT_DEPOSIT_AMOUNT_USDC")
+                .ok()
+                .and_then(|s| s.parse::<u64>().ok())
+                .unwrap_or(0),
+            deposit_amount_thb: get_var(env, "EVENT_DEPOSIT_AMOUNT_THB")
+                .ok()
+                .and_then(|s| s.parse::<u64>().ok())
+                .unwrap_or(0),
+            promptpay_id: get_var(env, "EVENT_PROMPTPAY_ID").unwrap_or_default(),
         };
 
         let dev_mode = get_var(env, "DEV_MODE")

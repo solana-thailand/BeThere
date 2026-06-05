@@ -72,10 +72,32 @@ pub struct AttendeeResponse {
     pub claim_token: Option<String>,
     pub participation_type: String,
     pub row_index: usize,
+    // Deposit fields
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deposit_status: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deposit_amount: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deposit_tx_signature: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deposit_verified: Option<String>,
+    // NFT field
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub nft_proof_url: Option<String>,
+    // Refund fields
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub refund_status: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub refund_link: Option<String>,
 }
 
 impl AttendeeResponse {
     pub fn from_attendee(attendee: &crate::models::attendee::Attendee) -> Self {
+        let deposit_status = Self::derive_deposit_status(
+            &attendee.deposit_verified,
+            &attendee.refund_status,
+            &attendee.deposit_amount,
+        );
         Self {
             api_id: attendee.api_id.clone(),
             name: attendee.display_name().to_string(),
@@ -88,7 +110,32 @@ impl AttendeeResponse {
             claim_token: attendee.claim_token.clone(),
             participation_type: attendee.participation_type.clone(),
             row_index: attendee.row_index,
+            deposit_status,
+            deposit_amount: attendee.deposit_amount.clone(),
+            deposit_tx_signature: attendee.deposit_tx_signature.clone(),
+            deposit_verified: attendee.deposit_verified.clone(),
+            nft_proof_url: attendee.nft_proof_url.clone(),
+            refund_status: attendee.refund_status.clone(),
+            refund_link: attendee.refund_link.clone(),
         }
+    }
+
+    /// Derive a human-readable deposit_status from the normalized fields.
+    fn derive_deposit_status(
+        deposit_verified: &Option<String>,
+        refund_status: &Option<String>,
+        deposit_amount: &Option<String>,
+    ) -> Option<String> {
+        if let Some(rs) = refund_status {
+            return Some(rs.clone());
+        }
+        if deposit_verified.as_deref() == Some("true") {
+            return Some("verified".to_string());
+        }
+        if deposit_amount.is_some() {
+            return Some("pending".to_string());
+        }
+        None
     }
 }
 
@@ -106,10 +153,32 @@ pub struct AttendeeListItem {
     pub qr_code_url: Option<String>,
     pub participation_type: String,
     pub row_index: usize,
+    // Deposit fields
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deposit_status: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deposit_amount: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deposit_tx_signature: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deposit_verified: Option<String>,
+    // NFT field
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub nft_proof_url: Option<String>,
+    // Refund fields
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub refund_status: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub refund_link: Option<String>,
 }
 
 impl AttendeeListItem {
     pub fn from_attendee(attendee: &crate::models::attendee::Attendee) -> Self {
+        let deposit_status = AttendeeResponse::derive_deposit_status(
+            &attendee.deposit_verified,
+            &attendee.refund_status,
+            &attendee.deposit_amount,
+        );
         Self {
             api_id: attendee.api_id.clone(),
             name: attendee.display_name().to_string(),
@@ -121,6 +190,13 @@ impl AttendeeListItem {
             qr_code_url: attendee.qr_code_url.clone(),
             participation_type: attendee.participation_type.clone(),
             row_index: attendee.row_index,
+            deposit_status,
+            deposit_amount: attendee.deposit_amount.clone(),
+            deposit_tx_signature: attendee.deposit_tx_signature.clone(),
+            deposit_verified: attendee.deposit_verified.clone(),
+            nft_proof_url: attendee.nft_proof_url.clone(),
+            refund_status: attendee.refund_status.clone(),
+            refund_link: attendee.refund_link.clone(),
         }
     }
 }

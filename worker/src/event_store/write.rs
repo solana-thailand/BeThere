@@ -44,6 +44,23 @@ pub async fn save_event_config(kv: &KvStore, config: &EventConfig) -> Result<(),
         .map_err(|e| format!("failed to write event config to KV: {e:?}"))
 }
 
+/// Dual-write: persist event config to D1 alongside KV.
+/// Non-blocking — errors are logged, not propagated, so KV remains the source of truth.
+pub async fn sync_event_to_d1(d1: Option<&worker::D1Database>, config: &EventConfig) {
+    if let Some(db) = d1
+        && let Err(e) = crate::db::events::upsert_event(db, config).await {
+            tracing::warn!(event_id = %config.id, error = %e, "D1 event dual-write failed");
+        }
+}
+
+/// Dual-write: delete event from D1 alongside KV.
+pub async fn sync_delete_event_from_d1(d1: Option<&worker::D1Database>, event_id: &str) {
+    if let Some(db) = d1
+        && let Err(e) = crate::db::events::delete_event(db, event_id).await {
+            tracing::warn!(event_id = %event_id, error = %e, "D1 event delete failed");
+        }
+}
+
 // ---------------------------------------------------------------------------
 // Escrow index writes
 // ---------------------------------------------------------------------------
@@ -83,9 +100,11 @@ pub async fn delete_escrow_index(kv: &KvStore, escrow_address: &str) -> Result<(
 /// Create a new event.
 ///
 /// Generates a unique ID from the slug, validates required fields,
-/// saves the full config, and updates the event index.
+/// saves the full config to D1 (primary) and KV (write-through cache if available),
+/// and updates the KV event index.
 pub async fn create_event(
-    kv: &KvStore,
+    kv: Option<&KvStore>,
+    d1: Option<&worker::D1Database>,
     req: &CreateEventRequest,
     updated_by: &str,
 ) -> Result<EventConfig, String> {
@@ -130,11 +149,26 @@ pub async fn create_event(
 
     // Auto-deduplicate slug on collision (e.g. "my-event" → "my-event-1" → "my-event-2")
     // Supports recurring events with the same name.
-    let index = get_event_index(kv).await?;
-    let (id, slug) = {
-        let existing_ids: Vec<&str> = index.events.iter().map(|e| e.id.as_str()).collect();
-        deduplicate_slug(&slug, &existing_ids)
+    // Collect existing IDs from KV index + D1 for deduplication.
+    let kv_index = if let Some(kv_ref) = kv {
+        get_event_index(kv_ref).await?
+    } else {
+        EventIndex::default()
     };
+    let mut existing_ids: Vec<String> = kv_index.events.iter().map(|e| e.id.clone()).collect();
+    if let Some(db) = d1
+        && let Ok(d1_rows) = crate::db::events::list_events(db).await
+    {
+        for row in d1_rows {
+            if let Some(row_id) = row.id
+                && !existing_ids.iter().any(|id| id == &row_id)
+            {
+                existing_ids.push(row_id);
+            }
+        }
+    }
+    let existing_id_refs: Vec<&str> = existing_ids.iter().map(|s| s.as_str()).collect();
+    let (id, slug) = deduplicate_slug(&slug, &existing_id_refs);
 
     let now = chrono::Utc::now().to_rfc3339();
 
@@ -210,18 +244,27 @@ pub async fn create_event(
         updated_by: updated_by.to_string(),
     };
 
-    // Save full config
-    save_event_config(kv, &config).await?;
+    // D1 write (primary — always if available)
+    sync_event_to_d1(d1, &config).await;
 
-    // Maintain escrow reverse index (H7)
-    if !config.escrow_address.is_empty() {
-        save_escrow_index(kv, &config.escrow_address, &config.id).await?;
+    // KV write-through cache (if available, non-fatal)
+    if let Some(kv_ref) = kv {
+        if let Err(e) = save_event_config(kv_ref, &config).await {
+            tracing::warn!(event_id = %id, error = %e, "KV save failed for new event (D1 is primary)");
+        }
+
+        // Maintain escrow reverse index (H7)
+        if !config.escrow_address.is_empty() {
+            let _ = save_escrow_index(kv_ref, &config.escrow_address, &config.id).await;
+        }
+
+        // Update KV index
+        let mut index = kv_index;
+        index.events.insert(0, config.to_meta());
+        if let Err(e) = save_event_index(kv_ref, &index).await {
+            tracing::warn!(event_id = %id, error = %e, "KV index update failed for new event");
+        }
     }
-
-    // Update index
-    let mut index = index;
-    index.events.insert(0, config.to_meta());
-    save_event_index(kv, &index).await?;
 
     tracing::info!(
         event_id = %id,
@@ -511,6 +554,228 @@ pub async fn update_event(
     Ok(config)
 }
 
+/// Apply partial update from `UpdateEventRequest` to an existing `EventConfig`.
+/// Validates escrow-critical field locks and deposit caps.
+/// Does NOT save — caller is responsible for persisting to KV/D1.
+pub fn apply_update(config: &mut EventConfig, req: &UpdateEventRequest) -> Result<(), String> {
+    // SEC-002: Lock escrow-critical fields after on-chain init.
+    let is_escrow_reset = req
+        .escrow_status
+        .as_ref()
+        .is_some_and(|s| matches!(s, EscrowStatus::None));
+
+    if !config.escrow_address.is_empty() && !is_escrow_reset {
+        let wallet_changed = req
+            .organizer_wallet
+            .as_ref()
+            .is_some_and(|w| w.trim() != config.organizer_wallet.trim());
+        let event_id_changed = req
+            .on_chain_event_id
+            .is_some_and(|id| id != config.on_chain_event_id);
+        let deposit_usdc_changed = req
+            .deposit_amount_usdc
+            .is_some_and(|d| d != config.deposit_amount_usdc);
+        let deposit_thb_changed = req
+            .deposit_amount_thb
+            .is_some_and(|d| d != config.deposit_amount_thb);
+        let deadline_changed = req
+            .refund_deadline_hours
+            .is_some_and(|h| h != config.refund_deadline_hours);
+        if wallet_changed
+            || event_id_changed
+            || deposit_usdc_changed
+            || deposit_thb_changed
+            || deadline_changed
+        {
+            return Err(
+                "cannot change organizer_wallet, on_chain_event_id, deposit_amount_usdc, deposit_amount_thb, or refund_deadline_hours after escrow is initialized on-chain"
+                    .to_string(),
+            );
+        }
+    }
+
+    // SEC-003: Max deposit cap
+    const MAX_DEPOSIT_USDC: u64 = 1_000_000_000;
+    if let Some(v) = req.deposit_amount_usdc {
+        if v > MAX_DEPOSIT_USDC {
+            return Err(format!(
+                "deposit_amount_usdc exceeds maximum cap ({MAX_DEPOSIT_USDC} = $1,000 USDC)"
+            ));
+        }
+        config.deposit_amount_usdc = v;
+    }
+
+    // Apply partial updates
+    if let Some(ref name) = req.name {
+        config.name = name.trim().to_string();
+    }
+    if let Some(ref slug) = req.slug {
+        config.slug = slugify(slug);
+    }
+    if let Some(ref tagline) = req.tagline {
+        config.tagline = tagline.trim().to_string();
+    }
+    if let Some(ref link) = req.link {
+        config.link = link.trim().to_string();
+    }
+    if let Some(ref status) = req.status {
+        config.status = status.clone();
+    }
+    if let Some(ms) = req.event_start_ms {
+        if ms <= 0 {
+            return Err("event_start_ms must be positive".to_string());
+        }
+        config.event_start_ms = ms;
+    }
+    if let Some(ms) = req.event_end_ms {
+        if ms <= config.event_start_ms {
+            return Err("event_end_ms must be after event_start_ms".to_string());
+        }
+        config.event_end_ms = ms;
+    }
+    if let Some(tba) = req.time_tba {
+        config.time_tba = tba;
+    }
+    if let Some(ref sheet_id) = req.sheet_id {
+        if sheet_id.trim().is_empty() {
+            return Err("sheet_id cannot be empty".to_string());
+        }
+        config.sheet_id = sheet_id.trim().to_string();
+    }
+    if let Some(ref sheet_name) = req.sheet_name {
+        config.sheet_name = sheet_name.clone();
+    }
+    if let Some(ref staff_sheet_name) = req.staff_sheet_name {
+        config.staff_sheet_name = staff_sheet_name.clone();
+    }
+    if let Some(enabled) = req.quiz_enabled {
+        config.quiz_enabled = enabled;
+    }
+    if let Some(ref v) = req.nft_collection_mint {
+        config.nft_collection_mint = v.trim().to_string();
+    }
+    if let Some(ref v) = req.nft_metadata_uri {
+        config.nft_metadata_uri = v.trim().to_string();
+    }
+    if let Some(ref v) = req.nft_image_url {
+        config.nft_image_url = v.trim().to_string();
+    }
+    if let Some(ref v) = req.nft_name_template {
+        config.nft_name_template = v.trim().to_string();
+    }
+    if let Some(ref v) = req.nft_symbol {
+        config.nft_symbol = v.trim().to_string();
+    }
+    if let Some(ref v) = req.nft_description_template {
+        config.nft_description_template = v.trim().to_string();
+    }
+    if let Some(ref emails) = req.organizer_emails {
+        config.organizer_emails = emails
+            .iter()
+            .map(|e| e.trim().to_lowercase())
+            .filter(|e| !e.is_empty())
+            .collect();
+    }
+    if let Some(ref emails) = req.staff_emails {
+        config.staff_emails = emails
+            .iter()
+            .map(|e| e.trim().to_lowercase())
+            .filter(|e| !e.is_empty())
+            .collect();
+    }
+    if let Some(ref url) = req.claim_base_url {
+        config.claim_base_url = url.trim().to_string();
+    }
+    if let Some(ref v) = req.merkle_tree {
+        config.merkle_tree = v.trim().to_string();
+    }
+    if let Some(ref v) = req.organization_id {
+        config.organization_id = v.trim().to_string();
+    }
+    if let Some(v) = req.deposit_enabled {
+        config.deposit_enabled = v;
+    }
+    if let Some(v) = req.deposit_amount_thb {
+        config.deposit_amount_thb = v;
+    }
+    if let Some(ref v) = req.promptpay_id {
+        config.promptpay_id = v.trim().to_string();
+    }
+    if let Some(ref v) = req.escrow_address {
+        config.escrow_address = v.trim().to_string();
+    }
+    if let Some(ref v) = req.escrow_status {
+        let valid = matches!(
+            (&config.escrow_status, v),
+            (EscrowStatus::None, EscrowStatus::Initialized)
+                | (EscrowStatus::Initialized, EscrowStatus::Deactivated)
+                | (EscrowStatus::Deactivated, EscrowStatus::Closed)
+                | (EscrowStatus::Closed, EscrowStatus::None)
+                | (EscrowStatus::Cancelled, EscrowStatus::None)
+        );
+        if !valid {
+            return Err(format!(
+                "invalid escrow status transition: {} → {}",
+                config.escrow_status, v
+            ));
+        }
+        config.escrow_status = v.clone();
+    }
+    if let Some(ref v) = req.organizer_wallet {
+        config.organizer_wallet = v.trim().to_string();
+    }
+    if let Some(v) = req.on_chain_event_id {
+        config.on_chain_event_id = v;
+    }
+    if let Some(v) = req.refund_deadline_hours {
+        config.refund_deadline_hours = v;
+    }
+    if let Some(v) = req.max_refundable_deposits {
+        config.max_refundable_deposits = v;
+    }
+    if let Some(ref v) = req.description {
+        config.description = v.trim().to_string();
+    }
+    if let Some(ref v) = req.location {
+        config.location = v.trim().to_string();
+    }
+    if let Some(ref v) = req.video_url {
+        config.video_url = v.trim().to_string();
+    }
+    if let Some(ref v) = req.event_format {
+        config.event_format = v.clone();
+        if v.has_in_person() {
+            config.deposit_enabled = true;
+        }
+    }
+    if let Some(v) = req.require_contact_info {
+        config.require_contact_info = v;
+    }
+    if let Some(v) = req.require_photo_consent {
+        config.require_photo_consent = v;
+    }
+    if let Some(v) = req.in_person_capacity {
+        config.in_person_capacity = v;
+    }
+    if let Some(v) = req.online_capacity {
+        config.online_capacity = v;
+    }
+    if let Some(ref v) = req.online_open_mode {
+        config.online_open_mode = v.clone();
+    }
+    if let Some(v) = req.online_registration_open {
+        config.online_registration_open = v;
+    }
+    if let Some(v) = req.deposit_deadline_hours {
+        config.deposit_deadline_hours = v;
+    }
+    if let Some(ref v) = req.visibility {
+        config.visibility = v.clone();
+    }
+
+    Ok(())
+}
+
 /// Archive (soft-delete) an event by setting its status to Archived.
 ///
 /// SEC-004: Rejects archive if the event has an active on-chain escrow.
@@ -766,10 +1031,11 @@ pub async fn seed_from_config(
         claim_base_url: global.server.claim_base_url.clone(),
         merkle_tree: String::new(), // not in global config — per-event only
         organization_id: String::new(), // seeded event has no org
-        deposit_enabled: false,
-        deposit_amount_usdc: 0,
-        deposit_amount_thb: 0,
-        promptpay_id: String::new(),
+        deposit_enabled: global.event_defaults.deposit_enabled
+            || event_checkin_domain::models::event::EventFormat::InPerson.has_in_person(),
+        deposit_amount_usdc: global.event_defaults.deposit_amount_usdc,
+        deposit_amount_thb: global.event_defaults.deposit_amount_thb,
+        promptpay_id: global.event_defaults.promptpay_id.clone(),
         escrow_address: String::new(),
         escrow_status: EscrowStatus::None,
         organizer_wallet: String::new(),
@@ -807,6 +1073,46 @@ pub async fn seed_from_config(
     );
 
     Ok(config)
+}
+
+// ---------------------------------------------------------------------------
+// KV seeding from D1 (P0 — ensures KV index is consistent with D1)
+// ---------------------------------------------------------------------------
+
+/// Seed KV from D1: read all events from D1, upsert each config + rebuild the index.
+///
+/// Idempotent — overwrites existing KV entries with D1 data.
+/// Returns the number of events synced.
+pub async fn seed_kv_from_d1(kv: &KvStore, d1: &worker::D1Database) -> Result<usize, String> {
+    let rows = crate::db::events::list_events(d1).await?;
+    let count = rows.len();
+
+    if rows.is_empty() {
+        tracing::info!("seed_kv_from_d1: no events in D1, nothing to do");
+        return Ok(0);
+    }
+
+    // Upsert each event config into KV
+    let mut index = get_event_index(kv).await?;
+    for row in &rows {
+        let config = row.to_event_config();
+        save_event_config(kv, &config).await?;
+
+        // Upsert into index (update if exists, insert if new)
+        let meta = config.to_meta();
+        if let Some(existing) = index.events.iter_mut().find(|e| e.id == meta.id) {
+            *existing = meta;
+        } else {
+            index.events.push(meta);
+        }
+    }
+
+    // Sort by creation date (newest first) to match normal ordering
+    index.events.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+    save_event_index(kv, &index).await?;
+
+    tracing::info!(count, "seed_kv_from_d1: synced events from D1 to KV");
+    Ok(count)
 }
 
 // ---------------------------------------------------------------------------

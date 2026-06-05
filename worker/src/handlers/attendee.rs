@@ -79,17 +79,46 @@ pub async fn list_attendees(
     tracing::info!("listing attendees (requested by: {})", claims.email);
 
     let event = resolve_event_with_access(&state, &claims, query.event_id.as_deref()).await?;
+    tracing::info!(event_id = %event.id, "STEP 1: event resolved");
 
     let kv = resolve_kv(&state);
+    tracing::info!(
+        has_kv = kv.is_some(),
+        has_d1 = state.d1.is_some(),
+        "STEP 2: bindings"
+    );
 
-    // 1. Fetch sheet-based attendees
-    let mut attendees =
-        sheets::get_attendees_for_event(&state, &event.sheet_id, &event.sheet_name, kv, &event.id)
-            .await
-            .map_err(|e| {
-                tracing::error!("failed to fetch attendees: {e}");
-                AppError::Internal(format!("failed to fetch attendees: {e}"))
-            })?;
+    // 1. Fetch sheet-based attendees (D1 fallback when Sheets is unavailable/rate-limited)
+    tracing::info!("STEP 3: before get_attendees_for_event");
+    let mut attendees = match sheets::get_attendees_for_event(
+        &state,
+        &event.sheet_id,
+        &event.sheet_name,
+        kv,
+        &event.id,
+    )
+    .await
+    {
+        Ok(a) => a,
+        Err(sheets_err) => {
+            tracing::warn!(error = %sheets_err, "Sheets fetch failed, trying D1 fallback");
+            match &state.d1 {
+                Some(db) => crate::db::attendees::get_attendees_by_event(db, &event.id)
+                    .await
+                    .map_err(|d1_err| {
+                        tracing::error!(error = %d1_err, "D1 fallback also failed");
+                        AppError::Internal(format!("Sheets: {sheets_err} | D1: {d1_err}"))
+                    })?,
+                None => {
+                    return Err(AppError::Internal(format!(
+                        "failed to fetch attendees: {sheets_err}"
+                    ))
+                    .into());
+                }
+            }
+        }
+    };
+    tracing::info!(count = attendees.len(), "STEP 4: attendees fetched");
 
     // 2. Merge walk-in attendees from KV (only for this event)
     let sheet_len = attendees.len();
@@ -294,13 +323,25 @@ pub async fn get_public_ticket(
     let event = resolve_event(&state, query.event_id.as_deref()).await?;
 
     let kv = resolve_kv(&state);
-    let attendee = sheets::get_attendee_by_id(&id, &state, &event.sheet_id, &event.sheet_name, kv)
-        .await
-        .map_err(|e| {
-            tracing::error!(attendee_id = %id, error = %e, "failed to fetch attendee for public ticket");
-            AppError::Internal(format!("failed to fetch attendee: {e}"))
-        })?
-        .ok_or_else(|| AppError::NotFound(format!("attendee with id '{id}' not found")))?;
+    let attendee = match sheets::get_attendee_by_id(
+        &id,
+        &state,
+        &event.sheet_id,
+        &event.sheet_name,
+        kv,
+    )
+    .await
+    {
+        Ok(Some(a)) => a,
+        Ok(None) => {
+            return Err(AppError::NotFound(format!("attendee with id '{id}' not found")).into());
+        }
+        Err(e) => {
+            // Sheets errors (404, 429, etc.) — attendee can't be found
+            tracing::warn!(attendee_id = %id, error = %e, "failed to fetch attendee for public ticket");
+            return Err(AppError::NotFound(format!("attendee with id '{id}' not found")).into());
+        }
+    };
 
     let mut response = AttendeeResponse::from_attendee(&attendee);
 

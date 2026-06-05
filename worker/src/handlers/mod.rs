@@ -210,6 +210,7 @@ pub fn routes(state: AppState) -> Router<()> {
         // Migrate and seed routes MUST come before /events/{id} to avoid path conflicts
         .route("/events/migrate", post(events::migrate_quiz))
         .route("/events/seed", post(events::seed_event))
+        .route("/events/reseed-kv", post(events::reseed_kv_from_d1))
         .route(
             "/events/{id}",
             get(events::get_event)

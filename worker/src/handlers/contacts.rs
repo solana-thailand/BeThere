@@ -182,15 +182,24 @@ pub async fn sync_contacts_handler(
         return Err(AppError::Validation("CONTACTS_SHEET_ID not configured".to_string()).into());
     }
 
-    let kv = state
-        .events_kv
-        .as_ref()
-        .ok_or_else(|| AppError::Internal("EVENTS KV namespace not configured".to_string()))?;
+    let kv = state.events_kv.as_ref();
+    let d1 = state.d1.as_deref();
 
-    // Load all events
-    let index = crate::event_store::get_event_index(kv)
-        .await
-        .map_err(AppError::Internal)?;
+    // Load all events (KV → D1 fallback)
+    let event_metas: Vec<event_checkin_domain::models::event::EventMeta> = if let Some(kv_ref) = kv
+    {
+        let index = crate::event_store::get_event_index(kv_ref)
+            .await
+            .map_err(AppError::Internal)?;
+        index.events
+    } else if let Some(db) = d1 {
+        tracing::info!("no KV, loading event list from D1 for contacts sync");
+        crate::db::events::list_events_as_meta(db)
+            .await
+            .map_err(AppError::Internal)?
+    } else {
+        return Err(AppError::Internal("neither KV nor D1 configured".to_string()).into());
+    };
 
     let mut synced = 0usize;
     let mut added = 0usize;
@@ -202,7 +211,7 @@ pub async fn sync_contacts_handler(
         &state,
         &contacts_config.contacts_sheet_id,
         &contacts_config.contacts_sheet_name,
-        Some(kv),
+        kv,
     )
     .await
     .unwrap_or_default();
@@ -211,26 +220,38 @@ pub async fn sync_contacts_handler(
         existing.iter().map(|c| c.email.to_lowercase()).collect();
 
     // For each event, load attendees and upsert
-    for event_meta in &index.events {
-        let config = match crate::event_store::get_event_config(kv, &event_meta.id)
-            .await
-            .map_err(AppError::Internal)?
-        {
-            Some(c) => c,
-            None => continue,
-        };
+    for event_meta in &event_metas {
+        let config =
+            match crate::event_store::get_event_config_with_fallback(kv, d1, &event_meta.id)
+                .await
+                .map_err(AppError::Internal)?
+            {
+                Some(c) => c,
+                None => continue,
+            };
 
         // Resolve the contacts sheet from the event's organization
-        let resolved = crate::org_store::resolve_contacts_sheet(kv, &config, contacts_config).await;
+        let resolved = match kv {
+            Some(kv_ref) => {
+                crate::org_store::resolve_contacts_sheet(kv_ref, &config, contacts_config).await
+            }
+            None => {
+                // No KV: fall back to global sheets config (same as resolve_contacts_sheet fallback)
+                event_checkin_domain::models::org::ResolvedContactsSheet {
+                    sheet_id: contacts_config.contacts_sheet_id.clone(),
+                    contacts_sheet_name: contacts_config.contacts_sheet_name.clone(),
+                    events_sheet_name: contacts_config.events_sheet_name.clone(),
+                }
+            }
+        };
 
         if resolved.sheet_id.is_empty() {
             continue;
         }
 
-        let attendees =
-            sheets::get_attendees(&state, &config.sheet_id, &config.sheet_name, Some(kv))
-                .await
-                .unwrap_or_default();
+        let attendees = sheets::get_attendees(&state, &config.sheet_id, &config.sheet_name, kv)
+            .await
+            .unwrap_or_default();
 
         // Sync event to Events tab (non-fatal)
         if let Err(e) = events_tab::upsert_event_tab(
@@ -239,7 +260,7 @@ pub async fn sync_contacts_handler(
             &state,
             &resolved.sheet_id,
             &resolved.events_sheet_name,
-            Some(kv),
+            kv,
         )
         .await
         {
@@ -271,7 +292,7 @@ pub async fn sync_contacts_handler(
                 &state,
                 &resolved.sheet_id,
                 &resolved.contacts_sheet_name,
-                Some(kv),
+                kv,
             )
             .await
             {

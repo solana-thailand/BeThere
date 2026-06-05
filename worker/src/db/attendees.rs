@@ -6,7 +6,9 @@
 use std::str::FromStr;
 
 use event_checkin_domain::models::attendee::{Attendee, CheckInStatus};
+use js_sys::Array;
 use serde::Deserialize;
+use wasm_bindgen::JsCast;
 use worker::D1Database;
 use worker::d1::D1Type;
 
@@ -143,6 +145,89 @@ pub(crate) async fn verify_deposit(
     .map_err(|e| format!("D1 verify_deposit run: {e:?}"))?;
 
     Ok(())
+}
+
+/// Get deposit status from D1 by attendee ID.
+/// Returns the raw deposit columns if a row is found.
+pub(crate) async fn get_deposit_status_from_d1(
+    db: &D1Database,
+    attendee_id: &str,
+) -> Result<Option<DepositStatusRow>, String> {
+    let stmt = db.prepare(
+        "SELECT id, event_id, deposit_status, deposit_tx_hash, deposit_amount_usdc \
+         FROM attendees WHERE id = ?1",
+    );
+    let row = stmt
+        .bind_refs(&[D1Type::Text(attendee_id)])
+        .map_err(|e| format!("D1 get_deposit_status bind: {e:?}"))?
+        .first::<DepositStatusRow>(None)
+        .await
+        .ok() // D1 returns JsValue(null) for no-match, not Rust None
+        .flatten();
+
+    Ok(row)
+}
+
+/// Raw D1 row for deposit status columns.
+#[derive(Deserialize)]
+pub(crate) struct DepositStatusRow {
+    pub id: String,
+    pub event_id: String,
+    pub deposit_status: Option<String>,
+    pub deposit_tx_hash: Option<String>,
+    pub deposit_amount_usdc: Option<i64>,
+}
+
+/// Save a pending deposit to D1 (upsert deposit columns on the attendee row).
+pub(crate) async fn save_deposit_status_to_d1(
+    db: &D1Database,
+    attendee_id: &str,
+    deposit_status: &str,
+    deposit_tx_hash: Option<&str>,
+    deposit_amount_usdc: i64,
+) -> Result<(), String> {
+    let tx_hash = deposit_tx_hash.unwrap_or("");
+    let stmt = db.prepare(
+        "UPDATE attendees \
+         SET deposit_status = ?1, deposit_tx_hash = ?2, deposit_amount_usdc = ?3, \
+         updated_at = datetime('now') \
+         WHERE id = ?4",
+    );
+    stmt.bind_refs(&[
+        D1Type::Text(deposit_status),
+        D1Type::Text(tx_hash),
+        D1Type::Integer(deposit_amount_usdc as i32),
+        D1Type::Text(attendee_id),
+    ])
+    .map_err(|e| format!("D1 save_deposit_status bind: {e:?}"))?
+    .run()
+    .await
+    .map_err(|e| format!("D1 save_deposit_status run: {e:?}"))?;
+
+    Ok(())
+}
+
+/// Count deposits for an event from D1 (fallback for KV deposit counter).
+pub(crate) async fn count_deposits_by_event(
+    db: &D1Database,
+    event_id: &str,
+) -> Result<u32, String> {
+    let stmt = db.prepare(
+        "SELECT COUNT(*) as cnt FROM attendees \
+         WHERE event_id = ?1 AND deposit_status IS NOT NULL AND deposit_status != ''",
+    );
+    #[derive(Deserialize)]
+    struct CountRow {
+        cnt: i64,
+    }
+    let row = stmt
+        .bind_refs(&[D1Type::Text(event_id)])
+        .map_err(|e| format!("D1 count_deposits bind: {e:?}"))?
+        .first::<CountRow>(Some("cnt"))
+        .await
+        .map_err(|e| format!("D1 count_deposits first: {e:?}"))?;
+
+    Ok(row.map(|r| r.cnt as u32).unwrap_or(0))
 }
 
 /// Write refund status to D1.
@@ -316,7 +401,8 @@ pub(crate) async fn get_attendee_by_id(
         .map_err(|e| format!("D1 get_attendee_by_id bind: {e:?}"))?
         .first::<D1AttendeeRow>(None)
         .await
-        .map_err(|e| format!("D1 get_attendee_by_id first: {e:?}"))?;
+        .ok() // D1 returns JsValue(null) for no-match
+        .flatten();
 
     Ok(row.map(|r| r.to_attendee()))
 }
@@ -340,12 +426,16 @@ pub(crate) async fn get_attendee_by_claim_token(
         .map_err(|e| format!("D1 get_attendee_by_claim_token bind: {e:?}"))?
         .first::<D1AttendeeRow>(None)
         .await
-        .map_err(|e| format!("D1 get_attendee_by_claim_token first: {e:?}"))?;
+        .ok() // D1 returns JsValue(null) for no-match
+        .flatten();
 
     Ok(row.map(|r| r.to_attendee()))
 }
 
 /// Fetch all attendees for a given event from D1.
+///
+/// Uses JSON.stringify-based deserialization to avoid the panic in
+/// `D1Result::results()` which uses `serde_wasm_bindgen::from_value(...).unwrap()`.
 pub(crate) async fn get_attendees_by_event(
     db: &D1Database,
     event_id: &str,
@@ -360,16 +450,63 @@ pub(crate) async fn get_attendees_by_event(
          FROM attendees WHERE event_id = ?1 \
          ORDER BY sheet_row_index ASC, created_at ASC",
     );
-    let result = stmt
+    let bound = stmt
         .bind_refs(&[D1Type::Text(event_id)])
-        .map_err(|e| format!("D1 get_attendees_by_event bind: {e:?}"))?
-        .all()
-        .await
-        .map_err(|e| format!("D1 get_attendees_by_event all: {e:?}"))?;
+        .map_err(|e| format!("D1 get_attendees_by_event bind: {e:?}"))?;
 
-    let rows: Vec<D1AttendeeRow> = result
-        .results()
-        .map_err(|e| format!("D1 get_attendees_by_event results: {e:?}"))?;
+    // Bypass D1Result::results() entirely — it uses serde_wasm_bindgen::from_value().unwrap()
+    // which panics on type mismatches (e.g. D1 NULL → serde_json::Value). With panic="abort",
+    // this kills the Worker isolate and causes the runtime hang.
+    //
+    // Instead, call the prepared statement's .all() promise directly via raw JS interop,
+    // extract the .results array from the returned JS object, then serialize each row via
+    // JSON.stringify and parse with serde_json (pure Rust, never panics on bad data).
+    let raw_result = wasm_bindgen_futures::JsFuture::from(
+        bound
+            .inner()
+            .all()
+            .map_err(|e| format!("D1 raw all() call: {e:?}"))?,
+    )
+    .await
+    .map_err(|e| format!("D1 raw all() await: {e:?}"))?;
+
+    // Extract the .results array from the D1 result JS object
+    let results_val = js_sys::Reflect::get(&raw_result, &js_sys::JsString::from("results"))
+        .map_err(|e| format!("D1 get results property: {e:?}"))?;
+
+    // null results → empty
+    if results_val.is_null() || results_val.is_undefined() {
+        return Ok(Vec::new());
+    }
+
+    let results_arr: Array = results_val
+        .dyn_into()
+        .map_err(|e| format!("D1 results is not an array: {e:?}"))?;
+
+    let mut rows = Vec::with_capacity(results_arr.length() as usize);
+    for (i, js_row) in results_arr.iter().enumerate() {
+        // JSON.stringify the JS object → string, then parse with serde_json.
+        // This completely avoids serde_wasm_bindgen and its .unwrap() panics.
+        let json_str = match js_sys::JSON::stringify(&js_row) {
+            Ok(s) => s.as_string().unwrap_or_default(),
+            Err(e) => {
+                let msg = format!("{e:?}");
+                tracing::warn!(row_index = i, error = %msg, "D1: JSON.stringify failed, skipping row");
+                continue;
+            }
+        };
+        match serde_json::from_str::<D1AttendeeRow>(&json_str) {
+            Ok(row) => rows.push(row),
+            Err(e) => {
+                tracing::warn!(
+                    row_index = i,
+                    error = %e,
+                    json = %json_str.chars().take(200).collect::<String>(),
+                    "D1: skipping row with deserialize error"
+                );
+            }
+        }
+    }
 
     Ok(rows.into_iter().map(|r| r.to_attendee()).collect())
 }
@@ -421,4 +558,175 @@ pub(crate) async fn count_in_person_attendees(
         .map_err(|e| format!("D1 count_in_person first: {e:?}"))?;
 
     Ok(row.map(|r| r.cnt as usize).unwrap_or(0))
+}
+
+// ==========================================================================
+// Walk-in attendee D1 helpers (P3.3: KV-optional fallback)
+// ==========================================================================
+
+use event_checkin_domain::models::attendee::WalkinAttendee;
+
+/// Check if a walk-in attendee already exists for the given event + email.
+pub(crate) async fn check_walkin_duplicate(
+    db: &D1Database,
+    event_id: &str,
+    email: &str,
+) -> Result<bool, String> {
+    let stmt = db.prepare(
+        "SELECT COUNT(*) as cnt FROM attendees \
+         WHERE event_id = ?1 AND email = ?2 AND participation_type = 'walkin'",
+    );
+    #[derive(Deserialize)]
+    struct CountRow {
+        cnt: i64,
+    }
+    let row = stmt
+        .bind_refs(&[D1Type::Text(event_id), D1Type::Text(email)])
+        .map_err(|e| format!("D1 check_walkin_duplicate bind: {e:?}"))?
+        .first::<CountRow>(Some("cnt"))
+        .await
+        .map_err(|e| format!("D1 check_walkin_duplicate first: {e:?}"))?;
+
+    Ok(row.map(|r| r.cnt > 0).unwrap_or(false))
+}
+
+/// Insert a walk-in attendee into the D1 attendees table.
+///
+/// Uses `participation_type = 'walkin'` to distinguish from regular attendees.
+/// The `id` is derived from the claim_token (UUID v7).
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn upsert_walkin_attendee(
+    db: &D1Database,
+    id: &str,
+    event_id: &str,
+    email: &str,
+    name: &str,
+    phone: Option<&str>,
+    checked_in_at: &str,
+    checked_in_by: &str,
+    claim_token: &str,
+) -> Result<(), String> {
+    let stmt = db.prepare(
+        "INSERT INTO attendees (id, event_id, email, name, approval_status, participation_type, \
+         contact_channel, contact_handle, checked_in_at, checked_in_by, claim_token, \
+         created_at, updated_at) \
+         VALUES (?1, ?2, ?3, ?4, 'approved', 'walkin', ?5, ?6, ?7, ?8, ?9, \
+         datetime('now'), datetime('now')) \
+         ON CONFLICT (id) DO UPDATE SET \
+         name = excluded.name, \
+         checked_in_at = excluded.checked_in_at, \
+         checked_in_by = excluded.checked_in_by, \
+         updated_at = datetime('now')",
+    );
+    // phone → contact_channel, empty handle
+    let contact_channel = phone.unwrap_or("");
+    stmt.bind_refs(&[
+        D1Type::Text(id),
+        D1Type::Text(event_id),
+        D1Type::Text(email),
+        D1Type::Text(name),
+        D1Type::Text(contact_channel),
+        D1Type::Text(""), // contact_handle
+        D1Type::Text(checked_in_at),
+        D1Type::Text(checked_in_by),
+        D1Type::Text(claim_token),
+    ])
+    .map_err(|e| format!("D1 upsert_walkin_attendee bind: {e:?}"))?
+    .run()
+    .await
+    .map_err(|e| format!("D1 upsert_walkin_attendee run: {e:?}"))?;
+
+    Ok(())
+}
+
+/// Fetch walk-in attendees for an event from D1.
+///
+/// Filters by `participation_type = 'walkin'` and converts D1 rows
+/// to `WalkinAttendee` domain objects.
+pub(crate) async fn get_walkin_attendees(
+    db: &D1Database,
+    event_id: &str,
+) -> Result<Vec<WalkinAttendee>, String> {
+    let stmt = db.prepare(
+        "SELECT id, event_id, email, name, participation_type, \
+         checked_in_at, checked_in_by, claim_token, claimed_at, \
+         contact_channel, deposit_status \
+         FROM attendees \
+         WHERE event_id = ?1 AND participation_type = 'walkin' \
+         ORDER BY checked_in_at ASC",
+    );
+    let bound = stmt
+        .bind_refs(&[D1Type::Text(event_id)])
+        .map_err(|e| format!("D1 get_walkin_attendees bind: {e:?}"))?;
+
+    // Use same safe JSON stringify approach as get_attendees_by_event
+    let raw_result = wasm_bindgen_futures::JsFuture::from(
+        bound
+            .inner()
+            .all()
+            .map_err(|e| format!("D1 get_walkin raw all() call: {e:?}"))?,
+    )
+    .await
+    .map_err(|e| format!("D1 get_walkin raw all() await: {e:?}"))?;
+
+    let results_val = js_sys::Reflect::get(&raw_result, &js_sys::JsString::from("results"))
+        .map_err(|e| format!("D1 get_walkin results property: {e:?}"))?;
+
+    if results_val.is_null() || results_val.is_undefined() {
+        return Ok(Vec::new());
+    }
+
+    let results_arr: Array = results_val
+        .dyn_into()
+        .map_err(|e| format!("D1 get_walkin results is not an array: {e:?}"))?;
+
+    let mut walkins = Vec::with_capacity(results_arr.length() as usize);
+    for (i, js_row) in results_arr.iter().enumerate() {
+        let json_str = match js_sys::JSON::stringify(&js_row) {
+            Ok(s) => s.as_string().unwrap_or_default(),
+            Err(e) => {
+                let msg = format!("{e:?}");
+                tracing::warn!(row_index = i, error = %msg, "D1 walkin: JSON.stringify failed, skipping row");
+                continue;
+            }
+        };
+        #[derive(Deserialize)]
+        struct WalkinRow {
+            event_id: String,
+            email: String,
+            name: String,
+            checked_in_at: Option<String>,
+            checked_in_by: Option<String>,
+            claim_token: Option<String>,
+            claimed_at: Option<String>,
+            contact_channel: Option<String>,
+        }
+        match serde_json::from_str::<WalkinRow>(&json_str) {
+            Ok(row) => {
+                // phone stored in contact_channel for walkins
+                let phone = row.contact_channel.filter(|c| !c.is_empty());
+                walkins.push(WalkinAttendee {
+                    event_id: row.event_id,
+                    name: row.name,
+                    email: row.email,
+                    phone,
+                    claim_token: row.claim_token.unwrap_or_default(),
+                    checked_in_at: row.checked_in_at.unwrap_or_default(),
+                    checked_in_by: row.checked_in_by.unwrap_or_default(),
+                    wallet_address: None,
+                    claimed_at: row.claimed_at,
+                });
+            }
+            Err(e) => {
+                tracing::warn!(
+                    row_index = i,
+                    error = %e,
+                    json = %json_str.chars().take(200).collect::<String>(),
+                    "D1 walkin: skipping row with deserialize error"
+                );
+            }
+        }
+    }
+
+    Ok(walkins)
 }

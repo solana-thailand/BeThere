@@ -64,9 +64,12 @@ async fn fetch(
     env: Env,
     _ctx: Context,
 ) -> Result<axum::http::Response<axum::body::Body>> {
-    // H3: Initialize logger once per isolate, not per request
+    // Initialize logger + panic hook once per isolate, not per request.
+    // tracing-wasm sends tracing events to console.log (visible in wrangler tail).
+    // console_error_panic_hook logs panics to console.error before abort.
     let _ = LOG_INITIALIZED.get_or_init(|| {
-        console_log::init_with_level(log::Level::Info).ok();
+        console_error_panic_hook::set_once();
+        tracing_wasm::set_as_global_default();
     });
 
     let state = state::AppState::from_env(&env)?.with_ctx(_ctx);
@@ -91,7 +94,8 @@ async fn fetch(
             middleware::security_headers_layer,
         ));
     let mut router = router.merge(api_routes);
-    Ok(router.call(req).await?)
+    let resp = router.call(req).await.expect("router call is infallible");
+    Ok(resp)
 }
 
 /// Cron-triggered cleanup — runs daily at 03:00 UTC.
@@ -100,7 +104,8 @@ async fn fetch(
 /// event configs) based on retention policy defined in `cleanup.rs`.
 #[event(scheduled)]
 async fn scheduled(_event: worker::ScheduledEvent, env: Env, _ctx: worker::ScheduleContext) {
-    console_log::init_with_level(log::Level::Info).ok();
+    console_error_panic_hook::set_once();
+    tracing_wasm::set_as_global_default();
 
     let events_kv = match env.kv("EVENTS").ok() {
         Some(kv) => kv,

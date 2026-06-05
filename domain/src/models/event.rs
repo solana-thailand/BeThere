@@ -23,6 +23,7 @@ fn default_true() -> bool {
 pub enum OnlineOpenMode {
     #[default]
     Always,
+    #[serde(alias = "auto")]
     AutoOnFull,
     Manual,
 }
@@ -199,8 +200,10 @@ pub struct EventMeta {
     #[serde(default)]
     pub time_tba: bool,
     /// Google Sheets spreadsheet ID for attendee data.
+    #[serde(default)]
     pub sheet_id: String,
     /// ISO 8601 creation timestamp.
+    #[serde(default)]
     pub created_at: String,
     /// Organization this event belongs to. Empty string = global (no org).
     #[serde(default, skip_serializing_if = "String::is_empty")]

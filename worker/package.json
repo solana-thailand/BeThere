@@ -11,6 +11,6 @@
     "@cloudflare/unenv-preset": "^2.16.0",
     "@playwright/test": "^1.60.0",
     "@types/node": "^25.9.1",
-    "wrangler": "^4.96.0"
+    "wrangler": "^4.98.0"
   }
 }

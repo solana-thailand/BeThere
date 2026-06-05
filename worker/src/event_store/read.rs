@@ -1,12 +1,12 @@
 //! Read operations: getters, listers, resolvers, and access-check helpers.
 
-use worker::KvStore;
+use worker::{D1Database, KvStore};
 
-use event_checkin_domain::models::event::{
-    EventConfig, EventIndex, EventMeta, EventStatus,
+use event_checkin_domain::models::event::{EventConfig, EventIndex, EventMeta, EventStatus};
+
+use super::schema::{
+    deposit_status_key, escrow_index_key, event_config_key, thb_deposit_key, thb_deposit_list_key,
 };
-
-use super::schema::{event_config_key, escrow_index_key, deposit_status_key, thb_deposit_key, thb_deposit_list_key};
 
 // ---------------------------------------------------------------------------
 // Event index
@@ -116,18 +116,41 @@ pub async fn resolve_event(kv: &KvStore, event_id: Option<&str>) -> Result<Event
     }
 }
 
-/// Resolve an event, falling back to global config if EVENTS KV is not available.
+/// Resolve an event, trying KV → D1 → global config fallback.
 ///
 /// This is the main entry point for handlers:
-/// - If `events_kv` is `Some` → resolve event from KV (by ID or first active)
-/// - If `events_kv` is `None` → build synthetic EventConfig from global env vars
+/// 1. If `events_kv` is `Some` → resolve event from KV (by ID or first active)
+/// 2. If KV miss → try D1 (by ID or first active)
+/// 3. If `events_kv` is `None` and D1 miss → build synthetic EventConfig from global env vars
 pub async fn resolve_event_or_fallback(
     events_kv: Option<&KvStore>,
     event_id: Option<&str>,
     global: &event_checkin_domain::config::AppConfig,
+    d1: Option<&worker::D1Database>,
 ) -> Result<EventConfig, String> {
     match events_kv {
-        Some(kv) => resolve_event(kv, event_id).await,
+        Some(kv) => {
+            let result = resolve_event(kv, event_id).await;
+            match result {
+                Ok(config) => Ok(config),
+                Err(kv_err) => {
+                    // KV miss — try D1 before giving up
+                    if let Some(db) = d1 {
+                        let d1_result = resolve_event_from_d1(db, event_id).await;
+                        if let Some(config) = d1_result? {
+                            tracing::info!(
+                                event_id = %config.id,
+                                "D1 fallback: recovered event not found in KV"
+                            );
+                            // Rebuild KV from D1 data
+                            super::write::save_event_config(kv, &config).await.ok();
+                            return Ok(config);
+                        }
+                    }
+                    Err(kv_err)
+                }
+            }
+        }
         None => {
             let d = &global.event_defaults;
             Ok(EventConfig::from_global_config(
@@ -150,6 +173,53 @@ pub async fn resolve_event_or_fallback(
             ))
         }
     }
+}
+
+/// Resolve an event from D1 only.
+async fn resolve_event_from_d1(
+    db: &worker::D1Database,
+    event_id: Option<&str>,
+) -> Result<Option<EventConfig>, String> {
+    match event_id {
+        Some(id) if !id.is_empty() => crate::db::events::get_event(db, id)
+            .await
+            .map(|opt| opt.map(|row| row.to_event_config())),
+        _ => crate::db::events::get_active_event(db)
+            .await
+            .map(|opt| opt.map(|row| row.to_event_config())),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Slug-based resolution (KV → D1 fallback)
+// ---------------------------------------------------------------------------
+
+/// Resolve an event by slug, trying KV index → D1 fallback.
+///
+/// 1. If `events_kv` is `Some` → scan KV index for slug → load full config
+/// 2. If KV miss or unavailable → try D1 `get_event_by_slug`
+pub async fn resolve_event_by_slug(
+    events_kv: Option<&KvStore>,
+    slug: &str,
+    d1: Option<&worker::D1Database>,
+) -> Result<EventConfig, String> {
+    // Try KV first
+    if let Some(kv) = events_kv {
+        let index = get_event_index(kv).await?;
+        if let Some(meta) = index.events.iter().find(|e| e.slug == slug)
+            && let Ok(Some(config)) = get_event_config(kv, &meta.id).await {
+                return Ok(config);
+            }
+    }
+
+    // D1 fallback
+    if let Some(db) = d1
+        && let Some(row) = crate::db::events::get_event_by_slug(db, slug).await? {
+            tracing::info!(%slug, event_id = %row.id.clone().unwrap_or_default(), "resolved event by slug from D1");
+            return Ok(row.to_event_config());
+        }
+
+    Err(format!("event '{slug}' not found"))
 }
 
 // ---------------------------------------------------------------------------
@@ -316,4 +386,141 @@ pub async fn find_attendee_by_wallet(
         }
     }
     Ok(None)
+}
+
+// ---------------------------------------------------------------------------
+// KV-optional fallback reads (P3.2)
+// ---------------------------------------------------------------------------
+
+/// Get deposit status with KV → D1 fallback.
+///
+/// When KV is available: try KV first, fall back to D1 on miss.
+/// When KV is unavailable: read from D1 attendees table.
+pub async fn get_deposit_status_with_fallback(
+    kv: Option<&KvStore>,
+    d1: Option<&D1Database>,
+    event_id: &str,
+    attendee_id: &str,
+) -> Result<Option<event_checkin_domain::models::deposit::DepositStatus>, String> {
+    // Try KV first if available
+    if let Some(kv) = kv {
+        let result = get_deposit_status(kv, event_id, attendee_id).await?;
+        if result.is_some() {
+            return Ok(result);
+        }
+    }
+
+    // D1 fallback: read deposit columns from attendees table
+    if let Some(db) = d1
+        && let Some(row) = crate::db::attendees::get_deposit_status_from_d1(db, attendee_id).await?
+        {
+            // Only build DepositStatus if there's an actual deposit record
+            if row.deposit_status.is_some() {
+                let verified = matches!(
+                    row.deposit_status.as_deref(),
+                    Some("verified" | "confirmed")
+                );
+                return Ok(Some(event_checkin_domain::models::deposit::DepositStatus {
+                    attendee_id: row.id,
+                    event_id: row.event_id,
+                    method: event_checkin_domain::models::deposit::DepositMethod::Usdc,
+                    amount: row.deposit_amount_usdc.unwrap_or(0) as u64,
+                    currency: "USDC".to_string(),
+                    tx_signature: row.deposit_tx_hash,
+                    verified,
+                    deposited_at: String::new(), // D1 doesn't store deposited_at separately
+                    wallet_address: None,
+                    deposit_order: 0,
+                    refundable: true, // default
+                    rejected: false,
+                }));
+            }
+        }
+
+    Ok(None)
+}
+
+/// Get event config with KV → D1 fallback.
+///
+/// When KV is available: try KV first, fall back to D1 on miss.
+/// When KV is unavailable: read from D1 events table.
+pub async fn get_event_config_with_fallback(
+    kv: Option<&KvStore>,
+    d1: Option<&D1Database>,
+    event_id: &str,
+) -> Result<Option<EventConfig>, String> {
+    // Try KV first if available
+    if let Some(kv) = kv
+        && let Some(config) = get_event_config(kv, event_id).await? {
+            return Ok(Some(config));
+        }
+
+    // D1 fallback
+    if let Some(db) = d1
+        && let Some(row) = crate::db::events::get_event(db, event_id).await? {
+            return Ok(Some(row.to_event_config()));
+        }
+
+    Ok(None)
+}
+
+/// Increment deposit counter with KV → D1 fallback.
+///
+/// When KV is available: use the atomic KV counter.
+/// When KV is unavailable: count existing deposits in D1 + 1.
+pub async fn increment_deposit_counter_with_fallback(
+    kv: Option<&KvStore>,
+    d1: Option<&D1Database>,
+    event_id: &str,
+) -> Result<u32, String> {
+    if let Some(kv) = kv {
+        return super::write::increment_deposit_counter(kv, event_id).await;
+    }
+
+    // D1 fallback: count existing deposits + 1
+    if let Some(db) = d1 {
+        let count = crate::db::attendees::count_deposits_by_event(db, event_id).await?;
+        return Ok(count + 1);
+    }
+
+    // Neither available — fallback to 1
+    Ok(1)
+}
+
+/// Save deposit status with KV best-effort + D1 primary.
+///
+/// Writes to D1 first (primary), then best-effort to KV (cache).
+pub async fn save_deposit_status_with_fallback(
+    kv: Option<&KvStore>,
+    d1: Option<&D1Database>,
+    status: &event_checkin_domain::models::deposit::DepositStatus,
+) -> Result<(), String> {
+    // D1 write (primary)
+    if let Some(db) = d1 {
+        let deposit_state = if status.verified {
+            "verified"
+        } else {
+            "pending"
+        };
+        crate::db::attendees::save_deposit_status_to_d1(
+            db,
+            &status.attendee_id,
+            deposit_state,
+            status.tx_signature.as_deref(),
+            status.amount as i64,
+        )
+        .await?;
+    }
+
+    // KV write (best-effort cache)
+    if let Some(kv) = kv
+        && let Err(e) = super::write::save_deposit_status(kv, status).await {
+            tracing::warn!(
+                attendee_id = %status.attendee_id,
+                error = %e,
+                "KV deposit status save failed (non-fatal, D1 is primary)"
+            );
+        }
+
+    Ok(())
 }

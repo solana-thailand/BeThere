@@ -21,9 +21,12 @@ Migrate from Cloudflare KV to Cloudflare D1 (SQLite) for claim locks and audit t
 
 D1 wins for our Workers architecture. Turso would only make sense if we self-hosted a Rust server.
 
-### Why D1 over Durable Objects
+### Why D1 over Durable Objects (Initial Decision — Superseded)
 
-Durable Objects (DO) also offer SQLite storage with strict serializability — a single DO per event would serialize all claim operations, eliminating even theoretical races. However:
+> **⚠️ SUPERSEDED**: The CTO has since directed migration to Durable Objects for ACID guarantees.
+> See **Issue #050** for the updated plan.
+
+Durable Objects (DO) also offer SQLite storage with strict serializability — a single DO per event would serialize all claim operations, eliminating even theoretical races. However, at the time of this decision (Issue #037), the following tradeoffs favored D1 first:
 
 | Factor | D1 | Durable Objects + SQLite |
 |--------|----|--------------------------|
@@ -35,7 +38,7 @@ Durable Objects (DO) also offer SQLite storage with strict serializability — a
 | Scale model | One DB, many queries | One DO per entity (e.g. per event) |
 | `worker` crate support | `env.d1("DB")` — built-in | Requires `worker::DurableObject` class implementation |
 
-For BeThere's scale (< 100 concurrent claims per event), D1's near-atomic `ON CONFLICT` is sufficient. The TOCTOU window is negligible. DO's added complexity (routing layer, DO class, lifecycle management) isn't justified. DO would make sense if we needed real-time collaboration (multiplayer) or per-user stateful compute.
+The initial decision was: D1 first for simplicity, DO later for ACID if needed. That "later" is now — Issue #050 tracks the DO migration. D1 proved itself as a solid read store and migration target; DO adds the ACID write guarantees the CTO requires.
 
 ### Full Cloudflare Storage Landscape
 
@@ -45,7 +48,7 @@ No D0 or D2 products exist. The complete lineup (updated 2026-05 — see Issue #
 |---------|---------|------------------|
 | KV | Eventually-consistent key-value | ✅ Using (caches, quiz, events) |
 | D1 | Managed SQLite database | ✅ Done — claim locks + audit trail (this issue) |
-| Durable Objects | Single-threaded stateful compute + SQLite | 🟡 P2 — Phase 12 multi-org SaaS |
+| Durable Objects | Single-threaded stateful compute + SQLite | 🟢 P0 — ACID writes via DO (Issue #050) |
 | R2 | S3-compatible object storage, zero egress | 🟡 P0 — slip images, badge SVGs, NFT metadata (see Issue #039) |
 | Hyperdrive | Accelerate existing Postgres/MySQL | ❌ No external DB |
 | Queues | Message queuing, guaranteed delivery, retries | 🟡 P1 — sheets sync, minting, refund queue (see Issue #039) |

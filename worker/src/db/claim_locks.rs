@@ -104,9 +104,11 @@ pub(crate) async fn get_claim_lock(
          asset_id, signature, claimed_at \
          FROM claim_locks WHERE event_id = ?1 AND token = ?2",
     );
-    stmt.bind_refs(&[D1Type::Text(event_id), D1Type::Text(token)])
+    Ok(stmt
+        .bind_refs(&[D1Type::Text(event_id), D1Type::Text(token)])
         .map_err(|e| format!("D1 get_claim_lock bind: {e:?}"))?
         .first::<ClaimLockRow>(None)
         .await
-        .map_err(|e| format!("D1 get_claim_lock first: {e:?}"))
+        .ok() // D1 returns JsValue(null) for no-match
+        .flatten())
 }

@@ -8,6 +8,7 @@
 //!   GET    /api/events/{id}     — get event details
 //!   PUT    /api/events/{id}     — update event config
 //!   DELETE /api/events/{id}     — archive (soft-delete) event
+//!   POST   /api/events/reseed-kv — reseed KV index from D1 (super admin only)
 
 use axum::{
     Extension,
@@ -41,16 +42,40 @@ pub async fn list_events(
 ) -> Result<ApiOk<serde_json::Value>, crate::error::WorkerError> {
     tracing::info!(staff_email = %claims.email, "list events requested");
 
-    let kv = state.events_kv.as_ref().ok_or_else(|| {
-        AppError::Internal(
+    let kv = state.events_kv.as_ref();
+
+    let all_events = if let Some(kv_ref) = kv {
+        let events = crate::event_store::list_events(kv_ref).await.map_err(|e| {
+            tracing::error!(error = %e, "failed to list events");
+            AppError::Internal(format!("failed to list events: {e}"))
+        })?;
+        if !events.is_empty() {
+            events
+        } else if let Some(ref d1) = state.d1 {
+            tracing::info!("KV empty, falling back to D1 for event list");
+            crate::db::events::list_events_as_meta(d1)
+                .await
+                .map_err(|e| {
+                    tracing::error!(error = %e, "D1 list events failed");
+                    AppError::Internal(format!("failed to list events from D1: {e}"))
+                })?
+        } else {
+            events
+        }
+    } else if let Some(ref d1) = state.d1 {
+        tracing::info!("no KV, reading event list from D1");
+        crate::db::events::list_events_as_meta(d1)
+            .await
+            .map_err(|e| {
+                tracing::error!(error = %e, "D1 list events failed");
+                AppError::Internal(format!("failed to list events from D1: {e}"))
+            })?
+    } else {
+        return Err(AppError::Internal(
             "events KV namespace not configured — add EVENTS binding in wrangler.toml".into(),
         )
-    })?;
-
-    let all_events = crate::event_store::list_events(kv).await.map_err(|e| {
-        tracing::error!(error = %e, "failed to list events");
-        AppError::Internal(format!("failed to list events: {e}"))
-    })?;
+        .into());
+    };
 
     // SuperAdmin sees everything
     if state
@@ -81,10 +106,20 @@ pub async fn list_events(
         }
 
         // Slower check: load full config to check staff_emails
-        if let Ok(Some(config)) = crate::event_store::get_event_config(kv, &meta.id).await
+        // KV first, then D1 fallback
+        if let Some(kv_ref) = kv
+            && let Ok(Some(config)) = crate::event_store::get_event_config(kv_ref, &meta.id).await
             && crate::event_store::has_event_access(&config, &claims.email)
         {
             visible.push(meta.clone());
+        } else if let Some(ref d1) = state.d1 {
+            // D1 fallback for staff check when event is not in KV
+            if let Ok(Some(row)) = crate::db::events::get_event(d1, &meta.id).await {
+                let config = row.to_event_config();
+                if crate::event_store::has_event_access(&config, &claims.email) {
+                    visible.push(meta.clone());
+                }
+            }
         }
     }
 
@@ -124,6 +159,9 @@ pub async fn seed_event(
             AppError::Internal(e.to_string())
         })?;
 
+    // D1 dual-write (non-fatal)
+    crate::event_store::sync_event_to_d1(state.d1.as_deref(), &config).await;
+
     tracing::info!(
         event_id = %config.id,
         event_name = %config.name,
@@ -136,6 +174,46 @@ pub async fn seed_event(
         "name": config.name,
         "slug": config.slug,
         "status": config.status.as_str(),
+    })))
+}
+
+/// POST /api/events/reseed-kv
+/// Rebuild the KV event index and configs from D1.
+/// SuperAdmin only. Idempotent — overwrites KV entries with D1 data.
+#[worker::send]
+pub async fn reseed_kv_from_d1(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+) -> Result<ApiOk<serde_json::Value>, crate::error::WorkerError> {
+    tracing::info!(staff_email = %claims.email, "reseed KV from D1 requested");
+
+    // Role check: SuperAdmin only
+    let role = crate::auth::resolve_user_role(&claims.email, &state, None).await;
+    if role != crate::auth::UserRole::SuperAdmin {
+        return Err(AppError::Forbidden("only super admins can reseed KV from D1".into()).into());
+    }
+
+    let kv = state
+        .events_kv
+        .as_ref()
+        .ok_or_else(|| AppError::Internal("events KV namespace not configured".into()))?;
+    let d1 = state
+        .d1
+        .as_ref()
+        .ok_or_else(|| AppError::Internal("D1 database not configured".into()))?;
+
+    let count = crate::event_store::seed_kv_from_d1(kv, d1)
+        .await
+        .map_err(|e| {
+            tracing::error!(error = %e, "failed to reseed KV from D1");
+            AppError::Internal(e.to_string())
+        })?;
+
+    tracing::info!(count, staff_email = %claims.email, "KV reseeded from D1");
+
+    Ok(ApiOk::new(json!({
+        "synced": count,
+        "message": format!("{count} events synced from D1 to KV"),
     })))
 }
 
@@ -218,13 +296,19 @@ pub async fn create_event(
         .into());
     }
 
-    let kv = state.events_kv.as_ref().ok_or_else(|| {
-        AppError::Internal(
-            "events KV namespace not configured — add EVENTS binding in wrangler.toml".into(),
-        )
-    })?;
+    let kv = state.events_kv.as_ref();
+    let d1 = state.d1.as_deref();
 
-    let config = crate::event_store::create_event(kv, &body, &claims.email)
+    // Require at least D1 or KV to create an event
+    if kv.is_none() && d1.is_none() {
+        return Err(AppError::Internal(
+            "no storage configured — need D1 database or EVENTS KV binding".into(),
+        )
+        .into());
+    }
+
+    // Build the event config, optionally writing to KV index
+    let config = crate::event_store::create_event(kv, d1, &body, &claims.email)
         .await
         .map_err(|e| {
             let err_msg = e.to_string();
@@ -238,6 +322,9 @@ pub async fn create_event(
             }
         })?;
 
+    // D1 is primary — always write (sync_event_to_d1 is non-fatal)
+    crate::event_store::sync_event_to_d1(d1, &config).await;
+
     tracing::info!(
         event_id = %config.id,
         event_name = %config.name,
@@ -245,19 +332,32 @@ pub async fn create_event(
         "event created",
     );
 
-    // Audit log
-    let _ = crate::audit_store::append_event_audit(
-        kv,
-        &config.id,
-        crate::audit_store::create_entry(
+    // Audit log — write to D1 (always) + KV (if available)
+    if let Some(kv_ref) = kv {
+        let _ = crate::audit_store::append_event_audit(
+            kv_ref,
+            &config.id,
+            crate::audit_store::create_entry(
+                &claims.email,
+                crate::audit_store::AuditAction::EventCreated,
+                &config.id,
+                &format!("event '{}' created", config.name),
+            ),
+            d1,
+        )
+        .await;
+    } else if let Some(db) = d1 {
+        audit_d1_only(
+            db,
+            &config.id,
             &claims.email,
             crate::audit_store::AuditAction::EventCreated,
             &config.id,
             &format!("event '{}' created", config.name),
-        ),
-        state.d1.as_deref(),
-    )
-    .await;
+            None,
+        )
+        .await;
+    }
 
     // Sync to Events tab in contacts sheet (non-fatal)
     sync_event_to_tab(&state, &config, 0, kv).await;
@@ -285,18 +385,17 @@ pub async fn get_event(
 ) -> Result<ApiOk<serde_json::Value>, crate::error::WorkerError> {
     tracing::info!(event_id = %id, staff_email = %claims.email, "get event requested");
 
-    let kv = state
-        .events_kv
-        .as_ref()
-        .ok_or_else(|| AppError::Internal("events KV namespace not configured".into()))?;
-
-    let config = crate::event_store::get_event(kv, &id)
-        .await
-        .map_err(|e| {
-            tracing::error!(event_id = %id, error = %e, "failed to get event");
-            AppError::Internal(format!("failed to read event: {e}"))
-        })?
-        .ok_or_else(|| AppError::NotFound(format!("event '{id}' not found")))?;
+    let config = crate::event_store::resolve_event_or_fallback(
+        state.events_kv.as_ref(),
+        Some(&id),
+        &state.config,
+        state.d1.as_deref(),
+    )
+    .await
+    .map_err(|e| {
+        tracing::error!(event_id = %id, error = %e, "failed to get event");
+        AppError::Internal(format!("failed to read event: {e}"))
+    })?;
 
     // Access check: non-super_admin must be assigned to this event
     let is_super_admin = state
@@ -335,19 +434,38 @@ pub async fn update_event(
 ) -> Result<ApiOk<serde_json::Value>, crate::error::WorkerError> {
     tracing::info!(event_id = %id, staff_email = %claims.email, "update event requested");
 
-    let kv = state
-        .events_kv
-        .as_ref()
-        .ok_or_else(|| AppError::Internal("events KV namespace not configured".into()))?;
+    let kv = state.events_kv.as_ref();
 
-    // Role check: fetch existing event to resolve per-event role
-    let existing_event = crate::event_store::get_event(kv, &id)
-        .await
-        .map_err(|e| {
-            tracing::error!(event_id = %id, error = %e, "failed to fetch event for role check");
-            AppError::Internal(format!("failed to read event: {e}"))
-        })?
-        .ok_or_else(|| AppError::NotFound(format!("event '{id}' not found")))?;
+    // Role check: fetch existing event — KV first, D1 fallback
+    let existing_event = if let Some(kv_ref) = kv {
+        crate::event_store::get_event(kv_ref, &id)
+            .await
+            .map_err(|e| {
+                tracing::error!(event_id = %id, error = %e, "failed to fetch event for role check");
+                AppError::Internal(format!("failed to read event: {e}"))
+            })?
+    } else {
+        None
+    };
+
+    let existing_event = match existing_event {
+        Some(e) => e,
+        None => {
+            tracing::info!(event_id = %id, "KV miss, trying D1 for event");
+            if let Some(ref d1) = state.d1 {
+                crate::db::events::get_event(d1, &id)
+                    .await
+                    .map_err(|e| {
+                        tracing::error!(event_id = %id, error = %e, "D1 get event failed");
+                        AppError::Internal(format!("failed to read event from D1: {e}"))
+                    })?
+                    .map(|row| row.to_event_config())
+                    .ok_or_else(|| AppError::NotFound(format!("event '{id}' not found")))?
+            } else {
+                return Err(AppError::NotFound(format!("event '{id}' not found")).into());
+            }
+        }
+    };
 
     let role = crate::auth::resolve_user_role(&claims.email, &state, Some(&existing_event)).await;
     if role < crate::auth::UserRole::Organizer {
@@ -407,12 +525,21 @@ pub async fn update_event(
         }
     }
 
-    let config = crate::event_store::update_event(kv, &id, &body, &claims.email)
-        .await
-        .map_err(|e| {
-            tracing::error!(event_id = %id, error = %e, "failed to update event");
-            AppError::Internal(e.to_string())
-        })?;
+    // Apply partial update to existing config (works regardless of KV vs D1 source)
+    let mut config = existing_event.clone();
+    crate::event_store::apply_update(&mut config, &body).map_err(AppError::Validation)?;
+    config.updated_by = claims.email.clone();
+    config.updated_at = chrono::Utc::now().to_rfc3339();
+
+    // Write to KV (if available, non-fatal)
+    if let Some(kv_ref) = kv
+        && let Err(e) = crate::event_store::save_event_config(kv_ref, &config).await
+    {
+        tracing::warn!(event_id = %id, error = %e, "KV write failed for event update");
+    }
+
+    // D1 dual-write
+    crate::event_store::sync_event_to_d1(state.d1.as_deref(), &config).await;
 
     tracing::info!(
         event_id = %config.id,
@@ -422,31 +549,70 @@ pub async fn update_event(
     );
 
     // Audit log
-    let _ = crate::audit_store::append_event_audit(
-        kv,
-        &config.id,
-        crate::audit_store::create_entry(
+    if let Some(kv_ref) = kv {
+        let _ = crate::audit_store::append_event_audit(
+            kv_ref,
+            &config.id,
+            crate::audit_store::create_entry(
+                &claims.email,
+                crate::audit_store::AuditAction::EventUpdated,
+                &config.id,
+                &format!("event '{}' updated", config.name),
+            ),
+            state.d1.as_deref(),
+        )
+        .await;
+
+        // Audit log: escrow re-initialized (reset from Closed/Cancelled → None)
+        if body.escrow_status == Some(event_checkin_domain::models::event::EscrowStatus::None)
+            && matches!(
+                existing_event.escrow_status,
+                event_checkin_domain::models::event::EscrowStatus::Closed
+                    | event_checkin_domain::models::event::EscrowStatus::Cancelled
+            )
+        {
+            let _ = crate::audit_store::append_event_audit(
+                kv_ref,
+                &config.id,
+                crate::audit_store::create_entry(
+                    &claims.email,
+                    crate::audit_store::AuditAction::EscrowReinitialized,
+                    &config.id,
+                    &format!(
+                        "escrow reset from {} to none — ready for re-initialization",
+                        existing_event.escrow_status
+                    ),
+                ),
+                state.d1.as_deref(),
+            )
+            .await;
+        }
+
+        // Sync to Events tab in contacts sheet (non-fatal)
+        sync_event_to_tab(&state, &config, 0, Some(kv_ref)).await;
+    } else if let Some(ref db) = state.d1 {
+        audit_d1_only(
+            db,
+            &config.id,
             &claims.email,
             crate::audit_store::AuditAction::EventUpdated,
             &config.id,
             &format!("event '{}' updated", config.name),
-        ),
-        state.d1.as_deref(),
-    )
-    .await;
-
-    // Audit log: escrow re-initialized (reset from Closed/Cancelled → None)
-    if body.escrow_status == Some(event_checkin_domain::models::event::EscrowStatus::None)
-        && matches!(
-            existing_event.escrow_status,
-            event_checkin_domain::models::event::EscrowStatus::Closed
-                | event_checkin_domain::models::event::EscrowStatus::Cancelled
+            None,
         )
-    {
-        let _ = crate::audit_store::append_event_audit(
-            kv,
-            &config.id,
-            crate::audit_store::create_entry(
+        .await;
+
+        // Escrow re-initialized audit
+        if body.escrow_status == Some(event_checkin_domain::models::event::EscrowStatus::None)
+            && matches!(
+                existing_event.escrow_status,
+                event_checkin_domain::models::event::EscrowStatus::Closed
+                    | event_checkin_domain::models::event::EscrowStatus::Cancelled
+            )
+        {
+            audit_d1_only(
+                db,
+                &config.id,
                 &claims.email,
                 crate::audit_store::AuditAction::EscrowReinitialized,
                 &config.id,
@@ -454,14 +620,14 @@ pub async fn update_event(
                     "escrow reset from {} to none — ready for re-initialization",
                     existing_event.escrow_status
                 ),
-            ),
-            state.d1.as_deref(),
-        )
-        .await;
-    }
+                None,
+            )
+            .await;
+        }
 
-    // Sync to Events tab in contacts sheet (non-fatal)
-    sync_event_to_tab(&state, &config, 0, kv).await;
+        // Sync to Events tab in contacts sheet (non-fatal)
+        sync_event_to_tab(&state, &config, 0, None).await;
+    }
 
     Ok(ApiOk::new(json!({
         "id": config.id,
@@ -487,19 +653,38 @@ pub async fn archive_event(
 ) -> Result<ApiOk<serde_json::Value>, crate::error::WorkerError> {
     tracing::info!(event_id = %id, staff_email = %claims.email, "archive event requested");
 
-    let kv = state
-        .events_kv
-        .as_ref()
-        .ok_or_else(|| AppError::Internal("events KV namespace not configured".into()))?;
+    let kv = state.events_kv.as_ref();
 
-    // Role check: fetch existing event to resolve per-event role
-    let existing_event = crate::event_store::get_event(kv, &id)
-        .await
-        .map_err(|e| {
-            tracing::error!(event_id = %id, error = %e, "failed to fetch event for role check");
-            AppError::Internal(format!("failed to read event: {e}"))
-        })?
-        .ok_or_else(|| AppError::NotFound(format!("event '{id}' not found")))?;
+    // Role check: fetch existing event — KV first, D1 fallback
+    let existing_event = if let Some(kv_ref) = kv {
+        crate::event_store::get_event(kv_ref, &id)
+            .await
+            .map_err(|e| {
+                tracing::error!(event_id = %id, error = %e, "failed to fetch event for role check");
+                AppError::Internal(format!("failed to read event: {e}"))
+            })?
+    } else {
+        None
+    };
+
+    let existing_event = match existing_event {
+        Some(e) => e,
+        None => {
+            tracing::info!(event_id = %id, "KV miss, trying D1 for event");
+            if let Some(ref d1) = state.d1 {
+                crate::db::events::get_event(d1, &id)
+                    .await
+                    .map_err(|e| {
+                        tracing::error!(event_id = %id, error = %e, "D1 get event failed");
+                        AppError::Internal(format!("failed to read event from D1: {e}"))
+                    })?
+                    .map(|row| row.to_event_config())
+                    .ok_or_else(|| AppError::NotFound(format!("event '{id}' not found")))?
+            } else {
+                return Err(AppError::NotFound(format!("event '{id}' not found")).into());
+            }
+        }
+    };
 
     let role = crate::auth::resolve_user_role(&claims.email, &state, Some(&existing_event)).await;
     if role < crate::auth::UserRole::Organizer {
@@ -509,28 +694,63 @@ pub async fn archive_event(
         .into());
     }
 
-    crate::event_store::archive_event(kv, &id)
-        .await
-        .map_err(|e| {
-            tracing::error!(event_id = %id, error = %e, "failed to archive event");
-            AppError::Internal(e.to_string())
-        })?;
+    // Apply archive status change
+    let mut config = existing_event.clone();
+
+    // SEC-004: Block archive if escrow is active on-chain
+    if config.escrow_status.is_active() {
+        return Err(AppError::Validation(format!(
+            "cannot archive event with active on-chain escrow (status: {}) — close escrow first",
+            config.escrow_status
+        ))
+        .into());
+    }
+
+    config.status = event_checkin_domain::models::event::EventStatus::Archived;
+    config.updated_by = claims.email.clone();
+    config.updated_at = chrono::Utc::now().to_rfc3339();
+
+    // Write to KV (if available, non-fatal)
+    if let Some(kv_ref) = kv {
+        crate::event_store::archive_event(kv_ref, &id)
+            .await
+            .map_err(|e| {
+                tracing::error!(event_id = %id, error = %e, "failed to archive event in KV");
+                AppError::Internal(e.to_string())
+            })?;
+    }
+
+    // D1 dual-write
+    crate::event_store::sync_event_to_d1(state.d1.as_deref(), &config).await;
 
     tracing::info!(event_id = %id, staff_email = %claims.email, "event archived");
 
     // Audit log
-    let _ = crate::audit_store::append_event_audit(
-        kv,
-        &id,
-        crate::audit_store::create_entry(
+    if let Some(kv_ref) = kv {
+        let _ = crate::audit_store::append_event_audit(
+            kv_ref,
+            &id,
+            crate::audit_store::create_entry(
+                &claims.email,
+                crate::audit_store::AuditAction::EventArchived,
+                &id,
+                "event archived",
+            ),
+            state.d1.as_deref(),
+        )
+        .await;
+    } else if let Some(ref db) = state.d1 {
+        audit_d1_only(
+            db,
+            &id,
             &claims.email,
             crate::audit_store::AuditAction::EventArchived,
             &id,
             "event archived",
-        ),
-        state.d1.as_deref(),
-    )
-    .await;
+            None,
+        )
+        .await;
+    }
 
     Ok(ApiOk::new(json!({
         "id": id,
@@ -551,19 +771,38 @@ pub async fn restore_event(
 ) -> Result<ApiOk<serde_json::Value>, crate::error::WorkerError> {
     tracing::info!(event_id = %id, staff_email = %claims.email, "restore event requested");
 
-    let kv = state
-        .events_kv
-        .as_ref()
-        .ok_or_else(|| AppError::Internal("events KV namespace not configured".into()))?;
+    let kv = state.events_kv.as_ref();
 
-    // Role check: fetch existing event to resolve per-event role
-    let existing_event = crate::event_store::get_event(kv, &id)
-        .await
-        .map_err(|e| {
-            tracing::error!(event_id = %id, error = %e, "failed to fetch event for role check");
-            AppError::Internal(format!("failed to read event: {e}"))
-        })?
-        .ok_or_else(|| AppError::NotFound(format!("event '{id}' not found")))?;
+    // Role check: fetch existing event — KV first, D1 fallback
+    let existing_event = if let Some(kv_ref) = kv {
+        crate::event_store::get_event(kv_ref, &id)
+            .await
+            .map_err(|e| {
+                tracing::error!(event_id = %id, error = %e, "failed to fetch event for role check");
+                AppError::Internal(format!("failed to read event: {e}"))
+            })?
+    } else {
+        None
+    };
+
+    let existing_event = match existing_event {
+        Some(e) => e,
+        None => {
+            tracing::info!(event_id = %id, "KV miss, trying D1 for event");
+            if let Some(ref d1) = state.d1 {
+                crate::db::events::get_event(d1, &id)
+                    .await
+                    .map_err(|e| {
+                        tracing::error!(event_id = %id, error = %e, "D1 get event failed");
+                        AppError::Internal(format!("failed to read event from D1: {e}"))
+                    })?
+                    .map(|row| row.to_event_config())
+                    .ok_or_else(|| AppError::NotFound(format!("event '{id}' not found")))?
+            } else {
+                return Err(AppError::NotFound(format!("event '{id}' not found")).into());
+            }
+        }
+    };
 
     let role = crate::auth::resolve_user_role(&claims.email, &state, Some(&existing_event)).await;
     if role < crate::auth::UserRole::Organizer {
@@ -573,28 +812,59 @@ pub async fn restore_event(
         .into());
     }
 
-    crate::event_store::restore_event(kv, &id)
-        .await
-        .map_err(|e| {
-            tracing::error!(event_id = %id, error = %e, "failed to restore event");
-            AppError::Internal(e.to_string())
-        })?;
+    if existing_event.status != event_checkin_domain::models::event::EventStatus::Archived {
+        return Err(AppError::Validation(format!(
+            "event '{id}' is not archived (current status: {}) — only archived events can be restored",
+            existing_event.status.as_str()
+        ))
+        .into());
+    }
+
+    // Write to KV (if available, non-fatal)
+    if let Some(kv_ref) = kv {
+        crate::event_store::restore_event(kv_ref, &id)
+            .await
+            .map_err(|e| {
+                tracing::error!(event_id = %id, error = %e, "failed to restore event in KV");
+                AppError::Internal(e.to_string())
+            })?;
+    }
+
+    // D1 dual-write
+    let mut config = existing_event.clone();
+    config.status = event_checkin_domain::models::event::EventStatus::Draft;
+    config.updated_by = claims.email.clone();
+    config.updated_at = chrono::Utc::now().to_rfc3339();
+    crate::event_store::sync_event_to_d1(state.d1.as_deref(), &config).await;
 
     tracing::info!(event_id = %id, staff_email = %claims.email, "event restored from archive");
 
     // Audit log
-    let _ = crate::audit_store::append_event_audit(
-        kv,
-        &id,
-        crate::audit_store::create_entry(
+    if let Some(kv_ref) = kv {
+        let _ = crate::audit_store::append_event_audit(
+            kv_ref,
+            &id,
+            crate::audit_store::create_entry(
+                &claims.email,
+                crate::audit_store::AuditAction::EventRestored,
+                &id,
+                "event restored from archive",
+            ),
+            state.d1.as_deref(),
+        )
+        .await;
+    } else if let Some(ref db) = state.d1 {
+        audit_d1_only(
+            db,
+            &id,
             &claims.email,
             crate::audit_store::AuditAction::EventRestored,
             &id,
             "event restored from archive",
-        ),
-        state.d1.as_deref(),
-    )
-    .await;
+            None,
+        )
+        .await;
+    }
 
     Ok(ApiOk::new(json!({
         "id": id,
@@ -615,10 +885,7 @@ pub async fn hard_delete_event(
     let force = params.get("force").map(|v| v == "true").unwrap_or(false);
     tracing::info!(event_id = %id, staff_email = %claims.email, force, "hard delete event requested");
 
-    let kv = state
-        .events_kv
-        .as_ref()
-        .ok_or_else(|| AppError::Internal("events KV namespace not configured".into()))?;
+    let kv = state.events_kv.as_ref();
 
     // Role check: SuperAdmin only for permanent deletion
     let role = crate::auth::resolve_user_role(&claims.email, &state, None).await;
@@ -628,32 +895,67 @@ pub async fn hard_delete_event(
         );
     }
 
-    // Load event config BEFORE deletion so we can resolve org's contacts sheet
-    let pre_delete_config = crate::event_store::get_event_config(kv, &id)
-        .await
-        .ok()
-        .flatten();
+    // Load event config BEFORE deletion — KV first, D1 fallback
+    let pre_delete_config = if let Some(kv_ref) = kv {
+        crate::event_store::get_event_config(kv_ref, &id)
+            .await
+            .ok()
+            .flatten()
+    } else {
+        None
+    };
 
-    crate::event_store::hard_delete_event(kv, &id, force)
-        .await
-        .map_err(|e| {
-            tracing::error!(event_id = %id, error = %e, "failed to hard-delete event");
-            AppError::Validation(e.to_string())
-        })?;
+    let pre_delete_config = match pre_delete_config {
+        Some(c) => Some(c),
+        None => {
+            if let Some(ref d1) = state.d1 {
+                crate::db::events::get_event(d1, &id)
+                    .await
+                    .ok()
+                    .flatten()
+                    .map(|row| row.to_event_config())
+            } else {
+                None
+            }
+        }
+    };
+
+    // KV delete (if available)
+    if let Some(kv_ref) = kv {
+        crate::event_store::hard_delete_event(kv_ref, &id, force)
+            .await
+            .map_err(|e| {
+                tracing::error!(event_id = %id, error = %e, "failed to hard-delete event from KV");
+                AppError::Validation(e.to_string())
+            })?;
+    }
+
+    // D1 dual-delete (non-fatal)
+    crate::event_store::sync_delete_event_from_d1(state.d1.as_deref(), &id).await;
+
+    // Validate event exists somewhere (KV or D1) — prevent deleting non-existent events
+    if pre_delete_config.is_none() && kv.is_none() {
+        return Err(AppError::NotFound(format!("event '{id}' not found")).into());
+    }
 
     // Clean up Events tab in contacts sheet (non-fatal)
     let resolved = match &pre_delete_config {
         Some(config) => {
-            crate::org_store::resolve_contacts_sheet(kv, config, &state.config.sheets).await
-        }
-        None => {
-            // Event config already gone — use global config
-            event_checkin_domain::models::org::ResolvedContactsSheet {
-                sheet_id: state.config.sheets.contacts_sheet_id.clone(),
-                contacts_sheet_name: state.config.sheets.contacts_sheet_name.clone(),
-                events_sheet_name: state.config.sheets.events_sheet_name.clone(),
+            if let Some(kv_ref) = kv {
+                crate::org_store::resolve_contacts_sheet(kv_ref, config, &state.config.sheets).await
+            } else {
+                event_checkin_domain::models::org::ResolvedContactsSheet {
+                    sheet_id: state.config.sheets.contacts_sheet_id.clone(),
+                    contacts_sheet_name: state.config.sheets.contacts_sheet_name.clone(),
+                    events_sheet_name: state.config.sheets.events_sheet_name.clone(),
+                }
             }
         }
+        None => event_checkin_domain::models::org::ResolvedContactsSheet {
+            sheet_id: state.config.sheets.contacts_sheet_id.clone(),
+            contacts_sheet_name: state.config.sheets.contacts_sheet_name.clone(),
+            events_sheet_name: state.config.sheets.events_sheet_name.clone(),
+        },
     };
 
     if !resolved.sheet_id.is_empty() {
@@ -662,7 +964,7 @@ pub async fn hard_delete_event(
             &state,
             &resolved.sheet_id,
             &resolved.events_sheet_name,
-            Some(kv),
+            kv,
         )
         .await;
         if let Err(e) = res {
@@ -682,18 +984,31 @@ pub async fn hard_delete_event(
     } else {
         crate::audit_store::AuditAction::EventHardDeleted
     };
-    let _ = crate::audit_store::append_global_audit(
-        kv,
-        crate::audit_store::create_entry_with_meta(
+    if let Some(kv_ref) = kv {
+        let _ = crate::audit_store::append_global_audit(
+            kv_ref,
+            crate::audit_store::create_entry_with_meta(
+                &claims.email,
+                action,
+                &id,
+                "event permanently deleted",
+                serde_json::json!({"force": force}),
+            ),
+            state.d1.as_deref(),
+        )
+        .await;
+    } else if let Some(ref db) = state.d1 {
+        audit_d1_only(
+            db,
+            "__global__",
             &claims.email,
             action,
             &id,
             "event permanently deleted",
-            serde_json::json!({"force": force}),
-        ),
-        state.d1.as_deref(),
-    )
-    .await;
+            Some(serde_json::json!({"force": force})),
+        )
+        .await;
+    }
 
     Ok(ApiOk::new(json!({
         "id": id,
@@ -709,19 +1024,38 @@ pub async fn get_event_audit(
     Extension(claims): Extension<Claims>,
     Path(id): Path<String>,
 ) -> Result<ApiOk<serde_json::Value>, crate::error::WorkerError> {
-    // Role check: must be admin or organizer of this event
-    let kv = state
-        .events_kv
-        .as_ref()
-        .ok_or_else(|| AppError::Internal("events KV namespace not configured".into()))?;
+    let kv = state.events_kv.as_ref();
 
-    let existing_event = crate::event_store::get_event(kv, &id)
-        .await
-        .map_err(|e| {
-            tracing::error!(event_id = %id, error = %e, "failed to fetch event for role check");
-            AppError::Internal(format!("failed to read event: {e}"))
-        })?
-        .ok_or_else(|| AppError::NotFound(format!("event '{id}' not found")))?;
+    // Role check: fetch existing event — KV first, D1 fallback
+    let existing_event = if let Some(kv_ref) = kv {
+        crate::event_store::get_event(kv_ref, &id)
+            .await
+            .map_err(|e| {
+                tracing::error!(event_id = %id, error = %e, "failed to fetch event for role check");
+                AppError::Internal(format!("failed to read event: {e}"))
+            })?
+    } else {
+        None
+    };
+
+    let existing_event = match existing_event {
+        Some(e) => e,
+        None => {
+            tracing::info!(event_id = %id, "KV miss, trying D1 for event");
+            if let Some(ref d1) = state.d1 {
+                crate::db::events::get_event(d1, &id)
+                    .await
+                    .map_err(|e| {
+                        tracing::error!(event_id = %id, error = %e, "D1 get event failed");
+                        AppError::Internal(format!("failed to read event from D1: {e}"))
+                    })?
+                    .map(|row| row.to_event_config())
+                    .ok_or_else(|| AppError::NotFound(format!("event '{id}' not found")))?
+            } else {
+                return Err(AppError::NotFound(format!("event '{id}' not found")).into());
+            }
+        }
+    };
 
     let role = crate::auth::resolve_user_role(&claims.email, &state, Some(&existing_event)).await;
 
@@ -731,12 +1065,39 @@ pub async fn get_event_audit(
         );
     }
 
-    let entries = crate::audit_store::get_event_audit(kv, &id, 100, state.d1.as_deref())
-        .await
-        .map_err(|e| {
-            tracing::error!(event_id = %id, error = %e, "failed to get audit log");
-            AppError::Internal(e.to_string())
-        })?;
+    // Read audit entries from KV (if available) + D1
+    let entries = if let Some(kv_ref) = kv {
+        crate::audit_store::get_event_audit(kv_ref, &id, 100, state.d1.as_deref())
+            .await
+            .map_err(|e| {
+                tracing::error!(event_id = %id, error = %e, "failed to get audit log");
+                AppError::Internal(e.to_string())
+            })?
+    } else if let Some(ref d1) = state.d1 {
+        // D1-only: read audit from D1 directly, convert to AuditEntry
+        let rows = crate::db::audit::get_audit_entries(d1, &id, 100)
+            .await
+            .map_err(|e| {
+                tracing::error!(event_id = %id, error = %e, "failed to get audit log from D1");
+                AppError::Internal(e.to_string())
+            })?;
+        rows.into_iter()
+            .filter_map(|r| {
+                let action: Option<crate::audit_store::AuditAction> =
+                    serde_json::from_str(&format!("\"{}\"", r.action)).ok();
+                Some(crate::audit_store::AuditEntry {
+                    timestamp: r.timestamp,
+                    actor: r.actor,
+                    action: action?,
+                    target: r.target,
+                    description: r.description,
+                    metadata: r.metadata.and_then(|s| serde_json::from_str(&s).ok()),
+                })
+            })
+            .collect()
+    } else {
+        vec![]
+    };
 
     tracing::info!(event_id = %id, count = entries.len(), "audit log retrieved");
 
@@ -754,11 +1115,6 @@ pub async fn get_global_audit(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
 ) -> Result<ApiOk<serde_json::Value>, crate::error::WorkerError> {
-    let kv = state
-        .events_kv
-        .as_ref()
-        .ok_or_else(|| AppError::Internal("events KV namespace not configured".into()))?;
-
     // Role check: SuperAdmin only for global audit
     let role = crate::auth::resolve_user_role(&claims.email, &state, None).await;
     if role != crate::auth::UserRole::SuperAdmin {
@@ -767,12 +1123,41 @@ pub async fn get_global_audit(
         );
     }
 
-    let entries = crate::audit_store::get_global_audit(kv, 200, state.d1.as_deref())
-        .await
-        .map_err(|e| {
-            tracing::error!(error = %e, "failed to get global audit log");
-            AppError::Internal(e.to_string())
-        })?;
+    let kv = state.events_kv.as_ref();
+    let d1 = state.d1.as_deref();
+
+    let entries = if let Some(kv_ref) = kv {
+        crate::audit_store::get_global_audit(kv_ref, 200, d1)
+            .await
+            .map_err(|e| {
+                tracing::error!(error = %e, "failed to get global audit log");
+                AppError::Internal(e.to_string())
+            })?
+    } else if let Some(db) = d1 {
+        // D1-only path: read global audit entries directly
+        crate::db::audit::get_global_audit_entries(db, 200)
+            .await
+            .map_err(|e| {
+                tracing::error!(error = %e, "failed to get global audit log from D1");
+                AppError::Internal(e.to_string())
+            })?
+            .into_iter()
+            .filter_map(|r| {
+                let action: Option<crate::audit_store::AuditAction> =
+                    serde_json::from_str(&format!("\"{}\"", r.action)).ok();
+                Some(crate::audit_store::AuditEntry {
+                    timestamp: r.timestamp,
+                    actor: r.actor,
+                    action: action?,
+                    target: r.target,
+                    description: r.description,
+                    metadata: r.metadata.and_then(|s| serde_json::from_str(&s).ok()),
+                })
+            })
+            .collect()
+    } else {
+        vec![]
+    };
 
     tracing::info!(count = entries.len(), "global audit log retrieved");
 
@@ -793,9 +1178,17 @@ async fn sync_event_to_tab(
     state: &AppState,
     config: &event_checkin_domain::models::event::EventConfig,
     total_attendees: usize,
-    kv: &worker::KvStore,
+    kv: Option<&worker::KvStore>,
 ) {
-    let resolved = crate::org_store::resolve_contacts_sheet(kv, config, &state.config.sheets).await;
+    let resolved = if let Some(kv_ref) = kv {
+        crate::org_store::resolve_contacts_sheet(kv_ref, config, &state.config.sheets).await
+    } else {
+        event_checkin_domain::models::org::ResolvedContactsSheet {
+            sheet_id: state.config.sheets.contacts_sheet_id.clone(),
+            contacts_sheet_name: state.config.sheets.contacts_sheet_name.clone(),
+            events_sheet_name: state.config.sheets.events_sheet_name.clone(),
+        }
+    };
 
     if resolved.sheet_id.is_empty() {
         return;
@@ -807,7 +1200,7 @@ async fn sync_event_to_tab(
         state,
         &resolved.sheet_id,
         &resolved.events_sheet_name,
-        Some(kv),
+        kv,
     )
     .await
     {
@@ -816,5 +1209,36 @@ async fn sync_event_to_tab(
             error = %e,
             "failed to sync event to Events tab (non-fatal)"
         );
+    }
+}
+
+/// Write an audit entry to D1 directly (for when KV is unavailable).
+/// Non-fatal — errors are logged but not propagated.
+async fn audit_d1_only(
+    db: &worker::D1Database,
+    event_id: &str,
+    email: &str,
+    action: crate::audit_store::AuditAction,
+    target: &str,
+    description: &str,
+    metadata: Option<serde_json::Value>,
+) {
+    let action_str = serde_json::to_string(&action)
+        .unwrap_or_default()
+        .trim_matches('"')
+        .to_string();
+    let metadata_str = metadata.as_ref().map(|v| v.to_string());
+    if let Err(e) = crate::db::append_audit(
+        db,
+        event_id,
+        email,
+        &action_str,
+        target,
+        description,
+        metadata_str.as_deref(),
+    )
+    .await
+    {
+        tracing::warn!(event_id, error = %e, "D1-only audit write failed");
     }
 }

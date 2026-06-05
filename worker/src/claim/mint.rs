@@ -98,9 +98,10 @@ pub async fn lookup_claim(
     {
         tracing::info!(claim_token = %token, email = %walkin.email, "claim lookup: found walk-in attendee");
 
-        let nft_available = !event.nft_metadata_uri.is_empty()
-            && !event.nft_image_url.is_empty()
-            && !state.config.solana.api_key.is_empty();
+        // API key + image URL are required; metadata_uri/collection_mint are optional
+        // enhancements passed to Helius when set.
+        let nft_available =
+            !event.nft_image_url.is_empty() && !state.config.solana.api_key.is_empty();
 
         return Ok(ClaimLookup {
             name: walkin.name.clone(),
@@ -161,10 +162,9 @@ pub async fn lookup_claim(
     let claimed = attendee.claimed_at.is_some();
     let claimed_at = attendee.claimed_at.clone();
 
-    // Check if NFT minting is fully configured (all required secrets present)
-    let nft_available = !event.nft_metadata_uri.is_empty()
-        && !event.nft_image_url.is_empty()
-        && !state.config.solana.api_key.is_empty();
+    // API key + image URL are required; metadata_uri/collection_mint are optional
+    // enhancements passed to Helius when set.
+    let nft_available = !event.nft_image_url.is_empty() && !state.config.solana.api_key.is_empty();
 
     let api_event = ApiEventConfig {
         event_name: event.name.clone(),

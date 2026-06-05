@@ -23,10 +23,7 @@ pub(crate) async fn fetch(
     opts.set_mode(RequestMode::Cors);
 
     if let Some(ref body_str) = body {
-        let json_val = web_sys::window()
-            .and_then(|_| js_sys::JSON::parse(body_str).ok())
-            .unwrap_or_else(|| JsValue::NULL);
-        opts.set_body(&json_val);
+        opts.set_body(&JsValue::from_str(body_str));
     }
 
     let request = Request::new_with_str_and_init(&url, &opts)

@@ -315,6 +315,63 @@ pub async fn get_column_mapping(
 }
 
 // ---------------------------------------------------------------------------
+// Sheet range fetch with automatic fallback for narrow sheets
+// ---------------------------------------------------------------------------
+
+/// Fetch a sheet range, retrying with progressively smaller column ranges
+/// if the initial range exceeds the actual sheet width.
+///
+/// Google Sheets API returns `Unable to parse range` when the requested
+/// column range (e.g. `A2:AF`) exceeds the sheet's actual column count.
+/// This helper retries with smaller fallback ranges: Z (26), Q (17).
+async fn fetch_sheet_range_with_retry(
+    sheet_id: &str,
+    sheet_name: &str,
+    initial_range: &str,
+    access_token: &str,
+) -> Result<ValueRange, String> {
+    let url = format!(
+        "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{}",
+        urlencoding::encode(initial_range)
+    );
+
+    match fetch_sheet_range(&url, access_token).await {
+        Ok(vr) => Ok(vr),
+        Err(e) if e.contains("Unable to parse range") => {
+            tracing::warn!(
+                error = %e,
+                range = %initial_range,
+                "sheet range too wide, retrying with A2:Z"
+            );
+            // Fallback 1: A2:Z (26 columns)
+            let fallback_range = format!("{sheet_name}!A2:Z");
+            let fb_url = format!(
+                "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{}",
+                urlencoding::encode(&fallback_range)
+            );
+            match fetch_sheet_range(&fb_url, access_token).await {
+                Ok(vr) => Ok(vr),
+                Err(e2) if e2.contains("Unable to parse range") => {
+                    tracing::warn!(
+                        error = %e2,
+                        "A2:Z also failed, retrying with A2:Q"
+                    );
+                    // Fallback 2: A2:Q (17 columns — covers through checked_in_by)
+                    let fb2_range = format!("{sheet_name}!A2:Q");
+                    let fb2_url = format!(
+                        "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{}",
+                        urlencoding::encode(&fb2_range)
+                    );
+                    fetch_sheet_range(&fb2_url, access_token).await
+                }
+                Err(e2) => Err(e2),
+            }
+        }
+        Err(e) => Err(e),
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Attendee queries
 // ---------------------------------------------------------------------------
 
@@ -360,6 +417,7 @@ async fn get_attendees_inner(
 ) -> Result<Vec<Attendee>, String> {
     // Phase 2b: D1-first when event_id is available
     if let (Some(d1), Some(eid)) = (&state.d1, event_id) {
+        tracing::info!(event_id = %eid, "D1 path: querying attendees");
         match crate::db::attendees::get_attendees_by_event(d1, eid).await {
             Ok(attendees) if !attendees.is_empty() => {
                 tracing::info!(
@@ -413,12 +471,9 @@ async fn get_attendees_inner(
 
     let last_col = mapping.last_column_letter();
     let range = format!("{sheet_name}!A2:{last_col}");
-    let url = format!(
-        "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{}",
-        urlencoding::encode(&range)
-    );
 
-    let value_range: ValueRange = fetch_sheet_range(&url, &access_token).await?;
+    let value_range: ValueRange =
+        fetch_sheet_range_with_retry(sheet_id, sheet_name, &range, &access_token).await?;
 
     let attendees: Vec<Attendee> = value_range
         .values

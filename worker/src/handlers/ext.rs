@@ -38,10 +38,14 @@ pub async fn resolve_event_with_access(
     claims: &Claims,
     event_id: Option<&str>,
 ) -> Result<EventConfig, AppError> {
-    let event =
-        event_store::resolve_event_or_fallback(state.events_kv.as_ref(), event_id, &state.config)
-            .await
-            .map_err(AppError::Internal)?;
+    let event = event_store::resolve_event_or_fallback(
+        state.events_kv.as_ref(),
+        event_id,
+        &state.config,
+        state.d1.as_deref(),
+    )
+    .await
+    .map_err(AppError::Internal)?;
 
     if let Err(e) = crate::auth::check_event_access(&claims.email, state, &event).await {
         tracing::warn!(
@@ -61,9 +65,14 @@ pub async fn resolve_event(
     state: &AppState,
     event_id: Option<&str>,
 ) -> Result<EventConfig, AppError> {
-    event_store::resolve_event_or_fallback(state.events_kv.as_ref(), event_id, &state.config)
-        .await
-        .map_err(AppError::Internal)
+    event_store::resolve_event_or_fallback(
+        state.events_kv.as_ref(),
+        event_id,
+        &state.config,
+        state.d1.as_deref(),
+    )
+    .await
+    .map_err(AppError::Internal)
 }
 
 /// Helper to get the KV store from state (events_kv or quiz_kv fallback).

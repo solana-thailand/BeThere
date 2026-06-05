@@ -167,6 +167,23 @@ pub struct AttendeeResponse {
     /// Participation type from Google Sheet column Y (e.g. "In-Person", "Online").
     #[serde(default)]
     pub participation_type: String,
+    // Deposit fields
+    #[serde(default)]
+    pub deposit_status: Option<String>,
+    #[serde(default)]
+    pub deposit_amount: Option<String>,
+    #[serde(default)]
+    pub deposit_tx_signature: Option<String>,
+    #[serde(default)]
+    pub deposit_verified: Option<String>,
+    // NFT field
+    #[serde(default)]
+    pub nft_proof_url: Option<String>,
+    // Refund fields
+    #[serde(default)]
+    pub refund_status: Option<String>,
+    #[serde(default)]
+    pub refund_link: Option<String>,
 }
 
 /// Lightweight attendee summary for list views.
@@ -194,6 +211,23 @@ pub struct AttendeeListItem {
     /// Participation type from Google Sheet column Y (e.g. "In-Person", "Online").
     #[serde(default)]
     pub participation_type: String,
+    // Deposit fields
+    #[serde(default)]
+    pub deposit_status: Option<String>,
+    #[serde(default)]
+    pub deposit_amount: Option<String>,
+    #[serde(default)]
+    pub deposit_tx_signature: Option<String>,
+    #[serde(default)]
+    pub deposit_verified: Option<String>,
+    // NFT field
+    #[serde(default)]
+    pub nft_proof_url: Option<String>,
+    // Refund fields
+    #[serde(default)]
+    pub refund_status: Option<String>,
+    #[serde(default)]
+    pub refund_link: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

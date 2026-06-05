@@ -105,7 +105,7 @@ pub struct UpdateDepositSignatureRequest {
 /// Returns `true` if the deadline expired and the switch was performed.
 pub(crate) async fn check_and_switch_deadline(
     state: &AppState,
-    kv: &worker::KvStore,
+    kv: Option<&worker::KvStore>,
     event: &EventConfig,
     attendee: &event_checkin_domain::models::attendee::Attendee,
     registration_date_str: &str,
@@ -148,7 +148,7 @@ pub(crate) async fn check_and_switch_deadline(
         state,
         &event.sheet_id,
         &event.sheet_name,
-        Some(kv),
+        kv,
     )
     .await
     {
@@ -167,7 +167,7 @@ pub(crate) async fn check_and_switch_deadline(
             mapping,
             event.sheet_id.clone(),
             event.sheet_name.clone(),
-            Some(kv.clone()),
+            kv.cloned(),
         ));
         tracing::info!(
             attendee_id = %attendee.api_id,
@@ -181,7 +181,7 @@ pub(crate) async fn check_and_switch_deadline(
             state,
             &event.sheet_id,
             &event.sheet_name,
-            Some(kv),
+            kv,
         )
         .await
         {
@@ -205,7 +205,7 @@ pub(crate) async fn check_and_switch_deadline(
 pub(crate) async fn check_in_person_capacity(
     state: &AppState,
     event: &EventConfig,
-    kv: &worker::KvStore,
+    kv: Option<&worker::KvStore>,
 ) -> bool {
     // No capacity limit = always available (handled by has_in_person_capacity)
     if event.in_person_capacity.is_none() {
@@ -217,7 +217,7 @@ pub(crate) async fn check_in_person_capacity(
         state,
         &event.sheet_id,
         &event.sheet_name,
-        Some(kv),
+        kv,
         &event.id,
     )
     .await
@@ -231,26 +231,28 @@ pub(crate) async fn check_in_person_capacity(
 
     let in_person_count = attendees.iter().filter(|a| a.is_in_person()).count() as u32;
 
-    // Count walk-in attendees as in-person
-    let walkin_prefix = format!("walkin:{}:", event.id);
+    // Count walk-in attendees as in-person (KV only)
     let mut walkin_count: u32 = 0;
-    let mut cursor: Option<String> = None;
-    loop {
-        let mut builder = kv.list().prefix(walkin_prefix.clone());
-        if let Some(c) = cursor.take() {
-            builder = builder.cursor(c);
-        }
-        match builder.execute().await {
-            Ok(resp) => {
-                walkin_count += resp.keys.len() as u32;
-                if resp.list_complete {
+    if let Some(kv) = kv {
+        let walkin_prefix = format!("walkin:{}:", event.id);
+        let mut cursor: Option<String> = None;
+        loop {
+            let mut builder = kv.list().prefix(walkin_prefix.clone());
+            if let Some(c) = cursor.take() {
+                builder = builder.cursor(c);
+            }
+            match builder.execute().await {
+                Ok(resp) => {
+                    walkin_count += resp.keys.len() as u32;
+                    if resp.list_complete {
+                        break;
+                    }
+                    cursor = resp.cursor;
+                }
+                Err(e) => {
+                    tracing::warn!(error = ?e, "reclaim capacity: failed to list walk-in keys");
                     break;
                 }
-                cursor = resp.cursor;
-            }
-            Err(e) => {
-                tracing::warn!(error = ?e, "reclaim capacity: failed to list walk-in keys");
-                break;
             }
         }
     }
@@ -377,20 +379,27 @@ pub(crate) async fn verify_and_confirm_deposit(
     state: &AppState,
     body: &UpdateDepositSignatureRequest,
 ) {
-    let Some(kv) = state.events_kv.as_ref() else {
-        tracing::error!("EVENTS KV not configured in background verification");
-        return;
-    };
+    let kv = state.events_kv.as_ref();
+    let d1 = state.d1.as_deref();
 
     let rpc_url = state.config.solana.full_rpc_url();
     let confirmed = verify_tx_on_chain(&rpc_url, &body.tx_signature).await;
 
     if confirmed {
         // Reload and update deposit status
-        match event_store::get_deposit_status(kv, &body.event_id, &body.attendee_id).await {
+        match event_store::get_deposit_status_with_fallback(
+            kv,
+            d1,
+            &body.event_id,
+            &body.attendee_id,
+        )
+        .await
+        {
             Ok(Some(mut deposit_status)) => {
                 deposit_status.verified = true;
-                if let Err(e) = event_store::save_deposit_status(kv, &deposit_status).await {
+                if let Err(e) =
+                    event_store::save_deposit_status_with_fallback(kv, d1, &deposit_status).await
+                {
                     tracing::error!(
                         attendee_id = %body.attendee_id,
                         error = %e,
@@ -405,44 +414,66 @@ pub(crate) async fn verify_and_confirm_deposit(
                     "USDC deposit verified in background"
                 );
 
-                // Audit log
-                let _ = crate::audit_store::append_event_audit(
-                    kv,
-                    &body.event_id,
-                    crate::audit_store::create_entry_with_meta(
-                        "system",
-                        crate::audit_store::AuditAction::DepositConfirmed,
+                // D1 dual-write for verified deposit
+                if let Some(db) = d1
+                    && let Err(e) = crate::db::attendees::verify_deposit(
+                        db,
                         &body.attendee_id,
-                        "USDC deposit confirmed on-chain (background)",
-                        serde_json::json!({
-                            "tx_signature": body.tx_signature,
-                            "confirmed": true,
-                        }),
-                    ),
-                    state.d1.as_deref(),
-                )
-                .await;
+                        "verified",
+                        &body.tx_signature,
+                        deposit_status.amount as i64,
+                        &chrono::Utc::now().to_rfc3339(),
+                        "usdc_on_chain_bg",
+                    )
+                    .await
+                    {
+                        tracing::warn!(
+                            attendee_id = %body.attendee_id,
+                            error = %e,
+                            "D1 USDC deposit verify failed in background (non-fatal)"
+                        );
+                    }
+
+                // Audit log
+                if let Some(kv) = kv {
+                    let _ = crate::audit_store::append_event_audit(
+                        kv,
+                        &body.event_id,
+                        crate::audit_store::create_entry_with_meta(
+                            "system",
+                            crate::audit_store::AuditAction::DepositConfirmed,
+                            &body.attendee_id,
+                            "USDC deposit confirmed on-chain (background)",
+                            serde_json::json!({
+                                "tx_signature": body.tx_signature,
+                                "confirmed": true,
+                            }),
+                        ),
+                        state.d1.as_deref(),
+                    )
+                    .await;
+                }
 
                 // Write deposit columns to sheet + auto-generate QR (non-blocking)
                 let deposit_amount_str = deposit_status.amount.to_string();
                 // Can't collapse: inner lookups depend on event_config bound by this pattern
                 #[allow(clippy::collapsible_if)]
                 if let Ok(Some(event_config)) =
-                    event_store::get_event_config(kv, &body.event_id).await
+                    event_store::get_event_config_with_fallback(kv, d1, &body.event_id).await
                 {
                     let (mapping_result, attendee_result) = futures_util::join!(
                         crate::sheets::get_column_mapping(
                             state,
                             &event_config.sheet_id,
                             &event_config.sheet_name,
-                            Some(kv),
+                            kv,
                         ),
                         crate::sheets::get_attendee_by_id(
                             &body.attendee_id,
                             state,
                             &event_config.sheet_id,
                             &event_config.sheet_name,
-                            Some(kv),
+                            kv,
                         )
                     );
                     if let (Ok(mapping), Ok(Some(attendee))) = (mapping_result, attendee_result) {
@@ -451,7 +482,7 @@ pub(crate) async fn verify_and_confirm_deposit(
                             state,
                             sheet_id: &event_config.sheet_id,
                             sheet_name: &event_config.sheet_name,
-                            kv: Some(kv),
+                            kv,
                         };
 
                         if let Err(e) = crate::sheets::write::write_deposit_verification(
@@ -474,7 +505,7 @@ pub(crate) async fn verify_and_confirm_deposit(
                                 state,
                                 &event_config.sheet_id,
                                 &event_config.sheet_name,
-                                Some(kv),
+                                kv,
                             )
                             .await
                             {

@@ -57,6 +57,12 @@ EVENT_LINK = "https://solana-thailand.github.io/genesis/events/road-to-mainnet-1
 EVENT_START_MS = "1777170600000"
 EVENT_END_MS = "1777183200000"
 
+# Deposit settings (survive re-seed via POST /api/events/seed)
+# EVENT_DEPOSIT_ENABLED = "true"
+# EVENT_DEPOSIT_AMOUNT_USDC = "0"
+# EVENT_DEPOSIT_AMOUNT_THB = "0"
+# EVENT_PROMPTPAY_ID = ""
+
 # Secrets (set via `npx wrangler secret put <NAME>`):
 # - JWT_SECRET
 # - GOOGLE_CLIENT_ID

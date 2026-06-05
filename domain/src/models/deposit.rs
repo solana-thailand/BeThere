@@ -228,7 +228,7 @@ pub struct PendingSlipResponse {
 /// Response for GET /api/refund/queue — THB refunds pending.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RefundQueueResponse {
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
     pub pending: Vec<ThbDeposit>,
 }
 

@@ -191,6 +191,10 @@ For a 500-attendee event (same analysis as Issue #037):
 
 D1 storage: ~50MB for 10K attendees × 5 events. Well within 10GB limit.
 
+## Next Steps
+
+After Phase 2d, ACID-critical writes will migrate from D1 to **Durable Objects + SQLite** (see **Issue #050**). D1 will become read-only for attendee data. The current D1 write code serves as a fallback during the DO migration.
+
 ## Risks and Mitigations
 
 | Risk | Likelihood | Impact | Mitigation |

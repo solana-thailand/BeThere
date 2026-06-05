@@ -112,28 +112,14 @@ pub async fn register_attendee(
         return Err(AppError::Validation("event slug is required".to_string()).into());
     }
 
-    // 2. Resolve event by slug from KV
-    let kv = state.events_kv.as_ref().ok_or_else(|| {
-        tracing::error!("EVENTS KV namespace not configured");
-        AppError::Internal("EVENTS KV namespace not configured".to_string())
-    })?;
+    // 2. Resolve event by slug (KV → D1 fallback)
+    let kv = state.events_kv.as_ref();
 
-    let index = crate::event_store::get_event_index(kv)
+    let config = crate::event_store::resolve_event_by_slug(kv, slug, state.d1.as_deref())
         .await
-        .map_err(AppError::Internal)?;
+        .map_err(AppError::NotFound)?;
 
-    let event_id = index
-        .events
-        .iter()
-        .find(|e| e.slug == slug)
-        .map(|e| e.id.clone())
-        .ok_or_else(|| AppError::NotFound(format!("event '{slug}' not found")))?;
-
-    let config = crate::event_store::get_event_config(kv, &event_id)
-        .await
-        .map_err(AppError::Internal)?;
-
-    let config = config.ok_or_else(|| AppError::NotFound(format!("event '{slug}' not found")))?;
+    let event_id = config.id.clone();
 
     // 3. Check event is Active
     if config.status != EventStatus::Active {
@@ -205,7 +191,7 @@ pub async fn register_attendee(
         &state,
         &config.sheet_id,
         &config.sheet_name,
-        Some(kv),
+        kv,
         &config.id,
     )
     .await
@@ -296,14 +282,23 @@ pub async fn register_attendee(
     // 5c. Check if attendee has rolling deposit credit that covers this event's deposit
     let mut credit_covered_method: Option<String> = None;
     if config.deposit_enabled && !is_online_participation(&participation_type) {
-        let resolved_contacts =
-            crate::org_store::resolve_contacts_sheet(kv, &config, &state.config.sheets).await;
+        let resolved_contacts = match kv {
+            Some(kv_store) => {
+                crate::org_store::resolve_contacts_sheet(kv_store, &config, &state.config.sheets)
+                    .await
+            }
+            None => event_checkin_domain::models::org::ResolvedContactsSheet {
+                sheet_id: state.config.sheets.contacts_sheet_id.clone(),
+                contacts_sheet_name: state.config.sheets.contacts_sheet_name.clone(),
+                events_sheet_name: state.config.sheets.events_sheet_name.clone(),
+            },
+        };
         if !resolved_contacts.sheet_id.is_empty()
             && let Ok((credit_thb, credit_usdc)) = crate::sheets::contacts::get_credit_balance(
                 &state,
                 &resolved_contacts.sheet_id,
                 &resolved_contacts.contacts_sheet_name,
-                Some(kv),
+                kv,
                 &email,
             )
             .await
@@ -331,13 +326,8 @@ pub async fn register_attendee(
     let now = chrono::Utc::now().to_rfc3339();
 
     // 8. Resolve column mapping
-    let mapping = match sheets::get_column_mapping(
-        &state,
-        &config.sheet_id,
-        &config.sheet_name,
-        Some(kv),
-    )
-    .await
+    let mapping = match sheets::get_column_mapping(&state, &config.sheet_id, &config.sheet_name, kv)
+        .await
     {
         Ok(m) => m,
         Err(e) => {
@@ -356,7 +346,7 @@ pub async fn register_attendee(
             &event_id,
             &email,
             name,
-            "pending", // new registrations start as pending
+            "approved", // self-registered attendees are auto-approved (consistent with Sheets)
             &participation_type,
             contact_channel.unwrap_or(""),
             contact_handle.unwrap_or(""),
@@ -426,7 +416,7 @@ pub async fn register_attendee(
         let bg_mapping = mapping.clone();
         let bg_sheet_id = config.sheet_id.clone();
         let bg_sheet_name = config.sheet_name.clone();
-        let bg_kv = Some(kv.clone());
+        let bg_kv = kv.cloned();
         let bg_event_id = event_id.clone();
         let bg_config = config.clone();
 
@@ -525,7 +515,7 @@ pub async fn register_attendee(
             &state,
             &config.sheet_id,
             &config.sheet_name,
-            Some(kv),
+            kv,
         )
         .await
         {
@@ -540,7 +530,7 @@ pub async fn register_attendee(
             contact_handle,
             &state,
             &config,
-            Some(kv),
+            kv,
         )
         .await;
     }
@@ -596,34 +586,19 @@ pub async fn my_registration(
         return Err(AppError::Validation("event slug is required".to_string()).into());
     }
 
-    // Resolve event by slug from KV
-    let kv = state.events_kv.as_ref().ok_or_else(|| {
-        tracing::error!("EVENTS KV namespace not configured");
-        AppError::Internal("EVENTS KV namespace not configured".to_string())
-    })?;
+    // Resolve event by slug (KV → D1 fallback)
+    let kv = state.events_kv.as_ref();
 
-    let index = crate::event_store::get_event_index(kv)
+    let config = crate::event_store::resolve_event_by_slug(kv, slug, state.d1.as_deref())
         .await
-        .map_err(AppError::Internal)?;
-
-    let event_entry = index
-        .events
-        .iter()
-        .find(|e| e.slug == slug)
-        .ok_or_else(|| AppError::NotFound(format!("event '{slug}' not found")))?;
-
-    let config = crate::event_store::get_event_config(kv, &event_entry.id)
-        .await
-        .map_err(AppError::Internal)?;
-
-    let config = config.ok_or_else(|| AppError::NotFound(format!("event '{slug}' not found")))?;
+        .map_err(AppError::NotFound)?;
 
     // Fetch attendees and find by email (case-insensitive)
     let attendees = sheets::get_attendees_for_event(
         &state,
         &config.sheet_id,
         &config.sheet_name,
-        Some(kv),
+        kv,
         &config.id,
     )
     .await
@@ -643,9 +618,9 @@ pub async fn my_registration(
         })?;
 
     let claim_token = attendee.claim_token.clone().unwrap_or_default();
-    // Fetch deposit status
-    let deposit = if let Some(ref kv) = state.events_kv {
-        crate::event_store::get_deposit_status(kv, &event_entry.id, &attendee.api_id)
+    // Fetch deposit status (KV → None, D1 deposit data not stored separately)
+    let deposit = if let Some(kv_store) = kv {
+        crate::event_store::get_deposit_status(kv_store, &config.id, &attendee.api_id)
             .await
             .ok()
             .flatten()
@@ -654,7 +629,7 @@ pub async fn my_registration(
     };
     let next_step = build_next_step(
         &config.event_format,
-        &event_entry.id,
+        &config.id,
         &attendee.api_id,
         &claim_token,
         &state,
@@ -732,121 +707,165 @@ pub struct MyRegistrationsItem {
 /// GET /api/my-registrations
 ///
 /// Returns all registrations for the authenticated user across all events.
-/// Iterates active events from KV index, checks each event's attendee list for the JWT email.
-/// Uses KV-cached attendee data so this is efficient.
+/// Iterates active events (KV index → D1 fallback), checks each event's attendee list for the JWT email.
 #[worker::send]
 pub async fn my_registrations(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
 ) -> Result<ApiOk<Vec<MyRegistrationsItem>>, crate::error::WorkerError> {
-    let kv = state
-        .events_kv
-        .as_ref()
-        .ok_or_else(|| AppError::Internal("EVENTS KV not configured".to_string()))?
-        .clone();
+    let kv = state.events_kv.as_ref();
+    let d1 = state.d1.as_deref();
 
-    let index = crate::event_store::get_event_index(&kv)
-        .await
-        .map_err(AppError::Internal)?;
+    // Build list of (event_id, event_name, event_slug, event_start_ms, EventConfig)
+    // from KV index → D1 fallback
+    let event_list: Vec<(
+        String,
+        String,
+        String,
+        i64,
+        event_checkin_domain::models::event::EventConfig,
+    )> = if let Some(kv_store) = kv {
+        // KV path: use index + per-event config
+        let index = crate::event_store::get_event_index(kv_store)
+            .await
+            .map_err(AppError::Internal)?;
+        let mut list = Vec::new();
+        for meta in &index.events {
+            if matches!(meta.status, EventStatus::Completed | EventStatus::Archived) {
+                continue;
+            }
+            if let Ok(Some(config)) = crate::event_store::get_event_config(kv_store, &meta.id).await
+            {
+                list.push((
+                    meta.id.clone(),
+                    meta.name.clone(),
+                    meta.slug.clone(),
+                    meta.event_start_ms,
+                    config,
+                ));
+            }
+        }
+        list
+    } else if let Some(db) = d1 {
+        // D1 fallback: list all events
+        let rows = crate::db::events::list_events(db)
+            .await
+            .map_err(AppError::Internal)?;
+        rows.into_iter()
+            .filter(|r| {
+                let status = r.status.as_deref().unwrap_or("");
+                status != "completed" && status != "archived"
+            })
+            .map(|r| {
+                let config = r.to_event_config();
+                let id = config.id.clone();
+                let name = config.name.clone();
+                let slug = config.slug.clone();
+                let start_ms = config.event_start_ms;
+                (id, name, slug, start_ms, config)
+            })
+            .collect()
+    } else {
+        return Err(AppError::Internal("neither KV nor D1 configured".to_string()).into());
+    };
 
     // Process events concurrently (config + attendee loads are independent per-event)
-    let event_futures: Vec<_> = index
-        .events
-        .iter()
-        .filter(|e| !matches!(e.status, EventStatus::Completed | EventStatus::Archived))
-        .map(|event_entry| {
-            let state = state.clone();
-            let kv = kv.clone();
-            let email = claims.email.clone();
-            let event_entry = event_entry.clone();
-            async move {
-                // Load event config
-                let config = match crate::event_store::get_event_config(&kv, &event_entry.id).await
-                {
-                    Ok(Some(c)) => c,
-                    _ => return None,
-                };
+    let event_futures: Vec<_> = event_list
+        .into_iter()
+        .map(
+            |(event_id, event_name, event_slug, event_start_ms, config)| {
+                let state = state.clone();
+                let kv = kv.cloned();
+                let email = claims.email.clone();
+                async move {
+                    // Fetch attendees (KV-cached or direct sheet read)
+                    let attendees = match crate::sheets::get_attendees_for_event(
+                        &state,
+                        &config.sheet_id,
+                        &config.sheet_name,
+                        kv.as_ref(),
+                        &config.id,
+                    )
+                    .await
+                    {
+                        Ok(a) => a,
+                        Err(e) => {
+                            tracing::warn!(
+                                event_id = %event_id,
+                                error = %e,
+                                "my-registrations: failed to fetch attendees, skipping"
+                            );
+                            return None;
+                        }
+                    };
 
-                // Fetch attendees (KV-cached)
-                let attendees = match crate::sheets::get_attendees_for_event(
-                    &state,
-                    &config.sheet_id,
-                    &config.sheet_name,
-                    Some(&kv),
-                    &config.id,
-                )
-                .await
-                {
-                    Ok(a) => a,
-                    Err(e) => {
-                        tracing::warn!(
-                            event_id = %event_entry.id,
-                            error = %e,
-                            "my-registrations: failed to fetch attendees, skipping"
-                        );
-                        return None;
-                    }
-                };
+                    // Find attendee matching JWT email
+                    let attendee = attendees
+                        .iter()
+                        .find(|a| a.email.eq_ignore_ascii_case(&email))?;
 
-                // Find attendee matching JWT email
-                let attendee = attendees
-                    .iter()
-                    .find(|a| a.email.eq_ignore_ascii_case(&email))?;
-
-                let claim_token = attendee.claim_token.clone().unwrap_or_default();
-                // Fetch deposit status for this attendee
-                let deposit =
-                    crate::event_store::get_deposit_status(&kv, &event_entry.id, &attendee.api_id)
+                    let claim_token = attendee.claim_token.clone().unwrap_or_default();
+                    // Fetch deposit status for this attendee (KV only)
+                    let deposit = if let Some(ref kv_store) = kv {
+                        crate::event_store::get_deposit_status(
+                            kv_store,
+                            &event_id,
+                            &attendee.api_id,
+                        )
                         .await
                         .ok()
-                        .flatten();
-                let next_step = build_next_step(
-                    &config.event_format,
-                    &event_entry.id,
-                    &attendee.api_id,
-                    &claim_token,
-                    &state,
-                    deposit.as_ref(),
-                    &attendee.participation_type,
-                );
+                        .flatten()
+                    } else {
+                        None
+                    };
+                    let next_step = build_next_step(
+                        &config.event_format,
+                        &event_id,
+                        &attendee.api_id,
+                        &claim_token,
+                        &state,
+                        deposit.as_ref(),
+                        &attendee.participation_type,
+                    );
 
-                let status = if attendee.claimed_at.as_ref().is_some_and(|s| !s.is_empty()) {
-                    "nft claimed".to_string()
-                } else if attendee
-                    .checked_in_at
-                    .as_ref()
-                    .is_some_and(|s| !s.is_empty())
-                {
-                    "checked in".to_string()
-                } else if attendee
-                    .deposit_verified
-                    .as_ref()
-                    .is_some_and(|s| !s.is_empty())
-                {
-                    "deposit confirmed".to_string()
-                } else if attendee
-                    .deposit_method
-                    .as_ref()
-                    .is_some_and(|s| !s.is_empty())
-                {
-                    "deposit pending".to_string()
-                } else {
-                    "registered".to_string()
-                };
+                    let status = if attendee.claimed_at.as_ref().is_some_and(|s| !s.is_empty()) {
+                        "nft claimed".to_string()
+                    } else if attendee
+                        .checked_in_at
+                        .as_ref()
+                        .is_some_and(|s| !s.is_empty())
+                    {
+                        "checked in".to_string()
+                    } else if attendee
+                        .deposit_verified
+                        .as_ref()
+                        .is_some_and(|s| !s.is_empty())
+                    {
+                        "deposit confirmed".to_string()
+                    } else if attendee
+                        .deposit_method
+                        .as_ref()
+                        .is_some_and(|s| !s.is_empty())
+                    {
+                        "deposit pending".to_string()
+                    } else {
+                        "registered".to_string()
+                    };
 
-                Some(MyRegistrationsItem {
-                    event_id: event_entry.id.clone(),
-                    event_name: event_entry.name.clone(),
-                    event_slug: event_entry.slug.clone(),
-                    event_start_ms: event_entry.event_start_ms,
-                    attendee_id: attendee.api_id.clone(),
-                    name: attendee.name.clone(),
-                    participation_type: attendee.participation_type.clone(),
-                    status,
-                    next_step,
-                })
-            }
-        })
+                    Some(MyRegistrationsItem {
+                        event_id,
+                        event_name,
+                        event_slug,
+                        event_start_ms,
+                        attendee_id: attendee.api_id.clone(),
+                        name: attendee.name.clone(),
+                        participation_type: attendee.participation_type.clone(),
+                        status,
+                        next_step,
+                    })
+                }
+            },
+        )
         .collect();
 
     let results: Vec<MyRegistrationsItem> = join_all(event_futures)
@@ -934,7 +953,7 @@ async fn enforce_capacity(
     state: &AppState,
     config: &event_checkin_domain::models::event::EventConfig,
     participation_type: &str,
-    kv: &worker::kv::KvStore,
+    kv: Option<&worker::kv::KvStore>,
 ) -> Result<(), AppError> {
     use event_checkin_domain::models::event::OnlineOpenMode;
 
@@ -953,7 +972,7 @@ async fn enforce_capacity(
         state,
         &config.sheet_id,
         &config.sheet_name,
-        Some(kv),
+        kv,
         &config.id,
     )
     .await
@@ -969,37 +988,40 @@ async fn enforce_capacity(
         }
     }
 
-    // Count UNSYNCED walk-in attendees as in-person (avoid double-counting with sheet)
-    let walkin_prefix = format!("walkin:{}:", config.id);
-    let mut walkin_cursor: Option<String> = None;
-    let mut walkin_count: u32 = 0;
-    loop {
-        let mut builder = kv.list().prefix(walkin_prefix.clone());
-        if let Some(c) = walkin_cursor.take() {
-            builder = builder.cursor(c);
-        }
-        match builder.execute().await {
-            Ok(resp) => {
-                for key in &resp.keys {
-                    let email = key.name.strip_prefix(&walkin_prefix).unwrap_or("");
-                    let sync_key = format!("walkin_synced:{}:{}", config.id, email);
-                    let synced: Option<bool> = kv.get(&sync_key).json().await.ok().flatten();
-                    if synced != Some(true) {
-                        walkin_count += 1;
+    // Count UNSYNCED walk-in attendees from KV (skip if KV unavailable)
+    if let Some(kv_store) = kv {
+        let walkin_prefix = format!("walkin:{}:", config.id);
+        let mut walkin_cursor: Option<String> = None;
+        let mut walkin_count: u32 = 0;
+        loop {
+            let mut builder = kv_store.list().prefix(walkin_prefix.clone());
+            if let Some(c) = walkin_cursor.take() {
+                builder = builder.cursor(c);
+            }
+            match builder.execute().await {
+                Ok(resp) => {
+                    for key in &resp.keys {
+                        let email = key.name.strip_prefix(&walkin_prefix).unwrap_or("");
+                        let sync_key = format!("walkin_synced:{}:{}", config.id, email);
+                        let synced: Option<bool> =
+                            kv_store.get(&sync_key).json().await.ok().flatten();
+                        if synced != Some(true) {
+                            walkin_count += 1;
+                        }
                     }
+                    if resp.list_complete {
+                        break;
+                    }
+                    walkin_cursor = resp.cursor;
                 }
-                if resp.list_complete {
+                Err(e) => {
+                    tracing::warn!(error = ?e, "failed to list walk-in keys for capacity");
                     break;
                 }
-                walkin_cursor = resp.cursor;
-            }
-            Err(e) => {
-                tracing::warn!(error = ?e, "failed to list walk-in keys for capacity");
-                break;
             }
         }
+        in_person_count += walkin_count;
     }
-    in_person_count += walkin_count;
 
     tracing::info!(
         event_id = %config.id,

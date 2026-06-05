@@ -246,6 +246,10 @@ m = {
         'EVENT_LINK': 'https://solana-thailand.github.io/genesis/events/road-to-mainnet-1-bangkok/',
         'EVENT_START_MS': '1777170600000',
         'EVENT_END_MS': '1777183200000',
+        'EVENT_DEPOSIT_ENABLED': 'false',
+        'EVENT_DEPOSIT_AMOUNT_USDC': '0',
+        'EVENT_DEPOSIT_AMOUNT_THB': '0',
+        'EVENT_PROMPTPAY_ID': '',
     },
     'assets': {
         'jwt': '${ASSETS_JWT}',
