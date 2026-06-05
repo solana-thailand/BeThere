@@ -109,10 +109,12 @@ Template: `claim/lock.rs` pattern (DO first, D1 fallback).
 - [ ] Route `register.rs` / `walkin.rs` through DO (`UpsertAttendee` action) with D1 fallback
 
 ### Non-DO Improvements (can do NOW)
-- [ ] Handler latency optimization (reduce D1 round-trips)
-- [ ] Batch D1 operations where possible
-- [ ] Review D1 query patterns for N+1 issues
-- [ ] Frontend improvements independent of DO
+- [x] Replace O(n) full-table-scan in `get_attendee_with_claim_counts` with targeted SQL (commit `ebf41bf`)
+- [ ] Batch `write_developer_data` 5 sequential inserts into 1 D1 batch (saves 4 round-trips)
+- [ ] Parallelize the 3 D1 writes in `register_attendee` via `join!`
+- [ ] Parallelize quiz+adventure checks with attendee lookup in `execute_claim`
+- [ ] Replace `check_walkin_duplicate` + `upsert_walkin_attendee` with single INSERT ON CONFLICT
+- [ ] Add `count_walkin_attendees` for `enforce_walkin_capacity` D1 fallback
 
 ## How to Dev/Test
 ```bash
