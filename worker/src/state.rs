@@ -1,21 +1,22 @@
 use std::collections::HashSet;
 use std::sync::{Arc, OnceLock};
 
-use worker::{Bucket, Context, D1Database, Env, KvStore};
+use worker::{Bucket, Context, D1Database, Env, KvStore, ObjectNamespace};
 
 // ---------------------------------------------------------------------------
 // Cached bindings — stable per Workers isolate, avoid JS interop on every request
 // ---------------------------------------------------------------------------
 
-/// Cached stable bindings (KV + D1) — read once per isolate, not per request.
+/// Cached stable bindings (KV + D1 + DO) — read once per isolate, not per request.
 ///
-/// `env.kv()` and `env.d1()` cross the WASM↔JS boundary. Since bindings
-/// don't change within an isolate's lifetime, cache them alongside config.
+/// `env.kv()`, `env.d1()`, and `env.durable_object()` cross the WASM↔JS boundary.
+/// Since bindings don't change within an isolate's lifetime, cache them alongside config.
 struct CachedBindings {
     quiz_kv: Option<KvStore>,
     events_kv: Option<KvStore>,
     d1: Option<Arc<D1Database>>,
     r2: Option<Bucket>,
+    event_do: Option<ObjectNamespace>,
 }
 
 static CACHED_BINDINGS: OnceLock<CachedBindings> = OnceLock::new();
@@ -67,6 +68,9 @@ pub struct AppState {
     /// `None` if the `ASSETS_BUCKET` binding is not configured.
     #[allow(dead_code)]
     pub r2: Option<Bucket>,
+    /// Durable Object namespace for ACID event writes (Issue #050).
+    /// `None` if the `EVENT_DO` binding is not configured.
+    pub event_do: Option<ObjectNamespace>,
 }
 
 impl AppState {
@@ -250,6 +254,7 @@ impl AppState {
                     events_kv: env.kv("EVENTS").ok(),
                     d1: env.d1("DB").ok().map(Arc::new),
                     r2: env.bucket("ASSETS_BUCKET").ok(),
+                    event_do: env.durable_object("EVENT_DO").ok(),
                 };
                 let _ = CACHED_BINDINGS.set(b);
                 CACHED_BINDINGS.get().unwrap()
@@ -260,6 +265,7 @@ impl AppState {
         let events_kv = bindings.events_kv.clone();
         let d1 = bindings.d1.clone();
         let r2 = bindings.r2.clone();
+        let event_do = bindings.event_do.clone();
 
         let webhook_secret = get_var(env, "WEBHOOK_SECRET").unwrap_or_default();
         if webhook_secret.is_empty() {
@@ -280,6 +286,7 @@ impl AppState {
             events_kv,
             d1,
             r2,
+            event_do,
             webhook_secret,
             worker_ctx: None,
         })

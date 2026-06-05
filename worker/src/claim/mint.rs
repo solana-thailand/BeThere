@@ -515,8 +515,15 @@ pub async fn execute_claim(
     // 8. Claim dedup lock — prevent concurrent double-claim
     let lock_kv: Option<&KvStore> = resolve_kv(state);
     if let Some(kv) = lock_kv
-        && let Err(e) =
-            acquire_claim_lock(kv, &event.id, token, wallet_address, state.d1.as_deref()).await
+        && let Err(e) = acquire_claim_lock(
+            kv,
+            &event.id,
+            token,
+            wallet_address,
+            state.d1.as_deref(),
+            state.event_do.as_ref(),
+        )
+        .await
     {
         return Err(AppError::RateLimited(e));
     }
@@ -542,7 +549,14 @@ pub async fn execute_claim(
             tracing::error!(claim_token = %token, error = %e, "mint failed");
             // Release lock so attendee can retry
             if let Some(kv) = lock_kv {
-                let _ = release_claim_lock(kv, &event.id, token, state.d1.as_deref()).await;
+                let _ = release_claim_lock(
+                    kv,
+                    &event.id,
+                    token,
+                    state.d1.as_deref(),
+                    state.event_do.as_ref(),
+                )
+                .await;
             }
             return Err(AppError::External {
                 service: "helius".into(),
@@ -620,6 +634,7 @@ pub async fn execute_claim(
             &mint_result.asset_id,
             &mint_result.signature,
             state.d1.as_deref(),
+            state.event_do.as_ref(),
         )
         .await
     {
@@ -671,8 +686,15 @@ async fn execute_walkin_claim(
     }
 
     // Claim dedup lock
-    if let Err(e) =
-        acquire_claim_lock(kv, &event.id, token, wallet_address, state.d1.as_deref()).await
+    if let Err(e) = acquire_claim_lock(
+        kv,
+        &event.id,
+        token,
+        wallet_address,
+        state.d1.as_deref(),
+        state.event_do.as_ref(),
+    )
+    .await
     {
         return Err(AppError::RateLimited(e));
     }
@@ -697,7 +719,14 @@ async fn execute_walkin_claim(
         Ok(result) => result,
         Err(ref e) => {
             tracing::error!(claim_token = %token, error = %e, "walk-in mint failed");
-            let _ = release_claim_lock(kv, &event.id, token, state.d1.as_deref()).await;
+            let _ = release_claim_lock(
+                kv,
+                &event.id,
+                token,
+                state.d1.as_deref(),
+                state.event_do.as_ref(),
+            )
+            .await;
             return Err(AppError::External {
                 service: "helius".into(),
                 status: 502,
@@ -733,10 +762,11 @@ async fn execute_walkin_claim(
         &mint_result.asset_id,
         &mint_result.signature,
         state.d1.as_deref(),
+        state.event_do.as_ref(),
     )
     .await
     {
-        tracing::warn!(error = %e, "walk-in claim lock finalize failed (non-blocking)");
+        tracing::warn!(error = %e, "walk-in claim lock finalize failed");
     }
 
     tracing::info!(

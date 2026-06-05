@@ -124,3 +124,16 @@ migrations_dir = "migrations"
 [[r2_buckets]]
 binding = "ASSETS_BUCKET"
 bucket_name = "bethere-assets"
+
+# Durable Objects — per-event ACID writes (Issue #050).
+# Each event gets its own DO instance with built-in SQLite storage.
+# Phase 1: claim lock operations (acquire, finalize, release).
+[[durable_objects.bindings]]
+name = "EVENT_DO"
+class_name = "EventDurableObject"
+
+# DO migration — creates the DO class with SQLite storage.
+# `new_sqlite_classes` tells Cloudflare to enable SQLite inside each DO instance.
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["EventDurableObject"]

@@ -229,7 +229,11 @@ m = {
     'bindings': [
         {'type': 'kv_namespace', 'name': 'EVENTS', 'namespace_id': 'c8a6a87f9ed34ce0a3c8e48b84039214'},
         {'type': 'd1', 'name': 'DB', 'id': '98d09542-e7d8-4413-ac34-4276a50d126c'},
-        {'type': 'r2_bucket', 'name': 'ASSETS_BUCKET', 'bucket_name': 'bethere-assets'}
+        {'type': 'r2_bucket', 'name': 'ASSETS_BUCKET', 'bucket_name': 'bethere-assets'},
+        {'type': 'durable_object', 'name': 'EVENT_DO', 'class_name': 'EventDurableObject'},
+    ],
+    'migrations': [
+        {'tag': 'v1', 'new_sqlite_classes': ['EventDurableObject']}
     ],
     'vars': {
         'SERVER_URL': 'https://bethere.solana-thailand.workers.dev',

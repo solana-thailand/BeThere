@@ -2,12 +2,17 @@
 //!
 //! Provides a write-first/verify-after lock mechanism backed by KV (with D1
 //! atomic fallback) to prevent concurrent double-claims.
+//!
+//! Phase 1 (Issue #050): Routes through Durable Object when available for
+//! truly ACID claim lock operations. Falls back to D1 + KV when DO is not
+//! configured.
 
-use worker::KvStore;
+use worker::{KvStore, Method, ObjectNamespace, Request, RequestInit, Response};
 
 use event_checkin_domain::models::attendee::WalkinAttendee;
 
 use crate::db;
+use crate::durable_objects::DoRequest;
 
 // ---------------------------------------------------------------------------
 // TTL constants
@@ -16,6 +21,56 @@ use crate::db;
 /// TTL for finalized claim lock records (90 days).
 /// Auto-cleanup post-event; permanent records are not needed indefinitely.
 pub(crate) const CLAIM_LOCK_FINALIZE_TTL_SECS: u64 = 86400 * 90;
+
+// ---------------------------------------------------------------------------
+// DO routing helpers (Issue #050 Phase 1)
+// ---------------------------------------------------------------------------
+
+/// Send an RPC request to the EventDurableObject for a given event.
+/// Returns the parsed DoResponse.
+async fn do_rpc(
+    namespace: &ObjectNamespace,
+    event_id: &str,
+    request: DoRequest,
+) -> Result<DoResponseParsed, String> {
+    let id = namespace
+        .id_from_name(event_id)
+        .map_err(|e| format!("DO id_from_name failed: {e:?}"))?;
+    let stub = id
+        .get_stub()
+        .map_err(|e| format!("DO get_stub failed: {e:?}"))?;
+
+    let body = serde_json::to_string(&request)
+        .map_err(|e| format!("DO request serialize failed: {e:?}"))?;
+
+    let req = Request::new_with_init(
+        "http://internal/do",
+        &RequestInit {
+            method: Method::Post,
+            body: Some(body.into()),
+            ..Default::default()
+        },
+    )
+    .map_err(|e| format!("DO request init failed: {e:?}"))?;
+
+    let mut resp: Response = stub
+        .fetch_with_request(req)
+        .await
+        .map_err(|e| format!("DO fetch failed: {e:?}"))?;
+
+    let parsed: DoResponseParsed = resp
+        .json()
+        .await
+        .map_err(|e| format!("DO response parse failed: {e:?}"))?;
+
+    Ok(parsed)
+}
+
+#[derive(serde::Deserialize)]
+struct DoResponseParsed {
+    success: bool,
+    error: Option<String>,
+}
 
 // ---------------------------------------------------------------------------
 // Lock helpers (pub(crate) for reuse by handlers if needed)
@@ -29,16 +84,65 @@ pub(crate) fn claim_lock_key(event_id: &str, token: &str) -> String {
 /// Try to acquire a claim lock. Returns Ok(()) if acquired, Err if already locked.
 /// Sets a 5-minute TTL as safety net.
 ///
-/// Uses write-first, verify-after pattern to eliminate the TOCTOU race between
-/// checking for an existing lock and writing a new one. Each caller writes a
-/// unique lock_id, then reads back to confirm it won the race.
+/// Phase 1 (Issue #050): Routes through Durable Object when available for
+/// truly ACID lock acquisition. Falls back to D1 + KV when DO is not configured.
 pub(crate) async fn acquire_claim_lock(
     kv: &KvStore,
     event_id: &str,
     token: &str,
     wallet: &str,
     d1: Option<&worker::D1Database>,
+    event_do: Option<&ObjectNamespace>,
 ) -> Result<(), String> {
+    // DO path: truly ACID (single-threaded per event)
+    if let Some(namespace) = event_do {
+        let lock_id = uuid::Uuid::now_v7().to_string();
+        let expires_at = (chrono::Utc::now() + chrono::Duration::seconds(300)).to_rfc3339();
+
+        let resp = do_rpc(
+            namespace,
+            event_id,
+            DoRequest::AcquireClaimLock {
+                lock_id: lock_id.clone(),
+                event_id: event_id.to_string(),
+                token: token.to_string(),
+                wallet: wallet.to_string(),
+                expires_at: expires_at.clone(),
+            },
+        )
+        .await?;
+
+        if !resp.success {
+            tracing::warn!(
+                claim_token = %token,
+                error = ?resp.error,
+                "claim lock race: already locked (DO)"
+            );
+            return Err(resp.error.unwrap_or_else(|| {
+                "claim is already being processed or has been completed".to_string()
+            }));
+        }
+
+        // DO lock acquired — also write KV for read compatibility
+        let key = claim_lock_key(event_id, token);
+        let kv_lock = serde_json::json!({
+            "lock_id": lock_id,
+            "wallet": wallet,
+            "started_at": chrono::Utc::now().to_rfc3339(),
+        })
+        .to_string();
+        if let Ok(builder) = kv.put(&key, &kv_lock) {
+            let _ = builder.expiration_ttl(300).execute().await;
+        }
+
+        tracing::info!(
+            claim_token = %token,
+            lock_id = %lock_id,
+            "claim lock acquired (DO+KV)"
+        );
+        return Ok(());
+    }
+
     // D1 path: atomic INSERT ON CONFLICT DO NOTHING
     if let Some(db) = d1 {
         let lock_id = uuid::Uuid::now_v7().to_string();
@@ -139,6 +243,7 @@ pub(crate) async fn acquire_claim_lock(
 }
 
 /// Finalize the claim lock after successful mint (removes TTL, sets final data).
+/// Phase 1 (Issue #050): Routes through DO when available.
 pub(crate) async fn finalize_claim_lock(
     kv: &KvStore,
     event_id: &str,
@@ -147,7 +252,50 @@ pub(crate) async fn finalize_claim_lock(
     asset_id: &str,
     signature: &str,
     d1: Option<&worker::D1Database>,
+    event_do: Option<&ObjectNamespace>,
 ) -> Result<(), String> {
+    // DO path
+    if let Some(namespace) = event_do {
+        let claimed_at = chrono::Utc::now().to_rfc3339();
+        let resp = do_rpc(
+            namespace,
+            event_id,
+            DoRequest::FinalizeClaimLock {
+                event_id: event_id.to_string(),
+                token: token.to_string(),
+                asset_id: asset_id.to_string(),
+                signature: signature.to_string(),
+                claimed_at: claimed_at.clone(),
+            },
+        )
+        .await?;
+
+        if !resp.success {
+            return Err(resp
+                .error
+                .unwrap_or_else(|| "claim lock finalization failed (DO)".to_string()));
+        }
+
+        // Also finalize in KV for read compatibility
+        let key = claim_lock_key(event_id, token);
+        let lock_value = serde_json::json!({
+            "wallet": wallet,
+            "asset_id": asset_id,
+            "signature": signature,
+            "claimed_at": claimed_at,
+        })
+        .to_string();
+        kv.put(&key, &lock_value)
+            .map_err(|e| format!("claim lock finalize failed: {e:?}"))?
+            .expiration_ttl(CLAIM_LOCK_FINALIZE_TTL_SECS)
+            .execute()
+            .await
+            .map_err(|e| format!("claim lock finalize write failed: {e:?}"))?;
+
+        tracing::info!(claim_token = %token, "claim lock finalized (DO+KV)");
+        return Ok(());
+    }
+
     // D1 path: UPDATE claim_locks
     if let Some(db) = d1 {
         let claimed_at = chrono::Utc::now().to_rfc3339();
@@ -177,12 +325,43 @@ pub(crate) async fn finalize_claim_lock(
 }
 
 /// Release the claim lock on failure (delete the key so attendee can retry).
+/// Phase 1 (Issue #050): Routes through DO when available.
 pub(crate) async fn release_claim_lock(
     kv: &KvStore,
     event_id: &str,
     token: &str,
     d1: Option<&worker::D1Database>,
+    event_do: Option<&ObjectNamespace>,
 ) -> Result<(), String> {
+    // DO path
+    if let Some(namespace) = event_do {
+        let resp = do_rpc(
+            namespace,
+            event_id,
+            DoRequest::ReleaseClaimLock {
+                event_id: event_id.to_string(),
+                token: token.to_string(),
+            },
+        )
+        .await?;
+
+        if !resp.success {
+            tracing::warn!(
+                claim_token = %token,
+                error = ?resp.error,
+                "DO release claim lock failed"
+            );
+        }
+
+        // Always delete from KV
+        let key = claim_lock_key(event_id, token);
+        kv.delete(&key)
+            .await
+            .map_err(|e| format!("claim lock release failed: {e:?}"))?;
+        tracing::info!(claim_token = %token, "claim lock released (DO+KV)");
+        return Ok(());
+    }
+
     // D1 path: DELETE
     if let Some(db) = d1 {
         db::release_claim_lock(db, event_id, token).await?;

@@ -5,6 +5,7 @@ mod claim;
 mod cleanup;
 mod crypto;
 mod db;
+mod durable_objects;
 mod error;
 mod escrow_indexer;
 mod event_store;
@@ -19,6 +20,9 @@ mod solana;
 mod solana_escrow;
 mod state;
 mod storage;
+
+// Export DO class for workers-rs macro registration
+pub use durable_objects::EventDurableObject;
 
 use std::sync::OnceLock;
 
