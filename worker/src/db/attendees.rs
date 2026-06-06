@@ -757,12 +757,13 @@ pub(crate) async fn check_walkin_duplicate(
     Ok(row.map(|r| r.cnt > 0).unwrap_or(false))
 }
 
-/// Insert a walk-in attendee into the D1 attendees table.
+/// Attempt to insert a walk-in attendee, rejecting duplicates atomically.
 ///
-/// Uses `participation_type = 'walkin'` to distinguish from regular attendees.
-/// The `id` is derived from the claim_token (UUID v7).
+/// Uses `INSERT ... SELECT ... WHERE NOT EXISTS` to combine the duplicate
+/// check and insert into a single D1 round-trip. Returns `Ok(true)` if the
+/// row was inserted, `Ok(false)` if a duplicate already existed.
 #[allow(clippy::too_many_arguments)]
-pub(crate) async fn upsert_walkin_attendee(
+pub(crate) async fn try_insert_walkin(
     db: &D1Database,
     id: &str,
     event_id: &str,
@@ -772,38 +773,66 @@ pub(crate) async fn upsert_walkin_attendee(
     checked_in_at: &str,
     checked_in_by: &str,
     claim_token: &str,
-) -> Result<(), String> {
+) -> Result<bool, String> {
     let stmt = db.prepare(
         "INSERT INTO attendees (id, event_id, email, name, approval_status, participation_type, \
          contact_channel, contact_handle, checked_in_at, checked_in_by, claim_token, \
          created_at, updated_at) \
-         VALUES (?1, ?2, ?3, ?4, 'approved', 'walkin', ?5, ?6, ?7, ?8, ?9, \
-         datetime('now'), datetime('now')) \
-         ON CONFLICT (id) DO UPDATE SET \
-         name = excluded.name, \
-         checked_in_at = excluded.checked_in_at, \
-         checked_in_by = excluded.checked_in_by, \
-         updated_at = datetime('now')",
+         SELECT ?1, ?2, ?3, ?4, 'approved', 'walkin', ?5, ?6, ?7, ?8, ?9, \
+         datetime('now'), datetime('now') \
+         WHERE NOT EXISTS (\
+         SELECT 1 FROM attendees \
+         WHERE event_id = ?10 AND email = ?11 AND participation_type = 'walkin')",
     );
-    // phone → contact_channel, empty handle
     let contact_channel = phone.unwrap_or("");
-    stmt.bind_refs(&[
-        D1Type::Text(id),
-        D1Type::Text(event_id),
-        D1Type::Text(email),
-        D1Type::Text(name),
-        D1Type::Text(contact_channel),
-        D1Type::Text(""), // contact_handle
-        D1Type::Text(checked_in_at),
-        D1Type::Text(checked_in_by),
-        D1Type::Text(claim_token),
-    ])
-    .map_err(|e| format!("D1 upsert_walkin_attendee bind: {e:?}"))?
-    .run()
-    .await
-    .map_err(|e| format!("D1 upsert_walkin_attendee run: {e:?}"))?;
+    let result = stmt
+        .bind_refs(&[
+            D1Type::Text(id),
+            D1Type::Text(event_id),
+            D1Type::Text(email),
+            D1Type::Text(name),
+            D1Type::Text(contact_channel),
+            D1Type::Text(""), // contact_handle
+            D1Type::Text(checked_in_at),
+            D1Type::Text(checked_in_by),
+            D1Type::Text(claim_token),
+            D1Type::Text(event_id),
+            D1Type::Text(email),
+        ])
+        .map_err(|e| format!("D1 try_insert_walkin bind: {e:?}"))?
+        .run()
+        .await
+        .map_err(|e| format!("D1 try_insert_walkin run: {e:?}"))?;
 
-    Ok(())
+    let changes = result
+        .meta()
+        .map_err(|e| format!("D1 try_insert_walkin meta: {e:?}"))?
+        .and_then(|m| m.changes)
+        .unwrap_or(0);
+
+    Ok(changes > 0)
+}
+
+/// Count walk-in attendees for an event from D1.
+///
+/// Returns the count without fetching full rows.
+pub(crate) async fn count_walkin_attendees(db: &D1Database, event_id: &str) -> Result<u32, String> {
+    let stmt = db.prepare(
+        "SELECT COUNT(*) as cnt FROM attendees \
+         WHERE event_id = ?1 AND participation_type = 'walkin'",
+    );
+    #[derive(Deserialize)]
+    struct CountRow {
+        cnt: i64,
+    }
+    let row = stmt
+        .bind_refs(&[D1Type::Text(event_id)])
+        .map_err(|e| format!("D1 count_walkin_attendees bind: {e:?}"))?
+        .first::<CountRow>(Some("cnt"))
+        .await
+        .map_err(|e| format!("D1 count_walkin_attendees first: {e:?}"))?;
+
+    Ok(row.map(|r| r.cnt as u32).unwrap_or(0))
 }
 
 /// Fetch walk-in attendees for an event from D1.

@@ -438,7 +438,7 @@ pub async fn register_walkin(
                 AppError::Internal(format!("KV write failed: {e:?}"))
             })?;
     } else if let Some(db) = state.d1.as_deref() {
-        crate::db::attendees::upsert_walkin_attendee(
+        let inserted = crate::db::attendees::try_insert_walkin(
             db,
             &claim_token,
             &event.id,
@@ -454,6 +454,18 @@ pub async fn register_walkin(
             tracing::error!(event_id = %event.id, email = %email_lower, error = %e, "D1 walkin write failed");
             AppError::Internal(format!("D1 walkin write failed: {e}"))
         })?;
+        if !inserted {
+            tracing::warn!(
+                event_id = %event.id,
+                email = %email_lower,
+                "walk-in duplicate detected at insert time (race condition)"
+            );
+            return Err(AppError::Validation(
+                "a walk-in attendee with this email is already registered for this event"
+                    .to_string(),
+            )
+            .into());
+        }
         tracing::info!(event_id = %event.id, email = %email_lower, "walkin registered to D1 (no KV)");
     } else {
         tracing::error!("Neither EVENTS KV nor D1 available for walkin write");
@@ -979,9 +991,9 @@ async fn enforce_walkin_capacity(
         }
     } else if let Some(db) = state.d1.as_deref() {
         // D1 fallback: count walkin attendees (they are all "unsynced" from sheet perspective)
-        match crate::db::attendees::get_walkin_attendees(db, &config.id).await {
-            Ok(walkins) => {
-                in_person_count += walkins.len() as u32;
+        match crate::db::attendees::count_walkin_attendees(db, &config.id).await {
+            Ok(count) => {
+                in_person_count += count;
             }
             Err(e) => {
                 tracing::warn!(error = %e, "D1 walkin count for capacity failed, skipping");

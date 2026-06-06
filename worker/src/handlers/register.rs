@@ -340,7 +340,8 @@ pub async fn register_attendee(
 
     // 9a. Dual-write to D1 — attendee row (non-fatal, Phase 2a)
     if let Some(ref d1) = state.d1 {
-        if let Err(e) = crate::db::attendees::upsert_attendee(
+        // Parallelize attendee + contact upserts (independent D1 writes)
+        let attendee_fut = crate::db::attendees::upsert_attendee(
             d1,
             &api_id,
             &event_id,
@@ -350,9 +351,22 @@ pub async fn register_attendee(
             &participation_type,
             contact_channel.unwrap_or(""),
             contact_handle.unwrap_or(""),
-        )
-        .await
-        {
+        );
+
+        let events_joined = event_id.clone();
+        let contact_fut = crate::db::contacts::upsert_contact(
+            d1,
+            &email,
+            name,
+            &events_joined,
+            1, // event_count will be updated on subsequent registrations
+            contact_channel.unwrap_or(""),
+            contact_handle.unwrap_or(""),
+        );
+
+        let (attendee_result, contact_result) = futures_util::join!(attendee_fut, contact_fut);
+
+        if let Err(e) = attendee_result {
             tracing::warn!(
                 %api_id,
                 %email,
@@ -361,19 +375,7 @@ pub async fn register_attendee(
             );
         }
 
-        // D1 contact upsert (non-fatal)
-        let events_joined = event_id.clone();
-        if let Err(e) = crate::db::contacts::upsert_contact(
-            d1,
-            &email,
-            name,
-            &events_joined,
-            1, // event_count will be updated on subsequent registrations
-            contact_channel.unwrap_or(""),
-            contact_handle.unwrap_or(""),
-        )
-        .await
-        {
+        if let Err(e) = contact_result {
             tracing::warn!(
                 %email,
                 error = %e,
