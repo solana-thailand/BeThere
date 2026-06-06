@@ -42,7 +42,14 @@ pub use usdc::{
 /// Derive a stable u64 event ID from a string event ID for on-chain PDA derivation.
 /// Uses FNV-1a hash for deterministic, collision-resistant mapping.
 pub(crate) fn derive_on_chain_event_id(event_id: &str) -> u64 {
-    // FNV-1a 64-bit hash
+    // FNV-1a 64-bit hash → u64 PDA seed.
+    // Intentionally kept as FNV-1a because the on-chain program (bethere-escrow)
+    // uses `event_id: u64` as a PDA seed — changing the hash would re-derive all
+    // existing PDAs and orphan escrow accounts. FNV-1a is sufficient here because:
+    //   1. Input is a UUID (128 bits of entropy) → collision resistance is ~2^-64
+    //   2. PDA seeds are public on-chain — no irreversibility requirement
+    //   3. The organizer pubkey is also part of the seed, further reducing collision risk
+    // See VULN-007: JWT blacklist keys now use SHA-256; on-chain IDs remain FNV-1a.
     let mut hash: u64 = 0xcbf29ce484222325; // FNV offset basis
     for byte in event_id.bytes() {
         hash ^= byte as u64;

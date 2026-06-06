@@ -39,8 +39,8 @@ pub async fn blacklist_token(token: &str, claims: &Claims, state: &AppState) {
         }
     };
 
-    // Use blake3 hash of the token as the KV key (don't store raw tokens)
-    let hash = blake3_hash(token);
+    // Use SHA-256 hash of the token as the KV key (don't store raw tokens)
+    let hash = sha256_hex(token.as_bytes()).await;
     let key = format!("{JWT_BLACKLIST_PREFIX}{hash}");
 
     // TTL = remaining lifetime of the token (at least 60s for KV)
@@ -66,27 +66,29 @@ async fn is_token_blacklisted(token: &str, state: &AppState) -> bool {
         None => return false,
     };
 
-    let hash = blake3_hash(token);
+    let hash = sha256_hex(token.as_bytes()).await;
     let key = format!("{JWT_BLACKLIST_PREFIX}{hash}");
 
     matches!(kv.get(&key).text().await, Ok(Some(_)))
 }
 
-/// Simple blake3-based hash for JWT blacklist keys.
-/// Uses HMAC-SHA256 via SubtleCrypto as a portable alternative (blake3 crate doesn't
-/// compile to wasm32). We hash the token with a fixed salt for collision resistance.
-fn blake3_hash(input: &str) -> String {
-    // Fallback: use a fast, deterministic hash.
-    // Since blake3 won't compile to wasm32, we use a simple XOR-based approach
-    // seeded with the input length. This is sufficient for blacklist keys
-    // (not cryptographic — just needs to be unique per token).
-    let bytes = input.as_bytes();
-    let mut hash: u64 = 0xcbf29ce484222325; // FNV offset basis
-    for &b in bytes {
-        hash ^= b as u64;
-        hash = hash.wrapping_mul(0x100000001b3); // FNV prime
+/// SHA-256 hash (hex-encoded) for JWT blacklist keys.
+/// Uses SubtleCrypto in WASM, pure Rust SHA-256 in native tests.
+/// Replaces the previous FNV-1a approach (VULN-007).
+async fn sha256_hex(data: &[u8]) -> String {
+    match crate::solana_escrow::crypto::sha256(data).await {
+        Ok(hash) => hash.iter().map(|b| format!("{b:02x}")).collect(),
+        Err(e) => {
+            // FNV-1a fallback — should never happen but prevents auth breakage
+            tracing::warn!(error = %e, "SHA-256 failed for JWT blacklist, using FNV-1a fallback");
+            let mut h: u64 = 0xcbf29ce484222325;
+            for &b in data {
+                h ^= b as u64;
+                h = h.wrapping_mul(0x100000001b3);
+            }
+            format!("{h:016x}")
+        }
     }
-    format!("{hash:016x}")
 }
 
 // ---------------------------------------------------------------------------

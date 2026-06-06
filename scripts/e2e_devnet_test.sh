@@ -94,7 +94,8 @@ api_put() {
     -d "$body"
 }
 
-# Compute FNV-1a hash to match Rust's derive_on_chain_event_id
+# Compute FNV-1a hash to match Rust's derive_on_chain_event_id.
+# Intentionally FNV-1a — must match on-chain PDA seed derivation (see VULN-007).
 fnv1a_hash() {
   python3 -c "
 h = 0xcbf29ce484222325
