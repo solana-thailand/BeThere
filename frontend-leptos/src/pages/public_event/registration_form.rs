@@ -34,6 +34,12 @@ pub fn registration_form(
     set_reg_consent_marketing: WriteSignal<bool>,
     reg_state: ReadSignal<RegState>,
     set_reg_state: WriteSignal<RegState>,
+    reg_experience_level: ReadSignal<String>,
+    set_reg_experience_level: WriteSignal<String>,
+    reg_tech_stack: ReadSignal<Vec<String>>,
+    set_reg_tech_stack: WriteSignal<Vec<String>>,
+    reg_interests: ReadSignal<Vec<String>>,
+    set_reg_interests: WriteSignal<Vec<String>>,
 ) -> AnyView {
     // Pre-fill email from JWT
     set_reg_email.set(locked_email.clone());
@@ -230,6 +236,96 @@ pub fn registration_form(
                                         None => view! { <div></div> }.into_any(),
                                     }}
                                 </div>
+
+                                // Developer Profile Section (Issue #049)
+                                <div class="pe-dev-profile-section">
+                                    <label class="pe-label">"About You (optional — helps us plan better events)"</label>
+
+                                    // Experience Level
+                                    <select
+                                        class="pe-input"
+                                        prop:value=move || reg_experience_level.get()
+                                        on:change=move |ev| {
+                                            set_reg_experience_level.set(event_target_value(&ev));
+                                        }
+                                    >
+                                        <option value="">"Experience level..."</option>
+                                        <option value="Beginner">"Beginner"</option>
+                                        <option value="Intermediate">"Intermediate"</option>
+                                        <option value="Senior">"Senior"</option>
+                                        <option value="Tech Lead">"Tech Lead"</option>
+                                    </select>
+
+                                    // Tech Stack (multi-select via checkboxes)
+                                    <div class="pe-multiselect-group">
+                                        <span class="pe-multiselect-label">"Technologies you use:"</span>
+                                        <div class="pe-multiselect-options">
+                                            {move || {
+                                                let techs = ["Rust", "TypeScript", "Python", "Solidity", "Move", "Go", "C++"];
+                                                let current = reg_tech_stack.get();
+                                                techs.iter().map(move |&tech| {
+                                                    let is_checked = current.contains(&tech.to_string());
+                                                    let tech_clone = tech.to_string();
+                                                    view! {
+                                                        <label class="pe-multiselect-item">
+                                                            <input
+                                                                type="checkbox"
+                                                                class="pe-checkbox"
+                                                                checked=is_checked
+                                                                on:change=move |ev| {
+                                                                    let checked = event_target_checked(&ev);
+                                                                    set_reg_tech_stack.update(|stack| {
+                                                                        if checked {
+                                                                            stack.push(tech_clone.clone());
+                                                                        } else {
+                                                                            stack.retain(|t| t != &tech_clone);
+                                                                        }
+                                                                    });
+                                                                }
+                                                            />
+                                                            <span>{tech}</span>
+                                                        </label>
+                                                    }
+                                                }).collect::<Vec<_>>()
+                                            }}
+                                        </div>
+                                    </div>
+
+                                    // Interests (multi-select via checkboxes)
+                                    <div class="pe-multiselect-group">
+                                        <span class="pe-multiselect-label">"Topics that interest you:"</span>
+                                        <div class="pe-multiselect-options">
+                                            {move || {
+                                                let topics = ["DeFi", "NFT", "ZK Proofs", "Infrastructure", "Gaming", "AI/ML", "Mobile"];
+                                                let current = reg_interests.get();
+                                                topics.iter().map(move |&topic| {
+                                                    let is_checked = current.contains(&topic.to_string());
+                                                    let topic_clone = topic.to_string();
+                                                    view! {
+                                                        <label class="pe-multiselect-item">
+                                                            <input
+                                                                type="checkbox"
+                                                                class="pe-checkbox"
+                                                                checked=is_checked
+                                                                on:change=move |ev| {
+                                                                    let checked = event_target_checked(&ev);
+                                                                    set_reg_interests.update(|ints| {
+                                                                        if checked {
+                                                                            ints.push(topic_clone.clone());
+                                                                        } else {
+                                                                            ints.retain(|t| t != &topic_clone);
+                                                                        }
+                                                                    });
+                                                                }
+                                                            />
+                                                            <span>{topic}</span>
+                                                        </label>
+                                                    }
+                                                }).collect::<Vec<_>>()
+                                            }}
+                                        </div>
+                                    </div>
+                                </div>
                                 // PDPA Consent
                                 <div id="pe-field-consent">
                                     <label class="pe-checkbox-label">
@@ -386,6 +482,10 @@ pub fn registration_form(
                                                     return;
                                                 }
 
+                                                let experience_val = reg_experience_level.get();
+                                                let tech_stack_val = reg_tech_stack.get();
+                                                let interests_val = reg_interests.get();
+
                                                 set_reg_state.set(RegState::Submitting);
                                                 let body = RegisterBody {
                                                     slug: slug.clone(),
@@ -398,6 +498,9 @@ pub fn registration_form(
                                                     consent_given: if consent_val { Some(true) } else { None },
                                                     photo_consent_given: if photo_consent_val { Some(true) } else { None },
                                                     consent_marketing: if reg_consent_marketing.get() { Some(true) } else { None },
+                                                    experience_level: if experience_val.is_empty() { None } else { Some(experience_val) },
+                                                    tech_stack: if tech_stack_val.is_empty() { None } else { Some(serde_json::to_string(&*tech_stack_val).unwrap_or_default()) },
+                                                    interests: if interests_val.is_empty() { None } else { Some(serde_json::to_string(&*interests_val).unwrap_or_default()) },
                                                 };
 
                                                 leptos::task::spawn_local(async move {

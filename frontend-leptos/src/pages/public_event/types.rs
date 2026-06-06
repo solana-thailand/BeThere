@@ -48,6 +48,10 @@ pub struct RegisterBody {
     pub consent_given: Option<bool>,
     pub photo_consent_given: Option<bool>,
     pub consent_marketing: Option<bool>,
+    /// Developer profile fields (optional — Issue #049).
+    pub experience_level: Option<String>,
+    pub tech_stack: Option<String>,
+    pub interests: Option<String>,
 }
 
 /// Next step returned after registration.

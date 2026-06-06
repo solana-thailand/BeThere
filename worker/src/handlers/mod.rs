@@ -3,6 +3,7 @@ pub mod attendee;
 pub mod auth;
 pub mod checkin;
 pub mod claim;
+pub mod community;
 pub mod contacts;
 pub mod deposit;
 pub mod escrow_index;
@@ -291,6 +292,15 @@ pub fn routes(state: AppState) -> Router<()> {
             get(orgs::get_org)
                 .put(orgs::update_org)
                 .delete(orgs::delete_org),
+        )
+        // Community insights (protected — organizer dashboard)
+        .route(
+            "/community/insights",
+            get(community::get_community_insights),
+        )
+        .route(
+            "/community/developers",
+            get(community::list_developers),
         )
         // On-chain event indexing (protected — manual sync + query)
         .route("/escrow/sync", post(escrow_index::escrow_sync_handler))

@@ -372,3 +372,120 @@ pub(crate) async fn delete_developer_responses(
         .map_err(|e| format!("D1 delete_developer_responses: {e:?}"))?;
     Ok(0) // D1 exec doesn't return rows affected
 }
+
+// ---------------------------------------------------------------------------
+// Additional Aggregation Queries (Issue #049 Phase 1)
+// ---------------------------------------------------------------------------
+
+/// Role distribution across all developer profiles.
+pub(crate) async fn role_distribution(db: &D1Database) -> Result<Vec<(String, i64)>, String> {
+    let rows = db
+        .prepare(
+            "SELECT primary_role, COUNT(*) as cnt \
+             FROM developer_profiles \
+             WHERE primary_role IS NOT NULL \
+             GROUP BY primary_role \
+             ORDER BY cnt DESC",
+        )
+        .all()
+        .await
+        .map_err(|e| format!("D1 role_distribution run: {e:?}"))?
+        .results::<serde_json::Map<String, serde_json::Value>>()
+        .map_err(|e| format!("D1 role_distribution deserialize: {e:?}"))?;
+
+    Ok(rows
+        .into_iter()
+        .filter_map(|m| {
+            let label = m.get("primary_role")?.as_str()?.to_string();
+            let cnt = m.get("cnt")?.as_i64()?;
+            Some((label, cnt))
+        })
+        .collect())
+}
+
+/// Interest distribution (parsed from JSON arrays, like tech_stack_popularity).
+pub(crate) async fn interest_distribution(
+    db: &D1Database,
+    limit: usize,
+) -> Result<Vec<(String, i64)>, String> {
+    let rows = db
+        .prepare("SELECT interests FROM developer_profiles WHERE interests != '[]'")
+        .all()
+        .await
+        .map_err(|e| format!("D1 interest_distribution run: {e:?}"))?
+        .results::<InterestRow>()
+        .map_err(|e| format!("D1 interest_distribution deserialize: {e:?}"))?;
+
+    let mut counts: std::collections::HashMap<String, i64> = std::collections::HashMap::new();
+    for row in &rows {
+        if let Ok(items) = serde_json::from_str::<Vec<String>>(&row.interests) {
+            for item in items {
+                *counts.entry(item).or_default() += 1;
+            }
+        }
+    }
+
+    let mut sorted: Vec<_> = counts.into_iter().collect();
+    sorted.sort_by(|a, b| b.1.cmp(&a.1));
+    sorted.truncate(limit);
+    Ok(sorted)
+}
+
+/// Helper struct for interest_distribution query.
+#[derive(Debug, Deserialize)]
+struct InterestRow {
+    interests: String,
+}
+
+/// Count developers with consent_outreach = 1.
+pub(crate) async fn outreach_opt_in_count(db: &D1Database) -> Result<i64, String> {
+    let row = db
+        .prepare("SELECT COUNT(*) as cnt FROM developer_profiles WHERE consent_outreach = 1")
+        .first::<serde_json::Map<String, serde_json::Value>>(None)
+        .await
+        .ok()
+        .flatten();
+
+    Ok(row.and_then(|m| m.get("cnt")?.as_i64()).unwrap_or(0))
+}
+
+/// Developer profile summary for community list endpoint.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct DeveloperProfileSummary {
+    pub email: String,
+    pub display_name: String,
+    pub experience_level: Option<String>,
+    pub primary_role: Option<String>,
+    pub tech_stack: String,
+    pub interests: String,
+    pub total_events: i64,
+    pub last_active_at: String,
+    pub consent_outreach: i64,
+}
+
+/// Paginated developer list.
+pub(crate) async fn list_developers_paginated(
+    db: &D1Database,
+    limit: usize,
+    offset: usize,
+) -> Result<(Vec<DeveloperProfileSummary>, i64), String> {
+    let count = developer_count(db).await?;
+
+    let sql = format!(
+        "SELECT email, display_name, experience_level, primary_role, \
+         tech_stack, interests, total_events, last_active_at, consent_outreach \
+         FROM developer_profiles \
+         ORDER BY last_active_at DESC \
+         LIMIT {limit} OFFSET {offset}"
+    );
+
+    let rows = db
+        .prepare(&sql)
+        .all()
+        .await
+        .map_err(|e| format!("D1 list_developers_paginated run: {e:?}"))?
+        .results::<DeveloperProfileSummary>()
+        .map_err(|e| format!("D1 list_developers_paginated deserialize: {e:?}"))?;
+
+    Ok((rows, count))
+}

@@ -443,6 +443,11 @@ fn render_loaded_event(
     let (reg_consent_marketing, set_reg_consent_marketing) = signal(false);
     let (reg_state, set_reg_state) = signal(RegState::Idle);
 
+    // Developer profile signals (Issue #049)
+    let (reg_experience_level, set_reg_experience_level) = signal(String::new());
+    let (reg_tech_stack, set_reg_tech_stack) = signal(Vec::<String>::new());
+    let (reg_interests, set_reg_interests) = signal(Vec::<String>::new());
+
     let slug_for_signin = current_slug.clone();
     let slug_for_reg = data.slug.clone();
 
@@ -632,6 +637,9 @@ fn render_loaded_event(
                                         reg_photo_consent_given, set_reg_photo_consent_given,
                                         reg_consent_marketing, set_reg_consent_marketing,
                                         reg_state, set_reg_state,
+                                        reg_experience_level, set_reg_experience_level,
+                                        reg_tech_stack, set_reg_tech_stack,
+                                        reg_interests, set_reg_interests,
                                     )
                                 }
                                 RegistrationLookup::NotRegistered => {
@@ -658,6 +666,9 @@ fn render_loaded_event(
                                         reg_photo_consent_given, set_reg_photo_consent_given,
                                         reg_consent_marketing, set_reg_consent_marketing,
                                         reg_state, set_reg_state,
+                                        reg_experience_level, set_reg_experience_level,
+                                        reg_tech_stack, set_reg_tech_stack,
+                                        reg_interests, set_reg_interests,
                                     )
                                 }
                             }

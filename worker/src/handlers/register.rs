@@ -53,6 +53,10 @@ pub struct RegisterRequest {
     /// Whether the attendee wants to receive marketing communications
     /// about future events (optional, PDPA marketing consent).
     pub consent_marketing: Option<bool>,
+    /// Developer profile fields (optional — Issue #049 Phase 1).
+    pub experience_level: Option<String>,
+    pub tech_stack: Option<String>,
+    pub interests: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -398,6 +402,10 @@ pub async fn register_attendee(
             participation_type: &participation_type,
             consent_given: body.consent_given.unwrap_or(false),
             photo_consent_given: body.photo_consent_given.unwrap_or(false),
+            consent_marketing: body.consent_marketing.unwrap_or(false),
+            experience_level: body.experience_level.as_deref(),
+            tech_stack: body.tech_stack.as_deref(),
+            interests: body.interests.as_deref(),
         })
         .await;
     }
@@ -1130,6 +1138,10 @@ struct DeveloperData<'a> {
     participation_type: &'a str,
     consent_given: bool,
     photo_consent_given: bool,
+    consent_marketing: bool,
+    experience_level: Option<&'a str>,
+    tech_stack: Option<&'a str>,
+    interests: Option<&'a str>,
 }
 
 /// Write developer profile + registration responses to D1 (Issue #049 Phase 1).
@@ -1146,17 +1158,55 @@ async fn write_developer_data(data: &DeveloperData<'_>) {
         participation_type,
         consent_given,
         photo_consent_given,
+        consent_marketing,
+        experience_level,
+        tech_stack,
+        interests,
     } = data;
 
-    // 1. Upsert developer profile (display_name)
+    // 1. Upsert developer profile (display_name + consent_outreach)
     if let Err(e) =
         crate::db::developers::upsert_developer_field(d1, email, "display_name", name).await
     {
         tracing::warn!(%email, error = %e, "D1 developer display_name upsert failed (non-fatal)");
     }
 
-    // 2. Store registration responses (single batch INSERT — 1 D1 call instead of 5)
-    let responses: Vec<(&str, &str, bool)> = vec![
+    // 1b. Upsert consent_outreach from marketing consent
+    let consent_val = if *consent_marketing { "1" } else { "0" };
+    if let Err(e) =
+        crate::db::developers::upsert_developer_field(d1, email, "consent_outreach", consent_val)
+            .await
+    {
+        tracing::warn!(%email, error = %e, "D1 developer consent_outreach upsert failed (non-fatal)");
+    }
+
+    // 1c. Upsert optional profile fields
+    if let Some(level) = experience_level
+        && !level.is_empty()
+            && let Err(e) =
+                crate::db::developers::upsert_developer_field(d1, email, "experience_level", level)
+                    .await
+            {
+                tracing::warn!(%email, error = %e, "D1 developer experience_level upsert failed (non-fatal)");
+            }
+    if let Some(stack) = tech_stack
+        && !stack.is_empty()
+            && let Err(e) =
+                crate::db::developers::upsert_developer_field(d1, email, "tech_stack", stack).await
+            {
+                tracing::warn!(%email, error = %e, "D1 developer tech_stack upsert failed (non-fatal)");
+            }
+    if let Some(interest) = interests
+        && !interest.is_empty()
+            && let Err(e) =
+                crate::db::developers::upsert_developer_field(d1, email, "interests", interest)
+                    .await
+            {
+                tracing::warn!(%email, error = %e, "D1 developer interests upsert failed (non-fatal)");
+            }
+
+    // 2. Store registration responses (single batch INSERT — 1 D1 call instead of N)
+    let mut responses: Vec<(&str, &str, bool)> = vec![
         ("participation_type", participation_type, false),
         ("contact_channel", contact_channel, false),
         ("contact_handle", contact_handle, false),
@@ -1174,7 +1224,23 @@ async fn write_developer_data(data: &DeveloperData<'_>) {
             },
             false,
         ),
+        (
+            "consent_marketing",
+            if *consent_marketing { "true" } else { "false" },
+            false,
+        ),
     ];
+
+    // Profile-enriching fields
+    if let Some(level) = experience_level.filter(|v| !v.is_empty()) {
+        responses.push(("experience_level", level, true));
+    }
+    if let Some(stack) = tech_stack.filter(|v| !v.is_empty()) {
+        responses.push(("tech_stack", stack, true));
+    }
+    if let Some(interest) = interests.filter(|v| !v.is_empty()) {
+        responses.push(("interests", interest, true));
+    }
 
     if let Err(e) =
         crate::db::developers::batch_insert_registration_responses(d1, event_id, email, &responses)

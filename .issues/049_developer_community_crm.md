@@ -47,11 +47,13 @@ Registration Form → registration_responses (raw answers)
 
 ### Phase 1: D1 Migration + Developer Profiles (This Issue)
 - [x] D1 Phase 2a: Dual-write for attendees, contacts, events, staff (Issue #046)
-- [ ] `developer_profiles` table + upsert query
-- [ ] `registration_responses` table + insert query
+- [x] `developer_profiles` table + upsert query
+- [x] `registration_responses` table + insert query
+- [x] Backend: registration handler writes to D1 + developer profile (experience_level, tech_stack, interests, consent_outreach)
+- [x] Backend: community insights API (aggregations)
+- [x] Frontend: developer profile fields on registration form
+- [x] Backend: developer list API (paginated)
 - [ ] Registration form config schema (KV-stored JSON per event)
-- [ ] Backend: registration handler writes to D1 + developer profile
-- [ ] Backend: community insights API (aggregations)
 
 ### Phase 2: Configurable Registration Forms
 - [ ] Admin UI: form field builder (drag-drop, field types)
@@ -202,7 +204,7 @@ Registration Form → registration_responses (raw answers)
 
 ## Status
 
-- [ ] Phase 1: D1 Migration + Developer Profiles
+- [x] Phase 1: D1 Migration + Developer Profiles (mostly complete, config schema remaining)
 - [ ] Phase 2: Configurable Registration Forms
 - [ ] Phase 3: Campaigns & Series
 - [ ] Phase 4: Organizer Community Dashboard
