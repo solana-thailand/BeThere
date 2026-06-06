@@ -111,10 +111,12 @@ Template: `claim/lock.rs` pattern (DO first, D1 fallback).
 ### Non-DO Improvements (can do NOW)
 - [x] Replace O(n) full-table-scan in `get_attendee_with_claim_counts` with targeted SQL (commit `ebf41bf`)
 - [x] Batch `write_developer_data` 5 sequential inserts into 1 D1 batch (commit `feca436`, saves 4 round-trips)
-- [ ] Parallelize the 3 D1 writes in `register_attendee` via `join!`
-- [ ] Parallelize quiz+adventure checks with attendee lookup in `execute_claim`
-- [ ] Replace `check_walkin_duplicate` + `upsert_walkin_attendee` with single INSERT ON CONFLICT
-- [ ] Add `count_walkin_attendees` for `enforce_walkin_capacity` D1 fallback
+- [x] Parallelize D1 writes in `register_attendee` via `join!` (commit `5aec490`) — upsert_attendee + upsert_contact now concurrent
+- [x] Quiz+adventure checks in `execute_claim` — already parallelized via `join!` (pre-existing)
+- [x] Replace `check_walkin_duplicate` + `upsert_walkin_attendee` with atomic `try_insert_walkin` (commit `5aec490`) — INSERT...SELECT...WHERE NOT EXISTS, 1 D1 call
+- [x] Add `count_walkin_attendees()` for `enforce_walkin_capacity` D1 fallback (commit `5aec490`) — SELECT COUNT(*) instead of full row fetch
+
+**All non-DO quick wins completed and deployed to production.**
 
 ## How to Dev/Test
 ```bash
