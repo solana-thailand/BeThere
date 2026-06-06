@@ -926,3 +926,21 @@ pub(crate) async fn get_walkin_attendees(
 
     Ok(walkins)
 }
+
+/// Delete an attendee from D1 by event_id + email.
+/// Used for walk-in attendee deletion.
+pub(crate) async fn delete_attendee(
+    db: &D1Database,
+    event_id: &str,
+    email: &str,
+) -> Result<(), String> {
+    let stmt = db.prepare("DELETE FROM attendees WHERE event_id = ?1 AND email = ?2");
+    let bound = stmt
+        .bind_refs(&[D1Type::Text(event_id), D1Type::Text(email)])
+        .map_err(|e| format!("D1 delete_attendee bind: {e:?}"))?;
+    bound
+        .run()
+        .await
+        .map_err(|e| format!("D1 delete_attendee run: {e:?}"))?;
+    Ok(())
+}

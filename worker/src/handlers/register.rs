@@ -990,39 +990,16 @@ async fn enforce_capacity(
         }
     }
 
-    // Count UNSYNCED walk-in attendees from KV (skip if KV unavailable)
-    if let Some(kv_store) = kv {
-        let walkin_prefix = format!("walkin:{}:", config.id);
-        let mut walkin_cursor: Option<String> = None;
-        let mut walkin_count: u32 = 0;
-        loop {
-            let mut builder = kv_store.list().prefix(walkin_prefix.clone());
-            if let Some(c) = walkin_cursor.take() {
-                builder = builder.cursor(c);
+    // Count walk-in attendees from D1
+    if let Some(db) = state.d1.as_deref() {
+        match crate::db::attendees::count_walkin_attendees(db, &config.id).await {
+            Ok(count) => {
+                in_person_count += count;
             }
-            match builder.execute().await {
-                Ok(resp) => {
-                    for key in &resp.keys {
-                        let email = key.name.strip_prefix(&walkin_prefix).unwrap_or("");
-                        let sync_key = format!("walkin_synced:{}:{}", config.id, email);
-                        let synced: Option<bool> =
-                            kv_store.get(&sync_key).json().await.ok().flatten();
-                        if synced != Some(true) {
-                            walkin_count += 1;
-                        }
-                    }
-                    if resp.list_complete {
-                        break;
-                    }
-                    walkin_cursor = resp.cursor;
-                }
-                Err(e) => {
-                    tracing::warn!(error = ?e, "failed to list walk-in keys for capacity");
-                    break;
-                }
+            Err(e) => {
+                tracing::warn!(error = %e, "D1 walkin count for capacity failed, skipping");
             }
         }
-        in_person_count += walkin_count;
     }
 
     tracing::info!(

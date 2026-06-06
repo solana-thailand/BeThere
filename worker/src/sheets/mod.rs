@@ -30,12 +30,6 @@ const GOOGLE_TOKEN_KV_KEY: &str = "google_access_token";
 /// TTL for the cached Google access token (3500s = ~58 min, 100s buffer before 3600s expiry).
 const GOOGLE_TOKEN_TTL_SECS: u64 = 3500;
 
-/// KV key prefix for caching attendee lists.
-const ATTENDEE_CACHE_KEY_PREFIX: &str = "cache:attendees";
-
-/// TTL for the cached attendee list (5 minutes).
-const ATTENDEE_CACHE_TTL_SECS: u64 = 300;
-
 /// KV key for caching the staff members list.
 const STAFF_CACHE_KEY: &str = "cache:staff_members";
 
@@ -48,40 +42,13 @@ const COLUMN_MAP_CACHE_KEY_PREFIX: &str = "cache:column_map";
 /// TTL for the cached column mapping (1 hour — headers rarely change).
 const COLUMN_MAP_CACHE_TTL_SECS: u64 = 3600;
 
-/// KV key prefix for caching the claim_token → Attendee map (optimized for claim lookups).
-const CLAIM_MAP_CACHE_KEY_PREFIX: &str = "cache:claim_map";
-
 // ---------------------------------------------------------------------------
-// Cache helpers
+// Cache helpers (column map only — attendee cache removed in Phase 2d)
 // ---------------------------------------------------------------------------
 
-/// Build the KV cache key for a given (sheet_id, sheet_name) combination.
-fn attendee_cache_key(sheet_id: &str, sheet_name: &str) -> String {
-    format!("{ATTENDEE_CACHE_KEY_PREFIX}:{sheet_id}:{sheet_name}")
-}
-
-/// Build the KV cache key for the claim_token → Attendee map.
-fn claim_map_cache_key(sheet_id: &str, sheet_name: &str) -> String {
-    format!("{CLAIM_MAP_CACHE_KEY_PREFIX}:{sheet_id}:{sheet_name}")
-}
-
-/// Invalidate the attendee cache **and** the claim map cache for the given sheet.
-/// Errors are non-fatal — logged and ignored.
-pub(super) async fn invalidate_attendee_cache(
-    kv: Option<&KvStore>,
-    sheet_id: &str,
-    sheet_name: &str,
-) {
-    if let Some(kv) = kv {
-        let key = attendee_cache_key(sheet_id, sheet_name);
-        if let Err(e) = kv.delete(&key).await {
-            tracing::debug!(error = ?e, "failed to invalidate attendee cache");
-        }
-        let claim_key = claim_map_cache_key(sheet_id, sheet_name);
-        if let Err(e) = kv.delete(&claim_key).await {
-            tracing::debug!(error = ?e, "failed to invalidate claim map cache");
-        }
-    }
+/// KV cache key for a sheet's column mapping.
+fn column_map_cache_key(sheet_id: &str, sheet_name: &str) -> String {
+    format!("{COLUMN_MAP_CACHE_KEY_PREFIX}:{sheet_id}:{sheet_name}")
 }
 
 /// Invalidate the column mapping cache for the given sheet.
@@ -97,18 +64,6 @@ pub(super) async fn invalidate_column_map_cache(
             tracing::debug!(error = ?e, "failed to invalidate column map cache");
         }
     }
-}
-
-/// Flush all caches (attendee list + column mapping) for a sheet.
-pub async fn flush_caches(
-    _state: &AppState,
-    sheet_id: &str,
-    sheet_name: &str,
-    kv: Option<&KvStore>,
-) {
-    invalidate_attendee_cache(kv, sheet_id, sheet_name).await;
-    invalidate_column_map_cache(kv, sheet_id, sheet_name).await;
-    tracing::info!(sheet_id = %sheet_id, sheet_name = %sheet_name, "flushed all caches");
 }
 
 // ---------------------------------------------------------------------------
@@ -222,11 +177,6 @@ pub async fn get_cached_access_token(
 // ---------------------------------------------------------------------------
 // Column mapping
 // ---------------------------------------------------------------------------
-
-/// KV cache key for a sheet's column mapping.
-fn column_map_cache_key(sheet_id: &str, sheet_name: &str) -> String {
-    format!("{COLUMN_MAP_CACHE_KEY_PREFIX}:{sheet_id}:{sheet_name}")
-}
 
 /// Get the column mapping for a sheet.
 ///
@@ -378,9 +328,7 @@ async fn fetch_sheet_range_with_retry(
 /// Fetch all attendees from the Google Sheet.
 /// Returns a list of typed Attendee structs parsed from sheet rows.
 ///
-/// Uses KV cache when available: returns cached attendees on cache hit,
-/// fetches from Google Sheets on cache miss and stores the result with
-/// a 30-second TTL.
+/// Phase 2d: D1-first, Sheets fallback. No KV cache.
 pub async fn get_attendees(
     state: &AppState,
     sheet_id: &str,
@@ -407,7 +355,9 @@ pub async fn get_attendees_for_event(
 /// Inner implementation shared between `get_attendees` and `get_attendees_for_event`.
 ///
 /// When `event_id` is provided and D1 is configured, tries D1 first.
-/// Otherwise (or on D1 miss/error), falls through to the existing KV → Sheets path.
+/// Otherwise (or on D1 miss/error), falls through to Google Sheets.
+///
+/// Phase 2d: KV attendee cache removed — D1 is the primary store.
 async fn get_attendees_inner(
     state: &AppState,
     sheet_id: &str,
@@ -436,34 +386,7 @@ async fn get_attendees_inner(
         }
     }
 
-    let cache_key = attendee_cache_key(sheet_id, sheet_name);
-
-    // Try KV cache first
-    if let Some(kv) = kv {
-        match kv.get(&cache_key).text().await {
-            Ok(Some(cached)) => match serde_json::from_str::<Vec<Attendee>>(&cached) {
-                Ok(attendees) => {
-                    tracing::info!(
-                        count = attendees.len(),
-                        cache_key = %cache_key,
-                        "cache hit: attendees from KV"
-                    );
-                    return Ok(attendees);
-                }
-                Err(e) => {
-                    tracing::info!(error = ?e, "cache deserialize error, fetching fresh");
-                }
-            },
-            Ok(None) => {
-                tracing::info!(cache_key = %cache_key, "cache miss: KV key");
-            }
-            Err(e) => {
-                tracing::info!(error = ?e, "cache read error, fetching fresh");
-            }
-        }
-    }
-
-    // Cache miss or no KV — fetch from Google Sheets
+    // Sheets fallback (no KV cache — Phase 2d)
     let access_token = get_cached_access_token(state, kv).await?;
 
     // Resolve column mapping from headers
@@ -494,40 +417,6 @@ async fn get_attendees_inner(
         "fetched attendees from google sheets"
     );
 
-    // Write to KV cache
-    if let Some(kv) = kv {
-        match serde_json::to_string(&attendees) {
-            Ok(json) => match kv
-                .put(&cache_key, &json)
-                .map_err(|e| format!("failed to build attendee cache KV put: {e:?}"))
-            {
-                Ok(builder) => match builder
-                    .expiration_ttl(ATTENDEE_CACHE_TTL_SECS)
-                    .execute()
-                    .await
-                {
-                    Ok(()) => {
-                        tracing::info!(
-                            count = attendees.len(),
-                            cache_key = %cache_key,
-                            ttl = ATTENDEE_CACHE_TTL_SECS,
-                            "cached attendees in KV"
-                        );
-                    }
-                    Err(e) => {
-                        tracing::info!(error = ?e, "failed to cache attendees in KV");
-                    }
-                },
-                Err(e) => {
-                    tracing::info!(error = %e, "failed to build attendee cache KV put");
-                }
-            },
-            Err(e) => {
-                tracing::info!(error = ?e, "failed to serialize attendees for cache");
-            }
-        }
-    }
-
     Ok(attendees)
 }
 
@@ -536,7 +425,7 @@ async fn get_attendees_inner(
 // ---------------------------------------------------------------------------
 
 /// Build a HashMap of attendees keyed by `api_id`.
-/// Internally calls `get_attendees()` so KV caching is preserved.
+/// Internally calls `get_attendees()`.
 pub async fn get_attendees_map(
     state: &AppState,
     sheet_id: &str,
@@ -548,67 +437,6 @@ pub async fn get_attendees_map(
         .into_iter()
         .map(|a| (a.api_id.clone(), a))
         .collect())
-}
-
-/// Get the claim_token → Attendee map, with its own dedicated KV cache.
-///
-/// This avoids deserializing the full attendee list and building the HashMap
-/// on every claim-path lookup. The map is cached with the same TTL as the
-/// attendee list cache and is co-invalidated on mutations.
-pub async fn get_claim_map_cached(
-    state: &AppState,
-    sheet_id: &str,
-    sheet_name: &str,
-    kv: Option<&KvStore>,
-) -> Result<HashMap<String, Attendee>, String> {
-    let key = claim_map_cache_key(sheet_id, sheet_name);
-
-    // Try KV cache first
-    if let Some(kv) = kv {
-        match kv.get(&key).text().await {
-            Ok(Some(cached)) => {
-                if let Ok(map) = serde_json::from_str::<HashMap<String, Attendee>>(&cached) {
-                    tracing::debug!(count = map.len(), "claim map cache hit");
-                    return Ok(map);
-                }
-            }
-            Ok(None) => {
-                tracing::debug!("claim map cache miss");
-            }
-            Err(e) => {
-                tracing::debug!(error = ?e, "claim map cache read error");
-            }
-        }
-    }
-
-    // Cache miss — build from full attendee list (which itself is KV-cached)
-    let attendees: Vec<Attendee> = get_attendees(state, sheet_id, sheet_name, kv).await?;
-    let map: HashMap<String, Attendee> = attendees
-        .into_iter()
-        .filter_map(|a| a.claim_token.clone().map(|token| (token, a)))
-        .collect();
-
-    // Cache the built map for future lookups
-    if let Some(kv) = kv
-        && let Ok(json) = serde_json::to_string(&map)
-    {
-        match kv.put(&key, &json) {
-            Ok(builder) => {
-                if let Err(e) = builder
-                    .expiration_ttl(ATTENDEE_CACHE_TTL_SECS)
-                    .execute()
-                    .await
-                {
-                    tracing::debug!(error = ?e, "failed to cache claim map");
-                }
-            }
-            Err(e) => {
-                tracing::debug!(error = ?e, "failed to build claim map KV put");
-            }
-        }
-    }
-
-    Ok(map)
 }
 
 /// Get a single attendee by their api_id.
@@ -644,7 +472,8 @@ pub async fn get_attendee_by_id(
 
 /// Find an attendee by their claim token.
 ///
-/// Phase 2b: tries D1 first (indexed on claim_token), falls back to Sheets on miss.
+/// Phase 2d: tries D1 first (indexed on claim_token), falls back to Sheets on miss.
+/// No KV cache — claim map cache removed.
 pub async fn get_attendee_by_claim_token(
     claim_token: &str,
     state: &AppState,
@@ -668,9 +497,12 @@ pub async fn get_attendee_by_claim_token(
         }
     }
 
-    // Sheets fallback
-    let map = get_claim_map_cached(state, sheet_id, sheet_name, kv).await?;
-    Ok(map.get(claim_token).cloned())
+    // Sheets fallback (no KV cache — Phase 2d)
+    let attendees = get_attendees(state, sheet_id, sheet_name, kv).await?;
+    let attendee = attendees
+        .into_iter()
+        .find(|a| a.claim_token.as_deref() == Some(claim_token));
+    Ok(attendee)
 }
 
 /// Look up an attendee by claim token and return claim counts.

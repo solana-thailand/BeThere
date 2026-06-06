@@ -13,7 +13,7 @@ use worker::KvStore;
 use crate::http::{BatchUpdateRequest, ValueRange, batch_update_sheet};
 use crate::state::AppState;
 
-use super::{get_cached_access_token, invalidate_attendee_cache, invalidate_column_map_cache};
+use super::{get_cached_access_token, invalidate_column_map_cache};
 
 // ---------------------------------------------------------------------------
 // Check-in
@@ -86,7 +86,6 @@ pub async fn mark_checked_in(
         "bg_sync: marked row as checked in"
     );
 
-    invalidate_attendee_cache(kv.as_ref(), &sheet_id, &sheet_name).await;
     invalidate_column_map_cache(kv.as_ref(), &sheet_id, &sheet_name).await;
 }
 
@@ -150,7 +149,6 @@ pub async fn mark_virtual_checked_in(
         "bg_sync: marked row as virtually checked in"
     );
 
-    invalidate_attendee_cache(kv.as_ref(), &sheet_id, &sheet_name).await;
     invalidate_column_map_cache(kv.as_ref(), &sheet_id, &sheet_name).await;
 }
 
@@ -225,7 +223,6 @@ pub async fn clear_checked_in(
         "bg_sync: cleared check-in fields (undo)"
     );
 
-    invalidate_attendee_cache(kv.as_ref(), &sheet_id, &sheet_name).await;
     invalidate_column_map_cache(kv.as_ref(), &sheet_id, &sheet_name).await;
 }
 
@@ -298,8 +295,6 @@ pub async fn mark_claimed(
         nft_proof_url = %nft_proof_url,
         "bg_sync: marked row as claimed"
     );
-
-    invalidate_attendee_cache(kv.as_ref(), &sheet_id, &sheet_name).await;
 }
 
 // ---------------------------------------------------------------------------
@@ -418,7 +413,6 @@ pub async fn append_attendee_row(
         "bg_sync: appended self-registration row to google sheet"
     );
 
-    invalidate_attendee_cache(kv.as_ref(), &sheet_id, &sheet_name).await;
     invalidate_column_map_cache(kv.as_ref(), &sheet_id, &sheet_name).await;
 }
 
@@ -467,7 +461,6 @@ pub async fn update_deposit_method(
     }
 
     tracing::info!(row_index = row_index, method = %method, "bg_sync: updated deposit_method");
-    invalidate_attendee_cache(kv.as_ref(), &sheet_id, &sheet_name).await;
 }
 
 /// Update participation_type column.
@@ -510,7 +503,6 @@ pub async fn update_participation_type(
     }
 
     tracing::info!(row_index = row_index, %participation_type, "bg_sync: updated participation_type");
-    invalidate_attendee_cache(kv.as_ref(), &sheet_id, &sheet_name).await;
 }
 
 /// Write bank info columns.
@@ -630,7 +622,6 @@ pub async fn write_deposit_verification(
     }
 
     tracing::info!(row_index = row_index, "bg_sync: wrote deposit verification");
-    invalidate_attendee_cache(kv.as_ref(), &sheet_id, &sheet_name).await;
 }
 
 /// Update QR code URLs for attendee rows.
@@ -721,7 +712,6 @@ pub async fn write_refund_status(
     }
 
     tracing::info!(row_index = row_index, "bg_sync: wrote refund_status");
-    invalidate_attendee_cache(kv.as_ref(), &sheet_id, &sheet_name).await;
 }
 
 /// Write refund link column.
@@ -812,7 +802,6 @@ pub async fn delete_sheet_row(
     }
 
     tracing::info!(row_index = row_index, "bg_sync: deleted sheet row");
-    invalidate_attendee_cache(kv.as_ref(), &sheet_id, &sheet_name).await;
     invalidate_column_map_cache(kv.as_ref(), &sheet_id, &sheet_name).await;
 }
 

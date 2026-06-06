@@ -9,8 +9,6 @@
 
 use worker::{KvStore, Method, ObjectNamespace, Request, RequestInit, Response};
 
-use event_checkin_domain::models::attendee::WalkinAttendee;
-
 use crate::db;
 use crate::durable_objects::DoRequest;
 
@@ -405,65 +403,6 @@ pub(crate) fn mask_wallet(addr: &str) -> String {
 }
 
 // ---------------------------------------------------------------------------
-// Walk-in attendee lookup
-// ---------------------------------------------------------------------------
-
-/// KV key for walk-in reverse mapping (claim token → walk-in record).
-const CLAIM_WALKIN_PREFIX: &str = "claim_walkin:";
-
-/// KV key prefix for walk-in attendee records.
-const WALKIN_PREFIX: &str = "walkin:";
-
-/// Try to look up a walk-in attendee by claim token.
-/// Returns None if not a walk-in (falls back to normal sheet lookup).
-pub(crate) async fn lookup_walkin_by_claim_token(
-    kv: &KvStore,
-    token: &str,
-) -> Option<WalkinAttendee> {
-    let reverse_key = format!("{CLAIM_WALKIN_PREFIX}{token}");
-    let mapping: Option<String> = kv.get(&reverse_key).text().await.ok().flatten();
-
-    let mapping = mapping?;
-    // mapping format: "{event_id}:{email_lower}"
-    let walkin_key = format!("{WALKIN_PREFIX}{mapping}");
-
-    let walkin: Option<WalkinAttendee> = kv.get(&walkin_key).json().await.ok().flatten();
-
-    walkin
-}
-
-/// Mark a walk-in attendee as claimed (update KV record with wallet + timestamp).
-pub(crate) async fn mark_walkin_claimed(
-    kv: &KvStore,
-    event_id: &str,
-    email: &str,
-    wallet_address: &str,
-    claimed_at: &str,
-) -> Result<(), String> {
-    let email_lower = email.to_lowercase();
-    let walkin_key = format!("{WALKIN_PREFIX}{event_id}:{email_lower}");
-
-    let mut walkin: WalkinAttendee = kv
-        .get(&walkin_key)
-        .json()
-        .await
-        .ok()
-        .flatten()
-        .ok_or_else(|| format!("walk-in record not found: {walkin_key}"))?;
-
-    walkin.wallet_address = Some(wallet_address.to_string());
-    walkin.claimed_at = Some(claimed_at.to_string());
-
-    kv.put(&walkin_key, serde_json::to_string(&walkin).unwrap())
-        .map_err(|e| format!("walk-in claimed update failed: {e:?}"))?
-        .expiration_ttl(86400 * 90) // 90 days
-        .execute()
-        .await
-        .map_err(|e| format!("walk-in claimed write failed: {e:?}"))?;
-
-    Ok(())
-}
-
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------

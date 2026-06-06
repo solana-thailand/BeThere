@@ -234,42 +234,16 @@ async fn count_attendees_by_track(
         }
     }
 
-    // Count UNSYNCED walk-in attendees as in-person.
-    // Walk-in records are stored as individual KV keys: walkin:{event_id}:{email}
-    // Once synced to the Google Sheet, a walkin_synced:{event_id}:{email} marker is set.
-    // We only count unsynced walk-ins to avoid double-counting with sheet-based attendees.
-    if let Some(kv) = kv {
-        let prefix = format!("walkin:{}:", config.id);
-        let mut walkin_cursor: Option<String> = None;
-        let mut walkin_count: u32 = 0;
-        loop {
-            let mut builder = kv.list().prefix(prefix.clone());
-            if let Some(c) = walkin_cursor.take() {
-                builder = builder.cursor(c);
+    // Count walk-in attendees as in-person from D1.
+    if let Some(db) = state.d1.as_deref() {
+        match crate::db::attendees::count_walkin_attendees(db, &config.id).await {
+            Ok(count) => {
+                in_person_count += count;
             }
-            match builder.execute().await {
-                Ok(resp) => {
-                    for key in &resp.keys {
-                        // Extract email from key: walkin:{event_id}:{email}
-                        let email = key.name.strip_prefix(&prefix).unwrap_or("");
-                        let sync_key = format!("walkin_synced:{}:{}", config.id, email);
-                        let synced: Option<bool> = kv.get(&sync_key).json().await.ok().flatten();
-                        if synced != Some(true) {
-                            walkin_count += 1;
-                        }
-                    }
-                    if resp.list_complete {
-                        break;
-                    }
-                    walkin_cursor = resp.cursor;
-                }
-                Err(e) => {
-                    tracing::warn!(error = ?e, "failed to list walk-in keys for capacity count");
-                    break;
-                }
+            Err(e) => {
+                tracing::warn!(error = %e, "D1 walkin count for public stats failed, skipping");
             }
         }
-        in_person_count += walkin_count;
     }
 
     (in_person_count, online_count)

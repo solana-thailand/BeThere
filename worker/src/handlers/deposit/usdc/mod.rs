@@ -231,28 +231,13 @@ pub(crate) async fn check_in_person_capacity(
 
     let in_person_count = attendees.iter().filter(|a| a.is_in_person()).count() as u32;
 
-    // Count walk-in attendees as in-person (KV only)
+    // Count walk-in attendees from D1
     let mut walkin_count: u32 = 0;
-    if let Some(kv) = kv {
-        let walkin_prefix = format!("walkin:{}:", event.id);
-        let mut cursor: Option<String> = None;
-        loop {
-            let mut builder = kv.list().prefix(walkin_prefix.clone());
-            if let Some(c) = cursor.take() {
-                builder = builder.cursor(c);
-            }
-            match builder.execute().await {
-                Ok(resp) => {
-                    walkin_count += resp.keys.len() as u32;
-                    if resp.list_complete {
-                        break;
-                    }
-                    cursor = resp.cursor;
-                }
-                Err(e) => {
-                    tracing::warn!(error = ?e, "reclaim capacity: failed to list walk-in keys");
-                    break;
-                }
+    if let Some(db) = state.d1.as_deref() {
+        match crate::db::attendees::count_walkin_attendees(db, &event.id).await {
+            Ok(count) => walkin_count = count,
+            Err(e) => {
+                tracing::warn!(error = %e, "reclaim capacity: failed to count D1 walkins");
             }
         }
     }
@@ -426,13 +411,13 @@ pub(crate) async fn verify_and_confirm_deposit(
                         "usdc_on_chain_bg",
                     )
                     .await
-                    {
-                        tracing::warn!(
-                            attendee_id = %body.attendee_id,
-                            error = %e,
-                            "D1 USDC deposit verify failed in background (non-fatal)"
-                        );
-                    }
+                {
+                    tracing::warn!(
+                        attendee_id = %body.attendee_id,
+                        error = %e,
+                        "D1 USDC deposit verify failed in background (non-fatal)"
+                    );
+                }
 
                 // Audit log
                 if let Some(kv) = kv {

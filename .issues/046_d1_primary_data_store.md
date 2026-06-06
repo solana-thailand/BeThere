@@ -1,6 +1,6 @@
 # Issue #046: D1 as Primary Data Store (Phase 2 — Attendees, Contacts, Events, Staff)
 
-> **Status: 🔄 Phase 2a-2c DEPLOYED & VALIDATED** — Phase 2d (remove KV caching) remaining
+> **Status: ✅ Phase 2d-2e-2f COMPLETE** — KV fully removed from all walk-in paths (reads, writes, mirrors, sync markers). D1 is sole store. Deploy & verify latency.
 > Prerequisite: Issue #037 (Phase 1 — claim locks + audit trail) ✅ COMPLETE
 
 ## Summary
@@ -117,20 +117,63 @@ Move Sheets writes behind `wait_until()`. D1 is source of truth.
 - [ ] Sheets eventually consistent with D1 (within seconds)
 - [ ] No data loss if Sheets write fails (D1 is truth)
 
-### Phase 2d: Remove KV Attendee Caching
+### Phase 2d: Remove KV Attendee Caching + Walk-in KV Removal
 
 Remove KV cache layer for attendees since D1 serves reads fast enough.
+Also remove walk-in KV dependency — D1 is now the sole primary store for walk-ins.
 
-**Files changed:**
+**Files changed (Phase 2d — attendee cache):**
 - `worker/src/sheets/mod.rs` — remove `get_attendees()` KV cache logic
 - `worker/src/sheets/mod.rs` — remove `get_claim_map_cached()` (replaced by D1 query)
 - `worker/src/sheets/mod.rs` — remove `invalidate_attendee_cache()` calls
 - Various handlers — remove KV cache invalidation calls
 
+**Files changed (Phase 2e — walk-in KV removal):**
+- `worker/src/handlers/attendee.rs` — remove KV walk-in merge, D1-first delete
+- `worker/src/handlers/walkin.rs` — D1-first everywhere, remove `find_walkin_by_any()`
+- `worker/src/handlers/register.rs` — D1-first walk-in capacity count
+- `worker/src/handlers/public_event.rs` — D1-first walk-in capacity count
+- `worker/src/claim/mint.rs` — D1-only walk-in claim lookup/execution, remove KV fallback
+- `worker/src/claim/lock.rs` — remove `lookup_walkin_by_claim_token()`, rename `mark_walkin_claimed` → `mark_walkin_claimed_kv`
+- `worker/src/db/attendees.rs` — add `delete_attendee()` D1 function
+
+### Phase 2e: Remove Walk-in KV Reads + Fallbacks
+
+Removed all code paths where KV was the primary read source for walk-in attendees.
+D1 is now the sole primary store. KV is retained only as a best-effort write-only mirror.
+
+### Phase 2f: Remove KV Walk-in Mirror Writes + Sync Markers
+
+Removed all remaining KV writes for walk-in attendees (mirror, reverse mapping, sync markers).
+D1 is now the sole store — no KV keys are read or written for walk-in data.
+
+**Files changed (Phase 2f):**
+- `worker/src/handlers/walkin.rs` — removed `list_walkin_attendees()`, `walkin_key()`, `claim_walkin_key()`, `WALKIN_TTL_SECS`, KV mirror writes in `register_walkin`, KV sync marker writes in `sync_walkin_to_sheet`, KV fallbacks in 3 handlers, KV fallback in `enforce_walkin_capacity`
+- `worker/src/handlers/register.rs` — removed KV legacy fallback in capacity enforcement
+- `worker/src/handlers/public_event.rs` — removed KV legacy fallback in `count_attendees_by_track`
+- `worker/src/handlers/deposit/usdc/mod.rs` — replaced KV walk-in count with D1 `count_walkin_attendees`
+- `worker/src/claim/mint.rs` — removed `mark_walkin_claimed_kv` call, removed KV mirror update on walk-in claim
+- `worker/src/claim/lock.rs` — removed `mark_walkin_claimed_kv()`, `WALKIN_PREFIX`, `WalkinAttendee` import
+- `worker/src/handlers/attendee.rs` — removed KV walk-in key cleanup in `delete_attendee`
+- `worker/scripts/migrate_kv_walkins_to_d1.sh` — one-time migration script (KV → D1)
+
 **Acceptance:**
-- [ ] No KV cache for attendee data
-- [ ] Attendee list response time < 50ms (D1 query)
-- [ ] Reduced KV usage (cost savings at scale)
+- [x] No KV cache for attendee data
+- [x] No KV walk-in merge in `list_attendees` (D1 already has them)
+- [x] Walk-in registration writes D1 only (no KV mirror)
+- [x] Walk-in claim lookup is D1-only (no KV fallback)
+- [x] Walk-in claim execution records in D1 only (no KV mirror)
+- [x] Walk-in deletion uses D1 only (no KV cleanup)
+- [x] Capacity counting uses D1 only (no KV fallback)
+- [x] `find_walkin_by_any()` KV scan removed
+- [x] `lookup_walkin_by_claim_token()` KV function removed
+- [x] `list_walkin_attendees()` KV scan function removed
+- [x] `mark_walkin_claimed_kv()` KV function removed
+- [x] `walkin_key()`, `claim_walkin_key()`, `WALKIN_TTL_SECS` removed
+- [x] `walkin_synced:*` KV sync markers no longer read or written
+- [x] Migration script created: `worker/scripts/migrate_kv_walkins_to_d1.sh`
+- [ ] Attendee list response time < 50ms (D1 query) — deploy to verify
+- [ ] Reduced KV usage (cost savings at scale) — deploy to verify
 
 ## Database Schema
 

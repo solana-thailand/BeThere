@@ -16,7 +16,6 @@ use crate::error::ApiOk;
 use event_checkin_domain::models::api::{
     AttendeeListItem, AttendeeResponse, RecentCheckIn, StatsResponse,
 };
-use event_checkin_domain::models::attendee::{Attendee, CheckInStatus, WalkinAttendee};
 use event_checkin_domain::models::auth::Claims;
 use event_checkin_domain::models::error::AppError;
 
@@ -26,43 +25,7 @@ use super::ext::{
 use crate::sheets;
 use crate::state::AppState;
 
-/// Convert a walk-in attendee (from KV) into an Attendee (sheet-compatible)
-/// so it can be merged into the unified attendee list.
-fn walkin_to_attendee(w: &WalkinAttendee, row_index: usize) -> Attendee {
-    Attendee {
-        api_id: format!("walkin:{}", w.email),
-        first_name: String::new(),
-        last_name: String::new(),
-        name: w.name.clone(),
-        email: w.email.clone(),
-        ticket_name: "Walk-in".to_string(),
-        approval_status: CheckInStatus::CheckedIn,
-        participation_type: "In-Person".to_string(),
-        registration_date: None,
-        phone: w.phone.clone(),
-        contact_channel: None,
-        contact_handle: None,
-        deposit_agreed: None,
-        deposit_method: None,
-        deposit_amount: None,
-        deposit_tx_signature: None,
-        deposit_verified: None,
-        checked_in_at: Some(w.checked_in_at.clone()),
-        checked_in_by: Some(w.checked_in_by.clone()),
-        solana_address: w.wallet_address.clone(),
-        qr_code_url: None,
-        claim_token: Some(w.claim_token.clone()),
-        claimed_at: w.claimed_at.clone(),
-        nft_proof_url: None,
-        bank_account: None,
-        bank_name: None,
-        account_name: None,
-        refund_status: None,
-        refund_link: None,
-        send_email_status: None,
-        row_index,
-    }
-}
+// Walk-in attendees are now stored in D1 directly, so no KV→Attendee conversion is needed.
 
 /// GET /api/attendees
 /// List attendees with cursor-based pagination and statistics.
@@ -90,7 +53,7 @@ pub async fn list_attendees(
 
     // 1. Fetch sheet-based attendees (D1 fallback when Sheets is unavailable/rate-limited)
     tracing::info!("STEP 3: before get_attendees_for_event");
-    let mut attendees = match sheets::get_attendees_for_event(
+    let attendees = match sheets::get_attendees_for_event(
         &state,
         &event.sheet_id,
         &event.sheet_name,
@@ -120,42 +83,8 @@ pub async fn list_attendees(
     };
     tracing::info!(count = attendees.len(), "STEP 4: attendees fetched");
 
-    // 2. Merge walk-in attendees from KV (only for this event)
-    let sheet_len = attendees.len();
-    let walkin_attendees = match kv {
-        Some(k) => super::walkin::list_walkin_attendees(k, &event.id)
-            .await
-            .unwrap_or_else(|e| {
-                tracing::warn!(event_id = %event.id, error = %e, "failed to load walk-in attendees, skipping");
-                Vec::new()
-            }),
-        None => Vec::new(),
-    };
-
-    // Deduplicate: skip walk-ins whose email already exists in the sheet
-    // (they may have been synced already)
-    let sheet_emails: std::collections::HashSet<String> =
-        attendees.iter().map(|a| a.email.to_lowercase()).collect();
-
-    for (i, w) in walkin_attendees.iter().enumerate() {
-        if sheet_emails.contains(&w.email.to_lowercase()) {
-            continue;
-        }
-        // Assign row_index beyond sheet rows (sheet rows are 1-based)
-        let row_index = sheet_len + i + 1;
-        attendees.push(walkin_to_attendee(w, row_index));
-    }
-
-    let walkin_merged = attendees.len().saturating_sub(sheet_len);
-    if walkin_merged > 0 {
-        tracing::info!(
-            event_id = %event.id,
-            sheet_attendees = sheet_len,
-            walkin_merged,
-            total = attendees.len(),
-            "merged walk-in attendees into unified list"
-        );
-    }
+    // Walk-in attendees are now stored directly in D1 alongside pre-registered
+    // attendees (participation_type='walkin'), so no separate KV merge is needed.
 
     // Compute statistics over ALL attendees (not paginated)
     let total_approved: usize = attendees.iter().filter(|a| a.is_approved()).count();
@@ -657,20 +586,22 @@ async fn find_rollover_target(
 }
 
 /// POST /api/admin/flush-cache
-/// Flush all server-side caches (attendee list + column mapping) for an event.
+/// Flush server-side column mapping cache for an event.
 /// Use after changing sheet structure or headers.
+///
+/// Phase 2d: attendee list cache removed — only column map cache remains.
 #[worker::send]
 pub async fn flush_cache(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
     Query(query): Query<EventIdQuery>,
 ) -> Result<ApiOk<serde_json::Value>, crate::error::WorkerError> {
-    tracing::info!("flushing caches (requested by: {})", claims.email);
+    tracing::info!("flushing column map cache (requested by: {})", claims.email);
 
     let event = resolve_event_with_access(&state, &claims, query.event_id.as_deref()).await?;
     let kv = resolve_kv(&state);
 
-    sheets::flush_caches(&state, &event.sheet_id, &event.sheet_name, kv).await;
+    sheets::invalidate_column_map_cache(kv, &event.sheet_id, &event.sheet_name).await;
 
     Ok(ApiOk::new(json!({
         "flushed": true,
@@ -686,12 +617,10 @@ pub async fn flush_cache(
 /// Delete attendee request (supports both sheet-based and walk-in attendees).
 ///
 /// Cleans up:
-/// - Google Sheet row (regular attendees)
-/// - Walk-in KV records (walkin:*, claim_walkin:*, walkin_synced:*)
-/// - Deposit status, THB deposit data
+/// - D1 attendee record (primary store)
+/// - Google Sheet row (async, best-effort)
 /// - Claim locks
 /// - QR image cache
-/// - Attendee list cache
 #[worker::send]
 pub async fn delete_attendee(
     State(state): State<AppState>,
@@ -707,44 +636,49 @@ pub async fn delete_attendee(
     let mut deleted_keys = Vec::new();
     let source;
 
-    // 1. Try to find as walk-in attendee in KV
-    let walkin = if let Some(kv) = kv {
-        // Walk-in keys are indexed by email, not api_id.
-        // We need to scan walkin:{event_id}:* to find by claim_token or name.
-        crate::handlers::walkin::find_walkin_by_any(kv, &event.id, &id).await
-    } else {
-        None
-    };
+    // 1. Try to find as walk-in attendee in D1 (primary store)
+    //    Walk-ins have participation_type='walkin' in D1.
+    //    The `id` param may be a claim_token, email, or name.
+    let mut walkin: Option<event_checkin_domain::models::attendee::WalkinAttendee> = None;
+    if let Some(db) = state.d1.as_deref() {
+        // Try claim_token lookup first
+        if let Ok(Some(a)) = crate::db::attendees::get_attendee_by_claim_token(db, &id).await
+            && a.participation_type == "walkin"
+        {
+            walkin = Some(event_checkin_domain::models::attendee::WalkinAttendee {
+                event_id: event.id.clone(),
+                name: a.name.clone(),
+                email: a.email.clone(),
+                phone: a.phone.clone(),
+                claim_token: a.claim_token.clone().unwrap_or_default(),
+                checked_in_at: a.checked_in_at.clone().unwrap_or_default(),
+                checked_in_by: a.checked_in_by.clone().unwrap_or_default(),
+                wallet_address: None,
+                claimed_at: a.claimed_at.clone(),
+            });
+        }
+    }
 
     if let Some(walkin_attendee) = walkin {
-        // Walk-in attendee found in KV
         source = "walk-in".to_string();
         let email_lower = walkin_attendee.email.to_lowercase();
+        let claim_token = walkin_attendee.claim_token.clone();
 
-        // Delete walk-in record
-        let key = format!("walkin:{}:{}", event.id, email_lower);
-        if let Some(kv) = kv {
-            let _ = kv.delete(&key).await;
-            deleted_keys.push(key);
+        // Delete from D1 (primary)
+        if let Some(db) = state.d1.as_deref()
+            && let Err(e) = crate::db::attendees::delete_attendee(db, &event.id, &email_lower).await
+        {
+            tracing::warn!(
+                event_id = %event.id,
+                email = %email_lower,
+                error = %e,
+                "D1 walk-in delete failed"
+            );
         }
 
-        // Delete reverse mapping
-        let rkey = format!("claim_walkin:{}", walkin_attendee.claim_token);
+        // Clean up claim lock
         if let Some(kv) = kv {
-            let _ = kv.delete(&rkey).await;
-            deleted_keys.push(rkey);
-        }
-
-        // Delete sync marker
-        let skey = format!("walkin_synced:{}:{}", event.id, email_lower);
-        if let Some(kv) = kv {
-            let _ = kv.delete(&skey).await;
-            deleted_keys.push(skey);
-        }
-
-        // Delete claim lock
-        let lkey = crate::claim::claim_lock_key(&event.id, &walkin_attendee.claim_token);
-        if let Some(kv) = kv {
+            let lkey = crate::claim::claim_lock_key(&event.id, &claim_token);
             let _ = kv.delete(&lkey).await;
             deleted_keys.push(lkey);
         }
@@ -753,7 +687,7 @@ pub async fn delete_attendee(
             event_id = %event.id,
             email = %email_lower,
             name = %walkin_attendee.name,
-            "walk-in attendee deleted from KV"
+            "walk-in attendee deleted"
         );
     } else {
         // 2. Try to find as regular attendee in Google Sheet
@@ -823,10 +757,6 @@ pub async fn delete_attendee(
                     let qrkey = format!("qr:{}", attendee.api_id);
                     let _ = kv.delete(&qrkey).await;
                     deleted_keys.push(qrkey);
-
-                    // Flush attendee cache so list refreshes
-                    sheets::flush_caches(&state, &event.sheet_id, &event.sheet_name, Some(kv))
-                        .await;
                 }
 
                 tracing::info!(

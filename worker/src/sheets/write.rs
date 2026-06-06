@@ -7,7 +7,7 @@ use worker::KvStore;
 use crate::http::{BatchUpdateRequest, ValueRange, batch_update_sheet};
 use crate::state::AppState;
 
-use super::{get_cached_access_token, invalidate_attendee_cache, invalidate_column_map_cache};
+use super::{get_cached_access_token, invalidate_column_map_cache};
 
 // ---------------------------------------------------------------------------
 // Sheet write context — bundles repeated sheet operation parameters
@@ -85,7 +85,6 @@ pub async fn mark_checked_in(
         "marked row as checked in"
     );
 
-    invalidate_attendee_cache(kv, sheet_id, sheet_name).await;
     invalidate_column_map_cache(kv, sheet_id, sheet_name).await;
     Ok(timestamp)
 }
@@ -135,7 +134,6 @@ pub async fn mark_virtual_checked_in(
         "marked row as virtually checked in (online attendee)"
     );
 
-    invalidate_attendee_cache(kv, sheet_id, sheet_name).await;
     invalidate_column_map_cache(kv, sheet_id, sheet_name).await;
     Ok(timestamp)
 }
@@ -200,7 +198,6 @@ pub async fn clear_checked_in(
         "cleared check-in fields (undo)"
     );
 
-    invalidate_attendee_cache(kv, sheet_id, sheet_name).await;
     invalidate_column_map_cache(kv, sheet_id, sheet_name).await;
     Ok(())
 }
@@ -254,7 +251,6 @@ pub async fn mark_claimed(
 
     tracing::info!(row_index = row_index, wallet_address = %wallet_address, nft_proof_url = %nft_proof_url, "marked row as claimed");
 
-    invalidate_attendee_cache(kv, sheet_id, sheet_name).await;
     Ok(claimed_at.to_string())
 }
 
@@ -299,7 +295,6 @@ pub async fn update_qr_urls(
     let updated = updates.len();
     tracing::info!(count = updated, "updated qr code urls in google sheets");
 
-    invalidate_attendee_cache(kv, sheet_id, sheet_name).await;
     invalidate_column_map_cache(kv, sheet_id, sheet_name).await;
     Ok(updated)
 }
@@ -421,7 +416,6 @@ pub async fn append_attendee_row(
         "appended self-registration row to google sheet"
     );
 
-    invalidate_attendee_cache(kv, sheet_id, sheet_name).await;
     invalidate_column_map_cache(kv, sheet_id, sheet_name).await;
     Ok(())
 }
@@ -520,7 +514,6 @@ pub async fn append_walkin_row(
         "appended walk-in row to google sheet"
     );
 
-    invalidate_attendee_cache(kv, sheet_id, sheet_name).await;
     invalidate_column_map_cache(kv, sheet_id, sheet_name).await;
     Ok(())
 }
@@ -603,7 +596,6 @@ pub async fn delete_sheet_row(
     );
 
     // Invalidate all caches — row indices have shifted
-    invalidate_attendee_cache(kv, sheet_id, sheet_name).await;
     invalidate_column_map_cache(kv, sheet_id, sheet_name).await;
     Ok(())
 }
@@ -666,7 +658,6 @@ pub async fn update_participation_type(
         "updated participation_type in google sheet"
     );
 
-    invalidate_attendee_cache(kv, sheet_id, sheet_name).await;
     invalidate_column_map_cache(kv, sheet_id, sheet_name).await;
     Ok(())
 }
@@ -739,7 +730,6 @@ pub async fn write_bank_info(
         "wrote bank info to google sheet"
     );
 
-    invalidate_attendee_cache(kv, sheet_id, sheet_name).await;
     Ok(())
 }
 
@@ -803,7 +793,6 @@ pub async fn write_deposit_verification(
         "wrote deposit verification to google sheet"
     );
 
-    invalidate_attendee_cache(ctx.kv, ctx.sheet_id, ctx.sheet_name).await;
     Ok(())
 }
 
@@ -856,7 +845,6 @@ pub async fn update_deposit_method(
         "wrote credit deposit_method to google sheet"
     );
 
-    invalidate_attendee_cache(kv, sheet_id, sheet_name).await;
     Ok(())
 }
 
@@ -918,7 +906,6 @@ pub async fn write_refund_status(
         "wrote refund_status to google sheet"
     );
 
-    invalidate_attendee_cache(kv, sheet_id, sheet_name).await;
     Ok(())
 }
 
@@ -979,6 +966,5 @@ pub async fn write_refund_link(
         "wrote refund_link to google sheet"
     );
 
-    invalidate_attendee_cache(kv, sheet_id, sheet_name).await;
     Ok(())
 }

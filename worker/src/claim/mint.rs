@@ -16,8 +16,8 @@ use crate::solana::{self, MintRequest};
 use crate::state::AppState;
 
 use super::lock::{
-    FinalizeClaimLockParams, acquire_claim_lock, claim_lock_key, finalize_claim_lock,
-    lookup_walkin_by_claim_token, mark_walkin_claimed, mask_wallet, release_claim_lock,
+    FinalizeClaimLockParams, acquire_claim_lock, claim_lock_key, finalize_claim_lock, mask_wallet,
+    release_claim_lock,
 };
 
 // ---------------------------------------------------------------------------
@@ -92,10 +92,27 @@ pub async fn lookup_claim(
     let event = resolve_event(state, event_id).await?;
     let kv = resolve_kv(state);
 
-    // ── Walk-in path: check KV for walk-in attendee first ──
-    if let Some(kv_ref) = kv
-        && let Some(walkin) = lookup_walkin_by_claim_token(kv_ref, token).await
+    // ── Walk-in path: D1-only (walk-ins are stored in D1 as primary) ──
+    let mut walkin: Option<WalkinAttendee> = None;
+
+    if let Some(ref d1) = state.d1
+        && let Ok(Some(a)) = crate::db::attendees::get_attendee_by_claim_token(d1, token).await
+        && a.participation_type == "walkin"
     {
+        walkin = Some(WalkinAttendee {
+            event_id: event.id.clone(),
+            email: a.email.clone(),
+            name: a.name.clone(),
+            phone: None,
+            claim_token: a.claim_token.clone().unwrap_or_default(),
+            checked_in_at: a.checked_in_at.clone().unwrap_or_default(),
+            checked_in_by: a.checked_in_by.clone().unwrap_or_default(),
+            wallet_address: None,
+            claimed_at: a.claimed_at.clone(),
+        });
+    }
+
+    if let Some(walkin) = walkin {
         tracing::info!(claim_token = %token, email = %walkin.email, "claim lookup: found walk-in attendee");
 
         // API key + image URL are required; metadata_uri/collection_mint are optional
@@ -297,11 +314,26 @@ pub async fn execute_claim(
     let event = resolve_event(state, event_id).await?;
     let kv = resolve_kv(state);
 
-    // 2. Check walk-in path first
-    if let Some(kv_ref) = kv
-        && let Some(walkin) = lookup_walkin_by_claim_token(kv_ref, token).await
+    // 2. Check walk-in path: D1-only
+    let mut walkin: Option<WalkinAttendee> = None;
+    if let Some(ref d1) = state.d1
+        && let Ok(Some(a)) = crate::db::attendees::get_attendee_by_claim_token(d1, token).await
+        && a.participation_type == "walkin"
     {
-        return execute_walkin_claim(state, kv_ref, &event, token, wallet_address, walkin).await;
+        walkin = Some(WalkinAttendee {
+            event_id: event.id.clone(),
+            email: a.email.clone(),
+            name: a.name.clone(),
+            phone: None,
+            claim_token: a.claim_token.clone().unwrap_or_default(),
+            checked_in_at: a.checked_in_at.clone().unwrap_or_default(),
+            checked_in_by: a.checked_in_by.clone().unwrap_or_default(),
+            wallet_address: None,
+            claimed_at: a.claimed_at.clone(),
+        });
+    }
+    if let Some(walkin) = walkin {
+        return execute_walkin_claim(state, &event, token, wallet_address, walkin).await;
     }
 
     // 3. Pre-registered path: look up attendee by claim token from Google Sheet
@@ -664,20 +696,21 @@ pub async fn execute_claim(
 }
 
 // ---------------------------------------------------------------------------
-// Walk-in claim logic (KV-only, no Google Sheet dependency)
+// Walk-in claim logic (D1 + KV best-effort)
 // ---------------------------------------------------------------------------
 
 /// Execute the claim flow for a walk-in attendee.
-/// Walk-ins skip quiz/adventure gates and record claims in KV (not Sheets).
+/// Walk-ins skip quiz/adventure gates. Claims are recorded in D1 (primary)
+/// with KV best-effort mirror for legacy compatibility.
 async fn execute_walkin_claim(
     state: &AppState,
-    kv: &KvStore,
     event: &event_checkin_domain::models::event::EventConfig,
     token: &str,
     wallet_address: &str,
     walkin: WalkinAttendee,
 ) -> Result<ClaimResult, AppError> {
     let display_name = walkin.name.clone();
+    let kv = resolve_kv(state);
 
     // Note: walk-ins are always in-person — no online claim timing gate needed
 
@@ -688,15 +721,16 @@ async fn execute_walkin_claim(
     }
 
     // Claim dedup lock
-    if let Err(e) = acquire_claim_lock(
-        kv,
-        &event.id,
-        token,
-        wallet_address,
-        state.d1.as_deref(),
-        state.event_do.as_ref(),
-    )
-    .await
+    if let Some(kv) = kv
+        && let Err(e) = acquire_claim_lock(
+            kv,
+            &event.id,
+            token,
+            wallet_address,
+            state.d1.as_deref(),
+            state.event_do.as_ref(),
+        )
+        .await
     {
         return Err(AppError::RateLimited(e));
     }
@@ -721,14 +755,16 @@ async fn execute_walkin_claim(
         Ok(result) => result,
         Err(ref e) => {
             tracing::error!(claim_token = %token, error = %e, "walk-in mint failed");
-            let _ = release_claim_lock(
-                kv,
-                &event.id,
-                token,
-                state.d1.as_deref(),
-                state.event_do.as_ref(),
-            )
-            .await;
+            if let Some(kv) = kv {
+                let _ = release_claim_lock(
+                    kv,
+                    &event.id,
+                    token,
+                    state.d1.as_deref(),
+                    state.event_do.as_ref(),
+                )
+                .await;
+            }
             return Err(AppError::External {
                 service: "helius".into(),
                 status: 502,
@@ -737,38 +773,41 @@ async fn execute_walkin_claim(
         }
     };
 
-    // Mark as claimed in KV (not Google Sheet — walk-ins are KV-only)
+    // Mark as claimed in D1 (primary)
     let claimed_at = Utc::now().to_rfc3339();
-    if let Err(e) = mark_walkin_claimed(
-        kv,
-        &walkin.event_id,
-        &walkin.email,
-        wallet_address,
-        &claimed_at,
-    )
-    .await
+    if let Some(ref d1) = state.d1
+        && let Err(e) = crate::db::attendees::claim_attendee(
+            d1,
+            token,
+            &claimed_at,
+            &mint_result.asset_id,
+            &mint_result.signature,
+        )
+        .await
     {
-        tracing::error!(claim_token = %token, error = %e, "walk-in mint succeeded but failed to mark claimed");
-        return Err(AppError::Internal(format!(
-            "NFT minted but failed to record claim. Asset ID: {}. Error: {e}",
-            mint_result.asset_id
-        )));
+        tracing::error!(
+            claim_token = %token,
+            error = %e,
+            "walk-in D1 claim write failed (mint succeeded, data may be inconsistent)"
+        );
+        // Don't fail the response — the NFT was already minted.
     }
 
     // Finalize claim lock
-    if let Err(e) = finalize_claim_lock(
-        kv,
-        FinalizeClaimLockParams {
-            event_id: &event.id,
-            token,
-            wallet: wallet_address,
-            asset_id: &mint_result.asset_id,
-            signature: &mint_result.signature,
-        },
-        state.d1.as_deref(),
-        state.event_do.as_ref(),
-    )
-    .await
+    if let Some(kv) = kv
+        && let Err(e) = finalize_claim_lock(
+            kv,
+            FinalizeClaimLockParams {
+                event_id: &event.id,
+                token,
+                wallet: wallet_address,
+                asset_id: &mint_result.asset_id,
+                signature: &mint_result.signature,
+            },
+            state.d1.as_deref(),
+            state.event_do.as_ref(),
+        )
+        .await
     {
         tracing::warn!(error = %e, "walk-in claim lock finalize failed");
     }
