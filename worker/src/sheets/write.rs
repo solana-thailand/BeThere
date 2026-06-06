@@ -324,6 +324,7 @@ pub async fn append_attendee_row(
     deposit_agreed: bool,
     consent_given: bool,
     photo_consent_given: bool,
+    consent_marketing: Option<bool>,
     mapping: &ColumnMapping,
     state: &AppState,
     sheet_id: &str,
@@ -377,6 +378,9 @@ pub async fn append_attendee_row(
     }
     if photo_consent_given {
         set(&mut row, CK::PhotoConsent, "Yes".to_string());
+    }
+    if consent_marketing.unwrap_or(false) {
+        set(&mut row, CK::ConsentMarketing, "Yes".to_string());
     }
 
     // Determine the last non-empty column to build the range

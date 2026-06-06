@@ -12,6 +12,7 @@ mod attendee;
 mod deposit;
 mod claim;
 mod admin;
+mod privacy;
 
 // Re-export everything so existing `use crate::api::*` still works.
 pub use types::*;
@@ -20,6 +21,7 @@ pub use attendee::*;
 pub use deposit::*;
 pub use claim::*;
 pub use admin::*;
+pub use privacy::*;
 
 use std::cell::RefCell;
 use std::collections::HashMap;

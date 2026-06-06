@@ -220,9 +220,10 @@ pub enum ColumnKey {
     RefundStatus,
     RefundLink,
     SendEmailStatus,
-    // Section 7: Consent & Compliance (AE–AF)
+    // Section 7: Consent & Compliance (AE–AG)
     ConsentGiven,
     PhotoConsent,
+    ConsentMarketing,
 }
 
 impl ColumnKey {
@@ -265,9 +266,10 @@ impl ColumnKey {
             ColumnKey::RefundStatus,
             ColumnKey::RefundLink,
             ColumnKey::SendEmailStatus,
-            // Section 7: Consent & Compliance (AE–AF)
+            // Section 7: Consent & Compliance (AE–AG)
             ColumnKey::ConsentGiven,
             ColumnKey::PhotoConsent,
+            ColumnKey::ConsentMarketing,
         ]
     }
 
@@ -331,6 +333,9 @@ impl ColumnKey {
             // Section 7: Consent & Compliance (AE)
             ColumnKey::ConsentGiven => &["consent_given", "pdpa_consent", "data_consent"],
             ColumnKey::PhotoConsent => &["photo_consent", "photo_consent_given", "media_consent"],
+            ColumnKey::ConsentMarketing => {
+                &["consent_marketing", "marketing_consent", "marketing_opt_in"]
+            }
         }
     }
 }
@@ -397,12 +402,13 @@ impl ColumnMapping {
         map.insert("refund_status".into(), 27); // AB
         map.insert("refund_link".into(), 28); // AC
         map.insert("send_email_status".into(), 29); // AD
-        // Section 7: Consent & Compliance (AE–AF)
+        // Section 7: Consent & Compliance (AE–AG)
         map.insert("consent_given".into(), 30); // AE
         map.insert("photo_consent".into(), 31); // AF
+        map.insert("consent_marketing".into(), 32); // AG
         Self {
             map,
-            total_columns: 32,
+            total_columns: 33,
         }
     }
 
@@ -984,7 +990,8 @@ mod tests {
         // Section 7: Consent & Compliance
         assert_eq!(mapping.get(ColumnKey::ConsentGiven), Some(30)); // AE
         assert_eq!(mapping.get(ColumnKey::PhotoConsent), Some(31)); // AF
-        assert_eq!(mapping.total_columns, 32);
+        assert_eq!(mapping.get(ColumnKey::ConsentMarketing), Some(32)); // AG
+        assert_eq!(mapping.total_columns, 33);
     }
 
     #[test]

@@ -83,6 +83,7 @@ pub enum AuditAction {
 
     // Privacy (PDPA)
     DataDeletionRequested,
+    MarketingUnsubscribed,
 
     // On-chain indexing
     OnChainEventIndexed,

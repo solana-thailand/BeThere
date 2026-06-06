@@ -27,17 +27,21 @@ pub(crate) async fn upsert_attendee(
     participation_type: &str,
     contact_channel: &str,
     contact_handle: &str,
+    consent_marketing: Option<bool>,
 ) -> Result<(), String> {
+    let cm = consent_marketing.unwrap_or(false);
     let stmt = db.prepare(
         "INSERT INTO attendees (id, event_id, email, name, approval_status, participation_type, \
-         contact_channel, contact_handle, created_at, updated_at) \
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, datetime('now'), datetime('now')) \
+         contact_channel, contact_handle, consent_marketing, consent_marketing_at, created_at, updated_at) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, datetime('now'), datetime('now'), datetime('now')) \
          ON CONFLICT (id) DO UPDATE SET \
          name = excluded.name, \
          approval_status = excluded.approval_status, \
          participation_type = excluded.participation_type, \
          contact_channel = excluded.contact_channel, \
          contact_handle = excluded.contact_handle, \
+         consent_marketing = excluded.consent_marketing, \
+         consent_marketing_at = excluded.consent_marketing_at, \
          updated_at = datetime('now')",
     );
     stmt.bind_refs(&[
@@ -49,6 +53,7 @@ pub(crate) async fn upsert_attendee(
         D1Type::Text(participation_type),
         D1Type::Text(contact_channel),
         D1Type::Text(contact_handle),
+        D1Type::Integer(if cm { 1 } else { 0 }),
     ])
     .map_err(|e| format!("D1 upsert_attendee bind: {e:?}"))?
     .run()
@@ -1003,4 +1008,26 @@ pub(crate) async fn clear_attendee_pii(db: &D1Database, attendee_id: &str) -> Re
         .await
         .map_err(|e| format!("D1 clear_attendee_pii: {e:?}"))?;
     Ok(())
+}
+
+/// Set marketing consent for all attendee rows matching an email.
+/// Used for PDPA marketing opt-out (unsubscribe).
+pub(crate) async fn set_marketing_consent(
+    db: &D1Database,
+    email: &str,
+    consent: bool,
+) -> Result<usize, String> {
+    let sql = format!(
+        "UPDATE attendees SET \
+         consent_marketing = {consent}, \
+         consent_marketing_at = datetime('now'), \
+         updated_at = datetime('now') \
+         WHERE email = '{email}'"
+    );
+    let result = db
+        .exec(&sql)
+        .await
+        .map_err(|e| format!("D1 set_marketing_consent: {e:?}"))?;
+    let count = result.count().unwrap_or(None).unwrap_or(0) as usize;
+    Ok(count)
 }

@@ -28,6 +28,14 @@ use crate::state::AppState;
 // Request / Response types
 // ---------------------------------------------------------------------------
 
+/// An event that blocks deletion because it hasn't ended yet.
+#[derive(serde::Serialize)]
+struct BlockedEvent {
+    event_id: String,
+    event_name: String,
+    event_end_ms: i64,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct DeleteRequestQuery {
     /// If provided, only delete data for this specific event.
@@ -52,7 +60,9 @@ pub async fn delete_request(
     let email = claims.email.to_lowercase();
     tracing::info!(email = %email, event_id = ?query.event_id, "PDPA data deletion request");
 
+    let now_ms = js_sys::Date::now() as i64;
     let mut summary = DeletionSummary::default();
+    let mut blocked_events: Vec<BlockedEvent> = Vec::new();
     let kv = state.events_kv.as_ref();
 
     // 1. Find all D1 attendee rows for this email
@@ -68,6 +78,25 @@ pub async fn delete_request(
             if let Some(ref target_event) = query.event_id
                 && entry.event_id != *target_event
             {
+                continue;
+            }
+
+            // Time-gate: block deletion for events that haven't ended yet.
+            // PDPA §38 exemption — retention is necessary for contract performance.
+            let event_config: Option<event_checkin_domain::models::event::EventConfig> = match kv {
+                Some(k) => crate::event_store::get_event_config(k, &entry.event_id)
+                    .await
+                    .unwrap_or(None),
+                None => None,
+            };
+            if let Some(ref cfg) = event_config
+                && cfg.event_end_ms > now_ms
+            {
+                blocked_events.push(BlockedEvent {
+                    event_id: entry.event_id.clone(),
+                    event_name: cfg.name.clone(),
+                    event_end_ms: cfg.event_end_ms,
+                });
                 continue;
             }
 
@@ -222,10 +251,20 @@ pub async fn delete_request(
         "PDPA data deletion completed"
     );
 
+    let status = if blocked_events.is_empty() {
+        "completed"
+    } else if summary.events_affected > 0 {
+        "partial"
+    } else {
+        "blocked"
+    };
+
     Ok(ApiOk::new(json!({
-        "status": "completed",
+        "status": status,
         "email": email,
         "events_affected": summary.events_affected,
+        "events_blocked": blocked_events.len(),
+        "blocked_events": blocked_events,
         "d1_attendees_cleared": summary.d1_attendees_cleared,
         "d1_contacts_cleared": summary.d1_contacts_cleared,
         "d1_developer_cleared": summary.d1_developer_cleared,
@@ -233,6 +272,61 @@ pub async fn delete_request(
         "kv_keys_deleted": summary.kv_keys_deleted,
         "r2_objects_deleted": summary.r2_objects_deleted,
         "on_chain_note": "On-chain data (wallet addresses, transaction signatures) is immutable and cannot be deleted. This is disclosed in our privacy policy as a technical limitation per PDPA Section 37.",
+        "time_gate_note": "Data deletion is only available after event conclusion per PDPA Section 38 (contract performance exemption). Blocked events retain data until their end date.",
+    })))
+}
+
+// ---------------------------------------------------------------------------
+// Handlers — Marketing Unsubscribe
+// ---------------------------------------------------------------------------
+
+/// `POST /api/privacy/unsubscribe-marketing`
+///
+/// Self-service marketing opt-out (PDPA right to withdraw consent).
+/// The user's email is taken from the JWT. Sets `consent_marketing = false`
+/// across all attendee rows for that email.
+#[worker::send]
+pub async fn unsubscribe_marketing(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+) -> Result<ApiOk<serde_json::Value>, WorkerError> {
+    let email = claims.email.to_lowercase();
+    tracing::info!(email = %email, "PDPA marketing unsubscribe request");
+
+    let mut rows_updated: usize = 0;
+
+    if let Some(db) = state.d1.as_deref() {
+        rows_updated = crate::db::attendees::set_marketing_consent(db, &email, false)
+            .await
+            .map_err(|e| AppError::Internal(format!("set_marketing_consent failed: {e}")))?;
+    }
+
+    // Audit log
+    if let Some(kv) = state.events_kv.as_ref() {
+        let _ = crate::audit_store::append_event_audit(
+            kv,
+            "global",
+            crate::audit_store::create_entry(
+                &email,
+                crate::audit_store::AuditAction::MarketingUnsubscribed,
+                &email,
+                &format!("Marketing consent withdrawn: {rows_updated} attendee rows updated"),
+            ),
+            state.d1.as_deref(),
+        )
+        .await;
+    }
+
+    tracing::info!(
+        email = %email,
+        rows_updated,
+        "PDPA marketing unsubscribe completed"
+    );
+
+    Ok(ApiOk::new(json!({
+        "status": "completed",
+        "email": email,
+        "rows_updated": rows_updated,
     })))
 }
 

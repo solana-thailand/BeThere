@@ -440,6 +440,7 @@ fn render_loaded_event(
     let (reg_deposit_agreed, set_reg_deposit_agreed) = signal(false);
     let (reg_consent_given, set_reg_consent_given) = signal(false);
     let (reg_photo_consent_given, set_reg_photo_consent_given) = signal(false);
+    let (reg_consent_marketing, set_reg_consent_marketing) = signal(false);
     let (reg_state, set_reg_state) = signal(RegState::Idle);
 
     let slug_for_signin = current_slug.clone();
@@ -629,6 +630,7 @@ fn render_loaded_event(
                                         reg_deposit_agreed, set_reg_deposit_agreed,
                                         reg_consent_given, set_reg_consent_given,
                                         reg_photo_consent_given, set_reg_photo_consent_given,
+                                        reg_consent_marketing, set_reg_consent_marketing,
                                         reg_state, set_reg_state,
                                     )
                                 }
@@ -654,6 +656,7 @@ fn render_loaded_event(
                                         reg_deposit_agreed, set_reg_deposit_agreed,
                                         reg_consent_given, set_reg_consent_given,
                                         reg_photo_consent_given, set_reg_photo_consent_given,
+                                        reg_consent_marketing, set_reg_consent_marketing,
                                         reg_state, set_reg_state,
                                     )
                                 }

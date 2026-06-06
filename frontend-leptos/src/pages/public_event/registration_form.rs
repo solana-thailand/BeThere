@@ -30,6 +30,8 @@ pub fn registration_form(
     set_reg_consent_given: WriteSignal<bool>,
     reg_photo_consent_given: ReadSignal<bool>,
     set_reg_photo_consent_given: WriteSignal<bool>,
+    reg_consent_marketing: ReadSignal<bool>,
+    set_reg_consent_marketing: WriteSignal<bool>,
     reg_state: ReadSignal<RegState>,
     set_reg_state: WriteSignal<RegState>,
 ) -> AnyView {
@@ -274,6 +276,24 @@ pub fn registration_form(
                                         ().into_any()
                                     }
                                 }}
+                                // Marketing Consent (optional)
+                                {
+                                    view! {
+                                        <div id="pe-field-marketing-consent">
+                                            <label class="pe-checkbox-label">
+                                                <input
+                                                    type="checkbox"
+                                                    class="pe-checkbox"
+                                                    checked=move || reg_consent_marketing.get()
+                                                    on:change=move |ev| {
+                                                        set_reg_consent_marketing.set(event_target_checked(&ev));
+                                                    }
+                                                />
+                                                <span>"(Optional) I'd like to receive updates about future events and opportunities."</span>
+                                            </label>
+                                        </div>
+                                    }.into_any()
+                                }
                                 // Deposit Agreement
                                 {move || {
                                     let is_online_track = is_hybrid && reg_participation.get().to_lowercase().contains("online");
@@ -377,6 +397,7 @@ pub fn registration_form(
                                                     deposit_agreed: if deposit_val { Some(true) } else { None },
                                                     consent_given: if consent_val { Some(true) } else { None },
                                                     photo_consent_given: if photo_consent_val { Some(true) } else { None },
+                                                    consent_marketing: if reg_consent_marketing.get() { Some(true) } else { None },
                                                 };
 
                                                 leptos::task::spawn_local(async move {

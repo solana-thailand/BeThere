@@ -318,6 +318,7 @@ pub async fn append_attendee_row(
     deposit_agreed: bool,
     consent_given: bool,
     photo_consent_given: bool,
+    consent_marketing: Option<bool>,
     mapping: ColumnMapping,
     sheet_id: String,
     sheet_name: String,
@@ -367,6 +368,9 @@ pub async fn append_attendee_row(
     }
     if photo_consent_given {
         set(&mut row, CK::PhotoConsent, "Yes".to_string());
+    }
+    if consent_marketing.unwrap_or(false) {
+        set(&mut row, CK::ConsentMarketing, "Yes".to_string());
     }
 
     let last_col_idx = row.iter().rposition(|v| !v.is_empty()).unwrap_or(0);

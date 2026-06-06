@@ -6,6 +6,7 @@ pub mod adventure;
 pub mod adventure_config;
 pub mod audit_panel;
 pub mod claim;
+pub mod data_privacy;
 pub mod deposit;
 pub mod escrow_init;
 pub mod event_form;

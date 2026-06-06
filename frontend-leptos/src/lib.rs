@@ -14,9 +14,9 @@ use leptos_router::path;
 use crate::components::ProtectedRoute;
 use crate::icons::{Icon, IconName};
 use crate::pages::{
-    admin::Admin, adventure::page::Adventure, claim::Claim, deposit::Deposit, landing::Landing,
-    login::Login, privacy::Privacy, public_event::PublicEvent, scanner::Scanner,
-    ticket::page::Ticket,
+    admin::Admin, adventure::page::Adventure, claim::Claim, data_privacy::DataPrivacy,
+    deposit::Deposit, landing::Landing, login::Login, privacy::Privacy, public_event::PublicEvent,
+    scanner::Scanner, ticket::page::Ticket,
 };
 
 /// Main application component.
@@ -55,6 +55,7 @@ pub fn App() -> impl IntoView {
                     <Route path=path!("/ticket/:attendee_id") view=Ticket />
                     <Route path=path!("/e/:slug") view=PublicEvent />
                     <Route path=path!("/privacy") view=Privacy />
+                    <Route path=path!("/data-privacy") view=DataPrivacy />
                     <Route path=path!("/adventure") view=Adventure />
                     <Route path=path!("/staff") view=ProtectedScanner />
                     <Route path=path!("/admin") view=ProtectedAdmin />

@@ -162,6 +162,11 @@ pub fn routes(state: AppState) -> Router<()> {
         )
         // PDPA data deletion — self-service (attendee-authed — email from JWT)
         .route("/privacy/delete-request", post(privacy::delete_request))
+        // PDPA marketing unsubscribe — self-service (attendee-authed — email from JWT)
+        .route(
+            "/privacy/unsubscribe-marketing",
+            post(privacy::unsubscribe_marketing),
+        )
         .layer(middleware::from_fn_with_state(
             state.clone(),
             crate::auth::require_identity,

@@ -126,6 +126,7 @@ pub fn Privacy() -> impl IntoView {
                 </div>
 
                 <div style="text-align: center; margin-top: 1rem;">
+                    <a href="/data-privacy" class="btn btn-outline" style="margin-right: 0.5rem;">"Manage My Data"</a>
                     <a href="/" class="btn btn-outline">"← Back to Home"</a>
                 </div>
             </div>

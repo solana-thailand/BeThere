@@ -47,6 +47,7 @@ pub struct RegisterBody {
     pub deposit_agreed: Option<bool>,
     pub consent_given: Option<bool>,
     pub photo_consent_given: Option<bool>,
+    pub consent_marketing: Option<bool>,
 }
 
 /// Next step returned after registration.

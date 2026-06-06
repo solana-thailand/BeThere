@@ -50,6 +50,9 @@ pub struct RegisterRequest {
     /// Whether the attendee consented to photo/media capture (PDPA).
     /// Required when event has `require_photo_consent` enabled.
     pub photo_consent_given: Option<bool>,
+    /// Whether the attendee wants to receive marketing communications
+    /// about future events (optional, PDPA marketing consent).
+    pub consent_marketing: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -351,6 +354,7 @@ pub async fn register_attendee(
             &participation_type,
             contact_channel.unwrap_or(""),
             contact_handle.unwrap_or(""),
+            body.consent_marketing,
         );
 
         let events_joined = event_id.clone();
@@ -415,6 +419,7 @@ pub async fn register_attendee(
         let bg_deposit_agreed = body.deposit_agreed.unwrap_or(false);
         let bg_consent_given = body.consent_given.unwrap_or(false);
         let bg_photo_consent_given = body.photo_consent_given.unwrap_or(false);
+        let bg_consent_marketing = body.consent_marketing;
         let bg_mapping = mapping.clone();
         let bg_sheet_id = config.sheet_id.clone();
         let bg_sheet_name = config.sheet_name.clone();
@@ -439,6 +444,7 @@ pub async fn register_attendee(
                 bg_deposit_agreed,
                 bg_consent_given,
                 bg_photo_consent_given,
+                bg_consent_marketing,
                 bg_mapping.clone(),
                 bg_sheet_id.clone(),
                 bg_sheet_name.clone(),
@@ -513,6 +519,7 @@ pub async fn register_attendee(
             body.deposit_agreed.unwrap_or(false),
             body.consent_given.unwrap_or(false),
             body.photo_consent_given.unwrap_or(false),
+            body.consent_marketing,
             &mapping,
             &state,
             &config.sheet_id,
