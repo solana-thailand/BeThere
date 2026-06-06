@@ -278,6 +278,7 @@ pub async fn create_event(
         created_at: now.clone(),
         updated_at: now,
         updated_by: updated_by.to_string(),
+        dev_profile_enabled: false,
     };
 
     // D1 write (primary — always if available)
@@ -816,6 +817,9 @@ pub fn apply_update(config: &mut EventConfig, req: &UpdateEventRequest) -> Resul
     if let Some(ref v) = req.visibility {
         config.visibility = v.clone();
     }
+    if let Some(v) = req.dev_profile_enabled {
+        config.dev_profile_enabled = v;
+    }
 
     Ok(())
 }
@@ -1101,6 +1105,7 @@ pub async fn seed_from_config(
         created_at: now.clone(),
         updated_at: now,
         updated_by: String::new(), // seeded from config, no user context
+        dev_profile_enabled: false,
     };
 
     // Save full config
@@ -1328,4 +1333,26 @@ pub async fn migrate_quiz_to_event(
             })
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Registration form config (Issue #049)
+// ---------------------------------------------------------------------------
+
+/// Save per-event registration form config to KV.
+pub async fn save_form_config(
+    kv: &KvStore,
+    event_id: &str,
+    config: &event_checkin_domain::models::event::RegistrationFormConfig,
+) -> Result<(), String> {
+    use super::schema::form_config_key;
+
+    let key = form_config_key(event_id);
+    let json_str = serde_json::to_string(config)
+        .map_err(|e| format!("failed to serialize form config: {e:?}"))?;
+    kv.put(&key, &json_str)
+        .map_err(|e| format!("failed to build form config put: {e:?}"))?
+        .execute()
+        .await
+        .map_err(|e| format!("failed to write form config to KV: {e:?}"))
 }

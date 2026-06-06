@@ -53,7 +53,7 @@ Registration Form → registration_responses (raw answers)
 - [x] Backend: community insights API (aggregations)
 - [x] Frontend: developer profile fields on registration form
 - [x] Backend: developer list API (paginated)
-- [ ] Registration form config schema (KV-stored JSON per event)
+- [x] Registration form config schema (KV-stored JSON per event)
 
 ### Phase 2: Configurable Registration Forms
 - [ ] Admin UI: form field builder (drag-drop, field types)
@@ -204,7 +204,7 @@ Registration Form → registration_responses (raw answers)
 
 ## Status
 
-- [x] Phase 1: D1 Migration + Developer Profiles (mostly complete, config schema remaining)
+- [x] Phase 1: D1 Migration + Developer Profiles (complete)
 - [ ] Phase 2: Configurable Registration Forms
 - [ ] Phase 3: Campaigns & Series
 - [ ] Phase 4: Organizer Community Dashboard

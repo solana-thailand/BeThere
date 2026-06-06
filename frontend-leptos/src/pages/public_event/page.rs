@@ -424,6 +424,7 @@ fn render_loaded_event(
     let show_reg_form = !event_completed.get();
     let require_contact = data.require_contact_info;
     let require_photo_consent = data.require_photo_consent;
+    let dev_profile_enabled = data.dev_profile_enabled;
 
     let in_person_available = data.in_person_available;
     let online_available = data.online_available;
@@ -640,6 +641,7 @@ fn render_loaded_event(
                                         reg_experience_level, set_reg_experience_level,
                                         reg_tech_stack, set_reg_tech_stack,
                                         reg_interests, set_reg_interests,
+                                        dev_profile_enabled,
                                     )
                                 }
                                 RegistrationLookup::NotRegistered => {
@@ -669,6 +671,7 @@ fn render_loaded_event(
                                         reg_experience_level, set_reg_experience_level,
                                         reg_tech_stack, set_reg_tech_stack,
                                         reg_interests, set_reg_interests,
+                                        dev_profile_enabled,
                                     )
                                 }
                             }

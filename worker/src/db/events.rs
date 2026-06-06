@@ -67,6 +67,8 @@ pub struct D1EventRow {
     pub online_registration_open: Option<i64>,
     pub deposit_deadline_hours: Option<i64>,
     pub updated_by: Option<String>,
+    // Columns added for Issue #049
+    pub dev_profile_enabled: Option<i64>,
 }
 
 impl D1EventRow {
@@ -169,6 +171,7 @@ impl D1EventRow {
             created_at: self.created_at.clone().unwrap_or_default(),
             updated_at: self.updated_at.clone().unwrap_or_default(),
             updated_by: self.updated_by.clone().unwrap_or_default(),
+            dev_profile_enabled: self.dev_profile_enabled.unwrap_or(0) == 1,
         }
     }
 }
@@ -210,7 +213,7 @@ pub async fn upsert_event(
          require_contact_info, require_photo_consent, \
          in_person_capacity, online_capacity, \
          online_open_mode, online_registration_open, \
-         deposit_deadline_hours, updated_by) \
+         deposit_deadline_hours, updated_by, dev_profile_enabled) \
          VALUES ('{id}', '{name}', '{slug}', '{status}', '{event_format}', \
          {event_start_ms}, {event_end_ms}, \
          {deposit_enabled}, {deposit_amount_usdc}, {deposit_amount_thb}, \
@@ -228,7 +231,7 @@ pub async fn upsert_event(
          {require_contact_info}, {require_photo_consent}, \
          {in_person_capacity}, {online_capacity}, \
          '{online_open_mode}', {online_registration_open}, \
-         {deposit_deadline_hours}, '{updated_by}') \
+         {deposit_deadline_hours}, '{updated_by}', {dev_profile_enabled}) \
          ON CONFLICT (id) DO UPDATE SET \
          name = excluded.name, slug = excluded.slug, status = excluded.status, \
          event_format = excluded.event_format, \
@@ -270,7 +273,8 @@ pub async fn upsert_event(
          online_open_mode = excluded.online_open_mode, \
          online_registration_open = excluded.online_registration_open, \
          deposit_deadline_hours = excluded.deposit_deadline_hours, \
-         updated_by = excluded.updated_by",
+         updated_by = excluded.updated_by, \
+         dev_profile_enabled = excluded.dev_profile_enabled",
         id = config.id,
         name = config.name.replace('\'', "''"),
         slug = config.slug,
@@ -326,6 +330,7 @@ pub async fn upsert_event(
             .map(|v| v as i64)
             .unwrap_or(-1),
         updated_by = config.updated_by,
+        dev_profile_enabled = config.dev_profile_enabled as i32,
     );
 
     db.exec(&sql)

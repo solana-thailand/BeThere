@@ -549,3 +549,30 @@ pub async fn save_deposit_status_with_fallback(
 
     Ok(())
 }
+
+// ---------------------------------------------------------------------------
+// Registration form config (Issue #049)
+// ---------------------------------------------------------------------------
+
+/// Read per-event registration form config from KV.
+/// Returns `None` if no custom config is stored (use defaults).
+pub async fn get_form_config(
+    kv: &KvStore,
+    event_id: &str,
+) -> Result<Option<event_checkin_domain::models::event::RegistrationFormConfig>, String> {
+    use super::schema::form_config_key;
+
+    let key = form_config_key(event_id);
+    let raw: Option<String> = kv
+        .get(&key)
+        .text()
+        .await
+        .map_err(|e| format!("failed to read form config for event '{event_id}': {e:?}"))?;
+
+    match raw {
+        None => Ok(None),
+        Some(json_str) => serde_json::from_str(&json_str)
+            .map(Some)
+            .map_err(|e| format!("failed to parse form config for event '{event_id}': {e}")),
+    }
+}

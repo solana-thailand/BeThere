@@ -229,6 +229,11 @@ pub fn routes(state: AppState) -> Router<()> {
         .route("/events/{id}/restore", post(events::restore_event))
         .route("/events/{id}/delete", delete(events::hard_delete_event))
         .route("/events/{id}/audit", get(events::get_event_audit))
+        // Registration form config (protected — organizer configures per-event form fields)
+        .route(
+            "/events/{id}/form-config",
+            get(events::get_form_config).put(events::put_form_config),
+        )
         .route("/audit/global", get(events::get_global_audit))
         // Admin deposit management (protected — organizer verifies slips, manages refunds)
         .route(
@@ -298,10 +303,7 @@ pub fn routes(state: AppState) -> Router<()> {
             "/community/insights",
             get(community::get_community_insights),
         )
-        .route(
-            "/community/developers",
-            get(community::list_developers),
-        )
+        .route("/community/developers", get(community::list_developers))
         // On-chain event indexing (protected — manual sync + query)
         .route("/escrow/sync", post(escrow_index::escrow_sync_handler))
         .route(

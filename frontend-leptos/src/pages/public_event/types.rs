@@ -197,6 +197,10 @@ pub struct PublicEventData {
 
     // Escrow
     pub escrow_status: Option<String>,
+
+    // Developer profile (Issue #049)
+    #[serde(default)]
+    pub dev_profile_enabled: bool,
 }
 
 #[derive(serde::Deserialize)]

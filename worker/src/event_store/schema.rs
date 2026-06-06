@@ -56,6 +56,12 @@ pub fn quiz_progress_key(event_id: &str, claim_token: &str) -> String {
     format!("event:{event_id}:quiz:progress:{claim_token}")
 }
 
+/// KV key for per-event registration form configuration.
+/// Pattern: `event:{id}:form:config`
+pub fn form_config_key(event_id: &str) -> String {
+    format!("event:{event_id}:form:config")
+}
+
 // ---------------------------------------------------------------------------
 // Slug helpers
 // ---------------------------------------------------------------------------

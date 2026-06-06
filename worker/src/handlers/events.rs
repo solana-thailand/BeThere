@@ -1265,3 +1265,85 @@ async fn audit_d1_only(
         tracing::warn!(event_id, error = %e, "D1-only audit write failed");
     }
 }
+
+// ---------------------------------------------------------------------------
+// Registration form config (Issue #049)
+// ---------------------------------------------------------------------------
+
+/// GET /api/events/{id}/form-config
+///
+/// Returns the registration form configuration for an event.
+/// If no custom config is stored in KV, returns the default config.
+#[worker::send]
+pub async fn get_form_config(
+    State(state): State<AppState>,
+    Extension(_claims): Extension<Claims>,
+    Path(event_id): Path<String>,
+) -> Result<ApiOk<serde_json::Value>, crate::error::WorkerError> {
+    use event_checkin_domain::models::event::RegistrationFormConfig;
+
+    let config = if let Some(kv) = &state.events_kv {
+        crate::event_store::get_form_config(kv, &event_id)
+            .await
+            .map_err(AppError::Internal)?
+    } else {
+        None
+    };
+
+    let form_config = config.unwrap_or_else(RegistrationFormConfig::default_config);
+    let value = serde_json::to_value(&form_config)
+        .map_err(|e| AppError::Internal(format!("failed to serialize form config: {e}")))?;
+
+    Ok(ApiOk::new(value))
+}
+
+/// PUT /api/events/{id}/form-config
+///
+/// Saves the registration form configuration for an event.
+#[worker::send]
+pub async fn put_form_config(
+    State(state): State<AppState>,
+    Extension(_claims): Extension<Claims>,
+    Path(event_id): Path<String>,
+    Json(body): Json<event_checkin_domain::models::event::RegistrationFormConfig>,
+) -> Result<ApiOk<serde_json::Value>, crate::error::WorkerError> {
+    let kv = state
+        .events_kv
+        .as_ref()
+        .ok_or_else(|| AppError::Internal("KV namespace not available".into()))?;
+
+    // Validate that all profile_field keys map to known developer_profiles columns
+    let valid_profile_keys = [
+        "experience_level",
+        "tech_stack",
+        "interests",
+        "github_handle",
+        "discord_handle",
+        "twitter_handle",
+        "primary_role",
+        "learning_goals",
+        "company_org",
+        "location_city",
+    ];
+    for field in &body.fields {
+        if field.profile_field && !valid_profile_keys.contains(&field.key.as_str()) {
+            return Err(AppError::Validation(format!(
+                "unknown profile field key: '{}' — valid keys: {}",
+                field.key,
+                valid_profile_keys.join(", ")
+            ))
+            .into());
+        }
+    }
+
+    crate::event_store::save_form_config(kv, &event_id, &body)
+        .await
+        .map_err(AppError::Internal)?;
+
+    tracing::info!(event_id = %event_id, "form config updated");
+
+    let value = serde_json::to_value(&body)
+        .map_err(|e| AppError::Internal(format!("failed to serialize form config: {e}")))?;
+
+    Ok(ApiOk::new(value))
+}

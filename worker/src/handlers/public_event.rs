@@ -197,6 +197,7 @@ pub async fn get_public_event(
         "online_open_mode": config.online_open_mode.as_str(),
         "visibility": config.visibility.as_str(),
         "escrow_status": config.escrow_status.as_str(),
+        "dev_profile_enabled": config.dev_profile_enabled,
     })))
 }
 

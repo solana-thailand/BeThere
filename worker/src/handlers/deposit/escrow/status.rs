@@ -242,6 +242,7 @@ pub async fn confirm_escrow_init_handler(
             online_registration_open: None,
             deposit_deadline_hours: None,
             visibility: None,
+            dev_profile_enabled: None,
         };
 
         event_store::update_event(kv, d1, &event.id, &update_req, &claims.email)
