@@ -81,6 +81,9 @@ pub enum AuditAction {
     AttendeeDeleted,
     ForceDeleteUsed,
 
+    // Privacy (PDPA)
+    DataDeletionRequested,
+
     // On-chain indexing
     OnChainEventIndexed,
 }

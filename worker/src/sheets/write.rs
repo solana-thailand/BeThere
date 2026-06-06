@@ -968,3 +968,63 @@ pub async fn write_refund_link(
 
     Ok(())
 }
+
+/// Clear PII cells for specific ranges in the attendee sheet (PDPA data erasure).
+/// Uses the batch clear API to wipe values in multiple ranges without affecting formatting.
+pub async fn clear_sheet_cells_batch(
+    state: &AppState,
+    sheet_id: &str,
+    sheet_name: &str,
+    ranges: &[String],
+    kv: Option<&KvStore>,
+) -> Result<(), String> {
+    if ranges.is_empty() {
+        return Ok(());
+    }
+
+    let access_token = get_cached_access_token(state, kv).await?;
+
+    // Build full A1-notation ranges (prepend sheet name)
+    let full_ranges: Vec<String> = ranges.iter().map(|r| format!("{sheet_name}!{r}")).collect();
+
+    // Use batchClear to wipe values in multiple ranges
+    // POST /v4/spreadsheets/{id}/values:batchClear
+    let url = format!("https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values:batchClear");
+
+    let body = serde_json::json!({
+        "ranges": full_ranges
+    });
+
+    let headers = worker::Headers::new();
+    headers
+        .set("Authorization", &format!("Bearer {access_token}"))
+        .map_err(|e| format!("failed to set auth header: {e:?}"))?;
+    headers
+        .set("Content-Type", "application/json")
+        .map_err(|e| format!("failed to set content-type: {e:?}"))?;
+
+    let json_body = serde_json::to_string(&body)
+        .map_err(|e| format!("failed to serialize batch clear: {e}"))?;
+
+    let mut init = worker::RequestInit::new();
+    init.with_method(worker::Method::Post)
+        .with_headers(headers)
+        .with_body(Some(wasm_bindgen::JsValue::from_str(&json_body)));
+
+    let request = worker::Request::new_with_init(&url, &init)
+        .map_err(|e| format!("failed to create batch clear request: {e:?}"))?;
+
+    let mut response = worker::Fetch::Request(request)
+        .send()
+        .await
+        .map_err(|e| format!("failed to send batch clear request: {e:?}"))?;
+
+    let status = response.status_code();
+    if !(200..300).contains(&status) {
+        let body = response.text().await.unwrap_or_default();
+        return Err(format!("sheet batch clear failed (HTTP {status}): {body}"));
+    }
+
+    tracing::info!(ranges = ?full_ranges, "cleared PII cells in sheet");
+    Ok(())
+}

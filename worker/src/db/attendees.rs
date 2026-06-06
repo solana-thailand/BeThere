@@ -944,3 +944,63 @@ pub(crate) async fn delete_attendee(
         .map_err(|e| format!("D1 delete_attendee run: {e:?}"))?;
     Ok(())
 }
+
+/// Minimal struct for PDPA deletion — attendee with event_id (not in domain Attendee).
+pub(crate) struct AttendeeWithEmail {
+    pub attendee: Attendee,
+    pub event_id: String,
+}
+
+/// Find all attendees across all events matching an email.
+/// Used for PDPA data deletion requests (find all data for a user).
+pub(crate) async fn get_attendees_by_email(
+    db: &D1Database,
+    email: &str,
+) -> Result<Vec<AttendeeWithEmail>, String> {
+    let sql = format!(
+        "SELECT id, event_id, email, name, approval_status, participation_type, \
+         checked_in_at, checked_in_by, claim_token, claimed_at, claim_asset_id, \
+         claim_signature, qr_url, contact_channel, contact_handle, \
+         deposit_status, deposit_amount_usdc, deposit_tx_hash, \
+         refund_tx_hash, refund_link, bank_name, bank_account_number, \
+         bank_account_name, sheet_row_index \
+         FROM attendees WHERE LOWER(email) = '{email}'"
+    );
+    let stmt = db.prepare(&sql);
+    let results = stmt
+        .run()
+        .await
+        .map_err(|e| format!("D1 get_attendees_by_email: {e:?}"))?;
+    let rows: Vec<D1AttendeeRow> = results
+        .results()
+        .map_err(|e| format!("D1 get_attendees_by_email deserialize: {e:?}"))?;
+    Ok(rows
+        .iter()
+        .map(|r| AttendeeWithEmail {
+            event_id: r.event_id.clone(),
+            attendee: r.to_attendee(),
+        })
+        .collect())
+}
+
+/// Clear PII columns for an attendee row (PDPA right to erasure).
+/// Keeps the row but blanks: name, email, contact_channel, contact_handle,
+/// checked_in_by, deposit_verified_by, refund_marked_by, refund_link,
+/// bank_name, bank_account_number, bank_account_name, claim_token, qr_url.
+pub(crate) async fn clear_attendee_pii(db: &D1Database, attendee_id: &str) -> Result<(), String> {
+    let sql = format!(
+        "UPDATE attendees SET \
+         name = '[DELETED]', email = '[DELETED]:' || id, \
+         contact_channel = NULL, contact_handle = NULL, \
+         checked_in_by = NULL, \
+         claim_token = NULL, qr_url = NULL, \
+         bank_name = NULL, bank_account_number = NULL, bank_account_name = NULL, \
+         refund_link = NULL, \
+         updated_at = datetime('now') \
+         WHERE id = '{attendee_id}'"
+    );
+    db.exec(&sql)
+        .await
+        .map_err(|e| format!("D1 clear_attendee_pii: {e:?}"))?;
+    Ok(())
+}

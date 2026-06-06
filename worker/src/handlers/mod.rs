@@ -11,6 +11,7 @@ pub mod ext;
 pub mod health;
 pub mod metadata;
 pub mod orgs;
+pub mod privacy;
 pub mod public_event;
 pub mod qr;
 pub mod quiz;
@@ -159,6 +160,8 @@ pub fn routes(state: AppState) -> Router<()> {
             "/storage/refunds/{event_id}/{attendee_id}",
             get(crate::storage::serve_refund),
         )
+        // PDPA data deletion — self-service (attendee-authed — email from JWT)
+        .route("/privacy/delete-request", post(privacy::delete_request))
         .layer(middleware::from_fn_with_state(
             state.clone(),
             crate::auth::require_identity,
