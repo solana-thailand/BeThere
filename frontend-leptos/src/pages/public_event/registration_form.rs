@@ -122,7 +122,6 @@ pub fn registration_form(
                 }
                 RegState::Idle => {
                     let slug = slug_for_reg.clone();
-                    let email_display = locked_email.clone();
                     let email_for_display = locked_email.clone();
                     let email_for_submit = locked_email.clone();
                     view! {
@@ -130,13 +129,6 @@ pub fn registration_form(
                             <h2 class="pe-section-title">
                                 <Icon icon=IconName::Ticket class="icon-md" />" Reserve Your Spot"
                             </h2>
-                            // Signed-in indicator
-                            <div class="pe-signed-in-row">
-                                <span class="pe-checkmark">"✓"</span>
-                                <span class="pe-detail-secondary">
-                                    {format!("Signed in as {email_display}")}
-                                </span>
-                            </div>
                             <div class="pe-flex-col-gap-md">
                                 // Name
                                 <div class="pe-field" id="pe-field-name">
