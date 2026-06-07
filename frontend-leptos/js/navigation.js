@@ -101,6 +101,34 @@ export function shareEvent(title, url) {
 }
 
 /**
+ * Save developer profile fields to localStorage for auto-fill on future events.
+ *
+ * @param {string} json - JSON string of { name, fields: { key: value, ... } }
+ */
+export function saveDevProfile(json) {
+  try {
+    localStorage.setItem("bt_dev_profile", json);
+  } catch (e) {
+    console.error("[navigation] saveDevProfile error:", e);
+  }
+}
+
+/**
+ * Load saved developer profile fields from localStorage.
+ *
+ * @returns {string|null} JSON string or null
+ */
+export function loadDevProfile() {
+  try {
+    var val = localStorage.getItem("bt_dev_profile");
+    return val || null;
+  } catch (e) {
+    console.error("[navigation] loadDevProfile error:", e);
+    return null;
+  }
+}
+
+/**
  * Internal: copy URL to clipboard using Clipboard API with textarea fallback.
  *
  * @param {string} text

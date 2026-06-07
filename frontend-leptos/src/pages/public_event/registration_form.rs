@@ -53,6 +53,28 @@ pub fn registration_form(
     let section_label = Arc::new(resolved_config.section_label.clone());
     let form_fields = Arc::new(resolved_config.fields.clone());
 
+    // Auto-fill from localStorage for returning users
+    if let Some(saved_json) = loadDevProfile() {
+        if let Ok(profile) = serde_json::from_str::<SavedDevProfile>(&saved_json) {
+            if !profile.name.is_empty() && reg_name.get().is_empty() {
+                set_reg_name.set(profile.name.clone());
+            }
+            if !profile.fields.is_empty() {
+                set_dynamic_field_values.update(|vals| {
+                    for (k, v) in &profile.fields {
+                        if !v.is_empty() && !vals.contains_key(k) {
+                            vals.insert(k.clone(), v.clone());
+                        }
+                    }
+                });
+            }
+            log::info!(
+                "[registration_form] pre-filled {} fields from saved dev profile",
+                profile.fields.len()
+            );
+        }
+    }
+
     view! {
         {move || {
             let current_reg = reg_state.get();
@@ -69,6 +91,15 @@ pub fn registration_form(
                     let slug_for_ls = slug_for_reg.clone();
 
                     saveProgress(&attendee_id, &eid, &slug_for_ls);
+
+                    // Save profile for auto-fill on future events
+                    let saved = SavedDevProfile {
+                        name: data.name.clone(),
+                        fields: dynamic_field_values.get(),
+                    };
+                    if let Ok(json) = serde_json::to_string(&saved) {
+                        saveDevProfile(&json);
+                    }
 
                     let redirect_url = next_url.clone();
                     leptos::task::spawn_local(async move {
