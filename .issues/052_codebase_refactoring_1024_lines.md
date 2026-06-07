@@ -40,7 +40,7 @@
 
 1. ✅ `event_do.rs` — cleanest boundaries, already grouped by impl blocks
 2. ✅ `sheets/write.rs` — independent functions, no shared state
-3. Backend handlers (events.rs, thb/handlers.rs)
+3. ✅ `events.rs` (1349→8 files) + `thb/handlers.rs` (1485→5 files + mod.rs)
 4. Backend write.rs (event_store)
 5. Frontend landing.rs, quiz_editor.rs (medium difficulty)
 6. Frontend scanner.rs, claim.rs, event_form.rs, admin.rs (hard — Leptos view! macros)
@@ -55,8 +55,8 @@
 
 ## Status
 
-- [ ] Phase 1: Easy backend splits (event_do, sheets/write)
-- [ ] Phase 2: Medium backend splits (events, thb/handlers)
+- [x] Phase 1: Easy backend splits (event_do, sheets/write)
+- [x] Phase 2: Medium backend splits (events→8 files, thb/handlers→5 files)
 - [ ] Phase 3: Frontend splits (landing, quiz_editor)
 - [ ] Phase 4: Hard backend (register, event_store/write)
 - [ ] Phase 5: Hard frontend (scanner, claim, event_form, admin)

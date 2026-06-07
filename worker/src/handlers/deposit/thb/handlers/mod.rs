@@ -1,0 +1,114 @@
+mod hold_credit;
+mod refund;
+mod slip_list;
+mod slip_upload;
+mod slip_verify;
+
+pub use hold_credit::{credit_balance_handler, hold_deposit_handler};
+pub use refund::{batch_thb_refund_handler, mark_manual_refund_handler, mark_refund_handler};
+pub use slip_list::{pending_thb_slips_handler, refund_queue_handler, refunded_list_handler};
+pub use slip_upload::upload_thb_slip_handler;
+pub use slip_verify::verify_thb_slip_handler;
+
+// ---------------------------------------------------------------------------
+// Shared helpers
+// ---------------------------------------------------------------------------
+
+/// Resolve attendee display names from Google Sheets for a list of deposits.
+/// Returns a map of `attendee_id → display_name`.
+/// Silently skips attendees not found — the frontend falls back to showing the raw ID.
+pub(crate) async fn resolve_attendee_names(
+    state: &crate::state::AppState,
+    sheet_id: &str,
+    sheet_name: &str,
+    deposits: &[event_checkin_domain::models::deposit::ThbDeposit],
+) -> std::collections::HashMap<String, String> {
+    use crate::handlers::ext::resolve_kv;
+    use crate::sheets;
+
+    if deposits.is_empty() {
+        return std::collections::HashMap::new();
+    }
+
+    let kv = resolve_kv(state);
+    match sheets::get_attendees_map(state, sheet_id, sheet_name, kv).await {
+        Ok(map) => deposits
+            .iter()
+            .filter_map(|d| {
+                map.get(&d.attendee_id)
+                    .map(|a| (d.attendee_id.clone(), a.display_name().to_string()))
+            })
+            .collect(),
+        Err(e) => {
+            tracing::warn!(error = %e, "failed to resolve attendee names for deposits");
+            std::collections::HashMap::new()
+        }
+    }
+}
+
+/// Upload a data URL to R2 if available. Returns the R2 key on success,
+/// or the original URL if R2 is not available or it's not a data URL.
+pub(super) async fn maybe_upload_to_r2(
+    state: &crate::state::AppState,
+    event_id: &str,
+    attendee_id: &str,
+    url: &str,
+    prefix: &str,
+) -> String {
+    // Only process data URLs
+    if !url.starts_with("data:") {
+        return url.to_string();
+    }
+
+    let Some(bucket) = state.r2.as_ref() else {
+        tracing::debug!("R2 bucket not available, storing slip URL as-is");
+        return url.to_string();
+    };
+
+    // Parse data URL: data:<mime>;base64,<data>
+    let rest = url.strip_prefix("data:").unwrap_or("");
+    let Some((header, data)) = rest.split_once(',') else {
+        return url.to_string();
+    };
+
+    // Decode base64
+    use base64::Engine;
+    let bytes = match base64::engine::general_purpose::STANDARD.decode(data.trim()) {
+        Ok(b) => b,
+        Err(e) => {
+            tracing::warn!(error = %e, "failed to decode base64 data URL, storing as-is");
+            return url.to_string();
+        }
+    };
+
+    // Determine extension from MIME type
+    let mime = header.split(';').next().unwrap_or("image/jpeg");
+    let ext = match mime {
+        "image/png" => "png",
+        "image/webp" => "webp",
+        _ => "jpg",
+    };
+
+    // Upload to R2
+    let key = format!("{prefix}{event_id}/{attendee_id}.{ext}");
+    match crate::storage::put_bytes(bucket, &key, bytes, mime).await {
+        Ok(_) => {
+            tracing::info!(key = %key, "uploaded slip image to R2");
+            // Return the serving URL path — route format depends on prefix
+            match prefix {
+                crate::storage::PREFIX_SLIPS => {
+                    // /api/storage/slips/{event_id}/{attendee_id} (ext stripped for route)
+                    format!("/api/storage/slips/{event_id}/{attendee_id}")
+                }
+                crate::storage::PREFIX_REFUNDS => {
+                    format!("/api/storage/refunds/{event_id}/{attendee_id}")
+                }
+                _ => format!("/api/storage/{key}"),
+            }
+        }
+        Err(e) => {
+            tracing::warn!(key = %key, error = %e, "R2 upload failed, storing data URL as-is");
+            url.to_string()
+        }
+    }
+}
