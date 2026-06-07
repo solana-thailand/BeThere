@@ -423,7 +423,6 @@ fn render_loaded_event(
 
     let show_reg_form = !event_completed.get();
     let require_contact = data.require_contact_info;
-    let require_photo_consent = data.require_photo_consent;
     let dev_profile_enabled = data.dev_profile_enabled;
 
     // Dynamic form config (Issue #049 Phase 2)
@@ -623,7 +622,6 @@ fn render_loaded_event(
                                         email_val,
                                         is_hybrid,
                                         require_contact,
-                                        require_photo_consent,
                                         has_deposit,
                                         deposit_label.clone(),
                                         in_person_available,
@@ -652,7 +650,6 @@ fn render_loaded_event(
                                         email_val,
                                         is_hybrid,
                                         require_contact,
-                                        require_photo_consent,
                                         has_deposit,
                                         deposit_label.clone(),
                                         in_person_available,

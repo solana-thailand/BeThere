@@ -9,7 +9,6 @@ pub fn registration_form(
     locked_email: String,
     is_hybrid: bool,
     require_contact: bool,
-    require_photo_consent: bool,
     has_deposit: bool,
     deposit_label: String,
     in_person_available: bool,
@@ -289,105 +288,48 @@ pub fn registration_form(
                                     }
                                 }}
 
-                                // Consolidated: PDPA + Deposit Agreement
+                                // Single unified consent checkbox
                                 {move || {
                                     let is_online_track = is_hybrid && reg_participation.get().to_lowercase().contains("online");
                                     let show_deposit = has_deposit && !is_online_track;
-                                    if show_deposit {
-                                        let dep_label = dep_label.clone();
-                                        view! {
-                                            <div id="pe-field-consent">
-                                                <label class="pe-checkbox-label">
-                                                    <input
-                                                        type="checkbox"
-                                                        class="pe-checkbox"
-                                                        checked=move || reg_consent_given.get()
-                                                        on:change=move |ev| {
-                                                            let checked = event_target_checked(&ev);
-                                                            set_reg_consent_given.set(checked);
-                                                            set_reg_deposit_agreed.set(checked);
-                                                            set_field_errors.update(|e| {
-                                                                e.consent_given = None;
-                                                                e.deposit_agreed = None;
-                                                            });
-                                                        }
-                                                    />
-                                                    <span>{format!("I agree to the <a href=\"/privacy\" target=\"_blank\" class=\"pe-ext-link\">Privacy Policy</a> and authorize the {} commitment deposit (refunded upon check-in).", dep_label)}</span>
-                                                </label>
-                                                {move || match (&field_errors.get().consent_given, &field_errors.get().deposit_agreed) {
-                                                    (Some(err), _) | (_, Some(err)) => view! { <span class="pe-field-error pe-field-error-indent">{err.clone()}</span> }.into_any(),
-                                                    _ => view! { <div></div> }.into_any(),
-                                                }}
-                                            </div>
-                                        }.into_any()
-                                    } else {
-                                        view! {
-                                            <div id="pe-field-consent">
-                                                <label class="pe-checkbox-label">
-                                                    <input
-                                                        type="checkbox"
-                                                        class="pe-checkbox"
-                                                        checked=move || reg_consent_given.get()
-                                                        on:change=move |ev| {
-                                                            set_reg_consent_given.set(event_target_checked(&ev));
-                                                            set_field_errors.update(|e| e.consent_given = None);
-                                                        }
-                                                    />
-                                                    <span>"I consent to BeThere collecting my data for registration, check-in, and NFT issuance. "<a href="/privacy" target="_blank" class="pe-ext-link">"Privacy Policy"</a></span>
-                                                </label>
-                                                {move || match &field_errors.get().consent_given {
-                                                    Some(err) => view! { <span class="pe-field-error pe-field-error-indent">{err.clone()}</span> }.into_any(),
-                                                    None => view! { <div></div> }.into_any(),
-                                                }}
-                                            </div>
-                                        }.into_any()
-                                    }
-                                }}
-                                // Photo Consent (optional, muted styling)
-                                {move || {
-                                    if require_photo_consent {
-                                        view! {
-                                            <div id="pe-field-photo-consent">
-                                                <label class="pe-checkbox-label pe-checkbox-optional">
-                                                    <input
-                                                        type="checkbox"
-                                                        class="pe-checkbox"
-                                                        checked=move || reg_photo_consent_given.get()
-                                                        on:change=move |ev| {
-                                                            set_reg_photo_consent_given.set(event_target_checked(&ev));
-                                                            set_field_errors.update(|e| e.photo_consent_given = None);
-                                                        }
-                                                    />
-                                                    <span>"(Optional) I consent to being photographed/filmed during the event for promotion on social media and marketing."</span>
-                                                </label>
-                                                {move || match &field_errors.get().photo_consent_given {
-                                                    Some(err) => view! { <span class="pe-field-error pe-field-error-indent">{err.clone()}</span> }.into_any(),
-                                                    None => view! { <div></div> }.into_any(),
-                                                }}
-                                            </div>
-                                        }.into_any()
-                                    } else {
-                                        ().into_any()
-                                    }
-                                }}
-                                // Marketing Consent (optional, muted styling)
-                                {
+                                    let dep_label = dep_label.clone();
                                     view! {
-                                        <div id="pe-field-marketing-consent">
-                                            <label class="pe-checkbox-label pe-checkbox-optional">
+                                        <div id="pe-field-consent">
+                                            <label class="pe-checkbox-label">
                                                 <input
                                                     type="checkbox"
                                                     class="pe-checkbox"
-                                                    checked=move || reg_consent_marketing.get()
+                                                    checked=move || reg_consent_given.get()
                                                     on:change=move |ev| {
-                                                        set_reg_consent_marketing.set(event_target_checked(&ev));
+                                                        let checked = event_target_checked(&ev);
+                                                        set_reg_consent_given.set(checked);
+                                                        set_reg_deposit_agreed.set(checked);
+                                                        set_reg_photo_consent_given.set(checked);
+                                                        set_reg_consent_marketing.set(checked);
+                                                        set_field_errors.update(|e| {
+                                                            e.consent_given = None;
+                                                            e.deposit_agreed = None;
+                                                            e.photo_consent_given = None;
+                                                        });
                                                     }
                                                 />
-                                                <span>"(Optional) I'd like to receive updates about future events and opportunities."</span>
+                                                <span>
+                                                    "I agree to the "
+                                                    <a href="/privacy" target="_blank" class="pe-ext-link">"Privacy Policy"</a>
+                                                    {if show_deposit {
+                                                        format!(" and authorize the {} commitment deposit (refunded upon check-in).", dep_label).into_any()
+                                                    } else {
+                                                        " for registration, check-in, and NFT issuance.".into_any()
+                                                    }}
+                                                </span>
                                             </label>
+                                            {move || match (&field_errors.get().consent_given, &field_errors.get().deposit_agreed) {
+                                                (Some(err), _) | (_, Some(err)) => view! { <span class="pe-field-error pe-field-error-indent">{err.clone()}</span> }.into_any(),
+                                                _ => view! { <div></div> }.into_any(),
+                                            }}
                                         </div>
                                     }.into_any()
-                                }
+                                }}
                                 // Submit button
                                 {
                                     let slug = slug.clone();
@@ -416,12 +358,9 @@ pub fn registration_form(
                                                 }
                                                 let consent_val = reg_consent_given.get();
                                                 if !consent_val {
-                                                    errors.consent_given = Some("You must consent to data collection".to_string());
+                                                    errors.consent_given = Some("You must agree to continue".to_string());
                                                 }
                                                 let photo_consent_val = reg_photo_consent_given.get();
-                                                if require_photo_consent && !photo_consent_val {
-                                                    errors.photo_consent_given = Some("You must consent to photo/media capture".to_string());
-                                                }
                                                 let is_online_track = is_hybrid && part_val.to_lowercase().contains("online");
                                                 if has_deposit && !is_online_track && !deposit_val {
                                                     errors.deposit_agreed = Some("You must agree to the deposit".to_string());
@@ -431,7 +370,6 @@ pub fn registration_form(
                                                     || errors.contact_channel.is_some()
                                                     || errors.contact_handle.is_some()
                                                     || errors.consent_given.is_some()
-                                                    || errors.photo_consent_given.is_some()
                                                     || errors.deposit_agreed.is_some();
 
                                                 // Determine scroll target before moving errors
@@ -440,7 +378,6 @@ pub fn registration_form(
                                                     .or(errors.contact_channel.as_ref().map(|_| "pe-field-channel"))
                                                     .or(errors.contact_handle.as_ref().map(|_| "pe-field-handle"))
                                                     .or(errors.consent_given.as_ref().map(|_| "pe-field-consent"))
-                                                    .or(errors.photo_consent_given.as_ref().map(|_| "pe-field-photo-consent"))
                                                     .or(errors.deposit_agreed.as_ref().map(|_| "pe-field-deposit"));
 
                                                 set_field_errors.set(errors);
