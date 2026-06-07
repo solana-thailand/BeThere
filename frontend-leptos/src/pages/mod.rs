@@ -5,6 +5,7 @@ pub mod admin_escrow;
 pub mod adventure;
 pub mod adventure_config;
 pub mod audit_panel;
+pub mod campaigns_page;
 pub mod claim;
 pub mod data_privacy;
 pub mod deposit;

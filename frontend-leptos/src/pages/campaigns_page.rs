@@ -1,0 +1,1036 @@
+//! Campaigns & Series admin page — list, create, edit, detail with events/progress/stats.
+//!
+//! Issue #049 Phase 3: Campaigns admin management.
+
+use leptos::prelude::*;
+
+use crate::api;
+use crate::components::{self, ToastType};
+use crate::icons::{Icon, IconName};
+
+// ===== View State =====
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum CampaignView {
+    List,
+    Create,
+    Edit,
+    Detail,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum DetailTab {
+    Events,
+    Progress,
+    Stats,
+}
+
+// ===== Helper =====
+
+fn status_badge_class(status: &str) -> &'static str {
+    match status {
+        "active" => "badge badge-success",
+        "completed" => "badge badge-info",
+        _ => "badge badge-warning",
+    }
+}
+
+// ===== Page Component =====
+
+#[component]
+pub fn CampaignsPage(
+    #[prop(name = "set_toast")] set_toast: WriteSignal<Option<components::ToastMessage>>,
+    #[prop(name = "active_event_id")] _active_event_id: ReadSignal<Option<String>>,
+) -> impl IntoView {
+    let (current_view, set_current_view) = signal(CampaignView::List);
+    let (detail_tab, set_detail_tab) = signal(DetailTab::Events);
+    let (selected_id, set_selected_id) = signal(None::<String>);
+    let (editing_id, set_editing_id) = signal(None::<String>);
+    let (campaigns, set_campaigns) = signal(Vec::<api::CampaignDetail>::new());
+    let (campaign_detail, set_campaign_detail) =
+        signal(None::<api::CampaignDetailResponse>);
+    let (progress, set_progress) = signal(Vec::<api::DeveloperProgressItem>::new());
+    let (stats, set_stats) = signal(None::<api::CampaignStatsResponse>);
+    let (loading, set_loading) = signal(true);
+    let (saving, set_saving) = signal(false);
+    let (refresh_counter, set_refresh_counter) = signal(0u32);
+    let (form_id, set_form_id) = signal(String::new());
+    let (form_title, set_form_title) = signal(String::new());
+    let (form_description, set_form_description) = signal(String::new());
+    let (form_org_id, set_form_org_id) = signal(String::new());
+    let (form_reward_type, set_form_reward_type) = signal(String::new());
+    let (form_criteria, set_form_criteria) = signal(String::new());
+    let (form_reward_config, set_form_reward_config) = signal(String::new());
+    let (add_event_id, set_add_event_id) = signal(String::new());
+    let (add_seq_order, set_add_seq_order) = signal(0i64);
+    let (add_is_required, set_add_is_required) = signal(true);
+    // Load campaign list
+    Effect::new(move |_| {
+        let _ = refresh_counter.get();
+        set_loading.set(true);
+
+        leptos::task::spawn_local(async move {
+            match api::list_campaigns(None, None).await {
+                Ok(data) => set_campaigns.set(data),
+                Err(e) => {
+                    log::error!("[campaigns-page] failed to load campaigns: {e}");
+                    components::show_toast(
+                        &set_toast,
+                        &format!("Failed to load campaigns: {e}"),
+                        ToastType::Error,
+                    );
+                }
+            }
+            set_loading.set(false);
+        });
+    });
+    // Load detail when selected
+    Effect::new(move |_| {
+        let id = selected_id.get();
+        if id.is_none() {
+            set_campaign_detail.set(None);
+            set_progress.set(Vec::new());
+            set_stats.set(None);
+            return;
+        }
+        let id_val = id.unwrap();
+        let id_for_detail = id_val.clone();
+        let id_for_progress = id_val.clone();
+        let id_for_stats = id_val;
+        leptos::task::spawn_local(async move {
+            match api::get_campaign(&id_for_detail).await {
+                Ok(detail) => set_campaign_detail.set(Some(detail)),
+                Err(e) => {
+                    log::error!("[campaigns-page] failed to load campaign: {e}");
+                    components::show_toast(
+                        &set_toast,
+                        &format!("Failed to load campaign: {e}"),
+                        ToastType::Error,
+                    );
+                }
+            }
+        });
+        // Load progress
+        leptos::task::spawn_local(async move {
+            match api::list_campaign_progress(&id_for_progress).await {
+                Ok(data) => set_progress.set(data),
+                Err(e) => {
+                    log::warn!("[campaigns-page] failed to load progress: {e}");
+                    set_progress.set(Vec::new());
+                }
+            }
+        });
+        // Load stats
+        leptos::task::spawn_local(async move {
+            match api::get_campaign_stats(&id_for_stats).await {
+                Ok(data) => set_stats.set(Some(data)),
+                Err(e) => {
+                    log::warn!("[campaigns-page] failed to load stats: {e}");
+                    set_stats.set(None);
+                }
+            }
+        });
+    });
+
+    let do_reload = move || {
+        set_refresh_counter.update(|n| *n += 1);
+    };
+
+    let reset_form = move || {
+        set_form_id.set(String::new());
+        set_form_title.set(String::new());
+        set_form_description.set(String::new());
+        set_form_org_id.set(String::new());
+        set_form_reward_type.set(String::new());
+        set_form_criteria.set(String::new());
+        set_form_reward_config.set(String::new());
+    };
+
+    let populate_form = move |c: &api::CampaignDetail| {
+        set_form_title.set(c.title.clone());
+        set_form_description.set(c.description.clone());
+        set_form_org_id.set(c.organization_id.clone());
+        set_form_reward_type.set(c.reward_type.clone());
+        set_form_criteria.set(c.completion_criteria.clone());
+        set_form_reward_config.set(c.reward_config.clone());
+    };
+
+    // Create new
+    let handle_create_new = move |_: web_sys::MouseEvent| {
+        reset_form();
+        set_editing_id.set(None);
+        set_current_view.set(CampaignView::Create);
+    };
+
+    let handle_edit = {
+        move |c: api::CampaignDetail| {
+            populate_form(&c);
+            set_editing_id.set(Some(c.id.clone()));
+            set_current_view.set(CampaignView::Edit);
+        }
+    };
+    // View detail
+    let handle_view = move |id: String| {
+        set_selected_id.set(Some(id));
+        set_detail_tab.set(DetailTab::Events);
+        set_current_view.set(CampaignView::Detail);
+    };
+
+    let handle_back = move |_: web_sys::MouseEvent| {
+        set_current_view.set(CampaignView::List);
+        set_selected_id.set(None);
+        set_editing_id.set(None);
+        do_reload();
+    };
+    // Save (create or update)
+    let handle_save = move |_: web_sys::MouseEvent| {
+        if saving.get() {
+            return;
+        }
+        let edit_id = editing_id.get();
+        let title = form_title.get();
+        if title.trim().is_empty() {
+            components::show_toast(&set_toast, "Title is required", ToastType::Warning);
+            return;
+        }
+
+        if edit_id.is_none() {
+            let id = form_id.get();
+            if id.trim().is_empty() {
+                components::show_toast(
+                    &set_toast,
+                    "Campaign ID (slug) is required",
+                    ToastType::Warning,
+                );
+                return;
+            }
+        }
+
+        set_saving.set(true);
+
+        match edit_id {
+            Some(eid) => {
+                let req = api::UpdateCampaignRequest {
+                    title,
+                    description: form_description.get(),
+                    completion_criteria: form_criteria.get(),
+                    reward_type: form_reward_type.get(),
+                    reward_config: form_reward_config.get(),
+                };
+                leptos::task::spawn_local(async move {
+                    match api::update_campaign(&eid, &req).await {
+                        Ok(_) => {
+                            components::show_toast(
+                                &set_toast,
+                                "Campaign updated",
+                                ToastType::Success,
+                            );
+                            set_current_view.set(CampaignView::List);
+                            set_editing_id.set(None);
+                            do_reload();
+                        }
+                        Err(e) => {
+                            components::show_toast(
+                                &set_toast,
+                                &format!("Failed to update: {e}"),
+                                ToastType::Error,
+                            );
+                        }
+                    }
+                    set_saving.set(false);
+                });
+            }
+            None => {
+                let req = api::CreateCampaignRequest {
+                    id: form_id.get(),
+                    title,
+                    description: form_description.get(),
+                    organization_id: form_org_id.get(),
+                    completion_criteria: form_criteria.get(),
+                    reward_type: form_reward_type.get(),
+                    reward_config: form_reward_config.get(),
+                };
+                leptos::task::spawn_local(async move {
+                    match api::create_campaign(&req).await {
+                        Ok(_) => {
+                            components::show_toast(
+                                &set_toast,
+                                "Campaign created",
+                                ToastType::Success,
+                            );
+                            set_current_view.set(CampaignView::List);
+                            do_reload();
+                        }
+                        Err(e) => {
+                            components::show_toast(
+                                &set_toast,
+                                &format!("Failed to create: {e}"),
+                                ToastType::Error,
+                            );
+                        }
+                    }
+                    set_saving.set(false);
+                });
+            }
+        }
+    };
+
+    let handle_delete = {
+        let set_toast = set_toast;
+        move |id: String, ev: web_sys::MouseEvent| {
+            ev.stop_propagation();
+            let confirmed = web_sys::window()
+                .map(|w| w.confirm_with_message("Delete this campaign?"))
+                .unwrap_or(Ok(false));
+            if confirmed != Ok(true) {
+                return;
+            }
+            let set_toast = set_toast;
+            leptos::task::spawn_local(async move {
+                match api::delete_campaign(&id).await {
+                    Ok(()) => {
+                        components::show_toast(
+                            &set_toast,
+                            "Campaign deleted",
+                            ToastType::Success,
+                        );
+                        do_reload();
+                    }
+                    Err(e) => {
+                        components::show_toast(
+                            &set_toast,
+                            &format!("Failed to delete: {e}"),
+                            ToastType::Error,
+                        );
+                    }
+                }
+            });
+        }
+    };
+
+    let handle_status_change = {
+        let set_toast = set_toast;
+        move |id: String, status: String| {
+            let set_toast = set_toast;
+            leptos::task::spawn_local(async move {
+                match api::update_campaign_status(&id, &status).await {
+                    Ok(_) => {
+                        components::show_toast(
+                            &set_toast,
+                            &format!("Status changed to {status}"),
+                            ToastType::Success,
+                        );
+                        do_reload();
+                    }
+                    Err(e) => {
+                        components::show_toast(
+                            &set_toast,
+                            &format!("Failed to change status: {e}"),
+                            ToastType::Error,
+                        );
+                    }
+                }
+            });
+        }
+    };
+
+    let handle_add_event = {
+        let set_toast = set_toast;
+        move |_: web_sys::MouseEvent| {
+            let id = selected_id.get().unwrap_or_default();
+            let new_event_id = add_event_id.get();
+            if new_event_id.trim().is_empty() {
+                components::show_toast(
+                    &set_toast,
+                    "Event ID is required",
+                    ToastType::Warning,
+                );
+                return;
+            }
+
+            let detail = campaign_detail.get();
+            let mut events: Vec<api::CampaignEventInput> = detail
+                .as_ref()
+                .map(|d| {
+                    d.events
+                        .iter()
+                        .map(|e| api::CampaignEventInput {
+                            event_id: e.event_id.clone(),
+                            sequence_order: e.sequence_order,
+                            is_required: e.is_required,
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+
+            events.push(api::CampaignEventInput {
+                event_id: new_event_id,
+                sequence_order: add_seq_order.get(),
+                is_required: add_is_required.get(),
+            });
+
+            let set_toast = set_toast;
+            leptos::task::spawn_local(async move {
+                match api::set_campaign_events(&id, events).await {
+                    Ok(()) => {
+                        components::show_toast(
+                            &set_toast,
+                            "Event added",
+                            ToastType::Success,
+                        );
+                        set_add_event_id.set(String::new());
+                        set_add_seq_order.set(0);
+                        set_add_is_required.set(true);
+                        // Reload detail
+                        match api::get_campaign(&id).await {
+                            Ok(d) => set_campaign_detail.set(Some(d)),
+                            Err(_) => {}
+                        }
+                    }
+                    Err(e) => {
+                        components::show_toast(
+                            &set_toast,
+                            &format!("Failed to add event: {e}"),
+                            ToastType::Error,
+                        );
+                    }
+                }
+            });
+        }
+    };
+
+    let handle_remove_event = {
+        let set_toast = set_toast;
+        move |event_id: String| {
+            let id = selected_id.get().unwrap_or_default();
+            let detail = campaign_detail.get();
+            let events: Vec<api::CampaignEventInput> = detail
+                .as_ref()
+                .map(|d| {
+                    d.events
+                        .iter()
+                        .filter(|e| e.event_id != event_id)
+                        .map(|e| api::CampaignEventInput {
+                            event_id: e.event_id.clone(),
+                            sequence_order: e.sequence_order,
+                            is_required: e.is_required,
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+
+            let set_toast = set_toast;
+            leptos::task::spawn_local(async move {
+                match api::set_campaign_events(&id, events).await {
+                    Ok(()) => {
+                        components::show_toast(
+                            &set_toast,
+                            "Event removed",
+                            ToastType::Success,
+                        );
+                        match api::get_campaign(&id).await {
+                            Ok(d) => set_campaign_detail.set(Some(d)),
+                            Err(_) => {}
+                        }
+                    }
+                    Err(e) => {
+                        components::show_toast(
+                            &set_toast,
+                            &format!("Failed to remove event: {e}"),
+                            ToastType::Error,
+                        );
+                    }
+                }
+            });
+        }
+    };
+
+    view! {
+        <div class="admin-campaigns-page">
+            // === LIST VIEW ===
+            <Show when=move || current_view.get() == CampaignView::List fallback=|| view! { <div></div> }>
+                <div class="events-header-row">
+                    <h2 class="admin-section-heading">
+                        <Icon icon=IconName::Trophy class="icon-heading" />
+                        " Campaigns & Series"
+                    </h2>
+                    <div class="events-header-actions">
+                        <button class="btn btn-primary btn-sm" on:click=handle_create_new>
+                            "+ Create Campaign"
+                        </button>
+                    </div>
+                </div>
+                <Show when=move || loading.get() fallback=|| view! { <div></div> }>
+                    <div class="empty-state">
+                        <span class="status-dot status-dot-loading"></span>
+                        " Loading campaigns..."
+                    </div>
+                </Show>
+                <Show when=move || !loading.get() && campaigns.get().is_empty() fallback=|| view! { <div></div> }>
+                    <div class="empty-state">
+                        <Icon icon=IconName::Trophy class="icon-lg" />
+                        <p>"No campaigns yet. Create your first campaign."</p>
+                    </div>
+                </Show>
+                <Show when=move || !loading.get() && !campaigns.get().is_empty() fallback=|| view! { <div></div> }>
+                    <div class="campaigns-list">
+                        <For
+                            each=move || campaigns.get()
+                            key=|c| c.id.clone()
+                            children=move |c: api::CampaignDetail| {
+                                let cid = c.id.clone();
+                                let cid_view = cid.clone();
+                                let cid_edit = cid.clone();
+                                let cid_del = cid.clone();
+                                let c_edit = c.clone();
+                                let status = c.status.clone();
+                                let status2 = status.clone();
+                                let status3 = status.clone();
+                                let id_for_status = cid.clone();
+
+                                let status_class = status_badge_class(&status);
+                                let status_label = status.clone();
+
+                                view! {
+                                    <div class="card">
+                                        <div class="card-header">
+                                            <div class="card-header-left">
+                                                <span class=status_class>
+                                                    {move || {
+                                                        match status_label.as_str() {
+                                                            "active" => "Active",
+                                                            "completed" => "Completed",
+                                                            _ => "Draft",
+                                                        }
+                                                    }}
+                                                </span>
+                                                <h3>{c.title.clone()}</h3>
+                                            </div>
+                                            <div class="card-header-actions">
+                                                <button
+                                                    class="btn btn-secondary btn-sm"
+                                                    on:click=move |_: web_sys::MouseEvent| handle_view(cid_view.clone())
+                                                >
+                                                    "View"
+                                                </button>
+                                                <button
+                                                    class="btn btn-secondary btn-sm"
+                                                    on:click={
+                                                        let c_edit = c_edit.clone();
+                                                        move |_: web_sys::MouseEvent| handle_edit(c_edit.clone())
+                                                    }
+                                                >
+                                                    "Edit"
+                                                </button>
+                                                <Show when=move || status2 != "active" fallback=|| view! { <div></div> }>
+                                                    <button
+                                                        class="btn btn-sm"
+                                                        on:click={
+                                                            let id_for_status = id_for_status.clone();
+                                                            move |_: web_sys::MouseEvent| {
+                                                                handle_status_change(id_for_status.clone(), "active".to_string());
+                                                            }
+                                                        }
+                                                    >
+                                                        "Activate"
+                                                    </button>
+                                                </Show>
+                                                <Show when=move || status3 == "active" fallback=|| view! { <div></div> }>
+                                                    <button
+                                                        class="btn btn-sm"
+                                                        on:click={
+                                                            let cid_edit = cid_edit.clone();
+                                                            move |_: web_sys::MouseEvent| {
+                                                                handle_status_change(cid_edit.clone(), "completed".to_string());
+                                                            }
+                                                        }
+                                                    >
+                                                        "Complete"
+                                                    </button>
+                                                </Show>
+                                                <button
+                                                    class="btn btn-danger btn-sm"
+                                                    on:click=move |ev: web_sys::MouseEvent| {
+                                                        handle_delete(cid_del.clone(), ev);
+                                                    }
+                                                >
+                                                    "Delete"
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div class="card-body">
+                                            <p>{c.description.clone()}</p>
+                                            <div class="card-meta">
+                                                <span class="meta-item">
+                                                    <Icon icon=IconName::Gift class="icon-sm" />
+                                                    " " {c.reward_type.clone()}
+                                                </span>
+                                                <span class="meta-item">
+                                                    <Icon icon=IconName::Calendar class="icon-sm" />
+                                                    " " {c.created_at.clone()}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                }
+                            }
+                        />
+                    </div>
+                </Show>
+            </Show>
+            // === CREATE / EDIT VIEW ===
+            <Show
+                when=move || current_view.get() == CampaignView::Create
+                    || current_view.get() == CampaignView::Edit
+                fallback=|| view! { <div></div> }
+            >
+                <div class="events-header-row">
+                    <h2 class="admin-section-heading">
+                        {move || {
+                            if editing_id.get().is_some() {
+                                "Edit Campaign"
+                            } else {
+                                "Create Campaign"
+                            }
+                        }}
+                    </h2>
+                    <button class="btn btn-secondary btn-sm" on:click=handle_back>
+                        "← Back"
+                    </button>
+                </div>
+
+                <div class="card">
+                    <div class="card-body">
+                        <div class="form-group">
+                            <label class="form-label">"Campaign ID (slug)"</label>
+                            <input
+                                class="form-input"
+                                type="text"
+                                placeholder="e.g. solana-hacker-series-2025"
+                                disabled=move || editing_id.get().is_some()
+                                prop:value=move || form_id.get()
+                                on:input=move |ev| set_form_id.set(event_target_value(&ev))
+                            />
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">"Title"</label>
+                            <input
+                                class="form-input"
+                                type="text"
+                                placeholder="Campaign title"
+                                prop:value=move || form_title.get()
+                                on:input=move |ev| set_form_title.set(event_target_value(&ev))
+                            />
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">"Description"</label>
+                            <textarea
+                                class="form-input"
+                                rows="3"
+                                placeholder="Campaign description"
+                                prop:value=move || form_description.get()
+                                on:input=move |ev| set_form_description.set(event_target_value(&ev))
+                            />
+                        </div>
+                        <Show when=move || editing_id.get().is_none() fallback=|| view! { <div></div> }>
+                            <div class="form-group">
+                                <label class="form-label">"Organization ID"</label>
+                                <input
+                                    class="form-input"
+                                    type="text"
+                                    placeholder="Organization ID"
+                                    prop:value=move || form_org_id.get()
+                                    on:input=move |ev| set_form_org_id.set(event_target_value(&ev))
+                                />
+                            </div>
+                        </Show>
+                        <div class="form-group">
+                            <label class="form-label">"Reward Type"</label>
+                            <select
+                                class="form-select"
+                                prop:value=move || form_reward_type.get()
+                                on:change=move |ev| set_form_reward_type.set(event_target_value(&ev))
+                            >
+                                <option value="none">"None"</option>
+                                <option value="nft_certificate">"NFT Certificate"</option>
+                                <option value="badge">"Badge"</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">"Completion Criteria (JSON)"</label>
+                            <textarea
+                                class="form-input"
+                                rows="3"
+                                placeholder=r#"{"type": "all_events"}"#
+                                prop:value=move || form_criteria.get()
+                                on:input=move |ev| set_form_criteria.set(event_target_value(&ev))
+                            />
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">"Reward Config (JSON)"</label>
+                            <textarea
+                                class="form-input"
+                                rows="3"
+                                placeholder=r#"{"nft_name": "Completion Badge"}"#
+                                prop:value=move || form_reward_config.get()
+                                on:input=move |ev| set_form_reward_config.set(event_target_value(&ev))
+                            />
+                        </div>
+                        <div class="form-actions">
+                            <button
+                                class="btn btn-primary"
+                                disabled=move || saving.get()
+                                on:click=handle_save
+                            >
+                                {move || if saving.get() { "Saving..." } else { "Save Campaign" }}
+                            </button>
+                            <button class="btn btn-secondary" on:click=handle_back>
+                                "Cancel"
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </Show>
+            // === DETAIL VIEW ===
+            <Show when=move || current_view.get() == CampaignView::Detail fallback=|| view! { <div></div> }>
+                <div class="events-header-row">
+                    <h2 class="admin-section-heading">
+                        {move || campaign_detail.get().map(|d| d.campaign.title.clone()).unwrap_or_default()}
+                    </h2>
+                    <button class="btn btn-secondary btn-sm" on:click=handle_back>
+                        "← Back"
+                    </button>
+                </div>
+                // Campaign info header
+                <div class="card">
+                    <div class="card-body">
+                        {move || {
+                            let detail = campaign_detail.get();
+                            detail.map(|d| {
+                                let c = &d.campaign;
+                                view! {
+                                    <div class="campaign-detail-info">
+                                        <div class="campaign-detail-row">
+                                            <strong>"ID:"</strong> <span>{c.id.clone()}</span>
+                                        </div>
+                                        <div class="campaign-detail-row">
+                                            <strong>"Status:"</strong>
+                                            <span class=status_badge_class(&c.status)>
+                                                {c.status.clone()}
+                                            </span>
+                                        </div>
+                                        <div class="campaign-detail-row">
+                                            <strong>"Description:"</strong>
+                                            <span>{c.description.clone()}</span>
+                                        </div>
+                                        <div class="campaign-detail-row">
+                                            <strong>"Reward Type:"</strong>
+                                            <span>{c.reward_type.clone()}</span>
+                                        </div>
+                                        <div class="campaign-detail-row">
+                                            <strong>"Organization:"</strong>
+                                            <span>{c.organization_id.clone()}</span>
+                                        </div>
+                                    </div>
+                                }
+                            })
+                        }}
+                    </div>
+                </div>
+                // Tabs
+                <div class="tab-bar">
+                    <button
+                        class=move || if detail_tab.get() == DetailTab::Events { "tab active" } else { "tab" }
+                        on:click=move |_| set_detail_tab.set(DetailTab::Events)
+                    >
+                        <Icon icon=IconName::Calendar class="icon-sm" />
+                        " Events"
+                    </button>
+                    <button
+                        class=move || if detail_tab.get() == DetailTab::Progress { "tab active" } else { "tab" }
+                        on:click=move |_| set_detail_tab.set(DetailTab::Progress)
+                    >
+                        <Icon icon=IconName::Target class="icon-sm" />
+                        " Progress"
+                    </button>
+                    <button
+                        class=move || if detail_tab.get() == DetailTab::Stats { "tab active" } else { "tab" }
+                        on:click=move |_| set_detail_tab.set(DetailTab::Stats)
+                    >
+                        <Icon icon=IconName::Chart class="icon-sm" />
+                        " Stats"
+                    </button>
+                </div>
+                // --- Events Tab ---
+                <Show when=move || detail_tab.get() == DetailTab::Events fallback=|| view! { <div></div> }>
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>"Campaign Events"</h3>
+                        </div>
+                        <div class="card-body">
+                            // Add event form
+                            <div class="form-row">
+                                <div class="form-group form-group-sm">
+                                    <input
+                                        class="form-input"
+                                        type="text"
+                                        placeholder="Event ID"
+                                        prop:value=move || add_event_id.get()
+                                        on:input=move |ev| set_add_event_id.set(event_target_value(&ev))
+                                    />
+                                </div>
+                                <div class="form-group form-group-sm">
+                                    <input
+                                        class="form-input"
+                                        type="number"
+                                        placeholder="Order"
+                                        prop:value=move || add_seq_order.get().to_string()
+                                        on:input=move |ev| {
+                                            let v = event_target_value(&ev);
+                                            set_add_seq_order.set(v.parse().unwrap_or(0));
+                                        }
+                                    />
+                                </div>
+                                <div class="form-group form-group-sm">
+                                    <label class="form-label-inline">
+                                        <input
+                                            type="checkbox"
+                                            prop:checked=move || add_is_required.get()
+                                            on:change=move |ev| {
+                                                let checked = event_target_checked(&ev);
+                                                set_add_is_required.set(checked);
+                                            }
+                                        />
+                                        " Required"
+                                    </label>
+                                </div>
+                                <button class="btn btn-primary btn-sm" on:click=handle_add_event>
+                                    "Add Event"
+                                </button>
+                            </div>
+                            // Events table
+                            <table class="table">
+                                <thead>
+                                    <tr class="table-header">
+                                        <th>"#"</th>
+                                        <th>"Event ID"</th>
+                                        <th>"Required"</th>
+                                        <th>"Actions"</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <For
+                                        each=move || {
+                                            campaign_detail
+                                                .get()
+                                                .map(|d| d.events)
+                                                .unwrap_or_default()
+                                        }
+                                        key=|e| (e.event_id.clone(), e.sequence_order)
+                                        children=move |e: api::CampaignEventItem| {
+                                            let eid = e.event_id.clone();
+                                            view! {
+                                                <tr class="table-row">
+                                                    <td>{e.sequence_order}</td>
+                                                    <td>{e.event_id.clone()}</td>
+                                                    <td>
+                                                        {if e.is_required {
+                                                            view! {
+                                                                <span class="badge badge-success">
+                                                                    "Required"
+                                                                </span>
+                                                            }
+                                                        } else {
+                                                            view! {
+                                                                <span class="badge badge-warning">
+                                                                    "Optional"
+                                                                </span>
+                                                            }
+                                                        }}
+                                                    </td>
+                                                    <td>
+                                                        <button
+                                                            class="btn btn-danger btn-sm"
+                                                            on:click=move |_: web_sys::MouseEvent| {
+                                                                handle_remove_event(eid.clone());
+                                                            }
+                                                        >
+                                                            "Remove"
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            }
+                                        }
+                                    />
+                                </tbody>
+                            </table>
+                            <Show
+                                when=move || {
+                                    campaign_detail
+                                        .get()
+                                        .map(|d| d.events.is_empty())
+                                        .unwrap_or(true)
+                                }
+                                fallback=|| view! { <div></div> }
+                            >
+                                <div class="empty-state">
+                                    <p>"No events in this campaign yet."</p>
+                                </div>
+                            </Show>
+                        </div>
+                    </div>
+                </Show>
+                // --- Progress Tab ---
+                <Show when=move || detail_tab.get() == DetailTab::Progress fallback=|| view! { <div></div> }>
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>"Developer Progress"</h3>
+                        </div>
+                        <div class="card-body">
+                            <Show when=move || progress.get().is_empty() fallback=|| view! { <div></div> }>
+                                <div class="empty-state">
+                                    <p>"No developer progress yet."</p>
+                                </div>
+                            </Show>
+                            <Show when=move || !progress.get().is_empty() fallback=|| view! { <div></div> }>
+                                <table class="table">
+                                    <thead>
+                                        <tr class="table-header">
+                                            <th>"Email"</th>
+                                            <th>"Completed"</th>
+                                            <th>"Status"</th>
+                                            <th>"Reward Claimed"</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <For
+                                            each=move || progress.get()
+                                            key=|p| p.developer_email.clone()
+                                            children=move |p: api::DeveloperProgressItem| {
+                                                let is_complete = p.is_complete;
+                                                let reward_claimed = p.reward_claimed_at.is_some();
+                                                view! {
+                                                    <tr class="table-row">
+                                                        <td>{p.developer_email.clone()}</td>
+                                                        <td>
+                                                            {format!(
+                                                                "{}/{}",
+                                                                p.events_completed,
+                                                                p.total_required,
+                                                            )}
+                                                        </td>
+                                                        <td>
+                                                            {if is_complete {
+                                                                view! {
+                                                                    <span class="badge badge-success">
+                                                                        "Complete"
+                                                                    </span>
+                                                                }
+                                                            } else {
+                                                                view! {
+                                                                    <span class="badge badge-warning">
+                                                                        "In Progress"
+                                                                    </span>
+                                                                }
+                                                            }}
+                                                        </td>
+                                                        <td>
+                                                            {if reward_claimed {
+                                                                view! {
+                                                                    <span class="badge badge-info">
+                                                                        "Claimed"
+                                                                    </span>
+                                                                }
+                                                            } else {
+                                                                view! { <span class="">"—"</span> }
+                                                            }}
+                                                        </td>
+                                                    </tr>
+                                                }
+                                            }
+                                        />
+                                    </tbody>
+                                </table>
+                            </Show>
+                        </div>
+                    </div>
+                </Show>
+                // --- Stats Tab ---
+                <Show when=move || detail_tab.get() == DetailTab::Stats fallback=|| view! { <div></div> }>
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>"Campaign Statistics"</h3>
+                        </div>
+                        <div class="card-body">
+                            {move || {
+                                stats.get().map(|s| {
+                                    let rate = s.completion_rate;
+                                    let rate_pct = format!("{:.1}%", rate * 100.0);
+                                    view! {
+                                        <div class="stats-overview">
+                                            <div class="stat-card">
+                                                <div class="stat-value">{s.total_enrolled.to_string()}</div>
+                                                <div class="stat-label">"Enrolled"</div>
+                                            </div>
+                                            <div class="stat-card">
+                                                <div class="stat-value">{s.total_completed.to_string()}</div>
+                                                <div class="stat-label">"Completed"</div>
+                                            </div>
+                                            <div class="stat-card">
+                                                <div class="stat-value">{rate_pct.clone()}</div>
+                                                <div class="stat-label">"Completion Rate"</div>
+                                            </div>
+                                        </div>
+                                        <div class="progress-bar-wrapper">
+                                            <div
+                                                class="progress-bar-fill"
+                                                style=format!("width: {}%", (rate * 100.0).min(100.0))
+                                            ></div>
+                                        </div>
+                                        <h4>"Per-Event Drop-off"</h4>
+                                        <table class="table">
+                                            <thead>
+                                                <tr class="table-header">
+                                                    <th>"#"</th>
+                                                    <th>"Event ID"</th>
+                                                    <th>"Attended"</th>
+                                                    <th>"Total"</th>
+                                                    <th>"Rate"</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <For
+                                                    each=move || s.events.clone()
+                                                    key=|e| (e.event_id.clone(), e.sequence_order)
+                                                    children=move |e: api::EventDropOffItem| {
+                                                        let attended = e.attended;
+                                                        let total = e.total_in_campaign;
+                                                        let pct = if total > 0 {
+                                                            (attended as f64 / total as f64) * 100.0
+                                                        } else {
+                                                            0.0
+                                                        };
+                                                        view! {
+                                                            <tr class="table-row">
+                                                                <td>{e.sequence_order}</td>
+                                                                <td>{e.event_id.clone()}</td>
+                                                                <td>{attended}</td>
+                                                                <td>{total}</td>
+                                                                <td>{format!("{pct:.1}%")}</td>
+                                                            </tr>
+                                                        }
+                                                    }
+                                                />
+                                            </tbody>
+                                        </table>
+                                    }
+                                })
+                            }}
+                        </div>
+                    </div>
+                </Show>
+            </Show>
+
+        </div>
+    }
+}

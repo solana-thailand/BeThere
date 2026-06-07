@@ -61,9 +61,9 @@ Registration Form → registration_responses (raw answers)
 - [x] Profile enrichment: each registration updates developer profile
 
 ### Phase 3: Campaigns & Series
-- [ ] `campaigns` + `campaign_events` tables
-- [ ] `developer_campaign_progress` tracking
-- [ ] Campaign dashboard: completion rates, drop-off points
+- [x] `campaigns` + `campaign_events` tables
+- [x] `developer_campaign_progress` tracking
+- [x] Campaign dashboard: completion rates, drop-off points
 - [ ] Completion certificate NFT for series graduates
 
 ### Phase 4: Organizer Community Dashboard

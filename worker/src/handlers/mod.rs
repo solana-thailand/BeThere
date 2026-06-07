@@ -1,6 +1,7 @@
 pub mod adventure;
 pub mod attendee;
 pub mod auth;
+pub mod campaigns;
 pub mod checkin;
 pub mod claim;
 pub mod community;
@@ -168,6 +169,16 @@ pub fn routes(state: AppState) -> Router<()> {
             "/privacy/unsubscribe-marketing",
             post(privacy::unsubscribe_marketing),
         )
+        // Campaign progress for current user (attendee-authed — my-progress must come before {id} routes)
+        .route(
+            "/campaigns/my-progress",
+            get(campaigns::my_campaign_progress),
+        )
+        // Campaign reward claim (attendee-authed — developer claims NFT certificate)
+        .route(
+            "/campaigns/{id}/claim-reward",
+            post(campaigns::claim_campaign_reward),
+        )
         .layer(middleware::from_fn_with_state(
             state.clone(),
             crate::auth::require_identity,
@@ -310,6 +321,30 @@ pub fn routes(state: AppState) -> Router<()> {
             "/escrow/events/{event_id}",
             get(escrow_index::get_onchain_events_handler),
         )
+        // Campaign management (protected — organizer CRUD)
+        .route(
+            "/campaigns",
+            get(campaigns::list_campaigns).post(campaigns::create_campaign),
+        )
+        .route(
+            "/campaigns/{id}",
+            get(campaigns::get_campaign)
+                .put(campaigns::update_campaign)
+                .delete(campaigns::delete_campaign),
+        )
+        .route(
+            "/campaigns/{id}/status",
+            patch(campaigns::update_campaign_status),
+        )
+        .route(
+            "/campaigns/{id}/events",
+            get(campaigns::list_campaign_events).put(campaigns::set_campaign_events),
+        )
+        .route(
+            "/campaigns/{id}/progress",
+            get(campaigns::list_campaign_progress),
+        )
+        .route("/campaigns/{id}/stats", get(campaigns::campaign_stats))
         .layer(middleware::from_fn_with_state(
             state.clone(),
             crate::auth::require_auth,

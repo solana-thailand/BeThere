@@ -7,6 +7,7 @@
 
 pub(crate) mod fetch;
 mod types;
+mod campaign;
 mod event;
 mod attendee;
 mod deposit;
@@ -16,6 +17,7 @@ mod privacy;
 
 // Re-export everything so existing `use crate::api::*` still works.
 pub use types::*;
+pub use campaign::*;
 pub use event::*;
 pub use attendee::*;
 pub use deposit::*;
