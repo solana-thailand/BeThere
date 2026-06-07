@@ -426,6 +426,9 @@ fn render_loaded_event(
     let require_photo_consent = data.require_photo_consent;
     let dev_profile_enabled = data.dev_profile_enabled;
 
+    // Dynamic form config (Issue #049 Phase 2)
+    let form_config = data.form_config.clone();
+
     let in_person_available = data.in_person_available;
     let online_available = data.online_available;
     let in_person_remaining = data.in_person_remaining;
@@ -444,10 +447,9 @@ fn render_loaded_event(
     let (reg_consent_marketing, set_reg_consent_marketing) = signal(false);
     let (reg_state, set_reg_state) = signal(RegState::Idle);
 
-    // Developer profile signals (Issue #049)
-    let (reg_experience_level, set_reg_experience_level) = signal(String::new());
-    let (reg_tech_stack, set_reg_tech_stack) = signal(Vec::<String>::new());
-    let (reg_interests, set_reg_interests) = signal(Vec::<String>::new());
+    // Dynamic form field values (Issue #049 Phase 2)
+    // Key = field key, Value = serialized value (string for text/select, JSON array for multiselect)
+    let (dynamic_field_values, set_dynamic_field_values) = signal(std::collections::HashMap::<String, String>::new());
 
     let slug_for_signin = current_slug.clone();
     let slug_for_reg = data.slug.clone();
@@ -638,10 +640,9 @@ fn render_loaded_event(
                                         reg_photo_consent_given, set_reg_photo_consent_given,
                                         reg_consent_marketing, set_reg_consent_marketing,
                                         reg_state, set_reg_state,
-                                        reg_experience_level, set_reg_experience_level,
-                                        reg_tech_stack, set_reg_tech_stack,
-                                        reg_interests, set_reg_interests,
                                         dev_profile_enabled,
+                                        form_config.as_ref(),
+                                        dynamic_field_values, set_dynamic_field_values,
                                     )
                                 }
                                 RegistrationLookup::NotRegistered => {
@@ -668,10 +669,9 @@ fn render_loaded_event(
                                         reg_photo_consent_given, set_reg_photo_consent_given,
                                         reg_consent_marketing, set_reg_consent_marketing,
                                         reg_state, set_reg_state,
-                                        reg_experience_level, set_reg_experience_level,
-                                        reg_tech_stack, set_reg_tech_stack,
-                                        reg_interests, set_reg_interests,
                                         dev_profile_enabled,
+                                        form_config.as_ref(),
+                                        dynamic_field_values, set_dynamic_field_values,
                                     )
                                 }
                             }

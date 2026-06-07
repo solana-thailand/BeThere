@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::types::{ApiError, ApiResponse, default_true};
-use super::{api_base, api_get, api_post_json, fetch::response_json};
+use super::{api_base, api_get, api_post_json, api_put_json, fetch::response_json};
 
 // ===== Admin Quiz Types =====
 
@@ -413,6 +413,162 @@ pub async fn put_admin_adventure_config(
 
     // Return the config we sent (backend echoes it back)
     Ok(config.clone())
+}
+
+// ===== Form Config API (Issue #049 Phase 2) =====
+
+/// Form field configuration (mirrors backend `FormFieldConfig`).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct FormFieldConfigAdmin {
+    /// Stable unique ID for Leptos `For` key (not serialized to backend).
+    #[serde(skip)]
+    pub uid: usize,
+    pub key: String,
+    pub label: String,
+    #[serde(rename = "type")]
+    pub field_type: FormFieldTypeAdmin,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub options: Option<Vec<String>>,
+    #[serde(default)]
+    pub required: bool,
+    #[serde(default)]
+    pub profile_field: bool,
+}
+
+/// Supported form field types.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum FormFieldTypeAdmin {
+    Text,
+    Textarea,
+    Select,
+    Multiselect,
+}
+
+impl FormFieldTypeAdmin {
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Text => "Text",
+            Self::Textarea => "Textarea",
+            Self::Select => "Select",
+            Self::Multiselect => "Multi-select",
+        }
+    }
+
+    /// All variants in order.
+    pub fn all() -> &'static [Self] {
+        &[Self::Text, Self::Textarea, Self::Select, Self::Multiselect]
+    }
+}
+
+/// Registration form config (mirrors backend `RegistrationFormConfig`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RegistrationFormConfigAdmin {
+    #[serde(default = "default_section_label")]
+    pub section_label: String,
+    pub fields: Vec<FormFieldConfigAdmin>,
+}
+
+fn default_section_label() -> String {
+    "About You (optional \u{2014} helps us plan better events)".to_string()
+}
+
+impl Default for RegistrationFormConfigAdmin {
+    fn default() -> Self {
+        Self {
+            section_label: default_section_label(),
+            fields: vec![
+                FormFieldConfigAdmin {
+                    uid: 1,
+                    key: "experience_level".to_string(),
+                    label: "Experience level".to_string(),
+                    field_type: FormFieldTypeAdmin::Select,
+                    options: Some(vec![
+                        "Beginner".to_string(),
+                        "Intermediate".to_string(),
+                        "Senior".to_string(),
+                        "Tech Lead".to_string(),
+                    ]),
+                    required: false,
+                    profile_field: true,
+                },
+                FormFieldConfigAdmin {
+                    uid: 2,
+                    key: "tech_stack".to_string(),
+                    label: "Technologies you use".to_string(),
+                    field_type: FormFieldTypeAdmin::Multiselect,
+                    options: Some(vec![
+                        "Rust".to_string(),
+                        "TypeScript".to_string(),
+                        "Python".to_string(),
+                        "Solidity".to_string(),
+                        "Move".to_string(),
+                        "Go".to_string(),
+                        "C++".to_string(),
+                    ]),
+                    required: false,
+                    profile_field: true,
+                },
+                FormFieldConfigAdmin {
+                    uid: 3,
+                    key: "interests".to_string(),
+                    label: "Topics that interest you".to_string(),
+                    field_type: FormFieldTypeAdmin::Multiselect,
+                    options: Some(vec![
+                        "DeFi".to_string(),
+                        "NFT".to_string(),
+                        "ZK Proofs".to_string(),
+                        "Infrastructure".to_string(),
+                        "Gaming".to_string(),
+                        "AI/ML".to_string(),
+                        "Mobile".to_string(),
+                    ]),
+                    required: false,
+                    profile_field: true,
+                },
+            ],
+        }
+    }
+}
+
+/// Valid profile field keys (must match developer_profiles columns).
+pub const VALID_PROFILE_KEYS: &[&str] = &[
+    "experience_level",
+    "tech_stack",
+    "interests",
+    "github_handle",
+    "discord_handle",
+    "twitter_handle",
+    "primary_role",
+    "learning_goals",
+    "company_org",
+    "location_city",
+];
+
+/// GET /api/events/{id}/form-config
+pub async fn get_form_config(event_id: &str) -> Result<RegistrationFormConfigAdmin, ApiError> {
+    let path = format!("/events/{event_id}/form-config");
+    let response = api_get(&path).await?;
+
+    let wrapper: ApiResponse<RegistrationFormConfigAdmin> =
+        response_json(&response).await.map_err(|e| ApiError {
+            message: format!("Failed to parse form config: {e}"),
+            status: 0,
+        })?;
+
+    wrapper.data.ok_or_else(|| ApiError {
+        message: wrapper.error.unwrap_or("No data".to_string()),
+        status: 0,
+    })
+}
+
+/// PUT /api/events/{id}/form-config
+pub async fn put_form_config(
+    event_id: &str,
+    config: &RegistrationFormConfigAdmin,
+) -> Result<RegistrationFormConfigAdmin, ApiError> {
+    let path = format!("/events/{event_id}/form-config");
+    api_put_json(&path, config).await
 }
 
 // ===== Audit Trail API =====

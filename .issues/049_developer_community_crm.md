@@ -56,9 +56,9 @@ Registration Form → registration_responses (raw answers)
 - [x] Registration form config schema (KV-stored JSON per event)
 
 ### Phase 2: Configurable Registration Forms
-- [ ] Admin UI: form field builder (drag-drop, field types)
-- [ ] Public event page: dynamic form rendering from config
-- [ ] Profile enrichment: each registration updates developer profile
+- [x] Admin UI: form field builder (drag-drop, field types)
+- [x] Public event page: dynamic form rendering from config
+- [x] Profile enrichment: each registration updates developer profile
 
 ### Phase 3: Campaigns & Series
 - [ ] `campaigns` + `campaign_events` tables
@@ -205,6 +205,6 @@ Registration Form → registration_responses (raw answers)
 ## Status
 
 - [x] Phase 1: D1 Migration + Developer Profiles (complete)
-- [ ] Phase 2: Configurable Registration Forms
+- [x] Phase 2: Configurable Registration Forms (complete)
 - [ ] Phase 3: Campaigns & Series
 - [ ] Phase 4: Organizer Community Dashboard

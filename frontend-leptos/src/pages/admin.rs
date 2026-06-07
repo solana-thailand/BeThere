@@ -31,6 +31,7 @@ enum AdminSection {
     Escrow,
     Cancellation,
     Quiz,
+    FormBuilder,
     Adventure,
     Events,
 }
@@ -350,12 +351,13 @@ pub fn Admin() -> impl IntoView {
                     match ev.key().as_str() {
                         "1" => { ev.prevent_default(); set_active_section.set(AdminSection::Events); }
                         "2" => { ev.prevent_default(); set_active_section.set(AdminSection::Quiz); }
-                        "3" => { ev.prevent_default(); set_active_section.set(AdminSection::Adventure); }
-                        "4" => { ev.prevent_default(); set_active_section.set(AdminSection::Attendance); set_active_tab.set(DashboardTab::InPerson); }
-                        "5" => { ev.prevent_default(); set_active_section.set(AdminSection::Attendance); set_active_tab.set(DashboardTab::Online); }
-                        "6" => { ev.prevent_default(); set_active_section.set(AdminSection::Deposits); }
-                        "7" => { ev.prevent_default(); set_active_section.set(AdminSection::Escrow); }
-                        "8" => { ev.prevent_default(); set_active_section.set(AdminSection::Cancellation); }
+                        "3" => { ev.prevent_default(); set_active_section.set(AdminSection::FormBuilder); }
+                        "4" => { ev.prevent_default(); set_active_section.set(AdminSection::Adventure); }
+                        "5" => { ev.prevent_default(); set_active_section.set(AdminSection::Attendance); set_active_tab.set(DashboardTab::InPerson); }
+                        "6" => { ev.prevent_default(); set_active_section.set(AdminSection::Attendance); set_active_tab.set(DashboardTab::Online); }
+                        "7" => { ev.prevent_default(); set_active_section.set(AdminSection::Deposits); }
+                        "8" => { ev.prevent_default(); set_active_section.set(AdminSection::Escrow); }
+                        "9" => { ev.prevent_default(); set_active_section.set(AdminSection::Cancellation); }
                         _ => {}
                     }
                 }
@@ -806,12 +808,26 @@ pub fn Admin() -> impl IntoView {
                         </button>
                         <button
                             class="admin-sidebar-item"
+                            class:active=move || active_section.get() == AdminSection::FormBuilder
+                            on:click=move |_| set_active_section.set(AdminSection::FormBuilder)
+                        >
+                            <span class="admin-sidebar-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                </svg>
+                            </span>
+                            "Form Builder"
+                            <span class="admin-sidebar-kbd">"Alt+3"</span>
+                        </button>
+                        <button
+                            class="admin-sidebar-item"
                             class:active=move || active_section.get() == AdminSection::Adventure
                             on:click=move |_| set_active_section.set(AdminSection::Adventure)
                         >
                             <span class="admin-sidebar-icon"><Icon icon=IconName::Crab class="icon-sm"/></span>
                             "Adventure"
-                            <span class="admin-sidebar-kbd">"Alt+3"</span>
+                            <span class="admin-sidebar-kbd">"Alt+4"</span>
                         </button>
                     </div>
 
@@ -835,7 +851,7 @@ pub fn Admin() -> impl IntoView {
                                 </svg>
                             </span>
                             "In-Person"
-                            <span class="admin-sidebar-kbd">"Alt+4"</span>
+                            <span class="admin-sidebar-kbd">"Alt+5"</span>
                         </button>
                         <button
                             class="admin-sidebar-item"
@@ -853,7 +869,7 @@ pub fn Admin() -> impl IntoView {
                                 </svg>
                             </span>
                             "Online"
-                            <span class="admin-sidebar-kbd">"Alt+5"</span>
+                            <span class="admin-sidebar-kbd">"Alt+6"</span>
                         </button>
                     </div>
 
@@ -872,7 +888,7 @@ pub fn Admin() -> impl IntoView {
                                 </svg>
                             </span>
                             "Deposits & Refunds"
-                            <span class="admin-sidebar-kbd">"Alt+6"</span>
+                            <span class="admin-sidebar-kbd">"Alt+7"</span>
                         </button>
                         <button
                             class="admin-sidebar-item"
@@ -881,7 +897,7 @@ pub fn Admin() -> impl IntoView {
                         >
                             <span class="admin-sidebar-icon"><Icon icon=IconName::Lock class="icon-sm"/></span>
                             "Escrow"
-                            <span class="admin-sidebar-kbd">"Alt+7"</span>
+                            <span class="admin-sidebar-kbd">"Alt+8"</span>
                         </button>
                         <button
                             class="admin-sidebar-item"
@@ -896,7 +912,7 @@ pub fn Admin() -> impl IntoView {
                                 </svg>
                             </span>
                             "Cancellation"
-                            <span class="admin-sidebar-kbd">"Alt+8"</span>
+                            <span class="admin-sidebar-kbd">"Alt+9"</span>
                         </button>
                     </div>
 
@@ -1484,6 +1500,11 @@ pub fn Admin() -> impl IntoView {
                 // Quiz section
                 <Show when=move || active_section.get() == AdminSection::Quiz fallback=|| view! { <div></div> }>
                     <crate::pages::quiz_editor::QuizEditor set_toast=set_toast active_event_id=active_event_id />
+                </Show>
+
+                // Form Builder section (Issue #049 Phase 2)
+                <Show when=move || active_section.get() == AdminSection::FormBuilder fallback=|| view! { <div></div> }>
+                    <crate::pages::form_builder::FormBuilder set_toast=set_toast active_event_id=active_event_id />
                 </Show>
 
                 // Adventure section

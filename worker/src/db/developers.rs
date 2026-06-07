@@ -294,7 +294,7 @@ pub(crate) async fn experience_distribution(db: &D1Database) -> Result<Vec<(Stri
 
 /// Tech stack popularity (parsed from JSON arrays in developer_profiles).
 /// Returns top N technologies by developer count.
-#[allow(dead_code, clippy::unnecessary_sort_by)]
+#[allow(dead_code)]
 pub(crate) async fn tech_stack_popularity(
     db: &D1Database,
     limit: usize,
@@ -318,12 +318,12 @@ pub(crate) async fn tech_stack_popularity(
     }
 
     let mut sorted: Vec<_> = counts.into_iter().collect();
-    sorted.sort_by(|a, b| b.1.cmp(&a.1));
+    sorted.sort_by_key(|(_, count)| std::cmp::Reverse(*count));
     sorted.truncate(limit);
     Ok(sorted)
 }
 
-/// Helper struct for tech_stack query.
+/// Helper struct for tech_stack_popularity query.
 #[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct TechStackRow {
@@ -426,7 +426,7 @@ pub(crate) async fn interest_distribution(
     }
 
     let mut sorted: Vec<_> = counts.into_iter().collect();
-    sorted.sort_by(|a, b| b.1.cmp(&a.1));
+    sorted.sort_by_key(|(_, count)| std::cmp::Reverse(*count));
     sorted.truncate(limit);
     Ok(sorted)
 }

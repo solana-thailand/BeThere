@@ -11,6 +11,7 @@ pub mod deposit;
 pub mod escrow_init;
 pub mod event_form;
 pub mod events_page;
+pub mod form_builder;
 pub mod landing;
 pub mod login;
 pub mod onchain_events_panel;

@@ -53,10 +53,13 @@ pub struct RegisterRequest {
     /// Whether the attendee wants to receive marketing communications
     /// about future events (optional, PDPA marketing consent).
     pub consent_marketing: Option<bool>,
-    /// Developer profile fields (optional — Issue #049 Phase 1).
+    /// Developer profile fields (optional — Issue #049 Phase 1, backward compat).
     pub experience_level: Option<String>,
     pub tech_stack: Option<String>,
     pub interests: Option<String>,
+    /// Dynamic profile fields from configurable form (Issue #049 Phase 2).
+    #[serde(default)]
+    pub profile_fields: Option<std::collections::HashMap<String, String>>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -391,7 +394,29 @@ pub async fn register_attendee(
             );
         }
 
-        // 9d. Developer profile + registration responses (Issue #049 Phase 1, non-fatal)
+        // 9d. Developer profile + registration responses (Issue #049 Phase 2, non-fatal)
+        let mut profile_fields: Vec<(String, String)> = Vec::new();
+
+        // Merge hardcoded fields (backward compat)
+        if let Some(ref v) = body.experience_level {
+            profile_fields.push(("experience_level".to_string(), v.clone()));
+        }
+        if let Some(ref v) = body.tech_stack {
+            profile_fields.push(("tech_stack".to_string(), v.clone()));
+        }
+        if let Some(ref v) = body.interests {
+            profile_fields.push(("interests".to_string(), v.clone()));
+        }
+
+        // Merge dynamic fields (Phase 2)
+        if let Some(ref fields) = body.profile_fields {
+            for (key, value) in fields {
+                if !value.is_empty() && !profile_fields.iter().any(|(k, _)| k == key) {
+                    profile_fields.push((key.clone(), value.clone()));
+                }
+            }
+        }
+
         write_developer_data(&DeveloperData {
             d1,
             email: &email,
@@ -403,9 +428,7 @@ pub async fn register_attendee(
             consent_given: body.consent_given.unwrap_or(false),
             photo_consent_given: body.photo_consent_given.unwrap_or(false),
             consent_marketing: body.consent_marketing.unwrap_or(false),
-            experience_level: body.experience_level.as_deref(),
-            tech_stack: body.tech_stack.as_deref(),
-            interests: body.interests.as_deref(),
+            profile_fields,
         })
         .await;
     }
@@ -1139,12 +1162,11 @@ struct DeveloperData<'a> {
     consent_given: bool,
     photo_consent_given: bool,
     consent_marketing: bool,
-    experience_level: Option<&'a str>,
-    tech_stack: Option<&'a str>,
-    interests: Option<&'a str>,
+    /// Dynamic profile fields (key, value) pairs from form config.
+    profile_fields: Vec<(String, String)>,
 }
 
-/// Write developer profile + registration responses to D1 (Issue #049 Phase 1).
+/// Write developer profile + registration responses to D1 (Issue #049 Phase 2).
 ///
 /// Best-effort: each write is individually wrapped in warn-on-error.
 async fn write_developer_data(data: &DeveloperData<'_>) {
@@ -1159,9 +1181,7 @@ async fn write_developer_data(data: &DeveloperData<'_>) {
         consent_given,
         photo_consent_given,
         consent_marketing,
-        experience_level,
-        tech_stack,
-        interests,
+        profile_fields: _,
     } = data;
 
     // 1. Upsert developer profile (display_name + consent_outreach)
@@ -1180,30 +1200,20 @@ async fn write_developer_data(data: &DeveloperData<'_>) {
         tracing::warn!(%email, error = %e, "D1 developer consent_outreach upsert failed (non-fatal)");
     }
 
-    // 1c. Upsert optional profile fields
-    if let Some(level) = experience_level
-        && !level.is_empty()
-            && let Err(e) =
-                crate::db::developers::upsert_developer_field(d1, email, "experience_level", level)
-                    .await
-            {
-                tracing::warn!(%email, error = %e, "D1 developer experience_level upsert failed (non-fatal)");
-            }
-    if let Some(stack) = tech_stack
-        && !stack.is_empty()
-            && let Err(e) =
-                crate::db::developers::upsert_developer_field(d1, email, "tech_stack", stack).await
-            {
-                tracing::warn!(%email, error = %e, "D1 developer tech_stack upsert failed (non-fatal)");
-            }
-    if let Some(interest) = interests
-        && !interest.is_empty()
-            && let Err(e) =
-                crate::db::developers::upsert_developer_field(d1, email, "interests", interest)
-                    .await
-            {
-                tracing::warn!(%email, error = %e, "D1 developer interests upsert failed (non-fatal)");
-            }
+    // 1c. Upsert dynamic profile fields
+    for (key, value) in &data.profile_fields {
+        if !value.is_empty()
+            && let Err(e) = crate::db::developers::upsert_developer_field(
+                d1,
+                email,
+                key.as_str(),
+                value.as_str(),
+            )
+            .await
+        {
+            tracing::warn!(%email, key, error = %e, "D1 developer field upsert failed (non-fatal)");
+        }
+    }
 
     // 2. Store registration responses (single batch INSERT — 1 D1 call instead of N)
     let mut responses: Vec<(&str, &str, bool)> = vec![
@@ -1232,14 +1242,10 @@ async fn write_developer_data(data: &DeveloperData<'_>) {
     ];
 
     // Profile-enriching fields
-    if let Some(level) = experience_level.filter(|v| !v.is_empty()) {
-        responses.push(("experience_level", level, true));
-    }
-    if let Some(stack) = tech_stack.filter(|v| !v.is_empty()) {
-        responses.push(("tech_stack", stack, true));
-    }
-    if let Some(interest) = interests.filter(|v| !v.is_empty()) {
-        responses.push(("interests", interest, true));
+    for (key, value) in &data.profile_fields {
+        if !value.is_empty() {
+            responses.push((key.as_str(), value.as_str(), true));
+        }
     }
 
     if let Err(e) =

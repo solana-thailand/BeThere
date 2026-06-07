@@ -1,6 +1,8 @@
 use super::types::*;
 use crate::icons::{Icon, IconName};
 use leptos::prelude::*;
+use std::collections::HashMap;
+use std::sync::Arc;
 
 pub fn registration_form(
     slug_for_reg: String,
@@ -34,18 +36,23 @@ pub fn registration_form(
     set_reg_consent_marketing: WriteSignal<bool>,
     reg_state: ReadSignal<RegState>,
     set_reg_state: WriteSignal<RegState>,
-    reg_experience_level: ReadSignal<String>,
-    set_reg_experience_level: WriteSignal<String>,
-    reg_tech_stack: ReadSignal<Vec<String>>,
-    set_reg_tech_stack: WriteSignal<Vec<String>>,
-    reg_interests: ReadSignal<Vec<String>>,
-    set_reg_interests: WriteSignal<Vec<String>>,
     dev_profile_enabled: bool,
+    form_config: Option<&RegistrationFormConfig>,
+    dynamic_field_values: ReadSignal<HashMap<String, String>>,
+    set_dynamic_field_values: WriteSignal<HashMap<String, String>>,
 ) -> AnyView {
     // Pre-fill email from JWT
     set_reg_email.set(locked_email.clone());
 
     let (field_errors, set_field_errors) = signal(FieldErrors::default());
+
+    // Resolve form config: use provided config or defaults
+    let resolved_config = match form_config {
+        Some(cfg) => cfg.clone(),
+        None => RegistrationFormConfig::default(),
+    };
+    let section_label = Arc::new(resolved_config.section_label.clone());
+    let form_fields = Arc::new(resolved_config.fields.clone());
 
     view! {
         {move || {
@@ -134,6 +141,7 @@ pub fn registration_form(
                             <div class="pe-flex-col-gap-md">
                                 // Name
                                 <div class="pe-field" id="pe-field-name">
+                                    <label class="pe-field-label">"Name"<span class="pe-required">" *"</span></label>
                                     <input
                                         type="text"
                                         placeholder="Your name"
@@ -151,12 +159,15 @@ pub fn registration_form(
                                     }}
                                 </div>
                                 // Email — locked
-                                <input
-                                    type="email"
-                                    value=email_for_display
-                                    readonly
-                                    class="pe-input pe-input--locked"
-                                />
+                                <div class="pe-field">
+                                    <label class="pe-field-label">"Email Address"</label>
+                                    <input
+                                        type="email"
+                                        value=email_for_display
+                                        readonly
+                                        class="pe-input pe-input--locked"
+                                    />
+                                </div>
                                 // Participation type (hybrid only)
                                 {move || {
                                     if is_hybrid {
@@ -169,22 +180,25 @@ pub fn registration_form(
                                             None => "Online (virtual)".to_string(),
                                         };
                                         view! {
-                                            <select
-                                                class="pe-input"
-                                                on:change=move |ev| set_reg_participation.set(event_target_value(&ev))
-                                            >
-                                                <option value="">"Select track..."</option>
-                                                {if in_person_available {
-                                                    view! { <option value="In-Person">{ip_label}</option> }.into_any()
-                                                } else {
-                                                    ().into_any()
-                                                }}
-                                                {if online_available {
-                                                    view! { <option value="Online">{on_label}</option> }.into_any()
-                                                } else {
-                                                    ().into_any()
-                                                }}
-                                            </select>
+                                            <div class="pe-field">
+                                                <label class="pe-field-label">"Select Track"</label>
+                                                <select
+                                                    class="pe-input"
+                                                    on:change=move |ev| set_reg_participation.set(event_target_value(&ev))
+                                                >
+                                                    <option value="">"Select track..."</option>
+                                                    {if in_person_available {
+                                                        view! { <option value="In-Person">{ip_label}</option> }.into_any()
+                                                    } else {
+                                                        ().into_any()
+                                                    }}
+                                                    {if online_available {
+                                                        view! { <option value="Online">{on_label}</option> }.into_any()
+                                                    } else {
+                                                        ().into_any()
+                                                    }}
+                                                </select>
+                                            </div>
                                         }.into_any()
                                     } else {
                                         ().into_any()
@@ -192,8 +206,8 @@ pub fn registration_form(
                                 }}
                                 // Contact Channel
                                 <div class="pe-field" id="pe-field-channel">
-                                    <label class="pe-label">
-                                        "Preferred Contact Channel / ช่องทางที่สะดวกให้ทีมงานติดต่อกลับเพื่อยืนยันสิทธิ์ (Confirm Seat)"
+                                    <label class="pe-field-label">
+                                        "Preferred Contact Channel"
                                         {if require_contact {
                                             view! { <span class="pe-required">" *"</span> }.into_any()
                                         } else {
@@ -221,9 +235,17 @@ pub fn registration_form(
                                 </div>
                                 // Contact Handle
                                 <div class="pe-field" id="pe-field-handle">
+                                    <label class="pe-field-label">
+                                        "Contact Username / Profile Link"
+                                        {if require_contact {
+                                            view! { <span class="pe-required">" *"</span> }.into_any()
+                                        } else {
+                                            ().into_any()
+                                        }}
+                                    </label>
                                     <input
                                         type="text"
-                                        placeholder="Username or profile link / โปรดระบุ Username หรือลิงก์โปรไฟล์"
+                                        placeholder="Username or profile link"
                                         class="pe-input"
                                         prop:class=move || if field_errors.get().contact_handle.is_some() { "pe-input--error" } else { "" }
                                         prop:value=move || reg_contact_handle.get()
@@ -238,128 +260,95 @@ pub fn registration_form(
                                     }}
                                 </div>
 
-                                // Developer Profile Section (Issue #049)
-                                {move || {
+                                // Dynamic Developer Profile Section (Issue #049 Phase 2)
+                                {
+                                    let sl = Arc::clone(&section_label);
+                                    let ff = Arc::clone(&form_fields);
+                                    move || {
                                     if dev_profile_enabled {
+                                        let label = sl.as_ref().clone();
+                                        let fields = ff.as_ref().clone();
                                         view! {
                                             <div class="pe-dev-profile-section">
-                                                <label class="pe-label">"About You (optional \u{2014} helps us plan better events)"</label>
-
-                                                // Experience Level
-                                                <select
-                                                    class="pe-input"
-                                                    prop:value=move || reg_experience_level.get()
-                                                    on:change=move |ev| {
-                                                        set_reg_experience_level.set(event_target_value(&ev));
+                                                <label class="pe-label">{label}</label>
+                                                <For
+                                                    each=move || fields.clone()
+                                                    key=|field| field.key.clone()
+                                                    children=move |field: FormFieldConfig| {
+                                                        render_dynamic_field(
+                                                            field,
+                                                            dynamic_field_values,
+                                                            set_dynamic_field_values,
+                                                        )
                                                     }
-                                                >
-                                                    <option value="">"Experience level..."</option>
-                                                    <option value="Beginner">"Beginner"</option>
-                                                    <option value="Intermediate">"Intermediate"</option>
-                                                    <option value="Senior">"Senior"</option>
-                                                    <option value="Tech Lead">"Tech Lead"</option>
-                                                </select>
-
-                                                // Tech Stack (multi-select via checkboxes)
-                                                <div class="pe-multiselect-group">
-                                                    <span class="pe-multiselect-label">"Technologies you use:"</span>
-                                                    <div class="pe-multiselect-options">
-                                                        {move || {
-                                                            let techs = ["Rust", "TypeScript", "Python", "Solidity", "Move", "Go", "C++"];
-                                                            let current = reg_tech_stack.get();
-                                                            techs.iter().map(move |&tech| {
-                                                                let is_checked = current.contains(&tech.to_string());
-                                                                let tech_clone = tech.to_string();
-                                                                view! {
-                                                                    <label class="pe-multiselect-item">
-                                                                        <input
-                                                                            type="checkbox"
-                                                                            class="pe-checkbox"
-                                                                            checked=is_checked
-                                                                            on:change=move |ev| {
-                                                                                let checked = event_target_checked(&ev);
-                                                                                set_reg_tech_stack.update(|stack| {
-                                                                                    if checked {
-                                                                                        stack.push(tech_clone.clone());
-                                                                                    } else {
-                                                                                        stack.retain(|t| t != &tech_clone);
-                                                                                    }
-                                                                                });
-                                                                            }
-                                                                        />
-                                                                        <span>{tech}</span>
-                                                                    </label>
-                                                                }
-                                                            }).collect::<Vec<_>>()
-                                                        }}
-                                                    </div>
-                                                </div>
-
-                                                // Interests (multi-select via checkboxes)
-                                                <div class="pe-multiselect-group">
-                                                    <span class="pe-multiselect-label">"Topics that interest you:"</span>
-                                                    <div class="pe-multiselect-options">
-                                                        {move || {
-                                                            let topics = ["DeFi", "NFT", "ZK Proofs", "Infrastructure", "Gaming", "AI/ML", "Mobile"];
-                                                            let current = reg_interests.get();
-                                                topics.iter().map(move |&topic| {
-                                                    let is_checked = current.contains(&topic.to_string());
-                                                    let topic_clone = topic.to_string();
-                                                    view! {
-                                                        <label class="pe-multiselect-item">
-                                                            <input
-                                                                type="checkbox"
-                                                                class="pe-checkbox"
-                                                                checked=is_checked
-                                                                on:change=move |ev| {
-                                                                    let checked = event_target_checked(&ev);
-                                                                    set_reg_interests.update(|ints| {
-                                                                        if checked {
-                                                                            ints.push(topic_clone.clone());
-                                                                        } else {
-                                                                            ints.retain(|t| t != &topic_clone);
-                                                                        }
-                                                                    });
-                                                                }
-                                                            />
-                                                            <span>{topic}</span>
-                                                        </label>
-                                                    }
-                                                }).collect::<Vec<_>>()
-                                            }}
-                                                    </div>
-                                                </div>
+                                                />
                                             </div>
                                         }.into_any()
                                     } else {
                                         ().into_any()
                                     }
                                 }}
-                                // PDPA Consent
-                                <div id="pe-field-consent">
-                                    <label class="pe-checkbox-label">
-                                        <input
-                                            type="checkbox"
-                                            class="pe-checkbox"
-                                            checked=move || reg_consent_given.get()
-                                            on:change=move |ev| {
-                                                set_reg_consent_given.set(event_target_checked(&ev));
-                                                set_field_errors.update(|e| e.consent_given = None);
-                                            }
-                                        />
-                                        <span>"I consent to BeThere collecting my name, email, and contact information for event registration, check-in, and NFT issuance. I understand my wallet address and transaction data will be recorded on the Solana blockchain (public, immutable). "<a href="/privacy" target="_blank" class="pe-ext-link">"View Privacy Policy"</a></span>
-                                    </label>
-                                    {move || match &field_errors.get().consent_given {
-                                        Some(err) => view! { <span class="pe-field-error pe-field-error-indent">{err.clone()}</span> }.into_any(),
-                                        None => view! { <div></div> }.into_any(),
-                                    }}
-                                </div>
-                                // Photo Consent (conditional)
+
+                                // Consolidated: PDPA + Deposit Agreement
+                                {move || {
+                                    let is_online_track = is_hybrid && reg_participation.get().to_lowercase().contains("online");
+                                    let show_deposit = has_deposit && !is_online_track;
+                                    if show_deposit {
+                                        let dep_label = dep_label.clone();
+                                        view! {
+                                            <div id="pe-field-consent">
+                                                <label class="pe-checkbox-label">
+                                                    <input
+                                                        type="checkbox"
+                                                        class="pe-checkbox"
+                                                        checked=move || reg_consent_given.get()
+                                                        on:change=move |ev| {
+                                                            let checked = event_target_checked(&ev);
+                                                            set_reg_consent_given.set(checked);
+                                                            set_reg_deposit_agreed.set(checked);
+                                                            set_field_errors.update(|e| {
+                                                                e.consent_given = None;
+                                                                e.deposit_agreed = None;
+                                                            });
+                                                        }
+                                                    />
+                                                    <span>{format!("I agree to the <a href=\"/privacy\" target=\"_blank\" class=\"pe-ext-link\">Privacy Policy</a> and authorize the {} commitment deposit (refunded upon check-in).", dep_label)}</span>
+                                                </label>
+                                                {move || match (&field_errors.get().consent_given, &field_errors.get().deposit_agreed) {
+                                                    (Some(err), _) | (_, Some(err)) => view! { <span class="pe-field-error pe-field-error-indent">{err.clone()}</span> }.into_any(),
+                                                    _ => view! { <div></div> }.into_any(),
+                                                }}
+                                            </div>
+                                        }.into_any()
+                                    } else {
+                                        view! {
+                                            <div id="pe-field-consent">
+                                                <label class="pe-checkbox-label">
+                                                    <input
+                                                        type="checkbox"
+                                                        class="pe-checkbox"
+                                                        checked=move || reg_consent_given.get()
+                                                        on:change=move |ev| {
+                                                            set_reg_consent_given.set(event_target_checked(&ev));
+                                                            set_field_errors.update(|e| e.consent_given = None);
+                                                        }
+                                                    />
+                                                    <span>"I consent to BeThere collecting my data for registration, check-in, and NFT issuance. "<a href="/privacy" target="_blank" class="pe-ext-link">"Privacy Policy"</a></span>
+                                                </label>
+                                                {move || match &field_errors.get().consent_given {
+                                                    Some(err) => view! { <span class="pe-field-error pe-field-error-indent">{err.clone()}</span> }.into_any(),
+                                                    None => view! { <div></div> }.into_any(),
+                                                }}
+                                            </div>
+                                        }.into_any()
+                                    }
+                                }}
+                                // Photo Consent (optional, muted styling)
                                 {move || {
                                     if require_photo_consent {
                                         view! {
                                             <div id="pe-field-photo-consent">
-                                                <label class="pe-checkbox-label">
+                                                <label class="pe-checkbox-label pe-checkbox-optional">
                                                     <input
                                                         type="checkbox"
                                                         class="pe-checkbox"
@@ -369,7 +358,7 @@ pub fn registration_form(
                                                             set_field_errors.update(|e| e.photo_consent_given = None);
                                                         }
                                                     />
-                                                    <span>"(Optional) I consent to being photographed/filmed during the event. Photos may be used for event promotion on social media and marketing materials."</span>
+                                                    <span>"(Optional) I consent to being photographed/filmed during the event for promotion on social media and marketing."</span>
                                                 </label>
                                                 {move || match &field_errors.get().photo_consent_given {
                                                     Some(err) => view! { <span class="pe-field-error pe-field-error-indent">{err.clone()}</span> }.into_any(),
@@ -381,11 +370,11 @@ pub fn registration_form(
                                         ().into_any()
                                     }
                                 }}
-                                // Marketing Consent (optional)
+                                // Marketing Consent (optional, muted styling)
                                 {
                                     view! {
                                         <div id="pe-field-marketing-consent">
-                                            <label class="pe-checkbox-label">
+                                            <label class="pe-checkbox-label pe-checkbox-optional">
                                                 <input
                                                     type="checkbox"
                                                     class="pe-checkbox"
@@ -399,39 +388,11 @@ pub fn registration_form(
                                         </div>
                                     }.into_any()
                                 }
-                                // Deposit Agreement
-                                {move || {
-                                    let is_online_track = is_hybrid && reg_participation.get().to_lowercase().contains("online");
-                                    if has_deposit && !is_online_track {
-                                        let dep_label = dep_label.clone();
-                                        view! {
-                                            <div id="pe-field-deposit">
-                                            <label class="pe-checkbox-label">
-                                                <input
-                                                    type="checkbox"
-                                                    class="pe-checkbox"
-                                                    checked=move || reg_deposit_agreed.get()
-                                                    on:change=move |ev| {
-                                                        set_reg_deposit_agreed.set(event_target_checked(&ev));
-                                                        set_field_errors.update(|e| e.deposit_agreed = None);
-                                                    }
-                                                />
-                                                <span>{format!("ยอมรับการจ่ายมัดจำ {} (จะได้รับคืนภายในงาน) / I agree to pay a {} commitment deposit to secure my seat and understand I will receive a refund upon check-in at the venue.", dep_label, dep_label)}</span>
-                                            </label>
-                                            {move || match &field_errors.get().deposit_agreed {
-                                                Some(err) => view! { <span class="pe-field-error pe-field-error-indent">{err.clone()}</span> }.into_any(),
-                                                None => view! { <div></div> }.into_any(),
-                                            }}
-                                            </div>
-                                        }.into_any()
-                                    } else {
-                                        ().into_any()
-                                    }
-                                }}
                                 // Submit button
                                 {
                                     let slug = slug.clone();
                                     let email_sub = email_for_submit.clone();
+                                    let submit_fields = form_fields.as_ref().clone();
                                     view! {
                                         <button
                                             class="pe-submit-btn"
@@ -491,9 +452,21 @@ pub fn registration_form(
                                                     return;
                                                 }
 
-                                                let experience_val = reg_experience_level.get();
-                                                let tech_stack_val = reg_tech_stack.get();
-                                                let interests_val = reg_interests.get();
+                                                // Extract dynamic field values for submission
+                                                let dynamic_vals = dynamic_field_values.get();
+                                                let (experience_level, tech_stack, interests) =
+                                                    extract_profile_fields(&dynamic_vals, &submit_fields);
+
+                                                // Build dynamic profile_fields map (Issue #049 Phase 2)
+                                                let profile_fields: std::collections::HashMap<String, String> = submit_fields
+                                                    .iter()
+                                                    .filter(|f| f.profile_field)
+                                                    .filter_map(|f| {
+                                                        dynamic_vals.get(&f.key).cloned()
+                                                            .filter(|v| !v.is_empty())
+                                                            .map(|v| (f.key.clone(), v))
+                                                    })
+                                                    .collect();
 
                                                 set_reg_state.set(RegState::Submitting);
                                                 let body = RegisterBody {
@@ -507,9 +480,10 @@ pub fn registration_form(
                                                     consent_given: if consent_val { Some(true) } else { None },
                                                     photo_consent_given: if photo_consent_val { Some(true) } else { None },
                                                     consent_marketing: if reg_consent_marketing.get() { Some(true) } else { None },
-                                                    experience_level: if experience_val.is_empty() { None } else { Some(experience_val) },
-                                                    tech_stack: if tech_stack_val.is_empty() { None } else { Some(serde_json::to_string(&*tech_stack_val).unwrap_or_default()) },
-                                                    interests: if interests_val.is_empty() { None } else { Some(serde_json::to_string(&*interests_val).unwrap_or_default()) },
+                                                    experience_level,
+                                                    tech_stack,
+                                                    interests,
+                                                    profile_fields: if profile_fields.is_empty() { None } else { Some(profile_fields) },
                                                 };
 
                                                 leptos::task::spawn_local(async move {
@@ -564,4 +538,185 @@ pub fn registration_form(
             }
         }}
     }.into_any()
+}
+
+/// Render a single dynamic form field based on its config.
+fn render_dynamic_field(
+    field: FormFieldConfig,
+    values: ReadSignal<HashMap<String, String>>,
+    set_values: WriteSignal<HashMap<String, String>>,
+) -> AnyView {
+    match field.field_type {
+        FormFieldType::Text => render_text_field(field, values, set_values),
+        FormFieldType::Textarea => render_textarea_field(field, values, set_values),
+        FormFieldType::Select => render_select_field(field, values, set_values),
+        FormFieldType::Multiselect => render_multiselect_field(field, values, set_values),
+    }
+}
+
+fn render_text_field(
+    field: FormFieldConfig,
+    values: ReadSignal<HashMap<String, String>>,
+    set_values: WriteSignal<HashMap<String, String>>,
+) -> AnyView {
+    let key = field.key.clone();
+    let placeholder = field.label.clone();
+    let key_for_read = key.clone();
+    view! {
+        <input
+            type="text"
+            placeholder=placeholder
+            class="pe-input"
+            prop:value=move || values.get().get(&key_for_read).cloned().unwrap_or_default()
+            on:input=move |ev| {
+                let val = event_target_value(&ev);
+                set_values.update(|m| { m.insert(key.clone(), val); });
+            }
+        />
+    }
+    .into_any()
+}
+
+fn render_textarea_field(
+    field: FormFieldConfig,
+    values: ReadSignal<HashMap<String, String>>,
+    set_values: WriteSignal<HashMap<String, String>>,
+) -> AnyView {
+    let key = field.key.clone();
+    let placeholder = field.label.clone();
+    let key_for_read = key.clone();
+    view! {
+        <textarea
+            placeholder=placeholder
+            class="pe-input"
+            rows="3"
+            prop:value=move || values.get().get(&key_for_read).cloned().unwrap_or_default()
+            on:input=move |ev| {
+                let val = event_target_value(&ev);
+                set_values.update(|m| { m.insert(key.clone(), val); });
+            }
+        ></textarea>
+    }
+    .into_any()
+}
+
+fn render_select_field(
+    field: FormFieldConfig,
+    values: ReadSignal<HashMap<String, String>>,
+    set_values: WriteSignal<HashMap<String, String>>,
+) -> AnyView {
+    let key = field.key.clone();
+    let label = field.label.clone();
+    let options = field.options.unwrap_or_default();
+    let key_for_read = key.clone();
+    view! {
+        <div class="pe-multiselect-group">
+            <span class="pe-multiselect-label">{label}</span>
+            <select
+                class="pe-input"
+                prop:value=move || values.get().get(&key_for_read).cloned().unwrap_or_default()
+                on:change=move |ev| {
+                    let val = event_target_value(&ev);
+                    set_values.update(|m| { m.insert(key.clone(), val); });
+                }
+            >
+                <option value="">"Select..."</option>
+                {options.iter().map(|opt| {
+                    let opt = opt.clone();
+                    view! { <option value=opt.clone()>{opt.clone()}</option> }
+                }).collect::<Vec<_>>()}
+            </select>
+        </div>
+    }
+    .into_any()
+}
+
+fn render_multiselect_field(
+    field: FormFieldConfig,
+    values: ReadSignal<HashMap<String, String>>,
+    set_values: WriteSignal<HashMap<String, String>>,
+) -> AnyView {
+    let key = field.key.clone();
+    let label = field.label.clone();
+    let options = field.options.unwrap_or_default();
+
+    view! {
+        <div class="pe-multiselect-group">
+            <span class="pe-multiselect-label">{label}</span>
+            <div class="pe-multiselect-options">
+                {options.iter().map(|opt| {
+                    let opt = opt.clone();
+                    let field_key = key.clone();
+                    let opt_for_display = opt.clone();
+                    let field_key_for_change = field_key.clone();
+                    let opt_for_change = opt.clone();
+                    view! {
+                        <label class="pe-multiselect-item">
+                            <input
+                                type="checkbox"
+                                class="pe-checkbox"
+                                checked=move || {
+                                    let raw = values.get().get(&field_key).cloned().unwrap_or_default();
+                                    let selected: Vec<String> = serde_json::from_str(&raw).unwrap_or_default();
+                                    selected.contains(&opt)
+                                }
+                                on:change=move |ev| {
+                                    let checked = event_target_checked(&ev);
+                                    set_values.update(|m| {
+                                        let raw = m.get(&field_key_for_change).cloned().unwrap_or_default();
+                                        let mut selected: Vec<String> = serde_json::from_str(&raw).unwrap_or_default();
+                                        if checked {
+                                            if !selected.contains(&opt_for_change) {
+                                                selected.push(opt_for_change.clone());
+                                            }
+                                        } else {
+                                            selected.retain(|s| s != &opt_for_change);
+                                        }
+                                        m.insert(field_key_for_change.clone(), serde_json::to_string(&selected).unwrap_or_default());
+                                    });
+                                }
+                            />
+                            <span>{opt_for_display}</span>
+                        </label>
+                    }
+                }).collect::<Vec<_>>()}
+            </div>
+        </div>
+    }.into_any()
+}
+
+/// Extract the known profile fields (experience_level, tech_stack, interests)
+/// from the dynamic field values map for backward-compatible submission.
+fn extract_profile_fields(
+    values: &HashMap<String, String>,
+    fields: &[FormFieldConfig],
+) -> (Option<String>, Option<String>, Option<String>) {
+    let profile_keys: Vec<&str> = fields
+        .iter()
+        .filter(|f| f.profile_field)
+        .map(|f| f.key.as_str())
+        .collect();
+
+    let get = |key: &str| -> Option<String> { values.get(key).cloned().filter(|v| !v.is_empty()) };
+
+    // Map known keys to the RegisterBody fields
+    let experience_level = if profile_keys.contains(&"experience_level") {
+        get("experience_level")
+    } else {
+        None
+    };
+
+    let tech_stack = if profile_keys.contains(&"tech_stack") {
+        get("tech_stack")
+    } else {
+        None
+    };
+
+    let interests = if profile_keys.contains(&"interests") {
+        get("interests")
+    } else {
+        None
+    };
+
+    (experience_level, tech_stack, interests)
 }

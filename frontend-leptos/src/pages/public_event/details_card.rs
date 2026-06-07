@@ -108,7 +108,7 @@ pub fn details_card(
                         view! {
                             <div class="pe-detail-row">
                                 <span><Icon icon=IconName::Timer class="icon-sm icon-muted" /></span>
-                                <span class="pe-text-accent-bold">
+                                <span class="pe-countdown-capsule">
                                     "Starts in "{cd}
                                 </span>
                             </div>

@@ -18,9 +18,7 @@ pub mod write;
 // ---------------------------------------------------------------------------
 
 // Schema (key helpers — only export what's used externally)
-pub use schema::{
-    deposit_status_key, form_config_key, quiz_progress_key, quiz_questions_key, thb_deposit_key,
-};
+pub use schema::{deposit_status_key, quiz_progress_key, quiz_questions_key, thb_deposit_key};
 
 // Read operations
 pub use read::{

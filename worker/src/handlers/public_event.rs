@@ -106,6 +106,20 @@ pub async fn get_public_event(
     .await
     .map_err(AppError::NotFound)?;
 
+    // Read form config for dynamic rendering (Issue #049 Phase 2)
+    let form_config = if config.dev_profile_enabled {
+        if let Some(kv) = &state.events_kv {
+            crate::event_store::get_form_config(kv, &config.id)
+                .await
+                .ok()
+                .flatten()
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
     // Only show Active or Completed events publicly
     match config.status {
         event_checkin_domain::models::event::EventStatus::Draft
@@ -198,6 +212,15 @@ pub async fn get_public_event(
         "visibility": config.visibility.as_str(),
         "escrow_status": config.escrow_status.as_str(),
         "dev_profile_enabled": config.dev_profile_enabled,
+        // Dynamic form config for registration (Issue #049 Phase 2)
+        "form_config": if config.dev_profile_enabled {
+            let cfg = form_config.unwrap_or_else(|| {
+                event_checkin_domain::models::event::RegistrationFormConfig::default_config()
+            });
+            serde_json::to_value(&cfg).unwrap_or(serde_json::Value::Null)
+        } else {
+            serde_json::Value::Null
+        },
     })))
 }
 

@@ -18,18 +18,18 @@ pub fn capacity_indicator(
             <h2 class="pe-section-title">
                 <Icon icon=IconName::Ticket class="icon-md" />" Capacity"
             </h2>
-            <div class="pe-flex-col-gap-sm">
+            <div class="pe-capacity-grid">
                 {if has_ip_cap {
                     let remaining = in_person_remaining.unwrap_or(0);
-                    let (color, label) = if remaining > 0 {
-                        ("#34d399", format!("In-Person: {remaining} spots left"))
+                    let (color, label, is_full) = if remaining > 0 {
+                        ("#34d399", "In-Person Spots Remaining", false)
                     } else {
-                        ("#f87171", "In-Person: FULL".to_string())
+                        ("#f87171", "In-Person — FULL", true)
                     };
                     view! {
-                        <div class="pe-capacity-row">
-                            <span style=format!("width:8px;height:8px;border-radius:50%;background:{color};flex-shrink:0;")></span>
-                            <span style=format!("color:{color};font-size:0.9rem;font-weight:500;")>{label}</span>
+                        <div class="pe-capacity-tile">
+                            <span class="pe-capacity-number" style=format!("color:{color};{}", if is_full { "text-decoration:line-through;opacity:0.6" } else { "" })>{remaining}</span>
+                            <span class="pe-capacity-label">{label}</span>
                         </div>
                     }.into_any()
                 } else {
@@ -37,15 +37,15 @@ pub fn capacity_indicator(
                 }}
                 {if has_on_cap {
                     let remaining = online_remaining.unwrap_or(0);
-                    let (color, label) = if remaining > 0 {
-                        ("#34d399", format!("Online: {remaining} spots left"))
+                    let (color, label, is_full) = if remaining > 0 {
+                        ("#34d399", "Online Spots Remaining", false)
                     } else {
-                        ("#f87171", "Online: FULL".to_string())
+                        ("#f87171", "Online — FULL", true)
                     };
                     view! {
-                        <div class="pe-capacity-row">
-                            <span style=format!("width:8px;height:8px;border-radius:50%;background:{color};flex-shrink:0;")></span>
-                            <span style=format!("color:{color};font-size:0.9rem;font-weight:500;")>{label}</span>
+                        <div class="pe-capacity-tile">
+                            <span class="pe-capacity-number" style=format!("color:{color};{}", if is_full { "text-decoration:line-through;opacity:0.6" } else { "" })>{remaining}</span>
+                            <span class="pe-capacity-label">{label}</span>
                         </div>
                     }.into_any()
                 } else {

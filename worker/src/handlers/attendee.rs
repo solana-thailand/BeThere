@@ -732,6 +732,20 @@ pub async fn delete_attendee(
                     .map_err(|e| AppError::Internal(format!("failed to delete sheet row: {e}")))?;
                 };
 
+                // Delete from D1 (primary store)
+                let email_lower = attendee.email.to_lowercase();
+                if let Some(db) = state.d1.as_deref()
+                    && let Err(e) =
+                        crate::db::attendees::delete_attendee(db, &event.id, &email_lower).await
+                {
+                    tracing::warn!(
+                        event_id = %event.id,
+                        email = %email_lower,
+                        error = %e,
+                        "D1 sheet attendee delete failed"
+                    );
+                }
+
                 // Clean up KV keys for this attendee
                 if let Some(kv) = kv {
                     // Deposit status
@@ -768,10 +782,33 @@ pub async fn delete_attendee(
                 );
             }
             None => {
-                return Err(AppError::NotFound(format!(
-                    "attendee '{id}' not found in walk-in records or event sheet"
-                ))
-                .into());
+                // Sheet lookup returned nothing — try D1 fallback in case the
+                // sheet row was already deleted but D1 record remains (orphan).
+                // Use delete_attendee_by_id to avoid serde_wasm_bindgen
+                // deserialization bug in get_attendee_by_id (.ok() swallows errors).
+                if let Some(db) = state.d1.as_deref() {
+                    match crate::db::attendees::delete_attendee_by_id(db, &id).await {
+                        Ok(()) => {
+                            source = "d1-orphan".to_string();
+                            tracing::info!(
+                                event_id = %event.id,
+                                attendee_id = %id,
+                                "orphan D1 attendee deleted (sheet row already gone)"
+                            );
+                        }
+                        Err(e) => {
+                            return Err(AppError::NotFound(format!(
+                                "attendee '{id}' not found in walk-in records, event sheet, or D1: {e}"
+                            ))
+                            .into());
+                        }
+                    }
+                } else {
+                    return Err(AppError::NotFound(format!(
+                        "attendee '{id}' not found in walk-in records or event sheet"
+                    ))
+                    .into());
+                }
             }
         }
     }

@@ -950,6 +950,20 @@ pub(crate) async fn delete_attendee(
     Ok(())
 }
 
+/// Delete an attendee from D1 by primary key `id`.
+/// Avoids the serde_wasm_bindgen deserialization issue in `get_attendee_by_id`.
+pub(crate) async fn delete_attendee_by_id(db: &D1Database, id: &str) -> Result<(), String> {
+    let stmt = db.prepare("DELETE FROM attendees WHERE id = ?1");
+    let bound = stmt
+        .bind_refs(&[D1Type::Text(id)])
+        .map_err(|e| format!("D1 delete_attendee_by_id bind: {e:?}"))?;
+    bound
+        .run()
+        .await
+        .map_err(|e| format!("D1 delete_attendee_by_id run: {e:?}"))?;
+    Ok(())
+}
+
 /// Minimal struct for PDPA deletion — attendee with event_id (not in domain Attendee).
 pub(crate) struct AttendeeWithEmail {
     pub attendee: Attendee,

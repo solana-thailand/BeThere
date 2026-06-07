@@ -48,10 +48,13 @@ pub struct RegisterBody {
     pub consent_given: Option<bool>,
     pub photo_consent_given: Option<bool>,
     pub consent_marketing: Option<bool>,
-    /// Developer profile fields (optional — Issue #049).
+    /// Developer profile fields (optional — Issue #049 Phase 1, backward compat).
     pub experience_level: Option<String>,
     pub tech_stack: Option<String>,
     pub interests: Option<String>,
+    /// Dynamic profile fields from configurable form (Issue #049 Phase 2).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub profile_fields: Option<std::collections::HashMap<String, String>>,
 }
 
 /// Next step returned after registration.
@@ -201,6 +204,119 @@ pub struct PublicEventData {
     // Developer profile (Issue #049)
     #[serde(default)]
     pub dev_profile_enabled: bool,
+
+    // Dynamic form config (Issue #049 Phase 2)
+    #[serde(default)]
+    pub form_config: Option<RegistrationFormConfig>,
+}
+
+// ---------------------------------------------------------------------------
+// Registration form config (Issue #049 Phase 2 — dynamic form rendering)
+// ---------------------------------------------------------------------------
+
+/// Supported form field types.
+#[derive(Debug, Clone, serde::Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum FormFieldType {
+    /// Single-line text input.
+    Text,
+    /// Multi-line text area.
+    Textarea,
+    /// Single-select dropdown.
+    Select,
+    /// Multi-select (checkboxes).
+    Multiselect,
+}
+
+/// Configuration for a single form field.
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct FormFieldConfig {
+    /// Unique field key (e.g. "experience_level", "tech_stack").
+    pub key: String,
+    /// Human-readable label shown above the field.
+    pub label: String,
+    /// Field input type.
+    #[serde(rename = "type")]
+    pub field_type: FormFieldType,
+    /// Options for Select/Multiselect fields. Ignored for Text/Textarea.
+    #[serde(default)]
+    pub options: Option<Vec<String>>,
+    /// Whether the field is required for submission.
+    #[serde(default)]
+    pub required: bool,
+    /// Whether this field should update the developer profile.
+    #[serde(default)]
+    pub profile_field: bool,
+}
+
+/// Per-event registration form configuration.
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct RegistrationFormConfig {
+    /// Human-readable section header (e.g. "About You").
+    #[serde(default = "default_section_label")]
+    pub section_label: String,
+    /// Ordered list of form fields to render.
+    #[serde(default)]
+    pub fields: Vec<FormFieldConfig>,
+}
+
+fn default_section_label() -> String {
+    "About You (optional \u{2014} helps us plan better events)".to_string()
+}
+
+impl Default for RegistrationFormConfig {
+    fn default() -> Self {
+        Self {
+            section_label: default_section_label(),
+            fields: vec![
+                FormFieldConfig {
+                    key: "experience_level".to_string(),
+                    label: "Experience level".to_string(),
+                    field_type: FormFieldType::Select,
+                    options: Some(vec![
+                        "Beginner".to_string(),
+                        "Intermediate".to_string(),
+                        "Senior".to_string(),
+                        "Tech Lead".to_string(),
+                    ]),
+                    required: false,
+                    profile_field: true,
+                },
+                FormFieldConfig {
+                    key: "tech_stack".to_string(),
+                    label: "Technologies you use".to_string(),
+                    field_type: FormFieldType::Multiselect,
+                    options: Some(vec![
+                        "Rust".to_string(),
+                        "TypeScript".to_string(),
+                        "Python".to_string(),
+                        "Solidity".to_string(),
+                        "Move".to_string(),
+                        "Go".to_string(),
+                        "C++".to_string(),
+                    ]),
+                    required: false,
+                    profile_field: true,
+                },
+                FormFieldConfig {
+                    key: "interests".to_string(),
+                    label: "Topics that interest you".to_string(),
+                    field_type: FormFieldType::Multiselect,
+                    options: Some(vec![
+                        "DeFi".to_string(),
+                        "NFT".to_string(),
+                        "ZK Proofs".to_string(),
+                        "Infrastructure".to_string(),
+                        "Gaming".to_string(),
+                        "AI/ML".to_string(),
+                        "Mobile".to_string(),
+                    ]),
+                    required: false,
+                    profile_field: true,
+                },
+            ],
+        }
+    }
 }
 
 #[derive(serde::Deserialize)]

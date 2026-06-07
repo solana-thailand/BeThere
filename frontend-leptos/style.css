@@ -9592,6 +9592,36 @@ nav a.active {
     gap: 0.5rem;
 }
 
+/* Capacity dashboard grid */
+.pe-capacity-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+}
+
+.pe-capacity-tile {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 0.75rem 0.5rem;
+    background: var(--bg-secondary);
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    text-align: center;
+}
+
+.pe-capacity-number {
+    font-size: 2rem;
+    font-weight: 700;
+    line-height: 1.2;
+}
+
+.pe-capacity-label {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-top: 0.25rem;
+}
+
 /* Deposit method rows */
 .pe-method-list {
     display: flex;
@@ -9706,6 +9736,14 @@ nav a.active {
     gap: 0.25rem;
 }
 
+/* Persistent top-aligned field label */
+.pe-field-label {
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin-bottom: 0.125rem;
+}
+
 .pe-input {
     width: 100%;
     padding: 0.6rem 0.8rem;
@@ -9715,10 +9753,31 @@ nav a.active {
     color: var(--text-primary);
     font-size: 0.9rem;
     outline: none;
+    transition: border-color 0.2s ease;
 }
 
 .pe-input--error {
     border-color: #f87171;
+    animation: pe-shake 0.3s ease;
+}
+
+@keyframes pe-shake {
+    0%,
+    100% {
+        transform: translateX(0);
+    }
+    20% {
+        transform: translateX(-3px);
+    }
+    40% {
+        transform: translateX(3px);
+    }
+    60% {
+        transform: translateX(-2px);
+    }
+    80% {
+        transform: translateX(2px);
+    }
 }
 
 .pe-input--locked {
@@ -9753,6 +9812,16 @@ nav a.active {
 .pe-checkbox {
     margin-top: 0.2rem;
     accent-color: var(--accent);
+}
+
+/* Optional checkbox — muted styling */
+.pe-checkbox-optional {
+    opacity: 0.7;
+    font-size: 0.8rem;
+}
+
+.pe-checkbox-optional:hover {
+    opacity: 1;
 }
 
 /* Developer profile section (Issue #049) */
@@ -9989,6 +10058,21 @@ nav a.active {
     color: var(--accent);
     font-weight: 600;
     font-size: 0.95rem;
+}
+
+/* Countdown capsule badge */
+.pe-countdown-capsule {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    color: var(--accent);
+    font-weight: 600;
+    font-size: 0.85rem;
+    background: rgba(139, 92, 246, 0.1);
+    border: 1px solid rgba(139, 92, 246, 0.25);
+    border-radius: 9999px;
+    padding: 0.2rem 0.6rem;
+    box-shadow: 0 0 8px rgba(139, 92, 246, 0.15);
 }
 
 /* Format badge row */
@@ -12732,4 +12816,209 @@ nav a.active {
 .dep2-icon--danger {
     color: var(--danger, red);
     font-size: 1.5rem;
+}
+
+/* ========================================================================
+   Form Builder (Issue #049 Phase 2 — admin form field editor)
+   ======================================================================== */
+
+.form-builder {
+    max-width: 800px;
+}
+
+.form-builder-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+}
+
+.form-builder-stats {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: 0.9rem;
+}
+
+.form-builder-actions {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.form-builder-section-label {
+    margin-bottom: 1rem;
+}
+
+.form-builder-section-label input {
+    margin-top: 0.3rem;
+}
+
+.form-builder-fields {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.form-builder-field-card {
+    padding: 1rem 1.25rem;
+    background: var(--bg-secondary, #1a1a2e);
+    border: 1px solid var(--border, #333);
+    border-radius: var(--radius-md, 8px);
+    transition: border-color 0.2s;
+}
+
+.form-builder-field-card:hover {
+    border-color: var(--accent-hover, #818cf8);
+}
+
+.form-builder-field-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+}
+
+.form-builder-field-reorder {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+.form-builder-field-reorder button {
+    width: 24px;
+    height: 18px;
+    font-size: 0.7rem;
+    padding: 0;
+    min-width: 0;
+    line-height: 1;
+}
+
+.form-builder-field-info {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex: 1;
+    flex-wrap: wrap;
+}
+
+.form-builder-field-key {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    font-family: monospace;
+}
+
+.form-builder-field-body {
+    padding-left: 2rem;
+}
+
+.form-builder-field-row {
+    display: flex;
+    gap: 0.75rem;
+    margin-bottom: 0.5rem;
+}
+
+.form-builder-field-col {
+    flex: 1;
+    min-width: 0;
+}
+
+.form_builder-field-col {
+    flex: 1;
+    min-width: 0;
+}
+
+.form-builder-toggles {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    justify-content: center;
+    padding-top: 0.3rem;
+}
+
+.form-builder-toggles .pe-checkbox-label {
+    font-size: 0.85rem;
+}
+
+.form-builder-field-options {
+    margin-top: 0.5rem;
+}
+
+.form-builder-field-options textarea {
+    font-family: monospace;
+    font-size: 0.85rem;
+}
+
+.form-builder-add-btn {
+    width: 100%;
+    padding: 0.75rem;
+    background: var(--bg-tertiary, #2a2a3e);
+    border: 2px dashed var(--border, #444);
+    border-radius: var(--radius-md, 8px);
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.form-builder-add-btn:hover {
+    border-color: var(--accent, #6366f1);
+    color: var(--accent, #6366f1);
+    background: var(--bg-hover, rgba(99, 102, 241, 0.08));
+}
+
+.form-builder-preview {
+    padding: 1.5rem;
+    background: var(--bg-tertiary, #2a2a3e);
+    border-radius: var(--radius-md, 8px);
+    border: 1px solid var(--border, #333);
+}
+
+.form-builder-help {
+    margin-top: 1.5rem;
+    padding: 1rem;
+    background: var(--bg-tertiary, #2a2a3e);
+    border-radius: var(--radius-md, 8px);
+    border: 1px solid var(--border, #333);
+}
+
+.form-builder-help summary {
+    cursor: pointer;
+    font-size: 0.85rem;
+}
+
+.form-builder-help-content {
+    margin-top: 0.75rem;
+}
+
+.form-builder-key-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-top: 0.5rem;
+}
+
+.form-builder-key {
+    font-size: 0.8rem;
+    padding: 0.15rem 0.5rem;
+    background: var(--bg-secondary, #1a1a2e);
+    border: 1px solid var(--border, #444);
+    border-radius: var(--radius-sm, 4px);
+    color: var(--accent, #6366f1);
+}
+
+.admin-confirm-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    background: var(--danger-bg, rgba(239, 68, 68, 0.1));
+    border: 1px solid var(--danger-border, rgba(239, 68, 68, 0.3));
+    border-radius: var(--radius-md, 8px);
+    margin-bottom: 1rem;
+    color: var(--danger, #ef4444);
+    font-size: 0.9rem;
 }

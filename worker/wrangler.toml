@@ -19,7 +19,7 @@ not_found_handling = "single-page-application"
 [build]
 command = """
   mkdir -p build/worker && \
-  CARGO_BUILD_JOBS=2 cargo build -p event-checkin-worker --target wasm32-unknown-unknown --release && \
+  CARGO_BUILD_JOBS=1 cargo build -p event-checkin-worker --target wasm32-unknown-unknown --release && \
   wasm-bindgen \
     --target bundler \
     --no-typescript \
