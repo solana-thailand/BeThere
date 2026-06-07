@@ -361,8 +361,7 @@ pub async fn get_event(db: &D1Database, event_id: &str) -> Result<Option<D1Event
         .prepare(&sql)
         .first::<D1EventRow>(None)
         .await
-        .ok() // D1 returns JsValue(null) for no-match
-        .flatten();
+        .map_err(|e| format!("D1 get_event query: {e:?}"))?;
     Ok(result)
 }
 
@@ -373,8 +372,7 @@ pub async fn get_active_event(db: &D1Database) -> Result<Option<D1EventRow>, Str
         .prepare(sql)
         .first::<D1EventRow>(None)
         .await
-        .ok() // D1 returns JsValue(null) for no-match
-        .flatten();
+        .map_err(|e| format!("D1 get_active_event query: {e:?}"))?;
     Ok(result)
 }
 
@@ -385,8 +383,7 @@ pub async fn get_event_by_slug(db: &D1Database, slug: &str) -> Result<Option<D1E
         .prepare(&sql)
         .first::<D1EventRow>(None)
         .await
-        .ok() // D1 returns JsValue(null) for no-match
-        .flatten();
+        .map_err(|e| format!("D1 get_event_by_slug query: {e:?}"))?;
     Ok(result)
 }
 

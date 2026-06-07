@@ -167,8 +167,7 @@ pub(crate) async fn get_deposit_status_from_d1(
         .map_err(|e| format!("D1 get_deposit_status bind: {e:?}"))?
         .first::<DepositStatusRow>(None)
         .await
-        .ok() // D1 returns JsValue(null) for no-match, not Rust None
-        .flatten();
+        .map_err(|e| format!("D1 get_deposit_status query: {e:?}"))?;
 
     Ok(row)
 }
@@ -406,8 +405,7 @@ pub(crate) async fn get_attendee_by_id(
         .map_err(|e| format!("D1 get_attendee_by_id bind: {e:?}"))?
         .first::<D1AttendeeRow>(None)
         .await
-        .ok() // D1 returns JsValue(null) for no-match
-        .flatten();
+        .map_err(|e| format!("D1 get_attendee_by_id query: {e:?}"))?;
 
     Ok(row.map(|r| r.to_attendee()))
 }
@@ -431,8 +429,7 @@ pub(crate) async fn get_attendee_by_claim_token(
         .map_err(|e| format!("D1 get_attendee_by_claim_token bind: {e:?}"))?
         .first::<D1AttendeeRow>(None)
         .await
-        .ok() // D1 returns JsValue(null) for no-match
-        .flatten();
+        .map_err(|e| format!("D1 get_attendee_by_claim_token query: {e:?}"))?;
 
     Ok(row.map(|r| r.to_attendee()))
 }

@@ -111,20 +111,18 @@ pub(crate) async fn get_developer_profile(
     db: &D1Database,
     email: &str,
 ) -> Result<Option<DeveloperProfileRow>, String> {
-    Ok(db
-        .prepare(
-            "SELECT email, display_name, wallet_address, github_handle, discord_handle, \
+    db.prepare(
+        "SELECT email, display_name, wallet_address, github_handle, discord_handle, \
          twitter_handle, experience_level, primary_role, tech_stack, interests, \
          learning_goals, expectations, company_org, location_city, consent_outreach, \
          first_seen_at, last_active_at, total_events, badges_earned \
          FROM developer_profiles WHERE email = ?1",
-        )
-        .bind_refs(&[D1Type::Text(email)])
-        .map_err(|e| format!("D1 get_developer_profile bind: {e:?}"))?
-        .first::<DeveloperProfileRow>(None)
-        .await
-        .ok() // D1 returns JsValue(null) for no-match
-        .flatten())
+    )
+    .bind_refs(&[D1Type::Text(email)])
+    .map_err(|e| format!("D1 get_developer_profile bind: {e:?}"))?
+    .first::<DeveloperProfileRow>(None)
+    .await
+    .map_err(|e| format!("D1 get_developer_profile query: {e:?}"))
 }
 
 /// Update wallet address for a developer (set when they connect wallet on claim page).
@@ -337,8 +335,7 @@ pub(crate) async fn developer_count(db: &D1Database) -> Result<i64, String> {
         .prepare("SELECT COUNT(*) as cnt FROM developer_profiles")
         .first::<serde_json::Map<String, serde_json::Value>>(None)
         .await
-        .ok() // D1 returns JsValue(null) when table empty
-        .flatten();
+        .map_err(|e| format!("D1 developer_count query: {e:?}"))?;
 
     Ok(row.and_then(|m| m.get("cnt")?.as_i64()).unwrap_or(0))
 }
@@ -443,8 +440,7 @@ pub(crate) async fn outreach_opt_in_count(db: &D1Database) -> Result<i64, String
         .prepare("SELECT COUNT(*) as cnt FROM developer_profiles WHERE consent_outreach = 1")
         .first::<serde_json::Map<String, serde_json::Value>>(None)
         .await
-        .ok()
-        .flatten();
+        .map_err(|e| format!("D1 outreach_opt_in_count query: {e:?}"))?;
 
     Ok(row.and_then(|m| m.get("cnt")?.as_i64()).unwrap_or(0))
 }
