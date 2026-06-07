@@ -154,12 +154,21 @@ pub(crate) async fn verify_deposit(
 
 /// Get deposit status from D1 by attendee ID.
 /// Returns the raw deposit columns if a row is found.
+///
+/// Uses COALESCE to avoid NULL deserialization errors — D1/SQLite may return
+/// NULL for columns that were added via ALTER TABLE where existing rows
+/// didn't get the default value applied.
 pub(crate) async fn get_deposit_status_from_d1(
     db: &D1Database,
     attendee_id: &str,
 ) -> Result<Option<DepositStatusRow>, String> {
     let stmt = db.prepare(
-        "SELECT id, event_id, deposit_status, deposit_tx_hash, deposit_amount_usdc \
+        "SELECT \
+            COALESCE(id, '')                   AS id, \
+            COALESCE(event_id, '')             AS event_id, \
+            COALESCE(deposit_status, 'none')   AS deposit_status, \
+            deposit_tx_hash, \
+            COALESCE(deposit_amount_usdc, 0)   AS deposit_amount_usdc \
          FROM attendees WHERE id = ?1",
     );
     let row = stmt
@@ -174,16 +183,15 @@ pub(crate) async fn get_deposit_status_from_d1(
 
 /// Raw D1 row for deposit status columns.
 ///
-/// All string fields are `Option<String>` because D1 may return NULL even for
-/// columns declared NOT NULL — e.g., rows synced from DO before the column
-/// was added, or rows where the default wasn't applied by D1's ALTER TABLE.
+/// Uses COALESCE in the query to ensure non-null defaults, so these fields
+/// are non-Optional except for `deposit_tx_hash` which is genuinely nullable.
 #[derive(Deserialize)]
 pub(crate) struct DepositStatusRow {
-    pub id: Option<String>,
-    pub event_id: Option<String>,
-    pub deposit_status: Option<String>,
+    pub id: String,
+    pub event_id: String,
+    pub deposit_status: String,
     pub deposit_tx_hash: Option<String>,
-    pub deposit_amount_usdc: Option<i64>,
+    pub deposit_amount_usdc: i64,
 }
 
 /// Save a pending deposit to D1 (upsert deposit columns on the attendee row).
