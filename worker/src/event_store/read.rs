@@ -443,8 +443,8 @@ pub async fn get_deposit_status_with_fallback(
                 Some("verified" | "confirmed")
             );
             return Ok(Some(event_checkin_domain::models::deposit::DepositStatus {
-                attendee_id: row.id,
-                event_id: row.event_id,
+                attendee_id: row.id.unwrap_or_default(),
+                event_id: row.event_id.unwrap_or_default(),
                 method: event_checkin_domain::models::deposit::DepositMethod::Usdc,
                 amount: row.deposit_amount_usdc.unwrap_or(0) as u64,
                 currency: "USDC".to_string(),

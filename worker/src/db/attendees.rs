@@ -173,10 +173,14 @@ pub(crate) async fn get_deposit_status_from_d1(
 }
 
 /// Raw D1 row for deposit status columns.
+///
+/// All string fields are `Option<String>` because D1 may return NULL even for
+/// columns declared NOT NULL — e.g., rows synced from DO before the column
+/// was added, or rows where the default wasn't applied by D1's ALTER TABLE.
 #[derive(Deserialize)]
 pub(crate) struct DepositStatusRow {
-    pub id: String,
-    pub event_id: String,
+    pub id: Option<String>,
+    pub event_id: Option<String>,
     pub deposit_status: Option<String>,
     pub deposit_tx_hash: Option<String>,
     pub deposit_amount_usdc: Option<i64>,
