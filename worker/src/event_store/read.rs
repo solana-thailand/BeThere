@@ -436,14 +436,15 @@ pub async fn get_deposit_status_with_fallback(
     if let Some(db) = d1
         && let Some(row) = crate::db::attendees::get_deposit_status_from_d1(db, attendee_id).await?
     {
+        let status_str = row.deposit_status.as_deref().unwrap_or("none");
         // Only build DepositStatus if there's an actual deposit record
-        if row.deposit_status != "none" {
-            let verified = matches!(row.deposit_status.as_str(), "verified" | "confirmed");
+        if status_str != "none" {
+            let verified = matches!(status_str, "verified" | "confirmed");
             return Ok(Some(event_checkin_domain::models::deposit::DepositStatus {
-                attendee_id: row.id,
-                event_id: row.event_id,
+                attendee_id: row.id.unwrap_or_default(),
+                event_id: row.event_id.unwrap_or_default(),
                 method: event_checkin_domain::models::deposit::DepositMethod::Usdc,
-                amount: row.deposit_amount_usdc as u64,
+                amount: row.deposit_amount_usdc.unwrap_or(0) as u64,
                 currency: "USDC".to_string(),
                 tx_signature: row.deposit_tx_hash,
                 verified,

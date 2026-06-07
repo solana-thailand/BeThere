@@ -9,6 +9,7 @@ use event_checkin_domain::models::attendee::{Attendee, CheckInStatus};
 use js_sys::Array;
 use serde::Deserialize;
 use wasm_bindgen::JsCast;
+use wasm_bindgen_futures;
 use worker::D1Database;
 use worker::d1::D1Type;
 
@@ -155,43 +156,69 @@ pub(crate) async fn verify_deposit(
 /// Get deposit status from D1 by attendee ID.
 /// Returns the raw deposit columns if a row is found.
 ///
-/// Uses COALESCE to avoid NULL deserialization errors — D1/SQLite may return
-/// NULL for columns that were added via ALTER TABLE where existing rows
-/// didn't get the default value applied.
+/// Uses JSON.stringify + serde_json to bypass `.first::<T>()` which uses
+/// `serde_wasm_bindgen::from_value()` — that crashes on `JsValue(null)`
+/// columns (e.g. rows inserted before ALTER TABLE added NOT NULL DEFAULT).
 pub(crate) async fn get_deposit_status_from_d1(
     db: &D1Database,
     attendee_id: &str,
 ) -> Result<Option<DepositStatusRow>, String> {
     let stmt = db.prepare(
-        "SELECT \
-            COALESCE(id, '')                   AS id, \
-            COALESCE(event_id, '')             AS event_id, \
-            COALESCE(deposit_status, 'none')   AS deposit_status, \
-            deposit_tx_hash, \
-            COALESCE(deposit_amount_usdc, 0)   AS deposit_amount_usdc \
+        "SELECT id, event_id, deposit_status, deposit_tx_hash, deposit_amount_usdc \
          FROM attendees WHERE id = ?1",
     );
-    let row = stmt
+    let bound = stmt
         .bind_refs(&[D1Type::Text(attendee_id)])
-        .map_err(|e| format!("D1 get_deposit_status bind: {e:?}"))?
-        .first::<DepositStatusRow>(None)
-        .await
-        .map_err(|e| format!("D1 get_deposit_status query: {e:?}"))?;
+        .map_err(|e| format!("D1 get_deposit_status bind: {e:?}"))?;
 
-    Ok(row)
+    // Bypass worker crate's .first::<T>() which uses serde_wasm_bindgen::from_value()
+    // — that crashes on JsValue(null) columns. Instead, call the raw JS .first() via
+    // inner(), then JSON.stringify → serde_json (same pattern as get_attendees_by_event).
+    let raw_first = wasm_bindgen_futures::JsFuture::from(
+        bound
+            .inner()
+            .first(None)
+            .map_err(|e| format!("D1 get_deposit_status first() call: {e:?}"))?,
+    )
+    .await
+    .map_err(|e| format!("D1 get_deposit_status first() await: {e:?}"))?;
+
+    // No row found
+    if raw_first.is_null() || raw_first.is_undefined() {
+        return Ok(None);
+    }
+
+    let json_str = js_sys::JSON::stringify(&raw_first)
+        .map(|s| s.as_string().unwrap_or_default())
+        .unwrap_or_default();
+
+    if json_str.is_empty() {
+        return Ok(None);
+    }
+
+    let row: DepositStatusRow = serde_json::from_str(&json_str).map_err(|e| {
+        tracing::warn!(
+            error = %e,
+            json = %json_str.chars().take(300).collect::<String>(),
+            "D1 get_deposit_status: deserialize failed"
+        );
+        format!("D1 get_deposit_status deserialize: {e}")
+    })?;
+
+    Ok(Some(row))
 }
 
 /// Raw D1 row for deposit status columns.
 ///
-/// Uses COALESCE in the query to ensure non-null defaults, so these fields
-/// are non-Optional except for `deposit_tx_hash` which is genuinely nullable.
+/// Uses serde_json (via JSON.stringify) so NULL columns become `None`
+/// in Option fields — no serde_wasm_bindgen crash.
 #[derive(Deserialize)]
 pub(crate) struct DepositStatusRow {
-    pub id: String,
-    pub event_id: String,
-    pub deposit_status: String,
+    pub id: Option<String>,
+    pub event_id: Option<String>,
+    pub deposit_status: Option<String>,
     pub deposit_tx_hash: Option<String>,
-    pub deposit_amount_usdc: i64,
+    pub deposit_amount_usdc: Option<i64>,
 }
 
 /// Save a pending deposit to D1 (upsert deposit columns on the attendee row).
