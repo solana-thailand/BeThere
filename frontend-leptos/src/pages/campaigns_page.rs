@@ -60,7 +60,12 @@ pub fn CampaignsPage(
     let (form_org_id, set_form_org_id) = signal(String::new());
     let (form_reward_type, set_form_reward_type) = signal(String::new());
     let (form_criteria, set_form_criteria) = signal(String::new());
-    let (form_reward_config, set_form_reward_config) = signal(String::new());
+    let (form_rc_name, set_form_rc_name) = signal(String::new());
+    let (form_rc_symbol, set_form_rc_symbol) = signal(String::new());
+    let (form_rc_description, set_form_rc_description) = signal(String::new());
+    let (form_rc_image_url, set_form_rc_image_url) = signal(String::new());
+    let (form_rc_metadata_uri, set_form_rc_metadata_uri) = signal(String::new());
+    let (form_rc_collection_mint, set_form_rc_collection_mint) = signal(String::new());
     let (add_event_id, set_add_event_id) = signal(String::new());
     let (add_seq_order, set_add_seq_order) = signal(0i64);
     let (add_is_required, set_add_is_required) = signal(true);
@@ -143,7 +148,12 @@ pub fn CampaignsPage(
         set_form_org_id.set(String::new());
         set_form_reward_type.set(String::new());
         set_form_criteria.set(String::new());
-        set_form_reward_config.set(String::new());
+        set_form_rc_name.set(String::new());
+        set_form_rc_symbol.set(String::new());
+        set_form_rc_description.set(String::new());
+        set_form_rc_image_url.set(String::new());
+        set_form_rc_metadata_uri.set(String::new());
+        set_form_rc_collection_mint.set(String::new());
     };
 
     let populate_form = move |c: &api::CampaignDetail| {
@@ -152,7 +162,44 @@ pub fn CampaignsPage(
         set_form_org_id.set(c.organization_id.clone());
         set_form_reward_type.set(c.reward_type.clone());
         set_form_criteria.set(c.completion_criteria.clone());
-        set_form_reward_config.set(c.reward_config.clone());
+        let rc: serde_json::Value =
+            serde_json::from_str(&c.reward_config).unwrap_or(serde_json::json!({}));
+        set_form_rc_name.set(
+            rc.get("name")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+        );
+        set_form_rc_symbol.set(
+            rc.get("symbol")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+        );
+        set_form_rc_description.set(
+            rc.get("description")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+        );
+        set_form_rc_image_url.set(
+            rc.get("image_url")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+        );
+        set_form_rc_metadata_uri.set(
+            rc.get("metadata_uri")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+        );
+        set_form_rc_collection_mint.set(
+            rc.get("collection_mint")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+        );
     };
 
     // Create new
@@ -206,6 +253,17 @@ pub fn CampaignsPage(
             }
         }
 
+        // Build reward_config JSON from individual fields
+        let rc = serde_json::json!({
+            "name": form_rc_name.get(),
+            "symbol": form_rc_symbol.get(),
+            "description": form_rc_description.get(),
+            "image_url": form_rc_image_url.get(),
+            "metadata_uri": form_rc_metadata_uri.get(),
+            "collection_mint": form_rc_collection_mint.get(),
+        });
+        let reward_config = serde_json::to_string(&rc).unwrap_or_default();
+
         set_saving.set(true);
 
         match edit_id {
@@ -215,7 +273,7 @@ pub fn CampaignsPage(
                     description: form_description.get(),
                     completion_criteria: form_criteria.get(),
                     reward_type: form_reward_type.get(),
-                    reward_config: form_reward_config.get(),
+                    reward_config,
                 };
                 leptos::task::spawn_local(async move {
                     match api::update_campaign(&eid, &req).await {
@@ -248,7 +306,7 @@ pub fn CampaignsPage(
                     organization_id: form_org_id.get(),
                     completion_criteria: form_criteria.get(),
                     reward_type: form_reward_type.get(),
-                    reward_config: form_reward_config.get(),
+                    reward_config,
                 };
                 leptos::task::spawn_local(async move {
                     match api::create_campaign(&req).await {
@@ -666,16 +724,59 @@ pub fn CampaignsPage(
                                 on:input=move |ev| set_form_criteria.set(event_target_value(&ev))
                             />
                         </div>
-                        <div class="form-group">
-                            <label class="form-label">"Reward Config (JSON)"</label>
-                            <textarea
-                                class="form-input"
-                                rows="3"
-                                placeholder=r#"{"nft_name": "Completion Badge"}"#
-                                prop:value=move || form_reward_config.get()
-                                on:input=move |ev| set_form_reward_config.set(event_target_value(&ev))
-                            />
-                        </div>
+                        <Show when=move || form_reward_type.get() == "nft_certificate" fallback=|| view! { <div></div> }>
+                            <div class="form-section">
+                                <h4 class="form-section-title">"NFT Reward Configuration"</h4>
+                                <div class="form-group">
+                                    <label class="form-label">"NFT Name"</label>
+                                    <input class="form-input" type="text"
+                                        placeholder="e.g. Series Completion Badge"
+                                        prop:value=move || form_rc_name.get()
+                                        on:input=move |ev| set_form_rc_name.set(event_target_value(&ev))
+                                    />
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">"Symbol"</label>
+                                    <input class="form-input" type="text"
+                                        placeholder="e.g. BUILDER"
+                                        prop:value=move || form_rc_symbol.get()
+                                        on:input=move |ev| set_form_rc_symbol.set(event_target_value(&ev))
+                                    />
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">"Description"</label>
+                                    <textarea class="form-input" rows="2"
+                                        placeholder="NFT description (defaults to 'Completed the {title} campaign')"
+                                        prop:value=move || form_rc_description.get()
+                                        on:input=move |ev| set_form_rc_description.set(event_target_value(&ev))
+                                    />
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">"Image URL"</label>
+                                    <input class="form-input" type="url"
+                                        placeholder="https://arweave.net/... or IPFS URL"
+                                        prop:value=move || form_rc_image_url.get()
+                                        on:input=move |ev| set_form_rc_image_url.set(event_target_value(&ev))
+                                    />
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">"Metadata URI"</label>
+                                    <input class="form-input" type="url"
+                                        placeholder="https://arweave.net/... (off-chain metadata JSON)"
+                                        prop:value=move || form_rc_metadata_uri.get()
+                                        on:input=move |ev| set_form_rc_metadata_uri.set(event_target_value(&ev))
+                                    />
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">"Collection Mint"</label>
+                                    <input class="form-input" type="text"
+                                        placeholder="Solana collection mint address (optional)"
+                                        prop:value=move || form_rc_collection_mint.get()
+                                        on:input=move |ev| set_form_rc_collection_mint.set(event_target_value(&ev))
+                                    />
+                                </div>
+                            </div>
+                        </Show>
                         <div class="form-actions">
                             <button
                                 class="btn btn-primary"

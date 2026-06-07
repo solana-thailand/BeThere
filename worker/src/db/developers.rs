@@ -328,6 +328,32 @@ struct TechStackRow {
     tech_stack: String,
 }
 
+/// Lightweight row for listing developers with wallet addresses.
+#[allow(dead_code)]
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct WalletDeveloperRow {
+    pub email: String,
+    pub wallet_address: String,
+}
+
+/// List all developers that have a non-null, non-empty wallet address.
+pub(crate) async fn list_developers_with_wallets(
+    db: &D1Database,
+) -> Result<Vec<WalletDeveloperRow>, String> {
+    let sql = "SELECT email, wallet_address FROM developer_profiles \
+         WHERE wallet_address IS NOT NULL AND wallet_address != ''";
+
+    let rows = db
+        .prepare(sql)
+        .all()
+        .await
+        .map_err(|e| format!("D1 list_developers_with_wallets run: {e:?}"))?
+        .results::<WalletDeveloperRow>()
+        .map_err(|e| format!("D1 list_developers_with_wallets deserialize: {e:?}"))?;
+
+    Ok(rows)
+}
+
 /// Total developer profile count.
 #[allow(dead_code)]
 pub(crate) async fn developer_count(db: &D1Database) -> Result<i64, String> {

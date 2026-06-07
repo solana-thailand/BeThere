@@ -21,6 +21,7 @@ pub mod register;
 pub mod user_log;
 pub mod waitlist;
 pub mod walkin;
+pub mod wallet;
 
 use crate::state::AppState;
 use axum::{
@@ -115,7 +116,10 @@ pub fn routes(state: AppState) -> Router<()> {
         .route(
             "/storage/badges/{event_id}",
             get(crate::storage::serve_badge),
-        );
+        )
+        // Wallet NFT verification (public — no auth needed to read on-chain data)
+        .route("/wallet/leaderboard", get(wallet::get_leaderboard))
+        .route("/wallet/{address}/nfts", get(wallet::get_wallet_nfts));
 
     // Attendee-authenticated routes — require JWT identity but NOT staff status.
     // Used for endpoints where a verified email is enough (registration, my-registration).

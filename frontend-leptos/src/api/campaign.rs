@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::types::ApiError;
-use super::{api_delete, api_get, api_post, api_post_json, api_put_json, fetch::response_json};
+use super::{api_delete, api_get, api_post_json, api_put_json, fetch::response_json};
 
 // ===== Campaign Types =====
 
@@ -365,17 +365,27 @@ pub async fn my_campaign_progress() -> Result<Vec<DeveloperProgressItem>, ApiErr
     Ok(result.data.map(|d| d.progress).unwrap_or_default())
 }
 
-/// POST /api/campaigns/{id}/claim-reward — claim completion reward
-pub async fn claim_campaign_reward(id: &str) -> Result<(), ApiError> {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClaimCampaignRewardRequest {
+    pub wallet_address: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ClaimCampaignRewardResponse {
+    #[serde(default)]
+    pub asset_id: String,
+    #[serde(default)]
+    pub signature: String,
+}
+
+/// POST /api/campaigns/{id}/claim-reward — claim completion reward (mints campaign NFT)
+pub async fn claim_campaign_reward(
+    id: &str,
+    wallet_address: &str,
+) -> Result<ClaimCampaignRewardResponse, ApiError> {
     let path = format!("/campaigns/{id}/claim-reward");
-    let response = api_post(&path).await?;
-
-    if !response.ok() {
-        return Err(ApiError {
-            message: "Failed to claim reward".to_string(),
-            status: response.status(),
-        });
-    }
-
-    Ok(())
+    let req = ClaimCampaignRewardRequest {
+        wallet_address: wallet_address.to_string(),
+    };
+    api_post_json(&path, &req).await
 }

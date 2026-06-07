@@ -17,7 +17,7 @@
 //!   POST   /api/campaigns/{id}/claim-reward  — claim completion certificate NFT
 
 use axum::{
-    Extension,
+    Extension, Json,
     extract::{Path, State},
 };
 use serde::{Deserialize, Serialize};
@@ -63,6 +63,11 @@ pub struct UpdateCampaignRequest {
 #[derive(Debug, Deserialize)]
 pub struct UpdateStatusRequest {
     pub status: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ClaimRewardRequest {
+    pub wallet_address: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -541,16 +546,22 @@ pub async fn my_campaign_progress(
 }
 
 /// POST /api/campaigns/{id}/claim-reward
-/// Marks the completion certificate NFT reward as claimed for the current user.
+/// Mints a campaign completion cNFT and marks the reward as claimed.
 #[worker::send]
 pub async fn claim_campaign_reward(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
     Path(id): Path<String>,
+    Json(body): Json<ClaimRewardRequest>,
 ) -> Result<ApiOk<serde_json::Value>, WorkerError> {
     let d1 = require_d1(&state)?;
 
     let email = claims.email.to_lowercase();
+
+    // Validate wallet address format
+    if let Err(e) = crate::solana::validate_wallet_address(&body.wallet_address) {
+        return Err(AppError::Validation(e).into());
+    }
 
     let progress = crate::db::campaigns::get_developer_progress(d1, &id, &email)
         .await
@@ -570,12 +581,105 @@ pub async fn claim_campaign_reward(
         );
     }
 
-    crate::db::campaigns::mark_reward_claimed(d1, &id, &email)
+    // Fetch campaign for reward_config metadata
+    let campaign = crate::db::campaigns::get_campaign(d1, &id)
         .await
-        .map_err(|e| AppError::Internal(format!("failed to mark reward claimed: {e}")))?;
+        .map_err(|e| AppError::Internal(format!("failed to get campaign: {e}")))?
+        .ok_or_else(|| AppError::NotFound(format!("campaign not found: {id}")))?;
+
+    // Parse reward_config JSON for NFT metadata
+    let reward_config: serde_json::Value =
+        serde_json::from_str(&campaign.reward_config).unwrap_or_else(|_| serde_json::json!({}));
+
+    let default_name = format!("{} - Campaign Complete", campaign.title);
+    let reward_name = reward_config
+        .get("name")
+        .and_then(|v| v.as_str())
+        .unwrap_or(&default_name)
+        .to_string();
+
+    let reward_symbol = reward_config
+        .get("symbol")
+        .and_then(|v| v.as_str())
+        .unwrap_or("CAMPAIGN")
+        .to_string();
+
+    let default_desc = format!("Completed the {} campaign", campaign.title);
+    let reward_description = reward_config
+        .get("description")
+        .and_then(|v| v.as_str())
+        .unwrap_or(&default_desc)
+        .to_string();
+
+    let reward_image_url = reward_config
+        .get("image_url")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+
+    let reward_metadata_uri = reward_config
+        .get("metadata_uri")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+
+    let reward_collection_mint = reward_config
+        .get("collection_mint")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+
+    // Mint campaign cNFT via Helius
+    let config = &state.config;
+    let mint_req = crate::solana::MintRequest {
+        wallet_address: &body.wallet_address,
+        rpc_url: &config.solana.rpc_url,
+        api_key: &config.solana.api_key,
+        collection_mint: &reward_collection_mint,
+        metadata_uri: &reward_metadata_uri,
+        image_url: &reward_image_url,
+        nft_name: &reward_name,
+        nft_symbol: &reward_symbol,
+        nft_description: &reward_description,
+        nft_external_url: &format!("/campaigns/{id}"),
+        merkle_tree: "",
+    };
+
+    let mint_result = match crate::solana::mint_compressed_nft(&mint_req).await {
+        Ok(result) => result,
+        Err(e) => {
+            tracing::error!(campaign_id = %id, error = %e, "campaign reward mint failed");
+            return Err(AppError::External {
+                service: "helius".into(),
+                status: 502,
+                body: e,
+            }
+            .into());
+        }
+    };
+
+    // Persist mint details alongside claimed timestamp
+    crate::db::campaigns::mark_reward_claimed_with_mint(
+        d1,
+        &id,
+        &email,
+        &mint_result.asset_id,
+        &mint_result.signature,
+    )
+    .await
+    .map_err(|e| AppError::Internal(format!("failed to save reward mint details: {e}")))?;
+
+    tracing::info!(
+        campaign_id = %id,
+        asset_id = %mint_result.asset_id,
+        signature = %mint_result.signature,
+        "campaign reward cNFT minted"
+    );
 
     Ok(ApiOk::new(serde_json::json!({
         "campaign_id": id,
         "reward_claimed": true,
+        "asset_id": mint_result.asset_id,
+        "signature": mint_result.signature,
     })))
 }

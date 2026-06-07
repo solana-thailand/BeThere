@@ -1106,8 +1106,8 @@ mod tests {
     #[test]
     fn test_last_column_letter_hardcoded() {
         let mapping = ColumnMapping::hardcoded();
-        // 32 columns → last index 31 → "AF"
-        assert_eq!(mapping.last_column_letter(), "AF");
+        // 33 columns → last index 32 → "AG"
+        assert_eq!(mapping.last_column_letter(), "AG");
     }
 
     #[test]

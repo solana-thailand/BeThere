@@ -12,6 +12,8 @@ use axum::{
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 
+use std::sync::Arc;
+
 use crate::error::ApiOk;
 use uuid::Uuid;
 
@@ -152,6 +154,19 @@ pub async fn check_in(
             error = %e,
             "D1 check-in write failed (non-fatal)"
         );
+    }
+
+    // Auto-update campaign progress (non-blocking — failures don't affect check-in)
+    if let Some(ref d1) = state.d1 {
+        let d1_clone = Arc::clone(d1);
+        let event_id_clone = event.id.clone();
+        let email_clone = attendee.email.clone();
+        if let Some(ctx) = &state.worker_ctx {
+            ctx.wait_until(async move {
+                crate::db::campaigns::on_event_checkin(&d1_clone, &event_id_clone, &email_clone)
+                    .await;
+            });
+        }
     }
 
     // Detach Google Sheets write — response returns immediately (Phase 2c)

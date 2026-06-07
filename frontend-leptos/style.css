@@ -13022,3 +13022,387 @@ nav a.active {
     color: var(--danger, #ef4444);
     font-size: 0.9rem;
 }
+
+/* ===== Developer Dashboard ===== */
+
+.dev-dashboard {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 2rem 1rem;
+}
+
+.dev-dashboard-header {
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+.dev-dashboard-title {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: var(--text-heading);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.dev-dashboard-subtitle {
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+}
+
+/* Wallet section */
+.dev-dashboard-wallet {
+    margin-bottom: 2rem;
+    padding: 1.5rem;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+}
+
+.dev-wallet-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.dev-wallet-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+/* Score card */
+.dev-score-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.dev-score-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.75rem;
+}
+
+.dev-score-tier-badge {
+    font-size: 1rem;
+    padding: 0.4rem 0.85rem;
+}
+
+.dev-score-value {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--accent);
+}
+
+.dev-score-desc {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    margin-bottom: 1rem;
+}
+
+.dev-score-breakdown {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    margin-bottom: 1rem;
+}
+
+.dev-score-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.dev-score-row-val {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.dev-score-total {
+    border-top: 1px solid var(--border);
+    padding-top: 0.35rem;
+    margin-top: 0.25rem;
+    font-weight: 700;
+}
+
+.dev-score-progress {
+    margin-top: 0.75rem;
+}
+
+.dev-score-progress-label {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.35rem;
+}
+
+.dev-score-progress-bar {
+    height: 6px;
+    background: var(--bg-tertiary);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.dev-score-progress-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 3px;
+    transition: width 0.4s ease;
+}
+
+.dev-score-max {
+    text-align: center;
+    color: var(--success);
+    font-weight: 600;
+    font-size: 0.85rem;
+    margin-top: 0.5rem;
+}
+
+/* Sections */
+.dev-section {
+    margin-bottom: 1.5rem;
+}
+
+.dev-section-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-heading);
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin-bottom: 1rem;
+}
+
+/* NFT grid */
+.dev-nft-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 1rem;
+}
+
+.dev-nft-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    transition: border-color 0.2s;
+}
+
+.dev-nft-card:hover {
+    border-color: var(--accent-border);
+}
+
+.dev-nft-image-wrap {
+    aspect-ratio: 1;
+    background: var(--bg-tertiary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+
+.dev-nft-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.dev-nft-placeholder {
+    color: var(--text-muted);
+}
+
+.dev-nft-info {
+    padding: 0.75rem;
+}
+
+.dev-nft-name {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 0.25rem;
+}
+
+.dev-nft-symbol {
+    font-size: 0.7rem;
+    color: var(--accent);
+    font-weight: 600;
+    text-transform: uppercase;
+    margin-bottom: 0.35rem;
+}
+
+.dev-nft-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    font-family: monospace;
+    text-decoration: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.dev-nft-link:hover {
+    color: var(--accent);
+}
+
+.dev-nft-empty,
+.dev-nft-empty p {
+    text-align: center;
+    color: var(--text-muted);
+    padding: 2rem 0;
+}
+
+/* Campaign progress */
+.dev-campaign-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.dev-campaign-item {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 1rem;
+}
+
+.dev-campaign-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.5rem;
+}
+
+.dev-campaign-id {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    font-family: monospace;
+}
+
+.dev-campaign-progress {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.5rem;
+}
+
+.dev-campaign-bar {
+    flex: 1;
+    height: 6px;
+    background: var(--bg-tertiary);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.dev-campaign-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 3px;
+    transition: width 0.4s ease;
+}
+
+.dev-campaign-count {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.dev-campaign-reward {
+    font-size: 0.8rem;
+    color: var(--success);
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.dev-campaign-reward-pending {
+    color: var(--warning);
+}
+
+.dev-campaign-empty {
+    text-align: center;
+    padding: 2rem 0;
+    color: var(--text-muted);
+}
+
+.dev-campaign-empty p {
+    margin-bottom: 0.25rem;
+}
+
+/* States */
+.dev-empty-state,
+.dev-loading,
+.dev-error {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: var(--text-muted);
+}
+
+.dev-loading p,
+.dev-error p {
+    margin-top: 0.75rem;
+}
+
+.dev-error {
+    color: var(--danger);
+}
+
+.dev-error .btn {
+    margin-top: 1rem;
+}
+
+/* Content area */
+.dev-content {
+    margin-top: 1rem;
+}
+
+/* Footer */
+.dev-dashboard-footer {
+    margin-top: 2rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    text-align: center;
+}
+
+.dev-dashboard-footer p {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+}
+
+/* Responsive */
+@media (max-width: 480px) {
+    .dev-dashboard {
+        padding: 1rem 0.75rem;
+    }
+
+    .dev-dashboard-title {
+        font-size: 1.35rem;
+    }
+
+    .dev-nft-grid {
+        grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+        gap: 0.75rem;
+    }
+
+    .dev-wallet-buttons {
+        flex-direction: column;
+    }
+}

@@ -207,6 +207,159 @@ pub async fn mint_compressed_nft(req: &MintRequest<'_>) -> Result<MintResult, St
 }
 
 // ---------------------------------------------------------------------------
+// DAS API — getAssetsByOwner (for on-chain verification)
+// ---------------------------------------------------------------------------
+
+/// Response from Helius DAS `getAssetsByOwner` — paginated list of assets.
+#[derive(Debug, Clone, serde::Deserialize)]
+#[allow(dead_code)]
+pub struct DasAssetsResponse {
+    pub items: Vec<DasAsset>,
+    pub total: i64,
+    pub page: i64,
+    pub limit: i64,
+}
+
+/// A single compressed NFT asset from the DAS API.
+#[derive(Debug, Clone, serde::Deserialize)]
+#[allow(dead_code)]
+pub struct DasAsset {
+    pub id: String,
+    #[serde(default)]
+    pub content: Option<DasContent>,
+    #[serde(default)]
+    pub grouping: Option<Vec<DasGrouping>>,
+    #[serde(default, rename = "type")]
+    pub asset_type: Option<String>,
+}
+
+/// Content metadata for a DAS asset (name, image, etc.).
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct DasContent {
+    #[serde(default)]
+    pub metadata: Option<DasMetadata>,
+    #[serde(default)]
+    pub json_uri: Option<String>,
+    #[serde(default)]
+    pub files: Option<Vec<DasFile>>,
+}
+
+/// Metadata within DAS content.
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct DasMetadata {
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub symbol: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
+}
+
+/// File reference within DAS content.
+#[derive(Debug, Clone, serde::Deserialize)]
+#[allow(dead_code)]
+pub struct DasFile {
+    #[serde(default)]
+    pub uri: Option<String>,
+    #[serde(default)]
+    pub mime: Option<String>,
+}
+
+/// Grouping info (which collection an NFT belongs to).
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct DasGrouping {
+    #[serde(default)]
+    pub group_key: Option<String>,
+    #[serde(default)]
+    pub group_value: Option<String>,
+}
+
+/// Helius DAS JSON-RPC response envelope.
+#[derive(Debug, serde::Deserialize)]
+struct HeliusDasResponse {
+    result: Option<DasAssetsResponse>,
+    error: Option<HeliusRpcError>,
+}
+
+/// Fetch all compressed NFTs owned by a wallet address using Helius DAS API.
+/// Returns paginated results — caller can specify page and limit.
+pub async fn get_assets_by_owner(
+    rpc_url: &str,
+    api_key: &str,
+    wallet_address: &str,
+    page: i64,
+    limit: i64,
+) -> Result<DasAssetsResponse, String> {
+    let url = format!("{}/?api-key={}", rpc_url, api_key);
+
+    let body = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": "bethere-das",
+        "method": "getAssetsByOwner",
+        "params": {
+            "ownerAddress": wallet_address,
+            "page": page,
+            "limit": limit,
+            "displayOptions": {
+                "showFungible": false,
+                "showNativeBalance": false,
+                "showInscription": false
+            }
+        }
+    });
+
+    let json_body = serde_json::to_string(&body)
+        .map_err(|e| format!("failed to serialize DAS request: {e}"))?;
+
+    let headers = Headers::new();
+    headers
+        .set("Content-Type", "application/json")
+        .map_err(|e| format!("failed to set content-type: {e:?}"))?;
+
+    let mut init = RequestInit::new();
+    init.with_method(Method::Post)
+        .with_headers(headers)
+        .with_body(Some(wasm_bindgen::JsValue::from_str(&json_body)));
+
+    let request = Request::new_with_init(&url, &init)
+        .map_err(|e| format!("failed to create DAS request: {e:?}"))?;
+
+    let mut response = Fetch::Request(request)
+        .send()
+        .await
+        .map_err(|e| format!("helius DAS request failed: {e:?}"))?;
+
+    let status = response.status_code();
+    if !(200..300).contains(&status) {
+        let body_text = response
+            .text()
+            .await
+            .unwrap_or_else(|_| "<failed to read body>".to_string());
+        return Err(format!("helius DAS returned HTTP {status}: {body_text}"));
+    }
+
+    let body_text = response
+        .text()
+        .await
+        .map_err(|e| format!("failed to read DAS response body: {e:?}"))?;
+
+    let rpc_response: HeliusDasResponse = serde_json::from_str(&body_text)
+        .map_err(|e| format!("failed to parse helius DAS response: {e:?}"))?;
+
+    if let Some(err) = rpc_response.error {
+        let code = err.code.map(|c| format!(" (code {c})")).unwrap_or_default();
+        return Err(format!(
+            "helius DAS error: {message}{code}",
+            message = err.message
+        ));
+    }
+
+    rpc_response
+        .result
+        .ok_or_else(|| "helius DAS returned no result and no error".to_string())
+}
+
+// ---------------------------------------------------------------------------
 // Wallet validation
 // ---------------------------------------------------------------------------
 

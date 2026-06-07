@@ -130,6 +130,31 @@ pub(crate) async fn get_campaign(db: &D1Database, id: &str) -> Result<Option<Cam
 }
 
 #[allow(dead_code)]
+/// Fetch all distinct `collection_mint` values from active campaigns with
+/// `reward_type = 'nft_certificate'`. Used to classify NFTs as campaign vs event.
+pub(crate) async fn campaign_collection_mints(db: &D1Database) -> Result<Vec<String>, String> {
+    let sql = "SELECT reward_config FROM campaigns WHERE status = 'active' AND reward_type = 'nft_certificate'";
+    let result = db
+        .prepare(sql)
+        .all()
+        .await
+        .map_err(|e| format!("D1 campaign_collection_mints: {e:?}"))?;
+    let rows = result
+        .results::<CampaignRow>()
+        .map_err(|e| format!("D1 campaign_collection_mints results: {e:?}"))?;
+
+    let mut mints = Vec::new();
+    for row in &rows {
+        if let Ok(cfg) = serde_json::from_str::<serde_json::Value>(&row.reward_config)
+            && let Some(mint) = cfg.get("collection_mint").and_then(|v| v.as_str())
+            && !mint.is_empty()
+        {
+            mints.push(mint.to_string());
+        }
+    }
+    Ok(mints)
+}
+
 pub(crate) async fn list_campaigns(
     db: &D1Database,
     organization_id: Option<&str>,
@@ -186,6 +211,7 @@ pub(crate) async fn delete_campaign(db: &D1Database, id: &str) -> Result<(), Str
 // Campaign Events
 // ---------------------------------------------------------------------------
 
+#[allow(dead_code)]
 pub(crate) async fn add_campaign_event(
     db: &D1Database,
     campaign_id: &str,
@@ -355,6 +381,7 @@ pub(crate) async fn list_developer_campaigns(
         .map_err(|e| format!("D1 list_developer_campaigns results: {e:?}"))
 }
 
+#[allow(dead_code)]
 pub(crate) async fn mark_reward_claimed(
     db: &D1Database,
     campaign_id: &str,
@@ -368,6 +395,27 @@ pub(crate) async fn mark_reward_claimed(
     db.exec(&sql)
         .await
         .map_err(|e| format!("D1 mark_reward_claimed: {e:?}"))?;
+    Ok(())
+}
+
+/// Mark campaign reward claimed with minted NFT details (asset_id + signature).
+pub(crate) async fn mark_reward_claimed_with_mint(
+    db: &D1Database,
+    campaign_id: &str,
+    developer_email: &str,
+    asset_id: &str,
+    signature: &str,
+) -> Result<(), String> {
+    let sql = format!(
+        "UPDATE developer_campaign_progress \
+         SET reward_claimed_at = datetime('now'), \
+             reward_asset_id = '{asset_id}', \
+             reward_signature = '{signature}' \
+         WHERE campaign_id = '{campaign_id}' AND developer_email = '{developer_email}'"
+    );
+    db.exec(&sql)
+        .await
+        .map_err(|e| format!("D1 mark_reward_claimed_with_mint: {e:?}"))?;
     Ok(())
 }
 
@@ -458,4 +506,116 @@ pub(crate) async fn campaign_completion_stats(
 struct TotalsRow {
     total_enrolled: i64,
     total_completed: i64,
+}
+
+// ---------------------------------------------------------------------------
+// Auto-Progress on Check-In (Issue 051 Phase 1)
+// ---------------------------------------------------------------------------
+
+/// After a successful check-in, update campaign progress for any campaigns that include this event.
+/// Non-blocking: errors are logged but don't affect check-in.
+pub(crate) async fn on_event_checkin(db: &D1Database, event_id: &str, developer_email: &str) {
+    // 1. Find all campaigns that include this event
+    let campaigns_sql =
+        format!("SELECT DISTINCT campaign_id FROM campaign_events WHERE event_id = '{event_id}'");
+    let result = match db.prepare(&campaigns_sql).all().await {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::warn!(event_id = %event_id, error = %e, "campaign auto-progress: failed to find campaigns");
+            return;
+        }
+    };
+
+    let campaign_rows = match result.results::<CampaignEventRow>() {
+        Ok(rows) => rows,
+        Err(e) => {
+            tracing::warn!(event_id = %event_id, error = %e, "campaign auto-progress: failed to parse campaign rows");
+            return;
+        }
+    };
+
+    for row in campaign_rows {
+        let campaign_id = &row.campaign_id;
+
+        // 2. Count total required events for this campaign
+        let total_sql = format!(
+            "SELECT COUNT(*) AS cnt FROM campaign_events WHERE campaign_id = '{campaign_id}' AND is_required = 1"
+        );
+        let total_result = match db.prepare(&total_sql).first::<TotalCountRow>(None).await {
+            Ok(Some(r)) => r,
+            Ok(None) => {
+                tracing::warn!(campaign_id = %campaign_id, "campaign auto-progress: no total count");
+                continue;
+            }
+            Err(e) => {
+                tracing::warn!(campaign_id = %campaign_id, error = %e, "campaign auto-progress: failed to count total");
+                continue;
+            }
+        };
+
+        // 3. Count events this developer has checked into for this campaign
+        let completed_sql = format!(
+            "SELECT COUNT(*) AS cnt FROM campaign_events ce \
+             INNER JOIN attendees a ON a.event_id = ce.event_id \
+             WHERE ce.campaign_id = '{campaign_id}' \
+             AND a.email = '{developer_email}' \
+             AND a.checked_in_at IS NOT NULL"
+        );
+        let completed_result = match db
+            .prepare(&completed_sql)
+            .first::<TotalCountRow>(None)
+            .await
+        {
+            Ok(Some(r)) => r,
+            Ok(None) => {
+                tracing::warn!(campaign_id = %campaign_id, "campaign auto-progress: no completed count");
+                continue;
+            }
+            Err(e) => {
+                tracing::warn!(campaign_id = %campaign_id, error = %e, "campaign auto-progress: failed to count completed");
+                continue;
+            }
+        };
+
+        let events_completed = completed_result.cnt;
+        let total_required = total_result.cnt;
+        let is_complete = if events_completed >= total_required {
+            1
+        } else {
+            0
+        };
+
+        // 4. Upsert progress
+        if let Err(e) = upsert_developer_progress(
+            db,
+            campaign_id,
+            developer_email,
+            events_completed,
+            total_required,
+            is_complete,
+        )
+        .await
+        {
+            tracing::warn!(
+                campaign_id = %campaign_id,
+                developer_email = %developer_email,
+                error = %e,
+                "campaign auto-progress: failed to upsert"
+            );
+        } else {
+            tracing::info!(
+                campaign_id = %campaign_id,
+                developer_email = %developer_email,
+                events_completed = events_completed,
+                total_required = total_required,
+                is_complete = is_complete,
+                "campaign auto-progress updated"
+            );
+        }
+    }
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+struct TotalCountRow {
+    cnt: i64,
 }
