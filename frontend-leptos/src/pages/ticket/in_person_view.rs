@@ -165,7 +165,7 @@ pub fn InPersonView(
                 <div class="ticket-info-row">
                     <span class="ticket-info-label">"Name"</span>
                     <span class="ticket-info-value">
-                        {utils::escape_html(&name)}
+                        {utils::escape_html(&utils::capitalize_name(&name))}
                     </span>
                 </div>
                 {if !masked_email.is_empty() {
@@ -316,21 +316,8 @@ pub fn InPersonView(
                         </div>
                     </div>
                 }.into_any()
-            } else if deposit_info.as_ref().is_some_and(|d| !d.verified) {
-                view! {
-                    <div class="ticket-action-card ticket-action-card--pending">
-                        <div class="ticket-action-icon">
-                            <Icon icon=IconName::Hourglass class="icon-sm" />
-                        </div>
-                        <div>
-                            <div class="ticket-action-title">"Awaiting Deposit Verification"</div>
-                            <div class="ticket-action-desc">
-                                "Your deposit is being verified. QR code will appear once confirmed."
-                            </div>
-                        </div>
-                    </div>
-                }.into_any()
-            } else if !is_checked_in {
+            } else if !is_checked_in && deposit_info.as_ref().is_none_or(|d| d.verified) {
+                // Ready for check-in: approved + no pending deposit
                 view! {
                     <div class="ticket-action-card ticket-action-card--ready">
                         <div class="ticket-action-icon">

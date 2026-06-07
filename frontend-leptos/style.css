@@ -8686,6 +8686,29 @@ nav a.active {
     padding: 2rem;
     color: var(--text-muted);
 }
+.ticket-qr-placeholder-ghost {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 0.5rem;
+}
+.ticket-qr-placeholder-ghost svg {
+    filter: blur(0.5px);
+}
+.ticket-qr-placeholder-text {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin: 0;
+}
+.ticket-qr-placeholder-hint {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin: 0;
+    text-align: center;
+    max-width: 240px;
+}
 .ticket-qr-actions {
     display: flex;
     align-items: center;

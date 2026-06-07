@@ -225,6 +225,26 @@ pub fn escape_html(text: &str) -> String {
         .replace('\'', "&#39;")
 }
 
+/// Title-case each word in a name string.
+///
+/// Handles "john doe" → "John Doe", "ozone" → "Ozone".
+/// Preserves already-capitalized words.
+pub fn capitalize_name(name: &str) -> String {
+    name.split_whitespace()
+        .map(|word| {
+            let mut chars = word.chars();
+            match chars.next() {
+                None => String::new(),
+                Some(first) => {
+                    first.to_uppercase().collect::<String>()
+                        + &chars.as_str().to_lowercase()
+                }
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 /// Check if a participation type string indicates an in-person attendee.
 ///
 /// Uses case-insensitive substring matching, matching the backend's

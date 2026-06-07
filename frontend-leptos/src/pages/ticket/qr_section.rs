@@ -119,8 +119,32 @@ pub fn QrSection(
                 } else {
                     view! {
                         <div class="ticket-qr-placeholder">
-                            <Icon icon=IconName::QrCode class="icon-xl" />
-                            <p class="hint">"QR code not yet generated"</p>
+                            <div class="ticket-qr-placeholder-ghost">
+                                <svg width="120" height="120" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    // Blurred QR silhouette
+                                    <rect x="10" y="10" width="40" height="40" rx="4" fill="currentColor" opacity="0.08" />
+                                    <rect x="55" y="10" width="20" height="20" rx="2" fill="currentColor" opacity="0.06" />
+                                    <rect x="80" y="10" width="30" height="30" rx="3" fill="currentColor" opacity="0.07" />
+                                    <rect x="10" y="55" width="20" height="25" rx="2" fill="currentColor" opacity="0.06" />
+                                    <rect x="35" y="55" width="15" height="15" rx="2" fill="currentColor" opacity="0.05" />
+                                    <rect x="55" y="55" width="25" height="25" rx="2" fill="currentColor" opacity="0.07" />
+                                    <rect x="85" y="55" width="25" height="20" rx="2" fill="currentColor" opacity="0.06" />
+                                    <rect x="10" y="85" width="30" height="25" rx="3" fill="currentColor" opacity="0.07" />
+                                    <rect x="45" y="85" width="20" height="20" rx="2" fill="currentColor" opacity="0.05" />
+                                    <rect x="70" y="85" width="40" height="25" rx="3" fill="currentColor" opacity="0.06" />
+                                    // Lock overlay
+                                    <circle cx="60" cy="60" r="22" fill="var(--bg-primary, #fff)" opacity="0.9" />
+                                    <rect x="48" y="56" width="24" height="18" rx="3" fill="currentColor" opacity="0.25" />
+                                    <path d="M52 56V50C52 46.686 54.686 44 58 44H62C65.314 44 68 46.686 68 50V56" stroke="currentColor" stroke-width="2.5" fill="none" opacity="0.25" />
+                                    <circle cx="60" cy="64" r="2" fill="var(--bg-primary, #fff)" opacity="0.9" />
+                                </svg>
+                            </div>
+                            <p class="ticket-qr-placeholder-text">
+                                "Your ticket is being prepared"
+                            </p>
+                            <p class="ticket-qr-placeholder-hint">
+                                "QR code will appear here once your deposit is verified"
+                            </p>
                         </div>
                     }.into_any()
                 }}
