@@ -6,6 +6,37 @@ use wasm_bindgen::prelude::*;
 use super::view_data::TicketViewData;
 use crate::icons::{Icon, IconName};
 
+/// Pulsing indicator that the backend is actively checking.
+/// Stays on indefinitely — no fake progress steps.
+#[component]
+pub fn ReassuranceTicker(
+    /// Deposit method — controls the messaging.
+    method: Option<crate::api::DepositMethod>,
+) -> impl IntoView {
+    let (received_label, verifying_label) = match method {
+        Some(crate::api::DepositMethod::Thb) | Some(crate::api::DepositMethod::CreditThb) => {
+            ("Slip received", "Verifying payment")
+        }
+        Some(crate::api::DepositMethod::Usdc) | Some(crate::api::DepositMethod::CreditUsdc) => {
+            ("Transaction sent", "Confirming on-chain")
+        }
+        _ => ("Received", "Verifying"),
+    };
+
+    view! {
+        <div class="ticket-ticker">
+            <span class="ticket-ticker-step ticket-ticker-step--done">
+                "\u{2705} "
+                {received_label}
+            </span>
+            <span class="ticket-ticker-step ticket-ticker-step--active">
+                "\u{23f3} "
+                {verifying_label}
+            </span>
+        </div>
+    }
+}
+
 #[wasm_bindgen(module = "/js/download.js")]
 extern "C" {
     #[wasm_bindgen(js_name = "downloadDataUrl")]
@@ -28,6 +59,7 @@ pub fn QrSection(
     let has_qr = view_data.has_qr;
     let name = view_data.name.clone();
     let is_checked_in = view_data.is_checked_in;
+    let deposit_method = view_data.deposit_info.as_ref().map(|d| d.method);
 
     if is_checked_in {
         // Collapsible QR after check-in
@@ -145,6 +177,7 @@ pub fn QrSection(
                             <p class="ticket-qr-placeholder-hint">
                                 "QR code will appear here once your deposit is verified"
                             </p>
+                            <ReassuranceTicker method=deposit_method />
                         </div>
                     }.into_any()
                 }}
