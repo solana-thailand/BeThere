@@ -447,6 +447,7 @@ pub async fn get_public_ticket(
         "refund_link": attendee.refund_link,
         "escrow_status": format!("{}", event.escrow_status),
         "rollover_target_event": rollover_target_event,
+        "quiz_enabled": event.quiz_enabled,
     });
     Ok(ApiOk::new(data))
 }

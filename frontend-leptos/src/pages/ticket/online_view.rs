@@ -45,6 +45,7 @@ pub fn OnlineView(
         orb_link,
         has_video,
         video_url,
+        quiz_enabled,
         ..
     } = view_data;
 
@@ -94,8 +95,8 @@ pub fn OnlineView(
         });
     });
 
-    // Build timeline quest link
-    let quest_link = if !is_checked_in && has_claim {
+    // Build timeline quest link — only show when quest is actually configured
+    let quest_link = if !is_checked_in && has_claim && quiz_enabled {
         Some((claim_href.clone(), "→ Go to Quest".to_string()))
     } else {
         None
@@ -185,11 +186,19 @@ pub fn OnlineView(
             TimelineStep {
                 done: is_checked_in,
                 number: 3,
-                title: if is_checked_in { "Quest Completed" } else { "Complete Quest" }.into(),
+                title: if is_checked_in {
+                    "Quest Completed"
+                } else if quiz_enabled {
+                    "Complete Quest"
+                } else {
+                    "Virtual Check-in"
+                }.into(),
                 desc: if is_checked_in {
                     "Virtual check-in complete!".into()
-                } else {
+                } else if quiz_enabled {
                     "Pass the quiz or adventure to virtually check in.".into()
+                } else {
+                    "Claim opens after the event ends.".into()
                 },
                 link: quest_link,
             },

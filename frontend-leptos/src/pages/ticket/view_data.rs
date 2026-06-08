@@ -69,6 +69,9 @@ pub struct TicketViewData {
 
     // Orb link
     pub orb_link: Option<String>,
+
+    // Quest
+    pub quiz_enabled: bool,
 }
 
 impl TicketViewData {
@@ -164,6 +167,7 @@ impl TicketViewData {
             event_id: data.event_id.clone(),
             rollover_target_event: data.rollover_target_event.clone(),
             orb_link,
+            quiz_enabled: data.quiz_enabled,
         }
     }
 }

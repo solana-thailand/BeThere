@@ -1136,27 +1136,17 @@ pub fn Claim() -> impl IntoView {
                                     set_state.set(ClaimState::Quiz(claim_data, quiz_data));
                                 }
                                 Ok(_) => {
-                                    // Quiz not configured despite status — fallback to Ready
+                                    // Quiz not configured despite quiz_enabled — organizer hasn't set it up yet.
                                     log::warn!(
-                                        "[claim] quiz status={:?} but quiz not configured, falling back to Ready",
+                                        "[claim] quiz status={:?} but quiz not configured, showing setup pending",
                                         claim_data.quiz_status
                                     );
-                                    if let Some(ref wallet) = claim_data.locked_wallet
-                                        && !wallet.is_empty()
-                                    {
-                                        set_wallet_input.set(wallet.clone());
-                                    }
-                                    set_state.set(ClaimState::Ready(claim_data));
+                                    set_state.set(ClaimState::NftComingSoon(claim_data));
                                 }
                                 Err(e) => {
                                     log::error!("[claim] failed to fetch quiz: {e}");
-                                    // Fallback to Ready so attendee isn't stuck
-                                    if let Some(ref wallet) = claim_data.locked_wallet
-                                        && !wallet.is_empty()
-                                    {
-                                        set_wallet_input.set(wallet.clone());
-                                    }
-                                    set_state.set(ClaimState::Ready(claim_data));
+                                    // Can't verify quiz status — show coming soon instead of letting claim through
+                                    set_state.set(ClaimState::NftComingSoon(claim_data));
                                 }
                             }
                         });

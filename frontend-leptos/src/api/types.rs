@@ -378,6 +378,9 @@ pub struct AttendeeData {
     /// Escrow status (none, initialized, deactivated, closed, cancelled).
     #[serde(default)]
     pub escrow_status: String,
+    /// Whether quiz-gated claiming is enabled for this event.
+    #[serde(default)]
+    pub quiz_enabled: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

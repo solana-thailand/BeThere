@@ -208,6 +208,14 @@ pub async fn lookup_claim(
     .await
     .unwrap_or(QuizStatus::NotRequired);
 
+    // If quiz_enabled is true but no quiz config exists yet, treat as NotStarted
+    // so the frontend shows the correct gate instead of letting the user claim.
+    let quiz_status = if event.quiz_enabled && quiz_status == QuizStatus::NotRequired {
+        QuizStatus::NotStarted
+    } else {
+        quiz_status
+    };
+
     // Read finalized claim lock KV for already-claimed attendees
     // to retrieve signature, asset_id, wallet for explorer links
     let (claimed_signature, claimed_asset_id, claimed_wallet, cluster) = if claimed {
@@ -275,10 +283,14 @@ pub async fn lookup_claim(
 
 /// Check if an online attendee has completed the required quest (quiz or adventure).
 /// Returns true if at least one is passed, or if neither is required.
+///
+/// When `quiz_enabled = true` but no quiz config exists in D1/KV yet, returns `false`
+/// to prevent claiming before the organizer finishes setting up the quiz.
 async fn verify_online_quest_completion(
     state: &AppState,
     event_id: &str,
     claim_token: &str,
+    quiz_enabled: bool,
 ) -> bool {
     let d1 = state.d1.as_deref();
     let kv = state.events_kv.as_ref().or(state.quiz_kv.as_ref());
@@ -290,11 +302,20 @@ async fn verify_online_quest_completion(
             // Quiz not configured — check adventure
             let kv_ref = match kv {
                 Some(k) => k,
-                None => return true,
+                None => {
+                    // No KV available — if quiz_enabled, block (can't verify);
+                    // otherwise allow (no quest required).
+                    return !quiz_enabled;
+                }
             };
             match crate::adventure::get_adventure_status(kv_ref, event_id, claim_token).await {
                 Ok(AdventureStatus::Passed) => true,
-                Ok(AdventureStatus::NotRequired) => true, // no quest configured at all
+                Ok(AdventureStatus::NotRequired) => {
+                    // Neither quiz nor adventure configured.
+                    // If quiz_enabled is true, the organizer intends a quest but
+                    // hasn't set it up yet — block claiming.
+                    !quiz_enabled
+                }
                 _ => false,
             }
         }
@@ -404,7 +425,8 @@ pub async fn execute_claim(
         let is_online_attendee = !attendee.is_in_person();
         if is_online_attendee && event.event_format.has_online() {
             // Verify quiz/adventure completion (at least one must be passed)
-            let quest_passed = verify_online_quest_completion(state, &event.id, token).await;
+            let quest_passed =
+                verify_online_quest_completion(state, &event.id, token, event.quiz_enabled).await;
             if quest_passed {
                 // Auto virtual check-in — generate timestamp locally, detach Sheets write
                 let virtual_ts = chrono::Utc::now().to_rfc3339();
@@ -481,7 +503,17 @@ pub async fn execute_claim(
     // Check quiz gate
     if let Some(quiz_status) = quiz_result {
         match quiz_status {
-            QuizStatus::NotRequired | QuizStatus::Passed => {}
+            QuizStatus::Passed => {}
+            QuizStatus::NotRequired => {
+                // Quiz not configured — if quiz_enabled is true, the organizer
+                // intends a quiz but hasn't set it up yet. Block the claim.
+                if event.quiz_enabled {
+                    tracing::warn!(claim_token = %token, "claim mint blocked: quiz enabled but not configured");
+                    return Err(AppError::Validation(
+                        "quiz is being set up — please try again later".into(),
+                    ));
+                }
+            }
             QuizStatus::NotStarted => {
                 tracing::warn!(claim_token = %token, "claim mint blocked: quiz not attempted");
                 return Err(AppError::Validation(
