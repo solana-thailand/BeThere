@@ -331,13 +331,13 @@ pub(crate) async fn undo_check_in(db: &D1Database, id: &str) -> Result<(), Strin
 /// filled with defaults/None during conversion.
 #[derive(Debug, Clone, Deserialize)]
 struct D1AttendeeRow {
-    id: String,
+    id: Option<String>,
     #[allow(dead_code)]
-    event_id: String,
-    email: String,
-    name: String,
-    approval_status: String,
-    participation_type: String,
+    event_id: Option<String>,
+    email: Option<String>,
+    name: Option<String>,
+    approval_status: Option<String>,
+    participation_type: Option<String>,
     checked_in_at: Option<String>,
     checked_in_by: Option<String>,
     claim_token: Option<String>,
@@ -367,7 +367,7 @@ impl D1AttendeeRow {
     /// deposit_agreed, deposit_method, deposit_amount, solana_address,
     /// send_email_status) are set to defaults.
     fn to_attendee(&self) -> Attendee {
-        let approval = CheckInStatus::from_str(&self.approval_status)
+        let approval = CheckInStatus::from_str(self.approval_status.as_deref().unwrap_or(""))
             .unwrap_or(CheckInStatus::PendingApproval);
 
         // Derive deposit_verified from deposit_status
@@ -389,14 +389,14 @@ impl D1AttendeeRow {
             .map(|id| format!("https://orb.helius.com/nft/{id}"));
 
         Attendee {
-            api_id: self.id.clone(),
+            api_id: self.id.clone().unwrap_or_default(),
             first_name: String::new(),
             last_name: String::new(),
-            name: self.name.clone(),
-            email: self.email.clone(),
-            ticket_name: self.name.clone(),
+            name: self.name.clone().unwrap_or_default(),
+            email: self.email.clone().unwrap_or_default(),
+            ticket_name: self.name.clone().unwrap_or_default(),
             approval_status: approval,
-            participation_type: self.participation_type.clone(),
+            participation_type: self.participation_type.clone().unwrap_or_default(),
             registration_date: None,
             phone: None,
             contact_channel: self.contact_channel.clone(),
@@ -439,14 +439,44 @@ pub(crate) async fn get_attendee_by_id(
          bank_account_name, sheet_row_index \
          FROM attendees WHERE id = ?1",
     );
-    let row = stmt
+    let bound = stmt
         .bind_refs(&[D1Type::Text(api_id)])
-        .map_err(|e| format!("D1 get_attendee_by_id bind: {e:?}"))?
-        .first::<D1AttendeeRow>(None)
-        .await
-        .map_err(|e| format!("D1 get_attendee_by_id query: {e:?}"))?;
+        .map_err(|e| format!("D1 get_attendee_by_id bind: {e:?}"))?;
 
-    Ok(row.map(|r| r.to_attendee()))
+    // Bypass worker crate's .first::<T>() which uses serde_wasm_bindgen::from_value()
+    // — that crashes on JsValue(null) columns. Instead: raw JS .first() → JSON.stringify
+    // → serde_json (same pattern as get_deposit_status_from_d1).
+    let raw_first = wasm_bindgen_futures::JsFuture::from(
+        bound
+            .inner()
+            .first(None)
+            .map_err(|e| format!("D1 get_attendee_by_id first() call: {e:?}"))?,
+    )
+    .await
+    .map_err(|e| format!("D1 get_attendee_by_id first() await: {e:?}"))?;
+
+    if raw_first.is_null() || raw_first.is_undefined() {
+        return Ok(None);
+    }
+
+    let json_str = js_sys::JSON::stringify(&raw_first)
+        .map(|s| s.as_string().unwrap_or_default())
+        .unwrap_or_default();
+
+    if json_str.is_empty() {
+        return Ok(None);
+    }
+
+    let row: D1AttendeeRow = serde_json::from_str(&json_str).map_err(|e| {
+        tracing::warn!(
+            error = %e,
+            json = %json_str.chars().take(300).collect::<String>(),
+            "D1 get_attendee_by_id: deserialize failed"
+        );
+        format!("D1 get_attendee_by_id deserialize: {e}")
+    })?;
+
+    Ok(Some(row.to_attendee()))
 }
 
 /// Fetch a single attendee by claim token from D1.
@@ -463,14 +493,44 @@ pub(crate) async fn get_attendee_by_claim_token(
          bank_account_name, sheet_row_index \
          FROM attendees WHERE claim_token = ?1",
     );
-    let row = stmt
+    let bound = stmt
         .bind_refs(&[D1Type::Text(claim_token)])
-        .map_err(|e| format!("D1 get_attendee_by_claim_token bind: {e:?}"))?
-        .first::<D1AttendeeRow>(None)
-        .await
-        .map_err(|e| format!("D1 get_attendee_by_claim_token query: {e:?}"))?;
+        .map_err(|e| format!("D1 get_attendee_by_claim_token bind: {e:?}"))?;
 
-    Ok(row.map(|r| r.to_attendee()))
+    // Bypass worker crate's .first::<T>() which uses serde_wasm_bindgen::from_value()
+    // — that crashes on JsValue(null) columns. Instead: raw JS .first() → JSON.stringify
+    // → serde_json (same pattern as get_attendee_by_id).
+    let raw_first = wasm_bindgen_futures::JsFuture::from(
+        bound
+            .inner()
+            .first(None)
+            .map_err(|e| format!("D1 get_attendee_by_claim_token first() call: {e:?}"))?,
+    )
+    .await
+    .map_err(|e| format!("D1 get_attendee_by_claim_token first() await: {e:?}"))?;
+
+    if raw_first.is_null() || raw_first.is_undefined() {
+        return Ok(None);
+    }
+
+    let json_str = js_sys::JSON::stringify(&raw_first)
+        .map(|s| s.as_string().unwrap_or_default())
+        .unwrap_or_default();
+
+    if json_str.is_empty() {
+        return Ok(None);
+    }
+
+    let row: D1AttendeeRow = serde_json::from_str(&json_str).map_err(|e| {
+        tracing::warn!(
+            error = %e,
+            json = %json_str.chars().take(300).collect::<String>(),
+            "D1 get_attendee_by_claim_token: deserialize failed"
+        );
+        format!("D1 get_attendee_by_claim_token deserialize: {e}")
+    })?;
+
+    Ok(Some(row.to_attendee()))
 }
 
 /// Fetch all attendees for a given event from D1.
@@ -555,13 +615,13 @@ pub(crate) async fn get_attendees_by_event(
 /// D1 row with aggregate counts for targeted claim lookup.
 #[derive(Deserialize)]
 struct D1AttendeeWithCounts {
-    id: String,
+    id: Option<String>,
     #[allow(dead_code)]
-    event_id: String,
-    email: String,
-    name: String,
-    approval_status: String,
-    participation_type: String,
+    event_id: Option<String>,
+    email: Option<String>,
+    name: Option<String>,
+    approval_status: Option<String>,
+    participation_type: Option<String>,
     checked_in_at: Option<String>,
     checked_in_by: Option<String>,
     claim_token: Option<String>,
@@ -582,13 +642,13 @@ struct D1AttendeeWithCounts {
     bank_account_number: Option<String>,
     bank_account_name: Option<String>,
     sheet_row_index: Option<i64>,
-    total_checked_in: i64,
-    total_claimed: i64,
+    total_checked_in: Option<i64>,
+    total_claimed: Option<i64>,
 }
 
 impl D1AttendeeWithCounts {
     fn to_attendee(&self) -> Attendee {
-        let approval = CheckInStatus::from_str(&self.approval_status)
+        let approval = CheckInStatus::from_str(self.approval_status.as_deref().unwrap_or(""))
             .unwrap_or(CheckInStatus::PendingApproval);
         let deposit_verified = match self.deposit_status.as_deref() {
             Some("verified" | "confirmed") => Some("true".to_string()),
@@ -603,14 +663,14 @@ impl D1AttendeeWithCounts {
             .as_ref()
             .map(|id| format!("https://orb.helius.com/nft/{id}"));
         Attendee {
-            api_id: self.id.clone(),
+            api_id: self.id.clone().unwrap_or_default(),
             first_name: String::new(),
             last_name: String::new(),
-            name: self.name.clone(),
-            email: self.email.clone(),
-            ticket_name: self.name.clone(),
+            name: self.name.clone().unwrap_or_default(),
+            email: self.email.clone().unwrap_or_default(),
+            ticket_name: self.name.clone().unwrap_or_default(),
             approval_status: approval,
-            participation_type: self.participation_type.clone(),
+            participation_type: self.participation_type.clone().unwrap_or_default(),
             registration_date: None,
             phone: None,
             contact_channel: self.contact_channel.clone(),
@@ -735,8 +795,8 @@ pub(crate) async fn get_attendee_with_claim_counts(
     let attendee = row.to_attendee();
     Ok((
         Some(attendee),
-        row.total_checked_in as usize,
-        row.total_claimed as usize,
+        row.total_checked_in.unwrap_or(0) as usize,
+        row.total_claimed.unwrap_or(0) as usize,
     ))
 }
 
@@ -1032,7 +1092,7 @@ pub(crate) async fn get_attendees_by_email(
     Ok(rows
         .iter()
         .map(|r| AttendeeWithEmail {
-            event_id: r.event_id.clone(),
+            event_id: r.event_id.clone().unwrap_or_default(),
             attendee: r.to_attendee(),
         })
         .collect())
