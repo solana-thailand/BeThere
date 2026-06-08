@@ -401,6 +401,7 @@ fn render_loaded_event(
     let description = data.description.clone();
     let link = data.link.clone();
     let nft_image_url = data.nft_image_url.clone();
+    let community_links = data.community_links.clone();
 
     // Deposit label for registration form checkbox
     let deposit_label = if escrow_closed {
@@ -502,6 +503,9 @@ fn render_loaded_event(
         } else {
             ().into_any()
         }}
+
+        // Community Links
+        {crate::pages::ticket::community_links::community_links_section(community_links.clone())}
 
         // Deposit Info Section
         {deposit_section(&data)}

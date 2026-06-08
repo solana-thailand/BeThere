@@ -69,6 +69,8 @@ pub struct D1EventRow {
     pub updated_by: Option<String>,
     // Columns added for Issue #049
     pub dev_profile_enabled: Option<i64>,
+    // Columns added for community links
+    pub community_links: Option<String>,
 }
 
 impl D1EventRow {
@@ -172,6 +174,13 @@ impl D1EventRow {
             updated_at: self.updated_at.clone().unwrap_or_default(),
             updated_by: self.updated_by.clone().unwrap_or_default(),
             dev_profile_enabled: self.dev_profile_enabled.unwrap_or(0) == 1,
+            community_links: serde_json::from_str(
+                &self
+                    .community_links
+                    .clone()
+                    .unwrap_or_else(|| "[]".to_string()),
+            )
+            .unwrap_or_default(),
         }
     }
 }
@@ -213,7 +222,7 @@ pub async fn upsert_event(
          require_contact_info, require_photo_consent, \
          in_person_capacity, online_capacity, \
          online_open_mode, online_registration_open, \
-         deposit_deadline_hours, updated_by, dev_profile_enabled) \
+         deposit_deadline_hours, updated_by, dev_profile_enabled, community_links) \
          VALUES ('{id}', '{name}', '{slug}', '{status}', '{event_format}', \
          {event_start_ms}, {event_end_ms}, \
          {deposit_enabled}, {deposit_amount_usdc}, {deposit_amount_thb}, \
@@ -231,7 +240,7 @@ pub async fn upsert_event(
          {require_contact_info}, {require_photo_consent}, \
          {in_person_capacity}, {online_capacity}, \
          '{online_open_mode}', {online_registration_open}, \
-         {deposit_deadline_hours}, '{updated_by}', {dev_profile_enabled}) \
+         {deposit_deadline_hours}, '{updated_by}', {dev_profile_enabled}, '{community_links}') \
          ON CONFLICT (id) DO UPDATE SET \
          name = excluded.name, slug = excluded.slug, status = excluded.status, \
          event_format = excluded.event_format, \
@@ -274,7 +283,8 @@ pub async fn upsert_event(
          online_registration_open = excluded.online_registration_open, \
          deposit_deadline_hours = excluded.deposit_deadline_hours, \
          updated_by = excluded.updated_by, \
-         dev_profile_enabled = excluded.dev_profile_enabled",
+         dev_profile_enabled = excluded.dev_profile_enabled, \
+         community_links = excluded.community_links",
         id = config.id,
         name = config.name.replace('\'', "''"),
         slug = config.slug,
@@ -331,6 +341,8 @@ pub async fn upsert_event(
             .unwrap_or(-1),
         updated_by = config.updated_by,
         dev_profile_enabled = config.dev_profile_enabled as i32,
+        community_links =
+            serde_json::to_string(&config.community_links).unwrap_or_else(|_| "[]".to_string()),
     );
 
     db.exec(&sql)

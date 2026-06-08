@@ -448,6 +448,7 @@ pub async fn get_public_ticket(
         "escrow_status": format!("{}", event.escrow_status),
         "rollover_target_event": rollover_target_event,
         "quiz_enabled": event.quiz_enabled,
+        "community_links": event.community_links,
     });
     Ok(ApiOk::new(data))
 }

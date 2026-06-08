@@ -59,6 +59,7 @@ pub struct EventForm {
     pub deposit_deadline_hours: String,
     pub visibility: api::EventVisibility,
     pub updated_at: String,
+    pub community_links: Vec<crate::api::CommunityLink>,
 }
 
 // ===== Helpers =====
@@ -195,6 +196,7 @@ pub fn default_form() -> EventForm {
         deposit_deadline_hours: String::new(),
         visibility: api::EventVisibility::default(),
         updated_at: String::new(),
+        community_links: vec![],
     }
 }
 
@@ -273,6 +275,7 @@ pub fn form_from_detail(detail: &api::EventDetail) -> EventForm {
         deposit_deadline_hours: detail.deposit_deadline_hours.map(|h| h.to_string()).unwrap_or_default(),
         visibility: detail.visibility.clone(),
         updated_at: detail.updated_at.clone(),
+        community_links: detail.community_links.clone(),
     }
 }
 
@@ -332,6 +335,22 @@ pub fn EventFormComponent(
     let (sec_deposit_open, set_sec_deposit_open) = signal(true);
     let (sec_capacity_open, set_sec_capacity_open) = signal(true);
     let (sec_people_open, set_sec_people_open) = signal(true);
+    let (sec_community_open, set_sec_community_open) = signal(false);
+
+    // Community links — managed as a separate signal for easier row-level editing
+    let (cl_links, set_cl_links) = signal(form.get().community_links.clone());
+
+    let add_community_link = move || {
+        set_cl_links.update(|links| {
+            if links.len() < 5 {
+                links.push(crate::api::CommunityLink {
+                    platform: "discord".to_string(),
+                    url: String::new(),
+                    label: String::new(),
+                });
+            }
+        });
+    };
 
     let (slug_manually_edited, set_slug_manually_edited) = signal(false);
     let (slug_taken, set_slug_taken) = signal(false);
@@ -547,6 +566,7 @@ pub fn EventFormComponent(
                 online_registration_open: current_form.online_registration_open,
                 deposit_deadline_hours: current_form.deposit_deadline_hours.trim().parse::<u32>().ok(),
                 visibility: current_form.visibility.clone(),
+                community_links: cl_links.get(),
             };
 
             // Determine if we should also initialize escrow after creating the event.
@@ -716,6 +736,7 @@ pub fn EventFormComponent(
                 online_registration_open: Some(current_form.online_registration_open),
                 deposit_deadline_hours: Some(current_form.deposit_deadline_hours.trim().parse::<u32>().ok()),
                 visibility: Some(current_form.visibility.clone()),
+                community_links: Some(cl_links.get()),
             };
 
             leptos::task::spawn_local(async move {
@@ -1819,6 +1840,107 @@ pub fn EventFormComponent(
                             <span class="quiz-setting-hint">"Comma-separated"</span>
                         </div>
                     </div>
+                    </div>
+                </div>
+
+                // ── Community Links ──
+                <div class="form-section">
+                    <div class="form-section-header" on:click=move |_| set_sec_community_open.update(|v| *v = !*v)>
+                        <span class="form-section-icon form-section-icon-community"></span>
+                        <span class="form-section-title">"Community Links"</span>
+                        <span class="form-section-badge form-section-badge-optional">"Optional"</span>
+                        <span class="form-section-toggle" class:form-section-toggle-open=move || sec_community_open.get()>"▼"</span>
+                    </div>
+                    <div class="form-section-body" class:form-section-body-hidden=move || !sec_community_open.get()>
+                        <p class="quiz-setting-hint">
+                            "Add links to your community channels (Discord, Telegram, X, Facebook, LINE). These appear on the event registration and ticket pages."
+                        </p>
+                        {move || {
+                            let links = cl_links.get();
+                            links.into_iter().enumerate().map(|(i, link)| {
+                                let idx = i;
+                                let platform = link.platform.clone();
+                                let url = link.url.clone();
+                                let label = link.label.clone();
+                                view! {
+                                    <div class="community-link-row">
+                                        <select
+                                            class="quiz-number-input community-link-platform"
+                                            on:change=move |ev| {
+                                                let val = event_target_value(&ev);
+                                                set_cl_links.update(|links| {
+                                                    if idx < links.len() {
+                                                        links[idx].platform = val;
+                                                    }
+                                                });
+                                            }
+                                        >
+                                            <option value="discord" selected=platform == "discord">"Discord"</option>
+                                            <option value="telegram" selected=platform == "telegram">"Telegram"</option>
+                                            <option value="x" selected=platform == "x">"X (Twitter)"</option>
+                                            <option value="facebook" selected=platform == "facebook">"Facebook"</option>
+                                            <option value="line" selected=platform == "line">"LINE"</option>
+                                            <option value="website" selected=platform == "website">"Website"</option>
+                                        </select>
+                                        <input
+                                            type="url"
+                                            class="quiz-number-input community-link-url"
+                                            placeholder="https://..."
+                                            prop:value=url
+                                            on:input=move |ev| {
+                                                let val = event_target_value(&ev);
+                                                set_cl_links.update(|links| {
+                                                    if idx < links.len() {
+                                                        links[idx].url = val;
+                                                    }
+                                                });
+                                            }
+                                        />
+                                        <input
+                                            type="text"
+                                            class="quiz-number-input community-link-label"
+                                            placeholder="Label (optional)"
+                                            prop:value=label
+                                            on:input=move |ev| {
+                                                let val = event_target_value(&ev);
+                                                set_cl_links.update(|links| {
+                                                    if idx < links.len() {
+                                                        links[idx].label = val;
+                                                    }
+                                                });
+                                            }
+                                        />
+                                        <button
+                                            class="btn btn-outline btn-xs community-link-remove"
+                                            on:click=move |_| {
+                                                set_cl_links.update(|links| {
+                                                    if idx < links.len() {
+                                                        links.remove(idx);
+                                                    }
+                                                });
+                                            }
+                                        >
+                                            "×"
+                                        </button>
+                                    </div>
+                                }
+                            }).collect::<Vec<_>>()
+                        }}
+                        {move || {
+                            let count = cl_links.get().len();
+                            if count < 5 {
+                                view! {
+                                    <button
+                                        class="btn btn-outline btn-sm community-link-add"
+                                        on:click=move |_| add_community_link()
+                                    >
+                                        "+ Add Link"
+                                    </button>
+                                }.into_any()
+                            } else {
+                                ().into_any()
+                            }
+                        }}
                     </div>
                 </div>
 

@@ -279,6 +279,7 @@ pub async fn create_event(
         updated_at: now,
         updated_by: updated_by.to_string(),
         dev_profile_enabled: false,
+        community_links: req.community_links.clone(),
     };
 
     // D1 write (primary — always if available)
@@ -568,6 +569,9 @@ pub async fn update_event(
     if let Some(ref v) = req.visibility {
         config.visibility = v.clone();
     }
+    if let Some(ref links) = req.community_links {
+        config.community_links = links.clone();
+    }
 
     config.updated_at = chrono::Utc::now().to_rfc3339();
     config.updated_by = updated_by.to_string();
@@ -819,6 +823,9 @@ pub fn apply_update(config: &mut EventConfig, req: &UpdateEventRequest) -> Resul
     }
     if let Some(v) = req.dev_profile_enabled {
         config.dev_profile_enabled = v;
+    }
+    if let Some(ref links) = req.community_links {
+        config.community_links = links.clone();
     }
 
     Ok(())
@@ -1106,6 +1113,7 @@ pub async fn seed_from_config(
         updated_at: now,
         updated_by: String::new(), // seeded from config, no user context
         dev_profile_enabled: false,
+        community_links: vec![],
     };
 
     // Save full config

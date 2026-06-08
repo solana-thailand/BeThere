@@ -212,6 +212,7 @@ pub async fn get_public_event(
         "visibility": config.visibility.as_str(),
         "escrow_status": config.escrow_status.as_str(),
         "dev_profile_enabled": config.dev_profile_enabled,
+        "community_links": config.community_links,
         // Dynamic form config for registration (Issue #049 Phase 2)
         "form_config": if config.dev_profile_enabled {
             let cfg = form_config.unwrap_or_else(|| {

@@ -72,6 +72,9 @@ pub struct TicketViewData {
 
     // Quest
     pub quiz_enabled: bool,
+
+    // Community
+    pub community_links: Vec<crate::api::CommunityLink>,
 }
 
 impl TicketViewData {
@@ -168,6 +171,7 @@ impl TicketViewData {
             rollover_target_event: data.rollover_target_event.clone(),
             orb_link,
             quiz_enabled: data.quiz_enabled,
+            community_links: data.community_links.clone(),
         }
     }
 }

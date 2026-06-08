@@ -7,6 +7,19 @@ pub(crate) const fn default_true() -> bool {
     true
 }
 
+// ===== Community Link =====
+
+/// A community/social link shown on event ticket and public event pages.
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct CommunityLink {
+    #[serde(default)]
+    pub platform: String,
+    #[serde(default)]
+    pub url: String,
+    #[serde(default)]
+    pub label: String,
+}
+
 // ===== Typed Enums =====
 
 /// Check-in / approval status for an attendee.
@@ -381,6 +394,9 @@ pub struct AttendeeData {
     /// Whether quiz-gated claiming is enabled for this event.
     #[serde(default)]
     pub quiz_enabled: bool,
+    /// Community/social links for the event.
+    #[serde(default)]
+    pub community_links: Vec<CommunityLink>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

@@ -8709,6 +8709,56 @@ nav a.active {
     text-align: center;
     max-width: 240px;
 }
+
+/* Reassurance ticker — animated progress steps shown in the QR placeholder */
+.ticket-ticker {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    margin-top: 0.75rem;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.ticket-ticker-step {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.15rem;
+    padding: 0.2rem 0.4rem;
+    border-radius: 999px;
+    transition:
+        color 0.3s ease,
+        background 0.3s ease;
+    white-space: nowrap;
+}
+
+.ticket-ticker-step--done {
+    color: var(--success, #22c55e);
+    opacity: 1;
+}
+
+.ticket-ticker-step--active {
+    color: var(--accent);
+    background: rgba(99, 102, 241, 0.08);
+    opacity: 1;
+    animation: ticker-pulse 1.8s ease-in-out infinite;
+}
+
+.ticket-ticker-step:not(:last-child)::after {
+    content: "·";
+    margin-left: 0.25rem;
+    opacity: 0.4;
+}
+
+@keyframes ticker-pulse {
+    0%,
+    100% {
+        opacity: 0.7;
+    }
+    50% {
+        opacity: 1;
+    }
+}
 .ticket-qr-actions {
     display: flex;
     align-items: center;
@@ -9366,6 +9416,159 @@ nav a.active {
     color: var(--text-muted);
     font-size: 0.85rem;
     margin: 0;
+}
+
+/* --- Community Links --- */
+.ticket-action-card--community {
+    border-left-color: var(--accent);
+    background: linear-gradient(
+        135deg,
+        var(--accent-bg) 0%,
+        var(--bg-card) 100%
+    );
+}
+
+.community-links-inner {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    width: 100%;
+}
+
+.community-links-title {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.community-links-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.community-link-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    border-radius: 8px;
+    background: var(--bg-card);
+    text-decoration: none;
+    color: var(--text-primary);
+    transition:
+        background 0.15s,
+        transform 0.1s;
+}
+
+.community-link-item:hover {
+    background: var(--accent-hover);
+    transform: translateY(-1px);
+}
+
+.community-link-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    color: var(--accent);
+    flex-shrink: 0;
+}
+
+.community-link-label {
+    font-size: 0.85rem;
+    font-weight: 500;
+}
+
+/* Public event page community links */
+.pe-community-links {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.pe-community-links-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.pe-community-link-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    border-radius: 8px;
+    background: var(--bg-secondary);
+    text-decoration: none;
+    color: var(--text-primary);
+    transition:
+        background 0.15s,
+        transform 0.1s;
+}
+
+.pe-community-link-item:hover {
+    background: var(--accent-hover);
+    transform: translateY(-1px);
+}
+
+.pe-community-link-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    color: var(--accent);
+    flex-shrink: 0;
+}
+
+/* Admin form — community link row */
+.community-link-row {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    margin-bottom: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.community-link-platform {
+    width: 120px !important;
+    flex-shrink: 0;
+}
+
+.community-link-url {
+    flex: 1;
+    min-width: 200px;
+}
+
+.community-link-label {
+    width: 150px;
+    flex-shrink: 0;
+}
+
+.community-link-remove {
+    flex-shrink: 0;
+    padding: 0.25rem 0.5rem !important;
+    font-size: 1rem;
+    line-height: 1;
+}
+
+.community-link-add {
+    margin-top: 0.25rem;
+}
+
+@media (max-width: 600px) {
+    .community-link-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .community-link-platform,
+    .community-link-url,
+    .community-link-label {
+        width: 100% !important;
+        min-width: unset;
+    }
 }
 
 /* ===== Bank Dropdown (deposit page) ===== */

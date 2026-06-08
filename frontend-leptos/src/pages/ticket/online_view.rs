@@ -46,6 +46,7 @@ pub fn OnlineView(
         has_video,
         video_url,
         quiz_enabled,
+        community_links,
         ..
     } = view_data;
 
@@ -259,6 +260,9 @@ pub fn OnlineView(
         } else {
             view! { <div></div> }.into_any()
         }}
+
+        // Community links
+        {crate::pages::ticket::community_links::community_links_section(community_links.clone())}
 
         // 6. Footer
         <div class="ticket-footer">

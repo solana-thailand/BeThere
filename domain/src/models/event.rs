@@ -260,6 +260,19 @@ pub struct EventIndex {
     pub events: Vec<EventMeta>,
 }
 
+/// A community/social link shown on event ticket and public event pages.
+/// Organizer-configurable. Extensible — new platforms don't require schema changes.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct CommunityLink {
+    /// Platform identifier: "discord", "telegram", "x", "facebook", "line", "website".
+    pub platform: String,
+    /// Full URL (e.g. "https://discord.gg/abc123").
+    pub url: String,
+    /// Optional display label override (e.g. "Solana Thailand Dev Chat").
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub label: String,
+}
+
 /// Full per-event configuration, stored under KV key "event:{id}".
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EventConfig {
@@ -385,6 +398,12 @@ pub struct EventConfig {
     /// YouTube/live stream/recording URL for the event.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub video_url: String,
+
+    // ── Community links ─────────────────────────────────────────────
+    /// Community/social links shown on ticket + public event pages.
+    /// Organizer-configurable. Empty = no community section shown.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub community_links: Vec<CommunityLink>,
     /// Event visibility — public (shown on landing) or private (auth required).
     #[serde(default)]
     pub visibility: EventVisibility,
@@ -634,6 +653,7 @@ impl EventConfig {
             updated_at: String::new(),
             updated_by: String::new(),
             dev_profile_enabled: false,
+            community_links: vec![],
         }
     }
 }
@@ -775,6 +795,9 @@ pub struct CreateEventRequest {
     /// Event visibility — public (shown on landing) or private (auth required).
     #[serde(default)]
     pub visibility: EventVisibility,
+    /// Community/social links.
+    #[serde(default)]
+    pub community_links: Vec<CommunityLink>,
 }
 /// Request body for PUT /api/events/{id} — update an existing event.
 /// All fields are optional; only provided fields are updated.
@@ -926,6 +949,9 @@ pub struct UpdateEventRequest {
     /// Whether developer profile fields are shown on the registration form.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub dev_profile_enabled: Option<bool>,
+    /// Community/social links. Replaces all existing links.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub community_links: Option<Vec<CommunityLink>>,
 }
 
 /// Response for GET /api/events — list all events.
@@ -1134,6 +1160,7 @@ mod tests {
             updated_at: String::new(),
             updated_by: String::new(),
             dev_profile_enabled: false,
+            community_links: vec![],
         }
     }
 

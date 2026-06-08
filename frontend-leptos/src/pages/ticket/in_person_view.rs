@@ -67,6 +67,7 @@ pub fn InPersonView(
         event_id,
         api_id,
         rollover_target_event,
+        community_links,
         ..
     } = view_data;
 
@@ -344,6 +345,9 @@ pub fn InPersonView(
         } else {
             view! { <div></div> }.into_any()
         }}
+
+        // Community links
+        {crate::pages::ticket::community_links::community_links_section(community_links.clone())}
 
         // 6. Footer
         <div class="ticket-footer">

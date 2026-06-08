@@ -224,6 +224,9 @@ pub struct PublicEventData {
     // Dynamic form config (Issue #049 Phase 2)
     #[serde(default)]
     pub form_config: Option<RegistrationFormConfig>,
+    /// Community/social links for the event.
+    #[serde(default)]
+    pub community_links: Vec<crate::api::CommunityLink>,
 }
 
 // ---------------------------------------------------------------------------

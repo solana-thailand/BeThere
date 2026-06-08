@@ -281,6 +281,9 @@ pub struct EventDetail {
     pub deposit_deadline_hours: Option<u32>,
     #[serde(default)]
     pub visibility: EventVisibility,
+    /// Community/social links for the event.
+    #[serde(default)]
+    pub community_links: Vec<super::types::CommunityLink>,
 }
 
 /// Response for GET /api/events — list all events.
@@ -382,6 +385,9 @@ pub struct CreateEventBody {
     pub deposit_deadline_hours: Option<u32>,
     #[serde(default)]
     pub visibility: EventVisibility,
+    /// Community/social links for the event.
+    #[serde(default)]
+    pub community_links: Vec<super::types::CommunityLink>,
 }
 
 /// Request body for PUT /api/events/{id} — update event.
@@ -478,6 +484,9 @@ pub struct UpdateEventBody {
     pub deposit_deadline_hours: Option<Option<u32>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub visibility: Option<EventVisibility>,
+    /// Community/social links for the event. Replaces all existing links.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub community_links: Option<Vec<super::types::CommunityLink>>,
 }
 
 /// Response from event create/update (partial data).
