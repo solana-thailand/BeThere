@@ -1,28 +1,74 @@
 /**
  * BeThere Attendee Registration Template Generator
- * Compatible with: event-checkin-domain v0.1.0 (32-column layout)
+ * Compatible with: event-checkin-domain v0.1.0 (33-column layout)
  *
- * Column Layout (A–AF, 32 columns):
+ * Column Layout (A–AG, 33 columns):
  *   Section 1 — Identity (A–E):        api_id, name, first_name, last_name, email
  *   Section 2 — Registration (F–I):    ticket_name, registration_date, approval_status, participation_type
  *   Section 3 — Contact (J–L):         phone, contact_channel, contact_handle
  *   Section 4 — Deposit (M–Q):         deposit_agreed, deposit_method, deposit_amount, deposit_tx_signature, deposit_verified
  *   Section 5 — Lifecycle (R–X):       checked_in_at, checked_in_by, solana_address, qr_code_url, claim_token, claimed_at, nft_proof_url
  *   Section 6 — Bank & Refund (Y–AD):  bank_account, bank_name, account_name, refund_status, refund_link, send_email_status
- *   Section 7 — Consent (AE–AF):       consent_given, photo_consent
+ *   Section 7 — Consent (AE–AG):       consent_given, photo_consent, consent_marketing
+ *
+ * Idempotent: safe to re-run. Only updates missing/changed headers,
+ * never deletes data rows. Re-applies formatting, dropdowns, and permissions.
  *
  * Usage: Open Google Sheets → Extensions → Apps Script → Paste → Run
  */
+
+/**
+ * Reads the service account email from Script Properties.
+ * Set it once via: Project Settings → Script Properties → SERVICE_ACCOUNT_EMAIL
+ */
+function getServiceAccountEmail() {
+  var email = PropertiesService.getScriptProperties().getProperty("SERVICE_ACCOUNT_EMAIL");
+  if (!email) {
+    Logger.log("⚠️ SERVICE_ACCOUNT_EMAIL not set in Script Properties.");
+    Logger.log("Set it via: Project Settings → Script Properties → add SERVICE_ACCOUNT_EMAIL");
+  }
+  return email;
+}
+
 function createBeThereTemplate() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sheet = ss.getActiveSheet();
 
-  sheet.setName("Attendees");
+  // ── 0. Grant service account editor access ─────────────────────────────
+  var serviceEmail = getServiceAccountEmail();
+  if (serviceEmail) {
+    grantEditorAccess(ss, serviceEmail);
+  }
 
-  // Clear all data, formats, and validations
-  sheet.clear();
+  // ── 1. Attendees tab ───────────────────────────────────────────────────
+  setupAttendeesTab(ss);
 
-  // ── Column definitions (keeps headers, widths, dropdowns in sync) ──────
+  // ── 2. Staff tab ───────────────────────────────────────────────────────
+  setupStaffTab(ss);
+
+  var statusMsg = "BeThere Template Ready!\n\n" +
+    "Attendees: 33 columns (A–AG)\n" +
+    "Staff: email + role columns";
+  if (serviceEmail) {
+    statusMsg += "\nService account: " + serviceEmail + " (editor)";
+  } else {
+    statusMsg += "\n⚠️ SERVICE_ACCOUNT_EMAIL not set — grant access manually.";
+  }
+  statusMsg += "\n\nSafe to re-run — existing data is preserved.";
+
+  SpreadsheetApp.getUi().alert(statusMsg);
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// Attendees Tab
+// ══════════════════════════════════════════════════════════════════════════
+
+function setupAttendeesTab(ss) {
+  var sheet = ss.getSheetByName("Attendees");
+  if (!sheet) {
+    sheet = ss.insertSheet("Attendees");
+  }
+
+  // ── Column definitions ─────────────────────────────────────────────────
   var COLUMNS = [
     { header: "api_id",               width: 150 },
     { header: "name",                 width: 180 },
@@ -56,16 +102,29 @@ function createBeThereTemplate() {
     { header: "send_email_status",    width: 140 },
     { header: "consent_given",        width: 120, dropdown: ["Yes", ""] },
     { header: "photo_consent",        width: 120, dropdown: ["Yes", "No", ""] },
+    { header: "consent_marketing",     width: 140, dropdown: ["Yes", "No", ""] },
   ];
 
-  var TOTAL = COLUMNS.length; // 32
-  var LAST_COL_LETTER = columnLetter(TOTAL - 1); // "AF"
+  var TOTAL = COLUMNS.length; // 33
   var DATA_ROWS = 999;
 
-  // ── 1. Headers ─────────────────────────────────────────────────────────
+  // ── Headers (merge: only update missing/changed) ───────────────────────
   var headers = COLUMNS.map(function(c) { return c.header; });
-  sheet.getRange(1, 1, 1, TOTAL).setValues([headers]);
+  var existingHeaders = sheet.getRange(1, 1, 1, TOTAL).getValues()[0];
+  var headerChanged = false;
+  for (var i = 0; i < TOTAL; i++) {
+    var existing = String(existingHeaders[i] || "").trim();
+    if (existing !== headers[i]) {
+      headerChanged = true;
+      break;
+    }
+  }
 
+  if (headerChanged) {
+    sheet.getRange(1, 1, 1, TOTAL).setValues([headers]);
+  }
+
+  // ── Header formatting (always re-apply) ────────────────────────────────
   var headerRange = sheet.getRange(1, 1, 1, TOTAL);
   headerRange.setFontWeight("bold")
              .setBackground("#F3F4F6")
@@ -73,95 +132,166 @@ function createBeThereTemplate() {
              .setHorizontalAlignment("center");
   sheet.setFrozenRows(1);
 
-  // ── 2. Column widths ───────────────────────────────────────────────────
+  // ── Column widths (always re-apply) ────────────────────────────────────
   for (var i = 0; i < TOTAL; i++) {
     if (COLUMNS[i].width) {
       sheet.setColumnWidth(i + 1, COLUMNS[i].width);
     }
   }
 
-  // ── 3. Dropdowns (Data Validation) ─────────────────────────────────────
+  // ── Dropdowns (always re-apply) ────────────────────────────────────────
   for (var i = 0; i < TOTAL; i++) {
     if (COLUMNS[i].dropdown) {
       setDropdown(sheet, i + 1, COLUMNS[i].dropdown, DATA_ROWS);
     }
   }
 
-  // ── 4. Conditional Formatting ──────────────────────────────────────────
+  // ── Conditional Formatting (always re-apply) ───────────────────────────
   var rules = [];
 
   // Approval status colors
   rules.push(condRule(sheet, "H2:H1000", "Approved",        { fontColor: "#34A853" }));
   rules.push(condRule(sheet, "H2:H1000", "PendingApproval", { fontColor: "#FBBC04" }));
   rules.push(condRule(sheet, "H2:H1000", "CheckedIn",       { fontColor: "#4285F4" }));
+  rules.push(condRule(sheet, "H2:H1000", "Invited",         { fontColor: "#A142F4" }));
 
   // Deposit/verified highlight
-  rules.push(condRule(sheet, "M2:M1000", "Yes", { background: "#D9EAD3" })); // deposit_agreed
-  rules.push(condRule(sheet, "Q2:Q1000", "Yes", { background: "#D9EAD3" })); // deposit_verified
+  rules.push(condRule(sheet, "M2:M1000", "Yes", { background: "#D9EAD3" }));
+  rules.push(condRule(sheet, "Q2:Q1000", "Yes", { background: "#D9EAD3" }));
 
   // Refund highlight
   rules.push(condRule(sheet, "AB2:AB1000", "refunded", { background: "#D9EAD3" }));
 
   // Consent highlight
-  rules.push(condRule(sheet, "AE2:AE1000", "Yes", { background: "#D9EAD3" })); // consent_given
-  rules.push(condRule(sheet, "AF2:AF1000", "Yes", { background: "#D9EAD3" })); // photo_consent
+  rules.push(condRule(sheet, "AE2:AE1000", "Yes", { background: "#D9EAD3" }));
+  rules.push(condRule(sheet, "AF2:AF1000", "Yes", { background: "#D9EAD3" }));
+  rules.push(condRule(sheet, "AG2:AG1000", "Yes", { background: "#D9EAD3" }));
 
   sheet.setConditionalFormatRules(rules);
 
-  // ── 5. Section background tinting ──────────────────────────────────────
-  // Lifecycle section (R–X) → light yellow
-  tintSection(sheet, 18, 24, "#FFF2CC"); // cols 18–24 = R–X
-  // Bank & Refund (Y–AD) → light blue
-  tintSection(sheet, 25, 30, "#E8F0FE"); // cols 25–30 = Y–AD
-  // Consent (AE–AF) → light green
-  tintSection(sheet, 31, 32, "#E6F4EA"); // cols 31–32 = AE–AF
+  // ── Section background tinting ─────────────────────────────────────────
+  tintSection(sheet, 18, 24, "#FFF2CC"); // R–X: Lifecycle
+  tintSection(sheet, 25, 30, "#E8F0FE"); // Y–AD: Bank & Refund
+  tintSection(sheet, 31, 33, "#E6F4EA"); // AE–AG: Consent
 
-  // ── 6. Example row ─────────────────────────────────────────────────────
-  var exampleRow = [
-    "0192a3b4-c5d6-7e8f-9a0b-1c2d3e4f5a6b", // A:  api_id (UUIDv7)
-    "Somchai Wattana",                         // B:  name
-    "Somchai",                                 // C:  first_name
-    "Wattana",                                 // D:  last_name
-    "somchai@email.com",                       // E:  email
-    "Self-Registered",                         // F:  ticket_name
-    "2026-05-20T10:30:00+07:00",              // G:  registration_date
-    "Approved",                                // H:  approval_status
-    "In-Person",                               // I:  participation_type
-    "0812345678",                              // J:  phone
-    "Telegram",                                // K:  contact_channel
-    "@somchai_tg",                             // L:  contact_handle
-    "Yes",                                     // M:  deposit_agreed
-    "thb",                                     // N:  deposit_method
-    "500",                                     // O:  deposit_amount
-    "PP-REF12345",                             // P:  deposit_tx_signature
-    "Yes",                                     // Q:  deposit_verified
-    "",                                        // R:  checked_in_at
-    "",                                        // S:  checked_in_by
-    "7xKXtg2CW87d97TXJSDpbD5jBkheTqA85T",     // T:  solana_address
-    "https://bethere.app/e/bkk2026?q=gst-abc", // U:  qr_code_url
-    "0192claim-token-12345",                   // V:  claim_token
-    "",                                        // W:  claimed_at
-    "",                                        // X:  nft_proof_url
-    "",                                        // Y:  bank_account
-    "",                                        // Z:  bank_name
-    "",                                        // AA: account_name
-    "",                                        // AB: refund_status
-    "",                                        // AC: refund_link
-    "",                                        // AD: send_email_status
-    "Yes",                                     // AE: consent_given
-    "No",                                      // AF: photo_consent
-  ];
-  sheet.getRange(2, 1, 1, TOTAL).setValues([exampleRow]);
-
-  SpreadsheetApp.getUi().alert(
-    "BeThere Template Created!\n\n" +
-    TOTAL + " columns (A–" + LAST_COL_LETTER + ")\n" +
-    "Sheet: \"Attendees\"\n" +
-    "Dropdowns, conditional formatting, and example data included."
-  );
+  // ── Example row (only if row 2 is empty) ───────────────────────────────
+  var row2 = sheet.getRange(2, 1, 1, 1).getValue();
+  if (!row2 || String(row2).trim() === "") {
+    var exampleRow = [
+      "0192a3b4-c5d6-7e8f-9a0b-1c2d3e4f5a6b",
+      "Somchai Wattana",
+      "Somchai",
+      "Wattana",
+      "somchai@email.com",
+      "Self-Registered",
+      "2026-05-20T10:30:00+07:00",
+      "Approved",
+      "In-Person",
+      "0812345678",
+      "Telegram",
+      "@somchai_tg",
+      "Yes",
+      "thb",
+      "500",
+      "PP-REF12345",
+      "Yes",
+      "", "", "",
+      "7xKXtg2CW87d97TXJSDpbD5jBkheTqA85T",
+      "https://bethere.app/e/bkk2026?q=gst-abc",
+      "0192claim-token-12345",
+      "", "",
+      "", "", "",
+      "", "", "",
+      "Yes", "No", "",
+    ];
+    sheet.getRange(2, 1, 1, TOTAL).setValues([exampleRow]);
+  }
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════
+// Staff Tab
+// ══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Sets up the "staff" tab with email (A) and role (B) columns.
+ * The BeThere worker reads staff emails from this tab for authentication.
+ * Valid roles: "admin", "organizer", "staff". Defaults to "staff" if empty.
+ * Idempotent: only writes headers if missing, never clears staff data.
+ */
+function setupStaffTab(ss) {
+  var STAFF_NAME = "staff";
+  var sheet = ss.getSheetByName(STAFF_NAME);
+  var isNew = false;
+  if (!sheet) {
+    sheet = ss.insertSheet(STAFF_NAME);
+    isNew = true;
+  }
+
+  // Only write headers if row 1 is empty or mismatched
+  var existingHeaders = sheet.getRange(1, 1, 1, 2).getValues()[0];
+  var needHeaders = String(existingHeaders[0] || "").trim() !== "email"
+                 || String(existingHeaders[1] || "").trim() !== "role";
+
+  if (needHeaders) {
+    sheet.getRange(1, 1, 1, 2).setValues([["email", "role"]]);
+  }
+
+  // Header formatting (always re-apply)
+  var staffHeaderRange = sheet.getRange(1, 1, 1, 2);
+  staffHeaderRange.setFontWeight("bold")
+                   .setBackground("#34A853")
+                   .setFontColor("#ffffff")
+                   .setVerticalAlignment("middle")
+                   .setHorizontalAlignment("center");
+  sheet.setFrozenRows(1);
+
+  // Column widths (always re-apply)
+  sheet.setColumnWidth(1, 280);
+  sheet.setColumnWidth(2, 100);
+
+  // Role dropdown (always re-apply)
+  setDropdown(sheet, 2, ["admin", "organizer", "staff"], 999);
+
+  // Example rows (only if sheet is brand new and row 2 is empty)
+  if (isNew) {
+    var row2 = sheet.getRange(2, 1, 1, 1).getValue();
+    if (!row2 || String(row2).trim() === "") {
+      sheet.getRange(2, 1, 2, 2).setValues([
+        ["admin@example.com", "admin"],
+        ["scanner@example.com", "staff"],
+      ]);
+    }
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// Permissions
+// ══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Grants editor access to the service account if not already present.
+ * Uses Drive API (Advanced Services must be enabled) or falls back to
+ * SpreadsheetApp.addEditor().
+ */
+function grantEditorAccess(ss, email) {
+  try {
+    // Check if already an editor
+    var editors = ss.getEditors();
+    for (var i = 0; i < editors.length; i++) {
+      if (editors[i].getEmail() === email) {
+        return; // Already has access
+      }
+    }
+    ss.addEditor(email);
+  } catch (e) {
+    Logger.log("⚠️ Could not add editor: " + e.message);
+    Logger.log("Add " + email + " as editor manually via Share button.");
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// Helpers
+// ══════════════════════════════════════════════════════════════════════════
 
 function setDropdown(sheet, col, values, rows) {
   var range = sheet.getRange(2, col, rows, 1);
