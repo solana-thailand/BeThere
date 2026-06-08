@@ -347,7 +347,7 @@ pub fn InPersonView(
         }}
 
         // Community links
-        {crate::pages::ticket::community_links::community_links_section(community_links.clone())}
+        {crate::pages::ticket::community_links::community_links_section(community_links.clone(), crate::pages::ticket::community_links::CommunityLinksVariant::Ticket)}
 
         // 6. Footer
         <div class="ticket-footer">

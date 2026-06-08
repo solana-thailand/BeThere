@@ -505,7 +505,7 @@ fn render_loaded_event(
         }}
 
         // Community Links
-        {crate::pages::ticket::community_links::community_links_section(community_links.clone())}
+        {crate::pages::ticket::community_links::community_links_section(community_links.clone(), crate::pages::ticket::community_links::CommunityLinksVariant::PublicEvent)}
 
         // Deposit Info Section
         {deposit_section(&data)}

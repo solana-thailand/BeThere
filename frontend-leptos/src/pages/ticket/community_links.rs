@@ -4,7 +4,7 @@ use leptos::prelude::*;
 
 use crate::api::CommunityLink;
 
-/// Render a platform icon SVG. Uses brand colors for recognizable platforms.
+/// Render a platform icon SVG.
 fn platform_icon(platform: &str) -> &'static str {
     match platform {
         "discord" => {
@@ -20,7 +20,7 @@ fn platform_icon(platform: &str) -> &'static str {
             r#"<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>"#
         }
         "line" => {
-            r#"<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M19.365 9.863c.349 0 .63.285.63.631 0 .345-.281.63-.63.63H17.61v1.125h1.755c.349 0 .63.283.63.63 0 .344-.281.629-.63.629h-2.386c-.345 0-.627-.285-.627-.629V8.108c0-.345.282-.63.63-.63h2.386c.346 0 .627.285.627.63 0 .349-.281.63-.63.63H17.61v1.125h1.755zm-3.855 3.016c0 .27-.174.51-.432.596-.064.021-.133.031-.199.031-.211 0-.391-.09-.51-.25l-2.443-3.317v2.94c0 .344-.279.629-.631.629-.346 0-.626-.285-.626-.629V8.108c0-.27.173-.51.43-.595.06-.023.136-.033.194-.033.195 0 .375.104.495.254l2.462 3.33V8.108c0-.345.282-.63.63-.63.345 0 .63.285.63.63v4.771zm-5.741 0c0 .344-.282.629-.631.629-.345 0-.627-.285-.627-.629V8.108c0-.345.285-.63.63-.63.349 0 .63.285.63.63v4.141h1.756c.348 0 .629.283.629.63 0 .344-.282.629-.629.629M24 10.314C24 4.943 18.615.572 12 .572S0 4.943 0 10.314c0 4.811 4.27 8.842 10.035 9.608.391.082.923.258 1.058.59.12.301.079.766.038 1.08l-.164 1.02c-.045.301-.24 1.186 1.049.645 1.291-.539 6.916-4.078 9.436-6.975C23.176 14.393 24 12.458 24 10.314"/></svg>"#
+            r#"<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M19.365 9.863c.349 0 .63.285.63.631 0 .345-.281.63-.63.63H17.61v1.125h1.755c.349 0 .63.283.63.63 0 .344-.281.629-.63.629h-2.386c-.345 0-.627-.285-.627-.629V8.108c0-.345.282-.63.63-.63h2.386c.346 0 .627.285.627.63 0 .349-.281.63-.63.63H17.61v1.125h1.755zm-3.855 3.016c0 .27-.174.51-.432.596-.064.021-.133.031-.199.031-.211 0-.391-.09-.51-.25l-2.443-3.317v2.94c0 .344-.279.629-.631.629-.346 0-.626-.285-.626-.629V8.108c0-.27.173-.51.43-.595.06-.023.136-.033.194-.033.195 0 .375.104.495.254l2.462 3.33V8.108c0-.345.282-.63.63-.63.345 0 .63.285.63.63v4.141h1.756c.348 0 .629.283.629.63 0 .344-.282.629-.629.629M24 10.314C24 4.943 18.615.572 12 .572S0 4.943 0 10.314c0 4.811 4.27 8.842 10.035 9.608.391.082.923.258 1.058.59.12.301.079.766.038 1.08l-.164 1.02c-.045.301-.24 1.186 1.049.645 1.291-.539 6.916-4.078 9.436-6.975C23.176 14.393 24 12.458 24 10.314"/></svg>"#
         }
         _ => {
             r#"<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>"#
@@ -40,16 +40,53 @@ fn platform_name(platform: &str) -> &'static str {
     }
 }
 
+/// CSS class suffix per platform for brand-colored icons on the public event page.
+fn platform_class(platform: &str) -> &'static str {
+    match platform {
+        "discord" => "pe-cl-discord",
+        "telegram" => "pe-cl-telegram",
+        "x" => "pe-cl-x",
+        "facebook" => "pe-cl-facebook",
+        "line" => "pe-cl-line",
+        _ => "pe-cl-website",
+    }
+}
+
+/// Which page context the component renders in.
+#[derive(Clone, Copy, PartialEq)]
+pub enum CommunityLinksVariant {
+    /// Ticket page — uses ticket-action-card styling
+    Ticket,
+    /// Public event page — uses pe-card styling with section title
+    PublicEvent,
+}
+
 /// Community links section — renders a "Join the Community" card.
-/// Shown on ticket pages and public event pages when community_links is non-empty.
-pub fn community_links_section(links: Vec<CommunityLink>) -> impl IntoView {
+/// Adapts its styling based on page context.
+pub fn community_links_section(
+    links: Vec<CommunityLink>,
+    variant: CommunityLinksVariant,
+) -> impl IntoView {
     if links.is_empty() {
         return ().into_any();
     }
 
+    let filtered: Vec<_> = links.into_iter().filter(|l| !l.url.is_empty()).collect();
+
+    if filtered.is_empty() {
+        return ().into_any();
+    }
+
+    match variant {
+        CommunityLinksVariant::Ticket => render_ticket_variant(filtered).into_any(),
+        CommunityLinksVariant::PublicEvent => render_public_event_variant(filtered).into_any(),
+    }
+}
+
+/// Ticket page variant — compact card with accent border.
+fn render_ticket_variant(links: Vec<CommunityLink>) -> impl IntoView {
     let items: Vec<_> = links
-        .iter()
-        .filter(|l| !l.url.is_empty())
+        .into_iter()
         .map(|link| {
             let icon = platform_icon(&link.platform);
             let display_label = if link.label.is_empty() {
@@ -82,5 +119,50 @@ pub fn community_links_section(links: Vec<CommunityLink>) -> impl IntoView {
             </div>
         </div>
     }
-    .into_any()
+}
+
+/// Public event page variant — matches pe-card design system with section title.
+fn render_public_event_variant(links: Vec<CommunityLink>) -> impl IntoView {
+    let items: Vec<_> = links
+        .into_iter()
+        .map(|link| {
+            let icon = platform_icon(&link.platform);
+            let cls = platform_class(&link.platform);
+            let display_label = if link.label.is_empty() {
+                platform_name(&link.platform).to_string()
+            } else {
+                link.label.clone()
+            };
+            let url = link.url.clone();
+            view! {
+                <a
+                    href=url
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="pe-community-link-item"
+                >
+                    <span class=format!("pe-community-link-icon {cls}") inner_html=icon />
+                    <span class="pe-community-link-label">{display_label}</span>
+                    <svg class="pe-community-link-arrow" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M6 3l5 5-5 5"/>
+                    </svg>
+                </a>
+            }
+        })
+        .collect();
+
+    view! {
+        <div class="pe-card">
+            <h2 class="pe-section-title">
+                <span class="pe-community-title-icon" inner_html=r#"<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>"# />
+                "Join the Community"
+            </h2>
+            <p class="pe-detail-secondary pe-mb-075">
+                "Connect with fellow attendees before and after the event."
+            </p>
+            <div class="pe-community-links-list">
+                {items}
+            </div>
+        </div>
+    }
 }
