@@ -1,6 +1,6 @@
 # Issue #040: Pre-Mainnet Escrow Test Coverage
 
-## Status: Phase A ✅ | Phase B ✅ (rollover devnet passes) | Phase C pending
+## Status: Phase A ✅ | Phase B ✅ (rollover devnet passes) | Phase C ✅ documented
 
 Phase A (SVM tests) complete — 39 tests pass.
 Phase B (E2E scripts): `test_lifecycle.sh` ✅, `test_escrow_devnet.sh` ✅ (31/31 pass). Rollover scripts unblocked by DEV_MODE bypass (Session 3).
@@ -120,8 +120,15 @@ Add 4 lifecycle integration tests to `bethere-escrow/src/tests.rs`:
 - Reports pass/fail summary
 - Usage: `bash scripts/e2e/run_all_e2e.sh`
 
-### Phase C: Manual Browser Test (from Handover 077)
-- Already documented in Handover 077 action items
+### Phase C: Manual Browser Test
+- Documented in `docs/rollover_browser_test_plan.md`
+- 12 test cases (R-01 through R-12) covering 6 flows:
+  1. Source event setup (create + escrow + deposit + check-in)
+  2. Target event setup (create + escrow init)
+  3. Rollover in browser (card → wallet connect → sign TX → verify)
+  4. Refund from target event
+  5. Full lifecycle cleanup (deactivate → claim → close)
+  6. Edge cases (double rollover, non-eligible conditions)
 
 ## Acceptance Criteria
 
@@ -140,7 +147,7 @@ Add 4 lifecycle integration tests to `bethere-escrow/src/tests.rs`:
 - [x] `test_lifecycle.sh` passes on devnet ✅ (no USDC needed)
 
 ### Phase C
-- [ ] Manual browser test of rollover flow documented
+- [x] Manual browser test of rollover flow documented (`docs/rollover_browser_test_plan.md`)
 
 ## Files to Modify
 
