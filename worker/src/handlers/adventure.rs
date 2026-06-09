@@ -34,18 +34,16 @@ pub async fn get_adventure_status(
     Query(query): Query<EventIdQuery>,
 ) -> Result<ApiOk<serde_json::Value>, WorkerError> {
     let event = resolve_event(&state, query.event_id.as_deref()).await?;
+    let db = state
+        .d1
+        .as_deref()
+        .ok_or_else(|| AppError::Internal("D1 database not available".to_string()))?;
 
-    let kv = state
-        .events_kv
-        .as_ref()
-        .or(state.quiz_kv.as_ref())
-        .ok_or_else(|| AppError::Internal("KV storage not available".to_string()))?;
-
-    let status = adventure::get_adventure_status(kv, &event.id, &token)
+    let status = adventure::get_adventure_status(db, &event.id, &token)
         .await
         .map_err(AppError::Internal)?;
 
-    let progress = adventure::get_adventure_progress(kv, &event.id, &token)
+    let progress = adventure::get_adventure_progress(db, &event.id, &token)
         .await
         .map_err(AppError::Internal)?;
 
@@ -99,14 +97,13 @@ pub async fn save_adventure_progress(
         }
     }
 
-    let kv = state
-        .events_kv
-        .as_ref()
-        .or(state.quiz_kv.as_ref())
-        .ok_or_else(|| AppError::Internal("KV storage not available".to_string()))?;
+    let db = state
+        .d1
+        .as_deref()
+        .ok_or_else(|| AppError::Internal("D1 database not available".to_string()))?;
 
     // Get config to determine required levels
-    let config = adventure::get_adventure_config(kv, &event.id)
+    let config = adventure::get_adventure_config(db, &event.id)
         .await
         .map_err(AppError::Internal)?;
 
@@ -124,7 +121,7 @@ pub async fn save_adventure_progress(
     };
 
     let progress = adventure::save_level_completion(
-        kv,
+        db,
         &event.id,
         &token,
         &body.level_id,
@@ -150,14 +147,12 @@ pub async fn get_admin_adventure(
     tracing::info!("admin adventure config read by {}", _claims.email);
 
     let event = resolve_event(&state, query.event_id.as_deref()).await?;
+    let db = state
+        .d1
+        .as_deref()
+        .ok_or_else(|| AppError::Internal("D1 database not available".to_string()))?;
 
-    let kv = state
-        .events_kv
-        .as_ref()
-        .or(state.quiz_kv.as_ref())
-        .ok_or_else(|| AppError::Internal("KV storage not available".to_string()))?;
-
-    let config = adventure::get_adventure_config(kv, &event.id)
+    let config = adventure::get_adventure_config(db, &event.id)
         .await
         .map_err(AppError::Internal)?;
 
@@ -183,14 +178,12 @@ pub async fn put_admin_adventure(
     );
 
     let event = resolve_event(&state, query.event_id.as_deref()).await?;
+    let db = state
+        .d1
+        .as_deref()
+        .ok_or_else(|| AppError::Internal("D1 database not available".to_string()))?;
 
-    let kv = state
-        .events_kv
-        .as_ref()
-        .or(state.quiz_kv.as_ref())
-        .ok_or_else(|| AppError::Internal("KV storage not available".to_string()))?;
-
-    adventure::save_adventure_config(kv, &event.id, &body)
+    adventure::save_adventure_config(db, &event.id, &body)
         .await
         .map_err(AppError::Internal)?;
 

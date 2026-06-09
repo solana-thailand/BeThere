@@ -98,7 +98,7 @@ pub(crate) async fn run_backfill_workflow(
     let mut skipped_details = Vec::new();
 
     for event_id in event_ids {
-        let deposits = event_store::list_deposit_statuses(kv, event_id)
+        let deposits = event_store::list_deposit_statuses(kv, event_id, None)
             .await
             .unwrap_or_default();
 
@@ -158,7 +158,7 @@ pub(crate) async fn run_backfill_workflow(
                     "Backfilled wallet_address"
                 );
                 deposit.wallet_address = Some(wallet.clone());
-                if let Err(e) = event_store::save_deposit_status(kv, &deposit).await {
+                if let Err(e) = event_store::save_deposit_status(kv, &deposit, None).await {
                     tracing::warn!(
                         attendee_id = %deposit.attendee_id,
                         error = %e,

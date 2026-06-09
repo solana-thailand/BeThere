@@ -118,6 +118,7 @@ async fn scheduled(_event: worker::ScheduledEvent, env: Env, _ctx: worker::Sched
             return;
         }
     };
+    let d1 = env.d1("DB").ok();
 
-    cleanup::run_cleanup(&events_kv).await;
+    cleanup::run_cleanup(&events_kv, d1.as_ref()).await;
 }

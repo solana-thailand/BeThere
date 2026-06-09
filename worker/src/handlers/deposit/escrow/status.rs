@@ -31,12 +31,13 @@ pub async fn usdc_refund_queue_handler(
         .events_kv
         .as_ref()
         .ok_or_else(|| AppError::Internal("EVENTS KV not configured".to_string()))?;
+    let d1 = state.d1.as_deref();
 
     let event =
         crate::handlers::ext::resolve_event_with_access(&state, &claims, query.event_id.as_deref())
             .await?;
 
-    let deposits = event_store::list_deposit_statuses(kv, &event.id)
+    let deposits = event_store::list_deposit_statuses(kv, &event.id, d1)
         .await
         .map_err(AppError::Internal)?;
 
@@ -78,14 +79,15 @@ pub async fn cancel_status_handler(
         .events_kv
         .as_ref()
         .ok_or_else(|| AppError::Internal("EVENTS KV not configured".to_string()))?;
+    let d1 = state.d1.as_deref();
 
     let event =
         crate::handlers::ext::resolve_event_with_access(&state, &claims, query.event_id.as_deref())
             .await?;
 
     let (deposits_res, thb_res) = futures_util::join!(
-        event_store::list_deposit_statuses(kv, &event.id),
-        event_store::list_thb_deposits(kv, &event.id),
+        event_store::list_deposit_statuses(kv, &event.id, d1),
+        event_store::list_thb_deposits(kv, &event.id, d1),
     );
     let deposits = deposits_res.map_err(AppError::Internal)?;
     let thb_deposits = thb_res.map_err(AppError::Internal)?;
@@ -426,6 +428,7 @@ pub async fn rollover_deposit_tx_handler(
         .events_kv
         .as_ref()
         .ok_or_else(|| AppError::Internal("EVENTS KV not configured".to_string()))?;
+    let d1 = state.d1.as_deref();
 
     // Resolve source event
     let source_event = event_store::get_event_config(kv, &body.source_event_id)
@@ -537,9 +540,10 @@ pub async fn rollover_deposit_tx_handler(
     crate::solana::validate_wallet_address(&body.wallet_address).map_err(AppError::Validation)?;
 
     // Verify attendee has a verified USDC deposit on source event
-    let deposit_status = event_store::get_deposit_status(kv, &source_event.id, &body.attendee_id)
-        .await
-        .map_err(AppError::Internal)?;
+    let deposit_status =
+        event_store::get_deposit_status(kv, &source_event.id, &body.attendee_id, d1)
+            .await
+            .map_err(AppError::Internal)?;
 
     let status = deposit_status.ok_or_else(|| {
         AppError::NotFound(format!(
@@ -562,9 +566,10 @@ pub async fn rollover_deposit_tx_handler(
     }
 
     // Verify no existing deposit on target event
-    let target_deposit = event_store::get_deposit_status(kv, &target_event.id, &body.attendee_id)
-        .await
-        .map_err(AppError::Internal)?;
+    let target_deposit =
+        event_store::get_deposit_status(kv, &target_event.id, &body.attendee_id, d1)
+            .await
+            .map_err(AppError::Internal)?;
 
     if target_deposit.is_some() {
         return Err(AppError::Validation(

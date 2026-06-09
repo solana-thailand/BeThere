@@ -27,12 +27,13 @@ pub async fn mark_refund_handler(
         .events_kv
         .as_ref()
         .ok_or_else(|| AppError::Internal("EVENTS KV not configured".to_string()))?;
+    let d1 = state.d1.as_deref();
 
     let event =
         crate::handlers::ext::resolve_event_with_access(&state, &claims, Some(&body.event_id))
             .await?;
 
-    let mut thb_deposit = event_store::get_thb_deposit(kv, &event.id, &attendee_id)
+    let mut thb_deposit = event_store::get_thb_deposit(kv, &event.id, &attendee_id, d1)
         .await
         .map_err(AppError::Internal)?
         .ok_or_else(|| {
@@ -72,7 +73,7 @@ pub async fn mark_refund_handler(
     thb_deposit.refunded_at = Some(now.clone());
     thb_deposit.refund_proof_url = Some(refund_proof_url.clone());
 
-    event_store::save_thb_deposit(kv, &thb_deposit)
+    event_store::save_thb_deposit(kv, &thb_deposit, d1)
         .await
         .map_err(AppError::Internal)?;
 
@@ -220,12 +221,13 @@ pub async fn batch_thb_refund_handler(
         .events_kv
         .as_ref()
         .ok_or_else(|| AppError::Internal("EVENTS KV not configured".to_string()))?;
+    let d1 = state.d1.as_deref();
 
     let event =
         crate::handlers::ext::resolve_event_with_access(&state, &claims, Some(&body.event_id))
             .await?;
 
-    let deposits = event_store::list_thb_deposits(kv, &event.id)
+    let deposits = event_store::list_thb_deposits(kv, &event.id, d1)
         .await
         .map_err(AppError::Internal)?;
 
@@ -244,7 +246,7 @@ pub async fn batch_thb_refund_handler(
         }
         dep.refunded = true;
         dep.refunded_at = Some(now.clone());
-        event_store::save_thb_deposit(kv, &dep)
+        event_store::save_thb_deposit(kv, &dep, d1)
             .await
             .map_err(AppError::Internal)?;
         refunded += 1;

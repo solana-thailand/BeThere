@@ -299,16 +299,12 @@ async fn verify_online_quest_completion(
     match crate::quiz::get_quiz_status(d1, kv, event_id, claim_token).await {
         Ok(QuizStatus::Passed) => true,
         Ok(QuizStatus::NotRequired) => {
-            // Quiz not configured — check adventure
-            let kv_ref = match kv {
-                Some(k) => k,
-                None => {
-                    // No KV available — if quiz_enabled, block (can't verify);
-                    // otherwise allow (no quest required).
-                    return !quiz_enabled;
-                }
+            // Quiz not configured — check adventure (D1 only)
+            let Some(db) = d1 else {
+                // No D1 available — treat adventure as not required
+                return !quiz_enabled;
             };
-            match crate::adventure::get_adventure_status(kv_ref, event_id, claim_token).await {
+            match crate::adventure::get_adventure_status(db, event_id, claim_token).await {
                 Ok(AdventureStatus::Passed) => true,
                 Ok(AdventureStatus::NotRequired) => {
                     // Neither quiz nor adventure configured.
@@ -481,7 +477,6 @@ pub async fn execute_claim(
     // 4+5. Quiz and Adventure gates — run concurrently to parallelize reads
     let d1_ref = state.d1.as_deref();
     let quiz_kv = state.events_kv.as_ref().or(state.quiz_kv.as_ref());
-    let adv_kv = state.events_kv.as_ref().or(state.quiz_kv.as_ref());
 
     let quiz_fut = async {
         crate::quiz::get_quiz_status(d1_ref, quiz_kv, &event.id, token)
@@ -489,12 +484,11 @@ pub async fn execute_claim(
             .ok()
     };
     let adv_fut = async {
-        if let Some(kv) = adv_kv {
-            crate::adventure::get_adventure_status(kv, &event.id, token)
+        match d1_ref {
+            Some(db) => crate::adventure::get_adventure_status(db, &event.id, token)
                 .await
-                .ok()
-        } else {
-            None
+                .ok(),
+            None => None,
         }
     };
 

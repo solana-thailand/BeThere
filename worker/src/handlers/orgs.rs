@@ -1,4 +1,4 @@
-//! Organization API handlers — CRUD for organizations (Approach A).
+//! Organization API handlers — CRUD for organizations.
 //!
 //! Protected endpoints (require super admin auth):
 //!   GET    /api/orgs           — list all organizations
@@ -43,25 +43,14 @@ pub async fn list_orgs(
         );
     }
 
-    let kv = state
-        .events_kv
+    let db = state
+        .d1
         .as_ref()
-        .ok_or_else(|| AppError::Internal("events KV namespace not configured".into()))?;
+        .ok_or_else(|| AppError::Internal("D1 database not available".into()))?;
 
-    let index = crate::org_store::get_org_index(kv)
+    let orgs = crate::org_store::list_orgs(db)
         .await
         .map_err(AppError::Internal)?;
-
-    // Load full configs for each org
-    let mut orgs = Vec::new();
-    for meta in &index.orgs {
-        if let Some(config) = crate::org_store::get_org_config(kv, &meta.id)
-            .await
-            .map_err(AppError::Internal)?
-        {
-            orgs.push(config);
-        }
-    }
 
     Ok(ApiOk::new(OrgListResponse { orgs }))
 }
@@ -89,12 +78,12 @@ pub async fn create_org(
         );
     }
 
-    let kv = state
-        .events_kv
+    let db = state
+        .d1
         .as_ref()
-        .ok_or_else(|| AppError::Internal("events KV namespace not configured".into()))?;
+        .ok_or_else(|| AppError::Internal("D1 database not available".into()))?;
 
-    let config = crate::org_store::create_org(kv, &req).await.map_err(|e| {
+    let config = crate::org_store::create_org(db, &req).await.map_err(|e| {
         tracing::error!(error = %e, "failed to create org");
         AppError::Validation(e)
     })?;
@@ -132,12 +121,12 @@ pub async fn get_org(
         return Err(AppError::Forbidden("only super admins can view organizations".into()).into());
     }
 
-    let kv = state
-        .events_kv
+    let db = state
+        .d1
         .as_ref()
-        .ok_or_else(|| AppError::Internal("events KV namespace not configured".into()))?;
+        .ok_or_else(|| AppError::Internal("D1 database not available".into()))?;
 
-    let org = crate::org_store::get_org_config(kv, &id)
+    let org = crate::org_store::get_org_config(db, &id)
         .await
         .map_err(AppError::Internal)?
         .ok_or_else(|| AppError::NotFound(format!("organization '{id}' not found")))?;
@@ -169,12 +158,12 @@ pub async fn update_org(
         );
     }
 
-    let kv = state
-        .events_kv
+    let db = state
+        .d1
         .as_ref()
-        .ok_or_else(|| AppError::Internal("events KV namespace not configured".into()))?;
+        .ok_or_else(|| AppError::Internal("D1 database not available".into()))?;
 
-    let config = crate::org_store::update_org(kv, &id, &req)
+    let config = crate::org_store::update_org(db, &id, &req)
         .await
         .map_err(|e| {
             tracing::error!(org_id = %id, error = %e, "failed to update org");
@@ -210,12 +199,12 @@ pub async fn delete_org(
         );
     }
 
-    let kv = state
-        .events_kv
+    let db = state
+        .d1
         .as_ref()
-        .ok_or_else(|| AppError::Internal("events KV namespace not configured".into()))?;
+        .ok_or_else(|| AppError::Internal("D1 database not available".into()))?;
 
-    crate::org_store::delete_org(kv, &id).await.map_err(|e| {
+    crate::org_store::delete_org(db, &id).await.map_err(|e| {
         tracing::error!(org_id = %id, error = %e, "failed to delete org");
         AppError::Validation(e)
     })?;

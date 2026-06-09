@@ -56,7 +56,17 @@ pub(crate) async fn apply_rollover_deposit_status(
     // that's exactly what the rollover is creating).
     let attendee_wallet = event.attendee.as_deref().unwrap_or("");
     let attendee_api_id = if let Some(kv_ref) = kv {
-        crate::event_store::find_attendee_by_wallet(kv_ref, &target_id, attendee_wallet)
+        crate::event_store::find_attendee_by_wallet(
+            kv_ref,
+            &target_id,
+            attendee_wallet,
+            d1,
+        )
+        .await
+        .ok()
+        .flatten()
+    } else if let Some(db) = d1 {
+        crate::db::deposit_statuses::find_attendee_by_wallet(db, &target_id, attendee_wallet)
             .await
             .ok()
             .flatten()
@@ -77,6 +87,7 @@ pub(crate) async fn apply_rollover_deposit_status(
                             kv_ref,
                             &src_id,
                             attendee_wallet,
+                            d1,
                         )
                         .await
                         .ok()
@@ -103,7 +114,12 @@ pub(crate) async fn apply_rollover_deposit_status(
 
     // Check if deposit_status already exists (dedup)
     let existing = if let Some(kv_ref) = kv {
-        crate::event_store::get_deposit_status(kv_ref, &target_id, &api_id)
+        crate::event_store::get_deposit_status(kv_ref, &target_id, &api_id, d1)
+            .await
+            .ok()
+            .flatten()
+    } else if let Some(db) = d1 {
+        crate::db::deposit_statuses::get_deposit_status(db, &target_id, &api_id)
             .await
             .ok()
             .flatten()
@@ -131,7 +147,8 @@ pub(crate) async fn apply_rollover_deposit_status(
             if let Some(src_id) = source_event_id
                 && let Some(kv_ref) = kv
                 && let Ok(Some(src_status)) =
-                    crate::event_store::get_deposit_status(kv_ref, &src_id, &api_id).await
+                    crate::event_store::get_deposit_status(kv_ref, &src_id, &api_id, d1)
+                        .await
             {
                 found = src_status.amount;
             }
@@ -163,7 +180,7 @@ pub(crate) async fn apply_rollover_deposit_status(
     };
 
     if let Some(kv_ref) = kv {
-        match crate::event_store::save_deposit_status(kv_ref, &deposit_status).await {
+        match crate::event_store::save_deposit_status(kv_ref, &deposit_status, d1).await {
             Ok(()) => {
                 tracing::info!(
                     sig = %event.signature,
@@ -233,15 +250,10 @@ pub async fn onchain_webhook_handler(
         );
     }
     let kv = state.events_kv.as_ref();
-    let d1 = state.d1.as_deref();
-
-    if kv.is_none() && d1.is_none() {
-        tracing::warn!(
-            count = body.transactions.len(),
-            "onchain webhook: no KV or D1 available, skipping escrow indexing"
-        );
-        return Ok(ApiOk::new(IndexSummary::default()));
-    }
+    let db = state
+        .d1
+        .as_deref()
+        .ok_or_else(|| AppError::Internal("D1 database not available".to_string()))?;
 
     if body.transactions.is_empty() {
         return Ok(ApiOk::new(IndexSummary::default()));
@@ -268,7 +280,8 @@ pub async fn onchain_webhook_handler(
         };
 
         // Resolve event ID from escrow address (async)
-        let event_id = escrow_indexer::resolve_event_by_escrow(d1, kv, &event.escrow_address).await;
+        let event_id =
+            escrow_indexer::resolve_event_by_escrow(Some(db), kv, &event.escrow_address).await;
 
         let Some(event_id) = event_id else {
             tracing::warn!(
@@ -280,17 +293,17 @@ pub async fn onchain_webhook_handler(
             continue;
         };
 
-        if let Some(kv_ref) = kv {
-            match escrow_indexer::save_onchain_event(kv_ref, &event_id, event.clone()).await {
-                Ok(true) => {
-                    tracing::info!(
-                        sig = %event.signature,
-                        instruction = %event.instruction,
-                        event_id = %event_id,
-                        "indexed on-chain event via webhook"
-                    );
+        match escrow_indexer::save_onchain_event(db, &event_id, event.clone()).await {
+            Ok(true) => {
+                tracing::info!(
+                    sig = %event.signature,
+                    instruction = %event.instruction,
+                    event_id = %event_id,
+                    "indexed on-chain event via webhook"
+                );
 
-                    // Also append to audit trail
+                // Also append to audit trail (KV + D1)
+                if let Some(kv_ref) = kv {
                     let _ = crate::audit_store::append_event_audit(
                         kv_ref,
                         &event_id,
@@ -310,30 +323,27 @@ pub async fn onchain_webhook_handler(
                                 "amount": event.amount,
                             }),
                         ),
-                        state.d1.as_deref(),
+                        Some(db),
                     )
                     .await;
+                }
 
-                    // For RolloverDeposit: create DepositStatus on the target event
-                    apply_rollover_deposit_status(d1, kv, &event).await;
+                // For RolloverDeposit: create DepositStatus on the target event
+                apply_rollover_deposit_status(Some(db), kv, &event).await;
 
-                    summary.indexed += 1;
-                }
-                Ok(false) => {
-                    summary.duplicates += 1;
-                }
-                Err(e) => {
-                    tracing::error!(
-                        sig = %event.signature,
-                        error = %e,
-                        "failed to save on-chain event"
-                    );
-                    summary.errors += 1;
-                }
+                summary.indexed += 1;
             }
-        } else {
-            // No KV — just count the event as resolved but don't store
-            summary.indexed += 1;
+            Ok(false) => {
+                summary.duplicates += 1;
+            }
+            Err(e) => {
+                tracing::error!(
+                    sig = %event.signature,
+                    error = %e,
+                    "failed to save on-chain event"
+                );
+                summary.errors += 1;
+            }
         }
     }
 
@@ -374,8 +384,9 @@ pub async fn escrow_sync_handler(
 ) -> Result<ApiOk<IndexSummary>, WorkerError> {
     let kv = state.events_kv.as_ref();
     let d1 = state.d1.as_deref();
+    let db = d1.ok_or_else(|| AppError::Internal("D1 database not available".to_string()))?;
 
-    let event = crate::event_store::get_event_config_with_fallback(kv, d1, &body.event_id)
+    let event = crate::event_store::get_event_config_with_fallback(kv, Some(db), &body.event_id)
         .await
         .map_err(AppError::Internal)?
         .ok_or_else(|| AppError::NotFound(format!("event '{}' not found", body.event_id)))?;
@@ -413,49 +424,41 @@ pub async fn escrow_sync_handler(
         "manual escrow sync triggered"
     );
 
-    let kv_ref = match kv {
-        Some(k) => k,
-        None => {
-            return Err(AppError::Internal(
-                "EVENTS KV not configured — escrow sync requires KV to store indexed events"
-                    .to_string(),
-            )
-            .into());
-        }
-    };
     let summary =
-        escrow_indexer::poll_escrow_events(kv_ref, &rpc_url, &event.escrow_address, &event.id)
+        escrow_indexer::poll_escrow_events(db, &rpc_url, &event.escrow_address, &event.id)
             .await
             .map_err(AppError::Internal)?;
 
     // Apply rollover deposit status hook for any newly indexed RolloverDeposit events
     if summary.indexed > 0 {
-        let onchain_events = escrow_indexer::read_onchain_events(kv_ref, &event.id).await;
+        let onchain_events = escrow_indexer::get_onchain_events(db, &event.id, 200).await;
         for ev in &onchain_events {
-            apply_rollover_deposit_status(d1, kv, ev).await;
+            apply_rollover_deposit_status(Some(db), kv, ev).await;
         }
     }
 
     // Audit log
-    let _ = crate::audit_store::append_event_audit(
-        kv_ref,
-        &event.id,
-        crate::audit_store::create_entry_with_meta(
-            &claims.email,
-            crate::audit_store::AuditAction::OnChainEventIndexed,
+    if let Some(kv_ref) = kv {
+        let _ = crate::audit_store::append_event_audit(
+            kv_ref,
             &event.id,
-            "manual escrow sync",
-            serde_json::json!({
-                "indexed": summary.indexed,
-                "duplicates": summary.duplicates,
-                "skipped_failed": summary.skipped_failed,
-                "skipped_no_event": summary.skipped_no_event,
-                "errors": summary.errors,
-            }),
-        ),
-        state.d1.as_deref(),
-    )
-    .await;
+            crate::audit_store::create_entry_with_meta(
+                &claims.email,
+                crate::audit_store::AuditAction::OnChainEventIndexed,
+                &event.id,
+                "manual escrow sync",
+                serde_json::json!({
+                    "indexed": summary.indexed,
+                    "duplicates": summary.duplicates,
+                    "skipped_failed": summary.skipped_failed,
+                    "skipped_no_event": summary.skipped_no_event,
+                    "errors": summary.errors,
+                }),
+            ),
+            Some(db),
+        )
+        .await;
+    }
 
     Ok(ApiOk::new(summary))
 }
@@ -485,9 +488,12 @@ pub async fn get_onchain_events_handler(
     Path(event_id): Path<String>,
 ) -> Result<ApiOk<OnchainEventsResponse>, WorkerError> {
     let kv = state.events_kv.as_ref();
-    let d1 = state.d1.as_deref();
+    let db = state
+        .d1
+        .as_deref()
+        .ok_or_else(|| AppError::Internal("D1 database not available".to_string()))?;
 
-    let event = crate::event_store::get_event_config_with_fallback(kv, d1, &event_id)
+    let event = crate::event_store::get_event_config_with_fallback(kv, Some(db), &event_id)
         .await
         .map_err(AppError::Internal)?
         .ok_or_else(|| AppError::NotFound(format!("event '{}' not found", event_id)))?;
@@ -507,16 +513,7 @@ pub async fn get_onchain_events_handler(
         return Err(AppError::Forbidden("insufficient permissions".to_string()).into());
     }
 
-    let events = match kv {
-        Some(kv_ref) => escrow_indexer::get_onchain_events(kv_ref, &event.id, 100).await,
-        None => {
-            tracing::warn!(
-                event_id = %event.id,
-                "no KV available, returning empty on-chain events"
-            );
-            vec![]
-        }
-    };
+    let events = escrow_indexer::get_onchain_events(db, &event.id, 100).await;
 
     Ok(ApiOk::new(OnchainEventsResponse {
         event_id: event.id,

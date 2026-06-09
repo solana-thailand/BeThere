@@ -231,17 +231,13 @@ pub async fn sync_contacts_handler(
             };
 
         // Resolve the contacts sheet from the event's organization
-        let resolved = match kv {
-            Some(kv_ref) => {
-                crate::org_store::resolve_contacts_sheet(kv_ref, &config, contacts_config).await
-            }
-            None => {
-                // No KV: fall back to global sheets config (same as resolve_contacts_sheet fallback)
-                event_checkin_domain::models::org::ResolvedContactsSheet {
-                    sheet_id: contacts_config.contacts_sheet_id.clone(),
-                    contacts_sheet_name: contacts_config.contacts_sheet_name.clone(),
-                    events_sheet_name: contacts_config.events_sheet_name.clone(),
-                }
+        let resolved = if let Some(db) = d1 {
+            crate::org_store::resolve_contacts_sheet(db, &config, contacts_config).await
+        } else {
+            event_checkin_domain::models::org::ResolvedContactsSheet {
+                sheet_id: contacts_config.contacts_sheet_id.clone(),
+                contacts_sheet_name: contacts_config.contacts_sheet_name.clone(),
+                events_sheet_name: contacts_config.events_sheet_name.clone(),
             }
         };
 

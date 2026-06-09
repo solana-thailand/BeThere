@@ -23,13 +23,14 @@ pub async fn verify_thb_slip_handler(
         .events_kv
         .as_ref()
         .ok_or_else(|| AppError::Internal("EVENTS KV not configured".to_string()))?;
+    let d1 = state.d1.as_deref();
 
     let event =
         crate::handlers::ext::resolve_event_with_access(&state, &claims, Some(&body.event_id))
             .await?;
 
     // Get existing THB deposit
-    let mut thb_deposit = event_store::get_thb_deposit(kv, &event.id, &body.attendee_id)
+    let mut thb_deposit = event_store::get_thb_deposit(kv, &event.id, &body.attendee_id, d1)
         .await
         .map_err(AppError::Internal)?
         .ok_or_else(|| {
@@ -52,18 +53,18 @@ pub async fn verify_thb_slip_handler(
         thb_deposit.verified_at = Some(now.clone());
     }
 
-    event_store::save_thb_deposit(kv, &thb_deposit)
+    event_store::save_thb_deposit(kv, &thb_deposit, d1)
         .await
         .map_err(AppError::Internal)?;
 
     // Update deposit status
-    if let Some(mut status) = event_store::get_deposit_status(kv, &event.id, &body.attendee_id)
+    if let Some(mut status) = event_store::get_deposit_status(kv, &event.id, &body.attendee_id, d1)
         .await
         .map_err(AppError::Internal)?
     {
         status.verified = body.approved;
         status.rejected = !body.approved;
-        event_store::save_deposit_status(kv, &status)
+        event_store::save_deposit_status(kv, &status, d1)
             .await
             .map_err(AppError::Internal)?;
     }

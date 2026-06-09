@@ -169,13 +169,13 @@ pub async fn get_form_config(
     Extension(_claims): Extension<Claims>,
     Path(event_id): Path<String>,
 ) -> Result<ApiOk<serde_json::Value>, crate::error::WorkerError> {
-    let config = if let Some(kv) = &state.events_kv {
-        crate::event_store::get_form_config(kv, &event_id)
-            .await
-            .map_err(AppError::Internal)?
-    } else {
-        None
-    };
+    let config = crate::event_store::get_form_config(
+        &event_id,
+        state.d1.as_deref(),
+        state.events_kv.as_ref(),
+    )
+    .await
+    .map_err(AppError::Internal)?;
 
     let form_config = config.unwrap_or_else(RegistrationFormConfig::default_config);
     let value = serde_json::to_value(&form_config)
@@ -194,11 +194,6 @@ pub async fn put_form_config(
     Path(event_id): Path<String>,
     Json(body): Json<RegistrationFormConfig>,
 ) -> Result<ApiOk<serde_json::Value>, crate::error::WorkerError> {
-    let kv = state
-        .events_kv
-        .as_ref()
-        .ok_or_else(|| AppError::Internal("KV namespace not available".into()))?;
-
     // Validate that all profile_field keys map to known developer_profiles columns
     let valid_profile_keys = [
         "experience_level",
@@ -223,9 +218,14 @@ pub async fn put_form_config(
         }
     }
 
-    crate::event_store::save_form_config(kv, &event_id, &body)
-        .await
-        .map_err(AppError::Internal)?;
+    crate::event_store::save_form_config(
+        &event_id,
+        &body,
+        state.d1.as_deref(),
+        state.events_kv.as_ref(),
+    )
+    .await
+    .map_err(AppError::Internal)?;
 
     tracing::info!(event_id = %event_id, "form config updated");
 
@@ -249,8 +249,8 @@ pub(super) async fn sync_event_to_tab(
     total_attendees: usize,
     kv: Option<&worker::KvStore>,
 ) {
-    let resolved = if let Some(kv_ref) = kv {
-        crate::org_store::resolve_contacts_sheet(kv_ref, config, &state.config.sheets).await
+    let resolved = if let Some(db) = state.d1.as_deref() {
+        crate::org_store::resolve_contacts_sheet(db, config, &state.config.sheets).await
     } else {
         event_checkin_domain::models::org::ResolvedContactsSheet {
             sheet_id: state.config.sheets.contacts_sheet_id.clone(),

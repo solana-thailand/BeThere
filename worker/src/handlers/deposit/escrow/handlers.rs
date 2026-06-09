@@ -173,6 +173,7 @@ pub async fn refund_and_close_tx_handler(
         .events_kv
         .as_ref()
         .ok_or_else(|| AppError::Internal("EVENTS KV not configured".to_string()))?;
+    let d1 = state.d1.as_deref();
 
     let event = event_store::get_event_config(kv, &body.event_id)
         .await
@@ -191,7 +192,7 @@ pub async fn refund_and_close_tx_handler(
 
     crate::solana::validate_wallet_address(&body.wallet_address).map_err(AppError::Validation)?;
 
-    let deposit_status = event_store::get_deposit_status(kv, &event.id, &body.attendee_id)
+    let deposit_status = event_store::get_deposit_status(kv, &event.id, &body.attendee_id, d1)
         .await
         .map_err(AppError::Internal)?;
 
@@ -277,6 +278,7 @@ pub async fn mark_checked_in_tx_handler(
         .events_kv
         .as_ref()
         .ok_or_else(|| AppError::Internal("EVENTS KV not configured".to_string()))?;
+    let d1 = state.d1.as_deref();
 
     let event = event_store::get_event_config(kv, &body.event_id)
         .await
@@ -296,7 +298,7 @@ pub async fn mark_checked_in_tx_handler(
     let attendee_wallet = match &body.attendee_wallet {
         Some(w) if !w.is_empty() => w.clone(),
         _ => {
-            let deposit = event_store::get_deposit_status(kv, &event.id, &body.attendee_id)
+            let deposit = event_store::get_deposit_status(kv, &event.id, &body.attendee_id, d1)
                 .await
                 .map_err(AppError::Internal)?
                 .ok_or_else(|| {
@@ -316,7 +318,7 @@ pub async fn mark_checked_in_tx_handler(
 
     crate::solana::validate_wallet_address(&attendee_wallet).map_err(AppError::Validation)?;
 
-    let deposit_status = event_store::get_deposit_status(kv, &event.id, &body.attendee_id)
+    let deposit_status = event_store::get_deposit_status(kv, &event.id, &body.attendee_id, d1)
         .await
         .map_err(AppError::Internal)?;
 
@@ -624,6 +626,10 @@ pub async fn claim_forfeited_tx_handler(
         .events_kv
         .as_ref()
         .ok_or_else(|| AppError::Internal("EVENTS KV not configured".to_string()))?;
+    let db = state
+        .d1
+        .as_deref()
+        .ok_or_else(|| AppError::Internal("D1 database not available".to_string()))?;
 
     let event = event_store::get_event_config(kv, &body.event_id)
         .await
@@ -674,7 +680,7 @@ pub async fn claim_forfeited_tx_handler(
         ))
     })?;
 
-    let all_deposits = event_store::list_deposit_statuses(kv, &body.event_id)
+    let all_deposits = event_store::list_deposit_statuses(kv, &body.event_id, Some(db))
         .await
         .map_err(AppError::Internal)?;
 
@@ -690,7 +696,7 @@ pub async fn claim_forfeited_tx_handler(
         );
     }
 
-    let onchain_events = crate::escrow_indexer::get_onchain_events(kv, &body.event_id, 200).await;
+    let onchain_events = crate::escrow_indexer::get_onchain_events(db, &body.event_id, 200).await;
     let mut excluded_wallets: std::collections::HashSet<String> = std::collections::HashSet::new();
     for ev in &onchain_events {
         match ev.instruction {
@@ -777,6 +783,7 @@ pub async fn close_deposit_tx_handler(
         .events_kv
         .as_ref()
         .ok_or_else(|| AppError::Internal("EVENTS KV not configured".to_string()))?;
+    let d1 = state.d1.as_deref();
 
     let event = event_store::get_event_config(kv, &body.event_id)
         .await
@@ -789,7 +796,7 @@ pub async fn close_deposit_tx_handler(
 
     crate::solana::validate_wallet_address(&body.wallet_address).map_err(AppError::Validation)?;
 
-    let deposit_status = event_store::get_deposit_status(kv, &event.id, &body.attendee_id)
+    let deposit_status = event_store::get_deposit_status(kv, &event.id, &body.attendee_id, d1)
         .await
         .map_err(AppError::Internal)?;
 

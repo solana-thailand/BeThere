@@ -5,6 +5,7 @@
 //! Read path: D1-first fallback when KV is empty (e.g. after data loss).
 
 use worker::D1Database;
+use worker::d1::D1Type;
 
 // ---------------------------------------------------------------------------
 // D1 row type matching the full events table
@@ -71,6 +72,8 @@ pub struct D1EventRow {
     pub dev_profile_enabled: Option<i64>,
     // Columns added for community links
     pub community_links: Option<String>,
+    // Columns added for Issue #053 Phase 3f
+    pub form_config: Option<String>,
 }
 
 impl D1EventRow {
@@ -183,6 +186,56 @@ impl D1EventRow {
             .unwrap_or_default(),
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Form config D1 helpers (Issue #053 Phase 3f)
+// ---------------------------------------------------------------------------
+
+/// Get form config for an event from D1.
+/// Returns None if no custom config is stored.
+pub async fn get_form_config(
+    db: &D1Database,
+    event_id: &str,
+) -> Result<Option<event_checkin_domain::models::event::RegistrationFormConfig>, String> {
+    let sql = format!("SELECT form_config FROM events WHERE id = '{event_id}' LIMIT 1");
+    let result = db
+        .prepare(&sql)
+        .first::<serde_json::Value>(None)
+        .await
+        .map_err(|e| format!("D1 get_form_config: {e:?}"))?;
+
+    match result {
+        Some(row) => {
+            let config_str = row.get("form_config").and_then(|v| v.as_str());
+            match config_str {
+                Some(json) if !json.is_empty() => {
+                    serde_json::from_str(json).map(Some).map_err(|e| {
+                        format!("failed to parse form config for event '{event_id}': {e}")
+                    })
+                }
+                _ => Ok(None),
+            }
+        }
+        None => Ok(None),
+    }
+}
+
+/// Save form config for an event to D1.
+pub async fn save_form_config(
+    db: &D1Database,
+    event_id: &str,
+    config: &event_checkin_domain::models::event::RegistrationFormConfig,
+) -> Result<(), String> {
+    let json_str = serde_json::to_string(config)
+        .map_err(|e| format!("failed to serialize form config: {e:?}"))?;
+    // Escape single quotes for SQL
+    let json_escaped = json_str.replace('\'', "''");
+    let sql = format!("UPDATE events SET form_config = '{json_escaped}' WHERE id = '{event_id}'");
+    db.exec(&sql)
+        .await
+        .map_err(|e| format!("D1 save_form_config: {e:?}"))?;
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -418,4 +471,34 @@ pub async fn list_events_as_meta(
 ) -> Result<Vec<event_checkin_domain::models::event::EventMeta>, String> {
     let rows = list_events(db).await?;
     Ok(rows.iter().map(|r| r.to_event_config().to_meta()).collect())
+}
+
+/// Check whether an organization has any non-archived events.
+pub async fn has_active_events_for_org(db: &D1Database, org_id: &str) -> Result<bool, String> {
+    let stmt = db.prepare(
+        "SELECT 1 AS found FROM events WHERE organization_id = ?1 AND status != 'Archived' LIMIT 1",
+    );
+    let result = stmt
+        .bind_refs(&[D1Type::Text(org_id)])
+        .map_err(|e| format!("D1 has_active_events_for_org bind: {e:?}"))?
+        .first::<serde_json::Value>(None)
+        .await
+        .map_err(|e| format!("D1 has_active_events_for_org query: {e:?}"))?;
+    Ok(result.is_some())
+}
+
+/// Count non-archived events for an organization.
+pub async fn count_active_events_for_org(db: &D1Database, org_id: &str) -> Result<usize, String> {
+    let stmt = db.prepare(
+        "SELECT COUNT(*) AS cnt FROM events WHERE organization_id = ?1 AND status != 'Archived'",
+    );
+    let result = stmt
+        .bind_refs(&[D1Type::Text(org_id)])
+        .map_err(|e| format!("D1 count_active_events_for_org bind: {e:?}"))?
+        .first::<serde_json::Value>(None)
+        .await
+        .map_err(|e| format!("D1 count_active_events_for_org query: {e:?}"))?;
+    Ok(result
+        .and_then(|v| v.get("cnt").and_then(|c| c.as_i64()))
+        .unwrap_or(0) as usize)
 }

@@ -58,7 +58,7 @@ const RETENTION_ONCHAIN_DEDUP_SECS: i64 = 90 * 86_400; // 7_776_000
 /// Run the daily cleanup pass.
 ///
 /// Returns a summary of deleted keys for logging.
-pub async fn run_cleanup(kv: &KvStore) -> CleanupSummary {
+pub async fn run_cleanup(kv: &KvStore, d1: Option<&worker::D1Database>) -> CleanupSummary {
     let mut summary = CleanupSummary::default();
     let now_ms = chrono::Utc::now().timestamp_millis();
 
@@ -105,8 +105,33 @@ pub async fn run_cleanup(kv: &KvStore) -> CleanupSummary {
             let prefix = format!("event:{event_id}:deposit:status:");
             summary.deposit_status_deleted += delete_keys_by_prefix(kv, &prefix).await;
 
+            // Also delete deposit statuses from D1
+            if let Some(db) = d1
+                && let Err(e) =
+                    crate::db::deposit_statuses::delete_deposit_statuses_for_event(db, event_id)
+                        .await
+            {
+                tracing::warn!(
+                    event_id = %event_id,
+                    error = %e,
+                    "D1 deposit statuses cleanup failed"
+                );
+            }
+
             let prefix = format!("event:{event_id}:deposit:thb:");
             summary.thb_deposits_deleted += delete_keys_by_prefix(kv, &prefix).await;
+
+            // Also delete THB deposits from D1
+            if let Some(db) = d1
+                && let Err(e) =
+                    crate::db::thb_deposits::delete_thb_deposits_for_event(db, event_id).await
+            {
+                tracing::warn!(
+                    event_id = %event_id,
+                    error = %e,
+                    "D1 THB deposits cleanup failed"
+                );
+            }
         }
 
         // Phase 3: Delete expired config keys (quiz config, adventure config, event config)
@@ -147,17 +172,25 @@ pub async fn run_cleanup(kv: &KvStore) -> CleanupSummary {
 
         // Phase 4b: Delete on-chain event data when financial data expires
         if now_ms / 1000 > financial_cutoff {
+            // KV onchain event list (legacy — now in D1, but may still exist)
             let key = format!("event:{event_id}:onchain");
             if kv.delete(&key).await.is_ok() {
                 summary.onchain_events_deleted += 1;
             }
 
-            // Clean up polling cursor
+            // Clean up polling cursor (legacy KV)
             if let Ok(Some(config)) = crate::event_store::get_event_config(kv, event_id).await
-                && !config.escrow_address.is_empty() {
-                    let cursor_key = format!("onchain:cursor:{}", config.escrow_address);
-                    let _ = kv.delete(&cursor_key).await;
-                }
+                && !config.escrow_address.is_empty()
+            {
+                let cursor_key = format!("onchain:cursor:{}", config.escrow_address);
+                let _ = kv.delete(&cursor_key).await;
+            }
+
+            // D1: delete onchain events for this event
+            if let Some(db) = d1 {
+                let sql = format!("DELETE FROM onchain_events WHERE event_id = '{event_id}'");
+                let _ = db.exec(&sql).await;
+            }
         }
     }
 
@@ -176,8 +209,22 @@ pub async fn run_cleanup(kv: &KvStore) -> CleanupSummary {
         index.events.iter().map(|e| e.id.clone()).collect();
     summary.orphaned_audit_deleted = cleanup_orphaned_audit_logs(kv, &known_ids).await;
 
-    // Phase 6: Clean up on-chain dedup keys (onchain:sig:*)
+    // Phase 6: Clean up on-chain dedup
+    // KV dedup keys (legacy)
     summary.onchain_dedup_deleted = cleanup_onchain_dedup_keys(kv).await;
+    // D1 dedup entries (90 days)
+    if let Some(db) = d1
+        && let Ok(count) = crate::db::onchain_events::cleanup_old_dedup_entries(db, 90).await
+    {
+        summary.onchain_dedup_deleted += count;
+    }
+
+    // Phase 7: Prune expired JWT blacklist entries
+    if let Some(db) = d1
+        && let Err(e) = crate::db::jwt_blacklist::cleanup_expired(db).await
+    {
+        tracing::warn!(error = %e, "JWT blacklist cleanup failed");
+    }
 
     tracing::info!(
         quiz_progress = summary.quiz_progress_deleted,
@@ -191,6 +238,7 @@ pub async fn run_cleanup(kv: &KvStore) -> CleanupSummary {
         orphaned_audit_deleted = summary.orphaned_audit_deleted,
         onchain_events_deleted = summary.onchain_events_deleted,
         onchain_dedup_deleted = summary.onchain_dedup_deleted,
+        jwt_blacklist_deleted = summary.jwt_blacklist_deleted,
         "cleanup: daily pass complete"
     );
 
@@ -267,14 +315,13 @@ pub async fn cleanup_orphaned_audit_logs(
                         if maybe_id.contains(':') {
                             continue;
                         }
-                        if !known_ids.contains(maybe_id)
-                            && kv.delete(name).await.is_ok() {
-                                deleted += 1;
-                                tracing::info!(
-                                    event_id = %maybe_id,
-                                    "cleanup: deleted orphaned audit log"
-                                );
-                            }
+                        if !known_ids.contains(maybe_id) && kv.delete(name).await.is_ok() {
+                            deleted += 1;
+                            tracing::info!(
+                                event_id = %maybe_id,
+                                "cleanup: deleted orphaned audit log"
+                            );
+                        }
                     }
                 }
                 if resp.list_complete {
@@ -399,6 +446,7 @@ pub struct CleanupSummary {
     pub orphaned_audit_deleted: usize,
     pub onchain_events_deleted: usize,
     pub onchain_dedup_deleted: usize,
+    pub jwt_blacklist_deleted: usize,
 }
 
 // ---------------------------------------------------------------------------

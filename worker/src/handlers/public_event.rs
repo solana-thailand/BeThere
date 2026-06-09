@@ -108,14 +108,14 @@ pub async fn get_public_event(
 
     // Read form config for dynamic rendering (Issue #049 Phase 2)
     let form_config = if config.dev_profile_enabled {
-        if let Some(kv) = &state.events_kv {
-            crate::event_store::get_form_config(kv, &config.id)
-                .await
-                .ok()
-                .flatten()
-        } else {
-            None
-        }
+        crate::event_store::get_form_config(
+            &config.id,
+            state.d1.as_deref(),
+            state.events_kv.as_ref(),
+        )
+        .await
+        .ok()
+        .flatten()
     } else {
         None
     };

@@ -44,6 +44,7 @@ pub async fn hold_deposit_handler(
         .events_kv
         .as_ref()
         .ok_or_else(|| AppError::Internal("EVENTS KV not configured".to_string()))?;
+    let d1 = state.d1.as_deref();
 
     // 1. Get event config
     let event = event_store::get_event_config(kv, &body.event_id)
@@ -80,7 +81,7 @@ pub async fn hold_deposit_handler(
     }
 
     // 2. Look up deposit status
-    let deposit = event_store::get_deposit_status(kv, &event.id, &body.attendee_id)
+    let deposit = event_store::get_deposit_status(kv, &event.id, &body.attendee_id, d1)
         .await
         .map_err(AppError::Internal)?
         .ok_or_else(|| AppError::NotFound("no deposit to hold".to_string()))?;
@@ -102,7 +103,15 @@ pub async fn hold_deposit_handler(
     };
 
     // 5. Resolve contacts sheet per-org
-    let resolved = crate::org_store::resolve_contacts_sheet(kv, &event, &state.config.sheets).await;
+    let resolved = if let Some(db) = state.d1.as_deref() {
+        crate::org_store::resolve_contacts_sheet(db, &event, &state.config.sheets).await
+    } else {
+        event_checkin_domain::models::org::ResolvedContactsSheet {
+            sheet_id: state.config.sheets.contacts_sheet_id.clone(),
+            contacts_sheet_name: state.config.sheets.contacts_sheet_name.clone(),
+            events_sheet_name: state.config.sheets.events_sheet_name.clone(),
+        }
+    };
 
     if resolved.sheet_id.is_empty() {
         return Err(AppError::Internal("contacts sheet not configured".to_string()).into());

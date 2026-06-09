@@ -1,12 +1,18 @@
+pub mod adventure;
 pub mod attendees;
 pub mod audit;
 pub mod campaigns;
 pub mod claim_locks;
 pub mod contacts;
+pub mod deposit_statuses;
 pub mod developers;
 pub mod escrow_index;
 pub mod events;
+pub mod jwt_blacklist;
+pub mod onchain_events;
+pub mod organizations;
 pub mod quiz;
+pub mod thb_deposits;
 
 pub(crate) use audit::*;
 pub(crate) use claim_locks::*;

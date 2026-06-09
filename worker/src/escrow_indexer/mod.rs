@@ -44,9 +44,6 @@ use worker::KvStore;
 /// Bethere-escrow program ID (devnet and mainnet).
 pub const ESCROW_PROGRAM_ID: &str = "C6HDeZES9aPpNwe3UvS9ecmfcRhH1XeJb8PGJmLG3z3T";
 
-/// Max on-chain events per event (FIFO).
-const MAX_ONCHAIN_EVENTS: usize = 200;
-
 /// Max signatures to fetch per polling cycle.
 const POLL_BATCH_SIZE: usize = 25;
 
@@ -279,7 +276,7 @@ pub(crate) fn read_u64_le(data: &[u8], offset: usize) -> Option<u64> {
 
 pub use poller::poll_escrow_events;
 
-pub use store::{get_onchain_events, read_onchain_events, save_cursor, save_onchain_event};
+pub use store::{get_onchain_events, save_cursor, save_onchain_event};
 
 pub use webhook::{HeliusEnhancedTransaction, parse_helius_transaction};
 

@@ -159,6 +159,7 @@ pub(crate) async fn verify_deposit(
 /// Uses JSON.stringify + serde_json to bypass `.first::<T>()` which uses
 /// `serde_wasm_bindgen::from_value()` — that crashes on `JsValue(null)`
 /// columns (e.g. rows inserted before ALTER TABLE added NOT NULL DEFAULT).
+#[allow(dead_code)]
 pub(crate) async fn get_deposit_status_from_d1(
     db: &D1Database,
     attendee_id: &str,
@@ -213,6 +214,7 @@ pub(crate) async fn get_deposit_status_from_d1(
 /// Uses serde_json (via JSON.stringify) so NULL columns become `None`
 /// in Option fields — no serde_wasm_bindgen crash.
 #[derive(Deserialize)]
+#[allow(dead_code)]
 pub(crate) struct DepositStatusRow {
     pub id: Option<String>,
     pub event_id: Option<String>,
@@ -222,6 +224,7 @@ pub(crate) struct DepositStatusRow {
 }
 
 /// Save a pending deposit to D1 (upsert deposit columns on the attendee row).
+#[allow(dead_code)]
 pub(crate) async fn save_deposit_status_to_d1(
     db: &D1Database,
     attendee_id: &str,
@@ -251,6 +254,7 @@ pub(crate) async fn save_deposit_status_to_d1(
 }
 
 /// Count deposits for an event from D1 (fallback for KV deposit counter).
+#[allow(dead_code)]
 pub(crate) async fn count_deposits_by_event(
     db: &D1Database,
     event_id: &str,
@@ -1117,6 +1121,115 @@ pub(crate) async fn clear_attendee_pii(db: &D1Database, attendee_id: &str) -> Re
     db.exec(&sql)
         .await
         .map_err(|e| format!("D1 clear_attendee_pii: {e:?}"))?;
+    Ok(())
+}
+
+/// Full upsert from Google Sheet row — includes lifecycle data (check-in, claims,
+/// deposits, QR, refunds). Used by the Sheet → D1 sync endpoint.
+///
+/// Idempotent: ON CONFLICT updates all lifecycle columns from the sheet data.
+/// Uses `db.exec()` with format string per project convention (avoids prepared stmt issues).
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn upsert_attendee_full(
+    db: &D1Database,
+    id: &str,
+    event_id: &str,
+    email: &str,
+    name: &str,
+    approval_status: &str,
+    participation_type: &str,
+    contact_channel: &str,
+    contact_handle: &str,
+    checked_in_at: Option<&str>,
+    checked_in_by: Option<&str>,
+    claim_token: Option<&str>,
+    claimed_at: Option<&str>,
+    qr_url: Option<&str>,
+    deposit_status: &str,
+    deposit_tx_hash: Option<&str>,
+    refund_tx_hash: Option<&str>,
+    refund_link: Option<&str>,
+    bank_name: Option<&str>,
+    bank_account_number: Option<&str>,
+    bank_account_name: Option<&str>,
+    sheet_row_index: Option<i32>,
+) -> Result<(), String> {
+    let esc = |s: &str| s.replace('\'', "\'\'");
+    let null_or = |opt: Option<&str>| -> String {
+        match opt {
+            Some(v) if !v.is_empty() => format!("'{}'", esc(v)),
+            _ => "NULL".to_string(),
+        }
+    };
+
+    let sql = format!(
+        "INSERT INTO attendees (
+            id, event_id, email, name, approval_status, participation_type,
+            contact_channel, contact_handle,
+            checked_in_at, checked_in_by, claim_token, claimed_at, qr_url,
+            deposit_status, deposit_tx_hash,
+            refund_tx_hash, refund_link,
+            bank_name, bank_account_number, bank_account_name,
+            sheet_row_index, synced_at, created_at, updated_at
+        ) VALUES (
+            '{id}', '{event_id}', '{email}', '{name}', '{approval_status}', '{participation_type}',
+            '{contact_channel}', '{contact_handle}',
+            {checked_in_at}, {checked_in_by}, {claim_token}, {claimed_at}, {qr_url},
+            '{deposit_status}', {deposit_tx_hash},
+            {refund_tx_hash}, {refund_link},
+            {bank_name}, {bank_account_number}, {bank_account_name},
+            {sheet_row_index}, datetime('now'), datetime('now'), datetime('now')
+        )
+        ON CONFLICT (id) DO UPDATE SET
+            name = excluded.name,
+            approval_status = excluded.approval_status,
+            participation_type = excluded.participation_type,
+            contact_channel = excluded.contact_channel,
+            contact_handle = excluded.contact_handle,
+            checked_in_at = COALESCE(excluded.checked_in_at, attendees.checked_in_at),
+            checked_in_by = COALESCE(excluded.checked_in_by, attendees.checked_in_by),
+            claim_token = COALESCE(excluded.claim_token, attendees.claim_token),
+            claimed_at = COALESCE(excluded.claimed_at, attendees.claimed_at),
+            qr_url = COALESCE(excluded.qr_url, attendees.qr_url),
+            deposit_status = excluded.deposit_status,
+            deposit_tx_hash = COALESCE(excluded.deposit_tx_hash, attendees.deposit_tx_hash),
+            refund_tx_hash = COALESCE(excluded.refund_tx_hash, attendees.refund_tx_hash),
+            refund_link = COALESCE(excluded.refund_link, attendees.refund_link),
+            bank_name = COALESCE(excluded.bank_name, attendees.bank_name),
+            bank_account_number = COALESCE(excluded.bank_account_number, attendees.bank_account_number),
+            bank_account_name = COALESCE(excluded.bank_account_name, attendees.bank_account_name),
+            sheet_row_index = excluded.sheet_row_index,
+            synced_at = datetime('now'),
+            updated_at = datetime('now')",
+        id = esc(id),
+        event_id = esc(event_id),
+        email = esc(email),
+        name = esc(name),
+        approval_status = esc(approval_status),
+        participation_type = esc(participation_type),
+        contact_channel = esc(contact_channel),
+        contact_handle = esc(contact_handle),
+        checked_in_at = null_or(checked_in_at),
+        checked_in_by = null_or(checked_in_by),
+        claim_token = null_or(claim_token),
+        claimed_at = null_or(claimed_at),
+        qr_url = null_or(qr_url),
+        deposit_status = esc(deposit_status),
+        deposit_tx_hash = null_or(deposit_tx_hash),
+        refund_tx_hash = null_or(refund_tx_hash),
+        refund_link = null_or(refund_link),
+        bank_name = null_or(bank_name),
+        bank_account_number = null_or(bank_account_number),
+        bank_account_name = null_or(bank_account_name),
+        sheet_row_index = sheet_row_index
+            .map(|i| i.to_string())
+            .unwrap_or_else(|| "NULL".to_string()),
+    );
+
+    db.exec(&sql)
+        .await
+        .map_err(|e| format!("D1 upsert_attendee_full exec: {e:?}"))?;
+
     Ok(())
 }
 

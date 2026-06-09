@@ -1,6 +1,6 @@
 //! Write operations: saves, creates, updates, deletes, and migration.
 
-use worker::KvStore;
+use worker::{D1Database, KvStore};
 
 use event_checkin_domain::models::event::{
     CreateEventRequest, EscrowStatus, EventConfig, EventIndex, EventStatus, UpdateEventRequest,
@@ -1177,10 +1177,16 @@ pub async fn seed_kv_from_d1(kv: &KvStore, d1: &worker::D1Database) -> Result<us
 // ---------------------------------------------------------------------------
 
 /// Save deposit status for an attendee.
+/// Save deposit status record (D1-first, KV fallback).
 pub async fn save_deposit_status(
     kv: &KvStore,
     status: &event_checkin_domain::models::deposit::DepositStatus,
+    d1: Option<&D1Database>,
 ) -> Result<(), String> {
+    if let Some(db) = d1 {
+        crate::db::deposit_statuses::save_deposit_status(db, status).await?;
+    }
+
     let key = deposit_status_key(&status.event_id, &status.attendee_id);
     let json = serde_json::to_string(status)
         .map_err(|e| format!("failed to serialize deposit status: {e}"))?;
@@ -1222,11 +1228,26 @@ pub async fn increment_deposit_counter(kv: &KvStore, event_id: &str) -> Result<u
     Ok(next)
 }
 
-/// Save THB deposit record for an attendee.
+/// Save THB deposit record for an attendee (D1-first, KV fallback).
 pub async fn save_thb_deposit(
     kv: &KvStore,
     deposit: &event_checkin_domain::models::deposit::ThbDeposit,
+    d1: Option<&D1Database>,
 ) -> Result<(), String> {
+    if let Some(db) = d1 {
+        // Check if deposit exists → insert or update
+        let existing =
+            crate::db::thb_deposits::get_thb_deposit(db, &deposit.event_id, &deposit.attendee_id)
+                .await?;
+
+        if existing.is_some() {
+            crate::db::thb_deposits::update_thb_deposit(db, deposit).await?;
+        } else {
+            crate::db::thb_deposits::insert_thb_deposit(db, deposit).await?;
+        }
+        return Ok(());
+    }
+
     let key = thb_deposit_key(&deposit.event_id, &deposit.attendee_id);
     let json = serde_json::to_string(deposit)
         .map_err(|e| format!("failed to serialize THB deposit: {e}"))?;
@@ -1347,20 +1368,32 @@ pub async fn migrate_quiz_to_event(
 // Registration form config (Issue #049)
 // ---------------------------------------------------------------------------
 
-/// Save per-event registration form config to KV.
+/// Save per-event registration form config.
+/// D1-first: writes to the `form_config` column on the events table.
+/// Falls back to KV if D1 is unavailable.
 pub async fn save_form_config(
-    kv: &KvStore,
     event_id: &str,
     config: &event_checkin_domain::models::event::RegistrationFormConfig,
+    d1: Option<&D1Database>,
+    kv: Option<&KvStore>,
 ) -> Result<(), String> {
-    use super::schema::form_config_key;
+    // D1-first
+    if let Some(db) = d1 {
+        return crate::db::events::save_form_config(db, event_id, config).await;
+    }
 
-    let key = form_config_key(event_id);
-    let json_str = serde_json::to_string(config)
-        .map_err(|e| format!("failed to serialize form config: {e:?}"))?;
-    kv.put(&key, &json_str)
-        .map_err(|e| format!("failed to build form config put: {e:?}"))?
-        .execute()
-        .await
-        .map_err(|e| format!("failed to write form config to KV: {e:?}"))
+    // KV fallback
+    if let Some(kv) = kv {
+        use super::schema::form_config_key;
+        let key = form_config_key(event_id);
+        let json_str = serde_json::to_string(config)
+            .map_err(|e| format!("failed to serialize form config: {e:?}"))?;
+        kv.put(&key, &json_str)
+            .map_err(|e| format!("failed to build form config put: {e:?}"))?
+            .execute()
+            .await
+            .map_err(|e| format!("failed to write form config to KV: {e:?}"))?;
+    }
+
+    Ok(())
 }

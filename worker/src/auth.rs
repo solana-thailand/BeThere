@@ -28,48 +28,60 @@ const JWT_BLACKLIST_PREFIX: &str = "jwt_blacklist:";
 /// Minimum TTL for KV entries (Cloudflare KV requires >= 60s).
 const KV_MIN_TTL: u64 = 60;
 
-/// Add a JWT to the blacklist. The KV entry TTL matches the token's remaining lifetime,
-/// so entries auto-expire when the token would have expired anyway.
+/// Add a JWT to the blacklist.
+/// D1-first: writes to `jwt_blacklist` table. Falls back to KV with TTL.
 pub async fn blacklist_token(token: &str, claims: &Claims, state: &AppState) {
-    let kv = match state.events_kv {
-        Some(ref kv) => kv,
-        None => {
-            tracing::warn!("no KV available — JWT blacklist skipped");
-            return;
-        }
-    };
-
-    // Use SHA-256 hash of the token as the KV key (don't store raw tokens)
     let hash = sha256_hex(token.as_bytes()).await;
-    let key = format!("{JWT_BLACKLIST_PREFIX}{hash}");
-
-    // TTL = remaining lifetime of the token (at least 60s for KV)
     let now = chrono::Utc::now().timestamp() as u64;
+    let expires_at = claims.exp;
     let ttl = (claims.exp.saturating_sub(now)).max(KV_MIN_TTL);
 
-    match kv.put(&key, "1") {
-        Ok(builder) => {
-            if let Err(e) = builder.expiration_ttl(ttl).execute().await {
-                tracing::warn!(key = %key, error = ?e, "failed to blacklist JWT in KV");
+    // D1-first
+    if let Some(ref db) = state.d1
+        && let Err(e) = crate::db::jwt_blacklist::insert(db, &hash, expires_at).await
+    {
+        tracing::warn!(hash = %hash, error = %e, "failed to blacklist JWT in D1");
+    }
+
+    // KV fallback (also write to KV for redundancy during migration)
+    if let Some(ref kv) = state.events_kv {
+        let key = format!("{JWT_BLACKLIST_PREFIX}{hash}");
+        match kv.put(&key, "1") {
+            Ok(builder) => {
+                if let Err(e) = builder.expiration_ttl(ttl).execute().await {
+                    tracing::warn!(key = %key, error = ?e, "failed to blacklist JWT in KV");
+                }
+            }
+            Err(e) => {
+                tracing::warn!(key = %key, error = ?e, "failed to build JWT blacklist KV put");
             }
         }
-        Err(e) => {
-            tracing::warn!(key = %key, error = ?e, "failed to build JWT blacklist put");
-        }
+    }
+
+    if state.d1.is_none() && state.events_kv.is_none() {
+        tracing::warn!("no D1 or KV available — JWT blacklist skipped");
     }
 }
 
 /// Check if a JWT has been blacklisted.
+/// D1-first: checks `jwt_blacklist` table. Falls back to KV.
 async fn is_token_blacklisted(token: &str, state: &AppState) -> bool {
-    let kv = match state.events_kv {
-        Some(ref kv) => kv,
-        None => return false,
-    };
-
     let hash = sha256_hex(token.as_bytes()).await;
-    let key = format!("{JWT_BLACKLIST_PREFIX}{hash}");
 
-    matches!(kv.get(&key).text().await, Ok(Some(_)))
+    // D1-first
+    if let Some(ref db) = state.d1 {
+        return crate::db::jwt_blacklist::exists(db, &hash)
+            .await
+            .unwrap_or(false);
+    }
+
+    // KV fallback
+    if let Some(ref kv) = state.events_kv {
+        let key = format!("{JWT_BLACKLIST_PREFIX}{hash}");
+        return matches!(kv.get(&key).text().await, Ok(Some(_)));
+    }
+
+    false
 }
 
 /// SHA-256 hash (hex-encoded) for JWT blacklist keys.

@@ -111,7 +111,7 @@ pub fn get_participation_badge(participation_type: &str) -> ParticipationBadge {
 
     let lower = participation_type.to_lowercase();
 
-    if lower.contains("in-person") || lower.contains("in person") {
+    if lower.contains("in-person") || lower.contains("in person") || lower.contains("in_person") {
         return ParticipationBadge {
             label: "In-Person".to_string(),
             css_class: "badge-info",
@@ -257,7 +257,7 @@ pub fn is_in_person(participation_type: &str) -> bool {
     if lower.is_empty() {
         return true;
     }
-    lower.contains("in-person") || lower.contains("in person")
+    lower.contains("in-person") || lower.contains("in person") || lower.contains("in_person")
 }
 
 #[cfg(test)]
@@ -300,6 +300,13 @@ mod tests {
     }
 
     #[test]
+    fn test_participation_badge_in_person_snake() {
+        let badge = get_participation_badge("in_person");
+        assert_eq!(badge.label, "In-Person");
+        assert_eq!(badge.css_class, "badge-info");
+    }
+
+    #[test]
     fn test_participation_badge_empty() {
         let badge = get_participation_badge("");
         assert_eq!(badge.label, "Unknown");
@@ -331,6 +338,9 @@ mod tests {
         assert!(!is_in_person("Virtual"));
         assert!(is_in_person(""));
         assert!(!is_in_person("Hybrid"));
+        assert!(is_in_person("in_person"));
+        assert!(is_in_person("In_Person"));
+        assert!(is_in_person("IN_PERSON"));
     }
 
     #[test]

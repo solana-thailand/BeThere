@@ -3,7 +3,7 @@
 use chrono::Utc;
 use futures_util::StreamExt;
 use serde::Deserialize;
-use worker::KvStore;
+use worker::D1Database;
 
 use super::{
     ESCROW_PROGRAM_ID, EscrowInstruction, IndexSummary, OnChainEvent, POLL_BATCH_SIZE, save_cursor,
@@ -115,7 +115,7 @@ pub(crate) enum FetchOutcome {
 /// Uses `getSignaturesForAddress` RPC method to fetch recent signatures,
 /// then fetches each transaction to extract events.
 pub async fn poll_escrow_events(
-    kv: &KvStore,
+    db: &D1Database,
     rpc_url: &str,
     escrow_address: &str,
     event_id: &str,
@@ -185,7 +185,7 @@ pub async fn poll_escrow_events(
                 summary.skipped_no_event += 1;
             }
             FetchOutcome::Event(event) => {
-                match super::store::save_onchain_event(kv, event_id, event.clone()).await {
+                match super::store::save_onchain_event(db, event_id, event.clone()).await {
                     Ok(true) => {
                         tracing::info!(
                             sig = %sig_info.signature,
@@ -205,7 +205,7 @@ pub async fn poll_escrow_events(
         }
 
         // Update cursor
-        let _ = save_cursor(kv, escrow_address, &sig_info.signature).await;
+        let _ = save_cursor(db, escrow_address, &sig_info.signature).await;
     }
 
     Ok(summary)

@@ -235,6 +235,7 @@ pub fn routes(state: AppState) -> Router<()> {
         .route("/events/migrate", post(events::migrate_quiz))
         .route("/events/seed", post(events::seed_event))
         .route("/events/reseed-kv", post(events::reseed_kv_from_d1))
+        .route("/events/{id}/sync-sheet", post(events::sync_sheet_to_d1))
         .route(
             "/events/{id}",
             get(events::get_event)

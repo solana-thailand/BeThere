@@ -31,8 +31,8 @@ pub use read::{
 
 // Write operations
 pub use write::{
-    apply_update, archive_event, create_event, hard_delete_event, increment_deposit_counter,
-    migrate_quiz_to_event, restore_event, save_deposit_status, save_escrow_index,
-    save_event_config, save_event_index, save_form_config, save_thb_deposit, seed_from_config,
-    seed_kv_from_d1, sync_delete_event_from_d1, sync_event_to_d1, update_event,
+    apply_update, archive_event, create_event, hard_delete_event, migrate_quiz_to_event,
+    restore_event, save_deposit_status, save_escrow_index, save_event_config, save_event_index,
+    save_form_config, save_thb_deposit, seed_from_config, seed_kv_from_d1,
+    sync_delete_event_from_d1, sync_event_to_d1, update_event,
 };

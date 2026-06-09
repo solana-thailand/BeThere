@@ -1,105 +1,95 @@
-//! KV-based adventure storage for the Rust Adventures feature.
+//! Adventure storage backed exclusively by D1 (Phase 3a complete — Issue #053).
 //!
-//! Key schema:
-//!   "event:{id}:adventure:config"              → AdventureConfig (JSON)
-//!   "event:{id}:adventure:progress:{token}"    → AdventureProgress (JSON)
+//! Adventure config and per-attendee progress live in D1 only.
+//! KV fallback and dual-write have been removed.
+//!
+//! Key schema (D1):
+//!   adventure_configs  — one row per event
+//!   adventure_progress — one row per (event_id, claim_token)
 
 use chrono::Utc;
-use worker::KvStore;
+use worker::D1Database;
 
 use event_checkin_domain::models::adventure::{
     AdventureConfig, AdventureProgress, AdventureStatus, LevelScore,
 };
 
-// No TTL on adventure progress.
-// Attendees may complete the adventure and claim their NFT hours later.
-// If progress expired before claiming, they'd have to redo all levels.
-// KV entries are small (a few KB) so storage cost is negligible.
+use crate::db::adventure as d1_adventure;
 
-// Key helpers
-fn adventure_config_key(event_id: &str) -> String {
-    format!("event:{event_id}:adventure:config")
-}
+// ---------------------------------------------------------------------------
+// Config
+// ---------------------------------------------------------------------------
 
-fn adventure_progress_key(event_id: &str, claim_token: &str) -> String {
-    format!("event:{event_id}:adventure:progress:{claim_token}")
-}
-
-// --- Config ---
-
-/// Read adventure config from KV.
+/// Read adventure config from D1. Returns `None` if no adventure is configured.
 pub async fn get_adventure_config(
-    kv: &KvStore,
+    db: &D1Database,
     event_id: &str,
 ) -> Result<Option<AdventureConfig>, String> {
-    let key = adventure_config_key(event_id);
-    let raw: Option<String> = kv
-        .get(&key)
-        .text()
-        .await
-        .map_err(|e| format!("failed to read adventure config from KV: {e:?}"))?;
-
-    match raw {
-        None => Ok(None),
-        Some(json_str) => serde_json::from_str(&json_str)
+    let json_str = d1_adventure::get_adventure_config_from_d1(db, event_id).await?;
+    match json_str {
+        Some(s) => serde_json::from_str(&s)
             .map(Some)
             .map_err(|e| format!("failed to parse adventure config: {e}")),
+        None => Ok(None),
     }
 }
 
-/// Write adventure config to KV.
+/// Write adventure config to D1.
 pub async fn save_adventure_config(
-    kv: &KvStore,
+    db: &D1Database,
     event_id: &str,
     config: &AdventureConfig,
 ) -> Result<(), String> {
-    let key = adventure_config_key(event_id);
     let json_str = serde_json::to_string(config)
         .map_err(|e| format!("failed to serialize adventure config: {e:?}"))?;
-    kv.put(&key, &json_str)
-        .map_err(|e| format!("failed to build adventure config put: {e:?}"))?
-        .execute()
-        .await
-        .map_err(|e| format!("failed to write adventure config to KV: {e:?}"))
+
+    d1_adventure::upsert_adventure_config_to_d1(db, event_id, &json_str, config.enabled).await?;
+
+    Ok(())
 }
 
-// --- Progress ---
+// ---------------------------------------------------------------------------
+// Progress
+// ---------------------------------------------------------------------------
 
-/// Read adventure progress for an attendee.
+/// Read adventure progress for an attendee from D1. Returns `None` if not found.
 pub async fn get_adventure_progress(
-    kv: &KvStore,
+    db: &D1Database,
     event_id: &str,
     claim_token: &str,
 ) -> Result<Option<AdventureProgress>, String> {
-    let key = adventure_progress_key(event_id, claim_token);
-    let raw: Option<String> = kv
-        .get(&key)
-        .text()
-        .await
-        .map_err(|e| format!("failed to read adventure progress from KV: {e:?}"))?;
-
-    match raw {
-        None => Ok(None),
-        Some(json_str) => serde_json::from_str(&json_str)
+    let json_str = d1_adventure::get_adventure_progress_from_d1(db, event_id, claim_token).await?;
+    match json_str {
+        Some(s) => serde_json::from_str(&s)
             .map(Some)
             .map_err(|e| format!("failed to parse adventure progress: {e}")),
+        None => Ok(None),
     }
 }
 
-/// Save adventure progress.
+/// Save adventure progress to D1.
 async fn save_adventure_progress(
-    kv: &KvStore,
+    db: &D1Database,
     event_id: &str,
     progress: &AdventureProgress,
 ) -> Result<(), String> {
-    let key = adventure_progress_key(event_id, &progress.claim_token);
     let json_str = serde_json::to_string(progress)
         .map_err(|e| format!("failed to serialize adventure progress: {e:?}"))?;
-    kv.put(&key, &json_str)
-        .map_err(|e| format!("failed to build adventure progress put: {e:?}"))?
-        .execute()
-        .await
-        .map_err(|e| format!("failed to write adventure progress to KV: {e:?}"))
+
+    d1_adventure::upsert_adventure_progress_to_d1(
+        db,
+        event_id,
+        &progress.claim_token,
+        &json_str,
+        progress.passed,
+        progress.total_moves,
+        progress.total_time_seconds,
+        progress.levels_completed.len() as u32,
+        progress.last_played_at.as_deref(),
+    )
+    .await?;
+
+    Ok(())
 }
 
 /// Save level completion and return updated progress.
@@ -107,14 +97,14 @@ async fn save_adventure_progress(
 /// Creates progress record if first time. Updates scores and checks if
 /// adventure is now passed.
 pub async fn save_level_completion(
-    kv: &KvStore,
+    db: &D1Database,
     event_id: &str,
     claim_token: &str,
     level_id: &str,
     score: LevelScore,
     required_levels: &[String],
 ) -> Result<AdventureProgress, String> {
-    let mut progress = get_adventure_progress(kv, event_id, claim_token)
+    let mut progress = get_adventure_progress(db, event_id, claim_token)
         .await?
         .unwrap_or_else(|| AdventureProgress {
             claim_token: claim_token.to_string(),
@@ -139,11 +129,7 @@ pub async fn save_level_completion(
     progress.total_time_seconds = progress.scores.values().map(|s| s.time_seconds).sum();
 
     // Check if adventure is now passed.
-    // required_levels is populated by the handler only when adventure is enabled.
-    // Empty required_levels means adventure is not configured — skip passed-check.
     if !required_levels.is_empty() {
-        // required_levels contains level number prefixes like "01", "02", etc.
-        // Actual completed IDs are like "01_hello_world", "02_variables"
         let all_done = required_levels.iter().all(|req| {
             progress.levels_completed.iter().any(|lid| {
                 lid.strip_prefix(req)
@@ -158,22 +144,22 @@ pub async fn save_level_completion(
 
     progress.last_played_at = Some(Utc::now().to_rfc3339());
 
-    save_adventure_progress(kv, event_id, &progress).await?;
+    save_adventure_progress(db, event_id, &progress).await?;
 
     Ok(progress)
 }
 
 /// Determine adventure status for a claim token.
 pub async fn get_adventure_status(
-    kv: &KvStore,
+    db: &D1Database,
     event_id: &str,
     claim_token: &str,
 ) -> Result<AdventureStatus, String> {
-    let config = get_adventure_config(kv, event_id).await?;
+    let config = get_adventure_config(db, event_id).await?;
     match config {
         None | Some(AdventureConfig { enabled: false, .. }) => Ok(AdventureStatus::NotRequired),
         Some(_config) => {
-            let progress = get_adventure_progress(kv, event_id, claim_token).await?;
+            let progress = get_adventure_progress(db, event_id, claim_token).await?;
             match progress {
                 None => Ok(AdventureStatus::NotStarted),
                 Some(p) if p.passed => Ok(AdventureStatus::Passed),

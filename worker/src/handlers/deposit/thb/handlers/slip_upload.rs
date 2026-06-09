@@ -113,6 +113,7 @@ pub async fn upload_thb_slip_handler(
         .events_kv
         .as_ref()
         .ok_or_else(|| AppError::Internal("EVENTS KV not configured".to_string()))?;
+    let d1 = state.d1.as_deref();
 
     let event = event_store::get_event_config(kv, &body.event_id)
         .await
@@ -185,7 +186,7 @@ pub async fn upload_thb_slip_handler(
     }
 
     // Check if already deposited
-    let existing = event_store::get_deposit_status(kv, &event.id, &body.attendee_id)
+    let existing = event_store::get_deposit_status(kv, &event.id, &body.attendee_id, d1)
         .await
         .map_err(AppError::Internal)?;
 
@@ -306,7 +307,7 @@ pub async fn upload_thb_slip_handler(
         refund_proof_url: None,
     };
 
-    event_store::save_thb_deposit(kv, &thb_deposit)
+    event_store::save_thb_deposit(kv, &thb_deposit, d1)
         .await
         .map_err(AppError::Internal)?;
 
@@ -359,9 +360,13 @@ pub async fn upload_thb_slip_handler(
     }
 
     // Atomically increment deposit counter for this event
-    let deposit_order = event_store::increment_deposit_counter(kv, &event.id)
-        .await
-        .map_err(AppError::Internal)?;
+    let deposit_order = event_store::increment_deposit_counter_with_fallback(
+        Some(kv),
+        state.d1.as_deref(),
+        &event.id,
+    )
+    .await
+    .map_err(AppError::Internal)?;
     let refundable =
         event.max_refundable_deposits == 0 || deposit_order <= event.max_refundable_deposits;
 
@@ -381,7 +386,7 @@ pub async fn upload_thb_slip_handler(
         rejected: false,
     };
 
-    event_store::save_deposit_status(kv, &deposit_status)
+    event_store::save_deposit_status(kv, &deposit_status, d1)
         .await
         .map_err(AppError::Internal)?;
 

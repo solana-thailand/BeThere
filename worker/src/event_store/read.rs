@@ -273,12 +273,17 @@ pub fn has_event_access(config: &EventConfig, email: &str) -> bool {
 // Deposit reads
 // ---------------------------------------------------------------------------
 
-/// Get deposit status for an attendee.
+/// Get deposit status for an attendee (D1-first, KV fallback).
 pub async fn get_deposit_status(
     kv: &KvStore,
     event_id: &str,
     attendee_id: &str,
+    d1: Option<&D1Database>,
 ) -> Result<Option<event_checkin_domain::models::deposit::DepositStatus>, String> {
+    if let Some(db) = d1 {
+        return crate::db::deposit_statuses::get_deposit_status(db, event_id, attendee_id).await;
+    }
+
     let key = deposit_status_key(event_id, attendee_id);
     let raw: Option<String> = kv
         .get(&key)
@@ -294,12 +299,16 @@ pub async fn get_deposit_status(
     }
 }
 
-/// List all deposit statuses for an event using KV list with prefix.
-/// Returns all DepositStatus records found under `event:{id}:deposit:status:*`.
+/// List all deposit statuses for an event (D1-first, KV fallback).
 pub async fn list_deposit_statuses(
     kv: &KvStore,
     event_id: &str,
+    d1: Option<&D1Database>,
 ) -> Result<Vec<event_checkin_domain::models::deposit::DepositStatus>, String> {
+    if let Some(db) = d1 {
+        return crate::db::deposit_statuses::list_deposit_statuses(db, event_id).await;
+    }
+
     let prefix = format!("event:{event_id}:deposit:status:");
     let mut deposits = Vec::new();
     let mut cursor: Option<String> = None;
@@ -340,12 +349,17 @@ pub async fn list_deposit_statuses(
     Ok(deposits)
 }
 
-/// Get THB deposit record for an attendee.
+/// Get THB deposit record for an attendee (D1-first, KV fallback).
 pub async fn get_thb_deposit(
     kv: &KvStore,
     event_id: &str,
     attendee_id: &str,
+    d1: Option<&D1Database>,
 ) -> Result<Option<event_checkin_domain::models::deposit::ThbDeposit>, String> {
+    if let Some(db) = d1 {
+        return crate::db::thb_deposits::get_thb_deposit(db, event_id, attendee_id).await;
+    }
+
     let key = thb_deposit_key(event_id, attendee_id);
     let raw: Option<String> = kv
         .get(&key)
@@ -361,11 +375,16 @@ pub async fn get_thb_deposit(
     }
 }
 
-/// List all THB deposits for an event.
+/// List all THB deposits for an event (D1-first, KV fallback).
 pub async fn list_thb_deposits(
     kv: &KvStore,
     event_id: &str,
+    d1: Option<&D1Database>,
 ) -> Result<Vec<event_checkin_domain::models::deposit::ThbDeposit>, String> {
+    if let Some(db) = d1 {
+        return crate::db::thb_deposits::list_thb_deposits(db, event_id).await;
+    }
+
     let list_key = thb_deposit_list_key(event_id);
     let raw: Option<String> = kv
         .get(&list_key)
@@ -381,7 +400,7 @@ pub async fn list_thb_deposits(
 
     let mut deposits = Vec::with_capacity(ids.len());
     for id in ids {
-        if let Some(deposit) = get_thb_deposit(kv, event_id, &id).await? {
+        if let Some(deposit) = get_thb_deposit(kv, event_id, &id, None).await? {
             deposits.push(deposit);
         }
     }
@@ -397,11 +416,16 @@ pub async fn find_attendee_by_wallet(
     kv: &KvStore,
     event_id: &str,
     wallet_address: &str,
+    d1: Option<&D1Database>,
 ) -> Result<Option<String>, String> {
     if wallet_address.is_empty() {
         return Ok(None);
     }
-    let deposits = list_deposit_statuses(kv, event_id).await?;
+    if let Some(db) = d1 {
+        return crate::db::deposit_statuses::find_attendee_by_wallet(db, event_id, wallet_address)
+            .await;
+    }
+    let deposits = list_deposit_statuses(kv, event_id, None).await?;
     for d in &deposits {
         if d.wallet_address.as_deref() == Some(wallet_address) {
             return Ok(Some(d.attendee_id.clone()));
@@ -416,44 +440,27 @@ pub async fn find_attendee_by_wallet(
 
 /// Get deposit status with KV → D1 fallback.
 ///
-/// When KV is available: try KV first, fall back to D1 on miss.
-/// When KV is unavailable: read from D1 attendees table.
+/// D1-first: queries the dedicated deposit_statuses table.
+/// Falls back to KV only if D1 is unavailable.
 pub async fn get_deposit_status_with_fallback(
     kv: Option<&KvStore>,
     d1: Option<&D1Database>,
     event_id: &str,
     attendee_id: &str,
 ) -> Result<Option<event_checkin_domain::models::deposit::DepositStatus>, String> {
-    // Try KV first if available
-    if let Some(kv) = kv {
-        let result = get_deposit_status(kv, event_id, attendee_id).await?;
-        if result.is_some() {
-            return Ok(result);
-        }
+    // D1 first (dedicated deposit_statuses table)
+    if let Some(db) = d1
+        && let Some(status) =
+            crate::db::deposit_statuses::get_deposit_status(db, event_id, attendee_id).await?
+    {
+        return Ok(Some(status));
     }
 
-    // D1 fallback: read deposit columns from attendees table
-    if let Some(db) = d1
-        && let Some(row) = crate::db::attendees::get_deposit_status_from_d1(db, attendee_id).await?
-    {
-        let status_str = row.deposit_status.as_deref().unwrap_or("none");
-        // Only build DepositStatus if there's an actual deposit record
-        if status_str != "none" {
-            let verified = matches!(status_str, "verified" | "confirmed");
-            return Ok(Some(event_checkin_domain::models::deposit::DepositStatus {
-                attendee_id: row.id.unwrap_or_default(),
-                event_id: row.event_id.unwrap_or_default(),
-                method: event_checkin_domain::models::deposit::DepositMethod::Usdc,
-                amount: row.deposit_amount_usdc.unwrap_or(0) as u64,
-                currency: "USDC".to_string(),
-                tx_signature: row.deposit_tx_hash,
-                verified,
-                deposited_at: String::new(), // D1 doesn't store deposited_at separately
-                wallet_address: None,
-                deposit_order: 0,
-                refundable: true, // default
-                rejected: false,
-            }));
+    // KV fallback
+    if let Some(kv) = kv {
+        let result = get_deposit_status(kv, event_id, attendee_id, None).await?;
+        if result.is_some() {
+            return Ok(result);
         }
     }
 
@@ -488,30 +495,28 @@ pub async fn get_event_config_with_fallback(
 
 /// Increment deposit counter with KV → D1 fallback.
 ///
-/// When KV is available: use the atomic KV counter.
-/// When KV is unavailable: count existing deposits in D1 + 1.
+/// D1-first: counts existing deposits in the deposit_statuses table + 1.
 pub async fn increment_deposit_counter_with_fallback(
     kv: Option<&KvStore>,
     d1: Option<&D1Database>,
     event_id: &str,
 ) -> Result<u32, String> {
-    if let Some(kv) = kv {
-        return super::write::increment_deposit_counter(kv, event_id).await;
+    if let Some(db) = d1 {
+        let count = crate::db::deposit_statuses::count_deposits_by_event(db, event_id).await?;
+        return Ok(count + 1);
     }
 
-    // D1 fallback: count existing deposits + 1
-    if let Some(db) = d1 {
-        let count = crate::db::attendees::count_deposits_by_event(db, event_id).await?;
-        return Ok(count + 1);
+    if let Some(kv) = kv {
+        return super::write::increment_deposit_counter(kv, event_id).await;
     }
 
     // Neither available — fallback to 1
     Ok(1)
 }
 
-/// Save deposit status with KV best-effort + D1 primary.
+/// Save deposit status with D1 primary + KV best-effort.
 ///
-/// Writes to D1 first (primary), then best-effort to KV (cache).
+/// Writes to D1 first (dedicated deposit_statuses table), then best-effort to KV.
 pub async fn save_deposit_status_with_fallback(
     kv: Option<&KvStore>,
     d1: Option<&D1Database>,
@@ -519,24 +524,12 @@ pub async fn save_deposit_status_with_fallback(
 ) -> Result<(), String> {
     // D1 write (primary)
     if let Some(db) = d1 {
-        let deposit_state = if status.verified {
-            "verified"
-        } else {
-            "pending"
-        };
-        crate::db::attendees::save_deposit_status_to_d1(
-            db,
-            &status.attendee_id,
-            deposit_state,
-            status.tx_signature.as_deref(),
-            status.amount as i64,
-        )
-        .await?;
+        crate::db::deposit_statuses::save_deposit_status(db, status).await?;
     }
 
     // KV write (best-effort cache)
     if let Some(kv) = kv
-        && let Err(e) = super::write::save_deposit_status(kv, status).await
+        && let Err(e) = super::write::save_deposit_status(kv, status, None).await
     {
         tracing::warn!(
             attendee_id = %status.attendee_id,
@@ -552,25 +545,37 @@ pub async fn save_deposit_status_with_fallback(
 // Registration form config (Issue #049)
 // ---------------------------------------------------------------------------
 
-/// Read per-event registration form config from KV.
+/// Read per-event registration form config.
+/// D1-first: queries the `form_config` column on the events table.
+/// Falls back to KV if D1 is unavailable.
 /// Returns `None` if no custom config is stored (use defaults).
 pub async fn get_form_config(
-    kv: &KvStore,
     event_id: &str,
+    d1: Option<&D1Database>,
+    kv: Option<&KvStore>,
 ) -> Result<Option<event_checkin_domain::models::event::RegistrationFormConfig>, String> {
-    use super::schema::form_config_key;
-
-    let key = form_config_key(event_id);
-    let raw: Option<String> = kv
-        .get(&key)
-        .text()
-        .await
-        .map_err(|e| format!("failed to read form config for event '{event_id}': {e:?}"))?;
-
-    match raw {
-        None => Ok(None),
-        Some(json_str) => serde_json::from_str(&json_str)
-            .map(Some)
-            .map_err(|e| format!("failed to parse form config for event '{event_id}': {e}")),
+    // D1-first
+    if let Some(db) = d1 {
+        return crate::db::events::get_form_config(db, event_id).await;
     }
+
+    // KV fallback
+    if let Some(kv) = kv {
+        use super::schema::form_config_key;
+        let key = form_config_key(event_id);
+        let raw: Option<String> = kv
+            .get(&key)
+            .text()
+            .await
+            .map_err(|e| format!("failed to read form config for event '{event_id}': {e:?}"))?;
+
+        return match raw {
+            None => Ok(None),
+            Some(json_str) => serde_json::from_str(&json_str)
+                .map(Some)
+                .map_err(|e| format!("failed to parse form config for event '{event_id}': {e}")),
+        };
+    }
+
+    Ok(None)
 }

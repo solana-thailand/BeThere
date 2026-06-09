@@ -2,7 +2,7 @@
 
 use chrono::Utc;
 use serde::Deserialize;
-use worker::KvStore;
+use worker::D1Database;
 
 use super::{ESCROW_PROGRAM_ID, EscrowInstruction, IndexSummary, OnChainEvent};
 
@@ -251,7 +251,7 @@ fn extract_amount_from_transfers(
 /// escrow address, and saves to KV.
 #[allow(dead_code)]
 pub async fn index_helius_transactions(
-    kv: &KvStore,
+    db: &D1Database,
     transactions: &[HeliusEnhancedTransaction],
     event_resolver: &dyn Fn(&str) -> Option<String>,
 ) -> IndexSummary {
@@ -280,7 +280,7 @@ pub async fn index_helius_transactions(
             continue;
         };
 
-        match super::store::save_onchain_event(kv, &event_id, event.clone()).await {
+        match super::store::save_onchain_event(db, &event_id, event.clone()).await {
             Ok(true) => {
                 tracing::info!(
                     sig = %event.signature,
@@ -289,28 +289,8 @@ pub async fn index_helius_transactions(
                     "indexed on-chain event"
                 );
 
-                // Also append to audit trail
-                let _ = crate::audit_store::append_event_audit(
-                    kv,
-                    &event_id,
-                    crate::audit_store::create_entry_with_meta(
-                        "on-chain",
-                        crate::audit_store::AuditAction::OnChainEventIndexed,
-                        &event.signature,
-                        &format!("on-chain: {}", event.instruction),
-                        serde_json::json!({
-                            "instruction": event.instruction.to_string(),
-                            "escrow_address": event.escrow_address,
-                            "slot": event.slot,
-                            "block_time": event.block_time,
-                            "organizer": event.organizer,
-                            "attendee": event.attendee,
-                            "amount": event.amount,
-                        }),
-                    ),
-                    None,
-                )
-                .await;
+                // Note: audit trail not appended here (dead code path)
+                // Active webhook handler (onchain_webhook_handler) appends audit.
 
                 summary.indexed += 1;
             }

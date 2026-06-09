@@ -307,8 +307,8 @@ pub async fn hard_delete_event(
     // Clean up Events tab in contacts sheet (non-fatal)
     let resolved = match &pre_delete_config {
         Some(config) => {
-            if let Some(kv_ref) = kv {
-                crate::org_store::resolve_contacts_sheet(kv_ref, config, &state.config.sheets).await
+            if let Some(db) = state.d1.as_deref() {
+                crate::org_store::resolve_contacts_sheet(db, config, &state.config.sheets).await
             } else {
                 event_checkin_domain::models::org::ResolvedContactsSheet {
                     sheet_id: state.config.sheets.contacts_sheet_id.clone(),

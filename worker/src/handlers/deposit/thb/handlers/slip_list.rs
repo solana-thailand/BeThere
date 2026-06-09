@@ -27,12 +27,13 @@ pub async fn pending_thb_slips_handler(
         .events_kv
         .as_ref()
         .ok_or_else(|| AppError::Internal("EVENTS KV not configured".to_string()))?;
+    let d1 = state.d1.as_deref();
 
     let event =
         crate::handlers::ext::resolve_event_with_access(&state, &claims, query.event_id.as_deref())
             .await?;
 
-    let all_deposits = event_store::list_thb_deposits(kv, &event.id)
+    let all_deposits = event_store::list_thb_deposits(kv, &event.id, d1)
         .await
         .map_err(AppError::Internal)?;
 
@@ -70,12 +71,13 @@ pub async fn refund_queue_handler(
         .events_kv
         .as_ref()
         .ok_or_else(|| AppError::Internal("EVENTS KV not configured".to_string()))?;
+    let d1 = state.d1.as_deref();
 
     let event =
         crate::handlers::ext::resolve_event_with_access(&state, &claims, query.event_id.as_deref())
             .await?;
 
-    let all_deposits = event_store::list_thb_deposits(kv, &event.id)
+    let all_deposits = event_store::list_thb_deposits(kv, &event.id, d1)
         .await
         .map_err(AppError::Internal)?;
 
@@ -119,12 +121,13 @@ pub async fn refunded_list_handler(
         .events_kv
         .as_ref()
         .ok_or_else(|| AppError::Internal("EVENTS KV not configured".to_string()))?;
+    let d1 = state.d1.as_deref();
 
     let event =
         crate::handlers::ext::resolve_event_with_access(&state, &claims, query.event_id.as_deref())
             .await?;
 
-    let all_deposits = event_store::list_thb_deposits(kv, &event.id)
+    let all_deposits = event_store::list_thb_deposits(kv, &event.id, d1)
         .await
         .map_err(AppError::Internal)?;
 

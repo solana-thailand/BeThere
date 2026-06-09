@@ -285,7 +285,7 @@ pub async fn get_public_ticket(
 
     // Fetch deposit status for context (pending verification, etc.)
     let deposit_status = if let Some(kv) = kv {
-        crate::event_store::get_deposit_status(kv, &event.id, &attendee.api_id)
+        crate::event_store::get_deposit_status(kv, &event.id, &attendee.api_id, state.d1.as_deref())
             .await
             .ok()
             .flatten()
@@ -295,10 +295,15 @@ pub async fn get_public_ticket(
 
     // Fetch THB deposit for refund proof URL
     let thb_deposit = if let Some(kv_ref) = kv {
-        crate::event_store::get_thb_deposit(kv_ref, &event.id, &attendee.api_id)
-            .await
-            .ok()
-            .flatten()
+        crate::event_store::get_thb_deposit(
+            kv_ref,
+            &event.id,
+            &attendee.api_id,
+            state.d1.as_deref(),
+        )
+        .await
+        .ok()
+        .flatten()
     } else {
         None
     };
@@ -567,7 +572,7 @@ async fn find_rollover_target(
         }
 
         // Attendee does NOT already have a deposit on this event
-        let existing = crate::event_store::get_deposit_status(kv, &meta.id, attendee_id)
+        let existing = crate::event_store::get_deposit_status(kv, &meta.id, attendee_id, None)
             .await
             .ok()
             .flatten();
@@ -755,7 +760,7 @@ pub async fn delete_attendee(
                     let _ = kv.delete(&dkey).await;
                     deleted_keys.push(dkey);
 
-                    // THB deposit
+                    // THB deposit (KV cleanup — D1 also cleaned below)
                     let tkey = crate::event_store::thb_deposit_key(&event.id, &attendee.api_id);
                     let _ = kv.delete(&tkey).await;
                     deleted_keys.push(tkey);
@@ -773,6 +778,36 @@ pub async fn delete_attendee(
                     let qrkey = format!("qr:{}", attendee.api_id);
                     let _ = kv.delete(&qrkey).await;
                     deleted_keys.push(qrkey);
+                }
+
+                if let Some(db) = state.d1.as_deref()
+                    && let Err(e) =
+                        crate::db::thb_deposits::delete_thb_deposit(db, &event.id, &attendee.api_id)
+                            .await
+                {
+                    tracing::warn!(
+                        event_id = %event.id,
+                        attendee_id = %attendee.api_id,
+                        error = %e,
+                        "D1 THB deposit delete failed"
+                    );
+                }
+
+                // Delete deposit status from D1
+                if let Some(db) = state.d1.as_deref()
+                    && let Err(e) = crate::db::deposit_statuses::delete_deposit_status(
+                        db,
+                        &event.id,
+                        &attendee.api_id,
+                    )
+                    .await
+                {
+                    tracing::warn!(
+                        event_id = %event.id,
+                        attendee_id = %attendee.api_id,
+                        error = %e,
+                        "D1 deposit status delete failed"
+                    );
                 }
 
                 tracing::info!(

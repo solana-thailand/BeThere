@@ -1,62 +1,35 @@
-//! Organization KV store — CRUD for organizations.
+//! Organization store — CRUD for organizations.
 //!
-//! Organizations are stored in the EVENTS KV namespace:
+//! Organizations are stored exclusively in D1 (Phase 3c complete).
+//! Previously stored in KV under:
 //!   "orgs"         → OrgIndex (list of OrgMeta summaries)
 //!   "org:{org_id}" → OrganizationConfig (full org config)
 
-use worker::KvStore;
+use worker::D1Database;
 
-use event_checkin_domain::models::event::EventStatus;
+use event_checkin_domain::config::SheetsConfig;
+use event_checkin_domain::models::event::EventConfig;
 use event_checkin_domain::models::org::{
-    CreateOrgRequest, OrgIndex, OrganizationConfig, UpdateOrgRequest,
+    CreateOrgRequest, OrganizationConfig, ResolvedContactsSheet, UpdateOrgRequest,
 };
 
-// ---------------------------------------------------------------------------
-// Index
-// ---------------------------------------------------------------------------
-
-pub async fn get_org_index(kv: &KvStore) -> Result<OrgIndex, String> {
-    kv.get("orgs")
-        .json::<OrgIndex>()
-        .await
-        .map_err(|e| format!("failed to read org index: {e:?}"))
-        .map(|opt| opt.unwrap_or_default())
-}
-
-async fn save_org_index(kv: &KvStore, index: &OrgIndex) -> Result<(), String> {
-    kv.put("orgs", index)
-        .map_err(|e| format!("failed to create org index KV entry: {e:?}"))?
-        .execute()
-        .await
-        .map_err(|e| format!("failed to save org index: {e:?}"))
-}
+use crate::db::organizations;
 
 // ---------------------------------------------------------------------------
-// Config
+// Read
 // ---------------------------------------------------------------------------
 
-fn org_config_key(org_id: &str) -> String {
-    format!("org:{org_id}")
-}
-
+/// Get a single organization config by ID.
 pub async fn get_org_config(
-    kv: &KvStore,
+    db: &D1Database,
     org_id: &str,
 ) -> Result<Option<OrganizationConfig>, String> {
-    let key = org_config_key(org_id);
-    kv.get(&key)
-        .json::<OrganizationConfig>()
-        .await
-        .map_err(|e| format!("failed to read org config '{key}': {e:?}"))
+    organizations::get_org_config(db, org_id).await
 }
 
-async fn save_org_config(kv: &KvStore, config: &OrganizationConfig) -> Result<(), String> {
-    let key = org_config_key(&config.id);
-    kv.put(&key, config)
-        .map_err(|e| format!("failed to create org config KV entry: {e:?}"))?
-        .execute()
-        .await
-        .map_err(|e| format!("failed to save org config: {e:?}"))
+/// List all organizations (newest first).
+pub async fn list_orgs(db: &D1Database) -> Result<Vec<OrganizationConfig>, String> {
+    organizations::list_orgs(db).await
 }
 
 // ---------------------------------------------------------------------------
@@ -65,7 +38,7 @@ async fn save_org_config(kv: &KvStore, config: &OrganizationConfig) -> Result<()
 
 /// Create a new organization.
 pub async fn create_org(
-    kv: &KvStore,
+    db: &D1Database,
     req: &CreateOrgRequest,
 ) -> Result<OrganizationConfig, String> {
     if req.name.trim().is_empty() {
@@ -75,8 +48,8 @@ pub async fn create_org(
     let id = slugify_org(&req.name);
 
     // Deduplicate slug
-    let index = get_org_index(kv).await?;
-    if index.orgs.iter().any(|o| o.id == id) {
+    let existing = organizations::get_org_config(db, &id).await?;
+    if existing.is_some() {
         return Err(format!("organization '{id}' already exists"));
     }
 
@@ -106,11 +79,7 @@ pub async fn create_org(
         updated_at: now,
     };
 
-    save_org_config(kv, &config).await?;
-
-    let mut index = index;
-    index.orgs.insert(0, config.to_meta());
-    save_org_index(kv, &index).await?;
+    organizations::insert_org(db, &config).await?;
 
     tracing::info!(org_id = %id, name = %config.name, "organization created");
 
@@ -119,11 +88,11 @@ pub async fn create_org(
 
 /// Update an existing organization.
 pub async fn update_org(
-    kv: &KvStore,
+    db: &D1Database,
     org_id: &str,
     req: &UpdateOrgRequest,
 ) -> Result<OrganizationConfig, String> {
-    let mut config = get_org_config(kv, org_id)
+    let mut config = organizations::get_org_config(db, org_id)
         .await?
         .ok_or_else(|| format!("organization '{org_id}' not found"))?;
 
@@ -149,48 +118,27 @@ pub async fn update_org(
 
     config.updated_at = chrono::Utc::now().to_rfc3339();
 
-    save_org_config(kv, &config).await?;
-
-    // Update index
-    let mut index = get_org_index(kv).await?;
-    if let Some(entry) = index.orgs.iter_mut().find(|o| o.id == org_id) {
-        *entry = config.to_meta();
-    }
-    save_org_index(kv, &index).await?;
+    organizations::update_org(db, &config).await?;
 
     tracing::info!(org_id = %org_id, "organization updated");
 
     Ok(config)
 }
 
-/// Delete an organization (only if it has no active events).
-pub async fn delete_org(kv: &KvStore, org_id: &str) -> Result<(), String> {
-    // Check for active events in this org
-    let event_index = crate::event_store::get_event_index(kv).await?;
-    let active_events: Vec<_> = event_index
-        .events
-        .iter()
-        .filter(|e| e.organization_id == org_id && !matches!(e.status, EventStatus::Archived))
-        .collect();
-
-    if !active_events.is_empty() {
+/// Delete an organization (only if it has no active events in D1).
+pub async fn delete_org(db: &D1Database, org_id: &str) -> Result<(), String> {
+    // Check for active events in this org via D1
+    let has_active = crate::db::events::has_active_events_for_org(db, org_id).await?;
+    if has_active {
+        // Count for error message
+        let count = crate::db::events::count_active_events_for_org(db, org_id).await?;
         return Err(format!(
-            "cannot delete org '{}': still has {} active event(s)",
+            "cannot delete org '{}': still has {count} active event(s)",
             org_id,
-            active_events.len()
         ));
     }
 
-    // Delete config
-    let key = org_config_key(org_id);
-    kv.delete(&key)
-        .await
-        .map_err(|e| format!("failed to delete org config: {e:?}"))?;
-
-    // Remove from index
-    let mut index = get_org_index(kv).await?;
-    index.orgs.retain(|o| o.id != org_id);
-    save_org_index(kv, &index).await?;
+    organizations::delete_org(db, org_id).await?;
 
     tracing::info!(org_id = %org_id, "organization deleted");
 
@@ -203,23 +151,23 @@ pub async fn delete_org(kv: &KvStore, org_id: &str) -> Result<(), String> {
 
 /// Resolve the contacts sheet info for an event's organization.
 ///
-/// If the event has an `organization_id`, loads the org config and uses its
-/// sheet settings. Otherwise, falls back to the global `SheetsConfig`.
-#[allow(clippy::too_many_arguments)]
+/// If the event has an `organization_id`, loads the org config from D1 and uses
+/// its sheet settings. Otherwise, falls back to the global `SheetsConfig`.
 pub async fn resolve_contacts_sheet(
-    kv: &KvStore,
-    event_config: &event_checkin_domain::models::event::EventConfig,
-    global_sheets: &event_checkin_domain::config::SheetsConfig,
-) -> event_checkin_domain::models::org::ResolvedContactsSheet {
+    db: &D1Database,
+    event_config: &EventConfig,
+    global_sheets: &SheetsConfig,
+) -> ResolvedContactsSheet {
     if !event_config.organization_id.is_empty()
-        && let Ok(Some(org)) = get_org_config(kv, &event_config.organization_id).await
+        && let Ok(Some(org)) =
+            organizations::get_org_config(db, &event_config.organization_id).await
     {
         let sheet_id = if org.contacts_sheet_id.is_empty() {
             global_sheets.contacts_sheet_id.clone()
         } else {
             org.contacts_sheet_id
         };
-        return event_checkin_domain::models::org::ResolvedContactsSheet {
+        return ResolvedContactsSheet {
             sheet_id,
             contacts_sheet_name: org.contacts_sheet_name,
             events_sheet_name: org.events_sheet_name,
@@ -227,7 +175,7 @@ pub async fn resolve_contacts_sheet(
     }
 
     // Fallback to global
-    event_checkin_domain::models::org::ResolvedContactsSheet {
+    ResolvedContactsSheet {
         sheet_id: global_sheets.contacts_sheet_id.clone(),
         contacts_sheet_name: global_sheets.contacts_sheet_name.clone(),
         events_sheet_name: global_sheets.events_sheet_name.clone(),

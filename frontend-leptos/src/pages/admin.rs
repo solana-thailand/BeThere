@@ -15,7 +15,7 @@ use std::collections::{HashMap, HashSet};
 use leptos::prelude::*;
 use leptos_router::hooks::use_navigate;
 
-use crate::api::{self, AttendeeListItem, GenerateQrData, StatsResponse};
+use crate::api::{self, AttendeeListItem, EventFormat, GenerateQrData, StatsResponse};
 use crate::auth;
 use crate::components::{self, ToastType};
 use crate::icons::{Icon, IconName};
@@ -294,6 +294,30 @@ pub fn Admin() -> impl IntoView {
 
     // Helper to get current event_id
     let get_event_id = move || active_event_id.get();
+
+    // Current event's format — drives conditional sidebar + attendee UI
+    let current_event_format = Memo::new(move |_| {
+        active_event_id
+            .get()
+            .and_then(|id| {
+                events_list
+                    .get()
+                    .iter()
+                    .find(|e| e.id == id)
+                    .map(|e| e.event_format.clone())
+            })
+            .unwrap_or_default()
+    });
+
+    // Auto-switch tab when event format is single-track
+    Effect::new(move |_| {
+        let fmt = current_event_format.get();
+        match fmt {
+            EventFormat::Online => set_active_tab.set(DashboardTab::Online),
+            EventFormat::InPerson => set_active_tab.set(DashboardTab::InPerson),
+            EventFormat::Hybrid => {} // keep current selection
+        }
+    });
 
     // Filtered attendees: tab-filtered + search query + filter pill + sort
     let filtered_attendees = Memo::new(move |_| {
@@ -851,46 +875,51 @@ pub fn Admin() -> impl IntoView {
                     // ── Group 2: Check-in (day-of-event) ──
                     <div class="admin-sidebar-group">
                         <div class="admin-sidebar-group-label">"Check-in"</div>
-                        <button
-                            class="admin-sidebar-item"
-                            class:active=move || active_section.get() == AdminSection::Attendance && active_tab.get() == DashboardTab::InPerson
-                            on:click=move |_| {
-                                set_active_section.set(AdminSection::Attendance);
-                                set_active_tab.set(DashboardTab::InPerson);
-                            }
-                        >
-                            <span class="admin-sidebar-icon">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-                                    <circle cx="9" cy="7" r="4"></circle>
-                                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-                                    <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-                                </svg>
-                            </span>
-                            "In-Person"
-                            <span class="admin-sidebar-kbd">"Alt+6"</span>
-                        </button>
-                        <button
-                            class="admin-sidebar-item"
-                            class:active=move || active_section.get() == AdminSection::Attendance && active_tab.get() == DashboardTab::Online
-                            on:click=move |_| {
-                                set_active_section.set(AdminSection::Attendance);
-                                set_active_tab.set(DashboardTab::Online);
-                            }
-                        >
-                            <span class="admin-sidebar-icon">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <circle cx="12" cy="12" r="10"></circle>
-                                    <line x1="2" y1="12" x2="22" y2="12"></line>
-                                    <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
-                                </svg>
-                            </span>
-                            "Online"
-                            <span class="admin-sidebar-kbd">"Alt+7"</span>
-                        </button>
+                        <Show when=move || current_event_format.get().has_in_person() fallback=|| view! { <div></div> }>
+                            <button
+                                class="admin-sidebar-item"
+                                class:active=move || active_section.get() == AdminSection::Attendance && active_tab.get() == DashboardTab::InPerson
+                                on:click=move |_| {
+                                    set_active_section.set(AdminSection::Attendance);
+                                    set_active_tab.set(DashboardTab::InPerson);
+                                }
+                            >
+                                <span class="admin-sidebar-icon">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                                        <circle cx="9" cy="7" r="4"></circle>
+                                        <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                                        <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                                    </svg>
+                                </span>
+                                "In-Person"
+                                <span class="admin-sidebar-kbd">"Alt+6"</span>
+                            </button>
+                        </Show>
+                        <Show when=move || current_event_format.get().has_online() fallback=|| view! { <div></div> }>
+                            <button
+                                class="admin-sidebar-item"
+                                class:active=move || active_section.get() == AdminSection::Attendance && active_tab.get() == DashboardTab::Online
+                                on:click=move |_| {
+                                    set_active_section.set(AdminSection::Attendance);
+                                    set_active_tab.set(DashboardTab::Online);
+                                }
+                            >
+                                <span class="admin-sidebar-icon">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <circle cx="12" cy="12" r="10"></circle>
+                                        <line x1="2" y1="12" x2="22" y2="12"></line>
+                                        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+                                    </svg>
+                                </span>
+                                "Online"
+                                <span class="admin-sidebar-kbd">"Alt+7"</span>
+                            </button>
+                        </Show>
                     </div>
 
-                    // ── Group 3: Payments (deposit & escrow) ──
+                    // ── Group 3: Payments (deposit & escrow) — only for events with in-person track ──
+                    <Show when=move || current_event_format.get().has_in_person() fallback=|| view! { <div></div> }>
                     <div class="admin-sidebar-group">
                         <div class="admin-sidebar-group-label">"Payments"</div>
                         <button
@@ -932,6 +961,7 @@ pub fn Admin() -> impl IntoView {
                             <span class="admin-sidebar-kbd">"Alt+0"</span>
                         </button>
                     </div>
+                    </Show>
 
                     // Quick stats at bottom of sidebar
                     <div class="admin-sidebar-stats">
@@ -1002,52 +1032,58 @@ pub fn Admin() -> impl IntoView {
                                 }
                             }}
                         </button>
-                        <button
-                            class="btn btn-primary btn-sm"
-                            on:click=handle_generate_qrs
-                            disabled=move || qr_generating.get()
-                        >
-                            {move || {
-                                    if qr_generating.get() {
-                                        "Generating...".to_string()
-                                    } else {
-                                        "Generate QR Codes".to_string()
-                                    }
-                                }}
-                        </button>
+                        // QR generation + walk-in actions — only for in-person/hybrid events
+                        <Show when=move || current_event_format.get().has_in_person() fallback=|| view! { <span></span> }>
+                            <button
+                                class="btn btn-primary btn-sm"
+                                on:click=handle_generate_qrs
+                                disabled=move || qr_generating.get()
+                            >
+                                {move || {
+                                        if qr_generating.get() {
+                                            "Generating...".to_string()
+                                        } else {
+                                            "Generate QR Codes".to_string()
+                                        }
+                                    }}
+                            </button>
+                        </Show>
                         <button class="btn btn-outline btn-sm" on:click=handle_export_csv>
                             "Export CSV"
                         </button>
                         <button class="btn btn-outline btn-sm" on:click=handle_select_all>
                             "Select All Pending"
                         </button>
-                        <span class="admin-actions-divider"></span>
-                        <button
-                            class="btn btn-outline btn-sm"
-                            on:click=handle_walkin_export
-                            disabled=move || walkin_exporting.get()
-                        >
-                            {move || {
-                                if walkin_exporting.get() {
-                                    "Exporting...".to_string()
-                                } else {
-                                    "Export Walk-in CSV".to_string()
-                                }
-                            }}
-                        </button>
-                        <button
-                            class="btn btn-outline btn-sm"
-                            on:click=handle_walkin_sync
-                            disabled=move || walkin_syncing.get()
-                        >
-                            {move || {
-                                if walkin_syncing.get() {
-                                    "Syncing...".to_string()
-                                } else {
-                                    "Sync Walk-ins to Sheet".to_string()
-                                }
-                            }}
-                        </button>
+                        // Walk-in management — only for in-person/hybrid
+                        <Show when=move || current_event_format.get().has_in_person() fallback=|| view! { <span></span> }>
+                            <span class="admin-actions-divider"></span>
+                            <button
+                                class="btn btn-outline btn-sm"
+                                on:click=handle_walkin_export
+                                disabled=move || walkin_exporting.get()
+                            >
+                                {move || {
+                                    if walkin_exporting.get() {
+                                        "Exporting...".to_string()
+                                    } else {
+                                        "Export Walk-in CSV".to_string()
+                                    }
+                                }}
+                            </button>
+                            <button
+                                class="btn btn-outline btn-sm"
+                                on:click=handle_walkin_sync
+                                disabled=move || walkin_syncing.get()
+                            >
+                                {move || {
+                                    if walkin_syncing.get() {
+                                        "Syncing...".to_string()
+                                    } else {
+                                        "Sync Walk-ins to Sheet".to_string()
+                                    }
+                                }}
+                            </button>
+                        </Show>
                     </div>
 
                     // QR generation result
@@ -1108,7 +1144,7 @@ pub fn Admin() -> impl IntoView {
                     </Show>
 
                     // Stats cards (tab-aware)
-                    {move || render_stats(&stats.get(), &attendees.get(), active_tab.get())}
+                    {move || render_stats(&stats.get(), &attendees.get(), active_tab.get(), &current_event_format.get())}
 
                     // Search box
                     <div class="search-box">
@@ -1253,6 +1289,7 @@ pub fn Admin() -> impl IntoView {
 
                                 let items = visible.into_iter().map(|attendee| {
                                     let is_checked_in = attendee.checked_in_at.is_some();
+                                    let is_attendee_in_person = utils::is_in_person(&attendee.participation_type);
                                     let is_vip = is_vip_ticket(&attendee.ticket_name);
                                     let is_walkin = attendee.ticket_name.eq_ignore_ascii_case("Walk-in");
                                     let is_selected = selected.contains(&attendee.api_id);
@@ -1280,20 +1317,35 @@ pub fn Admin() -> impl IntoView {
                                         Some(ref eid) => format!("/ticket/{api_id}?event_id={eid}"),
                                         None => format!("/ticket/{api_id}"),
                                     };
-                                    // Deposit/NFT/Refund badge state
-                                    let has_deposit = attendee.deposit_amount.is_some();
-                                    let is_deposit_verified = attendee.deposit_verified.as_deref() == Some("true");
-                                    let deposit_badge = if attendee.refund_status.is_some() {
-                                        Some(("badge badge-refunded", "Refunded"))
-                                    } else if is_deposit_verified {
-                                        Some(("badge badge-success", "Deposit ✓"))
-                                    } else if has_deposit {
-                                        Some(("badge badge-warning", "Deposit pending"))
+                                    // Participation-aware status badges
+                                    let has_nft = attendee.nft_proof_url.is_some();
+                                    let nft_url = attendee.nft_proof_url.clone();
+
+                                    // For in-person: deposit/refund badges
+                                    let deposit_badge = if is_attendee_in_person {
+                                        let has_deposit = attendee.deposit_amount.is_some();
+                                        let is_deposit_verified = attendee.deposit_verified.as_deref() == Some("true");
+                                        if attendee.refund_status.is_some() {
+                                            Some(("badge badge-refunded", "Refunded"))
+                                        } else if is_deposit_verified {
+                                            Some(("badge badge-success", "Deposit \u{2713}"))
+                                        } else if has_deposit {
+                                            Some(("badge badge-warning", "Deposit pending"))
+                                        } else {
+                                            None
+                                        }
+                                    } else {
+                                        None // online attendees don't deposit
+                                    };
+
+                                    // For online: show claim status when no deposit flow
+                                    let claim_badge = if !is_attendee_in_person && has_nft {
+                                        Some(("badge badge-success", "Claimed \u{2713}"))
+                                    } else if !is_attendee_in_person && !is_checked_in {
+                                        Some(("badge badge-info", "Registered"))
                                     } else {
                                         None
                                     };
-                                    let has_nft = attendee.nft_proof_url.is_some();
-                                    let nft_url = attendee.nft_proof_url.clone();
 
                                     view! {
                                         <div class="attendee-item" class:vip=is_vip class:selected=is_selected>
@@ -1329,6 +1381,15 @@ pub fn Admin() -> impl IntoView {
                                                 >
                                                     {
                                                         let (cls, txt) = deposit_badge.unwrap_or(("", ""));
+                                                        view! { <span class=cls.to_string()>{txt}</span> }
+                                                    }
+                                                </Show>
+                                                <Show
+                                                    when=move || claim_badge.is_some()
+                                                    fallback=|| view! { <span></span> }
+                                                >
+                                                    {
+                                                        let (cls, txt) = claim_badge.unwrap_or(("", ""));
                                                         view! { <span class=cls.to_string()>{txt}</span> }
                                                     }
                                                 </Show>
@@ -1372,13 +1433,19 @@ pub fn Admin() -> impl IntoView {
                                                     </Show>
                                                 </div>
                                                 <div class="attendee-actions">
-                                                    <a
-                                                        href=deposit_link
-                                                        class="btn btn-outline btn-xs btn-xs-override"
-                                                        title="Deposit page"
+                                                    // Deposit button — only for in-person attendees
+                                                    <Show
+                                                        when=move || is_attendee_in_person
+                                                        fallback=|| view! { <span></span> }
                                                     >
-                                                        "Deposit"
-                                                    </a>
+                                                        <a
+                                                            href=deposit_link.clone()
+                                                            class="btn btn-outline btn-xs btn-xs-override"
+                                                            title="Deposit page"
+                                                        >
+                                                            "Deposit"
+                                                        </a>
+                                                    </Show>
                                                     <button
                                                         class="btn btn-outline btn-xs btn-xs-override"
                                                         title="Copy ticket link"
@@ -1594,6 +1661,7 @@ fn render_stats(
     stats: &Option<StatsResponse>,
     attendees: &[AttendeeListItem],
     tab: DashboardTab,
+    event_format: &EventFormat,
 ) -> AnyView {
     match stats {
         Some(_s) => {
@@ -1652,26 +1720,31 @@ fn render_stats(
                     </div>
                 </div>
 
-                // Cross-tab summary
-                <div class="admin-cross-tab-summary">
-                    {format!("{} {} attendee{}", other_count, other_tab.label(), if other_count != 1 { "s" } else { "" })}
-                    " — "
-                    <span
-                        class="admin-tab-switch-link"
-                        on:click=move |_| {
-                            // This won't work in a render function since we can't access set_active_tab
-                            // The tab summary is informational; switching is done via the tab bar
-                        }
-                    >
-                        "switch tab to view"
-                    </span>
-                </div>
+                // Cross-tab summary — only for hybrid events with both tracks
+                {if event_format == &EventFormat::Hybrid {
+                    view! {
+                        <div class="admin-cross-tab-summary">
+                            {format!("{} {} attendee{}", other_count, other_tab.label(), if other_count != 1 { "s" } else { "" })}
+                            " — "
+                            <span
+                                class="admin-tab-switch-link"
+                                on:click=move |_| {
+                                    // Tab summary is informational; switching is done via the tab bar
+                                }
+                            >
+                                "switch tab to view"
+                            </span>
+                        </div>
+                    }.into_any()
+                } else {
+                    view! { <div></div> }.into_any()
+                }}
 
                 // Progress bar
                 <div class="card mb-2">
                     <div class="admin-progress-header">
                         <span class="admin-progress-title">
-                            {format!("{} Check-In Progress", tab.label())}
+                            {format!("{} Progress", tab.label())}
                         </span>
                         <span class="admin-progress-pct">
                             {format!("{tab_percentage:.1}% ({tab_checked_in} / {tab_total})")}

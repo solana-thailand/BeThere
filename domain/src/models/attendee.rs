@@ -127,7 +127,7 @@ impl Attendee {
         if lower.is_empty() {
             return true;
         }
-        lower.contains("in-person") || lower.contains("in person")
+        lower.contains("in-person") || lower.contains("in person") || lower.contains("in_person")
     }
 
     pub fn display_name(&self) -> &str {

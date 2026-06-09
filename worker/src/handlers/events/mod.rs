@@ -16,6 +16,7 @@ pub mod lifecycle;
 pub mod list;
 pub mod read;
 pub mod seed;
+pub mod sync;
 pub mod update;
 
 pub use audit::{get_event_audit, get_form_config, get_global_audit, put_form_config};
@@ -24,4 +25,5 @@ pub use lifecycle::{archive_event, hard_delete_event, restore_event};
 pub use list::list_events;
 pub use read::get_event;
 pub use seed::{migrate_quiz, reseed_kv_from_d1, seed_event};
+pub use sync::sync_sheet_to_d1;
 pub use update::update_event;

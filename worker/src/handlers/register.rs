@@ -219,10 +219,15 @@ pub async fn register_attendee(
         let claim_token = existing.claim_token.clone().unwrap_or_default();
         // Fetch deposit status if KV is available
         let deposit = if let Some(ref kv) = state.events_kv {
-            crate::event_store::get_deposit_status(kv, &event_id, &existing.api_id)
-                .await
-                .ok()
-                .flatten()
+            crate::event_store::get_deposit_status(
+                kv,
+                &event_id,
+                &existing.api_id,
+                state.d1.as_deref(),
+            )
+            .await
+            .ok()
+            .flatten()
         } else {
             None
         };
@@ -292,16 +297,14 @@ pub async fn register_attendee(
     // 5c. Check if attendee has rolling deposit credit that covers this event's deposit
     let mut credit_covered_method: Option<String> = None;
     if config.deposit_enabled && !is_online_participation(&participation_type) {
-        let resolved_contacts = match kv {
-            Some(kv_store) => {
-                crate::org_store::resolve_contacts_sheet(kv_store, &config, &state.config.sheets)
-                    .await
-            }
-            None => event_checkin_domain::models::org::ResolvedContactsSheet {
+        let resolved_contacts = if let Some(db) = state.d1.as_deref() {
+            crate::org_store::resolve_contacts_sheet(db, &config, &state.config.sheets).await
+        } else {
+            event_checkin_domain::models::org::ResolvedContactsSheet {
                 sheet_id: state.config.sheets.contacts_sheet_id.clone(),
                 contacts_sheet_name: state.config.sheets.contacts_sheet_name.clone(),
                 events_sheet_name: state.config.sheets.events_sheet_name.clone(),
-            },
+            }
         };
         if !resolved_contacts.sheet_id.is_empty()
             && let Ok((credit_thb, credit_usdc)) = crate::sheets::contacts::get_credit_balance(
@@ -484,13 +487,9 @@ pub async fn register_attendee(
             .await;
 
             // Upsert to contacts sheet (matches upsert_contact_after_registration)
-            let resolved = if let Some(ref contact_kv) = bg_kv {
-                crate::org_store::resolve_contacts_sheet(
-                    contact_kv,
-                    &bg_config,
-                    &bg_state.config.sheets,
-                )
-                .await
+            let resolved = if let Some(db) = bg_state.d1.as_deref() {
+                crate::org_store::resolve_contacts_sheet(db, &bg_config, &bg_state.config.sheets)
+                    .await
             } else {
                 event_checkin_domain::models::org::ResolvedContactsSheet {
                     sheet_id: bg_state.config.sheets.contacts_sheet_id.clone(),
@@ -660,10 +659,15 @@ pub async fn my_registration(
     let claim_token = attendee.claim_token.clone().unwrap_or_default();
     // Fetch deposit status (KV → None, D1 deposit data not stored separately)
     let deposit = if let Some(kv_store) = kv {
-        crate::event_store::get_deposit_status(kv_store, &config.id, &attendee.api_id)
-            .await
-            .ok()
-            .flatten()
+        crate::event_store::get_deposit_status(
+            kv_store,
+            &config.id,
+            &attendee.api_id,
+            state.d1.as_deref(),
+        )
+        .await
+        .ok()
+        .flatten()
     } else {
         None
     };
@@ -851,6 +855,7 @@ pub async fn my_registrations(
                             kv_store,
                             &event_id,
                             &attendee.api_id,
+                            state.d1.as_deref(),
                         )
                         .await
                         .ok()
@@ -1104,19 +1109,14 @@ async fn upsert_contact_after_registration(
     kv: Option<&worker::KvStore>,
 ) {
     // Resolve the contacts sheet from the event's organization
-    let resolved = match kv {
-        Some(kv_store) => {
-            crate::org_store::resolve_contacts_sheet(kv_store, event_config, &state.config.sheets)
-                .await
-        }
-        None => {
-            // No KV — fall back to global config
-            let global = &state.config.sheets;
-            event_checkin_domain::models::org::ResolvedContactsSheet {
-                sheet_id: global.contacts_sheet_id.clone(),
-                contacts_sheet_name: global.contacts_sheet_name.clone(),
-                events_sheet_name: global.events_sheet_name.clone(),
-            }
+    let resolved = if let Some(db) = state.d1.as_deref() {
+        crate::org_store::resolve_contacts_sheet(db, event_config, &state.config.sheets).await
+    } else {
+        let global = &state.config.sheets;
+        event_checkin_domain::models::org::ResolvedContactsSheet {
+            sheet_id: global.contacts_sheet_id.clone(),
+            contacts_sheet_name: global.contacts_sheet_name.clone(),
+            events_sheet_name: global.events_sheet_name.clone(),
         }
     };
 
