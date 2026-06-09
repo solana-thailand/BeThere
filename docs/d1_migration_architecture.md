@@ -1,5 +1,7 @@
 # D1 Migration Architecture — Google Sheets → D1 Primary Data Store
 
+> **Current Status**: **Phase 2a+ LIVE** — D1 binding exists in `wrangler.toml`, `worker/src/db.rs` module is active, handlers use D1 for claim locks and audit queries. The system is past Phase 2a (schema + dual-write).
+
 > Companion to Issue #046. Covers data models, schema design, current-state analysis,
 > target-state architecture, and the phased migration plan.
 
@@ -21,39 +23,58 @@
 ### Storage Map
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                    CURRENT STATE                         │
-├─────────────────────────────────────────────────────────┤
-│                                                          │
-│  Google Sheets (SOURCE OF TRUTH)                        │
-│  ├── Attendees sheet (per event)                        │
-│  │   Columns: A-Q (name, email, status, check-in,       │
-│  │             claim_token, deposit info, ...)           │
-│  ├── Staff sheet (per event)                            │
-│  │   Columns: A-C (email, role, event_id)               │
-│  ├── Contacts sheet (master, per org)                   │
-│  │   Columns: A-M (email, name, events, credits, ...)   │
-│  └── Events tab (per org)                               │
-│      Columns: A-R (event_id, name, config, ...)         │
-│       │                                                  │
-│       ▼ read via Sheets API (50-300ms per call)         │
-│  KV (CACHE LAYER — 60s TTL)                             │
-│  ├── attendees:{sheet_id}:{sheet_name} → JSON array     │
-│  ├── claim_map:{sheet_id}:{sheet_name} → JSON HashMap   │
-│  ├── column_mapping:{sheet_id}:{sheet_name} → JSON      │
-│  ├── google_token → OAuth token (3500s TTL)             │
-│  ├── staff:{sheet_id}:{sheet_name} → JSON array         │
-│  ├── event:{event_id} → EventConfig JSON                │
-│  ├── quiz:{event_id} → Quiz JSON                        │
-│  └── org:{org_id} → OrgConfig JSON                      │
-│                                                          │
-│  D1 (PHASE 1 — claim locks + audit)                     │
-│  ├── claim_locks (event_id, token → lock state)         │
-│  └── audit_log (event_id, actor, action, ...)           │
-│                                                          │
-│  R2 (BLOB STORAGE)                                      │
-│  └── badges, slips, refund proofs                       │
-└─────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                    CURRENT STATE (Post Phase 2)                  │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  D1 (PRIMARY SOURCE OF TRUTH)                                   │
+│  ├── claim_locks (Phase 1)                                      │
+│  ├── audit_log (Phase 1)                                        │
+│  ├── attendees (Phase 2 — replaces Attendees sheet)             │
+│  ├── contacts (Phase 2 — replaces Contacts sheet)               │
+│  ├── events (Phase 2 — replaces KV + Events tab)                │
+│  ├── staff (Phase 2 — replaces Staff sheet)                     │
+│  ├── developer_profiles (Phase 2)                               │
+│  ├── registration_responses (Phase 2)                           │
+│  ├── quiz_configs (Phase 2 — replaces KV quiz questions)        │
+│  ├── quiz_progress (Phase 2 — replaces KV quiz progress)        │
+│  ├── escrow_index (Phase 2 — replaces KV escrow mapping)        │
+│  ├── campaigns (Phase 2)                                        │
+│  ├── campaign_events (Phase 2)                                  │
+│  └── developer_campaign_progress (Phase 2)                      │
+│                                                                  │
+│  Google Sheets (ASYNC REPORTING LAYER)                          │
+│  ├── Attendees sheet (synced from D1 via wait_until)            │
+│  ├── Staff sheet (synced from D1 via wait_until)                │
+│  ├── Contacts sheet (synced from D1 via wait_until)             │
+│  └── Events tab (synced from D1 via wait_until)                 │
+│                                                                  │
+│  KV — EVENTS namespace (c8a6a87f...)                            │
+│  ├── DUAL-WRITE mirror of D1 (for read compat during migrate)  │
+│  │   ├── "events" → EventIndex JSON                            │
+│  │   ├── "event:{id}" → EventConfig JSON                       │
+│  │   └── "event:{id}:audit" → audit JSON array                 │
+│  ├── KV-ONLY (not yet migrated — Issue #053):                  │
+│  │   ├── event:{id}:adventure:config          → AdventureConfig │
+│  │   ├── event:{id}:adventure:progress:{tok}  → AdventureProg   │
+│  │   ├── event:{id}:onchain                   → Vec<OnChainEvt> │
+│  │   ├── onchain:sig:{sig}                    → dedup (90d TTL) │
+│  │   ├── onchain:cursor:{addr}                → polling cursor  │
+│  │   ├── thb_deposit:{eid}:{email}            → ThbDeposit      │
+│  │   ├── thb_deposits:{eid}                   → Vec<ThbDeposit> │
+│  │   ├── deposit_status:{id}                  → DepositStatus   │
+│  │   ├── org:{org_id}                         → OrgConfig       │
+│  │   ├── orgs                                 → OrgIndex        │
+│  │   ├── event:{id}:form:config              → form JSON       │
+│  │   └── jwt_blacklist:{hash}                 → "1" (TTL=exp)   │
+│  └── TTL caches:                                                │
+│      └── google_token → OAuth token (3500s TTL)                 │
+│                                                                  │
+│  KV — QUIZ namespace (REMOVED from wrangler.toml)               │
+│                                                                  │
+│  R2 (BLOB STORAGE)                                              │
+│  └── badges, slips, refund proofs                               │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 ### Hot Path Latency (Check-in)
@@ -123,35 +144,36 @@ sheets/events_tab.rs
 ## Target Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                    TARGET STATE                          │
-├─────────────────────────────────────────────────────────┤
-│                                                          │
-│  D1 (PRIMARY SOURCE OF TRUTH)                           │
-│  ├── claim_locks (existing — Phase 1)                   │
-│  ├── audit_log (existing — Phase 1)                     │
-│  ├── attendees (NEW — replaces Attendees sheet)         │
-│  ├── contacts (NEW — replaces Contacts sheet)           │
-│  ├── events (NEW — replaces KV + Events tab)            │
-│  └── staff (NEW — replaces Staff sheet)                 │
-│       │                                                  │
-│       │ D1 binding: sub-ms indexed queries               │
-│       │                                                  │
-│  Handlers (direct D1 reads + writes)                    │
-│       │                                                  │
-│       ▼ async sync via wait_until()                     │
-│  Google Sheets (REPORTING / BACKUP)                     │
-│  └── Mirrors D1 data for non-technical organizers       │
-│                                                          │
-│  KV (SESSION/TEMPORARY ONLY)                            │
-│  ├── google_token → OAuth token (3500s TTL)             │
-│  ├── quiz:{event_id} → Quiz JSON                        │
-│  ├── adventure:{event_id} → Adventure config            │
-│  └── org:{org_id} → Organization config                 │
-│                                                          │
-│  R2 (BLOB STORAGE — unchanged)                           │
-│  └── badges, slips, refund proofs                       │
-└─────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                    TARGET STATE (Post Phase 3 — Issue #053)     │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  D1 (PRIMARY SOURCE OF TRUTH — ALL BUSINESS DATA)               │
+│  ├── Phase 1: claim_locks, audit_log                             │
+│  ├── Phase 2: attendees, contacts, events, staff, developers,   │
+│  │            registration_responses, quiz_configs, quiz_progress│
+│  │            escrow_index, campaigns, campaign_events,          │
+│  │            developer_campaign_progress                        │
+│  └── Phase 3: adventure_configs, adventure_progress,             │
+│               onchain_events, onchain_dedup, onchain_cursors,    │
+│               thb_deposits, deposit_status,                      │
+│               organizations, event_form_config                   │
+│       │                                                          │
+│       │ D1 binding: sub-ms indexed queries                       │
+│       │                                                          │
+│  Handlers (direct D1 reads + writes)                            │
+│       │                                                          │
+│       ▼ async sync via wait_until()                             │
+│  Google Sheets (REPORTING / BACKUP)                             │
+│  └── Mirrors D1 data for non-technical organizers               │
+│                                                                  │
+│  KV (TEMPORARY / TTL-BASED ONLY)                                │
+│  ├── google_token → OAuth token (3500s TTL)                     │
+│  └── jwt_blacklist:{hash} → "1" (TTL=exp — keeps auto-cleanup)   │
+│                                                                  │
+│  R2 (BLOB STORAGE — unchanged)                                   │
+│  └── badges, slips, refund proofs                               │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 ### Hot Path Latency After Migration (Check-in)

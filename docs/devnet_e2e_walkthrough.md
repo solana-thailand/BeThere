@@ -974,12 +974,12 @@ solana confirm <TX_SIGNATURE> --url devnet
 │   Phantom Wallet │────▶│   Cloudflare Worker   │────▶│  Solana Devnet  │
 │   (Browser Ext)  │     │  bethere.workers.dev  │     │  (RPC + Program)│
 └─────────────────┘     └──────────────────────┘     └─────────────────┘
-                              │         │
-                              ▼         ▼
-                        ┌─────────┐ ┌──────────┐
-                        │  KV Store │ │ Google   │
-                        │  (Events) │ │ Sheets   │
-                        └─────────┘ └──────────┘
+                              │         │         │
+                              ▼         ▼         ▼
+                        ┌─────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐
+                        │  KV Store │ │ D1        │ │ R2        │ │ Google   │
+                        │  (Events) │ │ (Metadata)│ │ (Assets)  │ │ Sheets   │
+                        └─────────┘ └──────────┘ └──────────┘ └──────────┘
 ```
 
 ### On-Chain Program Instructions (Order Matters)
@@ -994,14 +994,16 @@ create_event ──▶ deposit (×N) ──▶ deactivate_event
                                claim_forfeited (after refund_deadline)
                                       │
                                close_event (after settlement)
+
+rollover_deposit (source event deactivated, target event active)
 ```
 
 ### PDA Seeds
 
 | Account | Seeds |
 |---------|-------|
-| EventEscrow | `["escrow", organizer_pubkey, event_id]` |
-| AttendeeDeposit | `["deposit", attendee_pubkey, event_id]` |
+| EventEscrow | `["escrow", organizer, event_id]` |
+| AttendeeDeposit | `["deposit", event, attendee]` |
 | Vault (ATA) | Derived via Associated Token Program |
 
 ---

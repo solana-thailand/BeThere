@@ -273,6 +273,10 @@ pub enum RefundEligibility {
 
 ## Proposed Module Structure
 
+> **Note**: The actual module structure differs from the original DDD proposal. The codebase uses `models/`, `config/`, and `qr/` rather than the proposed `aggregates/`, `entities/`, and `services/` directories. This is a pragmatic compromise — behavior methods live directly on structs within `models/`.
+>
+> **Additional domain models not covered in this doc**: `Campaign` and `Adventure` domain models exist in `domain/src/models/` and have dedicated handlers (`worker/src/handlers/campaigns.rs`, `worker/src/handlers/adventure.rs`) and frontend pages. These follow the same pattern but are not detailed in the DDD architecture doc.
+
 ```
 domain/
 ├── Cargo.toml
@@ -576,7 +580,12 @@ impl AttendeeRepository for MockAttendeeRepo {
 
 ## Migration Plan
 
-### Phase 1: Domain Behavior (Low Risk)
+### Phase 1: Domain Behavior (Low Risk) ✅ DONE
+
+> **Status**: Complete — all proposed domain behavior methods are now implemented.
+> `EventConfig`: `to_meta()`, `nft_name()`, `nft_description()`, `is_registration_open()`, `is_refund_eligible()`, `has_in_person_capacity()`, `has_online_capacity()`, `accepts_usdc_deposits()`, `deposit_deadline_passed()`, `from_global_config()`
+> `Attendee`: `is_approved()`, `is_checked_in()`, `is_in_person()`, `display_name()`, `can_check_in()`, `has_verified_deposit()`, `is_refund_eligible()`
+> `DepositStatus`: `is_refundable_tier()`, `is_past_deadline()`
 
 Move business logic from handlers into domain models. No structural changes.
 

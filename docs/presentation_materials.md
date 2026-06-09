@@ -24,7 +24,7 @@ BeThere is a **Solana-powered event check-in platform** that combines:
 | Check-in latency | < 500ms (edge worker) |
 | NFT mint cost | ~$0.001 per badge (cNFT) |
 | Platform stack | Rust + Solana + Cloudflare Workers + Leptos WASM |
-| Program ID | `2TGfNNXNez2NgopffDnYYhLNYmndUBBwg5SvpD5XQeLo` |
+| Program ID | `C6HDeZES9aPpNwe3UvS9ecmfcRhH1XeJb8PGJmLG3z3T` |
 | Test coverage | 61 tests (39 worker + 22 on-chain) |
 
 ---
@@ -89,10 +89,13 @@ BeThere is a **Solana-powered event check-in platform** that combines:
 ### Account Structure
 
 ```
-EventEscrow PDA ["escrow", event_id]
+EventEscrow PDA ["escrow", organizer, event_id]    (192 bytes)
+├── discriminator:  u8        (discriminator 0)
 ├── organizer:      Pubkey    (who created it)
 ├── usdc_mint:      Pubkey    (USDC mint address)
 ├── vault:          Pubkey    (ATA holding deposited USDC)
+├── event_id:       u64       (unique event identifier)
+├── version:        u64       (schema version)
 ├── deposit_amount: u64       (lamports per attendee)
 ├── event_end:      i64       (unix timestamp)
 ├── refund_deadline: i64      (unix timestamp)
@@ -100,16 +103,19 @@ EventEscrow PDA ["escrow", event_id]
 ├── total_refunded:   u64     (running counter)
 ├── total_forfeited:  u64     (running counter)
 ├── is_active:       bool     (false after deactivation)
-└── bump:            u8       (PDA bump seed)
+├── bump:            u8       (PDA bump seed)
+└── _padding        (to 192 bytes)
 
-AttendeeDeposit PDA ["deposit", event_escrow, attendee]
+AttendeeDeposit PDA ["deposit", event, attendee]    (96 bytes)
+│   NOTE: 'event' is the EventEscrow PDA address (not event_id)
 ├── attendee:     Pubkey
-├── event:        Pubkey
+├── event:        Pubkey    (EventEscrow PDA address)
 ├── amount:       u64
-├── deposited_at: i64
-├── checked_in:   bool       (set by organizer at door)
+├── deposited_at: i64       (unix timestamp)
+├── checked_in:   bool      (set by organizer at door)
 ├── refunded:     bool
-└── bump:         u8
+├── bump:         u8        (PDA bump seed)
+└── _padding      (to 96 bytes)
 ```
 
 ### Instruction Flow
@@ -155,6 +161,17 @@ AttendeeDeposit PDA ["deposit", event_escrow, attendee]
        ├──────────────────────────────────────────▶│
        │                    │                     │ EventEscrow closed
        │                    │                     │ Rent reclaimed
+       │                    │                     │
+       │                    │  close_deposit      │
+       │                    ├────────────────────▶│
+       │                    │                     │ AttendeeDeposit closed
+       │                    │                     │ Rent reclaimed
+       │                    │                     │
+       │                    │  rollover_deposit   │
+       │                    ├────────────────────▶│
+       │                    │                     │ Deposit moved to new
+       │                    │                     │ EventEscrow PDA
+       │                    │                     │ DepositRolledOver event
 ```
 
 ### Security Model
@@ -168,6 +185,8 @@ AttendeeDeposit PDA ["deposit", event_escrow, attendee]
 | `claim_forfeited` | Organizer | `now > refund_deadline`, `has_one organizer` |
 | `close_event` | Organizer | `has_one organizer`, all deposits settled |
 | `deactivate_event` | Organizer | `has_one organizer` |
+| `close_deposit` | Attendee | Deposit exists, not already closed |
+| `rollover_deposit` | Attendee | Source deposit exists, target escrow active, correct amount |
 
 ---
 

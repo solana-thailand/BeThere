@@ -59,6 +59,18 @@ Lightweight struct used in event listings:
 | `organizer_emails` | List of organizer email addresses |
 | `deposit_enabled` | Whether deposit/escrow is active |
 | `escrow_address` | On-chain escrow account address |
+| `time_tba` | Whether schedule is TBD (time to be announced) |
+| `organization_id` | Linked organization ID |
+| `max_refundable_deposits` | Cap on refundable deposits |
+| `escrow_status` | Current `EscrowStatus` (None, Initialized, Deactivated, Closed, Cancelled) |
+| `event_format` | `EventFormat` (InPerson, Online, Hybrid) |
+| `tagline` | Short description |
+| `location` | Venue/location string |
+| `video_url` | Online stream URL |
+| `nft_image_url` | Badge image URL |
+| `in_person_capacity` | Max in-person attendees |
+| `online_capacity` | Max online attendees |
+| `visibility` | `EventVisibility` (Public, Private) |
 
 ### EventConfig
 
@@ -199,6 +211,15 @@ All protected (require admin auth):
 | `GET` | `/api/orgs/{id}` | Get org details |
 | `PUT` | `/api/orgs/{id}` | Update org |
 | `DELETE` | `/api/orgs/{id}` | Delete org |
+| `POST` | `/api/events/{id}/restore` | Restore archived event |
+| `GET` | `/api/events/{id}/audit` | Get event audit log |
+| `GET` | `/api/events/{id}/form-config` | Get event registration form config |
+| `PUT` | `/api/events/{id}/form-config` | Update event registration form config |
+| `GET` | `/api/audit/global` | Global audit log |
+| `GET` | `/api/wallet/leaderboard` | Wallet leaderboard |
+| `GET` | `/api/wallet/{address}/nfts` | NFTs for a wallet address |
+| `GET` | `/api/community/insights` | Community insights |
+| `GET` | `/api/community/developers` | Community developer stats |
 | `GET` | `/api/storage/slips/{event_id}/{attendee_id}` | Serve slip image from R2 |
 | `GET` | `/api/storage/refunds/{event_id}/{attendee_id}` | Serve refund proof from R2 |
 | `GET` | `/api/storage/badges/{event_id}` | Serve badge SVG from R2 |
@@ -398,9 +419,9 @@ Walk-in attendees are registered per-event via the scanner UI:
 | `worker/src/handlers/walkin.rs` | Walk-in registration endpoint |
 | `worker/src/claim.rs` | Claim flow (pre-registered + walk-in) |
 | `frontend-leptos/src/pages/events_page.rs` | Events management UI (list + create/edit form) |
-| `frontend-leptos/src/api.rs` | Frontend API types + functions |
+| `frontend-leptos/src/api/` | Frontend API types + functions (directory) |
 | `bethere-escrow/src/state.rs` | On-chain `EventEscrow` state |
-| `bethere-escrow/src/lib.rs` | On-chain program (8 instructions) |
+| `bethere-escrow/src/lib.rs` | On-chain program (9 instructions: create_event, deposit, mark_checked_in, refund, claim_forfeited, close_event, deactivate_event, close_deposit, rollover_deposit) |
 | `worker/src/storage.rs` | R2 storage helpers (slip/refund/badge serving) |
 | `worker/src/db.rs` | D1 claim lock operations |
 | `worker/src/cleanup.rs` | Cron KV cleanup (retention policy) |
@@ -430,3 +451,15 @@ Walk-in attendees are registered per-event via the scanner UI:
 | `.issues/032_rolling_deposit_credit.md` | Rolling deposit credit + atomic rollover design |
 | `.handovers/077_rollover_deposit_e2e.md` | Rollover deposit implementation across all 3 layers |
 | `.handovers/080_r2_binding_rate_limiting.md` | R2 storage binding + rate limiting |
+
+---
+
+## 13. Campaign System
+
+The platform includes a **Campaign system** for multi-event credential programs. Campaign-related API routes include:
+
+- Campaign CRUD endpoints (create, read, update, delete campaigns)
+- Campaign-event linking (associate events with a campaign)
+- Credential/credit tracking per campaign
+
+See `worker/src/handlers/campaigns.rs` and `frontend-leptos/src/pages/campaigns_page.rs`.

@@ -1,6 +1,9 @@
 # Durable Objects Architecture — ACID Writes for BeThere
 
-> Status: **Planning** — Issue #050
+> Status: **Blocked** — Durable Objects are currently **disabled** in production due to Cloudflare API bug 10013.
+> The `wrangler.toml` DO bindings are **commented out**. The codebase handles `event_do: Option<ObjectNamespace>` with graceful `None` fallback, running in **D1-only mode**.
+> This document describes the *designed* architecture for when the Cloudflare bug is resolved.
+>
 > Related: `docs/d1_migration_architecture.md`, `.issues/050_durable_objects_acid_migration.md`
 > CTO decision: "ใช้ผ่าน durable objects จะได้ acid"
 
@@ -485,23 +488,26 @@ async fn get_attendees(
 ### wrangler.toml
 
 ```toml
-# Existing D1 binding (now read-only for attendee data)
+# Existing D1 binding (currently used for both reads and writes while DOs are disabled)
 [[d1_databases]]
 binding = "DB"
 database_name = "bethere-db"
 database_id = "98d09542-e7d8-4413-ac34-4276a50d126c"
 migrations_dir = "migrations"
 
-# NEW: Durable Object binding for ACID writes
-[[durable_objects.bindings]]
-name = "EVENT_DO"
-class_name = "EventDurableObject"
-
-# NEW: Migration to create DO class with SQLite storage
-[[migrations]]
-tag = "v1"
-new_sqlite_classes = ["EventDurableObject"]
+# BLOCKED: DO bindings commented out due to Cloudflare API bug 10013
+# Uncomment when the bug is resolved to enable ACID writes via Durable Objects.
+#
+# [[durable_objects.bindings]]
+# name = "EVENT_DO"
+# class_name = "EventDurableObject"
+#
+# [[migrations]]
+# tag = "v1"
+# new_sqlite_classes = ["EventDurableObject"]
 ```
+
+> **Note:** The DO code exists in `worker/src/durable_objects/` and is exported via `pub use durable_objects::EventDurableObject`, but the binding is not active. The worker handles `event_do=None` by falling back to D1 for all operations.
 
 ### Cargo.toml
 

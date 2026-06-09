@@ -5,7 +5,7 @@
 - **Date**: 2026-05-07
 - **Auditor**: Internal review
 - **Scope**: On-chain escrow program, backend TX builders, frontend wallet integration, KV store
-- **Codebase**: `bethere-escrow/`, `worker/src/solana_escrow.rs`, `worker/src/handlers/deposit.rs`, `frontend-leptos/`
+- **Codebase**: `bethere-escrow/`, `worker/src/solana_escrow/`, `worker/src/handlers/deposit.rs`, `frontend-leptos/`
 - **Status**: Pre-mainnet audit
 
 ---
@@ -634,6 +634,22 @@ Cross-referenced against the [Solana Foundation Payments & Commerce Checklist](h
 | Simulate before signing | ✅ | `simulateTransactionB64` called before all wallet signing requests |
 | Sanitize on-chain data (no prompt injection) | ✅ | On-chain data used for business logic only, not interpolated into executable context |
 | Validate before deserializing | ✅ | Quasar validates owner, data length, discriminator before field access |
+
+---
+
+### SQL Injection (D1 / raw_sql)
+
+> **Status**: Accepted risk with mitigations
+
+The codebase uses `sqlx::raw_sql` with `format!()` strings per project guidelines (required for PgCat compatibility). This pattern bypasses parameterized queries.
+
+**Mitigations in place:**
+- All input values are typed (UUIDs, enums, integers) — not free-form strings
+- D1 database is internal-only (no direct external SQL access)
+- Cloudflare Workers runtime provides isolation boundary
+- Audit new `raw_sql` calls for string interpolation of user input during code review
+
+**Recommendation**: For any endpoint accepting free-text user input that flows into `raw_sql`, add explicit sanitization or switch to parameterized queries for that specific call.
 
 ---
 

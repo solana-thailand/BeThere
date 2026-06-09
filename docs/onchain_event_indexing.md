@@ -2,7 +2,7 @@
 
 ## Overview
 
-The BeThere escrow program emits 8 on-chain event types via `emit!()`. The CPI event indexing system bridges these on-chain events with the off-chain audit trail in KV.
+The BeThere escrow program emits 9 on-chain event types via `emit!()`. The CPI event indexing system bridges these on-chain events with the off-chain audit trail in KV.
 
 ### Event Types
 
@@ -16,6 +16,7 @@ The BeThere escrow program emits 8 on-chain event types via `emit!()`. The CPI e
 | 5             | `EventClosed`     | `close_event`    | Escrow closed, rent reclaimed   |
 | 6             | `EventDeactivated`| `deactivate_event`| Registration closed           |
 | 7             | `DepositClosed`   | `close_deposit`  | Attendee deposit PDA closed     |
+| 8             | `DepositRolledOver` | `rollover_deposit` | Deposit moved to new event escrow (`source_escrow`, `target_escrow`, `attendee`, `amount`) |
 
 ## Architecture
 
@@ -194,3 +195,4 @@ Indexed events also appear in the per-event audit trail as `OnChainEventIndexed`
 3. **Failed TX filtering**: Transactions with errors are skipped
 4. **Access control**: Sync and query endpoints require staff/organizer auth
 5. **Non-blocking**: Indexing failures don't affect main operations
+6. **Rollover events**: `DepositRolledOver` events are indexed the same way as other deposit events — the indexer resolves both `source_escrow` and `target_escrow` addresses to their respective event IDs

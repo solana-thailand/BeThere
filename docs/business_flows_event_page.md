@@ -1007,6 +1007,28 @@ NFT Mint
 
 ---
 
+## 18.1 Campaign System & Adventure Game
+
+### Campaign Credential Flows
+
+The platform supports a **Campaign system** for developer events and learning programs. Campaigns provide structured credential flows where attendees earn credits and certificates across multiple events.
+
+- **Handler**: `worker/src/handlers/campaigns.rs`
+- **Frontend**: `frontend-leptos/src/pages/campaigns_page.rs`
+- Campaigns can gate credential issuance on event attendance + quiz/adventure completion
+- Credits accumulate across events within a campaign
+
+### Adventure Game as Quiz Alternative
+
+In addition to the quiz gate, events can use the **Adventure game** as an alternative engagement mechanism. Adventure presents a sequence of interactive steps (rather than Q&A) that attendees must complete to unlock their NFT claim.
+
+- **Handler**: `worker/src/handlers/adventure.rs`
+- **Frontend**: `frontend-leptos/src/pages/adventure/`
+- Adventure can serve as the virtual check-in mechanism for online attendees (see §18)
+- Steps are configured per-event and stored in KV
+
+---
+
 ## 19. Registration Capacity & Track Gating (Issue 024)
 
 ### Overview

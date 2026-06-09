@@ -35,8 +35,8 @@ BeThere is in a **privileged position**: the program is on devnet, not mainnet. 
 | Framework | Quasar (`quasar-lang`) |
 | Cluster | Devnet |
 | Discriminator type | Single byte (`#[account(discriminator = N)]`) |
-| Version field | **None** |
-| Migration logic | **None** |
+| Version field | `version: u8` — `ESCROW_VERSION = 1`, `DEPOSIT_VERSION = 1` |
+| Migration logic | `validate_version()` on both account types |
 | Upgrade authority | Program deployer (set at deployment) |
 
 ### PDA Type 1: EventEscrow
@@ -45,14 +45,14 @@ BeThere is in a **privileged position**: the program is on devnet, not mainnet. 
 |----------|--------|
 | Discriminator | `1` |
 | Seeds | `["escrow", organizer: Address, event_id: u64]` |
-| Account size | v0: 149 bytes (1 disc + 148 fields), v1: 192 bytes (1 disc + 1 ver + 148 fields + 36 pad) |
+| Account size | 192 bytes (1 disc + 1 ver + 154 fields + 36 pad) |
 
 ```
 Byte Layout:
-┌──────────┬──────────┬──────────┬──────────┬──────────┬──────────┬──────────┬──────────┬──────────┬──────────┬──────────┬──────────┬──────────┐
-│ disc (1) │ org (32) │ eid (8)  │ mint(32) │ vault(32)│ dep (8)  │ end (8)  │ refdl(8) │ tdep (8) │ tref (8) │ tfor (8) │ active(1)│ bump (1) │
-└──────────┴──────────┴──────────┴──────────┴──────────┴──────────┴──────────┴──────────┴──────────┴──────────┴──────────┴──────────┴──────────┘
-  0         1         33        41        73        105       113       121       129       137       145       153       155       156
+┌──────────┬──────────┬──────────┬──────────┬──────────┬──────────┬──────────┬──────────┬──────────┬──────────┬──────────┬──────────┬──────────┬──────────┬──────────┐
+│ disc (1) │ ver (1)  │ org (32) │ eid (8)  │ mint(32) │ vault(32)│ dep (8)  │ end (8)  │ refdl(8) │ tdep (8) │ tref (8) │ tfor (8) │ active(1)│ bump (1) │ pad (36) │
+└──────────┴──────────┴──────────┴──────────┴──────────┴──────────┴──────────┴──────────┴──────────┴──────────┴──────────┴──────────┴──────────┴──────────┴──────────┘
+  0         1         2         34        42        74        106       114       122       130       138       146       154       156       157       193
 
 Note: Quasar discriminator is 1 byte, not the 8-byte Anchor discriminator.
 ```
@@ -61,9 +61,10 @@ Field inventory:
 
 | # | Field | Type | Size | Mutable | Notes |
 |---|-------|------|------|---------|-------|
+| 0 | `version` | u8 | 1B | No | Schema version, currently 1 |
 | 1 | `organizer` | Address | 32B | No | PDA seed, set at creation |
 | 2 | `event_id` | u64 | 8B | No | PDA seed, set at creation |
-| 3 | `usdc_mint` | Address | 32B | No | Cluster-specific |
+| 3 | `deposit_mint` | Address | 32B | No | Cluster-specific |
 | 4 | `vault` | Address | 32B | No | Token account for USDC |
 | 5 | `deposit_amount` | u64 | 8B | No | Immutable after first deposit |
 | 6 | `event_end` | i64 | 8B | No | Set at creation |
@@ -73,6 +74,7 @@ Field inventory:
 | 10 | `total_forfeited` | u64 | 8B | Yes | Running counter |
 | 11 | `is_active` | bool | 1B | Yes | `deactivate_event` sets false |
 | 12 | `bump` | u8 | 1B | No | PDA nonce |
+| 13 | `_padding` | [u8; 36] | 36B | No | Reserved for future use |
 
 ### PDA Type 2: AttendeeDeposit
 
@@ -80,22 +82,23 @@ Field inventory:
 |----------|--------|
 | Discriminator | `2` |
 | Seeds | `["deposit", event: Address, attendee: Address]` |
-| Account size | v0: 84 bytes (1 discriminator + 83 data), v1: 96 bytes (1 disc + 1 ver + 82 fields + 1 bump + 11 pad) |
+| Account size | 96 bytes (1 disc + 1 ver + 82 fields + 1 bump + 11 pad) |
 
 ```
 Byte Layout:
-┌──────────┬──────────┬──────────┬──────────┬──────────┬──────────┬──────────┬──────────┬──────────┐
-│ disc (1) │ att (32) │ evt (32) │ amt (8)  │ depat(8) │ chk (1)  │ ref (1)  │ bump(1)  │          │
-└──────────┴──────────┴──────────┴──────────┴──────────┴──────────┴──────────┴──────────┴──────────┘
-  0         1         33        65        73        81        89        90        91        83
+┌──────────┬──────────┬──────────┬──────────┬──────────┬──────────┬──────────┬──────────┬──────────┬──────────┬──────────┐
+│ disc (1) │ ver (1)  │ att (32) │ evt (32) │ amt (8)  │ depat(8) │ chk (1)  │ ref (1)  │ bump (1) │ pad (11) │          │
+└──────────┴──────────┴──────────┴──────────┴──────────┴──────────┴──────────┴──────────┴──────────┴──────────┘
+  0         1         2         34        66        74        82        90        91        92        93        97
 
-Note: Discriminator is 1 byte. Total data = 75 bytes + 8 byte discriminator prefix = 83 bytes.
+Note: Discriminator is 1 byte. Total = 1 disc + 1 ver + 32 + 32 + 8 + 8 + 1 + 1 + 1 + 11 pad = 96 bytes.
 ```
 
 Field inventory:
 
 | # | Field | Type | Size | Mutable | Notes |
 |---|-------|------|------|---------|-------|
+| 0 | `version` | u8 | 1B | No | Schema version, currently 1 |
 | 1 | `attendee` | Address | 32B | No | PDA seed |
 | 2 | `event` | Address | 32B | No | PDA seed, links to EventEscrow |
 | 3 | `amount` | u64 | 8B | No | Set at deposit |
@@ -103,6 +106,7 @@ Field inventory:
 | 5 | `checked_in` | bool | 1B | Yes | `mark_checked_in` |
 | 6 | `refunded` | bool | 1B | Yes | `refund` |
 | 7 | `bump` | u8 | 1B | No | PDA nonce |
+| 8 | `_padding` | [u8; 11] | 11B | No | Reserved for future use |
 
 ### Instruction Set
 
@@ -116,13 +120,14 @@ Field inventory:
 | 5 | `close_event` | Organizer | EventEscrow (closed) |
 | 6 | `deactivate_event` | Organizer | EventEscrow |
 | 7 | `close_deposit` | Attendee | AttendeeDeposit (closed) |
+| 8 | `rollover_deposit` | Attendee | AttendeeDeposit (source → target) |
 
 ### What's Missing
 
-- **No `version` field** on either account type.
-- **No `padding` or reserved space** for future fields.
-- **No migration instructions** in the instruction set.
-- **No account size overhead** — accounts are exactly the struct size.
+- **No migration instructions** in the instruction set (accounts use `validate_version()` for current-version enforcement).
+- ~~No `version` field~~ — **Addressed:** both accounts have `version: u8` with `ESCROW_VERSION = 1` / `DEPOSIT_VERSION = 1`.
+- ~~No `padding`~~ — **Addressed:** EventEscrow has `_padding: [u8; 36]`, AttendeeDeposit has `_padding: [u8; 11]`.
+- ~~No account size overhead~~ — **Addressed:** EventEscrow is 192 bytes, AttendeeDeposit is 96 bytes (both include version + padding).
 
 ---
 

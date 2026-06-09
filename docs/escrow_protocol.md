@@ -171,7 +171,7 @@ Attendee → Visit event page → Connect wallet
 
 For In-Person events:
   Attendee → Sign deposit transaction (USDC → vault)
-           → AttendeeDeposit PDA created: seeds = ["deposit", attendee_pubkey, event_id]
+           → AttendeeDeposit PDA created: seeds = ["deposit", event, attendee]
            → On-chain validates: escrow is_active, correct deposit amount
            → Attendee's RSVP confirmed on-chain
 
@@ -391,36 +391,43 @@ Online attendees (in both online-only and hybrid events) follow a different path
 ### Accounts (PDAs)
 
 ```
-EventEscrow
-├── seeds: ["escrow", organizer_pubkey, event_id]
+EventEscrow (192 bytes, discriminator 1)
+├── seeds: ["escrow", organizer, event_id]
 ├── fields:
+│   ├── version: u8                  (Account version, currently 1)
+│   ├── organizer: Address           (Authority for check-ins and claims)
+│   ├── event_id: u64                (Event identifier)
+│   ├── deposit_mint: Address        (USDC mint address)
+│   ├── vault: Address               (Token account for deposits)
 │   ├── deposit_amount: u64          (USDC amount in lamports, 6 decimals)
 │   ├── event_end: i64               (Unix timestamp)
 │   ├── refund_deadline: i64         (Unix timestamp, must be > event_end)
-│   ├── organizer: Pubkey            (Authority for check-ins and claims)
 │   ├── total_deposited: u64         (Running sum of all deposits)
 │   ├── total_refunded: u64          (Running sum of all refunds)
 │   ├── total_forfeited: u64         (Running sum of all forfeited claims)
 │   ├── is_active: bool              (New deposits allowed while true)
 │   ├── bump: u8                     (PDA bump seed)
-│   └── usdc_mint: Pubkey            (USDC mint address)
+│   └── _padding: [u8; 36]          (Reserved for future use)
 ├── immutable after creation (except total_* counters and is_active)
-└── rent: ~300 bytes
+└── size: 192 bytes
 
 Note: EventEscrow PDA is only created for In-Person and Hybrid events.
       Online-only events have no on-chain escrow accounts.
 
-AttendeeDeposit
-├── seeds: ["deposit", attendee_pubkey, event_id]
+AttendeeDeposit (96 bytes, discriminator 2)
+├── seeds: ["deposit", event, attendee]
 ├── fields:
-│   ├── attendee: Pubkey             (Attendee's wallet)
-│   ├── event_id: [u8; 32]           (Links to EventEscrow)
+│   ├── version: u8                  (Account version, currently 1)
+│   ├── attendee: Address            (Attendee's wallet)
+│   ├── event: Address               (EventEscrow PDA, links to escrow)
 │   ├── amount: u64                  (Deposit amount in USDC lamports)
+│   ├── deposited_at: i64            (Timestamp of deposit)
 │   ├── checked_in: bool             (Set by organizer during event)
 │   ├── refunded: bool               (Set when refund processed)
-│   └── bump: u8                     (PDA bump seed)
+│   ├── bump: u8                     (PDA bump seed)
+│   └── _padding: [u8; 11]          (Reserved for future use)
 ├── one per attendee per event (in-person depositors only)
-└── rent: ~150 bytes
+└── size: 96 bytes
 
 Vault (Token Account)
 ├── PDA-owned Associated Token Account for USDC
@@ -430,17 +437,19 @@ Vault (Token Account)
 
 ### Program Instructions
 
-| Instruction | Signer | When | Effect |
-|---|---|---|---|
-| `create_event` | Organizer | Setup | Initialize escrow PDA + vault ATA |
-| `deposit` | Attendee | Before event | USDC → vault, create AttendeeDeposit PDA |
-| `mark_checked_in` | Organizer | Event day | Set `AttendeeDeposit.checked_in = true` |
-| `refund` | Attendee | After `event_end` | Vault → attendee USDC ATA, set `refunded = true` |
-| `refund_and_close` | Attendee | After `event_end` | Combined: refund + close_deposit in 1 TX (preferred) |
-| `deactivate_event` | Organizer | Before event starts | Set `is_active = false`, stop new deposits |
-| `claim_forfeited` | Organizer | After `refund_deadline` | Transfer unclaimed deposits to organizer |
-| `close_event` | Organizer | After settlement | Reclaim rent, close all PDAs |
-| `close_deposit` | Attendee | After refund or event deactivation | Close `AttendeeDeposit` PDA, reclaim rent-exempt SOL |
+| Discriminator | Instruction | Signer | When | Effect |
+|---|---|---|---|---|
+| 0 | `create_event` | Organizer | Setup | Initialize escrow PDA + vault ATA |
+| 1 | `deposit` | Attendee | Before event | USDC → vault, create AttendeeDeposit PDA |
+| 2 | `mark_checked_in` | Organizer | Event day | Set `AttendeeDeposit.checked_in = true` |
+| 3 | `refund` | Attendee | After `event_end` | Vault → attendee USDC ATA, set `refunded = true` |
+| 4 | `claim_forfeited` | Organizer | After `refund_deadline` | Transfer unclaimed deposits to organizer |
+| 5 | `close_event` | Organizer | After settlement | Reclaim rent, close all PDAs |
+| 6 | `deactivate_event` | Organizer | Before event starts | Set `is_active = false`, stop new deposits |
+| 7 | `close_deposit` | Attendee | After refund or event deactivation | Close `AttendeeDeposit` PDA, reclaim rent-exempt SOL |
+| 8 | `rollover_deposit` | Attendee | Source event deactivated | Transfer deposit from one event to another |
+
+> **Note:** `refund_and_close` is not a separate on-chain instruction. It is a client-side composition of `refund` (discriminator 3) + `close_deposit` (discriminator 7) in a single transaction.
 
 ### Instruction Ordering Constraints
 
@@ -449,11 +458,16 @@ create_event → deposit (N times) → deactivate_event
                                    ↓
                               mark_checked_in (N times)
                                    ↓
-                              refund | refund_and_close (N times, after event_end)
+                              refund (N times, after event_end)
                                    ↓
                               claim_forfeited (after refund_deadline)
                                    ↓
                               close_event (after full settlement)
+
+rollover_deposit (source event must be deactivated)
+
+Client-side composition:
+  refund + close_deposit → refund_and_close (single TX, reclaim rent after refund)
 ```
 
 ### Instruction Introspection

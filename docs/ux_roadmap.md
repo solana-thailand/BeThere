@@ -496,6 +496,7 @@ Submit the on-chain escrow program to a Solana audit firm (e.g., Audit Arena, Ot
 ## P0.8 — Registration Capacity & Track Gating (Issue 024)
 
 ### RC-1. Capacity indicator on public event page
+**Status**: ✅ Implemented — `in_person_capacity`, `online_capacity`, `OnlineOpenMode` fields on event config. Frontend shows remaining spots.
 **Current**: Registration form always shows both tracks for hybrid events.
 **Target**: Show remaining in-person spots. Hide in-person option when full. Auto-select online.
 **Impact**: Prevents frustration from registering for a full track. Clear expectations.
@@ -514,6 +515,7 @@ Submit the on-chain escrow program to a Solana audit firm (e.g., Audit Arena, Ot
 **Effort**: ~2h (frontend countdown + backend deadline field)
 
 ### RC-4. Organizer capacity controls on event form
+**Status**: ✅ Implemented — `in_person_capacity`, `online_capacity`, `online_open_mode` fields on event form.
 **Current**: No capacity fields on create/edit event form.
 **Target**: Add in-person capacity, online capacity, online open mode selector.
 **Impact**: Gives organizers control over spot allocation and NFT supply.
@@ -640,3 +642,53 @@ Submit the on-chain escrow program to a Solana audit firm (e.g., Audit Arena, Ot
 **Target**: Submit BeThere as a web app to Solana dApp Store. Prepare app metadata, screenshots, and description.
 **Impact**: Discovery channel for Solana Mobile users (Seeker, Saga). Free distribution.
 **Effort**: ~3h (listing only, no TWA wrapper)
+
+---
+
+## P2.7 — Campaign System & Community Features
+
+> **Status**: Partially implemented — campaign handler and frontend page exist.
+
+### CAMP-1. Campaign Management UX
+**Status**: ✅ Implemented — `worker/src/handlers/campaigns.rs` + `frontend-leptos/src/pages/campaigns_page.rs`
+**Current**: Campaign CRUD endpoints and campaign page for managing multi-event credential programs.
+**Impact**: Enables structured learning paths across multiple events with credit tracking.
+
+### CAMP-2. Campaign Credential Display
+**Current**: No attendee-facing view of campaign progress or earned credentials.
+**Target**: "My Campaigns" section showing progress across linked events + credits earned.
+**Impact**: Motivates multi-event attendance and credential completion.
+**Effort**: ~1d (frontend campaign progress component)
+
+---
+
+## P2.8 — Adventure Game UX
+
+> **Status**: Implemented — adventure handler and frontend pages exist.
+
+### ADV-1. Adventure Game Interface
+**Status**: ✅ Implemented — `worker/src/handlers/adventure.rs` + `frontend-leptos/src/pages/adventure/`
+**Current**: Adventure game provides step-based engagement as alternative to quiz gate.
+**Impact**: More interactive virtual check-in mechanism for online/hybrid events.
+
+### ADV-2. Adventure Level Analytics
+**Current**: No organizer analytics on adventure completion rates.
+**Target**: Per-event dashboard showing step completion rates, drop-off points, average time.
+**Impact**: Helps organizers improve adventure content.
+**Effort**: ~1d (admin analytics tab)
+
+---
+
+## P2.9 — Wallet Leaderboard & Community Insights
+
+> **Status**: Implemented — API endpoints exist.
+
+### WL-1. Wallet Leaderboard
+**Status**: ✅ Implemented — `GET /wallet/leaderboard` + `GET /wallet/{address}/nfts`
+**Current**: API endpoints for wallet leaderboard and per-wallet NFT lookup.
+**Impact**: Social proof — shows active wallets and NFT holders.
+
+### WL-2. Community Insights
+**Status**: ✅ Implemented — `GET /community/insights` + `GET /community/developers`
+**Current**: Community analytics endpoints for platform-wide insights and developer stats.
+**Impact**: Demonstrates platform activity and developer engagement.

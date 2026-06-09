@@ -120,7 +120,7 @@ solana program show C6HDeZES9aPpNwe3UvS9ecmfcRhH1XeJb8PGJmLG3z3T --url devnet
 
 ### Step 7: Claim Forfeited
 
-**What this does:** Transfers all USDC from vault to organizer's USDC token account. Closes the vault token account. Only works after `refund_deadline`.
+**What this does:** Transfers all forfeited USDC from vault to organizer's USDC token account. Does **not** close the vault — that is done by `close_event` (Step 8). Only works after `refund_deadline`.
 
 > ⚠️ **Devnet timing note:** The refund_deadline is `event_end + refund_deadline_hours`. If your event hasn't ended yet, this transaction will fail with a constraint error. Either:
 > - Wait for the event to end + refund_deadline to pass
@@ -246,6 +246,32 @@ If you've already refunded and return to the deposit page later:
 2. Status shows **"Already Deposited"** (refunded: true)
 3. The **"♻️ Reclaim Rent"** button is also visible here
 4. Follow the same flow as Step 13
+
+---
+
+## Flow D: Rollover Deposit
+
+> Tests the atomic deposit rollover from one event to another.
+
+### Prerequisites
+
+- Two events with escrow enabled (Event A with an existing deposit, Event B as rollover target)
+- Attendee has a deposited + refunded (or forfeited) deposit on Event A
+
+### Step 14: Rollover Deposit to New Event
+
+1. On the deposit page for Event A (after refund deadline or refund), click **"🔄 Rollover to Next Event"**
+2. Select Event B as the rollover target
+3. Connect wallet and approve the transaction
+4. ✅ Verify: Shows "✅ Deposit rolled over" with Solscan link
+5. 🔍 Verify on-chain: `rollover_deposit` instruction transferred USDC from Event A's vault to Event B's vault
+6. 🔍 Verify: New `AttendeeDeposit` PDA created for Event B with correct amount
+
+### Edge Cases to Test
+
+- Rollover to event with different deposit amount (should fail or handle partial)
+- Rollover when no target event is configured
+- Rollover when source vault is empty (already claimed by organizer)
 
 ---
 

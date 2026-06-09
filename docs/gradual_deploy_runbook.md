@@ -133,7 +133,10 @@ Before any production deployment:
 - [ ] Worker builds without errors (`cargo check -p event-checkin-worker --target wasm32-unknown-unknown`)
 - [ ] No clippy warnings (`cargo clippy --all-targets`)
 - [ ] `wrangler.toml` bindings match production (KV IDs, D1 ID)
+- [ ] R2 bucket binding exists and is accessible (`npx wrangler r2 bucket get ASSETS_BUCKET --test` or verify in Cloudflare dashboard)
 - [ ] Secrets are set (`npx wrangler secret list`)
+- [ ] **Check for new environment variables/secrets** since last deploy — compare `wrangler.toml` bindings and secret list with last deploy's version. New features may require additional secrets (e.g., webhook secrets, API keys).
+- [ ] **D1 migration state** — verify the D1 database ID in `wrangler.toml` matches production and schema migrations are up to date (`npx wrangler d1 migrations list bethere-db`)
 - [ ] Version bump in `worker/Cargo.toml` if needed
 
 ## Post-Deploy Verification
