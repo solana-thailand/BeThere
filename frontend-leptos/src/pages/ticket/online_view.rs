@@ -4,6 +4,7 @@ use leptos::prelude::*;
 use wasm_bindgen::prelude::*;
 
 use super::action_cards::*;
+use super::calendar_links::CalendarLinks;
 use super::event_context::EventContext;
 use super::nft_badge::NftClaimedBadge;
 use super::timeline::{Timeline, TimelineStep};
@@ -47,6 +48,9 @@ pub fn OnlineView(
         video_url,
         quiz_enabled,
         community_links,
+        calendar_subscribe_url,
+        event_start_ms,
+        event_name,
         ..
     } = view_data;
 
@@ -121,6 +125,9 @@ pub fn OnlineView(
                 location=event_location.clone()
                 event_link=event_link.clone()
             />
+
+            // ── Calendar links ──
+            <CalendarLinks subscribe_url=calendar_subscribe_url.clone() />
 
             // Attendee info
             <div class="ticket-info">

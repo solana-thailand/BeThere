@@ -284,6 +284,9 @@ pub struct EventDetail {
     /// Community/social links for the event.
     #[serde(default)]
     pub community_links: Vec<super::types::CommunityLink>,
+    /// Google Calendar embed URL for the event.
+    #[serde(default)]
+    pub calendar_subscribe_url: String,
 }
 
 /// Response for GET /api/events — list all events.
@@ -388,6 +391,9 @@ pub struct CreateEventBody {
     /// Community/social links for the event.
     #[serde(default)]
     pub community_links: Vec<super::types::CommunityLink>,
+    /// Google Calendar embed URL for the event.
+    #[serde(default)]
+    pub calendar_subscribe_url: String,
 }
 
 /// Request body for PUT /api/events/{id} — update event.
@@ -487,6 +493,9 @@ pub struct UpdateEventBody {
     /// Community/social links for the event. Replaces all existing links.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub community_links: Option<Vec<super::types::CommunityLink>>,
+    /// Google Calendar embed URL for the event.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub calendar_subscribe_url: Option<String>,
 }
 
 /// Response from event create/update (partial data).

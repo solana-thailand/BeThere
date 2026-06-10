@@ -280,6 +280,7 @@ pub async fn create_event(
         updated_by: updated_by.to_string(),
         dev_profile_enabled: false,
         community_links: req.community_links.clone(),
+        calendar_subscribe_url: req.calendar_subscribe_url.clone(),
     };
 
     // D1 write (primary — always if available)
@@ -572,6 +573,9 @@ pub async fn update_event(
     if let Some(ref links) = req.community_links {
         config.community_links = links.clone();
     }
+    if let Some(ref url) = req.calendar_subscribe_url {
+        config.calendar_subscribe_url = url.clone();
+    }
 
     config.updated_at = chrono::Utc::now().to_rfc3339();
     config.updated_by = updated_by.to_string();
@@ -826,6 +830,9 @@ pub fn apply_update(config: &mut EventConfig, req: &UpdateEventRequest) -> Resul
     }
     if let Some(ref links) = req.community_links {
         config.community_links = links.clone();
+    }
+    if let Some(ref url) = req.calendar_subscribe_url {
+        config.calendar_subscribe_url = url.clone();
     }
 
     Ok(())
@@ -1114,6 +1121,7 @@ pub async fn seed_from_config(
         updated_by: String::new(), // seeded from config, no user context
         dev_profile_enabled: false,
         community_links: vec![],
+        calendar_subscribe_url: String::new(),
     };
 
     // Save full config

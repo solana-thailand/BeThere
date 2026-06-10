@@ -60,6 +60,7 @@ pub struct EventForm {
     pub visibility: api::EventVisibility,
     pub updated_at: String,
     pub community_links: Vec<crate::api::CommunityLink>,
+    pub calendar_subscribe_url: String,
 }
 
 // ===== Helpers =====
@@ -197,6 +198,7 @@ pub fn default_form() -> EventForm {
         visibility: api::EventVisibility::default(),
         updated_at: String::new(),
         community_links: vec![],
+        calendar_subscribe_url: String::new(),
     }
 }
 
@@ -276,6 +278,7 @@ pub fn form_from_detail(detail: &api::EventDetail) -> EventForm {
         visibility: detail.visibility.clone(),
         updated_at: detail.updated_at.clone(),
         community_links: detail.community_links.clone(),
+        calendar_subscribe_url: detail.calendar_subscribe_url.clone(),
     }
 }
 
@@ -567,6 +570,7 @@ pub fn EventFormComponent(
                 deposit_deadline_hours: current_form.deposit_deadline_hours.trim().parse::<u32>().ok(),
                 visibility: current_form.visibility.clone(),
                 community_links: cl_links.get(),
+                calendar_subscribe_url: current_form.calendar_subscribe_url.trim().to_string(),
             };
 
             // Determine if we should also initialize escrow after creating the event.
@@ -737,6 +741,7 @@ pub fn EventFormComponent(
                 deposit_deadline_hours: Some(current_form.deposit_deadline_hours.trim().parse::<u32>().ok()),
                 visibility: Some(current_form.visibility.clone()),
                 community_links: Some(cl_links.get()),
+                calendar_subscribe_url: Some(current_form.calendar_subscribe_url.trim().to_string()),
             };
 
             leptos::task::spawn_local(async move {
@@ -918,6 +923,17 @@ pub fn EventFormComponent(
                             on:input=move |ev| set_form.update(|f| f.video_url = event_target_value(&ev))
                         />
                         <span class="quiz-setting-hint">"YouTube livestream or recording link — shown to attendees on the event page"</span>
+                    </div>
+                    <div class="quiz-setting-item event-form-span-full">
+                        <label class="quiz-field-label">"Calendar Subscribe URL"<span class="field-optional-badge">"Optional"</span></label>
+                        <input
+                            type="url"
+                            class="quiz-number-input"
+                            placeholder="e.g. https://calendar.google.com/calendar/embed?src=..."
+                            prop:value=move || form.get().calendar_subscribe_url
+                            on:input=move |ev| set_form.update(|f| f.calendar_subscribe_url = event_target_value(&ev))
+                        />
+                        <span class="quiz-setting-hint">"Google Calendar embed URL — shown as 'Our Event Calendar' on ticket page"</span>
                     </div>
                 </div>
                 </div>

@@ -4,6 +4,7 @@ use leptos::prelude::*;
 use wasm_bindgen::prelude::*;
 
 use super::action_cards::*;
+use super::calendar_links::CalendarLinks;
 use super::event_context::EventContext;
 use super::nft_badge::NftClaimedBadge;
 use super::qr_section::QrSection;
@@ -68,6 +69,10 @@ pub fn InPersonView(
         api_id,
         rollover_target_event,
         community_links,
+        calendar_subscribe_url,
+        event_start_ms,
+        event_end_ms: _,
+        event_name,
         ..
     } = view_data;
 
@@ -152,6 +157,9 @@ pub fn InPersonView(
                 location=event_location.clone()
                 event_link=event_link.clone()
             />
+
+            // ── Calendar links ──
+            <CalendarLinks subscribe_url=calendar_subscribe_url.clone() />
 
             // ── QR Code section ──
             <QrSection

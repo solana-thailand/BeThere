@@ -397,6 +397,10 @@ pub struct AttendeeData {
     /// Community/social links for the event.
     #[serde(default)]
     pub community_links: Vec<CommunityLink>,
+    /// Organization calendar subscribe URL (Google Calendar embed URL).
+    /// Empty = no calendar link shown.
+    #[serde(default)]
+    pub calendar_subscribe_url: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

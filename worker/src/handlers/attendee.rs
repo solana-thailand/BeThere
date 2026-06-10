@@ -452,6 +452,7 @@ pub async fn get_public_ticket(
         "rollover_target_event": rollover_target_event,
         "quiz_enabled": event.quiz_enabled,
         "community_links": event.community_links,
+        "calendar_subscribe_url": event.calendar_subscribe_url,
     });
     Ok(ApiOk::new(data))
 }

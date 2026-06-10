@@ -398,6 +398,11 @@ pub struct EventConfig {
     /// YouTube/live stream/recording URL for the event.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub video_url: String,
+    /// Google Calendar (or other) embed/subscribe URL for the organization.
+    /// When set, ticket page shows "Subscribe to our calendar" link.
+    /// Empty = no calendar link shown.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub calendar_subscribe_url: String,
 
     // ── Community links ─────────────────────────────────────────────
     /// Community/social links shown on ticket + public event pages.
@@ -654,6 +659,7 @@ impl EventConfig {
             updated_by: String::new(),
             dev_profile_enabled: false,
             community_links: vec![],
+            calendar_subscribe_url: String::new(),
         }
     }
 }
@@ -798,6 +804,9 @@ pub struct CreateEventRequest {
     /// Community/social links.
     #[serde(default)]
     pub community_links: Vec<CommunityLink>,
+    /// Organization calendar subscribe URL (Google Calendar embed URL).
+    #[serde(default)]
+    pub calendar_subscribe_url: String,
 }
 /// Request body for PUT /api/events/{id} — update an existing event.
 /// All fields are optional; only provided fields are updated.
@@ -952,6 +961,9 @@ pub struct UpdateEventRequest {
     /// Community/social links. Replaces all existing links.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub community_links: Option<Vec<CommunityLink>>,
+    /// Organization calendar subscribe URL.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub calendar_subscribe_url: Option<String>,
 }
 
 /// Response for GET /api/events — list all events.
@@ -1161,6 +1173,7 @@ mod tests {
             updated_by: String::new(),
             dev_profile_enabled: false,
             community_links: vec![],
+            calendar_subscribe_url: String::new(),
         }
     }
 

@@ -49,7 +49,9 @@ pub struct TicketViewData {
 
     // Event
     pub is_online: bool,
+    pub event_start_ms: i64,
     pub event_end_ms: i64,
+    pub event_name: String,
     pub video_url: String,
     pub has_video: bool,
     pub event_link: String,
@@ -75,6 +77,9 @@ pub struct TicketViewData {
 
     // Community
     pub community_links: Vec<crate::api::CommunityLink>,
+
+    // Calendar
+    pub calendar_subscribe_url: String,
 }
 
 impl TicketViewData {
@@ -158,7 +163,9 @@ impl TicketViewData {
             escrow_status,
             escrow_closed,
             is_online,
+            event_start_ms: data.event_start_ms,
             event_end_ms: data.event_end_ms,
+            event_name: data.event_name.clone(),
             video_url: data.video_url.clone(),
             has_video: !data.video_url.is_empty(),
             event_link: data.event_link.clone(),
@@ -172,6 +179,7 @@ impl TicketViewData {
             orb_link,
             quiz_enabled: data.quiz_enabled,
             community_links: data.community_links.clone(),
+            calendar_subscribe_url: data.calendar_subscribe_url.clone(),
         }
     }
 }
