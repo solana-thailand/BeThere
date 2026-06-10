@@ -59,6 +59,16 @@ pub fn routes(state: AppState) -> Router<()> {
 
     // Public routes — no auth middleware required.
     // Rate limiting is handled by Cloudflare Rate Limiting Rules (dashboard config).
+
+    // User-specific public routes — must never be cached (ticket, deposit data)
+    let public_no_store = Router::new()
+        .route("/public/ticket/{id}", get(attendee::get_public_ticket))
+        .route(
+            "/deposit/status/{attendee_id}",
+            get(deposit::get_deposit_status_handler),
+        )
+        .layer(middleware::from_fn(crate::middleware::cache_no_store_layer));
+
     let public = Router::new()
         .merge(health_routes)
         // NFT metadata (public — wallets/explorers fetch these)
@@ -86,13 +96,6 @@ pub fn routes(state: AppState) -> Router<()> {
         )
         // Waitlist signup (public)
         .route("/waitlist", post(waitlist::join_waitlist))
-        // Public ticket view (no auth — attendees view their QR slip)
-        .route("/public/ticket/{id}", get(attendee::get_public_ticket))
-        // Deposit status check (public — attendee checks own deposit status)
-        .route(
-            "/deposit/status/{attendee_id}",
-            get(deposit::get_deposit_status_handler),
-        )
         // Deposit TX details (public — returns Solana Pay URL for wallet)
         .route("/deposit/usdc/tx", get(deposit::deposit_usdc_tx_handler))
         // Deposit webhook with Bearer auth (VULN-001 fix — separate from attendee auth)
@@ -119,7 +122,8 @@ pub fn routes(state: AppState) -> Router<()> {
         )
         // Wallet NFT verification (public — no auth needed to read on-chain data)
         .route("/wallet/leaderboard", get(wallet::get_leaderboard))
-        .route("/wallet/{address}/nfts", get(wallet::get_wallet_nfts));
+        .route("/wallet/{address}/nfts", get(wallet::get_wallet_nfts))
+        .merge(public_no_store);
 
     // Attendee-authenticated routes — require JWT identity but NOT staff status.
     // Used for endpoints where a verified email is enough (registration, my-registration).

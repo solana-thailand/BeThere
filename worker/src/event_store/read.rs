@@ -154,12 +154,18 @@ pub async fn resolve_event_or_fallback(
             match result {
                 Ok(config) => Ok(config),
                 Err(kv_err) => {
+                    tracing::info!(
+                        event_id = ?event_id,
+                        kv_error = %kv_err,
+                        "KV event miss — trying D1 fallback"
+                    );
                     // KV miss — try D1 before giving up
                     if let Some(db) = d1 {
                         let d1_result = resolve_event_from_d1(db, event_id).await;
                         if let Some(config) = d1_result? {
                             tracing::info!(
                                 event_id = %config.id,
+                                slug = %config.slug,
                                 "D1 fallback: recovered event not found in KV"
                             );
                             // Rebuild KV from D1 data
@@ -196,14 +202,31 @@ pub async fn resolve_event_or_fallback(
 }
 
 /// Resolve an event from D1 only.
+///
+/// Tries ID-based lookup first, then slug-based fallback.
+/// This handles both cases where `event_id` is a UUID or a slug.
 async fn resolve_event_from_d1(
     db: &worker::D1Database,
     event_id: Option<&str>,
 ) -> Result<Option<EventConfig>, String> {
     match event_id {
-        Some(id) if !id.is_empty() => crate::db::events::get_event(db, id)
-            .await
-            .map(|opt| opt.map(|row| row.to_event_config())),
+        Some(id) if !id.is_empty() => {
+            // Try by ID first
+            if let Some(row) = crate::db::events::get_event(db, id).await? {
+                return Ok(Some(row.to_event_config()));
+            }
+            // Fallback: try by slug (handles cases where event_id param is a slug
+            // but D1 stores it in the slug column with a different UUID id)
+            if let Some(row) = crate::db::events::get_event_by_slug(db, id).await? {
+                tracing::info!(
+                    slug = %id,
+                    event_id = %row.id.clone().unwrap_or_default(),
+                    "D1 fallback: resolved event by slug after ID miss"
+                );
+                return Ok(Some(row.to_event_config()));
+            }
+            Ok(None)
+        }
         _ => crate::db::events::get_active_event(db)
             .await
             .map(|opt| opt.map(|row| row.to_event_config())),
@@ -373,6 +396,30 @@ pub async fn get_thb_deposit(
             .map_err(|e| format!("failed to parse THB deposit: {e}"))
             .map(Some),
     }
+}
+
+/// Get THB deposit with optional KV (D1-first, KV fallback).
+/// Returns `None` if neither D1 nor KV has the deposit data.
+pub async fn get_thb_deposit_with_fallback(
+    kv: Option<&KvStore>,
+    d1: Option<&D1Database>,
+    event_id: &str,
+    attendee_id: &str,
+) -> Result<Option<event_checkin_domain::models::deposit::ThbDeposit>, String> {
+    // D1 first
+    if let Some(db) = d1
+        && let Some(deposit) =
+            crate::db::thb_deposits::get_thb_deposit(db, event_id, attendee_id).await?
+    {
+        return Ok(Some(deposit));
+    }
+
+    // KV fallback
+    if let Some(kv_ref) = kv {
+        return get_thb_deposit(kv_ref, event_id, attendee_id, None).await;
+    }
+
+    Ok(None)
 }
 
 /// List all THB deposits for an event (D1-first, KV fallback).

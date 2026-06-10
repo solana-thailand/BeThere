@@ -217,20 +217,16 @@ pub async fn register_attendee(
     if let Some(existing) = attendees.iter().find(|a| a.email.to_lowercase() == email) {
         tracing::info!(%email, %slug, "registration duplicate — returning existing attendee");
         let claim_token = existing.claim_token.clone().unwrap_or_default();
-        // Fetch deposit status if KV is available
-        let deposit = if let Some(ref kv) = state.events_kv {
-            crate::event_store::get_deposit_status(
-                kv,
-                &event_id,
-                &existing.api_id,
-                state.d1.as_deref(),
-            )
-            .await
-            .ok()
-            .flatten()
-        } else {
-            None
-        };
+        // Fetch deposit status (D1-first, KV fallback)
+        let deposit = crate::event_store::get_deposit_status_with_fallback(
+            state.events_kv.as_ref(),
+            state.d1.as_deref(),
+            &event_id,
+            &existing.api_id,
+        )
+        .await
+        .ok()
+        .flatten();
 
         // Check if deposit deadline expired — attendee may have been auto-switched to Online
         let deadline_expired = deposit.is_none()
@@ -657,20 +653,16 @@ pub async fn my_registration(
         })?;
 
     let claim_token = attendee.claim_token.clone().unwrap_or_default();
-    // Fetch deposit status (KV → None, D1 deposit data not stored separately)
-    let deposit = if let Some(kv_store) = kv {
-        crate::event_store::get_deposit_status(
-            kv_store,
-            &config.id,
-            &attendee.api_id,
-            state.d1.as_deref(),
-        )
-        .await
-        .ok()
-        .flatten()
-    } else {
-        None
-    };
+    // Fetch deposit status (D1-first, KV fallback)
+    let deposit = crate::event_store::get_deposit_status_with_fallback(
+        kv,
+        state.d1.as_deref(),
+        &config.id,
+        &attendee.api_id,
+    )
+    .await
+    .ok()
+    .flatten();
     let next_step = build_next_step(
         &config.event_format,
         &config.id,
@@ -849,20 +841,16 @@ pub async fn my_registrations(
                         .find(|a| a.email.eq_ignore_ascii_case(&email))?;
 
                     let claim_token = attendee.claim_token.clone().unwrap_or_default();
-                    // Fetch deposit status for this attendee (KV only)
-                    let deposit = if let Some(ref kv_store) = kv {
-                        crate::event_store::get_deposit_status(
-                            kv_store,
-                            &event_id,
-                            &attendee.api_id,
-                            state.d1.as_deref(),
-                        )
-                        .await
-                        .ok()
-                        .flatten()
-                    } else {
-                        None
-                    };
+                    // Fetch deposit status (D1-first, KV fallback)
+                    let deposit = crate::event_store::get_deposit_status_with_fallback(
+                        kv.as_ref(),
+                        state.d1.as_deref(),
+                        &event_id,
+                        &attendee.api_id,
+                    )
+                    .await
+                    .ok()
+                    .flatten();
                     let next_step = build_next_step(
                         &config.event_format,
                         &event_id,

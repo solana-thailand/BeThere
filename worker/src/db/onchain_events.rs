@@ -192,22 +192,46 @@ pub async fn read_cursor_from_d1(
     escrow_address: &str,
 ) -> Result<Option<String>, String> {
     let stmt = db.prepare("SELECT last_signature FROM onchain_cursors WHERE escrow_address = ?1");
-    let result = stmt
+    let bound = stmt
         .bind_refs(&[D1Type::Text(escrow_address)])
-        .map_err(|e| format!("D1 read_cursor bind: {e:?}"))?
-        .first::<serde_json::Value>(None)
-        .await
-        .map_err(|e| format!("D1 read_cursor query: {e:?}"))?;
+        .map_err(|e| format!("D1 read_cursor bind: {e:?}"))?;
 
-    match result {
-        Some(row) => row
-            .get("last_signature")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string())
-            .ok_or_else(|| "D1 onchain_cursors.last_signature missing or not a string".to_string())
-            .map(Some),
-        None => Ok(None),
+    // Bypass worker crate's .first::<T>() — crashes on JsValue(null).
+    let raw_first = wasm_bindgen_futures::JsFuture::from(
+        bound
+            .inner()
+            .first(None)
+            .map_err(|e| format!("D1 read_cursor first() call: {e:?}"))?,
+    )
+    .await
+    .map_err(|e| format!("D1 read_cursor first() await: {e:?}"))?;
+
+    if raw_first.is_null() || raw_first.is_undefined() {
+        return Ok(None);
     }
+
+    let json_str = js_sys::JSON::stringify(&raw_first)
+        .map(|s| s.as_string().unwrap_or_default())
+        .unwrap_or_default();
+
+    if json_str.is_empty() {
+        return Ok(None);
+    }
+
+    let row: serde_json::Value = serde_json::from_str(&json_str).map_err(|e| {
+        tracing::warn!(
+            error = %e,
+            json = %json_str.chars().take(300).collect::<String>(),
+            "D1 read_cursor: deserialize failed"
+        );
+        format!("D1 read_cursor deserialize: {e}")
+    })?;
+
+    row.get("last_signature")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+        .ok_or_else(|| "D1 onchain_cursors.last_signature missing or not a string".to_string())
+        .map(Some)
 }
 
 /// Delete dedup entries older than `days` days. Returns `Ok(0)` (D1 exec doesn't return row count).

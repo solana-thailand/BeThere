@@ -153,6 +153,11 @@ pub async fn get_attendee(id: &str, event_id: Option<&str>) -> Result<AttendeeDa
 
 /// GET /api/public/ticket/:id?event_id=xxx
 /// Public — no auth required. Returns attendee ticket data with QR image.
+///
+/// Intentionally bypasses the in-memory API cache to prevent stale
+/// ticket data from one event leaking into another event's ticket page.
+/// Ticket data is user-specific and event-specific — it must always
+/// be fetched fresh from the server.
 pub async fn get_public_ticket(
     attendee_id: &str,
     event_id: Option<&str>,
@@ -164,7 +169,25 @@ pub async fn get_public_ticket(
         _ => format!("/public/ticket/{attendee_id}"),
     };
 
-    let json = cached_get(&path).await?;
+    // Use direct api_get_no_cache instead of cached_get to avoid serving stale
+    // ticket data from a different event or attendee. Also bypasses browser HTTP
+    // cache via RequestCache::NoStore to prevent stale CDN/cached responses.
+    let response = super::api_get_no_cache(&path).await?;
+
+    if !response.ok() {
+        let body: ApiResponse<()> = super::fetch::response_json(&response).await.unwrap_or(ApiResponse {
+            success: false,
+            data: None,
+            error: Some("Request failed".to_string()),
+            correlation_id: None,
+        });
+        return Err(ApiError {
+            message: body.error.unwrap_or_default(),
+            status: response.status(),
+        });
+    }
+
+    let json = super::fetch::response_text(&response).await?;
 
     let wrapper: ApiResponse<AttendeeData> =
         serde_json::from_str(&json).map_err(|e| ApiError {

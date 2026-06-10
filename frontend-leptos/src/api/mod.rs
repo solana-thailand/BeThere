@@ -31,7 +31,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::time::Duration;
 
-use fetch::{get as http_get, post as http_post, put as http_put, delete as http_delete, response_json, response_text};
+use fetch::{get as http_get, get_no_cache as http_get_no_cache, post as http_post, put as http_put, delete as http_delete, response_json, response_text};
 use crate::auth::{clear_token, get_token};
 
 // ---------------------------------------------------------------------------
@@ -163,6 +163,48 @@ pub(crate) async fn api_get(path: &str) -> Result<web_sys::Response, ApiError> {
     }
 
     let response = http_get(&url, &hdrs).await?;
+
+    if response.status() == 401 {
+        clear_token();
+        return Err(ApiError {
+            message: "Session expired".to_string(),
+            status: 401,
+        });
+    }
+
+    if response.status() == 403 {
+        let body: ApiResponse<()> = response_json(&response).await.unwrap_or(ApiResponse {
+            success: false,
+            data: None,
+            error: Some("Access denied".to_string()),
+            correlation_id: None,
+        });
+        return Err(ApiError {
+            message: body.error.unwrap_or("Access denied".to_string()),
+            status: 403,
+        });
+    }
+
+    Ok(response)
+}
+
+/// Make an authenticated GET request that bypasses browser HTTP cache.
+///
+/// Uses `RequestCache::NoStore` to ensure the browser never returns a
+/// stale cached response. Use for user-specific data that must always be
+/// fresh (e.g., ticket data, deposit status).
+pub(crate) async fn api_get_no_cache(path: &str) -> Result<web_sys::Response, ApiError> {
+    let url = format!("{}{path}", api_base());
+    let token = get_token();
+
+    let mut hdrs: Vec<(&str, &str)> = Vec::new();
+    let auth_val;
+    if let Some(ref t) = token {
+        auth_val = format!("Bearer {t}");
+        hdrs.push(("Authorization", &auth_val));
+    }
+
+    let response = http_get_no_cache(&url, &hdrs).await?;
 
     if response.status() == 401 {
         clear_token();

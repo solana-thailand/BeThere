@@ -284,29 +284,27 @@ pub async fn get_public_ticket(
     };
 
     // Fetch deposit status for context (pending verification, etc.)
-    let deposit_status = if let Some(kv) = kv {
-        crate::event_store::get_deposit_status(kv, &event.id, &attendee.api_id, state.d1.as_deref())
-            .await
-            .ok()
-            .flatten()
-    } else {
-        None
-    };
+    // Uses D1-first fallback so deposit data is found even when KV is empty.
+    let deposit_status = crate::event_store::get_deposit_status_with_fallback(
+        kv,
+        state.d1.as_deref(),
+        &event.id,
+        &attendee.api_id,
+    )
+    .await
+    .ok()
+    .flatten();
 
-    // Fetch THB deposit for refund proof URL
-    let thb_deposit = if let Some(kv_ref) = kv {
-        crate::event_store::get_thb_deposit(
-            kv_ref,
-            &event.id,
-            &attendee.api_id,
-            state.d1.as_deref(),
-        )
-        .await
-        .ok()
-        .flatten()
-    } else {
-        None
-    };
+    // Fetch THB deposit for refund proof URL (D1-first, KV fallback)
+    let thb_deposit = crate::event_store::get_thb_deposit_with_fallback(
+        kv,
+        state.d1.as_deref(),
+        &event.id,
+        &attendee.api_id,
+    )
+    .await
+    .ok()
+    .flatten();
 
     let deposit_info = deposit_status.as_ref().map(|d| {
         serde_json::json!({

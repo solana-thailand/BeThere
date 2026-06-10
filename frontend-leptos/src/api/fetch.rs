@@ -5,7 +5,7 @@
 
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
-use web_sys::{Request, RequestInit, RequestMode, Response};
+use web_sys::{Request, RequestCache, RequestInit, RequestMode, Response};
 
 use super::types::ApiError;
 
@@ -18,9 +18,37 @@ pub(crate) async fn fetch(
     headers: &[(&str, &str)],
     body: Option<String>,
 ) -> Result<Response, ApiError> {
+    fetch_inner(method, url, headers, body, false).await
+}
+
+/// Perform a fetch that bypasses the browser HTTP cache entirely.
+///
+/// Sets `RequestCache::NoStore` to prevent the browser from returning
+/// stale cached responses. Use for user-specific data that must always
+/// be fresh (e.g., ticket data, deposit status).
+pub(crate) async fn fetch_no_cache(
+    method: &str,
+    url: &str,
+    headers: &[(&str, &str)],
+    body: Option<String>,
+) -> Result<Response, ApiError> {
+    fetch_inner(method, url, headers, body, true).await
+}
+
+/// Shared fetch implementation with optional cache bypass.
+async fn fetch_inner(
+    method: &str,
+    url: &str,
+    headers: &[(&str, &str)],
+    body: Option<String>,
+    no_cache: bool,
+) -> Result<Response, ApiError> {
     let opts = RequestInit::new();
     opts.set_method(method);
     opts.set_mode(RequestMode::Cors);
+    if no_cache {
+        opts.set_cache(RequestCache::NoStore);
+    }
 
     if let Some(ref body_str) = body {
         opts.set_body(&JsValue::from_str(body_str));
@@ -92,6 +120,11 @@ pub(crate) async fn response_json<T: serde::de::DeserializeOwned>(
 /// Convenience: GET request.
 pub(crate) async fn get(url: &str, headers: &[(&str, &str)]) -> Result<Response, ApiError> {
     fetch("GET", url, headers, None).await
+}
+
+/// Convenience: GET request that bypasses browser HTTP cache.
+pub(crate) async fn get_no_cache(url: &str, headers: &[(&str, &str)]) -> Result<Response, ApiError> {
+    fetch_no_cache("GET", url, headers, None).await
 }
 
 /// Convenience: POST request with optional JSON body.

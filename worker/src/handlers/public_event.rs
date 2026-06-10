@@ -22,51 +22,58 @@ pub async fn list_public_events(
 ) -> Result<ApiOk<Value>, crate::error::WorkerError> {
     let now_ms = chrono::Utc::now().timestamp_millis();
 
-    let metas = if let Some(d1) = &state.d1 {
-        crate::db::events::list_events_as_meta(d1)
+    let mut public_events: Vec<Value> = if let Some(d1) = &state.d1 {
+        // D1-first: use raw JSON deserialization to avoid workers-rs serde panics
+        crate::db::events::list_public_events_raw(d1)
             .await
             .map_err(AppError::Internal)?
     } else if let Some(kv) = &state.events_kv {
         let index = crate::event_store::get_event_index(kv)
             .await
             .map_err(AppError::Internal)?;
-        index.events
+        let now = now_ms;
+        index
+            .events
+            .into_iter()
+            .filter(|e| {
+                matches!(
+                    e.status,
+                    event_checkin_domain::models::event::EventStatus::Active
+                ) && e.event_end_ms > now
+                    && e.visibility == EventVisibility::Public
+            })
+            .map(|e| {
+                json!({
+                    "id": e.id,
+                    "name": e.name,
+                    "slug": e.slug,
+                    "status": e.status.as_str(),
+                    "event_start_ms": e.event_start_ms,
+                    "event_end_ms": e.event_end_ms,
+                    "time_tba": e.time_tba,
+                    "deposit_enabled": e.deposit_enabled,
+                    "event_format": e.event_format.as_str(),
+                    "tagline": e.tagline,
+                    "location": e.location,
+                    "nft_image_url": e.nft_image_url,
+                    "created_at": e.created_at,
+                    "in_person_capacity": e.in_person_capacity,
+                    "online_capacity": e.online_capacity,
+                    "visibility": e.visibility.as_str(),
+                })
+            })
+            .collect()
     } else {
         return Err(AppError::Internal("no data store configured".into()).into());
     };
 
-    // Only show Active events whose end time is in the future (upcoming).
-    // Sort nearest-first so the soonest event appears at the top.
-    let mut public_events: Vec<Value> = metas
-        .into_iter()
-        .filter(|e| {
-            matches!(
-                e.status,
-                event_checkin_domain::models::event::EventStatus::Active
-            ) && e.event_end_ms > now_ms
-                && e.visibility == EventVisibility::Public
-        })
-        .map(|e| {
-            json!({
-                "id": e.id,
-                "name": e.name,
-                "slug": e.slug,
-                "status": e.status.as_str(),
-                "event_start_ms": e.event_start_ms,
-                "event_end_ms": e.event_end_ms,
-                "time_tba": e.time_tba,
-                "deposit_enabled": e.deposit_enabled,
-                "event_format": e.event_format.as_str(),
-                "tagline": e.tagline,
-                "location": e.location,
-                "nft_image_url": e.nft_image_url,
-                "created_at": e.created_at,
-                "in_person_capacity": e.in_person_capacity,
-                "online_capacity": e.online_capacity,
-                "visibility": e.visibility.as_str(),
-            })
-        })
-        .collect();
+    // Filter to Active events with future end time and Public visibility
+    public_events.retain(|e| {
+        let status = e.get("status").and_then(|v| v.as_str()).unwrap_or("");
+        let end_ms = e.get("event_end_ms").and_then(|v| v.as_i64()).unwrap_or(0);
+        let vis = e.get("visibility").and_then(|v| v.as_str()).unwrap_or("");
+        status == "active" && end_ms > now_ms && vis == "public"
+    });
 
     // Sort by event_start_ms ascending (nearest first)
     public_events.sort_by_key(|e| {

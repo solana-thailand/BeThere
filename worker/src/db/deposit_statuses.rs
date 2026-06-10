@@ -12,6 +12,9 @@ use event_checkin_domain::models::deposit::{DepositMethod, DepositStatus};
 // ---------------------------------------------------------------------------
 
 /// Read a single deposit status by event + attendee. Returns `None` if not found.
+///
+/// Uses raw JS `.first()` + `JSON.stringify` → serde_json to bypass the worker crate's
+/// `.first::<T>()` which crashes on `JsValue(null)` when no row is found.
 pub async fn get_deposit_status(
     db: &D1Database,
     event_id: &str,
@@ -19,17 +22,42 @@ pub async fn get_deposit_status(
 ) -> Result<Option<DepositStatus>, String> {
     let stmt =
         db.prepare("SELECT * FROM deposit_statuses WHERE event_id = ?1 AND attendee_id = ?2");
-    let result = stmt
+    let bound = stmt
         .bind_refs(&[D1Type::Text(event_id), D1Type::Text(attendee_id)])
-        .map_err(|e| format!("D1 get_deposit_status bind: {e:?}"))?
-        .first::<serde_json::Value>(None)
-        .await
-        .map_err(|e| format!("D1 get_deposit_status query: {e:?}"))?;
+        .map_err(|e| format!("D1 get_deposit_status bind: {e:?}"))?;
 
-    match result {
-        Some(row) => Ok(Some(row_to_deposit_status(row)?)),
-        None => Ok(None),
+    // Bypass worker crate's .first::<T>() — crashes on JsValue(null).
+    let raw_first = wasm_bindgen_futures::JsFuture::from(
+        bound
+            .inner()
+            .first(None)
+            .map_err(|e| format!("D1 get_deposit_status first() call: {e:?}"))?,
+    )
+    .await
+    .map_err(|e| format!("D1 get_deposit_status first() await: {e:?}"))?;
+
+    if raw_first.is_null() || raw_first.is_undefined() {
+        return Ok(None);
     }
+
+    let json_str = js_sys::JSON::stringify(&raw_first)
+        .map(|s| s.as_string().unwrap_or_default())
+        .unwrap_or_default();
+
+    if json_str.is_empty() {
+        return Ok(None);
+    }
+
+    let row: serde_json::Value = serde_json::from_str(&json_str).map_err(|e| {
+        tracing::warn!(
+            error = %e,
+            json = %json_str.chars().take(300).collect::<String>(),
+            "D1 get_deposit_status: deserialize failed"
+        );
+        format!("D1 get_deposit_status deserialize: {e}")
+    })?;
+
+    Ok(Some(row_to_deposit_status(row)?))
 }
 
 /// List all deposit statuses for an event (ordered by deposit_order).
@@ -56,6 +84,9 @@ pub async fn list_deposit_statuses(
 }
 
 /// Find attendee API ID by wallet address within a specific event's deposit records.
+///
+/// Uses raw JS `.first()` + `JSON.stringify` → serde_json to bypass the worker crate's
+/// `.first::<T>()` which crashes on `JsValue(null)` when no row is found.
 pub async fn find_attendee_by_wallet(
     db: &D1Database,
     event_id: &str,
@@ -64,33 +95,72 @@ pub async fn find_attendee_by_wallet(
     let stmt = db.prepare(
         "SELECT attendee_id FROM deposit_statuses WHERE event_id = ?1 AND wallet_address = ?2 LIMIT 1",
     );
-    let result = stmt
+    let bound = stmt
         .bind_refs(&[D1Type::Text(event_id), D1Type::Text(wallet_address)])
-        .map_err(|e| format!("D1 find_attendee_by_wallet bind: {e:?}"))?
-        .first::<serde_json::Value>(None)
-        .await
-        .map_err(|e| format!("D1 find_attendee_by_wallet query: {e:?}"))?;
+        .map_err(|e| format!("D1 find_attendee_by_wallet bind: {e:?}"))?;
 
-    Ok(result.and_then(|r| {
-        r.get("attendee_id")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string())
-    }))
+    let raw_first = wasm_bindgen_futures::JsFuture::from(
+        bound
+            .inner()
+            .first(None)
+            .map_err(|e| format!("D1 find_attendee_by_wallet first() call: {e:?}"))?,
+    )
+    .await
+    .map_err(|e| format!("D1 find_attendee_by_wallet first() await: {e:?}"))?;
+
+    if raw_first.is_null() || raw_first.is_undefined() {
+        return Ok(None);
+    }
+
+    let json_str = js_sys::JSON::stringify(&raw_first)
+        .map(|s| s.as_string().unwrap_or_default())
+        .unwrap_or_default();
+
+    if json_str.is_empty() {
+        return Ok(None);
+    }
+
+    let row: serde_json::Value = serde_json::from_str(&json_str).map_err(|e| {
+        tracing::warn!(
+            error = %e,
+            json = %json_str.chars().take(300).collect::<String>(),
+            "D1 find_attendee_by_wallet: deserialize failed"
+        );
+        format!("D1 find_attendee_by_wallet deserialize: {e}")
+    })?;
+
+    Ok(row
+        .get("attendee_id")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string()))
 }
 
 /// Count deposits for an event (for deposit counter).
 pub async fn count_deposits_by_event(db: &D1Database, event_id: &str) -> Result<u32, String> {
     let stmt = db.prepare("SELECT COUNT(*) as cnt FROM deposit_statuses WHERE event_id = ?1");
-    let result = stmt
+    let bound = stmt
         .bind_refs(&[D1Type::Text(event_id)])
-        .map_err(|e| format!("D1 count_deposits bind: {e:?}"))?
-        .first::<serde_json::Value>(None)
-        .await
-        .map_err(|e| format!("D1 count_deposits query: {e:?}"))?;
+        .map_err(|e| format!("D1 count_deposits bind: {e:?}"))?;
 
-    Ok(result
-        .and_then(|r| r.get("cnt").and_then(|v| v.as_i64()))
-        .unwrap_or(0) as u32)
+    let raw_first = wasm_bindgen_futures::JsFuture::from(
+        bound
+            .inner()
+            .first(None)
+            .map_err(|e| format!("D1 count_deposits first() call: {e:?}"))?,
+    )
+    .await
+    .map_err(|e| format!("D1 count_deposits first() await: {e:?}"))?;
+
+    if raw_first.is_null() || raw_first.is_undefined() {
+        return Ok(0);
+    }
+
+    let json_str = js_sys::JSON::stringify(&raw_first)
+        .map(|s| s.as_string().unwrap_or_default())
+        .unwrap_or_default();
+
+    let row: serde_json::Value = serde_json::from_str(&json_str).unwrap_or_default();
+    Ok(row.get("cnt").and_then(|v| v.as_i64()).unwrap_or(0) as u32)
 }
 
 // ---------------------------------------------------------------------------

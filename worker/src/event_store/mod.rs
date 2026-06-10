@@ -24,9 +24,10 @@ pub use schema::{deposit_status_key, quiz_progress_key, quiz_questions_key, thb_
 pub use read::{
     find_attendee_by_wallet, get_deposit_status, get_deposit_status_with_fallback, get_event,
     get_event_config, get_event_config_with_fallback, get_event_id_by_escrow, get_event_index,
-    get_form_config, get_thb_deposit, has_event_access, increment_deposit_counter_with_fallback,
-    is_event_organizer, is_event_staff, list_deposit_statuses, list_events, list_thb_deposits,
-    resolve_event_by_slug, resolve_event_or_fallback, save_deposit_status_with_fallback,
+    get_form_config, get_thb_deposit, get_thb_deposit_with_fallback, has_event_access,
+    increment_deposit_counter_with_fallback, is_event_organizer, is_event_staff,
+    list_deposit_statuses, list_events, list_thb_deposits, resolve_event_by_slug,
+    resolve_event_or_fallback, save_deposit_status_with_fallback,
 };
 
 // Write operations

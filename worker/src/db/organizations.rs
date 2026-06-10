@@ -15,17 +15,42 @@ pub async fn get_org_config(
     org_id: &str,
 ) -> Result<Option<event_checkin_domain::models::org::OrganizationConfig>, String> {
     let stmt = db.prepare("SELECT * FROM organizations WHERE id = ?1");
-    let result = stmt
+    let bound = stmt
         .bind_refs(&[D1Type::Text(org_id)])
-        .map_err(|e| format!("D1 get_org bind: {e:?}"))?
-        .first::<serde_json::Value>(None)
-        .await
-        .map_err(|e| format!("D1 get_org query: {e:?}"))?;
+        .map_err(|e| format!("D1 get_org bind: {e:?}"))?;
 
-    match result {
-        Some(row) => Ok(Some(row_to_org_config(row)?)),
-        None => Ok(None),
+    // Bypass worker crate's .first::<T>() — crashes on JsValue(null).
+    let raw_first = wasm_bindgen_futures::JsFuture::from(
+        bound
+            .inner()
+            .first(None)
+            .map_err(|e| format!("D1 get_org first() call: {e:?}"))?,
+    )
+    .await
+    .map_err(|e| format!("D1 get_org first() await: {e:?}"))?;
+
+    if raw_first.is_null() || raw_first.is_undefined() {
+        return Ok(None);
     }
+
+    let json_str = js_sys::JSON::stringify(&raw_first)
+        .map(|s| s.as_string().unwrap_or_default())
+        .unwrap_or_default();
+
+    if json_str.is_empty() {
+        return Ok(None);
+    }
+
+    let row: serde_json::Value = serde_json::from_str(&json_str).map_err(|e| {
+        tracing::warn!(
+            error = %e,
+            json = %json_str.chars().take(300).collect::<String>(),
+            "D1 get_org: deserialize failed"
+        );
+        format!("D1 get_org deserialize: {e}")
+    })?;
+
+    Ok(Some(row_to_org_config(row)?))
 }
 
 /// List all organizations from D1 (newest first).

@@ -48,12 +48,14 @@ build() {
     ~/.cargo/bin/trunk build --release
 
     # Trunk only copies JS files directly referenced by #[wasm_bindgen(module = "...")].
-    # lazy_assets.js is imported by scanner.js/qr_generate.js but not by Rust directly,
+    # lazy_assets.js is imported by scanner.js/clipboard.js but not by Rust directly,
     # so trunk skips it. Copy manually to avoid module resolution failures at runtime.
     SNIPPET_DIR="$(ls -d dist/snippets/event-checkin-frontend-*/js 2>/dev/null | head -1)"
-    if [[ -n "$SNIPPET_DIR" && -f js/lazy_assets.js && ! -f "$SNIPPET_DIR/lazy_assets.js" ]]; then
+    if [[ -n "$SNIPPET_DIR" && -f js/lazy_assets.js ]]; then
         cp js/lazy_assets.js "$SNIPPET_DIR/lazy_assets.js"
         echo "📋 Copied js/lazy_assets.js → $SNIPPET_DIR/lazy_assets.js"
+    else
+        echo "⚠️  No snippet dir or lazy_assets.js not found — QR scanner may fail at runtime"
     fi
 
     cleanup_html

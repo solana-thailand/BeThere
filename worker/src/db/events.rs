@@ -4,6 +4,7 @@
 //! Write path: upsert on every create/update/seed.
 //! Read path: D1-first fallback when KV is empty (e.g. after data loss).
 
+use wasm_bindgen_futures::JsFuture;
 use worker::D1Database;
 use worker::d1::D1Type;
 
@@ -12,7 +13,11 @@ use worker::d1::D1Type;
 // ---------------------------------------------------------------------------
 
 /// Full event row from D1, used for reconstructing EventConfig when KV is empty.
-#[derive(Debug, Clone, serde::Deserialize)]
+///
+/// Uses `#[serde(default)]` so that columns added by future migrations deserialize as
+/// `None` / zero values even when the migration hasn't been applied to production yet.
+#[derive(Debug, Clone, serde::Deserialize, Default)]
+#[serde(default)]
 #[allow(dead_code)]
 pub struct D1EventRow {
     pub id: Option<String>,
@@ -167,11 +172,17 @@ impl D1EventRow {
             event_format,
             require_contact_info: self.require_contact_info.unwrap_or(1) == 1,
             require_photo_consent: self.require_photo_consent.unwrap_or(0) == 1,
-            in_person_capacity: self.in_person_capacity.map(|v| v as u32),
-            online_capacity: self.online_capacity.map(|v| v as u32),
+            in_person_capacity: self
+                .in_person_capacity
+                .and_then(|v| if v >= 0 { Some(v as u32) } else { None }),
+            online_capacity: self
+                .online_capacity
+                .and_then(|v| if v >= 0 { Some(v as u32) } else { None }),
             online_open_mode,
             online_registration_open: self.online_registration_open.unwrap_or(0) == 1,
-            deposit_deadline_hours: self.deposit_deadline_hours.map(|v| v as u32),
+            deposit_deadline_hours: self
+                .deposit_deadline_hours
+                .and_then(|v| if v >= 0 { Some(v as u32) } else { None }),
             visibility,
             created_at: self.created_at.clone().unwrap_or_default(),
             updated_at: self.updated_at.clone().unwrap_or_default(),
@@ -199,25 +210,45 @@ pub async fn get_form_config(
     event_id: &str,
 ) -> Result<Option<event_checkin_domain::models::event::RegistrationFormConfig>, String> {
     let sql = format!("SELECT form_config FROM events WHERE id = '{event_id}' LIMIT 1");
-    let result = db
-        .prepare(&sql)
-        .first::<serde_json::Value>(None)
-        .await
-        .map_err(|e| format!("D1 get_form_config: {e:?}"))?;
+    let bound = db.prepare(&sql);
 
-    match result {
-        Some(row) => {
-            let config_str = row.get("form_config").and_then(|v| v.as_str());
-            match config_str {
-                Some(json) if !json.is_empty() => {
-                    serde_json::from_str(json).map(Some).map_err(|e| {
-                        format!("failed to parse form config for event '{event_id}': {e}")
-                    })
-                }
-                _ => Ok(None),
-            }
-        }
-        None => Ok(None),
+    // Bypass worker crate's .first::<T>() — crashes on JsValue(null).
+    let raw_first = JsFuture::from(
+        bound
+            .inner()
+            .first(None)
+            .map_err(|e| format!("D1 get_form_config first() call: {e:?}"))?,
+    )
+    .await
+    .map_err(|e| format!("D1 get_form_config first() await: {e:?}"))?;
+
+    if raw_first.is_null() || raw_first.is_undefined() {
+        return Ok(None);
+    }
+
+    let json_str = js_sys::JSON::stringify(&raw_first)
+        .map(|s| s.as_string().unwrap_or_default())
+        .unwrap_or_default();
+
+    if json_str.is_empty() {
+        return Ok(None);
+    }
+
+    let row: serde_json::Value = serde_json::from_str(&json_str).map_err(|e| {
+        tracing::warn!(
+            error = %e,
+            json = %json_str.chars().take(300).collect::<String>(),
+            "D1 get_form_config: deserialize failed"
+        );
+        format!("D1 get_form_config deserialize: {e}")
+    })?;
+
+    let config_str = row.get("form_config").and_then(|v| v.as_str());
+    match config_str {
+        Some(json) if !json.is_empty() => serde_json::from_str(json)
+            .map(Some)
+            .map_err(|e| format!("failed to parse form config for event '{event_id}': {e}")),
+        _ => Ok(None),
     }
 }
 
@@ -421,35 +452,69 @@ pub async fn delete_event(db: &D1Database, event_id: &str) -> Result<(), String>
 /// Get a single event by ID from D1.
 /// Returns None if not found.
 pub async fn get_event(db: &D1Database, event_id: &str) -> Result<Option<D1EventRow>, String> {
-    let sql = format!("SELECT * FROM events WHERE id = '{event_id}' LIMIT 1");
-    let result = db
-        .prepare(&sql)
-        .first::<D1EventRow>(None)
-        .await
-        .map_err(|e| format!("D1 get_event query: {e:?}"))?;
-    Ok(result)
+    get_event_raw(db, "id", event_id).await
+}
+
+/// Get an event from D1 by column value using raw JSON deserialization.
+///
+/// Bypasses `first::<D1EventRow>()` which uses `serde_wasm_bindgen::from_value`
+/// with `.unwrap()` — panics on certain nullable column types.
+async fn get_event_raw(
+    db: &D1Database,
+    column: &str,
+    value: &str,
+) -> Result<Option<D1EventRow>, String> {
+    let sql = format!("SELECT * FROM events WHERE {column} = '{value}' LIMIT 1");
+    let stmt = db.prepare(&sql);
+    let raw_first = JsFuture::from(
+        stmt.inner()
+            .first(None)
+            .map_err(|e| format!("D1 get_event_raw first() call: {e:?}"))?,
+    )
+    .await
+    .map_err(|e| format!("D1 get_event_raw first() await: {e:?}"))?;
+
+    if raw_first.is_null() || raw_first.is_undefined() {
+        return Ok(None);
+    }
+
+    let json_str = js_sys::JSON::stringify(&raw_first)
+        .map(|s| s.as_string().unwrap_or_default())
+        .unwrap_or_default();
+
+    let row: D1EventRow = serde_json::from_str(&json_str)
+        .map_err(|e| format!("D1 get_event_raw deserialize: {e:?}"))?;
+    Ok(Some(row))
 }
 
 /// Get the first active event from D1.
 pub async fn get_active_event(db: &D1Database) -> Result<Option<D1EventRow>, String> {
     let sql = "SELECT * FROM events WHERE status = 'active' ORDER BY created_at DESC LIMIT 1";
-    let result = db
-        .prepare(sql)
-        .first::<D1EventRow>(None)
-        .await
-        .map_err(|e| format!("D1 get_active_event query: {e:?}"))?;
-    Ok(result)
+    let stmt = db.prepare(sql);
+    let raw_first = JsFuture::from(
+        stmt.inner()
+            .first(None)
+            .map_err(|e| format!("D1 get_active_event first() call: {e:?}"))?,
+    )
+    .await
+    .map_err(|e| format!("D1 get_active_event first() await: {e:?}"))?;
+
+    if raw_first.is_null() || raw_first.is_undefined() {
+        return Ok(None);
+    }
+
+    let json_str = js_sys::JSON::stringify(&raw_first)
+        .map(|s| s.as_string().unwrap_or_default())
+        .unwrap_or_default();
+
+    let row: D1EventRow = serde_json::from_str(&json_str)
+        .map_err(|e| format!("D1 get_active_event deserialize: {e:?}"))?;
+    Ok(Some(row))
 }
 
 /// Get an event from D1 by slug.
 pub async fn get_event_by_slug(db: &D1Database, slug: &str) -> Result<Option<D1EventRow>, String> {
-    let sql = format!("SELECT * FROM events WHERE slug = '{slug}' LIMIT 1");
-    let result = db
-        .prepare(&sql)
-        .first::<D1EventRow>(None)
-        .await
-        .map_err(|e| format!("D1 get_event_by_slug query: {e:?}"))?;
-    Ok(result)
+    get_event_raw(db, "slug", slug).await
 }
 
 /// List all events from D1 (for index rebuild).
@@ -473,18 +538,122 @@ pub async fn list_events_as_meta(
     Ok(rows.iter().map(|r| r.to_event_config().to_meta()).collect())
 }
 
+/// Raw column subset for public event listings.
+/// Avoids `results::<D1EventRow>()` which can panic on nullable columns
+/// when deserialized via the workers-rs serde bridge.
+#[derive(serde::Deserialize)]
+struct PublicEventRow {
+    id: Option<String>,
+    name: Option<String>,
+    slug: Option<String>,
+    status: Option<String>,
+    event_format: Option<String>,
+    event_start_ms: Option<i64>,
+    event_end_ms: Option<i64>,
+    time_tba: Option<i64>,
+    deposit_enabled: Option<i64>,
+    tagline: Option<String>,
+    location: Option<String>,
+    nft_image_url: Option<String>,
+    created_at: Option<String>,
+    in_person_capacity: Option<i64>,
+    online_capacity: Option<i64>,
+    visibility: Option<String>,
+}
+
+/// List public events from D1 using raw JSON deserialization.
+/// Bypasses `results::<T>()` to avoid workers-rs serde panics on nullable columns.
+pub async fn list_public_events_raw(db: &D1Database) -> Result<Vec<serde_json::Value>, String> {
+    use event_checkin_domain::models::event::*;
+
+    let sql = "SELECT id, name, slug, status, event_format, event_start_ms, event_end_ms, \
+               time_tba, deposit_enabled, tagline, location, nft_image_url, \
+               created_at, in_person_capacity, online_capacity, visibility \
+               FROM events ORDER BY created_at DESC";
+
+    // Bypass workers-rs D1Result::results() which uses serde_wasm_bindgen::from_value
+    // with .unwrap() — panics on nullable columns or type mismatches.
+    // Instead, use .all() on the inner JsValue, then stringify and parse via serde_json.
+    let stmt = db.prepare(sql);
+    let raw_result = JsFuture::from(
+        stmt.inner()
+            .all()
+            .map_err(|e| format!("D1 list_public_events_raw all() call: {e:?}"))?,
+    )
+    .await
+    .map_err(|e| format!("D1 list_public_events_raw all() await: {e:?}"))?;
+
+    // Extract the `results` array from the D1 response object
+    let results_key = wasm_bindgen::JsValue::from_str("results");
+    let raw_rows =
+        js_sys::Reflect::get(&raw_result, &results_key).unwrap_or(wasm_bindgen::JsValue::NULL);
+
+    let json_str = js_sys::JSON::stringify(&raw_rows)
+        .map(|s| s.as_string().unwrap_or_default())
+        .unwrap_or_default();
+
+    let rows: Vec<PublicEventRow> = serde_json::from_str(&json_str).unwrap_or_default();
+
+    Ok(rows
+        .into_iter()
+        .map(|r| {
+            let status: EventStatus = serde_json::from_value(serde_json::Value::String(
+                r.status.clone().unwrap_or_default(),
+            ))
+            .unwrap_or_default();
+            let event_format: EventFormat = serde_json::from_value(serde_json::Value::String(
+                r.event_format.clone().unwrap_or_default(),
+            ))
+            .unwrap_or_default();
+            let visibility: EventVisibility = serde_json::from_value(serde_json::Value::String(
+                r.visibility
+                    .clone()
+                    .unwrap_or_else(|| "public".to_string()),
+            ))
+            .unwrap_or_default();
+
+            serde_json::json!({
+                "id": r.id.unwrap_or_default(),
+                "name": r.name.unwrap_or_default(),
+                "slug": r.slug.unwrap_or_default(),
+                "status": status.as_str(),
+                "event_start_ms": r.event_start_ms.unwrap_or(0),
+                "event_end_ms": r.event_end_ms.unwrap_or(0),
+                "time_tba": r.time_tba.unwrap_or(0) == 1,
+                "deposit_enabled": r.deposit_enabled.unwrap_or(0) != 0,
+                "event_format": event_format.as_str(),
+                "tagline": r.tagline.unwrap_or_default(),
+                "location": r.location.unwrap_or_default(),
+                "nft_image_url": r.nft_image_url.unwrap_or_default(),
+                "created_at": r.created_at.unwrap_or_default(),
+                "in_person_capacity": r.in_person_capacity.and_then(|v| if v >= 0 { Some(v as u32) } else { None }),
+                "online_capacity": r.online_capacity.and_then(|v| if v >= 0 { Some(v as u32) } else { None }),
+                "visibility": visibility.as_str(),
+            })
+        })
+        .collect())
+}
+
 /// Check whether an organization has any non-archived events.
 pub async fn has_active_events_for_org(db: &D1Database, org_id: &str) -> Result<bool, String> {
     let stmt = db.prepare(
         "SELECT 1 AS found FROM events WHERE organization_id = ?1 AND status != 'Archived' LIMIT 1",
     );
-    let result = stmt
+    let bound = stmt
         .bind_refs(&[D1Type::Text(org_id)])
-        .map_err(|e| format!("D1 has_active_events_for_org bind: {e:?}"))?
-        .first::<serde_json::Value>(None)
-        .await
-        .map_err(|e| format!("D1 has_active_events_for_org query: {e:?}"))?;
-    Ok(result.is_some())
+        .map_err(|e| format!("D1 has_active_events_for_org bind: {e:?}"))?;
+
+    // Bypass worker crate's .first::<T>() — crashes on JsValue(null).
+    let raw_first = JsFuture::from(
+        bound
+            .inner()
+            .first(None)
+            .map_err(|e| format!("D1 has_active_events_for_org first() call: {e:?}"))?,
+    )
+    .await
+    .map_err(|e| format!("D1 has_active_events_for_org first() await: {e:?}"))?;
+
+    Ok(!raw_first.is_null() && !raw_first.is_undefined())
 }
 
 /// Count non-archived events for an organization.
@@ -492,13 +661,28 @@ pub async fn count_active_events_for_org(db: &D1Database, org_id: &str) -> Resul
     let stmt = db.prepare(
         "SELECT COUNT(*) AS cnt FROM events WHERE organization_id = ?1 AND status != 'Archived'",
     );
-    let result = stmt
+    let bound = stmt
         .bind_refs(&[D1Type::Text(org_id)])
-        .map_err(|e| format!("D1 count_active_events_for_org bind: {e:?}"))?
-        .first::<serde_json::Value>(None)
-        .await
-        .map_err(|e| format!("D1 count_active_events_for_org query: {e:?}"))?;
-    Ok(result
-        .and_then(|v| v.get("cnt").and_then(|c| c.as_i64()))
-        .unwrap_or(0) as usize)
+        .map_err(|e| format!("D1 count_active_events_for_org bind: {e:?}"))?;
+
+    // Bypass worker crate's .first::<T>() — crashes on JsValue(null).
+    let raw_first = JsFuture::from(
+        bound
+            .inner()
+            .first(None)
+            .map_err(|e| format!("D1 count_active_events_for_org first() call: {e:?}"))?,
+    )
+    .await
+    .map_err(|e| format!("D1 count_active_events_for_org first() await: {e:?}"))?;
+
+    if raw_first.is_null() || raw_first.is_undefined() {
+        return Ok(0);
+    }
+
+    let json_str = js_sys::JSON::stringify(&raw_first)
+        .map(|s| s.as_string().unwrap_or_default())
+        .unwrap_or_default();
+
+    let row: serde_json::Value = serde_json::from_str(&json_str).unwrap_or_default();
+    Ok(row.get("cnt").and_then(|c| c.as_i64()).unwrap_or(0) as usize)
 }

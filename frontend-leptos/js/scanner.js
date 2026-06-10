@@ -14,7 +14,19 @@
  * - `window.__cameraStream`  — active MediaStream reference
  */
 
-import { loadQrLibraries } from "./lazy_assets.js";
+/**
+ * Load QR libraries via dynamic import.
+ *
+ * Uses dynamic import() instead of static import so the browser doesn't
+ * require lazy_assets.js to exist when scanner.js is first loaded.
+ * This prevents MIME-type errors on pages that don't use the scanner.
+ *
+ * @returns {Promise<void>}
+ */
+async function _loadQrLibraries() {
+  var { loadQrLibraries } = await import("./lazy_assets.js");
+  return loadQrLibraries();
+}
 
 /**
  * Preload QR libraries so they are ready when the scanner starts.
@@ -25,7 +37,7 @@ import { loadQrLibraries } from "./lazy_assets.js";
  * @returns {Promise<void>}
  */
 export function preloadQrLibraries() {
-  return loadQrLibraries();
+  return _loadQrLibraries();
 }
 
 /**
@@ -53,7 +65,7 @@ export function startCamera() {
   (async function () {
     try {
       // Ensure QR libraries are loaded before starting scanner
-      await loadQrLibraries();
+      await _loadQrLibraries();
       console.log("[scanner] QR libraries ready, requesting camera access...");
       var stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: "environment" },

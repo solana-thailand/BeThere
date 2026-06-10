@@ -16,22 +16,46 @@ pub async fn get_quiz_config_from_d1(
     event_id: &str,
 ) -> Result<Option<String>, String> {
     let stmt = db.prepare("SELECT config_json FROM quiz_configs WHERE event_id = ?1");
-    let result = stmt
+    let bound = stmt
         .bind_refs(&[D1Type::Text(event_id)])
-        .map_err(|e| format!("D1 get_quiz_config bind: {e:?}"))?
-        .first::<serde_json::Value>(None)
-        .await
-        .map_err(|e| format!("D1 get_quiz_config query: {e:?}"))?;
+        .map_err(|e| format!("D1 get_quiz_config bind: {e:?}"))?;
 
-    match result {
-        Some(row) => row
-            .get("config_json")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string())
-            .ok_or_else(|| "D1 quiz_configs.config_json missing or not a string".to_string())
-            .map(Some),
-        None => Ok(None),
+    // Bypass worker crate's .first::<T>() — crashes on JsValue(null).
+    let raw_first = wasm_bindgen_futures::JsFuture::from(
+        bound
+            .inner()
+            .first(None)
+            .map_err(|e| format!("D1 get_quiz_config first() call: {e:?}"))?,
+    )
+    .await
+    .map_err(|e| format!("D1 get_quiz_config first() await: {e:?}"))?;
+
+    if raw_first.is_null() || raw_first.is_undefined() {
+        return Ok(None);
     }
+
+    let json_str = js_sys::JSON::stringify(&raw_first)
+        .map(|s| s.as_string().unwrap_or_default())
+        .unwrap_or_default();
+
+    if json_str.is_empty() {
+        return Ok(None);
+    }
+
+    let row: serde_json::Value = serde_json::from_str(&json_str).map_err(|e| {
+        tracing::warn!(
+            error = %e,
+            json = %json_str.chars().take(300).collect::<String>(),
+            "D1 get_quiz_config: deserialize failed"
+        );
+        format!("D1 get_quiz_config deserialize: {e}")
+    })?;
+
+    row.get("config_json")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+        .ok_or_else(|| "D1 quiz_configs.config_json missing or not a string".to_string())
+        .map(Some)
 }
 
 /// Upsert quiz config JSON into D1.
@@ -67,22 +91,46 @@ pub async fn get_quiz_progress_from_d1(
     let stmt = db.prepare(
         "SELECT progress_json FROM quiz_progress WHERE event_id = ?1 AND claim_token = ?2",
     );
-    let result = stmt
+    let bound = stmt
         .bind_refs(&[D1Type::Text(event_id), D1Type::Text(claim_token)])
-        .map_err(|e| format!("D1 get_quiz_progress bind: {e:?}"))?
-        .first::<serde_json::Value>(None)
-        .await
-        .map_err(|e| format!("D1 get_quiz_progress query: {e:?}"))?;
+        .map_err(|e| format!("D1 get_quiz_progress bind: {e:?}"))?;
 
-    match result {
-        Some(row) => row
-            .get("progress_json")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string())
-            .ok_or_else(|| "D1 quiz_progress.progress_json missing or not a string".to_string())
-            .map(Some),
-        None => Ok(None),
+    // Bypass worker crate's .first::<T>() — crashes on JsValue(null).
+    let raw_first = wasm_bindgen_futures::JsFuture::from(
+        bound
+            .inner()
+            .first(None)
+            .map_err(|e| format!("D1 get_quiz_progress first() call: {e:?}"))?,
+    )
+    .await
+    .map_err(|e| format!("D1 get_quiz_progress first() await: {e:?}"))?;
+
+    if raw_first.is_null() || raw_first.is_undefined() {
+        return Ok(None);
     }
+
+    let json_str = js_sys::JSON::stringify(&raw_first)
+        .map(|s| s.as_string().unwrap_or_default())
+        .unwrap_or_default();
+
+    if json_str.is_empty() {
+        return Ok(None);
+    }
+
+    let row: serde_json::Value = serde_json::from_str(&json_str).map_err(|e| {
+        tracing::warn!(
+            error = %e,
+            json = %json_str.chars().take(300).collect::<String>(),
+            "D1 get_quiz_progress: deserialize failed"
+        );
+        format!("D1 get_quiz_progress deserialize: {e}")
+    })?;
+
+    row.get("progress_json")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+        .ok_or_else(|| "D1 quiz_progress.progress_json missing or not a string".to_string())
+        .map(Some)
 }
 
 /// Upsert quiz progress JSON into D1. Also stores denormalized `passed` and

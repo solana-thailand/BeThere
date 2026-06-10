@@ -11,7 +11,7 @@
 
 use leptos::prelude::*;
 use leptos_meta::Title;
-use leptos_router::hooks::use_params;
+use leptos_router::hooks::{use_params, use_query_map};
 use leptos_router::params::Params;
 use wasm_bindgen::prelude::*;
 
@@ -72,19 +72,9 @@ enum TicketState {
 // ---------------------------------------------------------------------------
 
 /// Build a deposit/reclaim href with optional event_id query param.
-fn build_deposit_href(api_id: &str) -> String {
-    let eid = web_sys::Url::new(
-        &web_sys::window()
-            .unwrap()
-            .location()
-            .href()
-            .unwrap(),
-    )
-    .ok()
-    .and_then(|url| url.search_params().get("event_id"));
-
-    match eid {
-        Some(ref e) if !e.is_empty() => format!("/deposit/{api_id}?event_id={e}"),
+fn build_deposit_href(api_id: &str, event_id: Option<&str>) -> String {
+    match event_id {
+        Some(e) if !e.is_empty() => format!("/deposit/{api_id}?event_id={e}"),
         _ => format!("/deposit/{api_id}"),
     }
 }
@@ -97,6 +87,7 @@ fn build_deposit_href(api_id: &str) -> String {
 #[component]
 pub fn Ticket() -> impl IntoView {
     let params = use_params::<TicketParams>();
+    let query = use_query_map();
 
     let (state, set_state) = signal(TicketState::Loading);
     let (fullscreen_qr, set_fullscreen_qr) = signal(false);
@@ -128,7 +119,11 @@ pub fn Ticket() -> impl IntoView {
         Some(PollingTier::AwaitingCheckIn)
     };
 
-    // Extract attendee_id from URL and event_id from query, then fetch ticket data
+    // Extract attendee_id from URL and event_id from query, then fetch ticket data.
+    //
+    // IMPORTANT: Reset state to Loading before each fetch to prevent stale ticket data
+    // from a previous event from being visible while the new data loads. This handles
+    // both initial page loads and SPA navigations between different ticket URLs.
     Effect::new(move |_| {
         let attendee_id = match params.get() {
             Ok(p) => p.attendee_id.unwrap_or_default(),
@@ -147,23 +142,23 @@ pub fn Ticket() -> impl IntoView {
             return;
         }
 
-        // Parse event_id from query params: ?event_id=xxx
-        let event_id = web_sys::Url::new(
-            &web_sys::window()
-                .unwrap()
-                .location()
-                .href()
-                .unwrap(),
-        )
-        .ok()
-        .and_then(|url| url.search_params().get("event_id"));
+        // Reset to Loading to clear any stale data from a previous ticket page visit.
+        // Without this, navigating between /ticket/A?event_id=X and /ticket/B?event_id=Y
+        // briefly shows the old event's data until the new API response arrives.
+        set_state.set(TicketState::Loading);
+        set_polling_active.set(false);
+        set_polling_expired.set(false);
+
+        // Parse event_id from query params via Leptos router (reactive, always in sync with URL)
+        let event_id = query.get().get("event_id").map(|s| s.to_string());
 
         leptos::task::spawn_local(async move {
             match api::get_public_ticket(&attendee_id, event_id.as_deref()).await {
                 Ok(data) => {
                     log::info!(
-                        "[ticket] loaded ticket for {}",
-                        data.attendee.name
+                        "[ticket] loaded ticket for {} (event: {})" ,
+                        data.attendee.name,
+                        data.event_name
                     );
                     let should_poll = polling_tier(&data).is_some();
                     set_state.set(TicketState::Found(data));
@@ -220,15 +215,7 @@ pub fn Ticket() -> impl IntoView {
             return;
         }
 
-        let event_id = web_sys::Url::new(
-            &web_sys::window()
-                .unwrap()
-                .location()
-                .href()
-                .unwrap(),
-        )
-        .ok()
-        .and_then(|url| url.search_params().get("event_id"));
+        let event_id = query.get().get("event_id").map(|s| s.to_string());
 
         // Build the cache key for this ticket
         let cache_key = match &event_id {
@@ -333,15 +320,7 @@ pub fn Ticket() -> impl IntoView {
         if attendee_id.is_empty() {
             return;
         }
-        let event_id = web_sys::Url::new(
-            &web_sys::window()
-                .unwrap()
-                .location()
-                .href()
-                .unwrap(),
-        )
-        .ok()
-        .and_then(|url| url.search_params().get("event_id"));
+        let event_id = query.get().get("event_id").map(|s| s.to_string());
 
         set_state.set(TicketState::Loading);
 
@@ -399,8 +378,9 @@ pub fn Ticket() -> impl IntoView {
                     }.into_any(),
 
                     TicketState::Found(data) => {
+                        let eid = query.get().get("event_id").map(|s| s.to_string());
                         let mut vd = TicketViewData::from_data(&data);
-                        vd.deposit_href = build_deposit_href(&vd.api_id);
+                        vd.deposit_href = build_deposit_href(&vd.api_id, eid.as_deref());
 
                         if vd.is_online {
                             view! {
