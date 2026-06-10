@@ -14,6 +14,7 @@ mod deposit;
 mod claim;
 mod admin;
 mod privacy;
+mod profile;
 mod wallet;
 
 // Re-export everything so existing `use crate::api::*` still works.
@@ -25,6 +26,7 @@ pub use deposit::*;
 pub use claim::*;
 pub use admin::*;
 pub use privacy::*;
+pub use profile::*;
 pub use wallet::*;
 
 use std::cell::RefCell;

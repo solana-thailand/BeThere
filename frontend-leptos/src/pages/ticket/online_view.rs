@@ -275,6 +275,7 @@ pub fn OnlineView(
         <div class="ticket-footer">
             <div class="ticket-nav">
                 <a href="/">"← Home"</a>
+                <a href="/profile">"Edit Profile"</a>
             </div>
         </div>
     }

@@ -15,8 +15,9 @@ use crate::components::ProtectedRoute;
 use crate::icons::{Icon, IconName};
 use crate::pages::{
     admin::Admin, adventure::page::Adventure, claim::Claim, data_privacy::DataPrivacy,
-    deposit::Deposit, dev_dashboard::DevDashboard, landing::Landing, login::Login,
-    privacy::Privacy, public_event::PublicEvent, scanner::Scanner, ticket::page::Ticket,
+    deposit::Deposit, dev_dashboard::DevDashboard, dev_profile::DevProfile, landing::Landing,
+    login::Login, privacy::Privacy, public_event::PublicEvent, scanner::Scanner,
+    ticket::page::Ticket,
 };
 
 /// Main application component.
@@ -58,6 +59,7 @@ pub fn App() -> impl IntoView {
                     <Route path=path!("/data-privacy") view=DataPrivacy />
                     <Route path=path!("/adventure") view=Adventure />
                     <Route path=path!("/dashboard") view=DevDashboard />
+                    <Route path=path!("/profile") view=DevProfile />
                     <Route path=path!("/staff") view=ProtectedScanner />
                     <Route path=path!("/admin") view=ProtectedAdmin />
                 </Routes>

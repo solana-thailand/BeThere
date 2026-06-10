@@ -10,6 +10,7 @@ pub mod claim;
 pub mod data_privacy;
 pub mod deposit;
 pub mod dev_dashboard;
+pub mod dev_profile;
 pub mod escrow_init;
 pub mod event_form;
 pub mod events_page;

@@ -14,6 +14,7 @@ pub mod health;
 pub mod metadata;
 pub mod orgs;
 pub mod privacy;
+pub mod profile;
 pub mod public_event;
 pub mod qr;
 pub mod quiz;
@@ -176,6 +177,11 @@ pub fn routes(state: AppState) -> Router<()> {
         .route(
             "/privacy/unsubscribe-marketing",
             post(privacy::unsubscribe_marketing),
+        )
+        // Developer profile (attendee-authed — read/update own profile)
+        .route(
+            "/my-profile",
+            get(profile::get_my_profile).put(profile::update_my_profile),
         )
         // Campaign progress for current user (attendee-authed — my-progress must come before {id} routes)
         .route(

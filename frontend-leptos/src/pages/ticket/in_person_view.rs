@@ -361,6 +361,7 @@ pub fn InPersonView(
         <div class="ticket-footer">
             <div class="ticket-nav">
                 <a href="/">"← Home"</a>
+                <a href="/profile">"Edit Profile"</a>
             </div>
             {if is_checked_in {
                 view! {
