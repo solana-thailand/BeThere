@@ -13879,3 +13879,26 @@ nav a.active {
     justify-content: flex-end;
     padding-top: 0.5rem;
 }
+
+.dev-profile-stat-card {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1rem 1.25rem;
+    background: var(--bg-hover);
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+}
+
+.dev-profile-stat-number {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--accent);
+    line-height: 1;
+}
+
+.dev-profile-stat-label {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+}

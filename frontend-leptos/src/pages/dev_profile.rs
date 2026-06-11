@@ -9,7 +9,6 @@ use leptos_meta::Title;
 use crate::api::{
     self, DeveloperProfile, UpdateProfileBody, INTEREST_OPTIONS, ROLE_OPTIONS,
 };
-use crate::auth::is_authenticated;
 use crate::icons::{Icon, IconName};
 
 // ---------------------------------------------------------------------------
@@ -55,12 +54,20 @@ pub fn DevProfile() -> impl IntoView {
     let (dirty, set_dirty) = signal(false);
 
     // Auth check + profile fetch on mount
+    // Use API-based auth check (GET /api/auth/me) instead of localStorage-only check.
+    // The localStorage token may be missing/expired while the HttpOnly cookie is still
+    // valid — using the API avoids a false redirect to /login → /admin for staff users.
     {
         let set_state = set_state;
         leptos::task::spawn_local(async move {
-            if !is_authenticated() {
-                let _ = web_sys::window().map(|w| w.location().set_href("/login"));
-                return;
+            // Verify auth via cookie-based API call
+            match crate::api::get_me().await {
+                Ok(_) => {}
+                Err(_) => {
+                    let _ =
+                        web_sys::window().map(|w| w.location().set_href("/login"));
+                    return;
+                }
             }
 
             set_state.set(ProfileState::LoadingProfile);
@@ -421,16 +428,26 @@ pub fn DevProfile() -> impl IntoView {
                         </div>
 
                         // Events attended
-                        if events > 0 {
+                        {if events > 0 {
                             view! {
-                                <div class="dev-profile-field">
-                                    <label class="dev-profile-label">"Events Attended"</label>
-                                    <div class="dev-profile-readonly">{format!("{events}")}</div>
+                                <div class="dev-profile-section">
+                                    <h3 class="dev-profile-section-title">"Your Activity"</h3>
+                                    <div class="dev-profile-stat-card">
+                                        <span class="dev-profile-stat-number">{format!("{events}")}</span>
+                                        <span class="dev-profile-stat-label">{if events == 1 { "Event Attended" } else { "Events Attended" }}</span>
+                                    </div>
                                 </div>
                             }.into_any()
                         } else {
-                            view! { <div></div> }.into_any()
-                        }
+                            view! {
+                                <div class="dev-profile-section">
+                                    <h3 class="dev-profile-section-title">"Your Activity"</h3>
+                                    <p class="dev-profile-hint">
+                                        "You haven't attended any events yet. Join an event to see your stats here!"
+                                    </p>
+                                </div>
+                            }.into_any()
+                        }}
 
                         // Consent
                         <div class="dev-profile-field">

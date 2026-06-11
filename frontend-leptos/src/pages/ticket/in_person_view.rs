@@ -1,6 +1,7 @@
 //! In-person attendee view — hero, QR, info, deposit, status badges.
 
 use leptos::prelude::*;
+use leptos_router::components::A;
 use wasm_bindgen::prelude::*;
 
 use super::action_cards::*;
@@ -70,9 +71,9 @@ pub fn InPersonView(
         rollover_target_event,
         community_links,
         calendar_subscribe_url,
-        event_start_ms,
+        event_start_ms: _,
         event_end_ms: _,
-        event_name,
+        event_name: _,
         ..
     } = view_data;
 
@@ -360,8 +361,8 @@ pub fn InPersonView(
         // 6. Footer
         <div class="ticket-footer">
             <div class="ticket-nav">
-                <a href="/">"← Home"</a>
-                <a href="/profile">"Edit Profile"</a>
+                <A href="/">"← Home"</A>
+                <A href="/profile">"Edit Profile"</A>
             </div>
             {if is_checked_in {
                 view! {

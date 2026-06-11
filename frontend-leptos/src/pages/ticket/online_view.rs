@@ -1,6 +1,7 @@
 //! Online attendee view — timeline, NFT claim, video section.
 
 use leptos::prelude::*;
+use leptos_router::components::A;
 use wasm_bindgen::prelude::*;
 
 use super::action_cards::*;
@@ -49,8 +50,8 @@ pub fn OnlineView(
         quiz_enabled,
         community_links,
         calendar_subscribe_url,
-        event_start_ms,
-        event_name,
+        event_start_ms: _,
+        event_name: _,
         ..
     } = view_data;
 
@@ -274,8 +275,8 @@ pub fn OnlineView(
         // 6. Footer
         <div class="ticket-footer">
             <div class="ticket-nav">
-                <a href="/">"← Home"</a>
-                <a href="/profile">"Edit Profile"</a>
+                <A href="/">"← Home"</A>
+                <A href="/profile">"Edit Profile"</A>
             </div>
         </div>
     }

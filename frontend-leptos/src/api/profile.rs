@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::{ApiError, api_get, api_get_no_cache, api_put_json};
+use super::{ApiError, api_get_no_cache, api_put_json};
 
 // ---------------------------------------------------------------------------
 // Types
@@ -97,9 +97,11 @@ pub async fn get_my_profile() -> Result<DeveloperProfile, ApiError> {
     let response = api_get_no_cache("/my-profile").await?;
 
     if !response.ok() {
+        let status = response.status();
+        let body = super::fetch::response_text(&response).await.unwrap_or_default();
         return Err(ApiError {
-            message: "Failed to get profile".to_string(),
-            status: response.status(),
+            message: format!("Failed to get profile ({status}): {body}"),
+            status,
         });
     }
 

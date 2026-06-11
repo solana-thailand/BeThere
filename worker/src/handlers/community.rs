@@ -137,14 +137,14 @@ pub async fn list_developers(
         .into_iter()
         .map(|p| DeveloperSummary {
             email: p.email,
-            display_name: p.display_name,
+            display_name: p.display_name.unwrap_or_default(),
             experience_level: p.experience_level,
             primary_role: p.primary_role,
-            tech_stack: p.tech_stack,
-            interests: p.interests,
-            total_events: p.total_events,
-            last_active_at: p.last_active_at,
-            consent_outreach: p.consent_outreach == 1,
+            tech_stack: p.tech_stack.unwrap_or_default(),
+            interests: p.interests.unwrap_or_default(),
+            total_events: p.total_events.unwrap_or(0),
+            last_active_at: p.last_active_at.unwrap_or_default(),
+            consent_outreach: p.consent_outreach.unwrap_or(0) == 1,
         })
         .collect();
 

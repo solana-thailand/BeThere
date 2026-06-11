@@ -17,24 +17,24 @@ use worker::d1::D1Type;
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub(crate) struct DeveloperProfileRow {
     pub email: String,
-    pub display_name: String,
+    pub display_name: Option<String>,
     pub wallet_address: Option<String>,
     pub github_handle: Option<String>,
     pub discord_handle: Option<String>,
     pub twitter_handle: Option<String>,
     pub experience_level: Option<String>,
     pub primary_role: Option<String>,
-    pub tech_stack: String,
-    pub interests: String,
-    pub learning_goals: String,
-    pub expectations: String,
-    pub company_org: String,
-    pub location_city: String,
-    pub consent_outreach: i64,
-    pub first_seen_at: String,
-    pub last_active_at: String,
-    pub total_events: i64,
-    pub badges_earned: String,
+    pub tech_stack: Option<String>,
+    pub interests: Option<String>,
+    pub learning_goals: Option<String>,
+    pub expectations: Option<String>,
+    pub company_org: Option<String>,
+    pub location_city: Option<String>,
+    pub consent_outreach: Option<i64>,
+    pub first_seen_at: Option<String>,
+    pub last_active_at: Option<String>,
+    pub total_events: Option<i64>,
+    pub badges_earned: Option<String>,
 }
 
 /// A single registration response row.
@@ -106,23 +106,57 @@ pub(crate) async fn upsert_developer_fields(
 }
 
 /// Get a developer profile by email.
+///
+/// Bypasses worker crate's `.first::<T>()` which uses `serde_wasm_bindgen::from_value()`
+/// — that crashes on `JsValue(null)` columns (e.g. rows with nullable fields).
+/// Instead: raw JS `.first()` → `JSON.stringify` → `serde_json` (same pattern as attendees.rs).
 #[allow(dead_code)]
 pub(crate) async fn get_developer_profile(
     db: &D1Database,
     email: &str,
 ) -> Result<Option<DeveloperProfileRow>, String> {
-    db.prepare(
+    let stmt = db.prepare(
         "SELECT email, display_name, wallet_address, github_handle, discord_handle, \
          twitter_handle, experience_level, primary_role, tech_stack, interests, \
          learning_goals, expectations, company_org, location_city, consent_outreach, \
          first_seen_at, last_active_at, total_events, badges_earned \
          FROM developer_profiles WHERE email = ?1",
+    );
+    let bound = stmt
+        .bind_refs(&[D1Type::Text(email)])
+        .map_err(|e| format!("D1 get_developer_profile bind: {e:?}"))?;
+
+    let raw_first = wasm_bindgen_futures::JsFuture::from(
+        bound
+            .inner()
+            .first(None)
+            .map_err(|e| format!("D1 get_developer_profile first() call: {e:?}"))?,
     )
-    .bind_refs(&[D1Type::Text(email)])
-    .map_err(|e| format!("D1 get_developer_profile bind: {e:?}"))?
-    .first::<DeveloperProfileRow>(None)
     .await
-    .map_err(|e| format!("D1 get_developer_profile query: {e:?}"))
+    .map_err(|e| format!("D1 get_developer_profile first() await: {e:?}"))?;
+
+    if raw_first.is_null() || raw_first.is_undefined() {
+        return Ok(None);
+    }
+
+    let json_str = js_sys::JSON::stringify(&raw_first)
+        .map(|s| s.as_string().unwrap_or_default())
+        .unwrap_or_default();
+
+    if json_str.is_empty() {
+        return Ok(None);
+    }
+
+    let row: DeveloperProfileRow = serde_json::from_str(&json_str).map_err(|e| {
+        tracing::warn!(
+            error = %e,
+            json = %json_str.chars().take(500).collect::<String>(),
+            "D1 get_developer_profile: deserialize failed"
+        );
+        format!("D1 get_developer_profile deserialize: {e}")
+    })?;
+
+    Ok(Some(row))
 }
 
 /// Update wallet address for a developer (set when they connect wallet on claim page).
@@ -475,14 +509,14 @@ pub(crate) async fn outreach_opt_in_count(db: &D1Database) -> Result<i64, String
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct DeveloperProfileSummary {
     pub email: String,
-    pub display_name: String,
+    pub display_name: Option<String>,
     pub experience_level: Option<String>,
     pub primary_role: Option<String>,
-    pub tech_stack: String,
-    pub interests: String,
-    pub total_events: i64,
-    pub last_active_at: String,
-    pub consent_outreach: i64,
+    pub tech_stack: Option<String>,
+    pub interests: Option<String>,
+    pub total_events: Option<i64>,
+    pub last_active_at: Option<String>,
+    pub consent_outreach: Option<i64>,
 }
 
 /// Paginated developer list.

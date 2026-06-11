@@ -89,50 +89,59 @@ pub async fn get_my_profile(
         .as_ref()
         .ok_or_else(|| AppError::NotFound("D1 database not available".to_string()))?;
 
-    let profile = crate::db::developers::get_developer_profile(d1, &claims.email)
-        .await
-        .map_err(|e| AppError::Internal(format!("Failed to fetch profile: {e}")))?
-        .unwrap_or_else(|| {
+    tracing::info!(email = %claims.email, "GET /api/my-profile");
+
+    let profile = match crate::db::developers::get_developer_profile(d1, &claims.email).await {
+        Ok(Some(p)) => p,
+        Ok(None) => {
+            tracing::info!(email = %claims.email, "no profile found, returning defaults");
             // Return a default empty profile for new users
             crate::db::developers::DeveloperProfileRow {
                 email: claims.email.clone(),
-                display_name: String::new(),
+                display_name: None,
                 wallet_address: None,
                 github_handle: None,
                 discord_handle: None,
                 twitter_handle: None,
                 experience_level: None,
                 primary_role: None,
-                tech_stack: "[]".to_string(),
-                interests: "[]".to_string(),
-                learning_goals: String::new(),
-                expectations: String::new(),
-                company_org: String::new(),
-                location_city: String::new(),
-                consent_outreach: 0,
-                first_seen_at: String::new(),
-                last_active_at: String::new(),
-                total_events: 0,
-                badges_earned: "[]".to_string(),
+                tech_stack: None,
+                interests: None,
+                learning_goals: None,
+                expectations: None,
+                company_org: None,
+                location_city: None,
+                consent_outreach: None,
+                first_seen_at: None,
+                last_active_at: None,
+                total_events: None,
+                badges_earned: None,
             }
-        });
+        }
+        Err(e) => {
+            tracing::error!(email = %claims.email, error = %e, "D1 get_developer_profile failed");
+            return Err(WorkerError(AppError::Internal(format!(
+                "Failed to fetch profile: {e}"
+            ))));
+        }
+    };
 
     Ok(ApiOk::new(MyProfileResponse {
         email: profile.email,
-        display_name: profile.display_name,
+        display_name: profile.display_name.unwrap_or_default(),
         wallet_address: profile.wallet_address,
         github_handle: profile.github_handle,
         discord_handle: profile.discord_handle,
         twitter_handle: profile.twitter_handle,
         experience_level: profile.experience_level,
         primary_role: profile.primary_role,
-        tech_stack: parse_json_array(&profile.tech_stack),
-        interests: parse_json_array(&profile.interests),
-        learning_goals: profile.learning_goals,
-        company_org: profile.company_org,
-        location_city: profile.location_city,
-        consent_outreach: profile.consent_outreach != 0,
-        total_events: profile.total_events,
+        tech_stack: parse_json_array(&profile.tech_stack.unwrap_or_else(|| "[]".to_string())),
+        interests: parse_json_array(&profile.interests.unwrap_or_else(|| "[]".to_string())),
+        learning_goals: profile.learning_goals.unwrap_or_default(),
+        company_org: profile.company_org.unwrap_or_default(),
+        location_city: profile.location_city.unwrap_or_default(),
+        consent_outreach: profile.consent_outreach.unwrap_or(0) != 0,
+        total_events: profile.total_events.unwrap_or(0),
     }))
 }
 
