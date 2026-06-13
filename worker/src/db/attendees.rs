@@ -157,6 +157,45 @@ pub(crate) async fn verify_deposit(
     Ok(())
 }
 
+/// Write a QR URL to D1 for a single attendee.
+///
+/// Required because the public ticket endpoint reads `qr_url` from D1
+/// (D1-first path). Without this, a QR written only to the Google Sheet is
+/// invisible to the ticket page until a manual sheet→D1 sync runs.
+pub(crate) async fn set_qr_url(db: &D1Database, id: &str, qr_url: &str) -> Result<(), String> {
+    let stmt = db.prepare(
+        "UPDATE attendees \n         SET qr_url = ?1, updated_at = datetime('now') \n         WHERE id = ?2",
+    );
+    stmt.bind_refs(&[D1Type::Text(qr_url), D1Type::Text(id)])
+        .map_err(|e| format!("D1 set_qr_url bind: {e:?}"))?
+        .run()
+        .await
+        .map_err(|e| format!("D1 set_qr_url run: {e:?}"))?;
+
+    Ok(())
+}
+
+/// Write QR URLs to D1 for multiple attendees in one statement.
+///
+/// `entries` is `(attendee_id, qr_url)` pairs. Used by batch QR generation.
+pub(crate) async fn set_qr_urls_batch(
+    db: &D1Database,
+    entries: &[(String, String)],
+) -> Result<usize, String> {
+    if entries.is_empty() {
+        return Ok(0);
+    }
+    let mut updated = 0usize;
+    for (id, qr_url) in entries {
+        if let Err(e) = set_qr_url(db, id, qr_url).await {
+            tracing::warn!(attendee_id = %id, error = %e, "D1 set_qr_urls_batch: row failed");
+            continue;
+        }
+        updated += 1;
+    }
+    Ok(updated)
+}
+
 /// Get deposit status from D1 by attendee ID.
 /// Returns the raw deposit columns if a row is found.
 ///

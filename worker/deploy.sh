@@ -237,37 +237,50 @@ for file_hash, content_b64 in manifest.items():
   fi
 
   # Build metadata JSON with assets JWT + env vars from wrangler.toml
+  #
+  # IMPORTANT: Cloudflare's PUT /workers/scripts/{name} API expects env vars
+  # as `plain_text` entries in the `bindings` array — NOT as a top-level
+  # `vars` dict (that's the wrangler.toml format). Using `vars` silently
+  # drops every env var, causing the worker to fall back to hardcoded defaults
+  # (e.g. SERVER_URL → "https://event-checkin.workers.dev").
   METADATA=$(/opt/homebrew/bin/python3 -c "
 import json
+
+plain_text_vars = {
+    'SERVER_URL': 'https://bethere.solana-thailand.workers.dev',
+    'CLAIM_BASE_URL': 'https://bethere.solana-thailand.workers.dev/claim',
+    'GOOGLE_SHEET_NAME': 'Attendees',
+    'GOOGLE_STAFF_SHEET_NAME': 'staff',
+    'PLATFORM_SHEET_ID': '1oF54ia6mquO_kB869aQxmz3RD8nDcTRWfXIX0VmndxM',
+    'DEV_MODE': '0',
+    'DEV_EMAIL': 'ratchapon.poc@gmail.com',
+    'SUPER_ADMIN_EMAILS': 'ratchapon.poc@gmail.com,hackathon@colosseum.org',
+    'EVENT_NAME': 'Solana x AI Builders: The Road to Mainnet #1 (Bangkok)',
+    'EVENT_TAGLINE': 'Deep Dive into Rust, AI Agents, and the Solana Ecosystem',
+    'EVENT_LINK': 'https://solana-thailand.github.io/genesis/events/road-to-mainnet-1-bangkok/',
+    'EVENT_START_MS': '1777170600000',
+    'EVENT_END_MS': '1777183200000',
+    'EVENT_DEPOSIT_ENABLED': 'false',
+    'EVENT_DEPOSIT_AMOUNT_USDC': '0',
+    'EVENT_DEPOSIT_AMOUNT_THB': '0',
+    'EVENT_PROMPTPAY_ID': '',
+}
+
+bindings = [
+    {'type': 'kv_namespace', 'name': 'EVENTS', 'namespace_id': 'c8a6a87f9ed34ce0a3c8e48b84039214'},
+    {'type': 'd1', 'name': 'DB', 'id': '98d09542-e7d8-4413-ac34-4276a50d126c'},
+    {'type': 'r2_bucket', 'name': 'ASSETS_BUCKET', 'bucket_name': 'bethere-assets'},
+    # DO binding not supported by PUT API (10021 unknown type) — wrangler deploy handles it
+]
+# Env vars MUST be plain_text bindings for the PUT API to accept them.
+for name, value in plain_text_vars.items():
+    bindings.append({'type': 'plain_text', 'name': name, 'text': value})
+
 m = {
     'main_module': 'shim.js',
     'compatibility_date': '2024-09-23',
     'compatibility_flags': ['nodejs_compat'],
-    'bindings': [
-        {'type': 'kv_namespace', 'name': 'EVENTS', 'namespace_id': 'c8a6a87f9ed34ce0a3c8e48b84039214'},
-        {'type': 'd1', 'name': 'DB', 'id': '98d09542-e7d8-4413-ac34-4276a50d126c'},
-        {'type': 'r2_bucket', 'name': 'ASSETS_BUCKET', 'bucket_name': 'bethere-assets'},
-        # DO binding not supported by PUT API (10021 unknown type) — wrangler deploy handles it
-    ],
-    'vars': {
-        'SERVER_URL': 'https://bethere.solana-thailand.workers.dev',
-        'CLAIM_BASE_URL': 'https://bethere.solana-thailand.workers.dev/claim',
-        'GOOGLE_SHEET_NAME': 'Attendees',
-        'GOOGLE_STAFF_SHEET_NAME': 'staff',
-        'PLATFORM_SHEET_ID': '1oF54ia6mquO_kB869aQxmz3RD8nDcTRWfXIX0VmndxM',
-        'DEV_MODE': '0',
-        'DEV_EMAIL': 'ratchapon.poc@gmail.com',
-        'SUPER_ADMIN_EMAILS': 'ratchapon.poc@gmail.com,hackathon@colosseum.org',
-        'EVENT_NAME': 'Solana x AI Builders: The Road to Mainnet #1 (Bangkok)',
-        'EVENT_TAGLINE': 'Deep Dive into Rust, AI Agents, and the Solana Ecosystem',
-        'EVENT_LINK': 'https://solana-thailand.github.io/genesis/events/road-to-mainnet-1-bangkok/',
-        'EVENT_START_MS': '1777170600000',
-        'EVENT_END_MS': '1777183200000',
-        'EVENT_DEPOSIT_ENABLED': 'false',
-        'EVENT_DEPOSIT_AMOUNT_USDC': '0',
-        'EVENT_DEPOSIT_AMOUNT_THB': '0',
-        'EVENT_PROMPTPAY_ID': '',
-    },
+    'bindings': bindings,
 
     'assets': {
         'jwt': '${ASSETS_JWT}',

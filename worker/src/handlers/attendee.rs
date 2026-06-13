@@ -272,16 +272,12 @@ pub async fn get_public_ticket(
         }
     };
 
+    let mut attendee = attendee;
+
     let mut response = AttendeeResponse::from_attendee(&attendee);
 
     // Mask email for privacy: "john@example.com" → "j***@example.com"
     response.email = mask_email(&response.email);
-
-    // Generate QR code image (cached in KV) if the attendee has a QR URL
-    let qr_image = match attendee.qr_code_url.as_ref() {
-        Some(url) => get_cached_qr_image(kv, &attendee.api_id, url).await,
-        None => None,
-    };
 
     // Fetch deposit status for context (pending verification, etc.)
     // Uses D1-first fallback so deposit data is found even when KV is empty.
@@ -294,6 +290,50 @@ pub async fn get_public_ticket(
     .await
     .ok()
     .flatten();
+
+    // Lazy QR backfill: ensure the attendee has a valid QR URL pointing at the
+    // current deployment. Triggers when:
+    //   - qr_url is missing/empty (verified before the D1 QR-write fix), OR
+    //   - qr_url points at a different host (e.g. the fallback default
+    //     `event-checkin.workers.dev` from a previous deploy where SERVER_URL
+    //     wasn't bound).
+    // Self-heals affected attendees on first ticket view without requiring a
+    // manual re-verify or sheet→D1 sync.
+    let expected_qr_url = format!(
+        "{}/staff/?scan={}",
+        state.config.server.url.trim_end_matches('/'),
+        attendee.api_id
+    );
+    let needs_qr_backfill = attendee.is_approved()
+        && attendee.is_in_person()
+        && deposit_status.as_ref().is_some_and(|d| d.verified)
+        && attendee.qr_code_url.as_deref() != Some(expected_qr_url.as_str());
+
+    if needs_qr_backfill {
+        tracing::info!(
+            attendee_id = %attendee.api_id,
+            old_qr_url = ?attendee.qr_code_url,
+            "lazy QR backfill: (re)generating qr_url for verified attendee"
+        );
+        if let Some(ref d1) = state.d1
+            && let Err(e) =
+                crate::db::attendees::set_qr_url(d1, &attendee.api_id, &expected_qr_url).await
+        {
+            tracing::warn!(
+                attendee_id = %attendee.api_id,
+                error = %e,
+                "lazy QR backfill: D1 write failed (non-fatal)"
+            );
+        }
+        attendee.qr_code_url = Some(expected_qr_url.clone());
+        response.qr_code_url = Some(expected_qr_url);
+    }
+
+    // Generate QR code image (cached in KV) if the attendee has a QR URL
+    let qr_image = match attendee.qr_code_url.as_ref() {
+        Some(url) => get_cached_qr_image(kv, &attendee.api_id, url).await,
+        None => None,
+    };
 
     // Fetch THB deposit for refund proof URL (D1-first, KV fallback)
     let thb_deposit = crate::event_store::get_thb_deposit_with_fallback(

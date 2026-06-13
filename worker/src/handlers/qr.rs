@@ -221,6 +221,28 @@ pub async fn generate_qrs(
         AppError::Internal(format!("failed to write QR URLs to sheet: {e}"))
     })?;
 
+    // Dual-write: also persist QR URLs to D1 so the public ticket page
+    // (which reads D1-first) can render them without a manual sheet→D1 sync.
+    // Non-fatal: Sheet is already updated, so a future sync would catch up.
+    if let Some(ref d1) = state.d1 {
+        let d1_entries: Vec<(String, String)> = updates
+            .iter()
+            .filter_map(|(row_idx, qr_url)| {
+                attendees
+                    .iter()
+                    .find(|a| a.row_index == *row_idx)
+                    .map(|a| (a.api_id.clone(), qr_url.clone()))
+            })
+            .collect();
+        match crate::db::attendees::set_qr_urls_batch(d1, &d1_entries).await {
+            Ok(n) => tracing::info!(d1_updated = n, "D1 qr_url batch write complete"),
+            Err(e) => tracing::warn!(
+                error = %e,
+                "D1 qr_url batch write failed (non-fatal; sheet already updated)"
+            ),
+        }
+    }
+
     tracing::info!(
         total_updated = updated,
         staff_email = %claims.email,

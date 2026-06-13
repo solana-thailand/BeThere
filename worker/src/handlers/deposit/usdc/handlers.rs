@@ -563,11 +563,29 @@ pub async fn confirm_deposit_handler(
                                     kv.cloned(),
                                 ));
 
-                                // Auto-generate QR if attendee doesn't have one
+                                // Auto-generate QR if attendee doesn't have one.
+                                // D1 write is inline (ticket page reads D1-first);
+                                // Sheet write is detached.
                                 if attendee.qr_code_url.as_ref().is_none_or(|u| u.is_empty()) {
                                     let server_url = &state.config.server.url;
                                     let qr_url =
                                         format!("{server_url}/staff/?scan={}", attendee.api_id);
+
+                                    if let Some(ref d1) = state.d1
+                                        && let Err(e) = crate::db::attendees::set_qr_url(
+                                            d1,
+                                            &attendee.api_id,
+                                            &qr_url,
+                                        )
+                                        .await
+                                    {
+                                        tracing::warn!(
+                                            attendee_id = %attendee.api_id,
+                                            error = %e,
+                                            "D1 set_qr_url failed on USDC confirm (non-fatal)"
+                                        );
+                                    }
+
                                     ctx.wait_until(crate::sheets::bg_sync::update_qr_urls(
                                         state.clone(),
                                         vec![(attendee.row_index, qr_url)],
@@ -603,6 +621,22 @@ pub async fn confirm_deposit_handler(
                                     let server_url = &state.config.server.url;
                                     let qr_url =
                                         format!("{server_url}/staff/?scan={}", attendee.api_id);
+
+                                    if let Some(ref d1) = state.d1
+                                        && let Err(e) = crate::db::attendees::set_qr_url(
+                                            d1,
+                                            &attendee.api_id,
+                                            &qr_url,
+                                        )
+                                        .await
+                                    {
+                                        tracing::warn!(
+                                            attendee_id = %attendee.api_id,
+                                            error = %e,
+                                            "D1 set_qr_url failed on USDC confirm (non-fatal)"
+                                        );
+                                    }
+
                                     if let Err(e) = crate::sheets::write::update_qr_urls(
                                         &[(attendee.row_index, qr_url)],
                                         &mapping,

@@ -484,6 +484,20 @@ pub(crate) async fn verify_and_confirm_deposit(
                         if attendee.qr_code_url.as_ref().is_none_or(|u| u.is_empty()) {
                             let server_url = &state.config.server.url;
                             let qr_url = format!("{server_url}/staff/?scan={}", attendee.api_id);
+
+                            // D1 write — inline so the ticket page sees the QR immediately.
+                            if let Some(ref d1) = state.d1
+                                && let Err(e) =
+                                    crate::db::attendees::set_qr_url(d1, &attendee.api_id, &qr_url)
+                                        .await
+                            {
+                                tracing::warn!(
+                                    attendee_id = %attendee.api_id,
+                                    error = %e,
+                                    "D1 set_qr_url failed on USDC verify_and_confirm (non-fatal)"
+                                );
+                            }
+
                             if let Err(e) = crate::sheets::write::update_qr_urls(
                                 &[(attendee.row_index, qr_url)],
                                 &mapping,
