@@ -151,7 +151,7 @@ pub async fn lookup_claim(
         });
     }
 
-    // ── Pre-registered path: look up from Google Sheet ──
+    // ── Pre-registered path: look up from Google Sheet, D1 fallback ──
     let (attendee, total_checked_in, total_claimed) =
         match crate::sheets::get_attendee_with_claim_counts(
             token,
@@ -165,8 +165,31 @@ pub async fn lookup_claim(
         {
             Ok((Some(a), checked_in, claimed)) => (a, checked_in, claimed),
             Ok((None, _, _)) => {
-                tracing::warn!(claim_token = %token, "claim lookup: no attendee found");
-                return Err(AppError::NotFound("claim token not found".into()));
+                // Sheets returned nothing — try D1 fallback (online attendees may
+                // have claim_token in D1 but not yet synced to Sheets).
+                // Use get_attendee_by_claim_token (no event filter) because
+                // resolve_event may return a different event than the attendee's.
+                tracing::info!(claim_token = %token, "claim lookup: Sheets miss, trying D1 fallback");
+                if let Some(ref d1) = state.d1 {
+                    match crate::db::attendees::get_attendee_by_claim_token(d1, token).await {
+                        Ok(Some(a)) => {
+                            tracing::info!(claim_token = %token, "claim lookup: found in D1 fallback");
+                            // Counts unavailable without event_id; claim page shows them as informational only
+                            (a, 0, 0)
+                        }
+                        Ok(None) => {
+                            tracing::warn!(claim_token = %token, "claim lookup: not found in Sheets or D1");
+                            return Err(AppError::NotFound("claim token not found".into()));
+                        }
+                        Err(e) => {
+                            tracing::error!(claim_token = %token, error = %e, "claim lookup D1 fallback failed");
+                            return Err(AppError::NotFound("claim token not found".into()));
+                        }
+                    }
+                } else {
+                    tracing::warn!(claim_token = %token, "claim lookup: no attendee found (no D1)");
+                    return Err(AppError::NotFound("claim token not found".into()));
+                }
             }
             Err(ref e) => {
                 tracing::error!(claim_token = %token, error = %e, "claim lookup failed");
@@ -354,7 +377,7 @@ pub async fn execute_claim(
         return execute_walkin_claim(state, &event, token, wallet_address, walkin).await;
     }
 
-    // 3. Pre-registered path: look up attendee by claim token from Google Sheet
+    // 3. Pre-registered path: look up attendee by claim token from Google Sheet, D1 fallback
     let mut attendee = match crate::sheets::get_attendee_by_claim_token(
         token,
         state,
@@ -366,8 +389,27 @@ pub async fn execute_claim(
     {
         Ok(Some(a)) => a,
         Ok(None) => {
-            tracing::warn!(claim_token = %token, "claim mint: no attendee found");
-            return Err(AppError::NotFound("claim token not found".into()));
+            // Sheets returned nothing — try D1 fallback
+            tracing::info!(claim_token = %token, "claim mint: Sheets miss, trying D1 fallback");
+            if let Some(ref d1) = state.d1 {
+                match crate::db::attendees::get_attendee_by_claim_token(d1, token).await {
+                    Ok(Some(a)) => {
+                        tracing::info!(claim_token = %token, "claim mint: found in D1 fallback");
+                        a
+                    }
+                    Ok(None) => {
+                        tracing::warn!(claim_token = %token, "claim mint: not found in Sheets or D1");
+                        return Err(AppError::NotFound("claim token not found".into()));
+                    }
+                    Err(e) => {
+                        tracing::error!(claim_token = %token, error = %e, "claim mint D1 fallback failed");
+                        return Err(AppError::NotFound("claim token not found".into()));
+                    }
+                }
+            } else {
+                tracing::warn!(claim_token = %token, "claim mint: no attendee found (no D1)");
+                return Err(AppError::NotFound("claim token not found".into()));
+            }
         }
         Err(ref e) => {
             tracing::error!(claim_token = %token, error = %e, "claim mint lookup failed");
