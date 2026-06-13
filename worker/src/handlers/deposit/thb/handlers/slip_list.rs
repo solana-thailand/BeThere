@@ -37,10 +37,13 @@ pub async fn pending_thb_slips_handler(
         .await
         .map_err(AppError::Internal)?;
 
-    let pending: Vec<ThbDeposit> = all_deposits
+    let mut pending: Vec<ThbDeposit> = all_deposits
         .into_iter()
         .filter(|d| !d.verified && d.slip_url.is_some())
         .collect();
+
+    // Migrate any inline base64 slip URLs to R2 (keeps response payload small)
+    super::migrate_data_urls(&state, kv, d1, &event.id, &mut pending).await;
 
     // Enrich with attendee names from Google Sheets
     let attendee_names =
@@ -81,10 +84,13 @@ pub async fn refund_queue_handler(
         .await
         .map_err(AppError::Internal)?;
 
-    let pending: Vec<ThbDeposit> = all_deposits
+    let mut pending: Vec<ThbDeposit> = all_deposits
         .into_iter()
         .filter(|d| d.verified && !d.refunded)
         .collect();
+
+    // Migrate any inline base64 slip/refund URLs to R2 (keeps response payload small)
+    super::migrate_data_urls(&state, kv, d1, &event.id, &mut pending).await;
 
     // Enrich with attendee names from Google Sheets
     let attendee_names =
@@ -131,7 +137,10 @@ pub async fn refunded_list_handler(
         .await
         .map_err(AppError::Internal)?;
 
-    let refunded: Vec<ThbDeposit> = all_deposits.into_iter().filter(|d| d.refunded).collect();
+    let mut refunded: Vec<ThbDeposit> = all_deposits.into_iter().filter(|d| d.refunded).collect();
+
+    // Migrate any inline base64 slip/refund URLs to R2 (keeps response payload small)
+    super::migrate_data_urls(&state, kv, d1, &event.id, &mut refunded).await;
 
     // Enrich with attendee names from Google Sheets
     let attendee_names =

@@ -46,6 +46,79 @@ pub(crate) async fn resolve_attendee_names(
     }
 }
 
+/// Migrate any inline base64 `data:` URLs (slip_url, refund_proof_url) to R2
+/// and persist the serving path back to D1.
+///
+/// Legacy rows inserted before R2 integration may still hold multi-MB base64
+/// strings in `slip_url` / `refund_proof_url`. When these appear in a list
+/// response the JSON payload balloons (e.g. 1.5 MB for a single slip). This
+/// helper uploads those images to R2 on first sight and replaces the field
+/// with a compact serving path (`/api/storage/slips/...`).
+///
+/// Idempotent: rows whose URL is already an R2 path are skipped. R2 upload
+/// failures are non-fatal — the original `data:` URL is kept in the response.
+pub(super) async fn migrate_data_urls(
+    state: &crate::state::AppState,
+    kv: &worker::KvStore,
+    d1: Option<&worker::D1Database>,
+    event_id: &str,
+    deposits: &mut [event_checkin_domain::models::deposit::ThbDeposit],
+) {
+    for deposit in deposits.iter_mut() {
+        let mut changed = false;
+
+        if let Some(url) = deposit.slip_url.as_ref()
+            && url.starts_with("data:")
+        {
+            let migrated = maybe_upload_to_r2(
+                state,
+                event_id,
+                &deposit.attendee_id,
+                url,
+                crate::storage::PREFIX_SLIPS,
+            )
+            .await;
+            if !migrated.starts_with("data:") {
+                tracing::info!(
+                    attendee_id = %deposit.attendee_id,
+                    "migrated slip_url data URL to R2"
+                );
+                deposit.slip_url = Some(migrated);
+                changed = true;
+            }
+        }
+
+        if let Some(url) = deposit.refund_proof_url.as_ref()
+            && url.starts_with("data:")
+        {
+            let migrated = maybe_upload_to_r2(
+                state,
+                event_id,
+                &deposit.attendee_id,
+                url,
+                crate::storage::PREFIX_REFUNDS,
+            )
+            .await;
+            if !migrated.starts_with("data:") {
+                tracing::info!(
+                    attendee_id = %deposit.attendee_id,
+                    "migrated refund_proof_url data URL to R2"
+                );
+                deposit.refund_proof_url = Some(migrated);
+                changed = true;
+            }
+        }
+
+        if changed && let Err(e) = crate::event_store::save_thb_deposit(kv, deposit, d1).await {
+            tracing::warn!(
+                attendee_id = %deposit.attendee_id,
+                error = %e,
+                "failed to persist data URL migration — will retry on next list call"
+            );
+        }
+    }
+}
+
 /// Upload a data URL to R2 if available. Returns the R2 key on success,
 /// or the original URL if R2 is not available or it's not a data URL.
 pub(super) async fn maybe_upload_to_r2(
