@@ -81,62 +81,86 @@ pub async fn list_thb_deposits(db: &D1Database, event_id: &str) -> Result<Vec<Th
 // ---------------------------------------------------------------------------
 
 /// Insert a new THB deposit into D1.
+/// Uses `db.exec()` with format string per project convention (avoids prepared stmt issues).
 pub async fn insert_thb_deposit(db: &D1Database, deposit: &ThbDeposit) -> Result<(), String> {
-    let stmt = db.prepare(
-        "INSERT INTO thb_deposits (attendee_id, event_id, amount_thb, slip_url, verified, verified_by, verified_at, uploaded_at, refunded, refunded_at, attendee_name, bank_account, bank_name, account_name, refund_proof_url) \
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+    let esc = |s: &str| s.replace('\'', "''");
+    let null_or = |opt: &Option<String>| -> String {
+        match opt {
+            Some(v) if !v.is_empty() => format!("'{}'", esc(v)),
+            _ => "NULL".to_string(),
+        }
+    };
+
+    let sql = format!(
+        "INSERT INTO thb_deposits \
+         (attendee_id, event_id, amount_thb, slip_url, verified, verified_by, verified_at, \
+          uploaded_at, refunded, refunded_at, attendee_name, bank_account, bank_name, \
+          account_name, refund_proof_url) \
+         VALUES ('{attendee_id}', '{event_id}', {amount_thb}, {slip_url}, {verified}, \
+          {verified_by}, {verified_at}, '{uploaded_at}', {refunded}, {refunded_at}, \
+          {attendee_name}, {bank_account}, {bank_name}, {account_name}, {refund_proof_url})",
+        attendee_id = esc(&deposit.attendee_id),
+        event_id = esc(&deposit.event_id),
+        amount_thb = deposit.amount_thb,
+        slip_url = null_or(&deposit.slip_url),
+        verified = deposit.verified as i32,
+        verified_by = null_or(&deposit.verified_by),
+        verified_at = null_or(&deposit.verified_at),
+        uploaded_at = esc(&deposit.uploaded_at),
+        refunded = deposit.refunded as i32,
+        refunded_at = null_or(&deposit.refunded_at),
+        attendee_name = null_or(&deposit.attendee_name),
+        bank_account = null_or(&deposit.bank_account),
+        bank_name = null_or(&deposit.bank_name),
+        account_name = null_or(&deposit.account_name),
+        refund_proof_url = null_or(&deposit.refund_proof_url),
     );
-    stmt.bind_refs(&[
-        D1Type::Text(&deposit.attendee_id),
-        D1Type::Text(&deposit.event_id),
-        D1Type::Integer(deposit.amount_thb as i32),
-        opt_text(&deposit.slip_url),
-        D1Type::Integer(deposit.verified as i32),
-        opt_text(&deposit.verified_by),
-        opt_text(&deposit.verified_at),
-        D1Type::Text(&deposit.uploaded_at),
-        D1Type::Integer(deposit.refunded as i32),
-        opt_text(&deposit.refunded_at),
-        opt_text(&deposit.attendee_name),
-        opt_text(&deposit.bank_account),
-        opt_text(&deposit.bank_name),
-        opt_text(&deposit.account_name),
-        opt_text(&deposit.refund_proof_url),
-    ])
-    .map_err(|e| format!("D1 insert_thb_deposit bind: {e:?}"))?
-    .run()
-    .await
-    .map_err(|e| format!("D1 insert_thb_deposit run: {e:?}"))?;
+
+    db.exec(&sql)
+        .await
+        .map_err(|e| format!("D1 insert_thb_deposit exec: {e:?}"))?;
 
     Ok(())
 }
 
 /// Update an existing THB deposit (for verify / refund operations).
+/// Uses `db.exec()` with format string per project convention (avoids prepared stmt issues).
 pub async fn update_thb_deposit(db: &D1Database, deposit: &ThbDeposit) -> Result<(), String> {
-    let stmt = db.prepare(
-        "UPDATE thb_deposits SET amount_thb = ?1, slip_url = ?2, verified = ?3, verified_by = ?4, verified_at = ?5, refunded = ?6, refunded_at = ?7, attendee_name = ?8, bank_account = ?9, bank_name = ?10, account_name = ?11, refund_proof_url = ?12 \
-         WHERE event_id = ?13 AND attendee_id = ?14",
+    let esc = |s: &str| s.replace('\'', "''");
+    let null_or = |opt: &Option<String>| -> String {
+        match opt {
+            Some(v) if !v.is_empty() => format!("'{}'", esc(v)),
+            _ => "NULL".to_string(),
+        }
+    };
+
+    let sql = format!(
+        "UPDATE thb_deposits SET \
+         amount_thb = {amount_thb}, slip_url = {slip_url}, verified = {verified}, \
+         verified_by = {verified_by}, verified_at = {verified_at}, refunded = {refunded}, \
+         refunded_at = {refunded_at}, attendee_name = {attendee_name}, \
+         bank_account = {bank_account}, bank_name = {bank_name}, \
+         account_name = {account_name}, refund_proof_url = {refund_proof_url} \
+         WHERE event_id = '{event_id}' AND attendee_id = '{attendee_id}'",
+        amount_thb = deposit.amount_thb,
+        slip_url = null_or(&deposit.slip_url),
+        verified = deposit.verified as i32,
+        verified_by = null_or(&deposit.verified_by),
+        verified_at = null_or(&deposit.verified_at),
+        refunded = deposit.refunded as i32,
+        refunded_at = null_or(&deposit.refunded_at),
+        attendee_name = null_or(&deposit.attendee_name),
+        bank_account = null_or(&deposit.bank_account),
+        bank_name = null_or(&deposit.bank_name),
+        account_name = null_or(&deposit.account_name),
+        refund_proof_url = null_or(&deposit.refund_proof_url),
+        event_id = esc(&deposit.event_id),
+        attendee_id = esc(&deposit.attendee_id),
     );
-    stmt.bind_refs(&[
-        D1Type::Integer(deposit.amount_thb as i32),
-        opt_text(&deposit.slip_url),
-        D1Type::Integer(deposit.verified as i32),
-        opt_text(&deposit.verified_by),
-        opt_text(&deposit.verified_at),
-        D1Type::Integer(deposit.refunded as i32),
-        opt_text(&deposit.refunded_at),
-        opt_text(&deposit.attendee_name),
-        opt_text(&deposit.bank_account),
-        opt_text(&deposit.bank_name),
-        opt_text(&deposit.account_name),
-        opt_text(&deposit.refund_proof_url),
-        D1Type::Text(&deposit.event_id),
-        D1Type::Text(&deposit.attendee_id),
-    ])
-    .map_err(|e| format!("D1 update_thb_deposit bind: {e:?}"))?
-    .run()
-    .await
-    .map_err(|e| format!("D1 update_thb_deposit run: {e:?}"))?;
+
+    db.exec(&sql)
+        .await
+        .map_err(|e| format!("D1 update_thb_deposit exec: {e:?}"))?;
 
     Ok(())
 }
@@ -206,12 +230,4 @@ fn row_to_thb_deposit(row: serde_json::Value) -> Result<ThbDeposit, String> {
         account_name: get_opt_str("account_name"),
         refund_proof_url: get_opt_str("refund_proof_url"),
     })
-}
-
-/// Helper: convert `Option<String>` to `D1Type::Text` (empty string for None).
-fn opt_text(opt: &Option<String>) -> D1Type<'_> {
-    match opt {
-        Some(s) => D1Type::Text(s),
-        None => D1Type::Null,
-    }
 }

@@ -168,59 +168,81 @@ pub async fn count_deposits_by_event(db: &D1Database, event_id: &str) -> Result<
 // ---------------------------------------------------------------------------
 
 /// Insert a new deposit status into D1.
+/// Uses `db.exec()` with format string per project convention (avoids prepared stmt issues).
 pub async fn insert_deposit_status(db: &D1Database, status: &DepositStatus) -> Result<(), String> {
     let method_str = status.method.to_string();
-    let stmt = db.prepare(
-        "INSERT INTO deposit_statuses (attendee_id, event_id, method, amount, currency, tx_signature, verified, deposited_at, wallet_address, deposit_order, refundable, rejected) \
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+    let esc = |s: &str| s.replace('\'', "''");
+    let null_or = |opt: &Option<String>| -> String {
+        match opt {
+            Some(v) if !v.is_empty() => format!("'{}'", esc(v)),
+            _ => "NULL".to_string(),
+        }
+    };
+
+    let sql = format!(
+        "INSERT INTO deposit_statuses \
+         (attendee_id, event_id, method, amount, currency, tx_signature, \
+          verified, deposited_at, wallet_address, deposit_order, refundable, rejected) \
+         VALUES ('{attendee_id}', '{event_id}', '{method}', {amount}, '{currency}', \
+          {tx_signature}, {verified}, '{deposited_at}', {wallet_address}, \
+          {deposit_order}, {refundable}, {rejected})",
+        attendee_id = esc(&status.attendee_id),
+        event_id = esc(&status.event_id),
+        method = esc(&method_str),
+        amount = status.amount,
+        currency = esc(&status.currency),
+        tx_signature = null_or(&status.tx_signature),
+        verified = status.verified as i32,
+        deposited_at = esc(&status.deposited_at),
+        wallet_address = null_or(&status.wallet_address),
+        deposit_order = status.deposit_order,
+        refundable = status.refundable as i32,
+        rejected = status.rejected as i32,
     );
-    stmt.bind_refs(&[
-        D1Type::Text(&status.attendee_id),
-        D1Type::Text(&status.event_id),
-        D1Type::Text(&method_str),
-        D1Type::Integer(status.amount as i32),
-        D1Type::Text(&status.currency),
-        opt_text(&status.tx_signature),
-        D1Type::Integer(status.verified as i32),
-        D1Type::Text(&status.deposited_at),
-        opt_text(&status.wallet_address),
-        D1Type::Integer(status.deposit_order as i32),
-        D1Type::Integer(status.refundable as i32),
-        D1Type::Integer(status.rejected as i32),
-    ])
-    .map_err(|e| format!("D1 insert_deposit_status bind: {e:?}"))?
-    .run()
-    .await
-    .map_err(|e| format!("D1 insert_deposit_status run: {e:?}"))?;
+
+    db.exec(&sql)
+        .await
+        .map_err(|e| format!("D1 insert_deposit_status exec: {e:?}"))?;
 
     Ok(())
 }
 
 /// Update an existing deposit status (for verify/reject operations).
+/// Uses `db.exec()` with format string per project convention (avoids prepared stmt issues).
 pub async fn update_deposit_status(db: &D1Database, status: &DepositStatus) -> Result<(), String> {
     let method_str = status.method.to_string();
-    let stmt = db.prepare(
-        "UPDATE deposit_statuses SET method = ?1, amount = ?2, currency = ?3, tx_signature = ?4, verified = ?5, deposited_at = ?6, wallet_address = ?7, deposit_order = ?8, refundable = ?9, rejected = ?10 \
-         WHERE event_id = ?11 AND attendee_id = ?12",
+    let esc = |s: &str| s.replace('\'', "''");
+    let null_or = |opt: &Option<String>| -> String {
+        match opt {
+            Some(v) if !v.is_empty() => format!("'{}'", esc(v)),
+            _ => "NULL".to_string(),
+        }
+    };
+
+    let sql = format!(
+        "UPDATE deposit_statuses SET \
+         method = '{method}', amount = {amount}, currency = '{currency}', \
+         tx_signature = {tx_signature}, verified = {verified}, \
+         deposited_at = '{deposited_at}', wallet_address = {wallet_address}, \
+         deposit_order = {deposit_order}, refundable = {refundable}, rejected = {rejected} \
+         WHERE event_id = '{event_id}' AND attendee_id = '{attendee_id}'",
+        method = esc(&method_str),
+        amount = status.amount,
+        currency = esc(&status.currency),
+        tx_signature = null_or(&status.tx_signature),
+        verified = status.verified as i32,
+        deposited_at = esc(&status.deposited_at),
+        wallet_address = null_or(&status.wallet_address),
+        deposit_order = status.deposit_order,
+        refundable = status.refundable as i32,
+        rejected = status.rejected as i32,
+        event_id = esc(&status.event_id),
+        attendee_id = esc(&status.attendee_id),
     );
-    stmt.bind_refs(&[
-        D1Type::Text(&method_str),
-        D1Type::Integer(status.amount as i32),
-        D1Type::Text(&status.currency),
-        opt_text(&status.tx_signature),
-        D1Type::Integer(status.verified as i32),
-        D1Type::Text(&status.deposited_at),
-        opt_text(&status.wallet_address),
-        D1Type::Integer(status.deposit_order as i32),
-        D1Type::Integer(status.refundable as i32),
-        D1Type::Integer(status.rejected as i32),
-        D1Type::Text(&status.event_id),
-        D1Type::Text(&status.attendee_id),
-    ])
-    .map_err(|e| format!("D1 update_deposit_status bind: {e:?}"))?
-    .run()
-    .await
-    .map_err(|e| format!("D1 update_deposit_status run: {e:?}"))?;
+
+    db.exec(&sql)
+        .await
+        .map_err(|e| format!("D1 update_deposit_status exec: {e:?}"))?;
 
     Ok(())
 }
@@ -314,12 +336,4 @@ fn row_to_deposit_status(row: serde_json::Value) -> Result<DepositStatus, String
         refundable: row.get("refundable").and_then(|v| v.as_i64()).unwrap_or(1) != 0,
         rejected: get_bool("rejected"),
     })
-}
-
-/// Helper: convert `Option<String>` to `D1Type::Text` (null for None).
-fn opt_text(opt: &Option<String>) -> D1Type<'_> {
-    match opt {
-        Some(s) => D1Type::Text(s),
-        None => D1Type::Null,
-    }
 }
