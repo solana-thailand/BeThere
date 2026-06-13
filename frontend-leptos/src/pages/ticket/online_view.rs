@@ -52,6 +52,7 @@ pub fn OnlineView(
         calendar_subscribe_url,
         event_start_ms: _,
         event_name: _,
+        event_id,
         ..
     } = view_data;
 
@@ -102,8 +103,15 @@ pub fn OnlineView(
     });
 
     // Build timeline quest link — only show when quest is actually configured
-    let quest_link = if !is_checked_in && has_claim && quiz_enabled {
-        Some((claim_href.clone(), "→ Go to Quest".to_string()))
+    // If we have a claim token, link to /claim/{token} which handles quiz gate.
+    // If no claim token (e.g. D1 missing claim_token), link to /adventure directly.
+    let quest_link = if !is_checked_in && quiz_enabled {
+        if has_claim {
+            Some((claim_href.clone(), "\u{2192} Go to Quest".to_string()))
+        } else {
+            let adventure_href = format!("/adventure?event_id={}", event_id);
+            Some((adventure_href, "\u{2192} Start Adventure".to_string()))
+        }
     } else {
         None
     };
@@ -255,6 +263,37 @@ pub fn OnlineView(
                         </div>
                     </div>
                 }.into_any()
+            } else if is_checked_in {
+                // Quest completed but no claim link yet (missing claim_token or event not ended)
+                if ended {
+                    view! {
+                        <div class="ticket-action-card ticket-action-card--pending">
+                            <div class="ticket-action-icon">
+                                <Icon icon=IconName::Gift class="icon-sm" />
+                            </div>
+                            <div>
+                                <div class="ticket-action-title">"Badge Claim Pending"</div>
+                                <div class="ticket-action-desc">
+                                    "Your quest is complete! Your NFT badge claim link is being prepared — please check back shortly."
+                                </div>
+                            </div>
+                        </div>
+                    }.into_any()
+                } else {
+                    view! {
+                        <div class="ticket-action-card ticket-action-card--pending">
+                            <div class="ticket-action-icon">
+                                <Icon icon=IconName::Clock class="icon-sm" />
+                            </div>
+                            <div>
+                                <div class="ticket-action-title">"Claim Available Soon"</div>
+                                <div class="ticket-action-desc">
+                                    "Quest complete! Claim link will be available after the event ends."
+                                </div>
+                            </div>
+                        </div>
+                    }.into_any()
+                }
             } else {
                 view! { <div></div> }.into_any()
             }

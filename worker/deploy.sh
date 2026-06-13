@@ -14,6 +14,18 @@
 #   3. Using the legacy PUT API with the assets JWT included in metadata
 
 set -uo pipefail
+
+# Source fnm (Node manager) for npx/node
+# Use fnm's default node installation directly to avoid shell integration issues
+FNM_NODE_BIN="$HOME/.local/share/fnm/node-versions/v24.16.0/installation/bin"
+if [ ! -d "$FNM_NODE_BIN" ]; then
+  # Fallback: find any fnm-managed node
+  FNM_NODE_BIN="$(find "$HOME/.local/share/fnm/node-versions" -path "*/installation/bin" -type d 2>/dev/null | head -1)"
+fi
+if [ -n "$FNM_NODE_BIN" ] && [ -d "$FNM_NODE_BIN" ]; then
+  export PATH="$FNM_NODE_BIN:$PATH"
+fi
+
 cd "$(dirname "$0")"
 
 PNP_FILE="$HOME/.pnp.cjs"
@@ -61,7 +73,7 @@ else
   # wrangler deploy uploads assets via assets-upload-session (which works),
   # then calls /versions (which fails with 10013).
   # The assets are already uploaded and cached by Cloudflare at this point.
-  if npx wrangler deploy 2>&1; then
+  if CI=true npx wrangler deploy 2>&1; then
     echo "✅ Deployed via wrangler"
     restore_pnp
     exit 0
@@ -97,7 +109,7 @@ else
   echo "📤 Uploading static assets..."
 
   # Build asset manifest (path → { hash, size }) using BLAKE3 (matching wrangler's hashFile)
-  MANIFEST=$(python3 -c "
+  MANIFEST=$(/opt/homebrew/bin/python3 -c "
 import os, json, base64
 import blake3
 
@@ -116,15 +128,17 @@ print(json.dumps({'manifest': manifest}))
 ")
 
   # Initialize asset upload session
+  echo "$MANIFEST" > /tmp/bethere_manifest.json
   INIT_RESPONSE=$(curl -s -X POST \
     "${API_BASE}/workers/scripts/${WORKER_NAME}/assets-upload-session" \
     -H "Authorization: Bearer ${OAUTH_TOKEN}" \
     -H "Content-Type: application/json" \
-    -d "$MANIFEST")
+    -d @/tmp/bethere_manifest.json)
+  rm -f /tmp/bethere_manifest.json
 
   # Extract JWT and buckets
-  ASSETS_JWT=$(echo "$INIT_RESPONSE" | python3 -c "import json,sys; r=json.load(sys.stdin); print(r.get('result',{}).get('jwt',''))" 2>/dev/null)
-  BUCKETS=$(echo "$INIT_RESPONSE" | python3 -c "
+  ASSETS_JWT=$(echo "$INIT_RESPONSE" | /opt/homebrew/bin/python3 -c "import json,sys; r=json.load(sys.stdin); print(r.get('result',{}).get('jwt',''))" 2>/dev/null)
+  BUCKETS=$(echo "$INIT_RESPONSE" | /opt/homebrew/bin/python3 -c "
 import json, sys
 r = json.load(sys.stdin)
 buckets = r.get('result',{}).get('buckets',[])
@@ -134,7 +148,7 @@ print(count)
 
   if [ -z "$ASSETS_JWT" ]; then
     echo "❌ Failed to get assets JWT"
-    echo "$INIT_RESPONSE" | python3 -m json.tool 2>/dev/null || echo "$INIT_RESPONSE"
+    echo "$INIT_RESPONSE" | /opt/homebrew/bin/python3 -m json.tool 2>/dev/null || echo "$INIT_RESPONSE"
     restore_pnp
     exit 1
   fi
@@ -145,8 +159,8 @@ print(count)
     echo "   Uploading ${BUCKETS} asset file(s)..."
 
     # Upload each file that needs uploading
-    python3 -c "
-import os, json, base64, subprocess
+    /opt/homebrew/bin/python3 -c "
+import os, json, base64, subprocess, tempfile
 import blake3
 
 dist = '${DIST_DIR}'
@@ -164,24 +178,27 @@ for root, dirs, files in os.walk(dist):
         h = blake3.blake3((b64 + ext).encode()).hexdigest()[:32]
         manifest[h] = base64.b64encode(contents).decode()
 
-# For each file, upload via the API
+# For each file, upload via the API using temp file to avoid arg length limit
 count = 0
 total = len(manifest)
 for file_hash, content_b64 in manifest.items():
     count += 1
     payload = json.dumps({file_hash: content_b64})
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as tf:
+        tf.write(payload)
+        tf_path = tf.name
     result = subprocess.run([
         'curl', '-s', '-X', 'POST', api,
         '-H', f'Authorization: Bearer {token}',
         '-H', 'Content-Type: application/json',
-        '-d', payload
+        '-d', f'@{tf_path}'
     ], capture_output=True, text=True)
+    os.unlink(tf_path)
 
     try:
         resp = json.loads(result.stdout)
         new_jwt = resp.get('result', {}).get('jwt', '')
         if new_jwt:
-            # Update the JWT for subsequent uploads
             with open('/tmp/bethere_assets_jwt.txt', 'w') as jf:
                 jf.write(new_jwt)
         print(f'  Uploaded {count}/{total}')
@@ -220,7 +237,7 @@ for file_hash, content_b64 in manifest.items():
   fi
 
   # Build metadata JSON with assets JWT + env vars from wrangler.toml
-  METADATA=$(python3 -c "
+  METADATA=$(/opt/homebrew/bin/python3 -c "
 import json
 m = {
     'main_module': 'shim.js',
@@ -280,7 +297,7 @@ print(json.dumps(m))
   rm -rf "$DRY_DIR"
 
   if [ "$HTTP_CODE" = "200" ]; then
-    STARTUP_MS=$(echo "$BODY" | python3 -c "import json,sys; r=json.load(sys.stdin); print(r.get('result',{}).get('startup_time_ms','?'))" 2>/dev/null || echo "?")
+    STARTUP_MS=$(echo "$BODY" | /opt/homebrew/bin/python3 -c "import json,sys; r=json.load(sys.stdin); print(r.get('result',{}).get('startup_time_ms','?'))" 2>/dev/null || echo "?")
     echo "✅ Deployed successfully! (startup: ${STARTUP_MS}ms)"
     echo "   https://${WORKER_NAME}.solana-thailand.workers.dev"
 
@@ -296,7 +313,7 @@ print(json.dumps(m))
     fi
   else
     echo "❌ Deploy failed (HTTP ${HTTP_CODE})"
-    echo "$BODY" | python3 -m json.tool 2>/dev/null || echo "$BODY"
+    echo "$BODY" | /opt/homebrew/bin/python3 -m json.tool 2>/dev/null || echo "$BODY"
     restore_pnp
     exit 1
   fi

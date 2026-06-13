@@ -50,18 +50,24 @@ pub fn Adventure() -> impl IntoView {
     let query = use_query_map();
     let _claim_token = move || query.get().get("token").map(|s| s.to_string());
     let has_token = _claim_token().is_some();
-    let _required_level = move || {
-        query
-            .get()
-            .get("level")
-            .and_then(|l| l.parse::<usize>().ok())
-    };
+    let event_id_param = move || query.get().get("event_id").map(|s| s.to_string());
+
+    // Required level from API config (fetched when event_id is present in casual mode)
+    let (required_level_from_api, set_required_level_from_api) = signal::<Option<usize>>(None);
+    let (event_slug, set_event_slug) = signal::<Option<String>>(None);
+    // Claim token returned by quest-complete check-in (casual mode)
+    let (quest_claim_token, set_quest_claim_token) = signal::<Option<String>>(None);
 
     // Restore progress: API if token present, localStorage otherwise
     let restore_token = _claim_token();
+    let restore_event_id = event_id_param();
     let restore_levels = levels_signal.clone();
     let restore_set_game = set_game.clone();
     let restore_set_completed = set_completed_levels.clone();
+    let restore_set_required_level = set_required_level_from_api.clone();
+    let restore_set_adventure_passed = set_adventure_passed.clone();
+    let restore_set_event_slug = set_event_slug.clone();
+    let restore_completed_read = completed_levels.clone();
     Effect::new(move |_| {
         if let Some(ref token) = restore_token {
             // Restore from API (claim flow)
@@ -128,6 +134,43 @@ pub fn Adventure() -> impl IntoView {
                         restore_set_completed.set(indices);
                     }
                 }
+
+                // Fetch adventure config from API to determine required_level
+                if let Some(ref eid) = restore_event_id {
+                    let eid = eid.clone();
+                    let set_rl = restore_set_required_level.clone();
+                    let set_ap = restore_set_adventure_passed.clone();
+                    let set_slug = restore_set_event_slug.clone();
+                    let completed_read = restore_completed_read.clone();
+                    leptos::task::spawn_local(async move {
+                        match api::get_public_adventure_config(&eid).await {
+                            Ok(config) => {
+                                // Store slug for navigation links
+                                if !config.event_slug.is_empty() {
+                                    set_slug.set(Some(config.event_slug.clone()));
+                                }
+                                if config.enabled {
+                                    log::info!("[adventure] config: enabled={}, required_level={:?}", config.enabled, config.required_level);
+                                    set_rl.set(config.required_level);
+                                    // Check if already passed from restored progress
+                                    if let Some(req_lvl) = config.required_level {
+                                        let completed = completed_read.get();
+                                        // required_level is 0-based in config
+                                        // e.g. required_level=2 means levels 0,1,2 must be completed
+                                        let all_done = (0..=req_lvl).all(|i| completed.contains(&i));
+                                        if all_done {
+                                            log::info!("[adventure] casual mode: already passed from restored progress");
+                                            set_ap.set(true);
+                                        }
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                log::warn!("[adventure] failed to fetch config: {e}");
+                            }
+                        }
+                    });
+                }
             }
         });
 
@@ -186,6 +229,7 @@ pub fn Adventure() -> impl IntoView {
     let auto_save_set_completed = set_completed_levels.clone();
     let auto_save_set_adventure_passed = set_adventure_passed.clone();
     let auto_save_completed_read = completed_levels.clone();
+    let auto_save_required_level = required_level_from_api.clone();
     Effect::new(move |_| {
         let g = auto_save_game.get();
         if !g.level_completed {
@@ -234,7 +278,8 @@ pub fn Adventure() -> impl IntoView {
             });
         } else {
             // Save to localStorage (casual play)
-            let completed = auto_save_completed_read.get();
+            let mut completed = auto_save_completed_read.get();
+            completed.insert(level_idx);
             if let Ok(json) = serde_json::to_string(&completed) {
                 if let Some(ls) = gloo_utils::window().local_storage().ok().flatten() {
                     if let Err(_) = ls.set(LS_COMPLETED_KEY, &json) {
@@ -243,6 +288,54 @@ pub fn Adventure() -> impl IntoView {
                         log::info!("[adventure] saved {} completed levels to localStorage", completed.len());
                     }
                 }
+            }
+
+            // Check if adventure is passed in casual mode
+            // required_level is 0-based in config: n means levels 0..=n must be completed
+            let req_lvl = auto_save_required_level.get();
+            if let Some(req_lvl) = req_lvl {
+                let all_required_done = (0..=req_lvl).all(|i| completed.contains(&i));
+                if all_required_done {
+                    log::info!("[adventure] casual mode: quest passed (required level index {req_lvl} completed)");
+                    auto_save_set_adventure_passed.set(true);
+                }
+            }
+        }
+    });
+
+    // Trigger virtual check-in when adventure is passed in casual mode
+    let quest_event_id = event_id_param();
+    let quest_adventure_passed = adventure_passed.clone();
+    let _quest_event_slug = event_slug.clone();
+    let (quest_checkin_done, set_quest_checkin_done) = signal(false);
+    Effect::new(move |_| {
+        if quest_adventure_passed.get() && !quest_checkin_done.get() && has_token == false {
+            if let Some(ref eid) = quest_event_id {
+                let eid = eid.clone();
+                let set_done = set_quest_checkin_done.clone();
+                let set_slug = set_event_slug.clone();
+                let set_ct = set_quest_claim_token.clone();
+                leptos::task::spawn_local(async move {
+                    match api::quest_complete_checkin(&eid).await {
+                        Ok(data) => {
+                            log::info!("[adventure] virtual check-in done: {}", data.status);
+                            if !data.event_slug.is_empty() {
+                                set_slug.set(Some(data.event_slug));
+                            }
+                            if let Some(ct) = data.claim_token {
+                                if !ct.is_empty() {
+                                    log::info!("[adventure] got claim token from check-in");
+                                    set_ct.set(Some(ct));
+                                }
+                            }
+                            set_done.set(true);
+                        }
+                        Err(e) => {
+                            log::warn!("[adventure] virtual check-in failed: {e}");
+                            set_done.set(true); // Don't retry
+                        }
+                    }
+                });
             }
         }
     });
@@ -494,14 +587,52 @@ pub fn Adventure() -> impl IntoView {
     view! {
         <Title text="Rust Adventures — Learn Rust by Playing" />
         <div class="adventure-page">
-            // No-token warning banner
+            // No-token banner: show quest mode info when event_id present
             <Show when=move || !has_token fallback=|| view! { <div></div> }>
                 <div class="adventure-banner adventure-banner-info">
                     <span class="adventure-banner-icon">"💡"</span>
-                    <span>"Playing in demo mode — progress saves to your browser. "
-                        <b>"Claim an NFT badge?"</b>
-                        " Ask staff to scan your ticket first!"
-                    </span>
+                    <span>{move || {
+                        let eid = event_id_param();
+                        let req_lvl = required_level_from_api.get();
+                        if eid.is_some() && req_lvl.is_some() {
+                            let lvl = req_lvl.unwrap() + 1; // 0-based to 1-based for display
+                            format!("Quest Mode — complete Level {lvl} to pass the quest! Progress saves to your browser.")
+                        } else if eid.is_some() {
+                            "Quest Mode — loading requirements...".to_string()
+                        } else {
+                            "Playing in demo mode — progress saves to your browser.".to_string()
+                        }
+                    }}</span>
+                </div>
+            </Show>
+
+            // Persistent quest-complete banner — shown whenever quest is passed so the user
+            // can always navigate to claim/event even if they keep playing higher levels.
+            <Show when=move || adventure_passed.get() && event_id_param().is_some()>
+                <div class="adventure-banner adventure-banner-success">
+                    <span class="adventure-banner-icon">"🎉"</span>
+                    <span>"Quest complete! "</span>
+                    {move || {
+                        // Prefer: URL token > quest-complete token > event page slug
+                        let claim_link = _claim_token().map(|t| format!("/claim/{t}"))
+                            .or_else(|| quest_claim_token.get().map(|t| format!("/claim/{t}")));
+                        let slug_link = event_slug.get().map(|s| format!("/e/{s}"));
+                        if let Some(link) = claim_link {
+                            view! {
+                                <a class="adventure-banner-link" href={link}>
+                                    "Claim your NFT Badge →"
+                                </a>
+                            }.into_any()
+                        } else if let Some(link) = slug_link {
+                            view! {
+                                <a class="adventure-banner-link" href={link}>
+                                    "Go to Event Page →"
+                                </a>
+                            }.into_any()
+                        } else {
+                            view! { <span></span> }.into_any()
+                        }
+                    }}
                 </div>
             </Show>
 
@@ -765,15 +896,23 @@ pub fn Adventure() -> impl IntoView {
                                         }.into_any()
                                     } else if adventure_passed.get() {
                                         // Required levels passed — can claim now
-                                        let claim_link = _claim_token().map(|t| format!("/claim/{t}"));
+                                        let claim_link = _claim_token().map(|t| format!("/claim/{t}"))
+                                            .or_else(|| quest_claim_token.get().map(|t| format!("/claim/{t}")));
+                                        let slug_link = event_slug.get().map(|s| format!("/e/{s}"));
                                         view! {
                                             <div class="adventure-all-complete">
                                                 "🎉 Quest complete! You've passed the adventure!"
                                             </div>
-                                            {if let Some(link) = claim_link {
+                                            {if let Some(link) = claim_link.clone() {
                                                 view! {
                                                     <a class="btn adventure-claim-btn" href={link}>
                                                         "🎁 Claim your NFT Badge"
+                                                    </a>
+                                                }.into_any()
+                                            } else if let Some(link) = slug_link {
+                                                view! {
+                                                    <a class="btn adventure-claim-btn" href={link}>
+                                                        "→ Go to Event Page"
                                                     </a>
                                                 }.into_any()
                                             } else {

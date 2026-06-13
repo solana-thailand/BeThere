@@ -527,14 +527,30 @@ pub async fn get_event_by_slug(db: &D1Database, slug: &str) -> Result<Option<D1E
 /// List all events from D1 (for index rebuild).
 pub async fn list_events(db: &D1Database) -> Result<Vec<D1EventRow>, String> {
     let sql = "SELECT * FROM events ORDER BY created_at DESC";
-    let result = db
-        .prepare(sql)
-        .all()
-        .await
-        .map_err(|e| format!("D1 list_events: {e:?}"))?;
-    result
-        .results()
-        .map_err(|e| format!("D1 list_events results: {e:?}"))
+    let stmt = db.prepare(sql);
+
+    // Bypass D1Result::results() — it uses serde_wasm_bindgen::from_value().unwrap()
+    // which panics on NULL columns. Use raw JS interop + JSON.stringify instead.
+    let raw_result = JsFuture::from(
+        stmt.inner()
+            .all()
+            .map_err(|e| format!("D1 list_events all() call: {e:?}"))?,
+    )
+    .await
+    .map_err(|e| format!("D1 list_events all() await: {e:?}"))?;
+
+    let results_key = wasm_bindgen::JsValue::from_str("results");
+    let raw_rows =
+        js_sys::Reflect::get(&raw_result, &results_key).unwrap_or(wasm_bindgen::JsValue::NULL);
+
+    let json_str = js_sys::JSON::stringify(&raw_rows)
+        .map(|s| s.as_string().unwrap_or_default())
+        .unwrap_or_default();
+
+    let rows: Vec<D1EventRow> = serde_json::from_str(&json_str)
+        .map_err(|e| format!("D1 list_events deserialize: {e:?}"))?;
+
+    Ok(rows)
 }
 
 /// List all events from D1 as `EventMeta` (for KV fallback).

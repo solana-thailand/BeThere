@@ -88,6 +88,10 @@ pub fn routes(state: AppState) -> Router<()> {
         .route("/quiz/{token}/status", get(quiz::get_quiz_status))
         // Adventure routes (public — attendees play adventure game)
         .route(
+            "/adventure/config",
+            get(adventure::get_public_adventure_config),
+        )
+        .route(
             "/adventure/{token}/status",
             get(adventure::get_adventure_status),
         )
@@ -171,6 +175,11 @@ pub fn routes(state: AppState) -> Router<()> {
             "/storage/refunds/{event_id}/{attendee_id}",
             get(crate::storage::serve_refund),
         )
+        // Adventure virtual check-in (attendee-authed — casual mode quest completion)
+        .route(
+            "/adventure/quest-complete",
+            post(adventure::quest_complete_checkin),
+        )
         // PDPA data deletion — self-service (attendee-authed — email from JWT)
         .route("/privacy/delete-request", post(privacy::delete_request))
         // PDPA marketing unsubscribe — self-service (attendee-authed — email from JWT)
@@ -210,6 +219,11 @@ pub fn routes(state: AppState) -> Router<()> {
         .route("/generate-qrs", post(qr::generate_qrs))
         // Flush server-side caches (attendee list + column mapping)
         .route("/admin/flush-cache", post(attendee::flush_cache))
+        // Repair empty claim_tokens in D1
+        .route(
+            "/admin/repair-claim-tokens",
+            post(attendee::repair_claim_tokens),
+        )
         // Walk-in attendee registration (protected — staff registers on-the-spot)
         .route("/walkin/register", post(walkin::register_walkin))
         // Walk-in attendee management

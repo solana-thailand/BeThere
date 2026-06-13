@@ -441,6 +441,40 @@ pub async fn post_claim(token: &str, wallet_address: &str) -> Result<ClaimMintDa
 
 // ===== Adventure API functions =====
 
+/// GET /api/adventure/config?event_id=...
+/// Public endpoint: get adventure config (enabled, required_level) for an event.
+/// Used by the adventure page in casual (no-token) mode.
+pub async fn get_public_adventure_config(
+    event_id: &str,
+) -> Result<crate::api::admin::AdventureConfigData, ApiError> {
+    let url = format!("{}/adventure/config?event_id={event_id}", api_base());
+    let response = super::fetch::get(&url, &[]).await?;
+
+    if !response.ok() {
+        let body: ApiResponse<()> = super::fetch::response_json(&response).await.unwrap_or(ApiResponse {
+            success: false,
+            data: None,
+            error: Some("Adventure config fetch failed".to_string()),
+            correlation_id: None,
+        });
+        return Err(ApiError {
+            message: body.error.unwrap_or_default(),
+            status: response.status(),
+        });
+    }
+
+    let wrapper: ApiResponse<crate::api::admin::AdventureConfigData> =
+        super::fetch::response_json(&response).await.map_err(|e| ApiError {
+            message: format!("Failed to parse adventure config: {e}"),
+            status: 0,
+        })?;
+
+    wrapper.data.ok_or_else(|| ApiError {
+        message: wrapper.error.unwrap_or("No data".to_string()),
+        status: 0,
+    })
+}
+
 /// GET /api/adventure/{token}/status
 /// Get adventure status and progress for a claim token.
 ///
@@ -526,4 +560,53 @@ pub async fn save_adventure_progress(
             message: wrapper.error.unwrap_or("No data".to_string()),
             status: 0,
         })
+}
+
+/// Response from POST /api/adventure/quest-complete
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct QuestCompleteData {
+    #[serde(default)]
+    pub status: String,
+    #[serde(default)]
+    pub claim_token: Option<String>,
+    #[serde(default)]
+    pub event_slug: String,
+}
+
+/// POST /api/adventure/quest-complete
+/// Triggers virtual check-in for authenticated users who completed the adventure in casual mode.
+/// Returns the claim_token and event_slug for navigation.
+pub async fn quest_complete_checkin(
+    event_id: &str,
+) -> Result<QuestCompleteData, ApiError> {
+    let url = format!("{}/adventure/quest-complete", api_base());
+    let body = serde_json::json!({ "event_id": event_id });
+    let body_str = serde_json::to_string(&body).unwrap_or_default();
+    let hdrs = [("Content-Type", "application/json")];
+
+    let response = super::fetch::post(&url, &hdrs, Some(body_str)).await?;
+
+    if !response.ok() {
+        let body: ApiResponse<()> = super::fetch::response_json(&response).await.unwrap_or(ApiResponse {
+            success: false,
+            data: None,
+            error: Some("Quest complete check-in failed".to_string()),
+            correlation_id: None,
+        });
+        return Err(ApiError {
+            message: body.error.unwrap_or_default(),
+            status: response.status(),
+        });
+    }
+
+    let wrapper: ApiResponse<QuestCompleteData> =
+        super::fetch::response_json(&response).await.map_err(|e| ApiError {
+            message: format!("Failed to parse quest-complete response: {e}"),
+            status: 0,
+        })?;
+
+    wrapper.data.ok_or_else(|| ApiError {
+        message: wrapper.error.unwrap_or("No data".to_string()),
+        status: 0,
+    })
 }

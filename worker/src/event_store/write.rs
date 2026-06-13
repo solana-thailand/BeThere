@@ -1034,7 +1034,7 @@ pub async fn seed_from_config(
         sheet_id: global.sheets.sheet_id.clone(),
         sheet_name: global.sheets.sheet_name.clone(),
         staff_sheet_name: global.sheets.staff_sheet_name.clone(),
-        quiz_enabled: true,
+        quiz_enabled: false,
         nft_collection_mint: global.nft.collection_mint.clone(),
         nft_metadata_uri: global.nft.metadata_uri.clone(),
         nft_image_url: if global.nft.image_url.is_empty() {

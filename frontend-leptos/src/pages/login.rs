@@ -59,6 +59,28 @@ pub fn Login() -> impl IntoView {
                         "[login] already authenticated via cookie (role={}), redirecting to {target}",
                         me.role
                     );
+
+                    // For attendees, try to redirect to their latest registration
+                    if me.role == "attendee" {
+                        if let Ok(resp) = crate::api::fetch::get("/api/my-registrations", &[]).await {
+                            if resp.status() == 200 {
+                                if let Ok(data) = crate::api::fetch::response_json::<serde_json::Value>(&resp).await {
+                                    if let Some(regs) = data["data"].as_array() {
+                                        if let Some(latest) = regs.first() {
+                                            if let Some(url) = latest["next_step"]["url"].as_str() {
+                                                if !url.is_empty() {
+                                                    log::info!("[login] redirecting attendee to latest registration: {url}");
+                                                    nav(url, Default::default());
+                                                    return;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     nav(target, Default::default());
                 }
                 Err(_) => {

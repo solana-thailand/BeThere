@@ -444,6 +444,7 @@ fn MyRegistrations() -> impl IntoView {
                 Err(_) => return,
             };
             let user_email = auth_data["data"]["email"].as_str().unwrap_or("").to_string();
+            let user_role = auth_data["data"]["role"].as_str().unwrap_or("").to_string();
             if user_email.is_empty() {
                 return;
             }
@@ -457,7 +458,19 @@ fn MyRegistrations() -> impl IntoView {
                         crate::api::fetch::response_json::<ApiResponse<Vec<MyRegistrationItem>>>(&resp)
                             .await
                     {
-                        set_registrations.set(Some(data.data.unwrap_or_default()));
+                        let regs = data.data.unwrap_or_default();
+                        // Auto-redirect attendees with registrations to their latest registration
+                        if user_role == "attendee" && !regs.is_empty() {
+                            if let Some(latest) = regs.first() {
+                                let url = latest.next_step.url.clone();
+                                if !url.is_empty() {
+                                    log::info!("[landing] auto-redirecting attendee to latest registration: {url}");
+                                    let _ = window.location().set_href(&url);
+                                    return;
+                                }
+                            }
+                        }
+                        set_registrations.set(Some(regs));
                     }
                 }
                 _ => {
@@ -526,8 +539,10 @@ fn MyRegistrations() -> impl IntoView {
                             {refs.into_iter().map(|reg| {
                                 let event_url = format!("/e/{}", reg.event_slug);
                                 let step_label = match reg.next_step.step_type.as_str() {
+                                    "claim" => "Claim Badge",
                                     "deposit" => "Complete Deposit",
                                     "quest" => "Start Quest",
+                                    "ticket" => "View Ticket",
                                     _ => "View",
                                 };
                                 let date_str = if reg.event_start_ms > 0 {

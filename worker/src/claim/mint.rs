@@ -210,6 +210,7 @@ pub async fn lookup_claim(
 
     // If quiz_enabled is true but no quiz config exists yet, treat as NotStarted
     // so the frontend shows the correct gate instead of letting the user claim.
+    // The organizer must configure quiz questions before attendees can claim.
     let quiz_status = if event.quiz_enabled && quiz_status == QuizStatus::NotRequired {
         QuizStatus::NotStarted
     } else {

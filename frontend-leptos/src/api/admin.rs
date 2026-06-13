@@ -63,6 +63,8 @@ pub struct AdminQuizSaveData {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AdventureConfigData {
     #[serde(default)]
+    pub event_slug: String,
+    #[serde(default)]
     pub enabled: bool,
     #[serde(default)]
     pub required_level: Option<usize>,

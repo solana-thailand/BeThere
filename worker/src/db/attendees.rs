@@ -29,12 +29,13 @@ pub(crate) async fn upsert_attendee(
     contact_channel: &str,
     contact_handle: &str,
     consent_marketing: Option<bool>,
+    claim_token: Option<&str>,
 ) -> Result<(), String> {
     let cm = consent_marketing.unwrap_or(false);
     let stmt = db.prepare(
         "INSERT INTO attendees (id, event_id, email, name, approval_status, participation_type, \
-         contact_channel, contact_handle, consent_marketing, consent_marketing_at, created_at, updated_at) \
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, datetime('now'), datetime('now'), datetime('now')) \
+         contact_channel, contact_handle, consent_marketing, consent_marketing_at, claim_token, created_at, updated_at) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, datetime('now'), ?10, datetime('now'), datetime('now')) \
          ON CONFLICT (id) DO UPDATE SET \
          name = excluded.name, \
          approval_status = excluded.approval_status, \
@@ -43,6 +44,7 @@ pub(crate) async fn upsert_attendee(
          contact_handle = excluded.contact_handle, \
          consent_marketing = excluded.consent_marketing, \
          consent_marketing_at = excluded.consent_marketing_at, \
+         claim_token = COALESCE(attendees.claim_token, excluded.claim_token), \
          updated_at = datetime('now')",
     );
     stmt.bind_refs(&[
@@ -55,6 +57,7 @@ pub(crate) async fn upsert_attendee(
         D1Type::Text(contact_channel),
         D1Type::Text(contact_handle),
         D1Type::Integer(if cm { 1 } else { 0 }),
+        D1Type::Text(claim_token.unwrap_or("")),
     ])
     .map_err(|e| format!("D1 upsert_attendee bind: {e:?}"))?
     .run()
@@ -74,7 +77,8 @@ pub(crate) async fn check_in_attendee(
 ) -> Result<(), String> {
     let stmt = db.prepare(
         "UPDATE attendees \
-         SET checked_in_at = ?1, checked_in_by = ?2, claim_token = ?3, \
+         SET checked_in_at = ?1, checked_in_by = ?2, \
+         claim_token = CASE WHEN ?3 = '' THEN claim_token ELSE ?3 END, \
          updated_at = datetime('now') \
          WHERE id = ?4",
     );
@@ -1086,12 +1090,26 @@ pub(crate) async fn get_attendees_by_email(
          FROM attendees WHERE LOWER(email) = '{email}'"
     );
     let stmt = db.prepare(&sql);
-    let results = stmt
-        .run()
-        .await
-        .map_err(|e| format!("D1 get_attendees_by_email: {e:?}"))?;
-    let rows: Vec<D1AttendeeRow> = results
-        .results()
+
+    // Bypass D1Result::results() — it uses serde_wasm_bindgen::from_value().unwrap()
+    // which panics on NULL columns. Use raw JS interop + JSON.stringify instead.
+    let raw_result = wasm_bindgen_futures::JsFuture::from(
+        stmt.inner()
+            .all()
+            .map_err(|e| format!("D1 get_attendees_by_email all() call: {e:?}"))?,
+    )
+    .await
+    .map_err(|e| format!("D1 get_attendees_by_email all() await: {e:?}"))?;
+
+    let results_key = wasm_bindgen::JsValue::from_str("results");
+    let raw_rows =
+        js_sys::Reflect::get(&raw_result, &results_key).unwrap_or(wasm_bindgen::JsValue::NULL);
+
+    let json_str = js_sys::JSON::stringify(&raw_rows)
+        .map(|s| s.as_string().unwrap_or_default())
+        .unwrap_or_default();
+
+    let rows: Vec<D1AttendeeRow> = serde_json::from_str(&json_str)
         .map_err(|e| format!("D1 get_attendees_by_email deserialize: {e:?}"))?;
     Ok(rows
         .iter()
@@ -1253,4 +1271,56 @@ pub(crate) async fn set_marketing_consent(
         .map_err(|e| format!("D1 set_marketing_consent: {e:?}"))?;
     let count = result.count().unwrap_or(None).unwrap_or(0) as usize;
     Ok(count)
+}
+
+/// Repair attendees with empty or NULL claim_tokens by generating new UUID v7s.
+/// Returns the number of rows repaired.
+pub(crate) async fn repair_empty_claim_tokens(db: &D1Database) -> Result<usize, String> {
+    // Count rows that need repair
+    let count_stmt = db.prepare(
+        "SELECT COUNT(*) as cnt FROM attendees WHERE claim_token = '' OR claim_token IS NULL",
+    );
+    let count_result = count_stmt
+        .first::<serde_json::Value>(None)
+        .await
+        .map_err(|e| format!("D1 repair count: {e:?}"))?;
+    let total = count_result
+        .and_then(|v| v.get("cnt").and_then(|c| c.as_i64()))
+        .unwrap_or(0);
+
+    if total == 0 {
+        return Ok(0);
+    }
+
+    // Fetch all attendee IDs that need repair
+    #[derive(Deserialize)]
+    struct IdRow {
+        id: String,
+    }
+    let stmt = db.prepare("SELECT id FROM attendees WHERE claim_token = '' OR claim_token IS NULL");
+    let results = stmt
+        .all()
+        .await
+        .map_err(|e| format!("D1 repair fetch: {e:?}"))?;
+
+    let rows = results
+        .results::<IdRow>()
+        .map_err(|e| format!("D1 repair parse: {e:?}"))?;
+
+    let mut repaired = 0usize;
+    for row in rows {
+        let new_token = uuid::Uuid::now_v7().to_string();
+        let update_stmt = db.prepare(
+            "UPDATE attendees SET claim_token = ?1, updated_at = datetime('now') WHERE id = ?2",
+        );
+        update_stmt
+            .bind_refs(&[D1Type::Text(&new_token), D1Type::Text(&row.id)])
+            .map_err(|e| format!("D1 repair bind: {e:?}"))?
+            .run()
+            .await
+            .map_err(|e| format!("D1 repair run for {}: {e:?}", row.id))?;
+        repaired += 1;
+    }
+
+    Ok(repaired)
 }

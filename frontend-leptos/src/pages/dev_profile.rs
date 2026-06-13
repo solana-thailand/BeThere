@@ -177,6 +177,9 @@ pub fn DevProfile() -> impl IntoView {
         <Title text="Developer Profile — BeThere" />
         <div class="dev-profile-page">
             <div class="dev-profile-header">
+                <a href="/" class="btn btn-outline btn-sm dev-profile-back-btn">
+                    "← Back"
+                </a>
                 <h1 class="dev-profile-title">
                     <Icon icon=IconName::Star class="icon-lg" />
                     " Developer Profile"

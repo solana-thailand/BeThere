@@ -113,6 +113,7 @@ impl TicketViewData {
             .attendee
             .claim_token
             .as_ref()
+            .filter(|t| !t.is_empty())
             .map(|t| format!("/claim/{t}"))
             .unwrap_or_default();
         let has_claim = !claim_href.is_empty();

@@ -163,7 +163,7 @@ pub fn default_form() -> EventForm {
         sheet_id: String::new(),
         sheet_name: "Attendees".to_string(),
         staff_sheet_name: "staff".to_string(),
-        quiz_enabled: true,
+        quiz_enabled: false,
         nft_collection_mint: String::new(),
         nft_metadata_uri: String::new(),
         nft_image_url: String::new(),

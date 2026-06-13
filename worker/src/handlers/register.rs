@@ -18,6 +18,7 @@ use event_checkin_domain::models::error::AppError;
 use event_checkin_domain::models::event::{EventFormat, EventStatus};
 
 use crate::error::ApiOk;
+use crate::handlers::adventure::resolve_claim_token_from_d1;
 use crate::sheets;
 use crate::state::AppState;
 
@@ -268,6 +269,11 @@ pub async fn register_attendee(
                 }
             }
         } else {
+            let is_checked_in = existing
+                .checked_in_at
+                .as_ref()
+                .is_some_and(|s| !s.is_empty());
+            let is_claimed = existing.claimed_at.as_ref().is_some_and(|s| !s.is_empty());
             build_next_step(
                 &config.event_format,
                 &event_id,
@@ -276,6 +282,8 @@ pub async fn register_attendee(
                 &state,
                 deposit.as_ref(),
                 &existing.participation_type,
+                is_checked_in,
+                is_claimed,
             )
         };
         return Ok(ApiOk::new(RegisterResponse {
@@ -361,6 +369,7 @@ pub async fn register_attendee(
             contact_channel.unwrap_or(""),
             contact_handle.unwrap_or(""),
             body.consent_marketing,
+            Some(&claim_token),
         );
 
         let events_joined = event_id.clone();
@@ -572,6 +581,7 @@ pub async fn register_attendee(
 
     // 10. Determine next_step based on event format and participation type
     // Note: deposit_method is now written in the background (step 9b)
+    // New registrations are never checked in or claimed yet
     let next_step = if credit_covered_method.is_some() {
         NextStep {
             step_type: "ticket".to_string(),
@@ -586,6 +596,8 @@ pub async fn register_attendee(
             &state,
             None,
             &participation_type,
+            false, // new registration, not checked in
+            false, // new registration, not claimed
         )
     };
 
@@ -652,7 +664,14 @@ pub async fn my_registration(
             ))
         })?;
 
-    let claim_token = attendee.claim_token.clone().unwrap_or_default();
+    let claim_token = resolve_claim_token_from_d1(&state, attendee)
+        .await
+        .unwrap_or_default();
+    let is_checked_in = attendee
+        .checked_in_at
+        .as_ref()
+        .is_some_and(|s| !s.is_empty());
+    let is_claimed = attendee.claimed_at.as_ref().is_some_and(|s| !s.is_empty());
     // Fetch deposit status (D1-first, KV fallback)
     let deposit = crate::event_store::get_deposit_status_with_fallback(
         kv,
@@ -671,6 +690,8 @@ pub async fn my_registration(
         &state,
         deposit.as_ref(),
         &attendee.participation_type,
+        is_checked_in,
+        is_claimed,
     );
 
     tracing::info!(
@@ -840,7 +861,14 @@ pub async fn my_registrations(
                         .iter()
                         .find(|a| a.email.eq_ignore_ascii_case(&email))?;
 
-                    let claim_token = attendee.claim_token.clone().unwrap_or_default();
+                    let claim_token = resolve_claim_token_from_d1(&state, attendee)
+                        .await
+                        .unwrap_or_default();
+                    let is_checked_in = attendee
+                        .checked_in_at
+                        .as_ref()
+                        .is_some_and(|s| !s.is_empty());
+                    let is_claimed = attendee.claimed_at.as_ref().is_some_and(|s| !s.is_empty());
                     // Fetch deposit status (D1-first, KV fallback)
                     let deposit = crate::event_store::get_deposit_status_with_fallback(
                         kv.as_ref(),
@@ -859,6 +887,8 @@ pub async fn my_registrations(
                         &state,
                         deposit.as_ref(),
                         &attendee.participation_type,
+                        is_checked_in,
+                        is_claimed,
                     );
 
                     let status = if attendee.claimed_at.as_ref().is_some_and(|s| !s.is_empty()) {
@@ -916,29 +946,44 @@ pub async fn my_registrations(
     Ok(ApiOk::new(results))
 }
 
-/// Build the next_step response based on event format and deposit status.
+/// Build the next_step response based on event format, deposit, and check-in status.
 ///
 /// Logic:
+/// - Already claimed → ticket page
+/// - Checked in (not claimed) → claim page
 /// - Online-only events → quest/claim page
 /// - In-person/hybrid events:
 ///   - No deposit yet → deposit page
-///   - THB deposit pending verification → ticket page (info view, no QR)
-///   - Deposit verified (USDC or THB) → ticket page
-fn is_online_participation(participation_type: &str) -> bool {
-    let lower = participation_type.trim().to_lowercase();
-    lower.contains("online") || lower.contains("virtual")
-}
-
+///   - Deposit exists → ticket page
+#[allow(clippy::too_many_arguments)]
 fn build_next_step(
     format: &EventFormat,
     event_id: &str,
     api_id: &str,
-    _claim_token: &str,
+    claim_token: &str,
     state: &AppState,
     deposit: Option<&event_checkin_domain::models::deposit::DepositStatus>,
     participation_type: &str,
+    is_checked_in: bool,
+    is_claimed: bool,
 ) -> NextStep {
     let _claim_base = &state.config.server.claim_base_url;
+
+    // Already claimed NFT — go to ticket page (final state)
+    if is_claimed {
+        return NextStep {
+            step_type: "ticket".to_string(),
+            url: format!("/ticket/{api_id}?event_id={event_id}"),
+        };
+    }
+
+    // Checked in but not yet claimed — go directly to claim page if token exists
+    if is_checked_in && !claim_token.is_empty() {
+        return NextStep {
+            step_type: "claim".to_string(),
+            url: format!("/claim/{claim_token}"),
+        };
+    }
 
     // Online attendees never need deposit — skip straight to waiting/ticket.
     // Quest completion (quiz/adventure) serves as virtual check-in at claim time.
@@ -974,6 +1019,11 @@ fn build_next_step(
             url: format!("/ticket/{api_id}?event_id={event_id}"),
         }
     }
+}
+
+fn is_online_participation(participation_type: &str) -> bool {
+    let lower = participation_type.trim().to_lowercase();
+    lower.contains("online") || lower.contains("virtual")
 }
 
 // ---------------------------------------------------------------------------

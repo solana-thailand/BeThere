@@ -620,7 +620,7 @@ impl EventConfig {
             sheet_id: sheet_id.to_string(),
             sheet_name: sheet_name.to_string(),
             staff_sheet_name: staff_sheet_name.to_string(),
-            quiz_enabled: true,
+            quiz_enabled: false,
             nft_collection_mint: nft_collection_mint.to_string(),
             nft_metadata_uri: nft_metadata_uri.to_string(),
             nft_image_url: nft_image_url.to_string(),

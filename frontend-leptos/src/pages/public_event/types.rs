@@ -41,6 +41,10 @@ pub fn google_icon() -> &'static str {
 pub struct SavedDevProfile {
     #[serde(default)]
     pub name: String,
+    #[serde(default)]
+    pub contact_channel: String,
+    #[serde(default)]
+    pub contact_handle: String,
     /// Dynamic field values keyed by field key.
     #[serde(default)]
     pub fields: std::collections::HashMap<String, String>,

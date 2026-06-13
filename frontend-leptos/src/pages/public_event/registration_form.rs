@@ -59,6 +59,12 @@ pub fn registration_form(
             if !profile.name.is_empty() && reg_name.get().is_empty() {
                 set_reg_name.set(profile.name.clone());
             }
+            if !profile.contact_channel.is_empty() && reg_contact_channel.get().is_empty() {
+                set_reg_contact_channel.set(profile.contact_channel.clone());
+            }
+            if !profile.contact_handle.is_empty() && reg_contact_handle.get().is_empty() {
+                set_reg_contact_handle.set(profile.contact_handle.clone());
+            }
             if !profile.fields.is_empty() {
                 set_dynamic_field_values.update(|vals| {
                     for (k, v) in &profile.fields {
@@ -95,6 +101,8 @@ pub fn registration_form(
                     // Save profile for auto-fill on future events
                     let saved = SavedDevProfile {
                         name: data.name.clone(),
+                        contact_channel: reg_contact_channel.get(),
+                        contact_handle: reg_contact_handle.get(),
                         fields: dynamic_field_values.get(),
                     };
                     if let Ok(json) = serde_json::to_string(&saved) {
@@ -239,6 +247,7 @@ pub fn registration_form(
                                     <select
                                         class="pe-input"
                                         prop:class=move || if field_errors.get().contact_channel.is_some() { "pe-input--error" } else { "" }
+                                        prop:value=move || reg_contact_channel.get()
                                         on:change=move |ev| {
                                             set_reg_contact_channel.set(event_target_value(&ev));
                                             set_field_errors.update(|e| e.contact_channel = None);

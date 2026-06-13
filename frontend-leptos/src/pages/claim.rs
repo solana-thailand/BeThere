@@ -1136,9 +1136,10 @@ pub fn Claim() -> impl IntoView {
                                     set_state.set(ClaimState::Quiz(claim_data, quiz_data));
                                 }
                                 Ok(_) => {
-                                    // Quiz not configured despite quiz_enabled — organizer hasn't set it up yet.
+                                    // Quiz enabled but not configured — organizer hasn't set it up yet.
+                                    // Show a clear message and block claiming.
                                     log::warn!(
-                                        "[claim] quiz status={:?} but quiz not configured, showing setup pending",
+                                        "[claim] quiz status={:?} but quiz not configured, showing quiz pending",
                                         claim_data.quiz_status
                                     );
                                     set_state.set(ClaimState::NftComingSoon(claim_data));
@@ -1381,9 +1382,24 @@ pub fn Claim() -> impl IntoView {
                                 .into_any()
                         }
 
-                        // ---- NFT Coming Soon ----
+                        // ---- NFT Coming Soon / Quiz Pending ----
                         ClaimState::NftComingSoon(data) => {
                             let checked_in_display = checked_in_label(&data.checked_in_at, &data.participation_type);
+                            // Differentiate: quiz not configured vs NFT not available
+                            let (card_title, card_msg, card_detail) = if data.nft_available {
+                                // NFT tech is ready but quiz blocks claiming
+                                (
+                                    "Waiting for Quiz Setup",
+                                    "Your organizer is preparing a quiz for this event. You’ll be able to claim your NFT badge once it’s ready.",
+                                    "Please check back soon or remind your organizer to set up the quiz!"
+                                )
+                            } else {
+                                (
+                                    "NFT Badge Coming Soon",
+                                    "Your proof-of-attendance NFT badge is being prepared.",
+                                    "You will receive a compressed NFT on Solana — a permanent, on-chain proof that you attended this event."
+                                )
+                            };
                             view! {
                                 <div class="claim-state-full">
                                     // Attendee welcome
@@ -1396,12 +1412,12 @@ pub fn Claim() -> impl IntoView {
                                     // NFT badge preview
                                     <NftBadgePreview />
 
-                                    // NFT coming soon with shimmer
+                                    // Status card — quiz pending or NFT coming soon
                                     <div class="claim-nft-soon-card">
-                                        <h3>"NFT Badge Coming Soon"</h3>
-                                        <p>"Your proof-of-attendance NFT badge is being prepared."</p>
+                                        <h3>{card_title}</h3>
+                                        <p>{card_msg}</p>
                                         <div class="nft-description">
-                                            "You will receive a compressed NFT on Solana — a permanent, on-chain proof that you attended this event."
+                                            {card_detail}
                                         </div>
                                     </div>
 

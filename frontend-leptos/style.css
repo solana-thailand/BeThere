@@ -6018,6 +6018,25 @@ nav a.active {
 .adventure-banner b {
     color: var(--warning);
 }
+.adventure-banner-success {
+    background: linear-gradient(
+        135deg,
+        rgba(74, 222, 128, 0.15),
+        rgba(34, 197, 94, 0.1)
+    );
+    color: var(--success);
+    border-bottom-color: var(--success);
+    font-weight: 600;
+}
+.adventure-banner-link {
+    color: var(--warning);
+    text-decoration: none;
+    font-weight: 700;
+    white-space: nowrap;
+}
+.adventure-banner-link:hover {
+    text-decoration: underline;
+}
 
 /* === Claim Button (golden) === */
 .adventure-claim-btn {
@@ -10270,6 +10289,9 @@ nav a.active {
 .pe-mb-025 {
     margin-bottom: 0.25rem;
 }
+.pe-mt-025 {
+    margin-top: 0.25rem;
+}
 
 /* Top margin */
 .pe-mt-05 {
@@ -13700,9 +13722,9 @@ nav a.active {
     color: var(--text-primary);
 }
 
-// =========================================================================
-// Developer Profile Page (/profile)
-// =========================================================================
+/* =========================================================================
+   Developer Profile Page (/profile)
+   ========================================================================= */
 
 .dev-profile-page {
     max-width: 640px;
