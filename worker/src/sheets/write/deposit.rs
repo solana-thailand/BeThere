@@ -258,6 +258,52 @@ pub async fn write_refund_status(
     Ok(())
 }
 
+/// Write refund_status (column AB) for multiple attendees in a single batch update.
+/// Takes pre-resolved `(row_index, status)` pairs to avoid N attendee lookups.
+/// Used by batch refund operations.
+pub async fn write_refund_status_batch(
+    updates: &[(usize, String)],
+    mapping: &ColumnMapping,
+    state: &AppState,
+    sheet_id: &str,
+    sheet_name: &str,
+    kv: Option<&KvStore>,
+) -> Result<(), String> {
+    if updates.is_empty() {
+        return Ok(());
+    }
+
+    let access_token = get_cached_access_token(state, kv).await?;
+
+    use event_checkin_domain::models::attendee::ColumnKey as CK;
+    let col = mapping.column_letter(CK::RefundStatus);
+
+    let data: Vec<ValueRange> = updates
+        .iter()
+        .map(|(row_index, status)| ValueRange {
+            range: format!("{sheet_name}!{col}{row_index}"),
+            values: vec![vec![status.clone()]],
+        })
+        .collect();
+
+    let url =
+        format!("https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values:batchUpdate");
+
+    let body = BatchUpdateRequest {
+        data,
+        value_input_option: "USER_ENTERED".to_string(),
+    };
+
+    batch_update_sheet(&url, &body, &access_token).await?;
+
+    tracing::info!(
+        count = updates.len(),
+        "wrote batch refund_status to google sheet"
+    );
+
+    Ok(())
+}
+
 /// Write refund link to the Google Sheet (column AC: refund_link).
 /// Called when organizer provides a refund link for an attendee.
 pub async fn write_refund_link(

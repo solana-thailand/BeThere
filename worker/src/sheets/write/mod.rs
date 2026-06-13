@@ -36,5 +36,5 @@ pub use checkin::{
 };
 pub use deposit::{
     update_deposit_method, write_bank_info, write_deposit_verification, write_refund_link,
-    write_refund_status,
+    write_refund_status, write_refund_status_batch,
 };

@@ -234,6 +234,8 @@ pub async fn batch_thb_refund_handler(
     let now = Utc::now().to_rfc3339();
     let mut refunded = 0u32;
     let mut skipped = 0u32;
+    let mut refunded_attendee_ids: std::collections::HashSet<String> =
+        std::collections::HashSet::new();
 
     for mut dep in deposits {
         if dep.refunded {
@@ -249,6 +251,7 @@ pub async fn batch_thb_refund_handler(
         event_store::save_thb_deposit(kv, &dep, d1)
             .await
             .map_err(AppError::Internal)?;
+        refunded_attendee_ids.insert(dep.attendee_id.clone());
         refunded += 1;
     }
 
@@ -259,6 +262,63 @@ pub async fn batch_thb_refund_handler(
         marker = %claims.email,
         "Batch THB refund completed"
     );
+
+    // Mirror D1 state into Google Sheet — write refund_status (AB) for all
+    // batch-refunded attendees in a single batch update. Non-fatal.
+    if !refunded_attendee_ids.is_empty() {
+        let mapping =
+            crate::sheets::get_column_mapping(&state, &event.sheet_id, &event.sheet_name, Some(kv))
+                .await
+                .unwrap_or_else(|_| {
+                    event_checkin_domain::models::attendee::ColumnMapping::hardcoded()
+                });
+
+        let attendees =
+            crate::sheets::get_attendees(&state, &event.sheet_id, &event.sheet_name, Some(kv))
+                .await
+                .unwrap_or_default();
+
+        let updates: Vec<(usize, String)> = attendees
+            .iter()
+            .filter_map(|a| {
+                if refunded_attendee_ids.contains(&a.api_id) {
+                    Some((a.row_index, "refunded".to_string()))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        if !updates.is_empty() {
+            if let Some(ctx) = &state.worker_ctx {
+                ctx.wait_until(crate::sheets::bg_sync::write_refund_status_batch(
+                    state.clone(),
+                    updates,
+                    mapping,
+                    event.sheet_id.clone(),
+                    event.sheet_name.clone(),
+                    Some(kv.clone()),
+                ));
+            } else {
+                // Fallback: blocking batch write when worker_ctx unavailable (tests)
+                if let Err(e) = crate::sheets::write::write_refund_status_batch(
+                    &updates,
+                    &mapping,
+                    &state,
+                    &event.sheet_id,
+                    &event.sheet_name,
+                    Some(kv),
+                )
+                .await
+                {
+                    tracing::warn!(
+                        error = %e,
+                        "failed to write batch refund_status to sheet (non-blocking)"
+                    );
+                }
+            }
+        }
+    }
 
     // Audit log
     let _ = crate::audit_store::append_event_audit(

@@ -760,6 +760,58 @@ pub async fn write_refund_link(
     tracing::info!(row_index = row_index, "bg_sync: wrote refund_link");
 }
 
+/// Write refund_status (column AB) for multiple attendees in a single batch update.
+/// Used by batch refund operations to mirror D1 state into the Sheet efficiently.
+pub async fn write_refund_status_batch(
+    state: AppState,
+    updates: Vec<(usize, String)>,
+    mapping: ColumnMapping,
+    sheet_id: String,
+    sheet_name: String,
+    kv: Option<KvStore>,
+) {
+    if updates.is_empty() {
+        return;
+    }
+
+    let access_token = match get_cached_access_token(&state, kv.as_ref()).await {
+        Ok(t) => t,
+        Err(e) => {
+            tracing::error!(error = %e, "bg_sync write_refund_status_batch: failed to get access token");
+            return;
+        }
+    };
+
+    use event_checkin_domain::models::attendee::ColumnKey as CK;
+    let col = mapping.column_letter(CK::RefundStatus);
+
+    let data: Vec<ValueRange> = updates
+        .into_iter()
+        .map(|(row_index, status)| ValueRange {
+            range: format!("{sheet_name}!{col}{row_index}"),
+            values: vec![vec![status]],
+        })
+        .collect();
+
+    let url =
+        format!("https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values:batchUpdate");
+
+    let body = BatchUpdateRequest {
+        data,
+        value_input_option: "USER_ENTERED".to_string(),
+    };
+
+    if let Err(e) = batch_update_sheet(&url, &body, &access_token).await {
+        tracing::error!(error = %e, "bg_sync write_refund_status_batch: sheet write failed");
+        return;
+    }
+
+    tracing::info!(
+        count = body.data.len(),
+        "bg_sync: wrote batch refund_status"
+    );
+}
+
 /// Delete a row from the Sheet.
 pub async fn delete_sheet_row(
     state: AppState,
