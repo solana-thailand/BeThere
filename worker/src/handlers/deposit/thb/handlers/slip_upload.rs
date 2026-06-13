@@ -390,6 +390,59 @@ pub async fn upload_thb_slip_handler(
         .await
         .map_err(AppError::Internal)?;
 
+    // Write deposit columns (N=method, O=amount, Q=verified) to mirror D1 state.
+    // verified=No means "pending review" — admin approval overwrites with Yes.
+    let deposit_amount_thb = event.deposit_amount_thb.to_string();
+    if let (Ok(mapping), Ok(Some(attendee))) = (
+        crate::sheets::get_column_mapping(&state, &event.sheet_id, &event.sheet_name, Some(kv))
+            .await,
+        crate::sheets::get_attendee_by_id(
+            &body.attendee_id,
+            &state,
+            &event.sheet_id,
+            &event.sheet_name,
+            Some(kv),
+        )
+        .await,
+    ) {
+        if let Some(wctx) = &state.worker_ctx {
+            wctx.wait_until(crate::sheets::bg_sync::write_deposit_verification(
+                state.clone(),
+                attendee.row_index,
+                "THB".to_string(),
+                deposit_amount_thb.clone(),
+                false, // pending — awaiting admin review
+                mapping.clone(),
+                event.sheet_id.clone(),
+                event.sheet_name.clone(),
+                Some(kv.clone()),
+            ));
+        } else {
+            let ctx = crate::sheets::write::SheetContext {
+                mapping: &mapping,
+                state: &state,
+                sheet_id: &event.sheet_id,
+                sheet_name: &event.sheet_name,
+                kv: Some(kv),
+            };
+            if let Err(e) = crate::sheets::write::write_deposit_verification(
+                attendee.row_index,
+                "THB",
+                &deposit_amount_thb,
+                false,
+                &ctx,
+            )
+            .await
+            {
+                tracing::warn!(
+                    attendee_id = %body.attendee_id,
+                    error = %e,
+                    "failed to write deposit verification to sheet (non-blocking)"
+                );
+            }
+        }
+    }
+
     tracing::info!(
         attendee_id = %body.attendee_id,
         event_id = %event.id,

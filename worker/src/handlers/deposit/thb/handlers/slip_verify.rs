@@ -77,85 +77,85 @@ pub async fn verify_thb_slip_handler(
         "THB deposit slip verified"
     );
 
-    // Write deposit columns (N, O, Q) to Google Sheet + auto-generate QR if approved
-    if body.approved {
-        let deposit_amount_thb = thb_deposit.amount_thb.to_string();
-        if let (Ok(mapping), Ok(Some(attendee))) = (
-            crate::sheets::get_column_mapping(&state, &event.sheet_id, &event.sheet_name, Some(kv))
-                .await,
-            crate::sheets::get_attendee_by_id(
-                &body.attendee_id,
-                &state,
-                &event.sheet_id,
-                &event.sheet_name,
-                Some(kv),
-            )
+    // Write deposit columns (N=method, O=amount, Q=verified) to Google Sheet.
+    // Mirrors D1 for BOTH approval and rejection so the sheet stays in sync.
+    // QR auto-generation only fires on approval.
+    let deposit_amount_thb = thb_deposit.amount_thb.to_string();
+    if let (Ok(mapping), Ok(Some(attendee))) = (
+        crate::sheets::get_column_mapping(&state, &event.sheet_id, &event.sheet_name, Some(kv))
             .await,
-        ) {
-            if let Some(wctx) = &state.worker_ctx {
-                // Detach deposit verification write
-                wctx.wait_until(crate::sheets::bg_sync::write_deposit_verification(
+        crate::sheets::get_attendee_by_id(
+            &body.attendee_id,
+            &state,
+            &event.sheet_id,
+            &event.sheet_name,
+            Some(kv),
+        )
+        .await,
+    ) {
+        if let Some(wctx) = &state.worker_ctx {
+            // Detach deposit verification write (fires for approve AND reject)
+            wctx.wait_until(crate::sheets::bg_sync::write_deposit_verification(
+                state.clone(),
+                attendee.row_index,
+                "THB".to_string(),
+                deposit_amount_thb.clone(),
+                body.approved,
+                mapping.clone(),
+                event.sheet_id.clone(),
+                event.sheet_name.clone(),
+                Some(kv.clone()),
+            ));
+
+            // Auto-generate QR if attendee doesn't have one (approval only)
+            if body.approved && attendee.qr_code_url.as_ref().is_none_or(|u| u.is_empty()) {
+                let server_url = &state.config.server.url;
+                let qr_url = format!("{server_url}/staff/?scan={}", attendee.api_id);
+                wctx.wait_until(crate::sheets::bg_sync::update_qr_urls(
                     state.clone(),
-                    attendee.row_index,
-                    "THB".to_string(),
-                    deposit_amount_thb.clone(),
-                    true,
-                    mapping.clone(),
+                    vec![(attendee.row_index, qr_url)],
+                    mapping,
                     event.sheet_id.clone(),
                     event.sheet_name.clone(),
                     Some(kv.clone()),
                 ));
+            }
+        } else {
+            // Fallback: blocking Sheets write when worker_ctx unavailable (tests)
+            let ctx = crate::sheets::write::SheetContext {
+                mapping: &mapping,
+                state: &state,
+                sheet_id: &event.sheet_id,
+                sheet_name: &event.sheet_name,
+                kv: Some(kv),
+            };
 
-                // Auto-generate QR if attendee doesn't have one
-                if attendee.qr_code_url.as_ref().is_none_or(|u| u.is_empty()) {
-                    let server_url = &state.config.server.url;
-                    let qr_url = format!("{server_url}/staff/?scan={}", attendee.api_id);
-                    wctx.wait_until(crate::sheets::bg_sync::update_qr_urls(
-                        state.clone(),
-                        vec![(attendee.row_index, qr_url)],
-                        mapping,
-                        event.sheet_id.clone(),
-                        event.sheet_name.clone(),
-                        Some(kv.clone()),
-                    ));
-                }
-            } else {
-                // Fallback: blocking Sheets write when worker_ctx unavailable (tests)
-                let ctx = crate::sheets::write::SheetContext {
-                    mapping: &mapping,
-                    state: &state,
-                    sheet_id: &event.sheet_id,
-                    sheet_name: &event.sheet_name,
-                    kv: Some(kv),
-                };
+            if let Err(e) = crate::sheets::write::write_deposit_verification(
+                attendee.row_index,
+                "THB",
+                &deposit_amount_thb,
+                body.approved,
+                &ctx,
+            )
+            .await
+            {
+                tracing::warn!(error = %e, "failed to write deposit verification to sheet (non-fatal)");
+            }
 
-                if let Err(e) = crate::sheets::write::write_deposit_verification(
-                    attendee.row_index,
-                    "THB",
-                    &deposit_amount_thb,
-                    true,
-                    &ctx,
+            if body.approved && attendee.qr_code_url.as_ref().is_none_or(|u| u.is_empty()) {
+                let server_url = &state.config.server.url;
+                let qr_url = format!("{server_url}/staff/?scan={}", attendee.api_id);
+                if let Err(e) = crate::sheets::write::update_qr_urls(
+                    &[(attendee.row_index, qr_url)],
+                    &mapping,
+                    &state,
+                    &event.sheet_id,
+                    &event.sheet_name,
+                    Some(kv),
                 )
                 .await
                 {
-                    tracing::warn!(error = %e, "failed to write deposit verification to sheet (non-fatal)");
-                }
-
-                if attendee.qr_code_url.as_ref().is_none_or(|u| u.is_empty()) {
-                    let server_url = &state.config.server.url;
-                    let qr_url = format!("{server_url}/staff/?scan={}", attendee.api_id);
-                    if let Err(e) = crate::sheets::write::update_qr_urls(
-                        &[(attendee.row_index, qr_url)],
-                        &mapping,
-                        &state,
-                        &event.sheet_id,
-                        &event.sheet_name,
-                        Some(kv),
-                    )
-                    .await
-                    {
-                        tracing::warn!(error = %e, "failed to auto-generate QR for verified attendee (non-fatal)");
-                    }
+                    tracing::warn!(error = %e, "failed to auto-generate QR for verified attendee (non-fatal)");
                 }
             }
         }
