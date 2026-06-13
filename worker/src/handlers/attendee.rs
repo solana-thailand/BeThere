@@ -732,11 +732,18 @@ pub async fn delete_attendee(
             "walk-in attendee deleted"
         );
     } else {
-        // 2. Try to find as regular attendee in Google Sheet
-        let attendee =
-            sheets::get_attendee_by_id(&id, &state, &event.sheet_id, &event.sheet_name, kv)
+        // 2. Try to find as regular attendee.
+        //    For deletion, read from the Sheet to get the correct row_index.
+        //    D1's sheet_row_index may be NULL (never synced) or stale (rows
+        //    shifted), which would cause the wrong row (or header row 0) to be
+        //    deleted — the attendee disappears from the web (D1) but stays on
+        //    the Google Sheet.
+        let attendee = {
+            let map = sheets::get_attendees_map(&state, &event.sheet_id, &event.sheet_name, kv)
                 .await
                 .map_err(|e| AppError::Internal(format!("failed to look up attendee: {e}")))?;
+            map.get(&id).cloned()
+        };
 
         match attendee {
             Some(attendee) => {
