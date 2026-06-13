@@ -4,6 +4,7 @@ pub mod audit;
 pub mod campaigns;
 pub mod claim_locks;
 pub mod contacts;
+pub mod d1_safe;
 pub mod deposit_statuses;
 pub mod developers;
 pub mod escrow_index;

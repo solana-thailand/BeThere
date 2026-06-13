@@ -61,22 +61,21 @@ pub async fn get_deposit_status(
 }
 
 /// List all deposit statuses for an event (ordered by deposit_order).
+///
+/// Uses `d1_safe::safe_all_rows` — the worker crate's `results()` panics on
+/// SQL NULL column values.
 pub async fn list_deposit_statuses(
     db: &D1Database,
     event_id: &str,
 ) -> Result<Vec<DepositStatus>, String> {
-    let stmt =
-        db.prepare("SELECT * FROM deposit_statuses WHERE event_id = ?1 ORDER BY deposit_order ASC");
-    let result = stmt
+    let stmt = db
+        .prepare("SELECT * FROM deposit_statuses WHERE event_id = ?1 ORDER BY deposit_order ASC")
         .bind_refs(&[D1Type::Text(event_id)])
-        .map_err(|e| format!("D1 list_deposit_statuses bind: {e:?}"))?
-        .all()
-        .await
-        .map_err(|e| format!("D1 list_deposit_statuses: {e:?}"))?;
+        .map_err(|e| format!("D1 list_deposit_statuses bind: {e:?}"))?;
 
-    let rows: Vec<serde_json::Value> = result
-        .results()
-        .map_err(|e| format!("D1 list_deposit_statuses results: {e:?}"))?;
+    let rows = super::d1_safe::safe_all_rows(&stmt)
+        .await
+        .map_err(|e| format!("D1 list_deposit_statuses: {e}"))?;
 
     rows.into_iter()
         .map(row_to_deposit_status)

@@ -54,18 +54,17 @@ pub async fn get_org_config(
 }
 
 /// List all organizations from D1 (newest first).
+///
+/// Uses `d1_safe::safe_all_rows` — the worker crate's `results()` panics on
+/// SQL NULL column values.
 pub async fn list_orgs(
     db: &D1Database,
 ) -> Result<Vec<event_checkin_domain::models::org::OrganizationConfig>, String> {
     let stmt = db.prepare("SELECT * FROM organizations ORDER BY created_at DESC");
-    let result = stmt
-        .all()
-        .await
-        .map_err(|e| format!("D1 list_orgs: {e:?}"))?;
 
-    let rows: Vec<serde_json::Value> = result
-        .results()
-        .map_err(|e| format!("D1 list_orgs results: {e:?}"))?;
+    let rows = super::d1_safe::safe_all_rows(&stmt)
+        .await
+        .map_err(|e| format!("D1 list_orgs: {e}"))?;
 
     rows.into_iter()
         .map(row_to_org_config)

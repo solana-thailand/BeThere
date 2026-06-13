@@ -57,19 +57,18 @@ pub async fn get_thb_deposit(
 }
 
 /// List all THB deposits for an event (newest first).
+///
+/// Uses `d1_safe::safe_all_rows` — the worker crate's `results()` panics on
+/// SQL NULL column values (e.g. rows inserted before the empty-string convention).
 pub async fn list_thb_deposits(db: &D1Database, event_id: &str) -> Result<Vec<ThbDeposit>, String> {
-    let stmt =
-        db.prepare("SELECT * FROM thb_deposits WHERE event_id = ?1 ORDER BY uploaded_at ASC");
-    let result = stmt
+    let stmt = db
+        .prepare("SELECT * FROM thb_deposits WHERE event_id = ?1 ORDER BY uploaded_at ASC")
         .bind_refs(&[D1Type::Text(event_id)])
-        .map_err(|e| format!("D1 list_thb_deposits bind: {e:?}"))?
-        .all()
-        .await
-        .map_err(|e| format!("D1 list_thb_deposits: {e:?}"))?;
+        .map_err(|e| format!("D1 list_thb_deposits bind: {e:?}"))?;
 
-    let rows: Vec<serde_json::Value> = result
-        .results()
-        .map_err(|e| format!("D1 list_thb_deposits results: {e:?}"))?;
+    let rows = super::d1_safe::safe_all_rows(&stmt)
+        .await
+        .map_err(|e| format!("D1 list_thb_deposits: {e}"))?;
 
     rows.into_iter()
         .map(row_to_thb_deposit)
