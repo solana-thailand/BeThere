@@ -14,10 +14,10 @@ use leptos_router::path;
 use crate::components::ProtectedRoute;
 use crate::icons::{Icon, IconName};
 use crate::pages::{
-    admin::Admin, adventure::page::Adventure, claim::Claim, data_privacy::DataPrivacy,
-    deposit::Deposit, dev_dashboard::DevDashboard, dev_profile::DevProfile, landing::Landing,
-    login::Login, privacy::Privacy, public_event::PublicEvent, scanner::Scanner,
-    ticket::page::Ticket,
+    admin::Admin, adventure::page::Adventure, claim::Claim, dashboard_live::DashboardLive,
+    data_privacy::DataPrivacy, deposit::Deposit, dev_dashboard::DevDashboard,
+    dev_profile::DevProfile, landing::Landing, login::Login, privacy::Privacy,
+    public_event::PublicEvent, scanner::Scanner, ticket::page::Ticket,
 };
 
 /// Main application component.
@@ -62,6 +62,7 @@ pub fn App() -> impl IntoView {
                     <Route path=path!("/profile") view=DevProfile />
                     <Route path=path!("/staff") view=ProtectedScanner />
                     <Route path=path!("/admin") view=ProtectedAdmin />
+                    <Route path=path!("/dashboard/live") view=ProtectedLiveDashboard />
                 </Routes>
             </main>
         </Router>
@@ -92,6 +93,20 @@ fn ProtectedAdmin() -> impl IntoView {
     view! {
         <ProtectedRoute>
             <Admin />
+        </ProtectedRoute>
+    }
+}
+
+/// Protected wrapper for the live aggregate dashboard.
+///
+/// Same auth guard as `ProtectedAdmin`. The live dashboard is the big-screen
+/// view for the in-room demo — staff JWT is enforced before mount so a
+/// projector mishap can't leak attendee data to the room.
+#[component]
+fn ProtectedLiveDashboard() -> impl IntoView {
+    view! {
+        <ProtectedRoute>
+            <DashboardLive />
         </ProtectedRoute>
     }
 }
