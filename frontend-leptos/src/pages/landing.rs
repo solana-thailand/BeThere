@@ -844,7 +844,7 @@ pub fn Landing() -> impl IntoView {
                 </h1>
                 <p class="landing-hero-desc">
                     {move || if persona.get() == 0 {
-                        "Put down a deposit to reserve your spot. Show up, take a quick quiz, and get every cent back — plus a digital badge you own forever.".to_string()
+                        "Put down a deposit to reserve your spot. Show up, check in, and get every cent back — take a quick quiz to unlock a digital badge you own forever.".to_string()
                     } else {
                         "Set a deposit for your event. Track check-ins live. No-shows auto-payout to you. Attendees who show up get refunded.".to_string()
                     }}
