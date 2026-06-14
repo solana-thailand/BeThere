@@ -42,7 +42,13 @@ pub struct EventDashboardMeta {
     pub id: String,
     pub name: String,
     pub slug: String,
-    pub capacity: i64,
+    /// In-person capacity. `None` or negative = unlimited (matches D1's -1
+    /// sentinel convention used by `D1EventRow.in_person_capacity`). The
+    /// legacy `capacity` column is ignored — it's a deprecated field that
+    /// drifts to 0 for events using the newer per-format capacity model.
+    pub in_person_capacity: Option<i64>,
+    /// Deposit amount in atomic USDC units (1 USDC = 1_000_000). The
+    /// frontend's `format_usdc()` converts to human-readable for display.
     pub deposit_amount_usdc: i64,
     pub event_start_ms: i64,
 }
@@ -172,7 +178,7 @@ pub async fn live_dashboard(
         id: event_id.clone(),
         name: event.name.clone().unwrap_or_default(),
         slug: event.slug.clone().unwrap_or_default(),
-        capacity: event.capacity.unwrap_or(0),
+        in_person_capacity: event.in_person_capacity,
         deposit_amount_usdc: event.deposit_amount_usdc.unwrap_or(0),
         event_start_ms: event.event_start_ms.unwrap_or(0),
     };

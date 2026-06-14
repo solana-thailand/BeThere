@@ -181,9 +181,18 @@ pub fn DashboardLive() -> impl IntoView {
                             <div class="dashboard-event-title">
                                 <h1>{resp.event.name.clone()}</h1>
                                 <span class="dashboard-event-subtitle">
-                                    {format!("Capacity: {}", resp.event.capacity)}
+                                    {format!(
+                                        "Capacity: {}",
+                                        match resp.event.in_person_capacity {
+                                            Some(v) if v >= 0 => v.to_string(),
+                                            _ => "Unlimited".to_string(),
+                                        }
+                                    )}
                                     " · "
-                                    {format!("Deposit: {} USDC", resp.event.deposit_amount_usdc)}
+                                    {format!(
+                                        "Deposit: {} USDC",
+                                        format_usdc(resp.event.deposit_amount_usdc as u64)
+                                    )}
                                 </span>
                             </div>
                         }

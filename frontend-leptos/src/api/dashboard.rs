@@ -24,8 +24,13 @@ pub struct EventDashboardMeta {
     pub name: String,
     #[serde(default)]
     pub slug: String,
+    /// In-person capacity. `None` or negative = unlimited (matches D1's -1
+    /// sentinel convention). Replaces the legacy `capacity` column, which
+    /// drifts to 0 for events using the newer per-format capacity model.
     #[serde(default)]
-    pub capacity: i64,
+    pub in_person_capacity: Option<i64>,
+    /// Deposit amount in atomic USDC units (1 USDC = 1_000_000).
+    /// `format_usdc()` converts to human-readable for display.
     #[serde(default)]
     pub deposit_amount_usdc: i64,
     #[serde(default)]

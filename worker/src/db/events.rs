@@ -60,7 +60,11 @@ pub struct D1EventRow {
     pub promptpay_id: Option<String>,
     pub escrow_address: Option<String>,
     pub organizer_wallet: Option<String>,
-    pub on_chain_event_id: Option<i64>,
+    // u64 not i64 — Solana on-chain event IDs are derived from hashes and can
+    // exceed i64::MAX (e.g. 15159210065911600000 > 9223372036854775807).
+    // Typing as i64 caused serde_json deserialize failures on the live
+    // dashboard endpoint when an event's ID occupied the high u64 range.
+    pub on_chain_event_id: Option<u64>,
     pub refund_deadline_hours: Option<i64>,
     pub max_refundable_deposits: Option<i64>,
     pub description: Option<String>,
@@ -165,7 +169,7 @@ impl D1EventRow {
             escrow_address: self.escrow_address.clone().unwrap_or_default(),
             escrow_status,
             organizer_wallet: self.organizer_wallet.clone().unwrap_or_default(),
-            on_chain_event_id: self.on_chain_event_id.unwrap_or(0) as u64,
+            on_chain_event_id: self.on_chain_event_id.unwrap_or(0),
             refund_deadline_hours: self.refund_deadline_hours.unwrap_or(168) as u32,
             max_refundable_deposits: self.max_refundable_deposits.unwrap_or(0) as u32,
             description: self.description.clone().unwrap_or_default(),
