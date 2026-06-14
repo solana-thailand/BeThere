@@ -42,7 +42,7 @@
 | `build_deactivate_event_transaction` | `close.rs` | ✓ 2/2 accounts match | ✅ PASS |
 | `build_rollover_deposit_transaction` | `rollover.rs` | ✓ 11/11 accounts match | ✅ PASS |
 
-**Worker tests**: 117 passed / 0 failed (81 + 15 + 21).
+**Worker tests**: 120 passed / 0 failed (84 + 15 + 21).
 
 ---
 
@@ -59,14 +59,14 @@ The worker's `build_refund_transaction` and `build_refund_and_close_transaction`
 
 The production refund handler at `worker/src/handlers/deposit/escrow/handlers.rs:244` calls `build_refund_and_close_transaction`, so this affected the live `/api/escrow/refund` endpoint.
 
-**Why unit tests didn't catch it**: Worker Rust unit tests (117 pass) validate transaction serialization, not on-chain execution. The quasar-svm tests in `bethere-escrow/` (43 pass) use the generated client which includes the sysvar. The e2e devnet scripts (`scripts/e2e/test_escrow_devnet.sh:766`) would catch it but require a live environment.
+**Why unit tests didn't catch it**: Worker Rust unit tests (now 120 pass, 117 at time of audit) validate transaction serialization, not on-chain execution. The quasar-svm tests in `bethere-escrow/` (43 pass) use the generated client which includes the sysvar. The e2e devnet scripts (`scripts/e2e/test_escrow_devnet.sh:766`) would catch it but require a live environment. A dedicated regression guard test was added post-audit (see Action Items).
 
 **Fix applied** (3 files):
 - `worker/src/solana_escrow/mod.rs` — added `INSTRUCTIONS_SYSVAR_ID` constant (`Sysvar1nstructions1111111111111111111111111`)
 - `worker/src/solana_escrow/tx_builders/mod.rs` — added `instruction_sysvar` field to `EscrowCtx` + populated in `resolve()`
 - `worker/src/solana_escrow/tx_builders/refund.rs` — inserted `acct_r(ctx.instruction_sysvar)` at index 6 (after `vault`, before `rent`) in both `build_refund_transaction` and `build_refund_and_close_transaction`
 
-**Verification**: `cargo build` clean · `cargo clippy` clean · 117 worker tests pass · account order now matches on-chain `Refund` struct exactly.
+**Verification**: `cargo build` clean · `cargo clippy` clean · 117 worker tests pass (at time of fix) · account order now matches on-chain `Refund` struct exactly.
 
 ---
 
@@ -179,4 +179,4 @@ Per-file test breakdown:
 - [x] Fix worker refund tx builder to include `instruction_sysvar` (CRITICAL — done in this audit)
 - [ ] Run `scripts/e2e/test_escrow_devnet.sh` post-deploy to confirm end-to-end refund flow on devnet
 - [ ] Run `scripts/e2e/test_rollover_devnet.sh` post-deploy to confirm rollover flow on devnet
-- [ ] Consider adding a worker-side serialization test that asserts refund account count == 10 (regression guard for future introspection changes)
+- [x] Add worker-side regression guard test asserting refund account count == 10 + `instruction_sysvar` at index 6 (DONE — 3 tests added in `worker/src/solana_escrow/tx_builders/mod.rs::tests`; worker tests now 120 pass)

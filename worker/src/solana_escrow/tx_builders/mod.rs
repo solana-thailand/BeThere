@@ -506,4 +506,76 @@ mod tests {
         let expected = "Bhgn1ZPvwe6ZkA7A9waU4t9BQdpEjdnSM4ZXeNCm1kuw";
         assert_eq!(pubkey_to_base58(&ata), expected, "Attendee ATA mismatch");
     }
+
+    // --------------------------------------------------------------------------------------------
+    // Regression guard — refund instruction account drift
+    // --------------------------------------------------------------------------------------------
+    // SEC-010 introspection hardening (.issues/047) added `instruction_sysvar`
+    // to the on-chain `Refund` struct at index 6. The worker tx builder must
+    // emit exactly 10 accounts or on-chain execution fails with
+    // `NotEnoughAccountKeys`. This test pins the count + the instruction_sysvar
+    // slot so future drift is caught at unit-test time, not on devnet.
+
+    #[tokio::test]
+    async fn test_refund_instruction_accounts_count_is_10() {
+        let organizer_str = "9ZNTfG4NyQgxy2SWjSiQoUyBPEvXT2xo7fKc5hPYYJ7b";
+        let ctx = EscrowCtx::resolve(organizer_str, 1u64).await.unwrap();
+        let attendee = pubkey_from_base58(organizer_str).unwrap();
+        let (attendee_deposit, _) = ctx.attendee_deposit(&attendee).await.unwrap();
+        let attendee_ta = ctx.token_account(&attendee).await.unwrap();
+
+        let accounts =
+            refund::refund_instruction_accounts(&ctx, attendee, attendee_deposit, attendee_ta);
+
+        assert_eq!(
+            accounts.len(),
+            10,
+            "refund instruction must emit exactly 10 accounts (got {}); \
+             missing instruction_sysvar would cause NotEnoughAccountKeys on-chain",
+            accounts.len()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_refund_instruction_sysvar_at_index_6() {
+        let organizer_str = "9ZNTfG4NyQgxy2SWjSiQoUyBPEvXT2xo7fKc5hPYYJ7b";
+        let ctx = EscrowCtx::resolve(organizer_str, 1u64).await.unwrap();
+        let attendee = pubkey_from_base58(organizer_str).unwrap();
+        let (attendee_deposit, _) = ctx.attendee_deposit(&attendee).await.unwrap();
+        let attendee_ta = ctx.token_account(&attendee).await.unwrap();
+
+        let accounts =
+            refund::refund_instruction_accounts(&ctx, attendee, attendee_deposit, attendee_ta);
+
+        // instruction_sysvar must sit between vault (idx 5) and rent (idx 7),
+        // matching the on-chain `Refund` struct declared in bethere-escrow.
+        assert_eq!(
+            accounts[6].pubkey,
+            ctx.instruction_sysvar,
+            "instruction_sysvar must be at index 6 (got {:?})",
+            accounts
+                .iter()
+                .position(|m| m.pubkey == ctx.instruction_sysvar)
+        );
+    }
+
+    #[tokio::test]
+    async fn test_refund_instruction_attendee_is_signer_writable_at_index_0() {
+        let organizer_str = "9ZNTfG4NyQgxy2SWjSiQoUyBPEvXT2xo7fKc5hPYYJ7b";
+        let ctx = EscrowCtx::resolve(organizer_str, 1u64).await.unwrap();
+        let attendee = pubkey_from_base58(organizer_str).unwrap();
+        let (attendee_deposit, _) = ctx.attendee_deposit(&attendee).await.unwrap();
+        let attendee_ta = ctx.token_account(&attendee).await.unwrap();
+
+        let accounts =
+            refund::refund_instruction_accounts(&ctx, attendee, attendee_deposit, attendee_ta);
+
+        // attendee is the refund signer + fee payer; must be signer+writable at idx 0.
+        assert!(accounts[0].is_signer, "attendee must be a signer");
+        assert!(
+            accounts[0].is_writable,
+            "attendee must be writable (fee deduction)"
+        );
+        assert_eq!(accounts[0].pubkey, attendee, "attendee must be at index 0");
+    }
 }

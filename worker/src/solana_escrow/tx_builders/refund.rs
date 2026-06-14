@@ -10,6 +10,35 @@ use super::{
     EscrowCtx, acct_r, acct_sw, acct_w, finalize_tx, merge_message_accounts, serialize_to_b64,
 };
 
+/// Build the account list for the `refund` instruction (discriminator 3).
+///
+/// Must match the on-chain `Refund` struct account order exactly:
+///   attendee, event_escrow, deposit_mint, attendee_deposit, attendee_ta,
+///   vault, instruction_sysvar, rent, token_program, system_program
+///
+/// Count must remain 10. The SEC-010 introspection hardening added
+/// `instruction_sysvar` at index 6 — removing it causes `NotEnoughAccountKeys`
+/// on-chain. Regression-tested in `tx_builders/mod.rs::tests`.
+pub(crate) fn refund_instruction_accounts(
+    ctx: &EscrowCtx,
+    attendee: PubkeyBytes,
+    attendee_deposit: PubkeyBytes,
+    attendee_ta: PubkeyBytes,
+) -> Vec<AccountMeta> {
+    vec![
+        acct_sw(attendee),
+        acct_w(ctx.event_escrow),
+        acct_r(ctx.usdc_mint),
+        acct_w(attendee_deposit),
+        acct_w(attendee_ta),
+        acct_w(ctx.vault),
+        acct_r(ctx.instruction_sysvar),
+        acct_r(ctx.rent_sysvar),
+        acct_r(ctx.token_program),
+        acct_r(ctx.system_program),
+    ]
+}
+
 /// Build a refund transaction for the escrow program.
 ///
 /// Transfers USDC from the vault back to the attendee and closes the
@@ -34,18 +63,8 @@ pub async fn build_refund_transaction(
 
     // Discriminator 3 (refund). No `organizer` account — the attendee signs.
     // The event_escrow PDA authorizes the vault → attendee_ta transfer.
-    let instruction_accounts = vec![
-        acct_sw(attendee),
-        acct_w(ctx.event_escrow),
-        acct_r(ctx.usdc_mint),
-        acct_w(attendee_deposit),
-        acct_w(attendee_ta),
-        acct_w(ctx.vault),
-        acct_r(ctx.instruction_sysvar),
-        acct_r(ctx.rent_sysvar),
-        acct_r(ctx.token_program),
-        acct_r(ctx.system_program),
-    ];
+    let instruction_accounts =
+        refund_instruction_accounts(&ctx, attendee, attendee_deposit, attendee_ta);
 
     // ATA program needed for CPI (init idempotent on attendee_ta).
     let extra = vec![acct_r(ctx.ata_program)];
@@ -85,21 +104,10 @@ pub async fn build_refund_and_close_transaction(
     let attendee_ta = ctx.token_account(&attendee).await?;
 
     // Instruction 1: Refund (discriminator 3)
-    // Account order must match the on-chain `Refund` struct:
-    //   attendee, event_escrow, deposit_mint, attendee_deposit, attendee_ta,
-    //   vault, instruction_sysvar, rent, token_program, system_program
-    let refund_accounts = vec![
-        acct_sw(attendee),
-        acct_w(ctx.event_escrow),
-        acct_r(ctx.usdc_mint),
-        acct_w(attendee_deposit),
-        acct_w(attendee_ta),
-        acct_w(ctx.vault),
-        acct_r(ctx.instruction_sysvar),
-        acct_r(ctx.rent_sysvar),
-        acct_r(ctx.token_program),
-        acct_r(ctx.system_program),
-    ];
+    // Account order is enforced by `refund_instruction_accounts` (see that
+    // function for the canonical on-chain `Refund` struct ordering).
+    let refund_accounts =
+        refund_instruction_accounts(&ctx, attendee, attendee_deposit, attendee_ta);
 
     // Instruction 2: Close Deposit (discriminator 7)
     let close_accounts = vec![
