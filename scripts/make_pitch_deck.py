@@ -1,0 +1,2123 @@
+#!/usr/bin/env python3
+"""
+BeThere — Pitch Deck Generator
+Produces a 14-slide .pptx optimized for Apple Keynote import.
+
+Run:
+    python3 scripts/make_pitch_deck.py
+Output:
+    .deliverables/bethere-pitch.pptx
+
+All facts pulled from README.md / DEMO.md (Jun 2025 audit).
+"""
+
+from pathlib import Path
+
+from pptx import Presentation
+from pptx.dml.color import RGBColor
+from pptx.enum.shapes import MSO_SHAPE
+from pptx.enum.text import MSO_ANCHOR, PP_ALIGN
+from pptx.oxml.ns import qn
+from pptx.util import Emu, Inches, Pt
+
+# ---------- Brand palette (Solana) ----------
+PURPLE = RGBColor(0x99, 0x45, 0xFF)  # primary
+GREEN = RGBColor(0x14, 0xF1, 0x95)  # accent
+PURPLE_DEEP = RGBColor(0x6B, 0x2F, 0xC9)  # darker shade
+BG_DARK = RGBColor(0x0B, 0x0E, 0x14)  # near-black slide bg
+BG_MID = RGBColor(0x16, 0x1B, 0x24)  # card bg
+BG_CARD = RGBColor(0x1E, 0x24, 0x2E)  # raised card
+BG_FUNNEL = RGBColor(0x14, 0x18, 0x20)  # funnel stage
+TEXT_LIGHT = RGBColor(0xF5, 0xF5, 0xF7)  # primary text
+TEXT_MUTED = RGBColor(0xA0, 0xA8, 0xB4)  # secondary text
+TEXT_DIM = RGBColor(0x6B, 0x73, 0x80)  # caption
+ACCENT_AMBER = RGBColor(0xFF, 0xB3, 0x3D)  # callout
+ACCENT_RED = RGBColor(0xFF, 0x5C, 0x7C)  # forfeit / problem
+ACCENT_BLUE = RGBColor(0x4D, 0xC9, 0xFF)  # refund / info
+DIVIDER = RGBColor(0x2A, 0x30, 0x3C)
+
+FONT = "Helvetica Neue"
+FONT_MONO = "Menlo"
+
+# Slide dimensions (16:9)
+SLIDE_W = Inches(13.333)
+SLIDE_H = Inches(7.5)
+
+OUT_PATH = (
+    Path(__file__).resolve().parent.parent / ".deliverables" / "bethere-pitch.pptx"
+)
+
+
+# =============================================================================
+# Helpers
+# =============================================================================
+
+
+def set_bg(slide, color: RGBColor) -> None:
+    """Solid background fill on the slide."""
+    bg = slide.background
+    bg.fill.solid()
+    bg.fill.fore_color.rgb = color
+
+
+def add_rect(
+    slide,
+    left,
+    top,
+    width,
+    height,
+    fill: RGBColor | None = None,
+    line: RGBColor | None = None,
+    line_width: float = 0.75,
+    shape: MSO_SHAPE = MSO_SHAPE.RECTANGLE,
+):
+    """Add a rectangle / shape with optional fill + line."""
+    sh = slide.shapes.add_shape(shape, left, top, width, height)
+    sh.shadow.inherit = False
+    if fill is None:
+        sh.fill.background()
+    else:
+        sh.fill.solid()
+        sh.fill.fore_color.rgb = fill
+    if line is None:
+        sh.line.fill.background()
+    else:
+        sh.line.color.rgb = line
+        sh.line.width = Pt(line_width)
+    return sh
+
+
+def add_text(
+    slide,
+    left,
+    top,
+    width,
+    height,
+    text,
+    size: float = 18,
+    color: RGBColor = TEXT_LIGHT,
+    bold: bool = False,
+    align=PP_ALIGN.LEFT,
+    anchor=MSO_ANCHOR.TOP,
+    font: str = FONT,
+    line_spacing: float = 1.15,
+):
+    """Single-block text box."""
+    tb = slide.shapes.add_textbox(left, top, width, height)
+    tf = tb.text_frame
+    tf.word_wrap = True
+    tf.margin_left = Pt(2)
+    tf.margin_right = Pt(2)
+    tf.margin_top = Pt(2)
+    tf.margin_bottom = Pt(2)
+    tf.vertical_anchor = anchor
+    p = tf.paragraphs[0]
+    p.alignment = align
+    p.line_spacing = line_spacing
+    r = p.add_run()
+    r.text = text
+    f = r.font
+    f.size = Pt(size)
+    f.bold = bold
+    f.color.rgb = color
+    f.name = font
+    return tb
+
+
+def add_multi(
+    slide,
+    left,
+    top,
+    width,
+    height,
+    runs,
+    align=PP_ALIGN.LEFT,
+    anchor=MSO_ANCHOR.TOP,
+    line_spacing: float = 1.2,
+):
+    """Multi-paragraph text box. runs = list of list-of-runs.
+    Each run = (text, size, color, bold, font?)."""
+    tb = slide.shapes.add_textbox(left, top, width, height)
+    tf = tb.text_frame
+    tf.word_wrap = True
+    tf.vertical_anchor = anchor
+    for i, para in enumerate(runs):
+        p = tf.paragraphs[0] if i == 0 else tf.add_paragraph()
+        p.alignment = align
+        p.line_spacing = line_spacing
+        for run in para:
+            text = run[0]
+            size = run[1]
+            color = run[2]
+            bold = run[3] if len(run) > 3 else False
+            font = run[4] if len(run) > 4 else FONT
+            r = p.add_run()
+            r.text = text
+            f = r.font
+            f.size = Pt(size)
+            f.bold = bold
+            f.color.rgb = color
+            f.name = font
+    return tb
+
+
+def add_bullets(
+    slide,
+    left,
+    top,
+    width,
+    height,
+    items,
+    size: float = 16,
+    color: RGBColor = TEXT_LIGHT,
+    bullet_color: RGBColor = GREEN,
+    line_spacing: float = 1.35,
+):
+    """Bulleted list. Each item = (text,) or (text, sub_color)."""
+    tb = slide.shapes.add_textbox(left, top, width, height)
+    tf = tb.text_frame
+    tf.word_wrap = True
+    for i, item in enumerate(items):
+        text = item[0]
+        col = item[1] if len(item) > 1 else color
+        p = tf.paragraphs[0] if i == 0 else tf.add_paragraph()
+        p.line_spacing = line_spacing
+        p.space_after = Pt(6)
+        r1 = p.add_run()
+        r1.text = "▸  "
+        r1.font.size = Pt(size)
+        r1.font.color.rgb = bullet_color
+        r1.font.name = FONT
+        r1.font.bold = True
+        r2 = p.add_run()
+        r2.text = text
+        r2.font.size = Pt(size)
+        r2.font.color.rgb = col
+        r2.font.name = FONT
+    return tb
+
+
+def header(slide, eyebrow: str, title: str, eyebrow_color: RGBColor = GREEN) -> None:
+    """Consistent slide header: small eyebrow + big title + accent line."""
+    add_text(
+        slide,
+        Inches(0.6),
+        Inches(0.45),
+        Inches(11),
+        Inches(0.3),
+        eyebrow.upper(),
+        size=12,
+        color=eyebrow_color,
+        bold=True,
+    )
+    add_text(
+        slide,
+        Inches(0.6),
+        Inches(0.75),
+        Inches(12),
+        Inches(0.8),
+        title,
+        size=32,
+        color=TEXT_LIGHT,
+        bold=True,
+    )
+    add_rect(slide, Inches(0.6), Inches(1.55), Inches(0.6), Pt(3), fill=PURPLE)
+
+
+def page_number(slide, n: int, total: int = 14) -> None:
+    add_text(
+        slide,
+        Inches(12.3),
+        Inches(7.05),
+        Inches(0.9),
+        Inches(0.3),
+        f"{n:02d} / {total:02d}",
+        size=10,
+        color=TEXT_DIM,
+        align=PP_ALIGN.RIGHT,
+    )
+
+
+def card(
+    slide,
+    left,
+    top,
+    width,
+    height,
+    fill: RGBColor = BG_CARD,
+    border: RGBColor = DIVIDER,
+    radius: bool = True,
+):
+    shp = MSO_SHAPE.ROUNDED_RECTANGLE if radius else MSO_SHAPE.RECTANGLE
+    return add_rect(
+        slide,
+        left,
+        top,
+        width,
+        height,
+        fill=fill,
+        line=border,
+        line_width=0.75,
+        shape=shp,
+    )
+
+
+# =============================================================================
+# Slide builders
+# =============================================================================
+
+
+def slide_01_title(prs) -> None:
+    s = prs.slides.add_slide(prs.slide_layouts[6])
+    set_bg(s, BG_DARK)
+
+    # Top brand bar
+    add_rect(s, Inches(0), Inches(0), SLIDE_W, Inches(0.15), fill=PURPLE)
+    add_rect(s, Inches(0.6), Inches(0.55), Inches(0.08), Inches(0.4), fill=GREEN)
+
+    # Eyebrow
+    add_text(
+        s,
+        Inches(0.8),
+        Inches(0.55),
+        Inches(8),
+        Inches(0.4),
+        "SOLANA  ·  DEVNET-VALIDATED  ·  100% RUST",
+        size=12,
+        color=GREEN,
+        bold=True,
+    )
+
+    # Logo placeholder
+    add_text(
+        s,
+        Inches(0.6),
+        Inches(1.8),
+        Inches(12),
+        Inches(0.4),
+        "[ BeThere LOGO ]",
+        size=14,
+        color=TEXT_DIM,
+        font=FONT_MONO,
+        align=PP_ALIGN.CENTER,
+    )
+
+    # Title
+    add_text(
+        s,
+        Inches(0.6),
+        Inches(2.4),
+        Inches(12.1),
+        Inches(1.5),
+        "BeThere",
+        size=120,
+        color=TEXT_LIGHT,
+        bold=True,
+        align=PP_ALIGN.CENTER,
+    )
+
+    # Tagline
+    add_text(
+        s,
+        Inches(0.6),
+        Inches(4.0),
+        Inches(12.1),
+        Inches(0.8),
+        "Turn every event into an on-chain experience.",
+        size=28,
+        color=GREEN,
+        bold=True,
+        align=PP_ALIGN.CENTER,
+    )
+
+    # Sub
+    add_text(
+        s,
+        Inches(0.6),
+        Inches(4.8),
+        Inches(12.1),
+        Inches(0.5),
+        "USDC deposit commitment · trustless escrow · compressed NFT badges",
+        size=16,
+        color=TEXT_MUTED,
+        align=PP_ALIGN.CENTER,
+    )
+
+    # Footer
+    add_rect(s, Inches(0), Inches(6.85), SLIDE_W, Pt(1), fill=DIVIDER)
+    add_multi(
+        s,
+        Inches(0.6),
+        Inches(7.0),
+        Inches(12.1),
+        Inches(0.4),
+        runs=[
+            [
+                ("IslandDAO V4  ·  ", 12, TEXT_MUTED, False),
+                ("June 22, 2025", 12, TEXT_LIGHT, True),
+            ],
+        ],
+        align=PP_ALIGN.CENTER,
+    )
+
+
+def slide_02_problem(prs) -> None:
+    s = prs.slides.add_slide(prs.slide_layouts[6])
+    set_bg(s, BG_DARK)
+    header(s, "The Problem", "Free events fail. No-shows wreck them.")
+
+    # Hero stat
+    card(
+        s,
+        Inches(0.6),
+        Inches(2.0),
+        Inches(5.6),
+        Inches(4.6),
+        fill=BG_MID,
+        border=ACCENT_RED,
+    )
+    add_text(
+        s,
+        Inches(0.9),
+        Inches(2.3),
+        Inches(5),
+        Inches(0.4),
+        "INDUSTRY BASELINE",
+        size=11,
+        color=ACCENT_RED,
+        bold=True,
+    )
+    add_text(
+        s,
+        Inches(0.9),
+        Inches(2.7),
+        Inches(5),
+        Inches(2.2),
+        "30–40%",
+        size=140,
+        color=ACCENT_RED,
+        bold=True,
+    )
+    add_text(
+        s,
+        Inches(0.9),
+        Inches(4.9),
+        Inches(5),
+        Inches(1.2),
+        "of registered attendees don't show up to free events.",
+        size=18,
+        color=TEXT_LIGHT,
+    )
+    add_text(
+        s,
+        Inches(0.9),
+        Inches(5.8),
+        Inches(5),
+        Inches(0.5),
+        "Catering wasted. Rooms half-empty. Speakers demoralized.",
+        size=13,
+        color=TEXT_MUTED,
+    )
+
+    # Secondary problems (right column)
+    items = [
+        (
+            "No on-chain proof of attendance",
+            "Attendance records live in spreadsheets — easy to forge, hard to verify.",
+        ),
+        ("NFTs cost too much", "Ethereum POAPs run ~$0.50 each. Pricey at any scale."),
+        (
+            "Web2 tools treat events as isolated",
+            "Luma & Eventbrite have no deposits, no penalties, no real skin in the game.",
+        ),
+        (
+            "Trust requires middlemen",
+            "Refunds depend on a human pressing a button days later.",
+        ),
+    ]
+    y = Inches(2.0)
+    for title, body in items:
+        card(s, Inches(6.6), y, Inches(6.1), Inches(1.05), fill=BG_CARD, border=DIVIDER)
+        add_text(
+            s,
+            Inches(6.85),
+            y + Inches(0.13),
+            Inches(5.7),
+            Inches(0.4),
+            title,
+            size=15,
+            color=TEXT_LIGHT,
+            bold=True,
+        )
+        add_text(
+            s,
+            Inches(6.85),
+            y + Inches(0.5),
+            Inches(5.7),
+            Inches(0.5),
+            body,
+            size=12,
+            color=TEXT_MUTED,
+        )
+        y += Inches(1.18)
+
+    page_number(s, 2)
+
+
+def slide_03_solution(prs) -> None:
+    s = prs.slides.add_slide(prs.slide_layouts[6])
+    set_bg(s, BG_DARK)
+    header(s, "The Solution", "Skin in the game — refundable, on-chain.")
+
+    # Top line
+    add_text(
+        s,
+        Inches(0.6),
+        Inches(1.85),
+        Inches(12),
+        Inches(0.5),
+        "Attendees commit a USDC deposit. Show up → get it back. Skip → forfeit.",
+        size=20,
+        color=TEXT_LIGHT,
+    )
+
+    # Three pillars
+    pillars = [
+        (
+            GREEN,
+            "Commit",
+            "$5 USDC",
+            "Locked in a Solana PDA escrow.\nTrustless, atomic, refundable.",
+        ),
+        (
+            PURPLE,
+            "Attend",
+            "On-site scan",
+            "Staff scans QR at the door.\nOn-chain check-in records attendance.",
+        ),
+        (
+            ACCENT_AMBER,
+            "Reward",
+            "Refund + cNFT",
+            "Deposit returned in full.\nCompressed NFT badge: $0.001 mint.",
+        ),
+    ]
+    x = Inches(0.6)
+    for color, label, big, body in pillars:
+        card(s, x, Inches(2.6), Inches(3.95), Inches(3.7), fill=BG_CARD, border=DIVIDER)
+        add_rect(s, x, Inches(2.6), Inches(3.95), Pt(4), fill=color)
+        add_text(
+            s,
+            x + Inches(0.3),
+            Inches(2.85),
+            Inches(3.5),
+            Inches(0.3),
+            label.upper(),
+            size=12,
+            color=color,
+            bold=True,
+        )
+        add_text(
+            s,
+            x + Inches(0.3),
+            Inches(3.25),
+            Inches(3.5),
+            Inches(1.0),
+            big,
+            size=42,
+            color=TEXT_LIGHT,
+            bold=True,
+        )
+        add_text(
+            s,
+            x + Inches(0.3),
+            Inches(4.5),
+            Inches(3.5),
+            Inches(1.7),
+            body,
+            size=14,
+            color=TEXT_MUTED,
+            line_spacing=1.4,
+        )
+        x += Inches(4.15)
+
+    # Bottom band
+    card(
+        s,
+        Inches(0.6),
+        Inches(6.45),
+        Inches(12.1),
+        Inches(0.7),
+        fill=BG_MID,
+        border=PURPLE,
+    )
+    add_multi(
+        s,
+        Inches(0.9),
+        Inches(6.55),
+        Inches(11.5),
+        Inches(0.5),
+        runs=[
+            [
+                ("Result:  ", 15, GREEN, True),
+                (
+                    "real commitment, real attendance, real on-chain proof — ",
+                    15,
+                    TEXT_LIGHT,
+                ),
+                ("at $0.00087 per transaction.", 15, GREEN, True),
+            ]
+        ],
+        anchor=MSO_ANCHOR.MIDDLE,
+    )
+
+    page_number(s, 3)
+
+
+def slide_04_demo_flow(prs) -> None:
+    s = prs.slides.add_slide(prs.slide_layouts[6])
+    set_bg(s, BG_DARK)
+    header(s, "Live Demo Flow", "From sign-up to badge — six steps on devnet.")
+
+    steps = [
+        ("01", "Create", "Organizer", "$5 USDC deposit set", PURPLE),
+        ("02", "Reserve", "Attendee", "Clicks Reserve Spot", PURPLE),
+        ("03", "Deposit", "Attendee", "Solana Pay QR · Phantom", GREEN),
+        ("04", "Scan", "Staff", "On-chain check-in", ACCENT_BLUE),
+        ("05", "Refund", "Attendee", "USDC returned in full", GREEN),
+        ("06", "Badge", "Attendee", "cNFT minted · $0.001", ACCENT_AMBER),
+    ]
+    # 6 cards in a 2x3 grid
+    card_w = Inches(3.9)
+    card_h = Inches(2.2)
+    gap_x = Inches(0.25)
+    gap_y = Inches(0.3)
+    start_x = Inches(0.6)
+    start_y = Inches(1.95)
+
+    for i, (num, name, actor, body, color) in enumerate(steps):
+        col = i % 3
+        row = i // 3
+        x = start_x + col * (card_w + gap_x)
+        y = start_y + row * (card_h + gap_y)
+        card(s, x, y, card_w, card_h, fill=BG_CARD, border=DIVIDER)
+        add_rect(s, x, y, Inches(0.08), card_h, fill=color)
+        # Number
+        add_text(
+            s,
+            x + Inches(0.3),
+            y + Inches(0.15),
+            Inches(1.5),
+            Inches(0.5),
+            num,
+            size=32,
+            color=color,
+            bold=True,
+            font=FONT_MONO,
+        )
+        # Actor
+        add_text(
+            s,
+            x + Inches(2.2),
+            y + Inches(0.25),
+            Inches(1.5),
+            Inches(0.4),
+            actor.upper(),
+            size=10,
+            color=TEXT_DIM,
+            bold=True,
+            align=PP_ALIGN.RIGHT,
+        )
+        # Name
+        add_text(
+            s,
+            x + Inches(0.3),
+            y + Inches(0.8),
+            Inches(3.4),
+            Inches(0.6),
+            name,
+            size=26,
+            color=TEXT_LIGHT,
+            bold=True,
+        )
+        # Body
+        add_text(
+            s,
+            x + Inches(0.3),
+            y + Inches(1.45),
+            Inches(3.4),
+            Inches(0.6),
+            body,
+            size=13,
+            color=TEXT_MUTED,
+        )
+
+    # Bottom: no-show path
+    card(
+        s,
+        Inches(0.6),
+        Inches(6.65),
+        Inches(12.1),
+        Inches(0.6),
+        fill=BG_MID,
+        border=ACCENT_RED,
+    )
+    add_multi(
+        s,
+        Inches(0.9),
+        Inches(6.72),
+        Inches(11.5),
+        Inches(0.45),
+        runs=[
+            [
+                ("No-show path:  ", 13, ACCENT_RED, True),
+                (
+                    "organizer claims the forfeited deposit — skin in the game enforced on-chain.",
+                    13,
+                    TEXT_LIGHT,
+                ),
+            ]
+        ],
+        anchor=MSO_ANCHOR.MIDDLE,
+    )
+
+    page_number(s, 4)
+
+
+def slide_05_architecture(prs) -> None:
+    s = prs.slides.add_slide(prs.slide_layouts[6])
+    set_bg(s, BG_DARK)
+    header(s, "Architecture", "One language. Three runtimes. Zero serialization bugs.")
+
+    # Three-layer stack
+    layers = [
+        (
+            "FRONTEND",
+            "Leptos WASM",
+            [
+                "Landing · Scanner · Admin · Claim",
+                "Camera QR + wallet adapter",
+                "38.6K LOC · compiles to wasm32",
+            ],
+            GREEN,
+        ),
+        (
+            "EDGE",
+            "Cloudflare Worker",
+            [
+                "API · auth · Google Sheets sync",
+                "D1 locks · KV cache · R2 storage",
+                "Rust → wasm32-unknown-unknown",
+            ],
+            PURPLE,
+        ),
+        (
+            "CHAIN",
+            "Solana Program",
+            [
+                "bethere-escrow · 6.2K LOC",
+                "PDA escrow · transfer_checked()",
+                "63 KB optimized · devnet-deployed",
+            ],
+            ACCENT_AMBER,
+        ),
+    ]
+    y = Inches(1.95)
+    for label, name, bullets, color in layers:
+        card(s, Inches(0.6), y, Inches(7.7), Inches(1.55), fill=BG_CARD, border=DIVIDER)
+        add_rect(s, Inches(0.6), y, Inches(0.08), Inches(1.55), fill=color)
+        add_text(
+            s,
+            Inches(0.85),
+            y + Inches(0.15),
+            Inches(2),
+            Inches(0.3),
+            label,
+            size=11,
+            color=color,
+            bold=True,
+        )
+        add_text(
+            s,
+            Inches(0.85),
+            y + Inches(0.45),
+            Inches(4),
+            Inches(0.5),
+            name,
+            size=22,
+            color=TEXT_LIGHT,
+            bold=True,
+        )
+        # Bullets inline
+        add_bullets(
+            s,
+            Inches(4.5),
+            y + Inches(0.25),
+            Inches(3.6),
+            Inches(1.2),
+            [(b,) for b in bullets],
+            size=11,
+            color=TEXT_MUTED,
+            bullet_color=color,
+            line_spacing=1.2,
+        )
+        y += Inches(1.7)
+
+    # Right column: shared types callout
+    card(
+        s,
+        Inches(8.6),
+        Inches(1.95),
+        Inches(4.1),
+        Inches(4.65),
+        fill=BG_MID,
+        border=PURPLE,
+    )
+    add_text(
+        s,
+        Inches(8.85),
+        Inches(2.15),
+        Inches(3.6),
+        Inches(0.4),
+        "WHY IT MATTERS",
+        size=11,
+        color=PURPLE,
+        bold=True,
+    )
+    add_text(
+        s,
+        Inches(8.85),
+        Inches(2.55),
+        Inches(3.6),
+        Inches(0.6),
+        "100% Rust",
+        size=32,
+        color=TEXT_LIGHT,
+        bold=True,
+    )
+    add_text(
+        s,
+        Inches(8.85),
+        Inches(3.25),
+        Inches(3.6),
+        Inches(0.5),
+        "Shared types flow from on-chain program →",
+        size=13,
+        color=TEXT_MUTED,
+    )
+    add_text(
+        s,
+        Inches(8.85),
+        Inches(3.55),
+        Inches(3.6),
+        Inches(0.5),
+        "edge worker → WASM frontend.",
+        size=13,
+        color=TEXT_MUTED,
+    )
+
+    # Stats
+    stats = [
+        ("63 KB", "on-chain program (optimized)"),
+        ("85", "tests passing (47 unit + 38 SVM)"),
+        ("< 500ms", "check-in latency at the edge"),
+    ]
+    sy = Inches(4.3)
+    for value, label in stats:
+        add_text(
+            s,
+            Inches(8.85),
+            sy,
+            Inches(3.6),
+            Inches(0.5),
+            value,
+            size=22,
+            color=GREEN,
+            bold=True,
+        )
+        add_text(
+            s,
+            Inches(8.85),
+            sy + Inches(0.45),
+            Inches(3.6),
+            Inches(0.3),
+            label,
+            size=11,
+            color=TEXT_MUTED,
+        )
+        sy += Inches(0.75)
+
+    page_number(s, 5)
+
+
+def slide_06_escrow(prs) -> None:
+    s = prs.slides.add_slide(prs.slide_layouts[6])
+    set_bg(s, BG_DARK)
+    header(s, "Solana Escrow", "Six on-chain instructions. All devnet-validated.")
+
+    # 6 step flow
+    steps = [
+        ("create_event", "Organizer", "EventEscrow PDA + Vault ATA", PURPLE),
+        ("deposit", "Attendee", "USDC → vault (Solana Pay)", GREEN),
+        ("mark_checked_in", "Organizer", "On-chain attendance record", ACCENT_BLUE),
+        ("refund", "Attendee", "USDC returned after event_end", GREEN),
+        ("claim_forfeited", "Organizer", "Forfeited deposits → org", ACCENT_RED),
+        ("rollover_deposit", "Attendee", "Atomic transfer to next event", ACCENT_AMBER),
+    ]
+    x = Inches(0.6)
+    step_w = Inches(1.95)
+    gap = Inches(0.05)
+    for i, (name, actor, body, color) in enumerate(steps):
+        card(s, x, Inches(1.95), step_w, Inches(2.6), fill=BG_CARD, border=DIVIDER)
+        add_rect(s, x, Inches(1.95), step_w, Pt(4), fill=color)
+        # number
+        add_text(
+            s,
+            x + Inches(0.15),
+            Inches(2.15),
+            Inches(0.5),
+            Inches(0.4),
+            f"{i + 1}",
+            size=20,
+            color=color,
+            bold=True,
+            font=FONT_MONO,
+        )
+        # name (mono)
+        add_text(
+            s,
+            x + Inches(0.15),
+            Inches(2.6),
+            step_w - Inches(0.3),
+            Inches(0.6),
+            name,
+            size=13,
+            color=TEXT_LIGHT,
+            bold=True,
+            font=FONT_MONO,
+        )
+        # actor
+        add_text(
+            s,
+            x + Inches(0.15),
+            Inches(3.3),
+            step_w - Inches(0.3),
+            Inches(0.3),
+            actor.upper(),
+            size=9,
+            color=TEXT_DIM,
+            bold=True,
+        )
+        # body
+        add_text(
+            s,
+            x + Inches(0.15),
+            Inches(3.55),
+            step_w - Inches(0.3),
+            Inches(0.9),
+            body,
+            size=10,
+            color=TEXT_MUTED,
+            line_spacing=1.25,
+        )
+        x += step_w + gap
+
+    # PDA seeds + security (bottom row)
+    card(
+        s,
+        Inches(0.6),
+        Inches(4.75),
+        Inches(6.0),
+        Inches(2.3),
+        fill=BG_MID,
+        border=DIVIDER,
+    )
+    add_text(
+        s,
+        Inches(0.85),
+        Inches(4.9),
+        Inches(5.5),
+        Inches(0.4),
+        "PDA SEEDS",
+        size=11,
+        color=GREEN,
+        bold=True,
+    )
+    seeds = [
+        'EventEscrow     ["escrow", organizer, event_id_le]',
+        'AttendeeDeposit ["deposit", event_escrow, attendee]',
+        "Vault ATA       ATA(EventEscrow, USDC-Mint)",
+    ]
+    add_multi(
+        s,
+        Inches(0.85),
+        Inches(5.25),
+        Inches(5.5),
+        Inches(1.7),
+        [[(line, 12, TEXT_LIGHT, False, FONT_MONO)] for line in seeds],
+        line_spacing=1.5,
+    )
+
+    # Security highlights
+    card(
+        s,
+        Inches(6.8),
+        Inches(4.75),
+        Inches(5.9),
+        Inches(2.3),
+        fill=BG_MID,
+        border=PURPLE,
+    )
+    add_text(
+        s,
+        Inches(7.05),
+        Inches(4.9),
+        Inches(5.4),
+        Inches(0.4),
+        "SECURITY POSTURE",
+        size=11,
+        color=PURPLE,
+        bold=True,
+    )
+    sec_items = [
+        "15 findings audited · 12 fixed (SEC-001 → SEC-015)",
+        "transfer_checked() — 6-decimal USDC, Token-2022",
+        "Refunds no longer require check-in (SEC-001 fix)",
+        "event_end guards on mark_checked_in (SEC-011 fix)",
+        "Canonical PDA derivation · checked arithmetic",
+    ]
+    add_bullets(
+        s,
+        Inches(7.05),
+        Inches(5.25),
+        Inches(5.4),
+        Inches(1.7),
+        [(it,) for it in sec_items],
+        size=12,
+        color=TEXT_LIGHT,
+        bullet_color=GREEN,
+        line_spacing=1.3,
+    )
+
+    page_number(s, 6)
+
+
+def slide_07_dashboard(prs) -> None:
+    s = prs.slides.add_slide(prs.slide_layouts[6])
+    set_bg(s, BG_DARK)
+    header(
+        s,
+        "IslandDAO V4 · Centerpiece",
+        "Live Aggregate Dashboard — the room watches itself.",
+        eyebrow_color=ACCENT_AMBER,
+    )
+
+    # Subtitle
+    add_text(
+        s,
+        Inches(0.6),
+        Inches(1.8),
+        Inches(12),
+        Inches(0.4),
+        "Project /dashboard/live on the big screen. Polls D1 every 2.5s. Updates in real time.",
+        size=14,
+        color=TEXT_MUTED,
+    )
+
+    # 5 tiles row
+    tiles = [
+        ("Registered", "0", PURPLE),
+        ("Checked-In", "0", GREEN),
+        ("Deposits Verified", "0", ACCENT_BLUE),
+        ("USDC Locked", "$0", ACCENT_AMBER),
+        ("NFTs Minted", "0", PURPLE_DEEP),
+    ]
+    tile_w = Inches(2.36)
+    tile_gap = Inches(0.07)
+    x = Inches(0.6)
+    for label, value, color in tiles:
+        card(s, x, Inches(2.4), tile_w, Inches(1.7), fill=BG_CARD, border=DIVIDER)
+        add_rect(s, x, Inches(2.4), tile_w, Pt(4), fill=color)
+        add_text(
+            s,
+            x + Inches(0.15),
+            Inches(2.6),
+            tile_w - Inches(0.3),
+            Inches(0.3),
+            label.upper(),
+            size=9,
+            color=color,
+            bold=True,
+        )
+        add_text(
+            s,
+            x + Inches(0.15),
+            Inches(2.95),
+            tile_w - Inches(0.3),
+            Inches(0.9),
+            value,
+            size=44,
+            color=TEXT_LIGHT,
+            bold=True,
+        )
+        x += tile_w + tile_gap
+
+    # 4-stage funnel
+    add_text(
+        s,
+        Inches(0.6),
+        Inches(4.35),
+        Inches(6),
+        Inches(0.3),
+        "4-STAGE FUNNEL · LIVE CONVERSION %",
+        size=11,
+        color=ACCENT_AMBER,
+        bold=True,
+    )
+    stages = [
+        ("Registered", 100, PURPLE),
+        ("Deposited", 75, GREEN),
+        ("Checked-In", 60, ACCENT_BLUE),
+        ("NFT Minted", 55, ACCENT_AMBER),
+    ]
+    fy = Inches(4.7)
+    for name, pct, color in stages:
+        # label
+        add_text(
+            s,
+            Inches(0.6),
+            fy,
+            Inches(1.6),
+            Inches(0.3),
+            name,
+            size=11,
+            color=TEXT_LIGHT,
+            bold=True,
+            anchor=MSO_ANCHOR.MIDDLE,
+        )
+        # bar bg
+        add_rect(
+            s,
+            Inches(2.3),
+            fy + Inches(0.05),
+            Inches(4.0),
+            Inches(0.25),
+            fill=BG_FUNNEL,
+            line=None,
+        )
+        # bar fill
+        add_rect(
+            s,
+            Inches(2.3),
+            fy + Inches(0.05),
+            Inches(4.0 * pct / 100),
+            Inches(0.25),
+            fill=color,
+            line=None,
+        )
+        # pct
+        add_text(
+            s,
+            Inches(6.4),
+            fy,
+            Inches(0.7),
+            Inches(0.3),
+            f"{pct}%",
+            size=11,
+            color=color,
+            bold=True,
+            align=PP_ALIGN.RIGHT,
+            anchor=MSO_ANCHOR.MIDDLE,
+        )
+        fy += Inches(0.4)
+
+    # Right side: activity feed mock
+    card(
+        s,
+        Inches(8.6),
+        Inches(4.35),
+        Inches(4.1),
+        Inches(2.75),
+        fill=BG_CARD,
+        border=DIVIDER,
+    )
+    add_text(
+        s,
+        Inches(8.85),
+        Inches(4.5),
+        Inches(3.6),
+        Inches(0.3),
+        "LIVE ACTIVITY FEED",
+        size=10,
+        color=GREEN,
+        bold=True,
+    )
+    feed = [
+        ("●", GREEN, "deposit_confirmed  +$5.00 USDC"),
+        ("●", ACCENT_BLUE, "checked_in         attendee #042"),
+        ("●", ACCENT_AMBER, "nft_minted         cNFT #018"),
+        ("●", GREEN, "deposit_confirmed  +$5.00 USDC"),
+        ("●", ACCENT_BLUE, "checked_in         attendee #043"),
+    ]
+    yy = Inches(4.85)
+    for dot, col, text in feed:
+        add_text(
+            s,
+            Inches(8.85),
+            yy,
+            Inches(0.2),
+            Inches(0.25),
+            dot,
+            size=11,
+            color=col,
+            bold=True,
+        )
+        add_text(
+            s,
+            Inches(9.05),
+            yy,
+            Inches(3.4),
+            Inches(0.25),
+            text,
+            size=10,
+            color=TEXT_LIGHT,
+            font=FONT_MONO,
+        )
+        yy += Inches(0.35)
+
+    add_text(
+        s,
+        Inches(8.85),
+        Inches(6.85),
+        Inches(3.6),
+        Inches(0.25),
+        "Updated 1s ago  ·  2.5s polling  ·  edge-deployed",
+        size=9,
+        color=TEXT_DIM,
+        font=FONT_MONO,
+    )
+
+    # resilience note
+    card(
+        s,
+        Inches(0.6),
+        Inches(7.05),
+        Inches(7.9),
+        Inches(0.4),
+        fill=BG_MID,
+        border=DIVIDER,
+    )
+    add_text(
+        s,
+        Inches(0.75),
+        Inches(7.08),
+        Inches(7.7),
+        Inches(0.35),
+        "Each tile degrades independently · last-good snapshot on poll error",
+        size=10,
+        color=TEXT_MUTED,
+        anchor=MSO_ANCHOR.MIDDLE,
+    )
+
+    # No page number on this hero slide — full-bleed feel
+    page_number(s, 7)
+
+
+def slide_08_performance(prs) -> None:
+    s = prs.slides.add_slide(prs.slide_layouts[6])
+    set_bg(s, BG_DARK)
+    header(s, "Performance & Cost", "Sub-cent per attendee. Built for scale.")
+
+    # Big stats grid (3x2)
+    stats = [
+        ("$0.001", "per cNFT badge", "990× cheaper than POAP", GREEN),
+        ("$0.00087", "per on-chain TX", "at $172/SOL", PURPLE),
+        ("< 500ms", "check-in latency", "edge-deployed", ACCENT_BLUE),
+        ("63 KB", "program size", "optimized bytecode", ACCENT_AMBER),
+        ("2.5s", "dashboard poll", "cache-bypassed", PURPLE_DEEP),
+        ("$0.87", "for 1,000 attendees", "vs $500+ on Ethereum", ACCENT_RED),
+    ]
+    cw = Inches(3.9)
+    ch = Inches(1.95)
+    gx = Inches(0.25)
+    gy = Inches(0.25)
+    sx = Inches(0.6)
+    sy = Inches(1.95)
+    for i, (value, label, sub, color) in enumerate(stats):
+        col = i % 3
+        row = i // 3
+        x = sx + col * (cw + gx)
+        y = sy + row * (ch + gy)
+        card(s, x, y, cw, ch, fill=BG_CARD, border=DIVIDER)
+        add_rect(s, x, y, cw, Pt(3), fill=color)
+        add_text(
+            s,
+            x + Inches(0.25),
+            y + Inches(0.2),
+            cw - Inches(0.5),
+            Inches(0.8),
+            value,
+            size=40,
+            color=color,
+            bold=True,
+        )
+        add_text(
+            s,
+            x + Inches(0.25),
+            y + Inches(1.0),
+            cw - Inches(0.5),
+            Inches(0.3),
+            label.upper(),
+            size=11,
+            color=TEXT_LIGHT,
+            bold=True,
+        )
+        add_text(
+            s,
+            x + Inches(0.25),
+            y + Inches(1.3),
+            cw - Inches(0.5),
+            Inches(0.3),
+            sub,
+            size=11,
+            color=TEXT_MUTED,
+        )
+
+    # Bottom comparison
+    card(
+        s,
+        Inches(0.6),
+        Inches(6.4),
+        Inches(12.1),
+        Inches(0.7),
+        fill=BG_MID,
+        border=GREEN,
+    )
+    add_multi(
+        s,
+        Inches(0.9),
+        Inches(6.5),
+        Inches(11.5),
+        Inches(0.55),
+        runs=[
+            [
+                ("Bottom line:  ", 14, GREEN, True),
+                (
+                    "1,000-attendee event costs $0.87 on Solana vs $500+ on Ethereum — ",
+                    14,
+                    TEXT_LIGHT,
+                ),
+                ("570× cheaper.", 14, GREEN, True),
+            ]
+        ],
+        anchor=MSO_ANCHOR.MIDDLE,
+    )
+
+    page_number(s, 8)
+
+
+def slide_09_security(prs) -> None:
+    s = prs.slides.add_slide(prs.slide_layouts[6])
+    set_bg(s, BG_DARK)
+    header(s, "Security & Trust", "Audited. Hardened. Defense-in-depth.")
+
+    # Left: audit summary
+    card(
+        s,
+        Inches(0.6),
+        Inches(1.95),
+        Inches(5.8),
+        Inches(4.85),
+        fill=BG_MID,
+        border=PURPLE,
+    )
+    add_text(
+        s,
+        Inches(0.85),
+        Inches(2.15),
+        Inches(5.3),
+        Inches(0.4),
+        "AUDIT RESULTS",
+        size=11,
+        color=PURPLE,
+        bold=True,
+    )
+
+    # Big number row
+    add_text(
+        s,
+        Inches(0.85),
+        Inches(2.6),
+        Inches(2.6),
+        Inches(1.0),
+        "15",
+        size=64,
+        color=TEXT_LIGHT,
+        bold=True,
+    )
+    add_text(
+        s,
+        Inches(0.85),
+        Inches(3.6),
+        Inches(2.6),
+        Inches(0.3),
+        "findings",
+        size=12,
+        color=TEXT_MUTED,
+    )
+
+    add_text(
+        s,
+        Inches(3.5),
+        Inches(2.6),
+        Inches(2.6),
+        Inches(1.0),
+        "12",
+        size=64,
+        color=GREEN,
+        bold=True,
+    )
+    add_text(
+        s,
+        Inches(3.5),
+        Inches(3.6),
+        Inches(2.6),
+        Inches(0.3),
+        "fixed",
+        size=12,
+        color=TEXT_MUTED,
+    )
+
+    add_text(
+        s,
+        Inches(0.85),
+        Inches(4.1),
+        Inches(5.3),
+        Inches(0.4),
+        "KEY FIXES (SEC-001 → SEC-015)",
+        size=11,
+        color=ACCENT_AMBER,
+        bold=True,
+    )
+    fixes = [
+        "SEC-001 — refunds no longer require check-in (anti-rug)",
+        "SEC-009 — transfer_checked() across all SPL transfers",
+        "SEC-011 — mark_checked_in blocked after event_end",
+        "SEC-002/003/004 — fields locked, $1K cap, archive guards",
+    ]
+    add_bullets(
+        s,
+        Inches(0.85),
+        Inches(4.45),
+        Inches(5.3),
+        Inches(2.2),
+        [(f,) for f in fixes],
+        size=11,
+        color=TEXT_LIGHT,
+        bullet_color=GREEN,
+        line_spacing=1.3,
+    )
+
+    # Right: trust model
+    card(
+        s,
+        Inches(6.6),
+        Inches(1.95),
+        Inches(6.1),
+        Inches(4.85),
+        fill=BG_MID,
+        border=GREEN,
+    )
+    add_text(
+        s,
+        Inches(6.85),
+        Inches(2.15),
+        Inches(5.6),
+        Inches(0.4),
+        "TRUST MODEL",
+        size=11,
+        color=GREEN,
+        bold=True,
+    )
+    add_text(
+        s,
+        Inches(6.85),
+        Inches(2.55),
+        Inches(5.6),
+        Inches(0.5),
+        "On-chain vs. off-chain",
+        size=18,
+        color=TEXT_LIGHT,
+        bold=True,
+    )
+
+    rows = [
+        (
+            PURPLE,
+            "ON-CHAIN",
+            [
+                "USDC escrow in PDAs",
+                "Attendance record (mark_checked_in)",
+                "Compressed NFT badge mint",
+                "Refund + rollover signatures",
+            ],
+        ),
+        (
+            ACCENT_BLUE,
+            "OFF-CHAIN (verifiable)",
+            [
+                "JWT auth (HMAC-SHA256, 24h expiry)",
+                "D1 claim locks (atomic double-claim prevention)",
+                "Audit trail (append-only, 27 action types)",
+                "Helius indexer (webhook + RPC poller)",
+            ],
+        ),
+    ]
+    yy = Inches(3.15)
+    for color, label, items in rows:
+        add_text(
+            s,
+            Inches(6.85),
+            yy,
+            Inches(5.6),
+            Inches(0.3),
+            label,
+            size=10,
+            color=color,
+            bold=True,
+        )
+        yy += Inches(0.3)
+        add_bullets(
+            s,
+            Inches(6.85),
+            yy,
+            Inches(5.6),
+            Inches(1.5),
+            [(it,) for it in items],
+            size=11,
+            color=TEXT_LIGHT,
+            bullet_color=color,
+            line_spacing=1.25,
+        )
+        yy += Inches(0.95)
+
+    page_number(s, 9)
+
+
+def slide_10_competitive(prs) -> None:
+    s = prs.slides.add_slide(prs.slide_layouts[6])
+    set_bg(s, BG_DARK)
+    header(
+        s,
+        "Competitive Landscape",
+        "First trustless deposit + attendance NFT on Solana.",
+    )
+
+    # Table dimensions
+    tx = Inches(0.6)
+    ty = Inches(2.0)
+    tw = Inches(12.1)
+    col_w = [
+        Inches(3.4),
+        Inches(2.0),
+        Inches(1.7),
+        Inches(1.7),
+        Inches(1.7),
+        Inches(1.6),
+    ]
+
+    headers = ["Feature", "BeThere", "Luma", "Eventbrite", "POAP", "Kickback"]
+    rows = [
+        ("On-chain USDC deposits", "✅ escrow", "❌", "❌", "❌", "⚠ ETH"),
+        ("Attendance NFT", "✅ cNFT", "❌", "❌", "✅ ETH", "❌"),
+        ("Deposit refund", "✅ auto", "❌", "manual", "❌", "pool"),
+        ("No-show penalty", "✅ forfeit", "❌", "❌", "❌", "split"),
+        ("Cost per NFT", "$0.001", "—", "—", "~$0.50", "—"),
+        ("Stablecoin", "✅ USDC", "❌", "❌", "❌", "❌ volatile"),
+        ("Open source", "✅", "❌", "❌", "❌", "archived"),
+    ]
+
+    # Header row
+    cx = tx
+    for i, h in enumerate(headers):
+        fill = PURPLE if i == 1 else BG_MID
+        color = TEXT_LIGHT if i == 1 else TEXT_MUTED
+        add_rect(s, cx, ty, col_w[i], Inches(0.45), fill=fill, line=DIVIDER)
+        add_text(
+            s,
+            cx + Inches(0.1),
+            ty + Inches(0.06),
+            col_w[i] - Inches(0.2),
+            Inches(0.35),
+            h,
+            size=11,
+            color=color,
+            bold=True,
+            anchor=MSO_ANCHOR.MIDDLE,
+        )
+        cx += col_w[i]
+
+    # Data rows
+    ry = ty + Inches(0.45)
+    row_h = Inches(0.5)
+    for r, row in enumerate(rows):
+        cx = tx
+        bg = BG_CARD if r % 2 == 0 else BG_MID
+        for i, cell in enumerate(row):
+            fill = bg
+            if i == 1:
+                fill = RGBColor(
+                    0x1F, 0x29, 0x37
+                )  # subtle purple-tint for BeThere column
+            color = TEXT_LIGHT if i == 0 or i == 1 else TEXT_MUTED
+            bold = i == 0 or i == 1
+            add_rect(s, cx, ry, col_w[i], row_h, fill=fill, line=DIVIDER)
+            add_text(
+                s,
+                cx + Inches(0.1),
+                ry + Inches(0.05),
+                col_w[i] - Inches(0.2),
+                row_h - Inches(0.1),
+                cell,
+                size=11,
+                color=color,
+                bold=bold,
+                anchor=MSO_ANCHOR.MIDDLE,
+            )
+            cx += col_w[i]
+        ry += row_h
+
+    # Footnote
+    add_text(
+        s,
+        Inches(0.6),
+        ry + Inches(0.15),
+        Inches(12),
+        Inches(0.4),
+        "Kickback (2016–2022): Ethereum deposit platform — shut down due to gas costs. BeThere addresses every structural weakness.",
+        size=10,
+        color=TEXT_DIM,
+    )
+
+    page_number(s, 10)
+
+
+def slide_11_whats_built(prs) -> None:
+    s = prs.slides.add_slide(prs.slide_layouts[6])
+    set_bg(s, BG_DARK)
+    header(s, "What's Built", "10 phases · 25+ features · devnet-validated today.")
+
+    # Top stats
+    top_stats = [
+        ("10", "phases complete", PURPLE),
+        ("25+", "production features", GREEN),
+        ("85", "tests passing", ACCENT_BLUE),
+        ("100%", "Rust codebase", ACCENT_AMBER),
+    ]
+    sx = Inches(0.6)
+    for value, label, color in top_stats:
+        card(s, sx, Inches(1.85), Inches(2.95), Inches(1.05), fill=BG_MID, border=color)
+        add_text(
+            s,
+            sx + Inches(0.2),
+            Inches(1.95),
+            Inches(1.3),
+            Inches(0.6),
+            value,
+            size=32,
+            color=color,
+            bold=True,
+        )
+        add_text(
+            s,
+            sx + Inches(1.5),
+            Inches(2.05),
+            Inches(1.4),
+            Inches(0.4),
+            label,
+            size=11,
+            color=TEXT_LIGHT,
+            bold=True,
+            anchor=MSO_ANCHOR.MIDDLE,
+        )
+        add_text(
+            s,
+            sx + Inches(1.5),
+            Inches(2.45),
+            Inches(1.4),
+            Inches(0.4),
+            "shipped",
+            size=10,
+            color=TEXT_MUTED,
+            anchor=MSO_ANCHOR.MIDDLE,
+        )
+        sx += Inches(3.1)
+
+    # Feature cluster (3 columns)
+    cols = [
+        (
+            PURPLE,
+            "CORE EVENT FLOW",
+            [
+                "QR camera scanner + manual lookup",
+                "Multi-event KV registry · 4-tier roles",
+                "Google Sign-In for attendees + staff",
+                "Self-registration (/e/{slug})",
+                "Walk-in attendee management",
+                "Slug auto-dedup · CSV export",
+            ],
+        ),
+        (
+            GREEN,
+            "SOLANA LAYER",
+            [
+                "USDC PDA escrow (devnet-deployed)",
+                "Solana Pay QR deposits",
+                "Phantom · Solflare · Backpack · Coinbase",
+                "Compressed NFT badges ($0.001)",
+                "Atomic deposit rollover",
+                "On-chain indexer (Helius webhook)",
+            ],
+        ),
+        (
+            ACCENT_BLUE,
+            "PLATFORM",
+            [
+                "Dual-track: USDC + PromptPay THB",
+                "Quiz-gated NFT claim",
+                "Rust Adventures (10 levels)",
+                "D1 atomic double-claim locks",
+                "R2 asset storage · Cron cleanup",
+                "Audit trail · 27 action types",
+            ],
+        ),
+    ]
+    cy = Inches(3.1)
+    cx = Inches(0.6)
+    col_w = Inches(3.95)
+    for color, title, items in cols:
+        card(s, cx, cy, col_w, Inches(3.7), fill=BG_CARD, border=DIVIDER)
+        add_rect(s, cx, cy, col_w, Pt(3), fill=color)
+        add_text(
+            s,
+            cx + Inches(0.2),
+            cy + Inches(0.15),
+            col_w - Inches(0.4),
+            Inches(0.3),
+            title,
+            size=11,
+            color=color,
+            bold=True,
+        )
+        add_bullets(
+            s,
+            cx + Inches(0.2),
+            cy + Inches(0.55),
+            col_w - Inches(0.4),
+            Inches(3.0),
+            [(it,) for it in items],
+            size=11,
+            color=TEXT_LIGHT,
+            bullet_color=color,
+            line_spacing=1.35,
+        )
+        cx += col_w + Inches(0.1)
+
+    page_number(s, 11)
+
+
+def slide_12_roadmap(prs) -> None:
+    s = prs.slides.add_slide(prs.slide_layouts[6])
+    set_bg(s, BG_DARK)
+    header(s, "Roadmap", "Mainnet next. Then SaaS, mobile, and credentials.")
+
+    # Timeline: past | now | next | future
+    cols = [
+        (
+            GREEN,
+            "DONE",
+            "Phases 1–6 + 8–9",
+            [
+                "Check-in · NFT · quiz · multi-event",
+                "Adventure · security hardening",
+                "USDC escrow (devnet-validated)",
+            ],
+        ),
+        (
+            ACCENT_AMBER,
+            "IN PROGRESS",
+            "Phase 7 · NFT config",
+            [
+                "NFT config UI",
+                "Production deployment polish",
+                "Live aggregate dashboard ✅",
+            ],
+        ),
+        (
+            PURPLE,
+            "NEXT",
+            "Phases 10 + 10.5",
+            [
+                "Mainnet deployment (~1.5 SOL)",
+                "PDPA compliance · consent + deletion",
+                "Platform fees (1–2% on forfeits)",
+            ],
+        ),
+        (
+            ACCENT_BLUE,
+            "FUTURE",
+            "Phases 12–15",
+            [
+                "Multi-organizer SaaS",
+                "Solana Mobile (MWA + dApp Store)",
+                "Learning & Credentials · curriculum",
+            ],
+        ),
+    ]
+    cx = Inches(0.6)
+    col_w = Inches(2.95)
+    for color, label, sub, items in cols:
+        card(s, cx, Inches(2.0), col_w, Inches(4.5), fill=BG_CARD, border=DIVIDER)
+        add_rect(s, cx, Inches(2.0), col_w, Pt(4), fill=color)
+        add_text(
+            s,
+            cx + Inches(0.2),
+            Inches(2.2),
+            col_w - Inches(0.4),
+            Inches(0.3),
+            label,
+            size=12,
+            color=color,
+            bold=True,
+        )
+        add_text(
+            s,
+            cx + Inches(0.2),
+            Inches(2.55),
+            col_w - Inches(0.4),
+            Inches(0.6),
+            sub,
+            size=14,
+            color=TEXT_LIGHT,
+            bold=True,
+        )
+        add_bullets(
+            s,
+            cx + Inches(0.2),
+            Inches(3.4),
+            col_w - Inches(0.4),
+            Inches(3.0),
+            [(it,) for it in items],
+            size=11,
+            color=TEXT_MUTED,
+            bullet_color=color,
+            line_spacing=1.35,
+        )
+        cx += col_w + Inches(0.1)
+
+    # Footer
+    card(
+        s,
+        Inches(0.6),
+        Inches(6.65),
+        Inches(12.1),
+        Inches(0.6),
+        fill=BG_MID,
+        border=PURPLE,
+    )
+    add_multi(
+        s,
+        Inches(0.9),
+        Inches(6.72),
+        Inches(11.5),
+        Inches(0.45),
+        runs=[
+            [
+                ("Mainnet cost: ", 13, TEXT_MUTED),
+                ("~1.5 SOL", 13, GREEN, True),
+                ("  ·  ", 13, TEXT_DIM),
+                ("PDPA pre-mainnet  ·  ", 13, TEXT_MUTED),
+                ("fees post-mainnet  ·  ", 13, TEXT_MUTED),
+                ("SaaS + Mobile + Credentials are the long game.", 13, TEXT_LIGHT),
+            ]
+        ],
+        anchor=MSO_ANCHOR.MIDDLE,
+    )
+
+    page_number(s, 12)
+
+
+def slide_13_evidence(prs) -> None:
+    s = prs.slides.add_slide(prs.slide_layouts[6])
+    set_bg(s, BG_DARK)
+    header(s, "Evidence", "Real devnet transactions — verify on Solscan.")
+
+    add_text(
+        s,
+        Inches(0.6),
+        Inches(1.8),
+        Inches(12),
+        Inches(0.4),
+        "Every step of the flow has a real, inspectable signature on Solana devnet.",
+        size=14,
+        color=TEXT_MUTED,
+    )
+
+    txs = [
+        ("init_escrow", "2YMQwjLRbTX3TD3uso3wxx6rP8aipJbHpb3A3B3LXtVc...hJ8G", PURPLE),
+        ("deposit", "4cQnNGRa5CHfcuWGzmE2LU7cUj58KreenSswnuypnZyV...uoEJe", GREEN),
+        ("refund", "5PA5wPRnHuhqSrvPs8T7t4nS3yjZtoV3sLzJtwYes3zS...tWVHT", ACCENT_BLUE),
+        (
+            "cnft_mint",
+            "4omCGAuSYEj5yCoif3soUGMGy7sZdXvZvXUfL3dUF5go...FP2Sh",
+            ACCENT_AMBER,
+        ),
+    ]
+    yy = Inches(2.5)
+    for action, sig, color in txs:
+        card(
+            s, Inches(0.6), yy, Inches(12.1), Inches(0.85), fill=BG_CARD, border=DIVIDER
+        )
+        add_rect(s, Inches(0.6), yy, Inches(0.08), Inches(0.85), fill=color)
+        add_text(
+            s,
+            Inches(0.85),
+            yy + Inches(0.13),
+            Inches(2.5),
+            Inches(0.3),
+            action,
+            size=14,
+            color=color,
+            bold=True,
+            font=FONT_MONO,
+        )
+        add_text(
+            s,
+            Inches(0.85),
+            yy + Inches(0.45),
+            Inches(2.5),
+            Inches(0.3),
+            "action",
+            size=10,
+            color=TEXT_DIM,
+        )
+        # Signature
+        add_text(
+            s,
+            Inches(3.6),
+            yy + Inches(0.13),
+            Inches(8.8),
+            Inches(0.3),
+            sig,
+            size=11,
+            color=TEXT_LIGHT,
+            font=FONT_MONO,
+        )
+        add_text(
+            s,
+            Inches(3.6),
+            yy + Inches(0.45),
+            Inches(8.8),
+            Inches(0.3),
+            "solscan.io/tx/<sig>?cluster=devnet",
+            size=10,
+            color=TEXT_DIM,
+            font=FONT_MONO,
+        )
+        # status pill
+        card(
+            s,
+            Inches(11.0),
+            yy + Inches(0.2),
+            Inches(1.5),
+            Inches(0.45),
+            fill=BG_MID,
+            border=color,
+        )
+        add_text(
+            s,
+            Inches(11.0),
+            yy + Inches(0.22),
+            Inches(1.5),
+            Inches(0.4),
+            "✓ VERIFIED",
+            size=10,
+            color=color,
+            bold=True,
+            align=PP_ALIGN.CENTER,
+            anchor=MSO_ANCHOR.MIDDLE,
+        )
+        yy += Inches(0.95)
+
+    # Demo resilience note
+    card(
+        s,
+        Inches(0.6),
+        Inches(6.55),
+        Inches(12.1),
+        Inches(0.7),
+        fill=BG_MID,
+        border=DIVIDER,
+    )
+    add_multi(
+        s,
+        Inches(0.9),
+        Inches(6.62),
+        Inches(11.5),
+        Inches(0.55),
+        runs=[
+            [
+                ("Demo resilience:  ", 12, ACCENT_AMBER, True),
+                (
+                    "wallet fail → pre-recorded video · devnet slow → cached Solscan links · ",
+                    12,
+                    TEXT_LIGHT,
+                ),
+                ("worker crash → architecture diagrams ready.", 12, TEXT_LIGHT),
+            ]
+        ],
+        anchor=MSO_ANCHOR.MIDDLE,
+    )
+
+    page_number(s, 13)
+
+
+def slide_14_qa(prs) -> None:
+    s = prs.slides.add_slide(prs.slide_layouts[6])
+    set_bg(s, BG_DARK)
+
+    # Top brand bar
+    add_rect(s, Inches(0), Inches(0), SLIDE_W, Inches(0.15), fill=PURPLE)
+
+    # Big text
+    add_text(
+        s,
+        Inches(0.6),
+        Inches(2.0),
+        Inches(12.1),
+        Inches(1.5),
+        "Thank you.",
+        size=88,
+        color=TEXT_LIGHT,
+        bold=True,
+        align=PP_ALIGN.CENTER,
+    )
+    add_text(
+        s,
+        Inches(0.6),
+        Inches(3.4),
+        Inches(12.1),
+        Inches(0.6),
+        "Questions, demos, partnerships — let's talk.",
+        size=22,
+        color=GREEN,
+        bold=True,
+        align=PP_ALIGN.CENTER,
+    )
+
+    # Three contact cards
+    cards = [
+        ("DEMO", "/dashboard/live", "Live aggregate dashboard\n(project at the door)"),
+        (
+            "REPO",
+            "github.com/...",
+            "100% Rust · open source\n85 tests · devnet-deployed",
+        ),
+        (
+            "NEXT",
+            "Phase 10 · Mainnet",
+            "~1.5 SOL deployment cost\nPDPA-ready · fees incoming",
+        ),
+    ]
+    cx = Inches(0.6)
+    card_w = Inches(3.95)
+    for label, headline, body in cards:
+        card(s, cx, Inches(4.6), card_w, Inches(1.95), fill=BG_CARD, border=DIVIDER)
+        add_rect(s, cx, Inches(4.6), card_w, Pt(3), fill=PURPLE)
+        add_text(
+            s,
+            cx + Inches(0.25),
+            Inches(4.8),
+            card_w - Inches(0.5),
+            Inches(0.3),
+            label,
+            size=11,
+            color=PURPLE,
+            bold=True,
+        )
+        add_text(
+            s,
+            cx + Inches(0.25),
+            Inches(5.1),
+            card_w - Inches(0.5),
+            Inches(0.5),
+            headline,
+            size=18,
+            color=TEXT_LIGHT,
+            bold=True,
+        )
+        add_text(
+            s,
+            cx + Inches(0.25),
+            Inches(5.65),
+            card_w - Inches(0.5),
+            Inches(0.9),
+            body,
+            size=12,
+            color=TEXT_MUTED,
+            line_spacing=1.35,
+        )
+        cx += card_w + Inches(0.1)
+
+    # Footer
+    add_rect(s, Inches(0), Inches(7.0), SLIDE_W, Pt(1), fill=DIVIDER)
+    add_text(
+        s,
+        Inches(0.6),
+        Inches(7.1),
+        Inches(12.1),
+        Inches(0.3),
+        "BeThere  ·  Solana-Powered Event Check-In  ·  IslandDAO V4  ·  June 22, 2025",
+        size=11,
+        color=TEXT_DIM,
+        align=PP_ALIGN.CENTER,
+    )
+
+
+# =============================================================================
+# Build
+# =============================================================================
+
+
+def build() -> None:
+    prs = Presentation()
+    prs.slide_width = SLIDE_W
+    prs.slide_height = SLIDE_H
+
+    builders = [
+        slide_01_title,
+        slide_02_problem,
+        slide_03_solution,
+        slide_04_demo_flow,
+        slide_05_architecture,
+        slide_06_escrow,
+        slide_07_dashboard,
+        slide_08_performance,
+        slide_09_security,
+        slide_10_competitive,
+        slide_11_whats_built,
+        slide_12_roadmap,
+        slide_13_evidence,
+        slide_14_qa,
+    ]
+    for fn in builders:
+        fn(prs)
+
+    OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    prs.save(OUT_PATH)
+    print(f"✓ wrote {OUT_PATH}  ({OUT_PATH.stat().st_size:,} bytes)")
+    print(f"  {len(builders)} slides · 16:9 · Keynote-ready")
+
+
+if __name__ == "__main__":
+    build()
