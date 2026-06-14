@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [develop, main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+jobs:
+  build-test:
+    name: check + clippy + test (domain, worker)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Cache cargo registry + target
+        uses: Swatinem/rust-cache@v2
+
+      - name: cargo check (workspace)
+        run: cargo check --workspace --locked --all-targets
+
+      - name: cargo clippy (workspace, -D warnings)
+        run: cargo clippy --workspace --locked --all-targets -- -D warnings
+
+      - name: cargo test (workspace)
+        run: cargo test --workspace --locked
