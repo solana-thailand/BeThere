@@ -128,6 +128,19 @@ The refund instruction was already at the 64-frame BPF call depth limit. Adding 
 
 **All 43 tests passing.**
 
+### Session 4 Findings (2026-06-14) — Worker TX Builder Sync
+
+**Verified via `docs/business_flow_verdict.md` audit:**
+- The worker's refund tx builders (`worker/src/solana_escrow/tx_builders/refund.rs`) were **out of sync** with the hardened on-chain `Refund` struct — they omitted the `instruction_sysvar` account, sending 9 accounts instead of the required 10. This would have caused every production refund to be rejected on-chain with `NotEnoughAccountKeys`.
+- Root cause: Session 3 added `instruction_sysvar: UncheckedAccount` to the on-chain `Refund` struct but the worker tx builder was not updated to match.
+- The quasar-svm unit tests (43 pass) didn't catch it because they use the generated client which includes the sysvar. The worker Rust tests (117 pass) validate serialization, not on-chain execution. The e2e devnet scripts would catch it but require a live environment.
+- **Fix applied** (3 files):
+  - `worker/src/solana_escrow/mod.rs` — added `INSTRUCTIONS_SYSVAR_ID` constant (`Sysvar1nstructions1111111111111111111111111`)
+  - `worker/src/solana_escrow/tx_builders/mod.rs` — added `instruction_sysvar` field to `EscrowCtx` + populated in `resolve()`
+  - `worker/src/solana_escrow/tx_builders/refund.rs` — inserted `acct_r(ctx.instruction_sysvar)` at index 6 (after `vault`, before `rent`) in both `build_refund_transaction` and `build_refund_and_close_transaction`
+- Verification: worker `cargo build` clean, `cargo clippy` clean, 117 tests pass. Account order now matches on-chain `Refund` struct exactly.
+- **Regression guard recommendation**: add a worker-side serialization test asserting refund account count == 10.
+
 ### Files Modified
 
 | File | Change |

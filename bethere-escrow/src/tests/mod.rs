@@ -87,6 +87,9 @@ fn token_account(address: Pubkey, mint: Pubkey, owner: Pubkey, amount: u64) -> A
     )
 }
 
+// Test fixture builder: args map 1:1 to EventEscrow fields (50+ call sites across the
+// test suite). Refactoring to a parameter struct would be churn with no functional gain.
+#[allow(clippy::too_many_arguments)]
 fn event_escrow_account(
     address: Pubkey,
     organizer: Pubkey,
@@ -129,6 +132,9 @@ fn event_escrow_account(
     }
 }
 
+// Test fixture builder: args map 1:1 to AttendeeDeposit fields (50+ call sites across
+// the test suite). Refactoring to a parameter struct would be churn with no functional gain.
+#[allow(clippy::too_many_arguments)]
 fn attendee_deposit_account(
     address: Pubkey,
     attendee: Pubkey,

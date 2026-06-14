@@ -9,8 +9,8 @@ use super::wire::{
     serialize_transaction,
 };
 use super::{
-    ASSOCIATED_TOKEN_PROGRAM_ID, ESCROW_PROGRAM_ID, EscrowError, PubkeyBytes, RENT_SYSVAR_ID,
-    SYSTEM_PROGRAM_ID, TOKEN_PROGRAM_ID,
+    ASSOCIATED_TOKEN_PROGRAM_ID, ESCROW_PROGRAM_ID, EscrowError, INSTRUCTIONS_SYSVAR_ID,
+    PubkeyBytes, RENT_SYSVAR_ID, SYSTEM_PROGRAM_ID, TOKEN_PROGRAM_ID,
 };
 
 pub(crate) mod close;
@@ -78,6 +78,7 @@ pub(crate) struct EscrowCtx {
     pub token_program: PubkeyBytes,
     pub system_program: PubkeyBytes,
     pub rent_sysvar: PubkeyBytes,
+    pub instruction_sysvar: PubkeyBytes,
     pub ata_program: PubkeyBytes,
     pub vault: PubkeyBytes,
     pub event_id: u64,
@@ -100,6 +101,7 @@ impl EscrowCtx {
         let token_program = pubkey_from_base58(TOKEN_PROGRAM_ID)?;
         let system_program = pubkey_from_base58(SYSTEM_PROGRAM_ID)?;
         let rent_sysvar = pubkey_from_base58(RENT_SYSVAR_ID)?;
+        let instruction_sysvar = pubkey_from_base58(INSTRUCTIONS_SYSVAR_ID)?;
         let ata_program = pubkey_from_base58(ASSOCIATED_TOKEN_PROGRAM_ID)?;
         let vault = get_associated_token_address(&event_escrow, &usdc_mint).await?;
         Ok(Self {
@@ -110,6 +112,7 @@ impl EscrowCtx {
             token_program,
             system_program,
             rent_sysvar,
+            instruction_sysvar,
             ata_program,
             vault,
             event_id,

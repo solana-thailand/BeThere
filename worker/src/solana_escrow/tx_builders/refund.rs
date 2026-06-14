@@ -41,6 +41,7 @@ pub async fn build_refund_transaction(
         acct_w(attendee_deposit),
         acct_w(attendee_ta),
         acct_w(ctx.vault),
+        acct_r(ctx.instruction_sysvar),
         acct_r(ctx.rent_sysvar),
         acct_r(ctx.token_program),
         acct_r(ctx.system_program),
@@ -84,6 +85,9 @@ pub async fn build_refund_and_close_transaction(
     let attendee_ta = ctx.token_account(&attendee).await?;
 
     // Instruction 1: Refund (discriminator 3)
+    // Account order must match the on-chain `Refund` struct:
+    //   attendee, event_escrow, deposit_mint, attendee_deposit, attendee_ta,
+    //   vault, instruction_sysvar, rent, token_program, system_program
     let refund_accounts = vec![
         acct_sw(attendee),
         acct_w(ctx.event_escrow),
@@ -91,6 +95,7 @@ pub async fn build_refund_and_close_transaction(
         acct_w(attendee_deposit),
         acct_w(attendee_ta),
         acct_w(ctx.vault),
+        acct_r(ctx.instruction_sysvar),
         acct_r(ctx.rent_sysvar),
         acct_r(ctx.token_program),
         acct_r(ctx.system_program),

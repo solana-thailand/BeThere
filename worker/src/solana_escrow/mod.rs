@@ -64,6 +64,12 @@ pub(crate) const SYSTEM_PROGRAM_ID: &str = "11111111111111111111111111111111";
 /// Rent sysvar ID.
 pub(crate) const RENT_SYSVAR_ID: &str = "SysvarRent111111111111111111111111111111111";
 
+/// Instructions sysvar ID.
+/// Required by the on-chain `refund` instruction for SEC-010 introspection
+/// (validates that `close_deposit` follows `refund` in the same transaction).
+/// See `.issues/047` for the hardening rationale.
+pub(crate) const INSTRUCTIONS_SYSVAR_ID: &str = "Sysvar1nstructions1111111111111111111111111";
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
