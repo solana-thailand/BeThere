@@ -99,13 +99,13 @@ Cross-referenced against the [Solana Foundation Security Checklist](https://gith
 | Reinitialization Prevention | ✅ Compliant | `init` constraint on PDA accounts; unique seeds prevent reuse |
 | PDA Sharing Prevention | ✅ Compliant | Seeds include organizer+event_id (escrow) and event+attendee (deposit) |
 | Type Cosplay Prevention | ✅ Compliant | Discriminators 1 (EventEscrow) and 2 (AttendeeDeposit) |
-| Duplicate Mutable Accounts | ✅ Compliant | `require_distinct` helper checks all 8 instruction handlers for duplicate addresses |
+| Duplicate Mutable Accounts | ✅ Compliant | `require_distinct` helper checks all 9 instruction handlers for duplicate addresses |
 | Revival / Close Attacks | ✅ Compliant | `close(dest=organizer)` in Quasar; vault closed atomically with escrow |
 | Data Matching | ✅ Compliant | `has_one(organizer)` and `address = Seeds(...)` constraints on all accounts |
 | Checked Math | ✅ Compliant | All arithmetic uses `checked_add`/`checked_sub` (SEC-009 audit) |
 | Token-2022 Compatibility | ✅ Compliant | `transfer_checked()` with mint + decimals (SEC-009 fix) |
 | Rent Reclamation | ✅ Compliant | `close_deposit` instruction + GC path (SEC-010 fix) |
-| Formal Verification | ✅ Verified | 13 Kani harnesses, 729 checks, all pass |
+| Formal Verification | ✅ Verified | 16 Kani harnesses, 729 checks, all pass |
 | Payment UX/Security | ✅ Compliant | Custom Solana Pay flow (not Commerce Kit) — 6/6 checks pass. Deposits go to PDA escrow, not merchant wallet |
 
 ## Bug Bounty

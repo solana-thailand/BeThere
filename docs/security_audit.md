@@ -478,8 +478,8 @@ The `checked_in` field still serves as an analytics signal and NFT eligibility m
 - **Date**: 2025-05-09
 - **Tool**: Kani 0.67.0 (CBMC 6.8.0 backend)
 - **Scope**: Pure arithmetic properties of escrow financial logic
-- **Source**: `bethere-escrow/src/kani.rs` — 13 proof harnesses, 489 lines
-- **Result**: ✅ **All 13 harnesses pass** — 0 failures across 729 total checks
+- **Source**: `bethere-escrow/src/kani.rs` — 16 proof harnesses, 489 lines
+- **Result**: ✅ **All 16 harnesses pass** — 0 failures across 729 total checks
 
 ### Verified Properties
 
@@ -506,7 +506,7 @@ Pure arithmetic functions were extracted from the 5 critical financial instructi
 ### Limitations
 
 Kani **cannot** verify (covered by SVM integration tests):
-- PDA seed correctness → covered by 29 SVM tests
+- PDA seed correctness → covered by 42 SVM tests
 - CPI call success/failure → covered by SVM `transfer_checked` tests
 - Account ownership checks → covered by SVM `has_one` constraint tests
 - Signer authority → covered by SVM unauthorized signer tests
@@ -518,9 +518,9 @@ Kani **cannot** verify (covered by SVM integration tests):
 | **Unit (single-ix)** | [Mollusk](https://github.com/anza-xyz/mollusk) | Pure instruction logic, CU benchmarking, fixture-based regression | ❌ Not used |
 | **Unit (multi-ix)** | [LiteSVM](https://github.com/LiteSVM/litesvm) | Full TX simulation, fast red-green-refactor loop | ⚠️ Using `quasar-svm` (framework-equivalent) |
 | **Integration** | [Surfpool](https://github.com/nickfrosty/surfpool) | Devnet-fork realistic state, RPC-level testing | ❌ Not used |
-| **Formal verification** | [Kani](https://github.com/model-checking/kani) | Arithmetic invariant proofs for financial logic | ✅ 13 harnesses, 729 checks |
+| **Formal verification** | [Kani](https://github.com/model-checking/kani) | Arithmetic invariant proofs for financial logic | ✅ 16 harnesses, 729 checks |
 
-**Current stack**: `quasar-svm` (29 tests) + Kani (13 harnesses). `quasar-svm` is the Quasar framework's bundled SVM runner — provides equivalent functionality to LiteSVM (in-process VM, token helpers, clock manipulation) with native Quasar account type integration.
+**Current stack**: `quasar-svm` (42 tests) + Kani (16 harnesses). `quasar-svm` is the Quasar framework's bundled SVM runner — provides equivalent functionality to LiteSVM (in-process VM, token helpers, clock manipulation) with native Quasar account type integration.
 
 **Migration path**: If Quasar loses maintenance or the project migrates to Anchor/Pinocchio, `litesvm` + `litesvm-token` is the Solana Foundation's recommended replacement.
 
@@ -535,7 +535,7 @@ Mapped against the [Solana Foundation Security Checklist](https://github.com/sol
 | # | Category | Status | How BeThere Addresses It | Finding |
 |---|----------|--------|--------------------------|--------|
 | 1 | Missing Owner Checks | ✅ Compliant | Quasar's `Account<T>` enforces `owner == program_id` at deserialization. Counterfeit accounts with matching data but wrong owner are rejected automatically. | — |
-| 2 | Missing Signer Checks | ✅ Compliant | All 8 instructions use `Signer` type. Mutating instructions add `has_one(organizer)` or `address = Seeds(..., attendee)` for authority scoping. | SEC-001 fix |
+| 2 | Missing Signer Checks | ✅ Compliant | All 9 instructions use `Signer` type. Mutating instructions add `has_one(organizer)` or `address = Seeds(..., attendee)` for authority scoping. | SEC-001 fix |
 | 3 | Arbitrary CPI Attacks | ✅ Compliant | All CPIs use `Program<TokenProgram>` and `Program<SystemProgram>`, which validate the target program ID before invocation. No untyped CPI targets. | — |
 | 4 | Reinitialization Attacks | ✅ Compliant | `init` constraint on `EventEscrow` and `AttendeeDeposit` PDAs prevents reinitialization. Seeds are unique per organizer+event_id and event+attendee, making PDA collision impossible. | — |
 | 5 | PDA Sharing Vulnerabilities | ✅ Compliant | `EventEscrow` seeds: `["escrow", organizer, event_id]` — unique per organizer per event. `AttendeeDeposit` seeds: `["deposit", event, attendee]` — unique per attendee per event. No shared PDAs across users. | — |
@@ -547,7 +547,7 @@ Mapped against the [Solana Foundation Security Checklist](https://github.com/sol
 | 11 | Bump Canonicalization | ✅ Compliant | `find_program_address` returns canonical (highest) bump. Stored in `event_escrow.bump` and `attendee_deposit.bump` at creation. CPIs use stored bump for `create_program_address` derivation. | — |
 | 12 | Lamport Griefing (Pre-funded PDA) | ✅ Compliant | `init` constraint handles account creation — if PDA already exists with lamports, init fails (account already allocated). No manual lamport transfer logic that could be exploited. | — |
 | 13 | Writable / Read-Only Enforcement | ✅ Compliant | Quasar enforces mutability at the account level: `#[account(mut)]` for writable, bare for read-only. `deposit_mint`, `rent`, `token_program`, `system_program` are all read-only. Financial accounts are `mut`. | — |
-| — | Checked Math | ✅ Compliant | All arithmetic uses `checked_add`, `checked_sub`. No raw `+` or `-` operators on financial values. Verified by Kani formal verification (13 harnesses). | SEC-009 (F09-F11) |
+| — | Checked Math | ✅ Compliant | All arithmetic uses `checked_add`, `checked_sub`. No raw `+` or `-` operators on financial values. Verified by Kani formal verification (16 harnesses). | SEC-009 (F09-F11) |
 | — | Token-2022 (`transfer_checked`) | ✅ Compliant | All 3 transfer sites use `transfer_checked()` with mint + decimals. Compatible with Token-2022 transfer hooks and fees. | SEC-009 |
 | — | Rent Reclamation | ✅ Compliant | `close_deposit` instruction (discriminator 7) with self-close + GC paths. Vault rent reclaimed via `close_account` in `close_event`. | SEC-010 |
 | — | Vault Balance Integrity | ✅ Compliant | `close_event` checks both accounting invariant (`deposited == refunded + forfeited`) AND actual vault token balance (`vault.amount() != 0`). Prevents griefing via external airdrop. | SEC-013 |
@@ -559,13 +559,13 @@ Mapped against the [Solana Foundation Security Checklist](https://github.com/sol
 | Check | Status | Evidence |
 |-------|--------|----------|
 | Validate account owners match expected program | ✅ | Quasar `Account<T>` auto-enforces |
-| Validate signer requirements explicitly | ✅ | `Signer` + `has_one` constraints on all 8 instructions |
+| Validate signer requirements explicitly | ✅ | `Signer` + `has_one` constraints on all 9 instructions |
 | Validate writable requirements explicitly | ✅ | `#[account(mut)]` on writable, bare for read-only |
 | Validate read-only accounts are not writable | ✅ | Quasar enforces at framework level |
 | Validate PDAs match expected seeds + canonical bump | ✅ | `address = Type::seeds(...)` on all PDA accounts |
 | Validate token mint ↔ token account relationships | ✅ | `constraints(*deposit_mint == *event_escrow.deposit_mint())` |
 | Validate rent exemption / initialization status | ✅ | `init` + `Sysvar<Rent>` pattern |
-| Check for duplicate mutable accounts | ✅ | `require_distinct` helper called in all 8 instruction handlers |
+| Check for duplicate mutable accounts | ✅ | `require_distinct` helper called in all 9 instruction handlers |
 | Verify sysvar addresses before reading | ✅ | Quasar `Sysvar<T>` validates internally |
 | Handle existing lamports on PDA init | ✅ | `init` constraint fails if account exists |
 | Validate program IDs before CPIs | ✅ | `Program<TokenProgram>` + `Program<SystemProgram>` |

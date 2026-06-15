@@ -100,7 +100,7 @@ Key stat: "2.5s real-time polling, edge-deployed, 100% Rust"
 | **Cost** | $0.001 NFT, $0.00087 TX — 990x cheaper than alternatives |
 | **Security** | 15 findings audited, 12 fixed, on-chain escrow with time-locked refunds |
 | **Innovation** | Dual-track (USDC + PromptPay THB), quiz/adventure gating, atomic deposit rollover, 100% Rust |
-| **Traction** | 100+ tests (worker unit + on-chain SVM + frontend WASM), devnet validated |
+| **Traction** | 287 tests (73 domain + 80 worker + 92 frontend Leptos + 42 on-chain SVM) + 16 Kani harnesses, devnet validated |
 | **Live Dashboard** | Real-time aggregate view — 2.5s polling, 5 tiles, 4-stage funnel, audit-log feed |
 
 ## What If Demo Fails?

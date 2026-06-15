@@ -30,11 +30,11 @@
 
 | Metric | Value |
 |--------|-------|
-| On-chain program | **63 KB** (optimized) |
+| On-chain program | **88 KB** (optimized, 89,856 bytes) |
 | NFT mint cost | **$0.001** per badge |
 | Transaction cost | **$0.00087** (at $172/SOL) |
 | Check-in latency | **< 500ms** (edge worker) |
-| Tests | **85 passing** (47 unit + 38 on-chain SVM) |
+| Tests | **287 passing** (73 domain + 80 worker + 92 frontend Leptos + 42 on-chain SVM) + 16 Kani harnesses |
 | Program ID (devnet) | `C6HDeZES9aPpNwe3UvS9ecmfcRhH1XeJb8PGJmLG3z3T` |
 
 ### 🎮 Live Demo Flow (Devnet)
@@ -466,11 +466,12 @@ The escrow system uses PDAs (Program Derived Addresses) to hold attendee USDC de
 ## Tests
 
 ```bash
-# All unit tests (47 total)
-cargo test -p event-checkin-domain   # 26 tests — shared types, QR logic
-cargo test -p event-checkin-worker   # 21 tests — crypto, auth, sheets, events
+# All off-chain tests (245 total)
+cargo test -p event-checkin-domain   # 73 tests — shared types, QR logic
+cargo test -p event-checkin-worker   # 80 tests — crypto, auth, sheets, events
+cd frontend-leptos && cargo test     # 92 tests — Leptos pages, adventure playtests
 
-# On-chain SVM tests (38 total)
+# On-chain SVM tests (42 total)
 cd bethere-escrow && quasar test     # All 9 escrow instructions + rollover lifecycle
 
 # E2E devnet scripts
@@ -596,7 +597,7 @@ See [`docs/security_audit.md`](docs/security_audit.md) for the full escrow secur
 | On-chain indexer | ✅ | Helius webhook + RPC poller for escrow event timeline |
 | Privacy policy | ✅ | PDPA-compliant `/privacy` route |
 | Security audit | ✅ | 15 findings, 12 fixed, SEC-001–015 addressed |
-| E2E tests | ✅ | 85 tests (47 unit + 38 on-chain SVM), 7 devnet E2E scripts |
+| E2E tests | ✅ | 287 tests (73 domain + 80 worker + 92 frontend Leptos + 42 on-chain SVM) + 16 Kani harnesses, 7 devnet E2E scripts |
 
 ## 📈 Competitive Landscape
 
