@@ -1628,7 +1628,7 @@ def slide_08_performance(prs) -> None:
         ("< 500ms", "check-in latency", "edge-deployed", ACCENT_BLUE),
         ("88 KB", "program size", "optimized bytecode (89,856 bytes)", ACCENT_AMBER),
         ("2.5s", "dashboard poll", "cache-bypassed", PURPLE_DEEP),
-        ("$0.87", "for 1,000 attendees", "vs $50–200 POAP on Gnosis", ACCENT_RED),
+        ("$1.00", "for 1,000 badges", "vs $50–200 POAP on Gnosis", ACCENT_RED),
     ]
     cw = Inches(3.9)
     ch = Inches(1.95)
@@ -1696,7 +1696,7 @@ def slide_08_performance(prs) -> None:
             [
                 ("Bottom line:  ", 14, GREEN, True),
                 (
-                    "1,000 attendees cost $0.87 on Solana vs $50–200 for POAP on Gnosis — ",
+                    "1,000 cNFT badges cost $1.00 on Solana vs $50–200 for POAP on Gnosis — ",
                     14,
                     TEXT_LIGHT,
                 ),

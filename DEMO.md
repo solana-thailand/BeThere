@@ -87,7 +87,7 @@ Key stat: "2.5s real-time polling, edge-deployed, 100% Rust"
 - Key point: "Skin in the game works"
 
 ### 7. Wrap-Up (10 sec)
-- Cost comparison: $0.87 for 1000 attendees vs $50–200 POAP on Gnosis
+- Cost comparison: $1.00 for 1,000 cNFT badges vs $50–200 POAP on Gnosis
 - "We started with manual deposits — now it's on-chain"
 - "100% Rust, open source, ready for mainnet"
 

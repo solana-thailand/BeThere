@@ -31,7 +31,7 @@
 |---|---|---|---|---|
 | On-chain program size | **89,856 bytes (88 KB)** | `os.stat().st_size` on `bethere-escrow/target/deploy/bethere_escrow.so` (built artifact, mtime 2026-06-03) | high | ✅ |
 | Kani proof harnesses | **16** | count of `#[kani::proof]` in `bethere-escrow/src/kani.rs` | high | ✅ |
-| Per-transaction fee | **$0.000860** (deck rounds to $0.00087) | 5,000 lamports ÷ 1e9 × $172/SOL | high | ✅ (~1% rounding) |
+| Per-transaction fee | **$0.000869** (deck shows $0.00087) | **Measured** 5,051 lamports (real deposit TX, `.handovers/052` E2E devnet run, sig `4cQnNGRa…`) ÷ 1e9 × $172/SOL = $0.0008688. Theoretical base-fee floor (5,000 lamports) = $0.00086; the measured TX is what the deck reports. | high | ✅ (measured value rounds to $0.00087) |
 | Executed Rust tests | **250 passing** (54 on-chain + 73 domain + 123 worker) | `cargo test` summary lines per crate | high | ✅ (deck says "250+") |
 | Frontend Leptos test specs | **147** (static count) | regex over `#[test]`/`#[wasm_bindgen_test]` in `frontend-leptos` | medium | docs only (not on slides) |
 
@@ -40,7 +40,7 @@
 | Claim | Value | Methodology | Confidence | matches deck |
 |---|---|---|---|---|
 | cNFT vs POAP cost | **~50× cheaper** (floor) | BeThere cNFT **$0.001** vs POAP-on-Gnosis **$0.05** (organizer floor) = 50×. Full range 50–200× at $0.05–0.20. **NOT** vs Ethereum mainnet (POAP avoids mainnet by design). | medium — see caveat | ✅ |
-| 1,000-attendee cost | **$0.87 vs $50–200** (POAP on Gnosis) | 1,000 × $0.00087 (Solana check-in TXs) vs 1,000 × $0.05–0.20 (Gnosis POAP mints). Conservative floor multiplier "~50×". | medium | ✅ |
+| 1,000-badge cost | **$1.00 vs $50–200** (POAP on Gnosis) | **Like-for-like (badges vs badges):** 1,000 × $0.001 (BeThere cNFT) = $1.00 vs 1,000 × $0.05–0.20 (POAP mints on Gnosis) = $50–200. Floor multiplier = exactly 50× ($1.00 ÷ $50). Previous deck figure ($0.87) conflated check-in TX fees with badge mints — corrected to a pure badge-to-badge comparison. | medium — see caveat | ✅ |
 
 ## 4. Competitive-feature claims
 
