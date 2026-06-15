@@ -552,7 +552,7 @@ def slide_01_title(prs) -> None:
         runs=[
             [
                 ("IslandDAO V4  ·  ", 12, TEXT_MUTED, False),
-                ("June 22, 2025", 12, TEXT_LIGHT, True),
+                ("June 23, 2026", 12, TEXT_LIGHT, True),
             ],
         ],
         align=PP_ALIGN.CENTER,
@@ -764,7 +764,7 @@ def slide_02_problem(prs) -> None:
         Inches(5),
         Inches(2.2),
         "30–40%",
-        size=140,
+        size=88,
         color=ACCENT_RED,
         bold=True,
     )
@@ -2496,7 +2496,7 @@ def slide_14_qa(prs) -> None:
         Inches(7.1),
         Inches(12.1),
         Inches(0.3),
-        "BeThere  ·  Solana-Powered Event Check-In  ·  IslandDAO V4  ·  June 22, 2025",
+        "BeThere  ·  Solana-Powered Event Check-In  ·  IslandDAO V4  ·  June 23, 2026",
         size=11,
         color=TEXT_DIM,
         align=PP_ALIGN.CENTER,
