@@ -21,13 +21,14 @@ Every external statistic in the deck currently has **zero citations** (verified 
 
 ### Phase 1 — Fix internal inconsistencies
 
-- [ ] **1.1 Reconcile the `990×` claim.**
+- [x] **1.1 Reconcile the `990×` claim.**
       Decide which figure is authoritative:
       - If POAP cost = `$0.50` → multiplier should be `500×`
       - If multiplier should stay `990×` → POAP cost should be `~$0.99`
       - Preferred: keep `990×` if defensible (requires real POAP mint cost source, see Phase 2), else correct to `500×` and align all 3 occurrences
       - Audit all occurrences: `slide_02_problem`, `slide_08_performance`, `slide_10_competitive`
-- [ ] **1.2 Rebuild deck + confirm consistency** across all slides mentioning POAP cost and multiplier.
+      RESULT: Reframed to Option A (POAP-on-Gnosis like-for-like, ~50×) across all 6+ occurrences (deck + docs). Commits efd6be5, 9d3a12f.
+- [x] **1.2 Rebuild deck + confirm consistency** across all slides mentioning POAP cost and multiplier.
 
 ### Phase 2 — Source external claims
 
@@ -45,8 +46,9 @@ Every external statistic in the deck currently has **zero citations** (verified 
       - Ethereum mainnet POAP is technically possible but "would make issuing thousands of free badges unsustainable" (bitget.com) — POAP avoids it by design.
       - **Impact on deck claims:** `990× cheaper` and `~$0.50` both assume Ethereum mainnet POAP — a strawman. A fair comparison (BeThere cNFT `$0.001` vs POAP on Gnosis `~$0.05–$0.20`) is only **~50–200× cheaper**, not `990×`.
       - **Credibility risk:** an investor who knows POAP will immediately flag this. Needs rework (see 2.4), not just a multiplier tweak.
-- [ ] **2.3 Research Luma / Eventbrite feature matrix** (deposit support, auto-refund, NFT badges) with a snapshot date — supports the competitive-table claims.
-- [ ] **2.4 Decision point — PENDING USER (POAP rework, not just multiplier fix).**
+- [x] **2.3 Research Luma / Eventbrite feature matrix** (deposit support, auto-refund, NFT badges) with a snapshot date — supports the competitive-table claims.
+      RESULT: All 8 cells verified No against official help docs (snapshot 2026-06-15). Deck claim holds at the mechanism level.
+- [x] **2.4 Decision point — RESOLVED: user chose Option A (POAP-on-Gnosis like-for-like, ~50×).**
       Surfaced to user: the `990×` / `$0.50 POAP` claim needs reframing, not a numeric patch. Options to decide before any deck edit:
       - **(A) Honest like-for-like:** compare cNFT `$0.001` vs POAP-on-Gnosis `~$0.05–$0.20` → "up to 50× cheaper" (defensible, modest).
       - **(B) Recompute vs Ethereum-mainnet generic NFT mint** (not POAP) at a cited gas price → keeps a large multiplier but changes the comparator from "POAP" to "Ethereum NFT".
@@ -56,32 +58,33 @@ Every external statistic in the deck currently has **zero citations** (verified 
 
 ### Phase 3 — Automate self-metrics
 
-- [ ] **3.1 Write `scripts/measure_metrics.py`** that regenerates, from the live codebase:
+- [x] **3.1 Write `scripts/measure_metrics.py`** that regenerates, from the live codebase: (commit 533bb3a)
       - [ ] Program size: bytes of `bethere-escrow/target/.../*.so` (built artifact)
       - [ ] Test count: parse `cargo test -p ... 2>&1` output for "X passed"
       - [ ] Kani harness count: count `#[kani::proof]` in `bethere-escrow/src/kani.rs`
       - [ ] Fee derivation: compute cNFT + TX cost from current Solana fee schedule (document assumptions)
       - [ ] Latency: flag as `NEEDS BENCHMARK` (can't measure without a running edge worker)
-- [ ] **3.2 Run it**, capture actual values, diff against deck claims.
-- [ ] **3.3 Reconcile any drift** between measured values and what the deck/docs assert.
+- [x] **3.2 Run it**, capture actual values, diff against deck claims.
+- [x] **3.3 Reconcile any drift** between measured values and what the deck/docs assert.
+      RESULT: test count 287→250+ (executed) reconciled across deck+docs+script; POAP strawman extended to docs. Commit 9d3a12f.
 
 ### Phase 4 — Build evidence ledger
 
-- [ ] **4.1 Create `docs/sources.md`** mapping every numeric claim to its proof:
+- [x] **4.1 Create `docs/sources.md`** mapping every numeric claim to its proof: (commit 091e3d9)
       - Columns: `claim | category (external/self/comparison) | value | source | date checked | confidence | verification method`
       - External claims → primary source URL + quote + retrieval date
       - Self claims → `scripts/measure_metrics.py` output line / CI ref
       - Comparison claims → documented methodology + assumptions
-- [ ] **4.2 Cross-link** from `README.md` and `DEMO.md` "stats" sections to `docs/sources.md` so future edits have a single source of truth.
-- [ ] **4.3 Commit ledger + metrics script** (`docs(sources): add evidence ledger + metrics script`).
+- [x] **4.2 Cross-link** from `README.md` and `DEMO.md` "stats" sections to `docs/sources.md` so future edits have a single source of truth.
+- [x] **4.3 Commit ledger + metrics script** (`docs(sources): add evidence ledger + metrics script`).
 
 ### Phase 5 — Add SDG 12.3 impact framing
 
-- [ ] **5.1 Decide representation** with user before editing (badge vs. line vs. small panel).
+- [x] **5.1 Decide representation** — user pre-approved the default single-line.
       Default proposal: a single SDG-12.3-aligned line on the **Problem** slide tying the `30–40%` stat to food-waste reduction — *only after* Phase 2.1 sources the stat it rests on.
-- [ ] **5.2 Implement the chosen representation** in `scripts/make_pitch_deck.py`.
-- [ ] **5.3 Rebuild + reopen** deck for visual review.
-- [ ] **5.4 Add the SDG claim to the evidence ledger** with its causal chain documented (no-show reduction → less over-catering → less food waste → SDG 12.3).
+- [x] **5.2 Implement the chosen representation** in `scripts/make_pitch_deck.py`. (commit 89ac8d7)
+- [x] **5.3 Rebuild + reopen** deck for visual review.
+- [x] **5.4 Add the SDG claim to the evidence ledger** with its causal chain documented (no-show reduction → less over-catering → less food waste → SDG 12.3). (docs/sources.md §5)
 
 ## Notes
 
