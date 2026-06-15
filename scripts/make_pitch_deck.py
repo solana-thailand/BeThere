@@ -795,7 +795,10 @@ def slide_02_problem(prs) -> None:
             "No on-chain proof of attendance",
             "Attendance records live in spreadsheets — easy to forge, hard to verify.",
         ),
-        ("NFTs cost too much", "Ethereum POAPs run ~$0.50 each. Pricey at any scale."),
+        (
+            "NFTs cost too much",
+            "POAPs run $0.05–0.20 each on Gnosis — $50–200 per 1,000 attendees.",
+        ),
         (
             "Web2 tools treat events as isolated",
             "Luma & Eventbrite have no deposits, no penalties, no real skin in the game.",
@@ -1605,12 +1608,12 @@ def slide_08_performance(prs) -> None:
 
     # Big stats grid (3x2)
     stats = [
-        ("$0.001", "per cNFT badge", "990× cheaper than POAP", GREEN),
+        ("$0.001", "per cNFT badge", "~50× cheaper than POAP", GREEN),
         ("$0.00087", "per on-chain TX", "at $172/SOL", PURPLE),
         ("< 500ms", "check-in latency", "edge-deployed", ACCENT_BLUE),
         ("88 KB", "program size", "optimized bytecode (89,856 bytes)", ACCENT_AMBER),
         ("2.5s", "dashboard poll", "cache-bypassed", PURPLE_DEEP),
-        ("$0.87", "for 1,000 attendees", "vs $500+ on Ethereum", ACCENT_RED),
+        ("$0.87", "for 1,000 attendees", "vs $50–200 POAP on Gnosis", ACCENT_RED),
     ]
     cw = Inches(3.9)
     ch = Inches(1.95)
@@ -1678,11 +1681,11 @@ def slide_08_performance(prs) -> None:
             [
                 ("Bottom line:  ", 14, GREEN, True),
                 (
-                    "1,000-attendee event costs $0.87 on Solana vs $500+ on Ethereum — ",
+                    "1,000 attendees cost $0.87 on Solana vs $50–200 for POAP on Gnosis — ",
                     14,
                     TEXT_LIGHT,
                 ),
-                ("570× cheaper.", 14, GREEN, True),
+                ("~50× cheaper.", 14, GREEN, True),
             ]
         ],
         anchor=MSO_ANCHOR.MIDDLE,
@@ -2001,8 +2004,8 @@ def slide_10_competitive(prs) -> None:
         ("USDC deposit escrow (PDA)", "✅", "❌", "❌", "❌", "⚠ ETH"),
         ("Auto-refund on attendance", "✅", "❌", "manual", "❌", "pool"),
         ("No-show forfeiture", "✅", "❌", "❌", "❌", "split"),
-        ("Attendance NFT badge", "✅ cNFT", "❌", "❌", "✅ ETH", "❌"),
-        ("On-chain proof · $0.001/mint", "✅", "❌", "❌", "~$0.50", "—"),
+        ("Attendance NFT badge", "✅ cNFT", "❌", "❌", "✅ Gnosis", "❌"),
+        ("On-chain proof · $0.001/mint", "✅", "❌", "❌", "~$0.05–0.20", "—"),
     ]
     end_b = draw_table(sec_b + 0.4, web3_rows)
 
@@ -2638,7 +2641,7 @@ SLIDE_NOTES = [
     # 3 — Problem
     "The core problem: 30-40% of registered attendees never show up to free events. "
     "No skin in the game. Existing tools — Luma, Eventbrite — treat events as isolated, "
-    "with no deposits and no penalties. And on Ethereum, attendance NFTs cost $0.50+ each. "
+    "with no deposits and no penalties. And even on Gnosis, POAP badges cost $0.05–0.20 each. "
     "We fix all three.",
     # 4 — Solution
     "Our solution: a $5 USDC refundable deposit. You commit skin in the game to register. "
@@ -2667,7 +2670,7 @@ SLIDE_NOTES = [
     "100% Rust, edge-deployed on Cloudflare. Encourage the audience to scan and watch the "
     "counter move live.",
     # 10 — Performance
-    "The cost flex: $0.001 per compressed NFT badge — 990x cheaper than an Ethereum POAP. "
+    "The cost flex: $0.001 per compressed NFT badge — ~50× cheaper than a POAP on Gnosis. "
     "$0.00087 per transaction. Under 500ms check-in latency. The program is 88 KB of "
     "optimized bytecode. This is what makes on-chain events economically viable at scale.",
     # 11 — Security
