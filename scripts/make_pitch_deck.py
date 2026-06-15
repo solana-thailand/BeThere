@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 BeThere — Pitch Deck Generator
-Produces a 14-slide .pptx optimized for Apple Keynote import.
+Produces a 17-slide .pptx (15 content + 2 section breaks) optimized for Apple Keynote import.
 
 Run:
     python3 scripts/make_pitch_deck.py
@@ -57,7 +57,30 @@ QR_PATH = Path(__file__).resolve().parent / "assets" / "qr_register.png"
 SERVER = "https://bethere.solana-thailand.workers.dev"
 DEMO_EVENT_SLUG = "islanddao-v4-demo"
 DEMO_REGISTER_URL = f"{SERVER}/e/{DEMO_EVENT_SLUG}"
-DASHBOARD_URL = f"{SERVER}/dashboard/live"
+# event_id pinned so the demo is immune to whoever currently wins
+# the get_active_event() fallback (ORDER BY created_at DESC) — there
+# are 5 active events in D1 today, only one of which is ours.
+DASHBOARD_URL = f"{SERVER}/dashboard/live?event_id={DEMO_EVENT_SLUG}"
+
+# Total slide count (15 content + 2 section breaks). Used by page_number()
+# and verified at the end of build().
+TOTAL_SLIDES = 17
+
+# Auto-incrementing slide counter — reset at the start of build(), bumped
+# by every slide (displayed or not) so page numbers stay correct even when
+# section breaks / title / closing slides don't render a number.
+_slide_counter = 0
+
+
+def _bump_slide() -> int:
+    """Increment the slide counter without rendering a page number.
+
+    Used for slides that should count toward the total (title, section
+    breaks, closing) but don't display an "N / TOTAL" badge.
+    """
+    global _slide_counter
+    _slide_counter += 1
+    return _slide_counter
 
 
 # =============================================================================
@@ -236,7 +259,9 @@ def header(slide, eyebrow: str, title: str, eyebrow_color: RGBColor = GREEN) -> 
     add_rect(slide, Inches(0.6), Inches(1.55), Inches(0.6), Pt(3), fill=PURPLE)
 
 
-def page_number(slide, n: int, total: int = 15) -> None:
+def page_number(slide, total: int = TOTAL_SLIDES) -> None:
+    """Render the auto-incremented page badge (e.g. "07 / 17")."""
+    n = _bump_slide()
     add_text(
         slide,
         Inches(12.3),
@@ -368,6 +393,9 @@ def slide_01_title(prs) -> None:
         align=PP_ALIGN.CENTER,
     )
 
+    # Title counts toward TOTAL_SLIDES but shows no badge.
+    _bump_slide()
+
 
 def slide_join_live_demo(prs) -> None:
     s = prs.slides.add_slide(prs.slide_layouts[6])
@@ -458,20 +486,40 @@ def slide_join_live_demo(prs) -> None:
         ),
     ]
     sy = ry + Inches(0.5)
+    # Each step wrapped in its own bordered card (matches the deck's
+    # card-based UI). Card 0.85" tall, spaced 0.95" → 0.10" gap.
+    # 4 cards span 2.45 → 6.15, leaving 0.20" before the bottom bar.
+    card_h = Inches(0.85)
+    card_w = Inches(8.0)
     for num, title_txt, sub_txt, col in steps:
+        card(s, rx, sy, card_w, card_h, fill=BG_CARD, border=DIVIDER)
+        # Left accent stripe in the step's color
+        add_rect(s, rx, sy, Inches(0.08), card_h, fill=col)
+        # Step number (vertically centered)
         add_text(
-            s, rx, sy, Inches(0.6), Inches(0.4), num, size=22, color=col, bold=True
+            s,
+            rx + Inches(0.25),
+            sy,
+            Inches(0.6),
+            card_h,
+            num,
+            size=22,
+            color=col,
+            bold=True,
+            anchor=MSO_ANCHOR.MIDDLE,
         )
+        # Title + subtitle (vertically centered inside the card)
         add_multi(
             s,
-            rx + Inches(0.7),
-            sy - Inches(0.02),
-            Inches(7.8),
-            Inches(0.9),
+            rx + Inches(0.95),
+            sy,
+            Inches(6.85),
+            card_h,
             runs=[
                 [(title_txt, 17, TEXT_LIGHT, True)],
                 [(sub_txt, 13, TEXT_MUTED, False)],
             ],
+            anchor=MSO_ANCHOR.MIDDLE,
         )
         sy += Inches(0.95)
 
@@ -509,7 +557,7 @@ def slide_join_live_demo(prs) -> None:
         ],
     )
 
-    page_number(s, 2)
+    page_number(s)
 
 
 def slide_02_problem(prs) -> None:
@@ -612,7 +660,7 @@ def slide_02_problem(prs) -> None:
         )
         y += Inches(1.18)
 
-    page_number(s, 3)
+    page_number(s)
 
 
 def slide_03_solution(prs) -> None:
@@ -668,6 +716,9 @@ def slide_03_solution(prs) -> None:
             color=color,
             bold=True,
         )
+        # 36pt (down from 42pt) — fits the widest header "Refund + cNFT"
+        # (3.96" at 42pt → 3.40" at 36pt) inside the 3.5"-wide pillar box
+        # without clipping or wrapping to a second line.
         add_text(
             s,
             x + Inches(0.3),
@@ -675,7 +726,7 @@ def slide_03_solution(prs) -> None:
             Inches(3.5),
             Inches(1.0),
             big,
-            size=42,
+            size=36,
             color=TEXT_LIGHT,
             bold=True,
         )
@@ -722,7 +773,7 @@ def slide_03_solution(prs) -> None:
         anchor=MSO_ANCHOR.MIDDLE,
     )
 
-    page_number(s, 4)
+    page_number(s)
 
 
 def slide_04_demo_flow(prs) -> None:
@@ -744,7 +795,7 @@ def slide_04_demo_flow(prs) -> None:
     gap_x = Inches(0.25)
     gap_y = Inches(0.3)
     start_x = Inches(0.6)
-    start_y = Inches(1.95)
+    start_y = Inches(1.80)
 
     for i, (num, name, actor, body, color) in enumerate(steps):
         col = i % 3
@@ -804,10 +855,12 @@ def slide_04_demo_flow(prs) -> None:
         )
 
     # Bottom: no-show path
+    # Grid now ends at 6.50 (start_y 1.80 + 2 rows of 2.2 + gap 0.3);
+    # bar at 6.50 ends at 7.10 → 0.40" clearance from 7.5" slide bottom.
     card(
         s,
         Inches(0.6),
-        Inches(6.65),
+        Inches(6.50),
         Inches(12.1),
         Inches(0.6),
         fill=BG_MID,
@@ -816,7 +869,7 @@ def slide_04_demo_flow(prs) -> None:
     add_multi(
         s,
         Inches(0.9),
-        Inches(6.72),
+        Inches(6.57),
         Inches(11.5),
         Inches(0.45),
         runs=[
@@ -832,7 +885,7 @@ def slide_04_demo_flow(prs) -> None:
         anchor=MSO_ANCHOR.MIDDLE,
     )
 
-    page_number(s, 5)
+    page_number(s)
 
 
 def slide_05_architecture(prs) -> None:
@@ -998,7 +1051,7 @@ def slide_05_architecture(prs) -> None:
         )
         sy += Inches(0.75)
 
-    page_number(s, 6)
+    page_number(s)
 
 
 def slide_06_escrow(prs) -> None:
@@ -1034,7 +1087,8 @@ def slide_06_escrow(prs) -> None:
             bold=True,
             font=FONT_MONO,
         )
-        # name (mono)
+        # name (mono) — 12pt so long names (mark_checked_in,
+        # claim_forfeited, rollover_deposit) stay single-line
         add_text(
             s,
             x + Inches(0.15),
@@ -1042,7 +1096,7 @@ def slide_06_escrow(prs) -> None:
             step_w - Inches(0.3),
             Inches(0.6),
             name,
-            size=13,
+            size=12,
             color=TEXT_LIGHT,
             bold=True,
             font=FONT_MONO,
@@ -1150,7 +1204,7 @@ def slide_06_escrow(prs) -> None:
         line_spacing=1.3,
     )
 
-    page_number(s, 7)
+    page_number(s)
 
 
 def slide_07_dashboard(prs) -> None:
@@ -1370,8 +1424,7 @@ def slide_07_dashboard(prs) -> None:
         anchor=MSO_ANCHOR.MIDDLE,
     )
 
-    # No page number on this hero slide — full-bleed feel
-    page_number(s, 8)
+    page_number(s)
 
 
 def slide_08_performance(prs) -> None:
@@ -1464,7 +1517,7 @@ def slide_08_performance(prs) -> None:
         anchor=MSO_ANCHOR.MIDDLE,
     )
 
-    page_number(s, 9)
+    page_number(s)
 
 
 def slide_09_security(prs) -> None:
@@ -1652,7 +1705,7 @@ def slide_09_security(prs) -> None:
         )
         yy += Inches(0.95)
 
-    page_number(s, 10)
+    page_number(s)
 
 
 def slide_10_competitive(prs) -> None:
@@ -1661,96 +1714,127 @@ def slide_10_competitive(prs) -> None:
     header(
         s,
         "Competitive Landscape",
-        "First trustless deposit + attendance NFT on Solana.",
+        "Full event-platform parity — plus trustless money & credentials.",
     )
 
-    # Table dimensions
+    # Shared column geometry (total width = 12.1")
     tx = Inches(0.6)
-    ty = Inches(2.0)
-    tw = Inches(12.1)
     col_w = [
-        Inches(3.4),
-        Inches(2.0),
-        Inches(1.7),
-        Inches(1.7),
-        Inches(1.7),
-        Inches(1.6),
+        Inches(3.4),  # Feature
+        Inches(1.9),  # BeThere
+        Inches(1.7),  # Luma
+        Inches(1.7),  # Eventbrite
+        Inches(1.7),  # POAP
+        Inches(1.7),  # Kickback
     ]
-
     headers = ["Feature", "BeThere", "Luma", "Eventbrite", "POAP", "Kickback"]
-    rows = [
-        ("On-chain USDC deposits", "✅ escrow", "❌", "❌", "❌", "⚠ ETH"),
-        ("Attendance NFT", "✅ cNFT", "❌", "❌", "✅ ETH", "❌"),
-        ("Deposit refund", "✅ auto", "❌", "manual", "❌", "pool"),
-        ("No-show penalty", "✅ forfeit", "❌", "❌", "❌", "split"),
-        ("Cost per NFT", "$0.001", "—", "—", "~$0.50", "—"),
-        ("Stablecoin", "✅ USDC", "❌", "❌", "❌", "❌ volatile"),
-        ("Open source", "✅", "❌", "❌", "❌", "archived"),
-    ]
 
-    # Header row
-    cx = tx
-    for i, h in enumerate(headers):
-        fill = PURPLE if i == 1 else BG_MID
-        color = TEXT_LIGHT if i == 1 else TEXT_MUTED
-        add_rect(s, cx, ty, col_w[i], Inches(0.45), fill=fill, line=DIVIDER)
+    def section_label(top_in: float, color: RGBColor, kicker: str) -> None:
+        """Small eyebrow + accent rule above each tier's table."""
         add_text(
             s,
-            cx + Inches(0.1),
-            ty + Inches(0.06),
-            col_w[i] - Inches(0.2),
-            Inches(0.35),
-            h,
+            Inches(0.6),
+            Inches(top_in),
+            Inches(12),
+            Inches(0.3),
+            kicker.upper(),
             size=11,
             color=color,
             bold=True,
-            anchor=MSO_ANCHOR.MIDDLE,
         )
-        cx += col_w[i]
+        add_rect(s, Inches(0.6), Inches(top_in + 0.3), Inches(0.5), Pt(2), fill=color)
 
-    # Data rows
-    ry = ty + Inches(0.45)
-    row_h = Inches(0.5)
-    for r, row in enumerate(rows):
+    def draw_table(
+        top_in: float, rows, header_h: float = 0.32, row_h: float = 0.33
+    ) -> float:
+        """Draw a competitive table. Returns the y (inches) where it ends."""
+        ty = Inches(top_in)
+        # Header row
         cx = tx
-        bg = BG_CARD if r % 2 == 0 else BG_MID
-        for i, cell in enumerate(row):
-            fill = bg
-            if i == 1:
-                fill = RGBColor(
-                    0x1F, 0x29, 0x37
-                )  # subtle purple-tint for BeThere column
-            color = TEXT_LIGHT if i == 0 or i == 1 else TEXT_MUTED
-            bold = i == 0 or i == 1
-            add_rect(s, cx, ry, col_w[i], row_h, fill=fill, line=DIVIDER)
+        for i, h in enumerate(headers):
+            fill = PURPLE if i == 1 else BG_MID
+            color = TEXT_LIGHT if i == 1 else TEXT_MUTED
+            add_rect(s, cx, ty, col_w[i], Inches(header_h), fill=fill, line=DIVIDER)
             add_text(
                 s,
                 cx + Inches(0.1),
-                ry + Inches(0.05),
+                ty + Inches(0.03),
                 col_w[i] - Inches(0.2),
-                row_h - Inches(0.1),
-                cell,
-                size=11,
+                Inches(header_h - 0.06),
+                h,
+                size=10,
                 color=color,
-                bold=bold,
+                bold=True,
                 anchor=MSO_ANCHOR.MIDDLE,
             )
             cx += col_w[i]
-        ry += row_h
+        # Data rows
+        ry = ty + Inches(header_h)
+        for r, row in enumerate(rows):
+            cx = tx
+            bg = BG_CARD if r % 2 == 0 else BG_MID
+            for i, cell in enumerate(row):
+                fill = bg
+                if i == 1:
+                    fill = RGBColor(
+                        0x1F, 0x29, 0x37
+                    )  # subtle purple-tint for BeThere column
+                color = TEXT_LIGHT if i == 0 or i == 1 else TEXT_MUTED
+                bold = i == 0 or i == 1
+                add_rect(s, cx, ry, col_w[i], Inches(row_h), fill=fill, line=DIVIDER)
+                add_text(
+                    s,
+                    cx + Inches(0.1),
+                    ry + Inches(0.03),
+                    col_w[i] - Inches(0.2),
+                    Inches(row_h - 0.06),
+                    cell,
+                    size=10,
+                    color=color,
+                    bold=bold,
+                    anchor=MSO_ANCHOR.MIDDLE,
+                )
+                cx += col_w[i]
+            ry += Inches(row_h)
+        return top_in + header_h + row_h * len(rows)
+
+    # ── Tier 1: Web2 platform parity ──
+    # Proves BeThere is a complete platform, not just a crypto novelty.
+    section_label(1.8, GREEN, "Tier 1 — Web2 parity (complete platform)")
+    web2_rows = [
+        ("Registration & landing pages", "✅", "✅", "✅", "❌", "✅"),
+        ("QR check-in + manual lookup", "✅", "✅", "✅", "⚠", "✅"),
+        ("Multi-organizer / multi-event", "✅", "✅", "✅", "❌", "❌"),
+        ("Live analytics dashboard", "✅", "✅", "✅", "❌", "❌"),
+        ("Walk-ins & CSV export", "✅", "⚠", "✅", "❌", "❌"),
+    ]
+    end_a = draw_table(2.2, web2_rows)
+
+    # ── Tier 2: Web3 advantage (BeThere's unique edge) ──
+    sec_b = end_a + 0.2
+    section_label(sec_b, PURPLE, "Tier 2 — Web3 advantage (only BeThere)")
+    web3_rows = [
+        ("USDC deposit escrow (PDA)", "✅", "❌", "❌", "❌", "⚠ ETH"),
+        ("Auto-refund on attendance", "✅", "❌", "manual", "❌", "pool"),
+        ("No-show forfeiture", "✅", "❌", "❌", "❌", "split"),
+        ("Attendance NFT badge", "✅ cNFT", "❌", "❌", "✅ ETH", "❌"),
+        ("On-chain proof · $0.001/mint", "✅", "❌", "❌", "~$0.50", "—"),
+    ]
+    end_b = draw_table(sec_b + 0.4, web3_rows)
 
     # Footnote
     add_text(
         s,
         Inches(0.6),
-        ry + Inches(0.15),
-        Inches(12),
+        Inches(end_b + 0.12),
+        Inches(12.1),
         Inches(0.4),
-        "Kickback (2016–2022): Ethereum deposit platform — shut down due to gas costs. BeThere addresses every structural weakness.",
+        "Kickback (2016–2022): Ethereum deposit platform — shut down due to gas costs. BeThere matches the web2 incumbents AND solves Kickback's structural weaknesses.",
         size=10,
         color=TEXT_DIM,
     )
 
-    page_number(s, 11)
+    page_number(s)
 
 
 def slide_11_whats_built(prs) -> None:
@@ -1874,7 +1958,7 @@ def slide_11_whats_built(prs) -> None:
         )
         cx += col_w + Inches(0.1)
 
-    page_number(s, 12)
+    page_number(s)
 
 
 def slide_12_roadmap(prs) -> None:
@@ -1887,7 +1971,7 @@ def slide_12_roadmap(prs) -> None:
         (
             GREEN,
             "DONE",
-            "Phases 1–6 + 8–9",
+            "Phases 1–6 & 8–9",
             [
                 "Check-in · NFT · quiz · multi-event",
                 "Adventure · security hardening",
@@ -1907,7 +1991,7 @@ def slide_12_roadmap(prs) -> None:
         (
             PURPLE,
             "NEXT",
-            "Phases 10 + 10.5",
+            "Phases 10 & 10.5",
             [
                 "Mainnet deployment (~1.5 SOL)",
                 "PDPA compliance · consent + deletion",
@@ -1995,7 +2079,7 @@ def slide_12_roadmap(prs) -> None:
         anchor=MSO_ANCHOR.MIDDLE,
     )
 
-    page_number(s, 13)
+    page_number(s)
 
 
 def slide_13_evidence(prs) -> None:
@@ -2130,7 +2214,7 @@ def slide_13_evidence(prs) -> None:
         anchor=MSO_ANCHOR.MIDDLE,
     )
 
-    page_number(s, 14)
+    page_number(s)
 
 
 def slide_14_qa(prs) -> None:
@@ -2234,6 +2318,155 @@ def slide_14_qa(prs) -> None:
         align=PP_ALIGN.CENTER,
     )
 
+    # Closing slide counts toward TOTAL_SLIDES but shows no badge.
+    _bump_slide()
+
+
+# =============================================================================
+# Section break — lightweight pacing slide between content parts
+# =============================================================================
+
+
+def slide_section_break(prs, eyebrow: str, title: str, subtitle: str) -> None:
+    """Centered eyebrow + big title + subtitle on a dark canvas.
+
+    Counts toward TOTAL_SLIDES but renders no page-number badge —
+    it's a pacing transition, not a content slide.
+    """
+    s = prs.slides.add_slide(prs.slide_layouts[6])
+    set_bg(s, BG_DARK)
+
+    # Subtle top brand bar (echoes the title slide)
+    add_rect(s, Inches(0), Inches(0), SLIDE_W, Inches(0.15), fill=PURPLE)
+
+    # Centered eyebrow
+    add_text(
+        s,
+        Inches(0.6),
+        Inches(2.75),
+        Inches(12.1),
+        Inches(0.4),
+        eyebrow.upper(),
+        size=14,
+        color=GREEN,
+        bold=True,
+        align=PP_ALIGN.CENTER,
+    )
+
+    # Big title
+    add_text(
+        s,
+        Inches(0.6),
+        Inches(3.25),
+        Inches(12.1),
+        Inches(1.3),
+        title,
+        size=72,
+        color=TEXT_LIGHT,
+        bold=True,
+        align=PP_ALIGN.CENTER,
+    )
+
+    # Short accent underline (centered: 1.0" wide → left = (13.333 - 1.0)/2)
+    add_rect(s, Inches(6.17), Inches(4.6), Inches(1.0), Pt(3), fill=GREEN)
+
+    # Subtitle
+    add_text(
+        s,
+        Inches(0.6),
+        Inches(4.9),
+        Inches(12.1),
+        Inches(0.6),
+        subtitle,
+        size=20,
+        color=TEXT_MUTED,
+        align=PP_ALIGN.CENTER,
+    )
+
+    _bump_slide()
+
+
+# =============================================================================
+# Speaker notes — presenter-view script (Keynote / PowerPoint)
+# Order MUST match the build() sequence below.
+# =============================================================================
+
+SLIDE_NOTES = [
+    # 1 — Title
+    "Welcome. I'm [name]. BeThere turns every event into an on-chain experience — "
+    "USDC deposits, trustless escrow, compressed NFT badges. Built 100% in Rust. "
+    "Before I explain how, let's get you into the live demo.",
+    # 2 — Join Live Demo
+    "Take out your phones and scan the QR code. In Phantom: Settings -> Developer -> "
+    "Enable Test Mode, then switch to Devnet. Reserve your spot with $5 USDC — fully "
+    "refundable. Watch the dashboard on screen react within 2.5 seconds. "
+    "FALLBACK: wallet fail -> pre-recorded video ready; devnet slow -> cached Solscan links.",
+    # 3 — Problem
+    "The core problem: 30-40% of registered attendees never show up to free events. "
+    "No skin in the game. Existing tools — Luma, Eventbrite — treat events as isolated, "
+    "with no deposits and no penalties. And on Ethereum, attendance NFTs cost $0.50+ each. "
+    "We fix all three.",
+    # 4 — Solution
+    "Our solution: a $5 USDC refundable deposit. You commit skin in the game to register. "
+    "Show up, scan, and you're refunded in full — plus a compressed NFT badge. No-show, "
+    "and your deposit rolls to the next event or forfeits to the organizer. "
+    "Trustless, automated, on-chain.",
+    # 5 — Demo Flow
+    "Here's the full six-step flow you just participated in: create, reserve, deposit, "
+    "scan, refund, badge. Every step is a real on-chain transaction on devnet. "
+    "Six instructions, all validated.",
+    # 6 — Section break: The Build
+    "[Pacing pause.] Now let's look under the hood — how BeThere is built.",
+    # 7 — Architecture
+    "One language — Rust — three runtimes: Leptos compiles to WASM for the frontend, "
+    "Cloudflare Workers for the edge API, and a native Solana program for on-chain logic. "
+    "Zero serialization bugs because there's no language boundary. The escrow program is "
+    "6,200 lines, 88 KB optimized, devnet-deployed.",
+    # 8 — Escrow
+    "Six on-chain instructions power the escrow. Key security detail: refunds no longer "
+    "require check-in — that was SEC-001, an anti-rug fix so organizers can't trap deposits. "
+    "We audited 15 findings and fixed 12; the remaining 3 are LOW-SEVERITY hardening items "
+    "(documented design choices), not vulnerabilities — happy to walk through any of them.",
+    # 9 — Dashboard
+    "This is the centerpiece — the live aggregate dashboard, polling every 2.5 seconds. "
+    "The room literally watches itself check in; total USDC locked ticks up in real time. "
+    "100% Rust, edge-deployed on Cloudflare. Encourage the audience to scan and watch the "
+    "counter move live.",
+    # 10 — Performance
+    "The cost flex: $0.001 per compressed NFT badge — 990x cheaper than an Ethereum POAP. "
+    "$0.00087 per transaction. Under 500ms check-in latency. The program is 88 KB of "
+    "optimized bytecode. This is what makes on-chain events economically viable at scale.",
+    # 11 — Security
+    "Security: 15 audit findings, 12 fixed. Same as the escrow slide — to be transparent, "
+    "the remaining 3 are LOW-SEVERITY hardening items (design acknowledgments), NOT "
+    "vulnerabilities. On the right: our trust model — USDC escrow, attendance, and badges "
+    "are on-chain; auth, claim locks, and the indexer are off-chain but verifiable.",
+    # 12 — Competitive
+    "Competitive landscape. Top tier (green) is web2 feature parity: we match Luma and "
+    "Eventbrite on walk-ins, calendars, multi-organizer, QR check-in, and analytics. "
+    "Bottom tier (purple) is the web3 advantage they can't touch: trustless escrow, "
+    "refundable deposits, on-chain credentials. Critically: Kickback tried this on Ethereum "
+    "and died from gas costs. Solana makes it work.",
+    # 13 — What's Built
+    "This isn't a whitepaper. 10 phases complete, 25+ production features, 287 tests "
+    "passing, 100% Rust. Everything you saw in the demo is live on devnet today.",
+    # 14 — Section break: The Road Ahead
+    "[Pacing pause.] So where does BeThere go from here?",
+    # 15 — Roadmap
+    "Phases 1-6 and 8-9 are done — that's everything you've seen. Phase 7 (NFT config UI) "
+    "is in progress. Next: mainnet deployment at ~1.5 SOL, plus PDPA compliance. Then "
+    "platform fees of 1-2% on forfeits. The long game: multi-organizer SaaS, Solana Mobile, "
+    "and learning credentials.",
+    # 16 — Evidence
+    "Don't take my word for it — every step has a real devnet signature. Here are live "
+    "Solscan links for event creation, deposits, check-ins, refunds, and badge mints. "
+    "Verify them yourself right now.",
+    # 17 — QA / CTA
+    "Thank you. The repo is 100% Rust and open source — 287 tests, devnet-deployed. "
+    "Questions, demos, partnerships — let's talk. Direct them to the dashboard projected "
+    "at the door.",
+]
+
 
 # =============================================================================
 # Build
@@ -2241,34 +2474,64 @@ def slide_14_qa(prs) -> None:
 
 
 def build() -> None:
+    global _slide_counter
+    _slide_counter = 0
+
     prs = Presentation()
     prs.slide_width = SLIDE_W
     prs.slide_height = SLIDE_H
 
-    builders = [
-        slide_01_title,
-        slide_join_live_demo,
-        slide_02_problem,
-        slide_03_solution,
-        slide_04_demo_flow,
-        slide_05_architecture,
-        slide_06_escrow,
-        slide_07_dashboard,
-        slide_08_performance,
-        slide_09_security,
-        slide_10_competitive,
-        slide_11_whats_built,
-        slide_12_roadmap,
-        slide_13_evidence,
-        slide_14_qa,
-    ]
-    for fn in builders:
-        fn(prs)
+    # Part 1 — the hook (title + live demo + problem/solution/flow)
+    slide_01_title(prs)
+    slide_join_live_demo(prs)
+    slide_02_problem(prs)
+    slide_03_solution(prs)
+    slide_04_demo_flow(prs)
+
+    # Section break → Part 2 (the build)
+    slide_section_break(
+        prs,
+        eyebrow="Part Two",
+        title="The Build",
+        subtitle="Architecture · escrow · live dashboard · security",
+    )
+
+    slide_05_architecture(prs)
+    slide_06_escrow(prs)
+    slide_07_dashboard(prs)
+    slide_08_performance(prs)
+    slide_09_security(prs)
+    slide_10_competitive(prs)
+    slide_11_whats_built(prs)
+
+    # Section break → Part 3 (the road ahead)
+    slide_section_break(
+        prs,
+        eyebrow="Part Three",
+        title="The Road Ahead",
+        subtitle="Roadmap · evidence · what's next",
+    )
+
+    slide_12_roadmap(prs)
+    slide_13_evidence(prs)
+    slide_14_qa(prs)
+
+    # Sanity check — counter must equal TOTAL_SLIDES
+    assert _slide_counter == TOTAL_SLIDES, (
+        f"slide count {_slide_counter} != TOTAL_SLIDES {TOTAL_SLIDES}"
+    )
+    assert len(SLIDE_NOTES) == TOTAL_SLIDES, (
+        f"SLIDE_NOTES has {len(SLIDE_NOTES)} entries, expected {TOTAL_SLIDES}"
+    )
+
+    # Attach presenter-view speaker notes (Keynote / PowerPoint notes pane)
+    for slide, note in zip(prs.slides, SLIDE_NOTES):
+        slide.notes_slide.notes_text_frame.text = note
 
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     prs.save(OUT_PATH)
     print(f"✓ wrote {OUT_PATH}  ({OUT_PATH.stat().st_size:,} bytes)")
-    print(f"  {len(builders)} slides · 16:9 · Keynote-ready")
+    print(f"  {_slide_counter} slides · 16:9 · Keynote-ready")
 
 
 if __name__ == "__main__":
