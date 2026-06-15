@@ -789,6 +789,21 @@ def slide_02_problem(prs) -> None:
         color=TEXT_MUTED,
     )
 
+    # SDG 12.3 impact tie-in — fewer no-shows -> less over-catering -> less
+    # food waste. Rests on the well-sourced 30-40% no-show stat (docs/sources.md).
+    # Subtle one-liner so it reads as an impact footnote, not a competing hero.
+    add_text(
+        s,
+        Inches(0.9),
+        Inches(6.45),
+        Inches(5),
+        Inches(0.4),
+        "🌱 SDG 12.3 · fewer no-shows → less over-catering → less food waste",
+        size=10,
+        color=GREEN,
+        bold=True,
+    )
+
     # Secondary problems (right column)
     items = [
         (
