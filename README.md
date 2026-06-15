@@ -15,9 +15,9 @@
 | Problem | BeThere Solution |
 |---------|------------------|
 | 30-40% no-show rates for free events | USDC deposit commitment — skin in the game |
-| No on-chain proof of attendance | Compressed NFT badges (cNFT) — 990x cheaper than POAP |
+| No on-chain proof of attendance | Compressed NFT badges (cNFT) — ~50× cheaper than POAP |
 | Web2-only event tools | Solana-native: deposits, refunds, NFTs all on-chain |
-| Expensive NFT minting ($0.50/ea) | cNFT on Solana: **$0.001 per badge** |
+| Expensive NFT minting ($0.05–0.20/ea on Gnosis) | cNFT on Solana: **$0.001 per badge** |
 | ETH gas fees too high | Solana: **$0.00087 per transaction** |
 
 ### 🏗️ Stack
@@ -34,7 +34,7 @@
 | NFT mint cost | **$0.001** per badge |
 | Transaction cost | **$0.00087** (at $172/SOL) |
 | Check-in latency | **< 500ms** (edge worker) |
-| Tests | **287 passing** (73 domain + 80 worker + 92 frontend Leptos + 42 on-chain SVM) + 16 Kani harnesses |
+| Tests | **250 passing** (54 on-chain + 73 domain + 123 worker) + 147 frontend specs + 16 Kani harnesses |
 | Program ID (devnet) | `C6HDeZES9aPpNwe3UvS9ecmfcRhH1XeJb8PGJmLG3z3T` |
 
 ### 🎮 Live Demo Flow (Devnet)
@@ -597,18 +597,18 @@ See [`docs/security_audit.md`](docs/security_audit.md) for the full escrow secur
 | On-chain indexer | ✅ | Helius webhook + RPC poller for escrow event timeline |
 | Privacy policy | ✅ | PDPA-compliant `/privacy` route |
 | Security audit | ✅ | 15 findings, 12 fixed, SEC-001–015 addressed |
-| E2E tests | ✅ | 287 tests (73 domain + 80 worker + 92 frontend Leptos + 42 on-chain SVM) + 16 Kani harnesses, 7 devnet E2E scripts |
+| E2E tests | ✅ | 250 tests (54 on-chain + 73 domain + 123 worker) + 147 frontend specs + 16 Kani harnesses, 7 devnet E2E scripts |
 
 ## 📈 Competitive Landscape
 
 | Feature | BeThere | Luma | Eventbrite | POAP | Kickback* |
 |---------|---------|------|------------|------|-----------|
 | On-chain deposits | ✅ USDC escrow | ❌ | ❌ | ❌ | ✅ ETH (defunct) |
-| Attendance NFTs | ✅ cNFT | ❌ | ❌ | ✅ (Ethereum) | ❌ |
+| Attendance NFTs | ✅ cNFT | ❌ | ❌ | ✅ (Gnosis) | ❌ |
 | Deposit refund | ✅ Auto | ❌ | Manual | ❌ | ✅ Payout pool |
 | No-show penalty | ✅ Forfeit to org | ❌ | ❌ | ❌ | ✅ Pool split |
 | Quiz/Adventure gating | ✅ Built-in | ❌ | ❌ | ❌ | ❌ |
-| Cost per NFT | **$0.001** | N/A | N/A | ~$0.50 | N/A |
+| Cost per NFT | **$0.001** | N/A | N/A | ~$0.05–0.20 | N/A |
 | Stablecoin deposits | ✅ USDC | ❌ | ❌ | ❌ | ❌ (volatile ETH) |
 | Open source | ✅ | ❌ | ❌ | ❌ | ✅ (archived) |
 

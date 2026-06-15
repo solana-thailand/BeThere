@@ -9,7 +9,7 @@ Every value is REAL (measured or derivable) — never fabricated, never mocked.
 
 Claims verified:
   - "88 KB program size (89,856 bytes)"
-  - "287 tests" (73 domain + 80 worker + 92 frontend Leptos + 42 on-chain SVM)
+  - "250+ tests" (54 on-chain + 73 domain + 123 worker) + 147 frontend specs
   - "16 Kani harnesses"
   - "$0.001 per cNFT badge"
   - "$0.00087 per on-chain TX"
@@ -53,11 +53,11 @@ JSON_OUT = SCRIPTS_DIR / ".metrics.json"
 # Deck claims (from scripts/make_pitch_deck.py + README + docs/presentation_materials.md)
 DECK_PROGRAM_BYTES = 89_856
 DECK_PROGRAM_KIB = 88
-DECK_TEST_TOTAL = 287
+DECK_TEST_TOTAL = 250
 DECK_TESTS_DOMAIN = 73
-DECK_TESTS_WORKER = 80
-DECK_TESTS_FRONTEND = 92
-DECK_TESTS_ONCHAIN = 42
+DECK_TESTS_WORKER = 123
+DECK_TESTS_FRONTEND = 147
+DECK_TESTS_ONCHAIN = 54
 DECK_KANI_PROOFS = 16
 DECK_TX_USD = 0.00087
 DECK_CNFT_USD = 0.001

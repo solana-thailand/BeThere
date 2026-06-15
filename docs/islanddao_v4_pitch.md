@@ -108,7 +108,7 @@ This is what makes a 40-person live flow **visible to the room** instead of invi
 - **Events run:** ~5 (devnet — confirm)
 - **Latency:** edge-deployed (Cloudflare Workers), sub-500ms check-in
 - **On-chain cost:** ~$0.00087 per deposit TX · ~$0.001 per cNFT badge
-- **Test coverage:** 287 tests (73 domain + 80 worker + 92 frontend Leptos + 42 on-chain SVM) + 16 Kani harnesses + 13 E2E
+- **Test coverage:** 250 tests (54 on-chain + 73 domain + 123 worker) + 147 frontend specs + 16 Kani harnesses + 13 E2E
 - **Stack:** 100% Rust (worker + escrow program + Leptos WASM frontend)
 - **Escrow program (devnet):** `C6HDeZES9aPpNwe3UvS9ecmfcRhH1XeJb8PGJmLG3z3T`
 

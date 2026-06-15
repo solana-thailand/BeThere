@@ -78,7 +78,7 @@ Key stat: "2.5s real-time polling, edge-deployed, 100% Rust"
 - Click "Claim Refund" → wallet signs → USDC returned
 - Click "Mint Badge" → cNFT minted
 - **Show in Phantom wallet** → the NFT badge appears
-- Key stat: "$0.001 mint cost, 990x cheaper than POAP"
+- Key stat: "$0.001 mint cost, ~50× cheaper than POAP (Gnosis)"
 
 ### 6. No-Show Path (20 sec)
 - Show organizer dashboard
@@ -87,7 +87,7 @@ Key stat: "2.5s real-time polling, edge-deployed, 100% Rust"
 - Key point: "Skin in the game works"
 
 ### 7. Wrap-Up (10 sec)
-- Cost comparison: $0.87 for 1000 attendees vs $500+ on Ethereum
+- Cost comparison: $0.87 for 1000 attendees vs $50–200 POAP on Gnosis
 - "We started with manual deposits — now it's on-chain"
 - "100% Rust, open source, ready for mainnet"
 
@@ -97,10 +97,10 @@ Key stat: "2.5s real-time polling, edge-deployed, 100% Rust"
 |-------|--------|
 | **Problem** | 30-40% no-show rate for free events |
 | **Solution** | USDC deposit commitment, refundable on check-in |
-| **Cost** | $0.001 NFT, $0.00087 TX — 990x cheaper than alternatives |
+| **Cost** | $0.001 NFT, $0.00087 TX — ~50× cheaper than POAP |
 | **Security** | 15 findings audited, 12 fixed, on-chain escrow with time-locked refunds |
 | **Innovation** | Dual-track (USDC + PromptPay THB), quiz/adventure gating, atomic deposit rollover, 100% Rust |
-| **Traction** | 287 tests (73 domain + 80 worker + 92 frontend Leptos + 42 on-chain SVM) + 16 Kani harnesses, devnet validated |
+| **Traction** | 250 tests (54 on-chain + 73 domain + 123 worker) + 147 frontend specs + 16 Kani harnesses, devnet validated |
 | **Live Dashboard** | Real-time aggregate view — 2.5s polling, 5 tiles, 4-stage funnel, audit-log feed |
 
 ## What If Demo Fails?

@@ -1197,7 +1197,7 @@ def slide_05_architecture(prs) -> None:
     # Stats
     stats = [
         ("88 KB", "on-chain program (optimized)"),
-        ("287", "tests across the stack"),
+        ("250+", "tests across the stack"),
         ("< 500ms", "check-in latency at the edge"),
     ]
     sy = Inches(4.3)
@@ -2033,7 +2033,7 @@ def slide_11_whats_built(prs) -> None:
     top_stats = [
         ("10", "phases complete", PURPLE),
         ("25+", "production features", GREEN),
-        ("287", "tests passing", ACCENT_BLUE),
+        ("250+", "tests passing", ACCENT_BLUE),
         ("100%", "Rust codebase", ACCENT_AMBER),
     ]
     sx = Inches(0.6)
@@ -2443,7 +2443,7 @@ def slide_14_qa(prs) -> None:
         (
             "REPO",
             "github.com/solana-thailand/BeThere",
-            "100% Rust · open source\n287 tests · devnet-deployed",
+            "100% Rust · open source\n250+ tests · devnet-deployed",
         ),
         (
             "NEXT",
@@ -2685,7 +2685,7 @@ SLIDE_NOTES = [
     "refundable deposits, on-chain credentials. Critically: Kickback tried this on Ethereum "
     "and died from gas costs. Solana makes it work.",
     # 13 — What's Built
-    "This isn't a whitepaper. 10 phases complete, 25+ production features, 287 tests "
+    "This isn't a whitepaper. 10 phases complete, 25+ production features, 250+ tests "
     "passing, 100% Rust. Everything you saw in the demo is live on devnet today.",
     # 14 — Section break: The Road Ahead
     "[Pacing pause.] So where does BeThere go from here?",
@@ -2699,7 +2699,7 @@ SLIDE_NOTES = [
     "Solscan links for event creation, deposits, check-ins, refunds, and badge mints. "
     "Verify them yourself right now.",
     # 17 — QA / CTA
-    "Thank you. The repo is 100% Rust and open source — 287 tests, devnet-deployed. "
+    "Thank you. The repo is 100% Rust and open source — 250+ tests, devnet-deployed. "
     "Questions, demos, partnerships — let's talk. Direct them to the dashboard projected "
     "at the door.",
 ]

@@ -25,7 +25,7 @@ BeThere is a **Solana-powered event check-in platform** that combines:
 | NFT mint cost | ~$0.001 per badge (cNFT) |
 | Platform stack | Rust + Solana + Cloudflare Workers + Leptos WASM |
 | Program ID | `C6HDeZES9aPpNwe3UvS9ecmfcRhH1XeJb8PGJmLG3z3T` |
-| Test coverage | 287 tests (73 domain + 80 worker + 92 frontend Leptos + 42 on-chain SVM) + 16 Kani harnesses |
+| Test coverage | 250 tests (54 on-chain + 73 domain + 123 worker) + 147 frontend specs + 16 Kani harnesses |
 
 ---
 
@@ -348,7 +348,7 @@ Rust + Solana + Cloudflare Workers + WASM
 
 **Traction**
 - Originated from manual deposit/refund events — now automated on-chain
-- End-to-end tested on devnet (287 tests passing)
+- End-to-end tested on devnet (250 tests passing)
 - Ready for mainnet deployment (1.5 SOL cost)
 - Supports both USDC (on-chain) and PromptPay THB (fiat) deposits
 
@@ -478,11 +478,11 @@ sequenceDiagram
 | Feature | BeThere | Luma | Eventbrite | POAP |
 |---------|---------|------|------------|------|
 | On-chain deposits | ✅ USDC escrow | ❌ | ❌ | ❌ |
-| Attendance NFTs | ✅ cNFT (Solana) | ❌ | ❌ | ✅ (Ethereum) |
+| Attendance NFTs | ✅ cNFT (Solana) | ❌ | ❌ | ✅ (Gnosis) |
 | Deposit refund | ✅ Automatic | ❌ | Manual | ❌ |
 | No-show penalty | ✅ Forfeit to org | ❌ | ❌ | ❌ |
 | Quiz/Adventure gating | ✅ Built-in | ❌ | ❌ | ❌ |
-| Cost per NFT | ~$0.001 | N/A | N/A | ~$0.50 |
+| Cost per NFT | ~$0.001 | N/A | N/A | ~$0.05–0.20 |
 | Self-serve setup | ✅ Google Sheets | ✅ | ✅ | Partial |
 | Open source | ✅ | ❌ | ❌ | ❌ |
 
