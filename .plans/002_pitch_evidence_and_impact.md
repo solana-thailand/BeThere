@@ -59,11 +59,12 @@ Every external statistic in the deck currently has **zero citations** (verified 
 ### Phase 3 — Automate self-metrics
 
 - [x] **3.1 Write `scripts/measure_metrics.py`** that regenerates, from the live codebase: (commit 533bb3a)
-      - [ ] Program size: bytes of `bethere-escrow/target/.../*.so` (built artifact)
-      - [ ] Test count: parse `cargo test -p ... 2>&1` output for "X passed"
-      - [ ] Kani harness count: count `#[kani::proof]` in `bethere-escrow/src/kani.rs`
-      - [ ] Fee derivation: compute cNFT + TX cost from current Solana fee schedule (document assumptions)
-      - [ ] Latency: flag as `NEEDS BENCHMARK` (can't measure without a running edge worker)
+      - [x] Program size: bytes of `bethere-escrow/target/.../*.so` (built artifact) — 89,856 bytes ✅
+      - [x] Test count: parse `cargo test -p ... 2>&1` output for "X passed" — 250 executed (54+73+123) ✅
+      - [x] Kani harness count: count `#[kani::proof]` in `bethere-escrow/src/kani.rs` — 16 ✅
+      - [x] Fee derivation: compute cNFT + TX cost from current Solana fee schedule (document assumptions) — TX from MEASURED 5,051 lamports (`.handovers/052`); cNFT from 12k-lamport Bubblegum model ✅
+      - [x] Latency: flag as `NEEDS BENCHMARK` (can't measure without a running edge worker) — `NEEDS_BENCHMARK`, low confidence ✅
+      RESULT (subsequent fix): the original script flagged 2 false DRIFTs (tests_total_stack compared the 397 static total vs deck's conservative 250+; fee_per_tx_usd used theoretical 5,000 lamports vs deck's $0.00087 which is the real MEASURED 5,051-lamport value). Both reconciled — script now derives TX fee from the measured 5,051-lamport deposit TX and compares only the EXECUTED test count (250) against the deck's 250+. Zero false-DRIFT flags remain; the only `matches_deck=False` is the documented cNFT $0.001-vs-$0.002 model choice (§3 caveat).
 - [x] **3.2 Run it**, capture actual values, diff against deck claims.
 - [x] **3.3 Reconcile any drift** between measured values and what the deck/docs assert.
       RESULT: test count 287→250+ (executed) reconciled across deck+docs+script; POAP strawman extended to docs. Commit 9d3a12f.
