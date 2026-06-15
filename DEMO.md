@@ -93,6 +93,8 @@ Key stat: "2.5s real-time polling, edge-deployed, 100% Rust"
 
 ## Key Talking Points
 
+> Figures below are sourced with confidence levels in [`docs/sources.md`](docs/sources.md).
+
 | Point | Detail |
 |-------|--------|
 | **Problem** | 30-40% no-show rate for free events |

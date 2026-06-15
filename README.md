@@ -37,6 +37,8 @@
 | Tests | **250 passing** (54 on-chain + 73 domain + 123 worker) + 147 frontend specs + 16 Kani harnesses |
 | Program ID (devnet) | `C6HDeZES9aPpNwe3UvS9ecmfcRhH1XeJb8PGJmLG3z3T` |
 
+> Every figure above is sourced in [`docs/sources.md`](docs/sources.md) — the evidence ledger (primary sources, measurement method, confidence, and known caveats). Refresh self-measured rows with `python3 scripts/measure_metrics.py`.
+
 ### 🎮 Live Demo Flow (Devnet)
 
 ```
