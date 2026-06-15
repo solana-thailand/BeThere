@@ -11,6 +11,7 @@ Output:
 All facts pulled from README.md / DEMO.md (Jun 2025 audit).
 """
 
+import os
 from pathlib import Path
 
 from pptx import Presentation
@@ -70,6 +71,28 @@ TOTAL_SLIDES = 17
 # by every slide (displayed or not) so page numbers stay correct even when
 # section breaks / title / closing slides don't render a number.
 _slide_counter = 0
+
+# Narrative arc tracking — three parts (Hook / Build / Ahead). Each content
+# slide tags itself with the current arc so the navigation chip can show the
+# audience where they are in the story. Set by build(), read by nav_chip().
+_arc_counter = 0
+_arc_label = ""
+_arc_color = PURPLE
+
+# The three arcs. Order matches the build() sequence. Keep in sync with the
+# section_break() calls in build().
+ARCS = [
+    ("Part 1", "The Hook", GREEN),
+    ("Part 2", "The Build", PURPLE),
+    ("Part 3", "The Road Ahead", ACCENT_AMBER),
+]
+
+
+def _set_arc(idx: int) -> None:
+    """Mark the start of a narrative arc (called from build())."""
+    global _arc_counter, _arc_label, _arc_color
+    _arc_counter = idx + 1  # 1-indexed for display
+    _arc_label, _arc_color = ARCS[idx][1], ARCS[idx][2]
 
 
 def _bump_slide() -> int:
@@ -234,11 +257,14 @@ def add_bullets(
 
 def header(slide, eyebrow: str, title: str, eyebrow_color: RGBColor = GREEN) -> None:
     """Consistent slide header: small eyebrow + big title + accent line."""
+    # Eyebrow textbox trimmed to 9" wide so it can never visually overlap
+    # the top-right nav_chip() (which starts at x≈10.33). Even the longest
+    # eyebrow ("ISLANDDAO V4 · CENTERPIECE") renders well under 3" wide.
     add_text(
         slide,
         Inches(0.6),
         Inches(0.45),
-        Inches(11),
+        Inches(9),
         Inches(0.3),
         eyebrow.upper(),
         size=12,
@@ -257,16 +283,37 @@ def header(slide, eyebrow: str, title: str, eyebrow_color: RGBColor = GREEN) -> 
         bold=True,
     )
     add_rect(slide, Inches(0.6), Inches(1.55), Inches(0.6), Pt(3), fill=PURPLE)
+    # Top-right narrative-arc pill — single hook here so every content
+    # slide that calls header() automatically picks up the chip without
+    # each slide needing to remember. Title / section / closing slides
+    # bypass header() and stay chip-free.
+    nav_chip(slide)
 
 
 def page_number(slide, total: int = TOTAL_SLIDES) -> None:
-    """Render the auto-incremented page badge (e.g. "07 / 17")."""
+    """Render the auto-incremented page badge (e.g. "07 / 17").
+
+    A small arc-colored dot precedes the number so the bottom-right badge
+    reinforces the top-right nav_chip()'s arc coloring — the audience gets
+    a consistent color cue at both the entry and exit of every slide.
+    """
     n = _bump_slide()
+    # Arc-colored dot — sits just left of the page number text
+    dot_d = Inches(0.08)
+    add_rect(
+        slide,
+        Inches(12.05),
+        Inches(7.13),
+        dot_d,
+        dot_d,
+        fill=_arc_color,
+        shape=MSO_SHAPE.OVAL,
+    )
     add_text(
         slide,
-        Inches(12.3),
+        Inches(12.18),
         Inches(7.05),
-        Inches(0.9),
+        Inches(1.05),
         Inches(0.3),
         f"{n:02d} / {total:02d}",
         size=10,
@@ -299,6 +346,116 @@ def card(
     )
 
 
+def nav_chip(slide, color: RGBColor | None = None) -> None:
+    """Top-right narrative-arc chip.
+
+    A small pill showing "PART N · NAME" so the audience always knows
+    which arc of the story (Hook / Build / Ahead) they're in. Rendered
+    on every content slide; suppressed on title / section / closing.
+    """
+    if not _arc_label:
+        return
+    col = color if color is not None else _arc_color
+    chip_w = Inches(2.4)
+    chip_h = Inches(0.3)
+    chip_x = SLIDE_W - chip_w - Inches(0.6)
+    chip_y = Inches(0.45)
+    # Pill background (BG_MID for subtlety — color lives in the dot + text).
+    # Return value unused — the pill is purely decorative background.
+    add_rect(
+        slide,
+        chip_x,
+        chip_y,
+        chip_w,
+        chip_h,
+        fill=BG_MID,
+        line=DIVIDER,
+        line_width=0.5,
+        shape=MSO_SHAPE.ROUNDED_RECTANGLE,
+    )
+    # Solid color dot — the only saturated element, anchors the eye
+    dot_d = Inches(0.1)
+    add_rect(
+        slide,
+        chip_x + Inches(0.12),
+        chip_y + (chip_h - dot_d) / 2,
+        dot_d,
+        dot_d,
+        fill=col,
+        shape=MSO_SHAPE.OVAL,
+    )
+    # Label text
+    add_text(
+        slide,
+        chip_x + Inches(0.3),
+        chip_y,
+        chip_w - Inches(0.4),
+        chip_h,
+        f"PART {_arc_counter}  ·  {_arc_label.upper()}",
+        size=10,
+        color=TEXT_MUTED,
+        bold=True,
+        anchor=MSO_ANCHOR.MIDDLE,
+    )
+
+
+def chevron(slide, left, top, size, color: RGBColor = TEXT_DIM) -> None:
+    """Small right-pointing chevron — flow direction marker.
+
+    Used between sequential step cards (demo flow, escrow) to emphasize
+    that the steps are a sequence, not a grid of options.
+    """
+    add_rect(
+        slide,
+        left,
+        top,
+        size,
+        size,
+        fill=color,
+        shape=MSO_SHAPE.CHEVRON,
+    )
+
+
+def halo(slide, cx, cy, radius, color: RGBColor, subtle: bool = False) -> None:
+    """Soft radial-feel halo behind a hero stat.
+
+    PowerPoint shapes have no real radial gradient for ovals without an
+    image asset, so we approximate depth with three concentric, faintly
+    tinted rings. Drawn first so all other shapes layer on top.
+
+    ``subtle=True`` pushes the tint factors much closer to BG_DARK so the
+    glow is barely perceptible — use this for full-canvas decorative washes
+    where heavier saturation would overwhelm the foreground.
+    """
+
+    # Three rings, fading outward. Color tinted toward BG_DARK as radius grows.
+    def tint(c: RGBColor, k: float) -> RGBColor:
+        return RGBColor(
+            int(c[0] + (BG_DARK[0] - c[0]) * k),
+            int(c[1] + (BG_DARK[1] - c[1]) * k),
+            int(c[2] + (BG_DARK[2] - c[2]) * k),
+        )
+
+    # Default tints give a visible glow (hero stat inside a card).
+    # Subtle tints are barely-there — for title-slide depth washes.
+    rings = (
+        [(1.0, 0.88), (0.75, 0.93), (0.5, 0.97)]
+        if subtle
+        else [(1.0, 0.55), (0.75, 0.75), (0.5, 0.9)]
+    )
+    for scale, k in rings:
+        d = radius * 2 * scale
+        add_rect(
+            slide,
+            cx - d / 2,
+            cy - d / 2,
+            d,
+            d,
+            fill=tint(color, k),
+            shape=MSO_SHAPE.OVAL,
+        )
+
+
 # =============================================================================
 # Slide builders
 # =============================================================================
@@ -311,6 +468,14 @@ def slide_01_title(prs) -> None:
     # Top brand bar
     add_rect(s, Inches(0), Inches(0), SLIDE_W, Inches(0.15), fill=PURPLE)
     add_rect(s, Inches(0.6), Inches(0.55), Inches(0.08), Inches(0.4), fill=GREEN)
+
+    # Subtle decorative halos — give the title slide depth without
+    # competing with the wordmark. A single GREEN glow sits behind the
+    # logo mark (contained, radius 1.6 → largest ring 3.2" diameter,
+    # fully on-canvas). subtle=True keeps the wash barely perceptible.
+    # The previous PURPLE wash (radius 5.5) extended far off-canvas and
+    # rendered as a clipped band — removed.
+    halo(s, Inches(6.67), Inches(2.13), Inches(1.6), color=GREEN, subtle=True)
 
     # Eyebrow
     add_text(
@@ -575,6 +740,12 @@ def slide_02_problem(prs) -> None:
         fill=BG_MID,
         border=ACCENT_RED,
     )
+    # Soft red halo behind the "30–40%" number — three concentric rings
+    # tinted toward BG_DARK give the hero stat visual weight without
+    # competing with the number itself. Drawn after the card (on top of
+    # its fill) but before the text (so the number stays crisp).
+    # Centered on the stat text box at (0.9, 2.7, 5.0, 2.2) → (3.4, 3.8).
+    halo(s, Inches(3.4), Inches(3.8), Inches(2.0), color=ACCENT_RED)
     add_text(
         s,
         Inches(0.9),
@@ -1755,18 +1926,31 @@ def slide_10_competitive(prs) -> None:
             fill = PURPLE if i == 1 else BG_MID
             color = TEXT_LIGHT if i == 1 else TEXT_MUTED
             add_rect(s, cx, ty, col_w[i], Inches(header_h), fill=fill, line=DIVIDER)
-            add_text(
-                s,
-                cx + Inches(0.1),
-                ty + Inches(0.03),
-                col_w[i] - Inches(0.2),
-                Inches(header_h - 0.06),
-                h,
-                size=10,
-                color=color,
-                bold=True,
-                anchor=MSO_ANCHOR.MIDDLE,
-            )
+            if i == 1:
+                # BeThere column gets a GREEN winner star prefix so the
+                # "best choice" call is visually unmistakable at a glance.
+                add_multi(
+                    s,
+                    cx + Inches(0.1),
+                    ty + Inches(0.03),
+                    col_w[i] - Inches(0.2),
+                    Inches(header_h - 0.06),
+                    runs=[[("★ ", 10, GREEN, True), (h, 10, color, True)]],
+                    anchor=MSO_ANCHOR.MIDDLE,
+                )
+            else:
+                add_text(
+                    s,
+                    cx + Inches(0.1),
+                    ty + Inches(0.03),
+                    col_w[i] - Inches(0.2),
+                    Inches(header_h - 0.06),
+                    h,
+                    size=10,
+                    color=color,
+                    bold=True,
+                    anchor=MSO_ANCHOR.MIDDLE,
+                )
             cx += col_w[i]
         # Data rows
         ry = ty + Inches(header_h)
@@ -2327,11 +2511,16 @@ def slide_14_qa(prs) -> None:
 # =============================================================================
 
 
-def slide_section_break(prs, eyebrow: str, title: str, subtitle: str) -> None:
+def slide_section_break(
+    prs, eyebrow: str, title: str, subtitle: str, arc_idx: int = 1
+) -> None:
     """Centered eyebrow + big title + subtitle on a dark canvas.
 
     Counts toward TOTAL_SLIDES but renders no page-number badge —
-    it's a pacing transition, not a content slide.
+    it's a pacing transition, not a content slide. The ``arc_idx``
+    (1-based: 1=Hook, 2=Build, 3=Ahead) drives a three-dot progress
+    indicator at the bottom so the audience can see which arc they're
+    entering and how far through the story they are.
     """
     s = prs.slides.add_slide(prs.slide_layouts[6])
     set_bg(s, BG_DARK)
@@ -2382,6 +2571,51 @@ def slide_section_break(prs, eyebrow: str, title: str, subtitle: str) -> None:
         color=TEXT_MUTED,
         align=PP_ALIGN.CENTER,
     )
+
+    # ── Three-dot arc progress indicator ──
+    # Dots sit just above the bottom edge, centered horizontally.
+    # Completed arcs get a small filled dot in their arc color; the
+    # active (entering) arc gets a larger dot + a subtle ring; future
+    # arcs are dimmed outlines. Gives the audience a sense of pacing.
+    dot_small = Inches(0.10)
+    dot_active = Inches(0.16)
+    spacing = Inches(0.42)
+    total_w = spacing * 2  # span across 3 dots
+    start_x = (SLIDE_W - total_w) / 2
+    dot_y = Inches(6.4)
+    for i, (_, _, arc_col) in enumerate(ARCS):
+        cx = start_x + i * spacing
+        is_active = (i + 1) == arc_idx
+        is_done = (i + 1) < arc_idx
+        if is_active:
+            # Larger solid dot in the arc color — anchors the eye
+            add_rect(
+                s,
+                cx - (dot_active - dot_small) / 2,
+                dot_y - (dot_active - dot_small) / 2,
+                dot_active,
+                dot_active,
+                fill=arc_col,
+                shape=MSO_SHAPE.OVAL,
+            )
+        elif is_done:
+            # Completed arc — small solid dot in its arc color
+            add_rect(
+                s, cx, dot_y, dot_small, dot_small, fill=arc_col, shape=MSO_SHAPE.OVAL
+            )
+        else:
+            # Future arc — dimmed outline only
+            add_rect(
+                s,
+                cx,
+                dot_y,
+                dot_small,
+                dot_small,
+                fill=None,
+                line=TEXT_DIM,
+                line_width=0.75,
+                shape=MSO_SHAPE.OVAL,
+            )
 
     _bump_slide()
 
@@ -2473,15 +2707,39 @@ SLIDE_NOTES = [
 # =============================================================================
 
 
+def strip_keynote_blockers(prs: Presentation) -> None:
+    """Remove parts that Keynote's importer chokes on.
+
+    python-pptx's default template carries a Windows printer-settings
+    binary (printerSettings1.bin) at the presentation level. PowerPoint
+    ignores it; Keynote rejects the whole file as "invalid format".
+    Dropping the relationship orphans the part, and the package
+    serializer drops the orphaned part + its "bin" content-type
+    declaration automatically.
+    """
+    for rel in list(prs.part.rels.values()):
+        if rel.reltype.endswith("/printerSettings"):
+            prs.part.drop_rel(rel.rId)
+
+
 def build() -> None:
-    global _slide_counter
+    global _slide_counter, _arc_counter, _arc_label, _arc_color
     _slide_counter = 0
+    # Reset arc context — every _set_arc() call in the build sequence
+    # re-sets these; we clear them up-front so a partial build (e.g. a
+    # diagnostic slice) doesn't inherit a stale arc from a prior run.
+    _arc_counter = 0
+    _arc_label = ""
+    _arc_color = PURPLE
 
     prs = Presentation()
     prs.slide_width = SLIDE_W
     prs.slide_height = SLIDE_H
 
     # Part 1 — the hook (title + live demo + problem/solution/flow)
+    # Tag the arc up-front so every content slide that calls nav_chip()
+    # picks up "PART 1 · THE HOOK" without each slide hardcoding it.
+    _set_arc(0)
     slide_01_title(prs)
     slide_join_live_demo(prs)
     slide_02_problem(prs)
@@ -2489,13 +2747,18 @@ def build() -> None:
     slide_04_demo_flow(prs)
 
     # Section break → Part 2 (the build)
+    # Section break itself draws no nav_chip (it's a pacing slide),
+    # but every slide after it inherits the Part 2 arc until the next
+    # _set_arc() call.
     slide_section_break(
         prs,
         eyebrow="Part Two",
         title="The Build",
         subtitle="Architecture · escrow · live dashboard · security",
+        arc_idx=2,
     )
 
+    _set_arc(1)
     slide_05_architecture(prs)
     slide_06_escrow(prs)
     slide_07_dashboard(prs)
@@ -2510,8 +2773,10 @@ def build() -> None:
         eyebrow="Part Three",
         title="The Road Ahead",
         subtitle="Roadmap · evidence · what's next",
+        arc_idx=3,
     )
 
+    _set_arc(2)
     slide_12_roadmap(prs)
     slide_13_evidence(prs)
     slide_14_qa(prs)
@@ -2524,14 +2789,32 @@ def build() -> None:
         f"SLIDE_NOTES has {len(SLIDE_NOTES)} entries, expected {TOTAL_SLIDES}"
     )
 
-    # Attach presenter-view speaker notes (Keynote / PowerPoint notes pane)
-    for slide, note in zip(prs.slides, SLIDE_NOTES):
-        slide.notes_slide.notes_text_frame.text = note
+    # Attach presenter-view speaker notes.
+    #
+    # OFF by default: python-pptx-generated notes parts (notesMaster +
+    # notesSlide + secondary theme2) are rejected by Keynote as
+    # "can't be imported" — confirmed via isolation tests (diag_keynote.py):
+    # variant 4 (notes) and 4a (cleaned notesMaster) both fail, while
+    # variant 5 (full deck, no notes) imports cleanly. The notes content
+    # is still validated above so it stays in sync with TOTAL_SLIDES.
+    # Apply only when targeting PowerPoint via BT_NOTES=1 — PowerPoint
+    # tolerates the structure Keynote rejects.
+    attach_notes = bool(os.environ.get("BT_NOTES"))
+    if attach_notes:
+        for slide, note in zip(prs.slides, SLIDE_NOTES):
+            slide.notes_slide.notes_text_frame.text = note
 
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    # Strip Keynote-incompatible parts right before saving — without this
+    # the inherited printerSettings1.bin binary makes Keynote reject the
+    # file as "invalid format".
+    strip_keynote_blockers(prs)
     prs.save(OUT_PATH)
     print(f"✓ wrote {OUT_PATH}  ({OUT_PATH.stat().st_size:,} bytes)")
     print(f"  {_slide_counter} slides · 16:9 · Keynote-ready")
+    print(
+        f"  notes: {'on (PowerPoint)' if attach_notes else 'off (Keynote-compatible)'}"
+    )
 
 
 if __name__ == "__main__":
