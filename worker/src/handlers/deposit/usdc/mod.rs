@@ -792,6 +792,13 @@ pub(crate) async fn discover_deposit_tx_on_chain(
     signature
 }
 
+/// Cooldown (in seconds) between on-chain deposit discovery attempts on public
+/// read paths. Prevents a malicious caller from triggering unbounded
+/// `getSignaturesForAddress` RPC calls by hammering `/public/ticket` for an
+/// attendee whose deposit has no on-chain TX yet. 5 minutes balances abuse
+/// protection with a reasonable retry window for legitimate deposits.
+const DISCOVERY_COOLDOWN_SECS: u64 = 300;
+
 /// Self-heal a deposit record from the on-chain state.
 ///
 /// Runs on every read/write path that touches an unverified `DepositStatus`.
@@ -832,42 +839,69 @@ pub(crate) async fn recover_and_verify_deposit(
 
     // ── Phase 1: discover tx_signature on-chain if missing ──
     if status.tx_signature.as_deref().is_none_or(|s| s.is_empty()) {
-        let wallet = status
-            .wallet_address
-            .as_deref()
-            .filter(|w| !w.is_empty());
-
-        let escrow_addr = if !event.escrow_address.is_empty() {
-            Some(event.escrow_address.clone())
-        } else if !event.organizer_wallet.is_empty() {
-            // Derive escrow address on the fly when not yet persisted.
-            let on_chain_event_id = if event.on_chain_event_id != 0 {
-                event.on_chain_event_id
-            } else {
-                crate::handlers::deposit::derive_on_chain_event_id(&event.id)
-            };
-            crate::solana_escrow::derive_escrow_address(
-                &event.organizer_wallet,
-                on_chain_event_id,
-            )
-            .await
-            .ok()
+        // Rate-limit discovery on public read paths: a malicious caller could
+        // hammer /public/ticket for an attendee whose deposit has no on-chain
+        // TX yet, triggering a getSignaturesForAddress RPC on every call. The
+        // cooldown caps discovery to one attempt per DISCOVERY_COOLDOWN_SECS
+        // per attendee. On KV-unavailable (tests), the gate is bypassed.
+        let cooldown_key = format!("discovery_cooldown:{}:{}", event.id, attendee_id);
+        let cooldown_active = if let Some(k) = kv {
+            k.get(&cooldown_key).text().await.unwrap_or(None).is_some()
         } else {
-            None
+            false
         };
 
-        if let (Some(wallet), Some(escrow)) = (wallet, escrow_addr)
-            && let Some(discovered_sig) =
-                discover_deposit_tx_on_chain(&rpc_url, &escrow, wallet).await
-        {
-            tracing::info!(
-                attendee_id = %attendee_id,
-                event_id = %event.id,
-                tx_signature = %discovered_sig,
-                "Recovered deposit TX signature via on-chain PDA discovery (read-path)"
-            );
-            status.tx_signature = Some(discovered_sig);
-            let _ = event_store::save_deposit_status_with_fallback(kv, d1, &status).await;
+        if !cooldown_active {
+            let wallet = status
+                .wallet_address
+                .as_deref()
+                .filter(|w| !w.is_empty());
+
+            let escrow_addr = if !event.escrow_address.is_empty() {
+                Some(event.escrow_address.clone())
+            } else if !event.organizer_wallet.is_empty() {
+                // Derive escrow address on the fly when not yet persisted.
+                let on_chain_event_id = if event.on_chain_event_id != 0 {
+                    event.on_chain_event_id
+                } else {
+                    crate::handlers::deposit::derive_on_chain_event_id(&event.id)
+                };
+                crate::solana_escrow::derive_escrow_address(
+                    &event.organizer_wallet,
+                    on_chain_event_id,
+                )
+                .await
+                .ok()
+            } else {
+                None
+            };
+
+            if let (Some(wallet), Some(escrow)) = (wallet, escrow_addr)
+                && let Some(discovered_sig) =
+                    discover_deposit_tx_on_chain(&rpc_url, &escrow, wallet).await
+            {
+                tracing::info!(
+                    attendee_id = %attendee_id,
+                    event_id = %event.id,
+                    tx_signature = %discovered_sig,
+                    "Recovered deposit TX signature via on-chain PDA discovery (read-path)"
+                );
+                status.tx_signature = Some(discovered_sig);
+                let _ = event_store::save_deposit_status_with_fallback(kv, d1, &status).await;
+            }
+
+            // Set cooldown after any discovery attempt (success, no-result, or
+            // RPC failure) so the public read paths can't trigger unbounded
+            // getSignaturesForAddress calls. Best-effort — KV failure is
+            // non-fatal (next poll may retry sooner, which is acceptable).
+            if let Some(k) = kv
+                && let Ok(builder) = k.put(&cooldown_key, "1")
+            {
+                let _ = builder
+                    .expiration_ttl(DISCOVERY_COOLDOWN_SECS)
+                    .execute()
+                    .await;
+            }
         }
     }
 
