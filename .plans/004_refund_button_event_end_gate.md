@@ -1,6 +1,6 @@
 # Plan 004 — Refund Button `event_end` Gate
 
-> **Status**: frontend-done (built + verified in WASM); verified-builds BLOCKED (no Docker on host; see §3.3)
+> **Status**: SHIPPED — frontend committed (`aef7d1b`), built, deployed to production (`https://bethere.solana-thailand.workers.dev`), and verified end-to-end against the `islanddao-v4-demo` deposit on 2026-06-17 (see §5). Verified-builds BLOCKED (no Docker on host; deferred to CI per user direction — see §3.3).
 > **Type**: bug-fix (UX) + ops (verified builds)
 > **Priority**: P1 (user-facing UX bug — misleading CTA shown before refunds are technically possible)
 > **Created**: 2026-06-17
@@ -184,12 +184,48 @@ metadata + custom domain) and are NOT addressed by verified builds. Don't confla
 
 ## 5. Rollout
 
-- [ ] Commit on `develop/feature/04_refund_button_event_end_gate` (gitflow).
-- [ ] PR / squash to `develop`.
-- [ ] Rebuild frontend: `bash frontend-leptos/build.sh`.
-- [ ] Deploy worker: `bash worker/deploy.sh`.
-- [ ] Verify on production deposit URL against `islanddao-v4-demo`:
+- [x] Commit on `feature/004_refund_button_event_end_gate` (gitflow).
+      Landed on `develop` at `2ca5245` via rebase (fast-forward — `develop`
+      had not moved since branch point `26e9bd0`).
+      Three commits: 1. `aef7d1b` — `fix(deposit): gate refund CTA on event_end_ms` (3 source files, +58/-9) 2. `97f7a25` — `docs(plan): add plan 004 — refund button event_end gate` 3. `2ca5245` — `docs(handover): add #103 — refund gate + verified builds investigation`
+- [x] PR / squash to `develop` — done directly via rebase per user direction
+      (no separate PR; `develop` is the integration branch on this repo).
+- [x] Rebuild frontend: `bash frontend-leptos/build.sh`.
+      Build succeeded in 1m07s (`trunk build --release`); output WASM
+      `event-checkin-frontend-a2b7d207545dc013_bg.wasm` (3.8M).
+      Verified the new copy string "Refund will be available after the event
+      ends" is present in the built WASM (`strings … | rg -c` returns 3).
+      Note: `build.sh` must be run from `frontend-leptos/` (trunk looks for
+      `Trunk.toml` in CWD); running it from the repo root fails with
+      "could not find the root package of the target crate".
+- [x] Deploy worker: `bash worker/deploy.sh`.
+      Deployed successfully to `https://bethere.solana-thailand.workers.dev`
+      (startup 13ms; 4921.60 KiB / gzip 1480.65 KiB; 16 files in assets dir).
+      Frontend assets verified served (71963 bytes). Bindings intact:
+      `EVENTS` KV, `bethere-db` D1, `bethere-assets` R2.
+      Note: worker global `EVENT_END_MS=1777183200000` (2026-04-26 06:00 UTC)
+      is in the PAST relative to wall-clock — but the deposit page reads
+      per-event `event_end_ms` from `DepositStatusResponse` (D1-sourced),
+      not this env var. The actual `islanddao-v4-demo` event_end_ms must be
+      checked against D1 before the §5 verification step is meaningful.
+- [x] Verify on production deposit URL against `islanddao-v4-demo`:
       event_end is in the future → no refund button should appear.
+      **Verified end-to-end on production** (deposit `019ecfc8-bd96-7fe3-8047-139f03a64137`): 1. **D1 event row**: `event_end_ms = 1782190800000` (2026-06-23 05:00 UTC,
+      +155h from verification time) → refund window CLOSED. 2. **D1 deposit row**: `refundable = 1`, `deposit_order = 1`, `verified = 1`,
+      `amount = 15000000` (15.00 USDC) — exactly the case the bug misled. 3. **Production API** (`GET /api/deposit/status/{id}?event_id=islanddao-v4-demo`):
+      returns `event_end_ms = 1782190800000` (future), `status.refundable = true`,
+      `status.verified = true`. Gate evaluates `info.refundable && event_ended`
+      = `true && (now_ms >= event_end_ms)` = `true && false` = **false → CTA hidden**. 4. **Deployed WASM identity**: `event-checkin-frontend-a2b7d207545dc013_bg.wasm`
+      served from production. SHA-256 matches local build from commit `aef7d1b`:
+      `d24d7c9045885f93dd8f9bbbc8837289fe3212ca511cb581b33f144f48b4c5fd`. 5. **Fix string present in deployed WASM**: "Refund will be available after
+      the event ends" confirmed via `strings … | rg -c` (=1). 6. **Old CTA string still present** (expected): "claim it now" — still used
+      in the legitimate post-event refund branch.
+      **Result**: visiting `/deposit/019ecfc8-bd96-7fe3-8047-139f03a64137?event_id=islanddao-v4-demo`
+      will now render the "Refund will be available after the event ends." advisory card
+      instead of the misleading "Don't lose your 15.00 USDC — claim it now" button. The
+      defense-in-depth gate on `RefundChooseWallet` also short-circuits to
+      `already_deposited_view` if any state path tries to enter the refund flow before
+      `event_end_ms`. End-to-end bug is closed.
 
 ---
 
@@ -207,10 +243,22 @@ Plus the verified-builds ops work (no source changes; documentation only).
 
 ## 7. Acceptance Criteria
 
-- [ ] On a page where `event_end_ms > now_ms`, the user sees a clear "Refund will be available after the event ends" message instead of the "Claim Refund" CTA.
+- [x] On a page where `event_end_ms > now_ms`, the user sees a clear "Refund will be available after the event ends" message instead of the "Claim Refund" CTA.
+      Verified end-to-end on production against `islanddao-v4-demo` deposit
+      `019ecfc8-bd96-7fe3-8047-139f03a64137` (15.00 USDC, refundable tier):
+      API returns `event_end_ms = 1782190800000` (+155h future), `refundable = true`.
+      Deployed WASM SHA-256 matches local build from `aef7d1b`. Fix string present.
+      See §5 for full verification record.
 - [ ] On a page where `event_end_ms <= now_ms` and the deposit is in the refundable tier, the original CTA is shown and the refund flow works end-to-end.
 - [ ] Non-refundable-tier deposits continue to show the "Non-refundable deposit" badge in all cases.
-- [ ] `clippy` + `cargo check` pass with `-D warnings`.
+- [~] `clippy` + `cargo check` pass with `-D warnings`.
+  Partial: `cargo check` in `frontend-leptos/` passes clean (exit 0).
+  `cargo clippy` introduces 0 new warnings on the 3 changed files, but the
+  frontend crate has 183 pre-existing clippy errors in untouched files
+  (`ticket/view_data.rs`, `utils/qr_gen.rs`, `utils/mod.rs`, `wallet_error.rs`,
+  etc.) — so `clippy -D warnings` does NOT pass crate-wide. The frontend crate
+  is built via `trunk`, not clippy-checked in workspace CI. Pre-existing tech
+  debt; separate cleanup PR.
 - [ ] CI stays green.
 - [x] Verified build for `bethere-escrow` — documented as BLOCKED with reason:
       no Docker on host (M5 Pro). Toolchain reinstalled as native ARM64; local build hash
