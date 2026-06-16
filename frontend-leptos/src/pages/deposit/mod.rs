@@ -320,14 +320,26 @@ pub fn Deposit() -> impl IntoView {
                         }
 
                         // ===== Refund: Choose Wallet =====
+                        // Defense-in-depth: the primary gate is the CTA in
+                        // already_deposited_view, but if the state machine
+                        // ever lands here with the refund window still closed
+                        // (e.g. deep link, stale state, future code path),
+                        // fall back to the AlreadyDeposited view rather than
+                        // exposing the wallet-connection flow. Render directly
+                        // instead of mutating state during render — avoids any
+                        // re-render loop.
                         DepositPageState::RefundChooseWallet(data) => {
-                            let wallets = detected_wallets.get();
-                            refund::refund_choose_wallet_view(
-                                &data,
-                                &wallets,
-                                set_state,
-                                handle_refund_connect_wallet.clone(),
-                            )
+                            if event_refund_window_open(data.event_end_ms) {
+                                let wallets = detected_wallets.get();
+                                refund::refund_choose_wallet_view(
+                                    &data,
+                                    &wallets,
+                                    set_state,
+                                    handle_refund_connect_wallet.clone(),
+                                )
+                            } else {
+                                already_deposited::already_deposited_view(&data, &set_state)
+                            }
                         }
 
                         // ===== Refund: Wallet Connected =====

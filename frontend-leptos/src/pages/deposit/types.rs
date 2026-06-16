@@ -176,6 +176,27 @@ pub fn deposit_step(
 // Helper functions
 // ---------------------------------------------------------------------------
 
+/// Current time as Unix epoch milliseconds, read from the client clock.
+/// Used to gate time-based UI (e.g. refund availability) on the deposit page.
+/// Note: the on-chain program remains the source of truth for actual refund
+/// validity; this is advisory only and tolerant of client clock skew.
+pub fn now_ms() -> i64 {
+    js_sys::Date::now() as i64
+}
+
+/// Whether the on-chain refund window is open as of the client clock.
+///
+/// Mirrors `bethere-escrow::instructions::refund::validate_and_update`:
+/// refunds are allowed iff `clock.unix_timestamp >= event_end`. The on-chain
+/// check uses seconds; we compare in milliseconds for consistency with
+/// `DepositStatusResponse.event_end_ms`.
+///
+/// Treats `event_end_ms <= 0` (legacy/missing field) as "not yet open" so
+/// the refund CTA stays hidden on bad data — fails safe.
+pub fn event_refund_window_open(event_end_ms: i64) -> bool {
+    event_end_ms > 0 && now_ms() >= event_end_ms
+}
+
 /// Format epoch ms to a short readable date for the refund deadline.
 pub fn format_refund_deadline(ms: i64) -> String {
     let date = js_sys::Date::new(&wasm_bindgen::JsValue::from_f64(ms as f64));

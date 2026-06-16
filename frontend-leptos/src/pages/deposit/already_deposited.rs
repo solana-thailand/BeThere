@@ -72,6 +72,11 @@ pub fn already_deposited_view(
     };
     let usdc_fmt = format_usdc(data.deposit_amount_usdc);
     let refund_info = compute_refund_info(&data);
+    // Refund window check: mirrors bethere-escrow refund instruction. The
+    // on-chain program is the source of truth; this gate is advisory and
+    // hides the CTA until the client clock passes event_end_ms. Fails safe
+    // (treats missing/zero event_end_ms as "not yet open").
+    let event_ended = event_refund_window_open(data.event_end_ms);
 
     let data_clone_for_refund = data.clone();
     let refund_info_clone = refund_info.clone();
@@ -170,8 +175,11 @@ pub fn already_deposited_view(
                         }.into_any(),
                         None => ().into_any(),
                     }}
-                    // Refund CTA (only if refundable)
-                    {if info.refundable {
+                    // Refund CTA — three states:
+                    //   (a) refundable tier AND event ended → claim button
+                    //   (b) refundable tier AND event not ended → "available after event" notice
+                    //   (c) not refundable tier → muted badge (unchanged)
+                    {if info.refundable && event_ended {
                         let data_clone_for_refund = data_clone_for_refund.clone();
                         view! {
                             <div class="dep2-refund-cta">
@@ -186,6 +194,14 @@ pub fn already_deposited_view(
                                 >
                                     "Claim Refund"
                                 </button>
+                            </div>
+                        }.into_any()
+                    } else if info.refundable {
+                        view! {
+                            <div class="dep2-info-note">
+                                <p class="hint-note">
+                                    "Refund will be available after the event ends."
+                                </p>
                             </div>
                         }.into_any()
                     } else {
