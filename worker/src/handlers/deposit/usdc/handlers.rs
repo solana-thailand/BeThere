@@ -16,8 +16,8 @@ use crate::state::AppState;
 use super::{
     ConfirmDepositQuery, ConfirmDepositResponse, DepositTxQuery, DepositTxResponse,
     UpdateDepositSignatureRequest, VerifyWithSignerOutcome, check_and_switch_deadline,
-    check_in_person_capacity, discover_deposit_tx_on_chain, verify_and_confirm_deposit,
-    verify_tx_with_signer,
+    check_in_person_capacity, discover_deposit_tx_on_chain, recover_and_verify_deposit,
+    verify_and_confirm_deposit, verify_tx_with_signer,
 };
 
 // ---------------------------------------------------------------------------
@@ -43,6 +43,17 @@ pub async fn get_deposit_status_handler(
     let status = event_store::get_deposit_status_with_fallback(kv, d1, &event.id, &attendee_id)
         .await
         .map_err(event_checkin_domain::models::error::AppError::Internal)?;
+
+    // --- Read-path self-heal ---
+    // Recover a missing tx_signature from on-chain PDA history and verify the
+    // deposit via signer cross-check. This closes the gap where the deposit
+    // page's `AlreadyDeposited` view never polls `/confirm` for an existing
+    // unverified record — the deposit page self-heals on load instead.
+    // Idempotent: returns immediately when already verified.
+    let status = match status {
+        Some(s) => Some(recover_and_verify_deposit(&state, &event, s).await),
+        None => None,
+    };
 
     // --- Deposit deadline edge-trigger ---
     // If event has a deposit_deadline_hours and attendee hasn't deposited,
