@@ -134,6 +134,63 @@ pub async fn find_attendee_by_wallet(
         .map(|s| s.to_string()))
 }
 
+/// Find attendee API ID by on-chain tx_signature within a specific event's deposit records.
+///
+/// Used by the read-path recovery guard to detect when a discovered signature
+/// is already bound to a *different* attendee (double-registration defence).
+/// Uses the same JsValue/JSON.stringify deserialisation pattern as
+/// `find_attendee_by_wallet`.
+pub async fn find_attendee_by_tx_signature(
+    db: &D1Database,
+    event_id: &str,
+    tx_signature: &str,
+) -> Result<Option<String>, String> {
+    if tx_signature.is_empty() {
+        return Ok(None);
+    }
+    let stmt = db.prepare(
+        "SELECT attendee_id FROM deposit_statuses WHERE event_id = ?1 AND tx_signature = ?2 LIMIT 1",
+    );
+    let bound = stmt
+        .bind_refs(&[D1Type::Text(event_id), D1Type::Text(tx_signature)])
+        .map_err(|e| format!("D1 find_attendee_by_tx_signature bind: {e:?}"))?;
+
+    let raw_first = wasm_bindgen_futures::JsFuture::from(
+        bound
+            .inner()
+            .first(None)
+            .map_err(|e| format!("D1 find_attendee_by_tx_signature first() call: {e:?}"))?,
+    )
+    .await
+    .map_err(|e| format!("D1 find_attendee_by_tx_signature first() await: {e:?}"))?;
+
+    if raw_first.is_null() || raw_first.is_undefined() {
+        return Ok(None);
+    }
+
+    let json_str = js_sys::JSON::stringify(&raw_first)
+        .map(|s| s.as_string().unwrap_or_default())
+        .unwrap_or_default();
+
+    if json_str.is_empty() {
+        return Ok(None);
+    }
+
+    let row: serde_json::Value = serde_json::from_str(&json_str).map_err(|e| {
+        tracing::warn!(
+            error = %e,
+            json = %json_str.chars().take(300).collect::<String>(),
+            "D1 find_attendee_by_tx_signature: deserialize failed"
+        );
+        format!("D1 find_attendee_by_tx_signature deserialize: {e}")
+    })?;
+
+    Ok(row
+        .get("attendee_id")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string()))
+}
+
 /// Count deposits for an event (for deposit counter).
 pub async fn count_deposits_by_event(db: &D1Database, event_id: &str) -> Result<u32, String> {
     let stmt = db.prepare("SELECT COUNT(*) as cnt FROM deposit_statuses WHERE event_id = ?1");

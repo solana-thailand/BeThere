@@ -484,6 +484,97 @@ pub async fn find_attendee_by_wallet(
     Ok(None)
 }
 
+/// Find attendee API ID by on-chain tx_signature within a specific event's deposit records.
+///
+/// KV-fallback mirror of `find_attendee_by_wallet`. Used by the read-path
+/// recovery guard to detect when a discovered signature is already bound to
+/// a *different* attendee (double-registration defence).
+pub async fn find_attendee_by_tx_signature(
+    kv: &KvStore,
+    event_id: &str,
+    tx_signature: &str,
+    d1: Option<&D1Database>,
+) -> Result<Option<String>, String> {
+    if tx_signature.is_empty() {
+        return Ok(None);
+    }
+    if let Some(db) = d1 {
+        return crate::db::deposit_statuses::find_attendee_by_tx_signature(
+            db,
+            event_id,
+            tx_signature,
+        )
+        .await;
+    }
+    let deposits = list_deposit_statuses(kv, event_id, None).await?;
+    for d in &deposits {
+        if d.tx_signature.as_deref() == Some(tx_signature) {
+            return Ok(Some(d.attendee_id.clone()));
+        }
+    }
+    Ok(None)
+}
+
+// ---------------------------------------------------------------------------
+// KV-optional fallback lookups (plan 003 — double-registration defence)
+// ---------------------------------------------------------------------------
+
+/// Find attendee API ID by wallet address, with KV/D1 fallback.
+///
+/// D1-first (indexed lookup via `idx_deposit_statuses_wallet`); falls back to
+/// KV scan only if D1 is unavailable. Returns `None` if neither store has a
+/// row matching `(event_id, wallet_address)`. Used by Guard 1 (deposit
+/// initiation) and Guard 2 (read-path recovery binding check).
+pub async fn find_attendee_by_wallet_with_fallback(
+    kv: Option<&KvStore>,
+    d1: Option<&D1Database>,
+    event_id: &str,
+    wallet_address: &str,
+) -> Result<Option<String>, String> {
+    if wallet_address.is_empty() {
+        return Ok(None);
+    }
+    if let Some(db) = d1
+        && let Some(id) =
+            crate::db::deposit_statuses::find_attendee_by_wallet(db, event_id, wallet_address)
+                .await?
+    {
+        return Ok(Some(id));
+    }
+    if let Some(kv_ref) = kv {
+        return find_attendee_by_wallet(kv_ref, event_id, wallet_address, None).await;
+    }
+    Ok(None)
+}
+
+/// Find attendee API ID by on-chain tx_signature, with KV/D1 fallback.
+///
+/// D1-first (indexed lookup via `idx_deposit_statuses_tx`); falls back to KV
+/// scan only if D1 is unavailable. Used by Guard 2 (read-path recovery binding
+/// check) to detect when a discovered signature is already bound to a
+/// *different* attendee.
+pub async fn find_attendee_by_tx_signature_with_fallback(
+    kv: Option<&KvStore>,
+    d1: Option<&D1Database>,
+    event_id: &str,
+    tx_signature: &str,
+) -> Result<Option<String>, String> {
+    if tx_signature.is_empty() {
+        return Ok(None);
+    }
+    if let Some(db) = d1
+        && let Some(id) =
+            crate::db::deposit_statuses::find_attendee_by_tx_signature(db, event_id, tx_signature)
+                .await?
+    {
+        return Ok(Some(id));
+    }
+    if let Some(kv_ref) = kv {
+        return find_attendee_by_tx_signature(kv_ref, event_id, tx_signature, None).await;
+    }
+    Ok(None)
+}
+
 // ---------------------------------------------------------------------------
 // KV-optional fallback reads (P3.2)
 // ---------------------------------------------------------------------------

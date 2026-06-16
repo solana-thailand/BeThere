@@ -264,6 +264,36 @@ pub async fn deposit_usdc_handler(
         .into());
     }
 
+    // Guard 1 (double-registration defence — plan 003): reject if this wallet
+    // is already bound to a *different* attendee in this event. Without this
+    // check, an organizer deleting an attendee row (off-chain only — the
+    // on-chain `AttendeeDeposit` PDA persists) would let the same wallet
+    // re-register as a new attendee_id and then have the read-path recovery
+    // re-verify the new row against the original on-chain TX — yielding two
+    // verified attendees, two QR codes, one deposit. The same bug is also
+    // exploitable by a malicious user (no organizer help required).
+    let wallet_owner =
+        event_store::find_attendee_by_wallet_with_fallback(kv, d1, &event.id, &body.wallet_address)
+            .await
+            .map_err(event_checkin_domain::models::error::AppError::Internal)?;
+
+    match wallet_owner {
+        Some(owner_id) if owner_id != body.attendee_id => {
+            tracing::warn!(
+                event_id = %event.id,
+                new_attendee_id = %body.attendee_id,
+                existing_attendee_id = %owner_id,
+                wallet = %body.wallet_address,
+                "deposit initiation rejected: wallet already bound to another registration"
+            );
+            return Err(event_checkin_domain::models::error::AppError::Validation(
+                "wallet is already bound to another registration for this event".to_string(),
+            )
+            .into());
+        }
+        _ => {}
+    }
+
     // Atomically increment deposit counter for this event
     let deposit_order = event_store::increment_deposit_counter_with_fallback(kv, d1, &event.id)
         .await

@@ -799,6 +799,22 @@ pub(crate) async fn discover_deposit_tx_on_chain(
 /// protection with a reasonable retry window for legitimate deposits.
 const DISCOVERY_COOLDOWN_SECS: u64 = 300;
 
+/// Pure decision helper for the claim-binding guard (plan 003).
+///
+/// Returns `true` iff either `wallet_owner` or `tx_owner` is bound to an id
+/// *different* from `current_attendee_id`. Both `Some(current_attendee_id)`
+/// (self-match on an idempotent re-recovery) and `None` (no binding recorded
+/// yet) are treated as no conflict.
+pub(crate) fn binding_conflict(
+    current_attendee_id: &str,
+    wallet_owner: Option<&str>,
+    tx_owner: Option<&str>,
+) -> bool {
+    let wallet_conflict = wallet_owner.is_some_and(|id| id != current_attendee_id);
+    let tx_conflict = tx_owner.is_some_and(|id| id != current_attendee_id);
+    wallet_conflict || tx_conflict
+}
+
 /// Self-heal a deposit record from the on-chain state.
 ///
 /// Runs on every read/write path that touches an unverified `DepositStatus`.
@@ -928,6 +944,81 @@ pub(crate) async fn recover_and_verify_deposit(
         && let Some(signer) = outcome.signer()
     {
         status.wallet_address = Some(signer.to_string());
+    }
+
+    // Guard 2 (double-registration defence — plan 003): refuse to verify if
+    // the wallet or the discovered tx_signature is already bound to a
+    // *different* attendee_id. The on-chain `AttendeeDeposit` PDA is keyed by
+    // `(event_escrow, attendee_wallet)`, so a single deposit can otherwise be
+    // claimed by N attendee rows when the DB is reset (e.g., organizer
+    // deletes a row, attendee re-registers with the same wallet and lets the
+    // read-path self-heal re-verify the new row). DB read failures are
+    // non-fatal: they skip that half of the guard with a warning rather than
+    // blocking the happy path, because the signer cross-check above has
+    // already proven the TX is real.
+    let post_backfill_wallet = status.wallet_address.as_deref().unwrap_or("");
+    let wallet_owner =
+        event_store::find_attendee_by_wallet_with_fallback(kv, d1, &event.id, post_backfill_wallet)
+            .await
+            .unwrap_or_else(|e| {
+                tracing::warn!(
+                    attendee_id = %attendee_id,
+                    error = %e,
+                    "wallet binding lookup failed on read-path recovery — skipping that half of the guard (non-fatal)"
+                );
+                None
+            });
+
+    let tx_owner =
+        event_store::find_attendee_by_tx_signature_with_fallback(kv, d1, &event.id, sig)
+            .await
+            .unwrap_or_else(|e| {
+                tracing::warn!(
+                    attendee_id = %attendee_id,
+                    error = %e,
+                    "tx_signature binding lookup failed on read-path recovery — skipping that half of the guard (non-fatal)"
+                );
+                None
+            });
+
+    if binding_conflict(&attendee_id, wallet_owner.as_deref(), tx_owner.as_deref()) {
+        tracing::warn!(
+            attendee_id = %attendee_id,
+            event_id = %event.id,
+            tx_signature = %sig,
+            wallet_owner = ?wallet_owner,
+            tx_owner = ?tx_owner,
+            "read-path recovery refused: deposit already bound to a different attendee"
+        );
+
+        // Best-effort audit: surface the refusal in the event's audit trail.
+        // Reuses `DepositConfirmed` with a `refused: true` meta flag — a
+        // dedicated `DepositRefused` action would be cleaner but is out of
+        // scope for this fix.
+        if let Some(kv) = kv {
+            let _ = crate::audit_store::append_event_audit(
+                kv,
+                &event.id,
+                crate::audit_store::create_entry_with_meta(
+                    "system",
+                    crate::audit_store::AuditAction::DepositConfirmed,
+                    &attendee_id,
+                    "USDC read-path recovery refused — deposit already bound to another attendee",
+                    serde_json::json!({
+                        "tx_signature": sig,
+                        "wallet_owner": wallet_owner,
+                        "tx_owner": tx_owner,
+                        "refused": true,
+                    }),
+                ),
+                d1,
+            )
+            .await;
+        }
+
+        // Return unchanged: still unverified, still carrying the discovered
+        // `tx_signature` so a human can investigate the double-binding.
+        return status;
     }
 
     status.verified = true;
@@ -1324,6 +1415,41 @@ pub(crate) async fn verify_and_confirm_deposit(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ─── binding_conflict (plan 003 — claim-binding guard) ───────────────
+
+    #[test]
+    fn test_binding_conflict_no_owners_returns_false() {
+        assert!(!binding_conflict("att_1", None, None));
+    }
+
+    #[test]
+    fn test_binding_conflict_self_match_returns_false() {
+        // Idempotent re-recovery: both bound to the current attendee.
+        assert!(!binding_conflict("att_1", Some("att_1"), Some("att_1")));
+    }
+
+    #[test]
+    fn test_binding_conflict_wallet_other_attendee_returns_true() {
+        assert!(binding_conflict("att_1", Some("att_2"), None));
+    }
+
+    #[test]
+    fn test_binding_conflict_tx_other_attendee_returns_true() {
+        assert!(binding_conflict("att_1", None, Some("att_2")));
+    }
+
+    #[test]
+    fn test_binding_conflict_both_other_attendee_returns_true() {
+        assert!(binding_conflict("att_1", Some("att_2"), Some("att_3")));
+    }
+
+    #[test]
+    fn test_binding_conflict_wallet_self_tx_other_returns_true() {
+        // Wallet legitimately bound to current attendee, but tx is bound to
+        // a different one — still flagged as a conflict.
+        assert!(binding_conflict("att_1", Some("att_1"), Some("att_2")));
+    }
 
     /// Build a confirmed `getTransaction` result with the given fee-payer.
     fn confirmed_tx(signer: &str, confirmation: &str) -> serde_json::Value {
