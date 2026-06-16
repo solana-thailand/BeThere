@@ -106,7 +106,7 @@ pub fn already_deposited_view(
                     if info.currency == "THB" {
                         format!("฿{}", info.amount)
                     } else {
-                        format!("{} {}", info.amount, info.currency)
+                        format!("{} {}", format_usdc(info.amount), info.currency)
                     }
                 }}
                 " deposited"
@@ -128,7 +128,7 @@ pub fn already_deposited_view(
                             if info.currency == "THB" {
                                 format!("฿{}", info.amount)
                             } else {
-                                format!("{} {}", info.amount, info.currency)
+                                format!("{} {}", format_usdc(info.amount), info.currency)
                             }
                         }}
                     </span>

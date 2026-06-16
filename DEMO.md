@@ -2,6 +2,41 @@
 
 > **Duration:** 3 minutes | **Network:** Solana Devnet | **Wallet:** Phantom
 
+---
+
+## ⚠️ CRITICAL: Phantom Devnet Pre-Flight Checklist
+
+> **If you skip this, the USDC deposit demo WILL fail.**
+> The worker verifies transactions on **devnet**. If Phantom is on **mainnet**,
+> the TX signs successfully (you get a signature) but the worker never finds it
+> on devnet → the page hangs on "Confirming deposit..." forever.
+
+**Do this 2 minutes before the demo:**
+
+1. **Open Phantom** → Settings → Developer Settings
+2. **Toggle "Testnet Mode" ON** (this switches Phantom to devnet)
+3. **Verify you have devnet SOL:**
+   - Phantom should show a "Devnet" badge
+   - Balance should be ≥ 0.05 SOL for transaction fees
+   - If empty: tap "Get SOL" in Phantom, or run:
+     ```bash
+     solana airdrop 2 <WALLET_ADDRESS> --url devnet
+     ```
+4. **Verify the cluster visually:**
+   - Phantom home screen should show "Devnet" or "Testnet" indicator
+   - If you see real USD balances, you're still on mainnet — go back to step 2
+5. **Keep Phantom on devnet for the entire demo** — do not toggle back
+
+> **Why this happens:** Phantom's injected provider does not expose which cluster
+> it's connected to. The frontend cannot auto-detect a mainnet/devnet mismatch.
+> The signed transaction goes to whatever network Phantom is on. The worker then
+> queries devnet RPC and never finds the signature. This is a known limitation
+> (see handover #035) — the worker now handles this gracefully (returns "pending,
+> retry" instead of erroring), but the deposit will never confirm if the networks
+> don't match.
+
+---
+
 ## Pre-Demo Setup (do before recording/live)
 
 > **Big-screen setup:** Open `/dashboard/live` in a separate browser tab on the projector **before** the demo starts. Sign in with the staff account. Leave it running throughout — it polls every 2.5s and updates as the room acts.

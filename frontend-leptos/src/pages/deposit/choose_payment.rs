@@ -52,6 +52,11 @@ pub fn choose_payment_view(
     let can_reclaim = data_clone.in_person_available.unwrap_or(false);
     let usdc_formatted = format_usdc(data.deposit_amount_usdc);
     let thb_amount = data_clone.deposit_amount_thb;
+    let show_thb = thb_amount > 0;
+    // Grid becomes single-column when exactly one method is available.
+    let single_card = show_usdc != show_thb;
+    // Degenerate case: admin set neither THB nor USDC amounts.
+    let no_methods = !show_usdc && !show_thb;
 
     // Reactive countdown for the deposit deadline banner.
     // Computes deadline from registration_date + deposit_deadline_hours, then ticks every second.
@@ -158,42 +163,62 @@ pub fn choose_payment_view(
             let hus = handle_upload_slip.clone();
             view! {
                 {move || match payment_choice.get() {
-                    None => view! {
-                        <div class="dep2-method-grid"
-                            class:dep2-method-grid--single={!show_usdc}>
-                            // THB card — always shown, recommended
-                            <div class="dep2-method-card dep2-method-card--recommended"
-                                on:click=move |_| set_payment_choice.set(Some(PaymentChoice::Thb))>
-                                <div class="dep2-method-name">"THB"</div>
-                                <div class="dep2-method-amount">
-                                    {format!("฿{} THB", thb_amount)}
+                    None => {
+                        if no_methods {
+                            // Admin set neither THB nor USDC — surface a clear
+                            // message instead of an empty grid.
+                            view! {
+                                <div class="dep2-deadline dep2-deadline--danger">
+                                    <span class="dep2-deadline-text">
+                                        "No payment methods are configured for this event. Please contact the organizer."
+                                    </span>
                                 </div>
-                                <div class="dep2-method-label">"via PromptPay"</div>
-                                <button class="dep2-method-cta"
-                                    on:click=move |ev| {
-                                        ev.stop_propagation();
-                                        set_payment_choice.set(Some(PaymentChoice::Thb));
-                                    }>
-                                    "Pay with PromptPay →"
-                                </button>
-                            </div>
+                            }.into_any()
+                        } else {
+                            view! {
+                                <div class="dep2-method-grid"
+                                    class:dep2-method-grid--single={single_card}>
+                                    // THB card — shown only when admin set a THB amount
+                                    {if show_thb {
+                                        view! {
+                                            <div class="dep2-method-card dep2-method-card--recommended"
+                                                on:click=move |_| set_payment_choice.set(Some(PaymentChoice::Thb))>
+                                                <div class="dep2-method-name">"THB"</div>
+                                                <div class="dep2-method-amount">
+                                                    {format!("฿{} THB", thb_amount)}
+                                                </div>
+                                                <div class="dep2-method-label">"via PromptPay"</div>
+                                                <button class="dep2-method-cta"
+                                                    on:click=move |ev| {
+                                                        ev.stop_propagation();
+                                                        set_payment_choice.set(Some(PaymentChoice::Thb));
+                                                    }>
+                                                    "Pay with PromptPay →"
+                                                </button>
+                                            </div>
+                                        }.into_any()
+                                    } else {
+                                        view! { <div></div> }.into_any()
+                                    }}
 
-                            // USDC card — only if accepted
-                            {if show_usdc {
-                                view! {
-                                    <div class="dep2-method-card"
-                                        on:click=move |_| set_payment_choice.set(Some(PaymentChoice::Usdc))>
-                                        <div class="dep2-method-name">"USDC"</div>
-                                        <div class="dep2-method-amount">
-                                            {format!("{} USDC", usdc_formatted)}
-                                        </div>
-                                        <div class="dep2-method-label">"via Solana"</div>
-                                    </div>
-                                }.into_any()
-                            } else {
-                                view! { <div></div> }.into_any()
-                            }}
-                        </div>
+                                    // USDC card — only if accepted
+                                    {if show_usdc {
+                                        view! {
+                                            <div class="dep2-method-card"
+                                                on:click=move |_| set_payment_choice.set(Some(PaymentChoice::Usdc))>
+                                                <div class="dep2-method-name">"USDC"</div>
+                                                <div class="dep2-method-amount">
+                                                    {format!("{} USDC", usdc_formatted)}
+                                                </div>
+                                                <div class="dep2-method-label">"via Solana"</div>
+                                            </div>
+                                        }.into_any()
+                                    } else {
+                                        view! { <div></div> }.into_any()
+                                    }}
+                                </div>
+                            }.into_any()
+                        }
                     }.into_any(),
 
                     Some(PaymentChoice::Usdc) => view! {
