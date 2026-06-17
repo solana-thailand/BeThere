@@ -336,6 +336,10 @@ pub fn routes(state: AppState) -> Router<()> {
         .route("/contacts", get(contacts::list_contacts_handler))
         .route("/contacts/events", get(contacts::list_events_tab_handler))
         .route("/contacts/stats", get(contacts::contacts_stats_handler))
+        .route(
+            "/contacts/audience",
+            get(contacts::audience_handler),
+        )
         .route("/contacts/sync", post(contacts::sync_contacts_handler))
         // Organization management (protected — super admin CRUD)
         .route("/orgs", get(orgs::list_orgs).post(orgs::create_org))

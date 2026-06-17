@@ -8,6 +8,7 @@
 pub(crate) mod fetch;
 mod types;
 mod campaign;
+mod contacts;
 mod dashboard;
 mod event;
 mod attendee;
@@ -21,6 +22,7 @@ mod wallet;
 // Re-export everything so existing `use crate::api::*` still works.
 pub use types::*;
 pub use campaign::*;
+pub use contacts::*;
 pub use dashboard::*;
 pub use event::*;
 pub use attendee::*;

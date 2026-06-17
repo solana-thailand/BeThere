@@ -235,6 +235,9 @@ pub fn Admin() -> impl IntoView {
     let (walkin_syncing, set_walkin_syncing) = signal(false);
     let (walkin_sync_result, set_walkin_sync_result) = signal(None::<api::WalkinSyncResponse>);
 
+    // Cross-event audience aggregation export state
+    let (audience_exporting, set_audience_exporting) = signal(false);
+
     // Active section — Events by default (organizers create event first)
     let (active_section, set_active_section) = signal(AdminSection::Events);
 
@@ -691,6 +694,54 @@ pub fn Admin() -> impl IntoView {
         });
     };
 
+    // Handle cross-event audience CSV export (ALL events).
+    //
+    // This is the unique cross-event view: deduped by email across every event,
+    // with per-email participation metrics (events joined, check-ins, etc.).
+    // It intentionally does NOT scope to the currently selected event — the
+    // per-event detail is already covered by the "Export CSV" button above.
+    // No event needs to be selected.
+    let handle_audience_export = move |_: web_sys::MouseEvent| {
+        if audience_exporting.get() {
+            return;
+        }
+        set_audience_exporting.set(true);
+        leptos::task::spawn_local(async move {
+            // None ⇒ aggregate across ALL events (matches the backend default).
+            match api::export_audience_csv(None).await {
+                Ok(data) => {
+                    let filename = data.filename.clone();
+                    let csv = data.csv.clone();
+                    match (filename, csv) {
+                        (Some(f), Some(c)) => {
+                            download_csv(&f, &c);
+                            components::show_toast(
+                                &set_toast,
+                                &format!("Exported {} distinct emails", data.total),
+                                ToastType::Success,
+                            );
+                        }
+                        _ => {
+                            components::show_toast(
+                                &set_toast,
+                                "Audience export returned no CSV payload",
+                                ToastType::Warning,
+                            );
+                        }
+                    }
+                }
+                Err(e) => {
+                    components::show_toast(
+                        &set_toast,
+                        &format!("Audience export failed: {e}"),
+                        ToastType::Error,
+                    );
+                }
+            }
+            set_audience_exporting.set(false);
+        });
+    };
+
     // Handle walk-in sync to Google Sheet
     let handle_walkin_sync = move |_: web_sys::MouseEvent| {
         if walkin_syncing.get() {
@@ -1050,6 +1101,21 @@ pub fn Admin() -> impl IntoView {
                         </Show>
                         <button class="btn btn-outline btn-sm" on:click=handle_export_csv>
                             "Export CSV"
+                        </button>
+                        // Cross-event audience export — deduped by email across ALL events.
+                        // Not gated by event format; works without an event selected.
+                        <button
+                            class="btn btn-outline btn-sm"
+                            on:click=handle_audience_export
+                            disabled=move || audience_exporting.get()
+                        >
+                            {move || {
+                                if audience_exporting.get() {
+                                    "Exporting...".to_string()
+                                } else {
+                                    "Export Audience (All Events)".to_string()
+                                }
+                            }}
                         </button>
                         <button class="btn btn-outline btn-sm" on:click=handle_select_all>
                             "Select All Pending"

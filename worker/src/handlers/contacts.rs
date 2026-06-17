@@ -4,14 +4,17 @@
 //! master contacts sheet that tracks all attendees across all events.
 //! Also manages the Events tab (event registry in the same sheet).
 
-use axum::extract::State;
+use axum::extract::{Query, State};
+use axum::Extension;
 use serde::Serialize;
 
+use crate::db::contacts::{AudienceRow, audience_aggregate};
 use crate::error::{ApiOk, WorkerError};
 use crate::sheets;
 use crate::sheets::contacts::{self, ContactUpsert};
 use crate::sheets::events_tab;
 use crate::state::AppState;
+use event_checkin_domain::models::auth::Claims;
 use event_checkin_domain::models::error::AppError;
 
 // ---------------------------------------------------------------------------
@@ -322,4 +325,164 @@ pub async fn sync_contacts_handler(
         updated,
         errors,
     }))
+}
+
+// ---------------------------------------------------------------------------
+// GET /api/contacts/audience — cross-event audience aggregation
+// ---------------------------------------------------------------------------
+
+/// Query params for `GET /api/contacts/audience`.
+#[derive(Debug, serde::Deserialize)]
+pub struct AudienceQuery {
+    /// Comma-separated event IDs to scope the aggregation.
+    /// Omit (or empty) to aggregate across ALL events.
+    pub event_ids: Option<String>,
+    /// Output format: `"csv"` to attach a CSV payload for download; anything
+    /// else (or omitted) returns JSON rows only.
+    pub format: Option<String>,
+}
+
+/// Response for `GET /api/contacts/audience`.
+///
+/// `rows` is always populated. `csv` / `filename` are attached only when
+/// `format=csv` is requested — the frontend can use them directly for a
+/// download, or build its own CSV from `rows` like the existing admin export.
+#[derive(Serialize)]
+pub struct AudienceResponse {
+    /// Number of distinct emails in the result.
+    pub total: usize,
+    /// Per-email aggregate rows.
+    pub rows: Vec<AudienceRow>,
+    /// Present only when `format=csv`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub csv: Option<String>,
+    /// Present only when `format=csv`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub filename: Option<String>,
+}
+
+/// `GET /api/contacts/audience?event_ids=a,b&format=csv`
+///
+/// Cross-event audience aggregation. Queries the `attendees` table directly
+/// (source of truth), dedupes by `LOWER(email)`, and returns per-email
+/// participation metrics enriched with `developer_profiles`.
+///
+/// - `event_ids` omitted/empty ⇒ ALL events.
+/// - `format=csv` ⇒ response also includes a CSV string + filename for download.
+///
+/// This intentionally bypasses the denormalized `contacts.events_joined` CSV
+/// column (which drifts); the `GROUP BY` here is computed fresh from real
+/// registration rows.
+#[worker::send]
+pub async fn audience_handler(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Query(query): Query<AudienceQuery>,
+) -> Result<ApiOk<AudienceResponse>, WorkerError> {
+    let db = state
+        .d1
+        .as_deref()
+        .ok_or_else(|| AppError::Internal("D1 database not available".to_string()))?;
+
+    // Parse `event_ids=a,b , c` → ["a","b","c"]. Empty/missing ⇒ all events.
+    let parsed_ids: Option<Vec<String>> = query.event_ids.as_deref().map(|s| {
+        s.split(',')
+            .map(|p| p.trim().to_string())
+            .filter(|p| !p.is_empty())
+            .collect::<Vec<String>>()
+    });
+    let event_ids: Option<&[String]> = match &parsed_ids {
+        Some(v) if !v.is_empty() => Some(v.as_slice()),
+        _ => None,
+    };
+
+    let rows = audience_aggregate(db, event_ids)
+        .await
+        .map_err(|e| AppError::Internal(format!("D1 audience aggregate failed: {e}")))?;
+
+    let total = rows.len();
+
+    let want_csv = match query.format.as_deref() {
+        Some(f) => f.eq_ignore_ascii_case("csv"),
+        None => false,
+    };
+
+    let (csv, filename) = match want_csv {
+        true => (
+            Some(build_audience_csv(&rows)),
+            Some(audience_csv_filename(event_ids)),
+        ),
+        false => (None, None),
+    };
+
+    tracing::info!(
+        total,
+        scoped = event_ids.is_some(),
+        want_csv,
+        staff = %claims.email,
+        "audience aggregation exported"
+    );
+
+    Ok(ApiOk::new(AudienceResponse {
+        total,
+        rows,
+        csv,
+        filename,
+    }))
+}
+
+/// Build a CSV string from audience rows.
+///
+/// Column order mirrors `AudienceRow` field order, with header names chosen for
+/// spreadsheet readability (spaces, not snake_case).
+fn build_audience_csv(rows: &[AudienceRow]) -> String {
+    let mut csv = String::from(
+        "Email,Name,Events Joined,Checked In,Approved,In-Person,Online,\
+         First Registered,Last Registered,Event IDs,Display Name,Experience,\
+         Role,Location,Wallet,Consent Outreach\n",
+    );
+    for r in rows {
+        csv.push_str(&format!(
+            "{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}\n",
+            escape_csv(&r.email),
+            escape_csv(&r.name),
+            r.events_joined,
+            r.checked_in_count,
+            r.approved_count,
+            r.in_person_count,
+            r.online_count,
+            escape_csv(r.first_registered.as_deref().unwrap_or("")),
+            escape_csv(r.last_registered.as_deref().unwrap_or("")),
+            escape_csv(&r.event_ids),
+            escape_csv(r.display_name.as_deref().unwrap_or("")),
+            escape_csv(r.experience_level.as_deref().unwrap_or("")),
+            escape_csv(r.primary_role.as_deref().unwrap_or("")),
+            escape_csv(r.location_city.as_deref().unwrap_or("")),
+            escape_csv(r.wallet_address.as_deref().unwrap_or("")),
+            r.consent_outreach,
+        ));
+    }
+    csv
+}
+
+/// Deterministic filename for the audience CSV export.
+///
+/// No timestamp: the export is computed fresh on each call, and a stable name
+/// avoids `chrono`/`Utc::now()` edge cases on the wasm32 Workers runtime.
+fn audience_csv_filename(event_ids: Option<&[String]>) -> String {
+    match event_ids {
+        Some(ids) => format!("audience-{}events.csv", ids.len()),
+        None => "audience-all.csv".to_string(),
+    }
+}
+
+/// Escape a CSV field containing commas, quotes, or newlines.
+///
+/// Mirrors the `escape_csv` helper in `walkin.rs` — kept local rather than
+/// promoted to a shared util to match the established per-handler convention.
+fn escape_csv(s: &str) -> String {
+    match s.contains(',') || s.contains('"') || s.contains('\n') {
+        true => format!("\"{}\"", s.replace('"', "\"\"")),
+        false => s.to_string(),
+    }
 }
