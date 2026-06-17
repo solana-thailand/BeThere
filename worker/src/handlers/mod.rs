@@ -274,6 +274,7 @@ pub fn routes(state: AppState) -> Router<()> {
                 .delete(events::archive_event),
         )
         .route("/events/{id}/restore", post(events::restore_event))
+        .route("/events/{id}/duplicate", post(events::duplicate_event))
         .route("/events/{id}/delete", delete(events::hard_delete_event))
         .route("/events/{id}/audit", get(events::get_event_audit))
         // Registration form config (protected — organizer configures per-event form fields)
