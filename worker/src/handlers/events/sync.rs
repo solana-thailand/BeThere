@@ -30,6 +30,11 @@ pub struct SheetSyncResponse {
     pub updated: usize,
     pub skipped: usize,
     pub errors: usize,
+    /// First per-row error message — surfaced for diagnostics because
+    /// `tracing-wasm` buffers `warn!` and does not flush inside request
+    /// handlers under `wrangler dev --remote`. `None` when there are no errors.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub first_error: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -104,6 +109,7 @@ pub async fn sync_sheet_to_d1(
             updated: 0,
             skipped: 0,
             errors: 0,
+            first_error: None,
         }));
     }
 
@@ -115,11 +121,33 @@ pub async fn sync_sheet_to_d1(
         existing.iter().map(|a| a.api_id.clone()).collect()
     };
 
+    // Detect claim_tokens that appear more than once within this batch.
+    // Legacy / misaligned sheets (e.g. Luma imports where `claim_token` reads
+    // a garbage column) can yield repeated values that collide on the
+    // `claim_token UNIQUE` constraint and abort the whole row. We null out the
+    // colliding tokens below — the live check-in flow mints fresh tokens
+    // anyway, and the sync's job is identity + lifecycle, not the historical
+    // (often meaningless) claim token from the sheet.
+    let dup_tokens: std::collections::HashSet<String> = {
+        let mut counts: std::collections::HashMap<&str, usize> =
+            std::collections::HashMap::new();
+        for a in &sheet_attendees {
+            if let Some(t) = a.claim_token.as_deref().filter(|t| !t.is_empty()) {
+                *counts.entry(t).or_default() += 1;
+            }
+        }
+        counts
+            .into_iter()
+            .filter_map(|(t, n)| if n > 1 { Some(t.to_string()) } else { None })
+            .collect()
+    };
+
     let mut synced = 0usize;
     let mut inserted = 0usize;
     let mut updated = 0usize;
     let mut skipped = 0usize;
     let mut errors = 0usize;
+    let mut first_error: Option<String> = None;
 
     for attendee in &sheet_attendees {
         let email = attendee.email.trim();
@@ -130,7 +158,28 @@ pub async fn sync_sheet_to_d1(
 
         let is_new = !existing_ids.contains(&attendee.api_id);
 
-        match sync_one_attendee(d1, &event_id, attendee).await {
+        // If this attendee's claim_token collides within the batch, clone the
+        // row with claim_token = None so the UNIQUE constraint doesn't abort
+        // the import (see `dup_tokens` build above for rationale).
+        let needs_null_token = attendee
+            .claim_token
+            .as_deref()
+            .filter(|t| !t.is_empty())
+            .is_some_and(|t| dup_tokens.contains(t));
+
+        let owned_normalised: Attendee;
+        let upsert_ref: &Attendee = if needs_null_token {
+            owned_normalised = {
+                let mut c = attendee.clone();
+                c.claim_token = None;
+                c
+            };
+            &owned_normalised
+        } else {
+            attendee
+        };
+
+        match sync_one_attendee(d1, &event_id, upsert_ref).await {
             Ok(()) => {
                 if is_new {
                     inserted += 1;
@@ -146,6 +195,14 @@ pub async fn sync_sheet_to_d1(
                     error = %e,
                     "failed to sync attendee"
                 );
+                // Capture the first error verbatim so it reaches the caller —
+                // tracing-wasm swallows `warn!` under `wrangler dev --remote`.
+                if first_error.is_none() {
+                    first_error = Some(format!(
+                        "api_id={api_id} email={email}: {e}",
+                        api_id = attendee.api_id,
+                    ));
+                }
                 errors += 1;
             }
         }
@@ -170,6 +227,7 @@ pub async fn sync_sheet_to_d1(
         updated,
         skipped,
         errors,
+        first_error,
     }))
 }
 
