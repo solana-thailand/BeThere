@@ -164,11 +164,17 @@ pass "DRY_RUN  = $DRY_RUN"
 
 # --- 1. Health check ---
 section "1. Health check"
-health=$(curl -s "$BASE_URL/api/health" || echo '{"ok":false}')
-if echo "$health" | json_get "['ok']" | grep -qi "true"; then
-  pass "worker healthy at $BASE_URL"
+# /api/health returns {"status":"ok","d1":{"connected":true,...}} — no top-level
+# `ok` field. Check both `status` and `d1.connected` so a half-broken worker
+# (D1 unreachable) is still flagged as unhealthy.
+health=$(curl -s "$BASE_URL/api/health" || echo '{"status":"error"}')
+health_status=$(echo "$health" | json_get "['status']")
+d1_connected=$(echo "$health" | json_get "['d1']['connected']")
+if [[ "$health_status" == "ok" && "$d1_connected" == "True" ]]; then
+  pass "worker healthy at $BASE_URL (status=ok, d1.connected=true)"
 else
-  fail "worker not healthy — is \`bash deploy.sh dev --remote\` running?"
+  fail "worker not healthy — is `bash deploy.sh dev --remote` running?"
+  echo "   status=$health_status d1.connected=$d1_connected"
   echo "   Response: $(echo "$health" | head -c 200)"
   exit 1
 fi
@@ -272,6 +278,8 @@ info "distinct emails now in D1 for this event: $post_total"
 delta=$((post_total - pre_total))
 if [[ "$delta" -gt 0 ]]; then
   pass "+$delta new emails after sync"
+elif [[ "$post_total" -gt 0 && "$post_total" -eq "$pre_total" ]]; then
+  pass "audience already in sync ($post_total emails, idempotent re-run — no new rows needed)"
 else
   fail "no increase in audience count (pre=$pre_total, post=$post_total)"
 fi
