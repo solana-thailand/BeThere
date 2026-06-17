@@ -167,6 +167,19 @@ pub struct DepositStatusResponse {
     /// Hours after event_end for refund deadline.
     #[serde(default)]
     pub refund_deadline_hours: u32,
+    /// Absolute refund deadline as Unix epoch milliseconds
+    /// (= `event_end_ms + refund_deadline_hours * 3_600_000`).
+    /// Precomputed by the worker so the frontend gate can evaluate the
+    /// no-show path (`now < refund_deadline_ms`) without recomputing.
+    /// `0` when not configured (legacy/missing data).
+    #[serde(default)]
+    pub refund_deadline_ms: i64,
+    /// Whether the attendee has checked in (off-chain source of truth:
+    /// Google Sheets / D1). Drives the two-path refund window on the
+    /// frontend: checked-in attendees may refund anytime after `event_end`;
+    /// no-shows may only refund before `refund_deadline_ms`.
+    #[serde(default)]
+    pub checked_in: bool,
     /// Event name for context display on the deposit page.
     #[serde(default)]
     pub event_name: String,
