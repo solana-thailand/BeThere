@@ -359,6 +359,13 @@ pub struct AudienceResponse {
     /// Present only when `format=csv`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub filename: Option<String>,
+    /// Event IDs referenced by audience rows but absent from the events
+    /// registry ("orphan" events). Attendees from these events appear in this
+    /// cross-event view but can't be selected in the per-event admin dashboard.
+    /// Empty (and omitted from JSON) when every referenced event is registered
+    /// or when the registry itself couldn't be read (non-fatal).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub unregistered_event_ids: Vec<String>,
 }
 
 /// `GET /api/contacts/audience?event_ids=a,b&format=csv`
@@ -415,10 +422,30 @@ pub async fn audience_handler(
         false => (None, None),
     };
 
+    // ── Orphan event_id detection (data hygiene) ──
+    //
+    // Each row's `event_ids` is a `GROUP_CONCAT(DISTINCT event_id)` CSV string.
+    // Collect every referenced event_id across all rows, diff against the
+    // events registry, and surface any that are NOT registered. Attendees from
+    // unregistered events appear here (cross-event view) but can't be selected
+    // in the per-event admin dashboard — the frontend warns the operator so
+    // those rows aren't presumed "missing".
+    let referenced: std::collections::HashSet<String> = rows
+        .iter()
+        .flat_map(|r| r.event_ids.split(','))
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+    let registered = registered_event_ids(&state).await;
+    let mut unregistered_event_ids: Vec<String> =
+        referenced.difference(&registered).cloned().collect();
+    unregistered_event_ids.sort();
+
     tracing::info!(
         total,
         scoped = event_ids.is_some(),
         want_csv,
+        unregistered = unregistered_event_ids.len(),
         staff = %claims.email,
         "audience aggregation exported"
     );
@@ -428,7 +455,35 @@ pub async fn audience_handler(
         rows,
         csv,
         filename,
+        unregistered_event_ids,
     }))
+}
+
+// ---------------------------------------------------------------------------
+// Orphan event_id detection — data hygiene helper
+// ---------------------------------------------------------------------------
+
+/// Resolve the set of registered event IDs from the events registry.
+///
+/// Mirrors the resolution in `list_events` / `sync_contacts_handler`:
+/// KV (`event_store::get_event_index`) first, then D1
+/// (`db::events::list_events_as_meta`) fallback. Non-fatal — returns an empty
+/// set if neither source is available, so the audience endpoint still serves
+/// rows when the registry can't be read (the orphan warning simply won't fire).
+async fn registered_event_ids(state: &AppState) -> std::collections::HashSet<String> {
+    if let Some(kv_ref) = state.events_kv.as_ref() {
+        if let Ok(index) = crate::event_store::get_event_index(kv_ref).await {
+            if !index.events.is_empty() {
+                return index.events.into_iter().map(|e| e.id).collect();
+            }
+        }
+    }
+    if let Some(db) = state.d1.as_deref() {
+        if let Ok(metas) = crate::db::events::list_events_as_meta(db).await {
+            return metas.into_iter().map(|e| e.id).collect();
+        }
+    }
+    Default::default()
 }
 
 /// Build a CSV string from audience rows.

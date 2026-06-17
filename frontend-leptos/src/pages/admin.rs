@@ -720,6 +720,33 @@ pub fn Admin() -> impl IntoView {
                                 &format!("Exported {} distinct emails", data.total),
                                 ToastType::Success,
                             );
+                            // Orphan event_id warning — attendees from
+                            // unregistered events appear here but can't be
+                            // selected in the per-event admin dashboard.
+                            if !data.unregistered_event_ids.is_empty() {
+                                let n = data.unregistered_event_ids.len();
+                                let preview = data
+                                    .unregistered_event_ids
+                                    .iter()
+                                    .take(3)
+                                    .cloned()
+                                    .collect::<Vec<_>>()
+                                    .join(", ");
+                                let more = if n > 3 {
+                                    format!(" (+{} more)", n - 3)
+                                } else {
+                                    String::new()
+                                };
+                                components::show_toast(
+                                    &set_toast,
+                                    &format!(
+                                        "{n} unregistered event(s) not in the event selector: \
+                                         {preview}{more}. Their attendees are visible here \
+                                         but not in per-event views.",
+                                    ),
+                                    ToastType::Warning,
+                                );
+                            }
                         }
                         _ => {
                             components::show_toast(

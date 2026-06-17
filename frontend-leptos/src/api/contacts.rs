@@ -72,6 +72,12 @@ pub struct AudienceResponse {
     pub rows: Vec<AudienceRow>,
     pub csv: Option<String>,
     pub filename: Option<String>,
+    /// Event IDs referenced by audience rows but absent from the events
+    /// registry ("orphan" events). The backend omits this when empty
+    /// (`skip_serializing_if = "Vec::is_empty"`); default to empty here so
+    /// older responses still deserialize.
+    #[serde(default)]
+    pub unregistered_event_ids: Vec<String>,
 }
 
 // ===== Path builder =====
