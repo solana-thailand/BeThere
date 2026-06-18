@@ -471,17 +471,16 @@ pub async fn audience_handler(
 /// set if neither source is available, so the audience endpoint still serves
 /// rows when the registry can't be read (the orphan warning simply won't fire).
 async fn registered_event_ids(state: &AppState) -> std::collections::HashSet<String> {
-    if let Some(kv_ref) = state.events_kv.as_ref() {
-        if let Ok(index) = crate::event_store::get_event_index(kv_ref).await {
-            if !index.events.is_empty() {
-                return index.events.into_iter().map(|e| e.id).collect();
-            }
-        }
+    if let Some(kv_ref) = state.events_kv.as_ref()
+        && let Ok(index) = crate::event_store::get_event_index(kv_ref).await
+        && !index.events.is_empty()
+    {
+        return index.events.into_iter().map(|e| e.id).collect();
     }
-    if let Some(db) = state.d1.as_deref() {
-        if let Ok(metas) = crate::db::events::list_events_as_meta(db).await {
-            return metas.into_iter().map(|e| e.id).collect();
-        }
+    if let Some(db) = state.d1.as_deref()
+        && let Ok(metas) = crate::db::events::list_events_as_meta(db).await
+    {
+        return metas.into_iter().map(|e| e.id).collect();
     }
     Default::default()
 }
