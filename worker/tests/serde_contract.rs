@@ -15,7 +15,7 @@ use event_checkin_domain::models::api::{QrGenerationStatus, QuizStatus};
 use event_checkin_domain::models::attendee::CheckInStatus;
 use event_checkin_domain::models::deposit::DepositMethod;
 use event_checkin_domain::models::event::{
-    EscrowStatus, EventFormat, EventStatus, EventVisibility, OnlineOpenMode,
+    DuplicateEventRequest, EscrowStatus, EventFormat, EventStatus, EventVisibility, OnlineOpenMode,
 };
 
 // ================================================================================================
@@ -265,4 +265,51 @@ fn full_event_meta_json_round_trips() {
     assert_eq!(meta.escrow_status, EscrowStatus::Initialized);
     assert_eq!(meta.event_format, EventFormat::Hybrid);
     assert_eq!(meta.visibility, EventVisibility::Public);
+}
+
+// ================================================================================================
+// DuplicateEventRequest — optional body for POST /api/events/{id}/duplicate (Issue #055)
+//
+// The handler accepts `Option<Json<DuplicateEventRequest>>` so it can be called
+// with no body at all (frontend one-click duplicate). These tests pin the
+// deserialization contract: empty/missing fields must default to empty strings,
+// matching the `Default` impl used by `.unwrap_or_default()` in the handler.
+// ================================================================================================
+
+#[test]
+fn duplicate_event_request_empty_object_uses_defaults() {
+    let req: DuplicateEventRequest =
+        serde_json::from_str("{}").expect("empty object should parse with defaults");
+    assert_eq!(req.new_sheet_id, "");
+    assert_eq!(req.new_name, "");
+}
+
+#[test]
+fn duplicate_event_request_parses_overrides() {
+    let json = r#"{"new_sheet_id":"new-sheet-abc","new_name":"Copied Event Name"}"#;
+    let req: DuplicateEventRequest =
+        serde_json::from_str(json).expect("payload with overrides should parse");
+    assert_eq!(req.new_sheet_id, "new-sheet-abc");
+    assert_eq!(req.new_name, "Copied Event Name");
+}
+
+#[test]
+fn duplicate_event_request_partial_payload_defaults_missing_fields() {
+    // Only new_name provided; new_sheet_id should default to empty.
+    let json = r#"{"new_name":"Just A Name"}"#;
+    let req: DuplicateEventRequest =
+        serde_json::from_str(json).expect("partial payload should parse");
+    assert_eq!(req.new_sheet_id, "");
+    assert_eq!(req.new_name, "Just A Name");
+}
+
+#[test]
+fn duplicate_event_request_default_matches_empty_object_parse() {
+    // The handler uses `.unwrap_or_default()` when no body is provided; this
+    // verifies the Default impl and the empty-object deserialization agree.
+    let from_default = DuplicateEventRequest::default();
+    let from_empty: DuplicateEventRequest =
+        serde_json::from_str("{}").expect("empty object should parse");
+    assert_eq!(from_default.new_sheet_id, from_empty.new_sheet_id);
+    assert_eq!(from_default.new_name, from_empty.new_name);
 }

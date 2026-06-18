@@ -198,6 +198,7 @@ pub fn EventsPage(
                                 let edit_id = evt.id.clone();
                                 let restore_id = evt.id.clone();
                                 let delete_id = evt.id.clone();
+                                let dup_id = evt.id.clone();
                                 let can_manage = components::can_manage_events(&user_role.get());
                                 let is_draft = evt.status == api::EventStatus::Draft;
                                 let is_archived = evt.status == api::EventStatus::Archived;
@@ -250,6 +251,63 @@ pub fn EventsPage(
                                                         });
                                                     }>
                                                         "Edit Event"
+                                                    </button>
+                                                }.into_any()
+                                            } else {
+                                                view! { <span></span> }.into_any()
+                                            }}
+                                            // Duplicate button — gated by can_manage_events.
+                                            // Copies event into a new Draft (Decision A1+B1, Issue #055).
+                                            {if can_manage {
+                                                let did = dup_id.clone();
+                                                let dname = ename.clone();
+                                                view! {
+                                                    <button
+                                                        class="btn btn-outline btn-sm"
+                                                        on:click=move |_| {
+                                                            let did = did.clone();
+                                                            let dname = dname.clone();
+                                                            let set_toast = set_toast;
+                                                            let reload = do_reload;
+                                                            let confirm_msg = format!("Duplicate '{dname}' into a new Draft event?");
+                                                            if !web_sys::window().unwrap().confirm_with_message(&confirm_msg).unwrap_or(false) {
+                                                                return;
+                                                            }
+                                                            leptos::task::spawn_local(async move {
+                                                                match api::duplicate_event(&did).await {
+                                                                    Ok(data) => {
+                                                                        // Inline any non-fatal warnings (e.g. shared sheet_id
+                                                                        // under Decision A1) into the success toast so the
+                                                                        // organizer sees them without depending on a
+                                                                        // Warning toast variant.
+                                                                        let mut msg = format!(
+                                                                            "Duplicated as '{}' (Draft)",
+                                                                            data.name
+                                                                        );
+                                                                        for warning in &data.warnings {
+                                                                            msg.push_str("\n⚠ ");
+                                                                            msg.push_str(warning);
+                                                                        }
+                                                                        components::show_toast(
+                                                                            &set_toast,
+                                                                            &msg,
+                                                                            components::ToastType::Success,
+                                                                        );
+                                                                        reload();
+                                                                    }
+                                                                    Err(e) => {
+                                                                        log::error!("[events-page] duplicate failed: {e}");
+                                                                        components::show_toast(
+                                                                            &set_toast,
+                                                                            &format!("Failed to duplicate: {e}"),
+                                                                            components::ToastType::Error,
+                                                                        );
+                                                                    }
+                                                                }
+                                                            });
+                                                        }
+                                                    >
+                                                        "Duplicate"
                                                     </button>
                                                 }.into_any()
                                             } else {

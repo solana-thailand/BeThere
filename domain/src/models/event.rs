@@ -808,6 +808,23 @@ pub struct CreateEventRequest {
     #[serde(default)]
     pub calendar_subscribe_url: String,
 }
+
+/// Request body for POST /api/events/{id}/duplicate — copy event settings
+/// into a new Draft. All fields optional; defaults to copying source verbatim
+/// with de-collided slug and "(Copy)" name suffix.
+///
+/// See `.issues/055_duplicate_event.md` for design (Decisions A1 + B1).
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct DuplicateEventRequest {
+    /// Override the source's sheet_id. If empty, source's sheet_id is reused
+    /// (with a UI warning) because sheet_id is a required field downstream.
+    #[serde(default)]
+    pub new_sheet_id: String,
+    /// Override the auto-generated "{name} (Copy)" display name.
+    #[serde(default)]
+    pub new_name: String,
+}
+
 /// Request body for PUT /api/events/{id} — update an existing event.
 /// All fields are optional; only provided fields are updated.
 #[derive(Debug, Clone, Serialize, Deserialize)]

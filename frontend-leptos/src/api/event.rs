@@ -716,3 +716,62 @@ pub async fn restore_event(id: &str) -> Result<EventMutationData, ApiError> {
         status: 0,
     })
 }
+
+/// Response payload for POST /api/events/{id}/duplicate.
+///
+/// Mirrors `EventMutationData` plus the source event id and a list of
+/// non-fatal warnings (e.g. sheet_id collision risk under Decision A1)
+/// that the UI should surface as a yellow toast.
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+pub struct DuplicateEventData {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub slug: String,
+    #[serde(default)]
+    pub status: String,
+    /// The id of the event this Draft was copied from.
+    #[serde(default)]
+    pub source_id: String,
+    /// Non-fatal warnings (e.g. shared sheet_id). Empty when no warnings.
+    #[serde(default)]
+    pub warnings: Vec<String>,
+    #[serde(default)]
+    pub updated_at: String,
+}
+
+/// POST /api/events/{id}/duplicate — copy an event's settings into a new Draft.
+///
+/// On success, callers should render `data.warnings` (if any) as a yellow
+/// toast in addition to the success toast, per Decision A1 in
+/// `.issues/055_duplicate_event.md`.
+pub async fn duplicate_event(id: &str) -> Result<DuplicateEventData, ApiError> {
+    let path = format!("/events/{id}/duplicate");
+    let response = api_post(&path).await?;
+
+    if !response.ok() {
+        let body: ApiResponse<()> = response_json(&response).await.unwrap_or(ApiResponse {
+            success: false,
+            data: None,
+            error: Some("Duplicate failed".to_string()),
+            correlation_id: None,
+        });
+        return Err(ApiError {
+            message: body.error.unwrap_or_default(),
+            status: 0,
+        });
+    }
+
+    let wrapper: ApiResponse<DuplicateEventData> =
+        response_json(&response).await.map_err(|e| ApiError {
+            message: format!("Failed to parse duplicate response: {e}"),
+            status: 0,
+        })?;
+
+    wrapper.data.ok_or_else(|| ApiError {
+        message: wrapper.error.unwrap_or("No data".to_string()),
+        status: 0,
+    })
+}
