@@ -285,7 +285,19 @@ pub fn PublicEvent() -> impl IntoView {
                 ().into_any()
             }
         }}
-        <div class="center-page">
+        <div class="center-page pe-bg-anim">
+            // Latent-space animated background layer (nebula mesh, color blobs,
+            // aurora sweep, twinkling starfield). Purely decorative — aria-hidden,
+            // pointer-events disabled in CSS.
+            <div class="pe-bg-layer" aria-hidden="true">
+                <div class="pe-bg-nebula"></div>
+                <div class="pe-bg-aurora"></div>
+                <div class="pe-bg-orb pe-bg-orb-1"></div>
+                <div class="pe-bg-orb pe-bg-orb-2"></div>
+                <div class="pe-bg-orb pe-bg-orb-3"></div>
+                <div class="pe-bg-orb pe-bg-orb-4"></div>
+                <div class="pe-bg-stars"></div>
+            </div>
             <div class="container layout-col-center pe-container-nogap">
 
                 // Back link
