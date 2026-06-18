@@ -8,6 +8,8 @@
 pub(crate) mod fetch;
 mod types;
 mod campaign;
+mod contacts;
+mod dashboard;
 mod event;
 mod attendee;
 mod deposit;
@@ -20,6 +22,8 @@ mod wallet;
 // Re-export everything so existing `use crate::api::*` still works.
 pub use types::*;
 pub use campaign::*;
+pub use contacts::*;
+pub use dashboard::*;
 pub use event::*;
 pub use attendee::*;
 pub use deposit::*;
@@ -270,6 +274,39 @@ pub(crate) async fn api_delete(path: &str) -> Result<web_sys::Response, ApiError
     }
 
     let response = http_delete(&url, &hdrs).await?;
+
+    if response.status() == 401 {
+        clear_token();
+        return Err(ApiError {
+            message: "Session expired".to_string(),
+            status: 401,
+        });
+    }
+
+    Ok(response)
+}
+
+/// Make an authenticated POST request with a raw `Blob` body (binary upload).
+/// Used for file uploads like the event poster where the body is image bytes,
+/// not JSON. `content_type` becomes the `Content-Type` header and selects the
+/// R2 key extension on the backend.
+pub(crate) async fn api_post_blob(
+    path: &str,
+    blob: &web_sys::Blob,
+    content_type: &str,
+) -> Result<web_sys::Response, ApiError> {
+    use fetch::post_raw as http_post_raw;
+    let url = format!("{}{path}", api_base());
+    let token = get_token();
+
+    let mut hdrs: Vec<(&str, &str)> = vec![("Content-Type", content_type)];
+    let auth_val;
+    if let Some(ref t) = token {
+        auth_val = format!("Bearer {t}");
+        hdrs.push(("Authorization", &auth_val));
+    }
+
+    let response = http_post_raw(&url, &hdrs, blob.clone()).await?;
 
     if response.status() == 401 {
         clear_token();

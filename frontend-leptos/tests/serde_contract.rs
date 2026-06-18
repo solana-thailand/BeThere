@@ -174,7 +174,7 @@ where
 /// Assert that a JSON string FAILS to deserialize into T (catches missing rename_all).
 fn assert_unknown_variant<T>(json: &str)
 where
-    T: serde::de::DeserializeOwned,
+    T: serde::de::DeserializeOwned + std::fmt::Debug,
 {
     let result = serde_json::from_str::<T>(json);
     assert!(

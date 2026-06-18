@@ -195,6 +195,8 @@ pub struct PublicEventData {
     pub deposit_amount_thb: f64,
     pub event_format: EventFormat,
     pub nft_image_url: String,
+    #[serde(default)]
+    pub poster_url: String,
     pub nft_name_template: String,
     pub nft_symbol: String,
     pub nft_description_template: String,

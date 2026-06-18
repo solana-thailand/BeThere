@@ -15,7 +15,8 @@ use event_checkin_domain::models::api::{QrGenerationStatus, QuizStatus};
 use event_checkin_domain::models::attendee::CheckInStatus;
 use event_checkin_domain::models::deposit::DepositMethod;
 use event_checkin_domain::models::event::{
-    EscrowStatus, EventFormat, EventStatus, EventVisibility, OnlineOpenMode,
+    CreateEventRequest, DuplicateEventRequest, EscrowStatus, EventConfig, EventFormat, EventStatus,
+    EventVisibility, OnlineOpenMode, UpdateEventRequest,
 };
 
 // ================================================================================================
@@ -265,4 +266,149 @@ fn full_event_meta_json_round_trips() {
     assert_eq!(meta.escrow_status, EscrowStatus::Initialized);
     assert_eq!(meta.event_format, EventFormat::Hybrid);
     assert_eq!(meta.visibility, EventVisibility::Public);
+}
+
+// ================================================================================================
+// DuplicateEventRequest — optional body for POST /api/events/{id}/duplicate (Issue #055)
+//
+// The handler accepts `Option<Json<DuplicateEventRequest>>` so it can be called
+// with no body at all (frontend one-click duplicate). These tests pin the
+// deserialization contract: empty/missing fields must default to empty strings,
+// matching the `Default` impl used by `.unwrap_or_default()` in the handler.
+// ================================================================================================
+
+#[test]
+fn duplicate_event_request_empty_object_uses_defaults() {
+    let req: DuplicateEventRequest =
+        serde_json::from_str("{}").expect("empty object should parse with defaults");
+    assert_eq!(req.new_sheet_id, "");
+    assert_eq!(req.new_name, "");
+}
+
+#[test]
+fn duplicate_event_request_parses_overrides() {
+    let json = r#"{"new_sheet_id":"new-sheet-abc","new_name":"Copied Event Name"}"#;
+    let req: DuplicateEventRequest =
+        serde_json::from_str(json).expect("payload with overrides should parse");
+    assert_eq!(req.new_sheet_id, "new-sheet-abc");
+    assert_eq!(req.new_name, "Copied Event Name");
+}
+
+#[test]
+fn duplicate_event_request_partial_payload_defaults_missing_fields() {
+    // Only new_name provided; new_sheet_id should default to empty.
+    let json = r#"{"new_name":"Just A Name"}"#;
+    let req: DuplicateEventRequest =
+        serde_json::from_str(json).expect("partial payload should parse");
+    assert_eq!(req.new_sheet_id, "");
+    assert_eq!(req.new_name, "Just A Name");
+}
+
+#[test]
+fn duplicate_event_request_default_matches_empty_object_parse() {
+    // The handler uses `.unwrap_or_default()` when no body is provided; this
+    // verifies the Default impl and the empty-object deserialization agree.
+    let from_default = DuplicateEventRequest::default();
+    let from_empty: DuplicateEventRequest =
+        serde_json::from_str("{}").expect("empty object should parse");
+    assert_eq!(from_default.new_sheet_id, from_empty.new_sheet_id);
+    assert_eq!(from_default.new_name, from_empty.new_name);
+}
+
+// ================================================================================================
+// poster_url — Plan 009 (event marketing poster).
+//
+// `poster_url` is a new field on EventConfig / EventMeta / CreateEventRequest /
+// UpdateEventRequest. These tests pin the contract: it defaults to "" when
+// absent (so existing payloads + pre-migration D1 rows keep working), and it
+// round-trips through the request types. Mirrors the nft_image_url plumbing.
+// ================================================================================================
+
+#[test]
+fn create_event_request_poster_url_defaults_empty_when_absent() {
+    // Minimal create payload (only required `name` + `sheet_id` + timestamps).
+    let json = r#"{"name":"E","sheet_id":"s","event_start_ms":1,"event_end_ms":2}"#;
+    let req: CreateEventRequest = serde_json::from_str(json).expect("minimal payload should parse");
+    assert_eq!(
+        req.poster_url, "",
+        "poster_url must default to empty when absent"
+    );
+}
+
+#[test]
+fn create_event_request_poster_url_round_trips() {
+    let json = r#"{"name":"E","sheet_id":"s","event_start_ms":1,"event_end_ms":2,"poster_url":"/api/storage/posters/abc"}"#;
+    let req: CreateEventRequest =
+        serde_json::from_str(json).expect("payload with poster_url should parse");
+    assert_eq!(req.poster_url, "/api/storage/posters/abc");
+}
+
+#[test]
+fn update_event_request_poster_url_defaults_none_when_absent() {
+    let req: UpdateEventRequest = serde_json::from_str("{}").expect("empty object should parse");
+    assert_eq!(
+        req.poster_url, None,
+        "poster_url must default to None when absent"
+    );
+}
+
+#[test]
+fn update_event_request_poster_url_round_trips_set() {
+    let json = r#"{"poster_url":"https://cdn.example.com/x.png"}"#;
+    let req: UpdateEventRequest =
+        serde_json::from_str(json).expect("payload with poster_url should parse");
+    assert_eq!(
+        req.poster_url.as_deref(),
+        Some("https://cdn.example.com/x.png")
+    );
+}
+
+#[test]
+fn update_event_request_poster_url_round_trips_clear() {
+    // Empty string is the documented "clear the field" sentinel.
+    let json = r#"{"poster_url":""}"#;
+    let req: UpdateEventRequest =
+        serde_json::from_str(json).expect("payload with empty poster_url should parse");
+    assert_eq!(req.poster_url.as_deref(), Some(""));
+}
+
+#[test]
+fn event_config_poster_url_defaults_empty_when_absent() {
+    // EventConfig has several required fields (no #[serde(default)]) — provide
+    // the minimal set, omit poster_url, and confirm it defaults to "".
+    let json = r#"{"id":"x","name":"E","slug":"x","tagline":"","link":"","status":"draft","event_start_ms":0,"event_end_ms":0,"sheet_id":"","sheet_name":"","staff_sheet_name":"","created_at":"","updated_at":""}"#;
+    let cfg: EventConfig = serde_json::from_str(json).expect("minimal EventConfig should parse");
+    assert_eq!(
+        cfg.poster_url, "",
+        "poster_url must default to empty when absent"
+    );
+    // Round-trip: empty poster_url is skip_serializing_if, so it won't appear in output.
+    let reser = serde_json::to_string(&cfg).expect("serialize EventConfig");
+    assert!(
+        !reser.contains("poster_url"),
+        "empty poster_url should be skipped on serialize, got: {reser}"
+    );
+}
+
+#[test]
+fn event_config_poster_url_round_trips_non_empty() {
+    let json = r#"{"id":"x","name":"E","slug":"x","tagline":"","link":"","status":"draft","event_start_ms":0,"event_end_ms":0,"sheet_id":"","sheet_name":"","staff_sheet_name":"","created_at":"","updated_at":"","poster_url":"/api/storage/posters/x"}"#;
+    let cfg: EventConfig =
+        serde_json::from_str(json).expect("EventConfig with poster_url should parse");
+    assert_eq!(cfg.poster_url, "/api/storage/posters/x");
+    let reser = serde_json::to_string(&cfg).expect("serialize EventConfig");
+    assert!(
+        reser.contains("\"poster_url\":\"/api/storage/posters/x\""),
+        "non-empty poster_url should appear in serialized output, got: {reser}"
+    );
+}
+
+#[test]
+fn update_event_request_default_impl_all_none() {
+    // Plan 009 added `Default` to UpdateEventRequest so handlers can build a
+    // partial update with `..Default::default()`. Verify every field is None.
+    let req = UpdateEventRequest::default();
+    assert_eq!(req.poster_url, None);
+    assert_eq!(req.nft_image_url, None);
+    assert_eq!(req.name, None);
 }

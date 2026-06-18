@@ -15,9 +15,9 @@
 | Problem | BeThere Solution |
 |---------|------------------|
 | 30-40% no-show rates for free events | USDC deposit commitment — skin in the game |
-| No on-chain proof of attendance | Compressed NFT badges (cNFT) — 990x cheaper than POAP |
+| No on-chain proof of attendance | Compressed NFT badges (cNFT) — ~50× cheaper than POAP |
 | Web2-only event tools | Solana-native: deposits, refunds, NFTs all on-chain |
-| Expensive NFT minting ($0.50/ea) | cNFT on Solana: **$0.001 per badge** |
+| Expensive NFT minting ($0.05–0.20/ea on Gnosis) | cNFT on Solana: **$0.001 per badge** |
 | ETH gas fees too high | Solana: **$0.00087 per transaction** |
 
 ### 🏗️ Stack
@@ -30,12 +30,14 @@
 
 | Metric | Value |
 |--------|-------|
-| On-chain program | **63 KB** (optimized) |
+| On-chain program | **88 KB** (optimized, 89,856 bytes) |
 | NFT mint cost | **$0.001** per badge |
 | Transaction cost | **$0.00087** (at $172/SOL) |
 | Check-in latency | **< 500ms** (edge worker) |
-| Tests | **85 passing** (47 unit + 38 on-chain SVM) |
+| Tests | **250 passing** (54 on-chain + 73 domain + 123 worker) + 147 frontend specs + 16 Kani harnesses |
 | Program ID (devnet) | `C6HDeZES9aPpNwe3UvS9ecmfcRhH1XeJb8PGJmLG3z3T` |
+
+> Every figure above is sourced in [`docs/sources.md`](docs/sources.md) — the evidence ledger (primary sources, measurement method, confidence, and known caveats). Refresh self-measured rows with `python3 scripts/measure_metrics.py`.
 
 ### 🎮 Live Demo Flow (Devnet)
 
@@ -466,11 +468,12 @@ The escrow system uses PDAs (Program Derived Addresses) to hold attendee USDC de
 ## Tests
 
 ```bash
-# All unit tests (47 total)
-cargo test -p event-checkin-domain   # 26 tests — shared types, QR logic
-cargo test -p event-checkin-worker   # 21 tests — crypto, auth, sheets, events
+# All off-chain tests (245 total)
+cargo test -p event-checkin-domain   # 73 tests — shared types, QR logic
+cargo test -p event-checkin-worker   # 80 tests — crypto, auth, sheets, events
+cd frontend-leptos && cargo test     # 92 tests — Leptos pages, adventure playtests
 
-# On-chain SVM tests (38 total)
+# On-chain SVM tests (42 total)
 cd bethere-escrow && quasar test     # All 9 escrow instructions + rollover lifecycle
 
 # E2E devnet scripts
@@ -596,18 +599,18 @@ See [`docs/security_audit.md`](docs/security_audit.md) for the full escrow secur
 | On-chain indexer | ✅ | Helius webhook + RPC poller for escrow event timeline |
 | Privacy policy | ✅ | PDPA-compliant `/privacy` route |
 | Security audit | ✅ | 15 findings, 12 fixed, SEC-001–015 addressed |
-| E2E tests | ✅ | 85 tests (47 unit + 38 on-chain SVM), 7 devnet E2E scripts |
+| E2E tests | ✅ | 250 tests (54 on-chain + 73 domain + 123 worker) + 147 frontend specs + 16 Kani harnesses, 7 devnet E2E scripts |
 
 ## 📈 Competitive Landscape
 
 | Feature | BeThere | Luma | Eventbrite | POAP | Kickback* |
 |---------|---------|------|------------|------|-----------|
 | On-chain deposits | ✅ USDC escrow | ❌ | ❌ | ❌ | ✅ ETH (defunct) |
-| Attendance NFTs | ✅ cNFT | ❌ | ❌ | ✅ (Ethereum) | ❌ |
+| Attendance NFTs | ✅ cNFT | ❌ | ❌ | ✅ (Gnosis) | ❌ |
 | Deposit refund | ✅ Auto | ❌ | Manual | ❌ | ✅ Payout pool |
 | No-show penalty | ✅ Forfeit to org | ❌ | ❌ | ❌ | ✅ Pool split |
 | Quiz/Adventure gating | ✅ Built-in | ❌ | ❌ | ❌ | ❌ |
-| Cost per NFT | **$0.001** | N/A | N/A | ~$0.50 | N/A |
+| Cost per NFT | **$0.001** | N/A | N/A | ~$0.05–0.20 | N/A |
 | Stablecoin deposits | ✅ USDC | ❌ | ❌ | ❌ | ❌ (volatile ETH) |
 | Open source | ✅ | ❌ | ❌ | ❌ | ✅ (archived) |
 

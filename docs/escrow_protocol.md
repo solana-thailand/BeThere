@@ -676,8 +676,8 @@ When creating events, organizers who haven't enabled deposits see: "Events witho
 - [x] On-chain program: `claim_forfeited` instruction
 - [x] On-chain program: `close_event` instruction
 - [x] On-chain program: `close_deposit` instruction (rent reclamation)
-- [x] On-chain program: 29 SVM unit tests (quasar-svm)
-- [x] On-chain program: 13 Kani formal verification harnesses
+- [x] On-chain program: 42 SVM unit tests (quasar-svm)
+- [x] On-chain program: 16 Kani formal verification harnesses
 - [ ] On-chain program: `refund_and_close` combined instruction (refund + close_deposit in 1 TX)
 - [ ] On-chain program: instruction introspection — refund + close enforcement (SEC-010 program-level fix)
 - [ ] On-chain program: instruction introspection — multi-deposit prevention per event per TX
@@ -725,8 +725,8 @@ Aligned with the [Solana Foundation Testing Pyramid](https://github.com/solana-f
 | **Unit (single-ix)** | [Mollusk](https://github.com/anza-xyz/mollusk) | Pure instruction logic, CU benchmarking, fixture-based regression | ❌ Not used |
 | **Unit (multi-ix)** | [LiteSVM](https://github.com/LiteSVM/litesvm) | Full TX simulation, fast red-green-refactor loop | ⚠️ Using `quasar-svm` (framework-equivalent) |
 | **Integration** | [Surfpool](https://github.com/nickfrosty/surfpool) | Devnet-fork realistic state, RPC-level testing | ❌ Not used |
-| **Formal verification** | [Kani](https://github.com/model-checking/kani) | Arithmetic invariant proofs for financial logic | ✅ 13 harnesses, 729 checks |
+| **Formal verification** | [Kani](https://github.com/model-checking/kani) | Arithmetic invariant proofs for financial logic | ✅ 16 harnesses, 729 checks |
 
-**Current stack**: `quasar-svm` (29 tests) + Kani (13 harnesses). The `quasar-svm` crate is the Quasar framework's bundled SVM runner, providing equivalent functionality to LiteSVM (in-process VM, token helpers, clock manipulation) with native Quasar account type integration.
+**Current stack**: `quasar-svm` (42 tests) + Kani (16 harnesses). The `quasar-svm` crate is the Quasar framework's bundled SVM runner, providing equivalent functionality to LiteSVM (in-process VM, token helpers, clock manipulation) with native Quasar account type integration.
 
 **Migration note**: If Quasar loses maintenance or the project migrates to Anchor/Pinocchio, `litesvm` + `litesvm-token` is the Solana Foundation's recommended replacement. The API patterns are similar — both load `.so` files, create token accounts, and process instructions in-process.

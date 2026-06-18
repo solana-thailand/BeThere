@@ -247,6 +247,7 @@ mod introspection;
 mod refund;
 mod rollover;
 mod rollover_flow;
+mod reference_oracle;
 
 // ===========================================================================
 // Full happy path lifecycle test

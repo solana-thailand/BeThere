@@ -6,6 +6,7 @@ pub mod checkin;
 pub mod claim;
 pub mod community;
 pub mod contacts;
+pub mod dashboard;
 pub mod deposit;
 pub mod escrow_index;
 pub mod events;
@@ -125,6 +126,11 @@ pub fn routes(state: AppState) -> Router<()> {
             "/storage/badges/{event_id}",
             get(crate::storage::serve_badge),
         )
+        // R2 poster serving (public — event marketing hero image on /e/{slug})
+        .route(
+            "/storage/posters/{event_id}",
+            get(crate::storage::serve_poster),
+        )
         // Wallet NFT verification (public — no auth needed to read on-chain data)
         .route("/wallet/leaderboard", get(wallet::get_leaderboard))
         .route("/wallet/{address}/nfts", get(wallet::get_wallet_nfts))
@@ -207,6 +213,12 @@ pub fn routes(state: AppState) -> Router<()> {
             crate::auth::require_identity,
         ));
 
+    // Live dashboard sub-router — cache_no_store because it is polled every
+    // 2.5s during the demo and must never surface a stale snapshot.
+    let protected_no_store = Router::new()
+        .route("/dashboard/live", get(dashboard::live_dashboard))
+        .layer(middleware::from_fn(crate::middleware::cache_no_store_layer));
+
     // Protected routes — require staff auth
     let protected = Router::new()
         .route("/attendees", get(attendee::list_attendees))
@@ -267,6 +279,11 @@ pub fn routes(state: AppState) -> Router<()> {
                 .delete(events::archive_event),
         )
         .route("/events/{id}/restore", post(events::restore_event))
+        .route("/events/{id}/duplicate", post(events::duplicate_event))
+        .route(
+            "/events/{id}/poster",
+            post(events::upload_poster).delete(events::delete_poster),
+        )
         .route("/events/{id}/delete", delete(events::hard_delete_event))
         .route("/events/{id}/audit", get(events::get_event_audit))
         // Registration form config (protected — organizer configures per-event form fields)
@@ -329,6 +346,7 @@ pub fn routes(state: AppState) -> Router<()> {
         .route("/contacts", get(contacts::list_contacts_handler))
         .route("/contacts/events", get(contacts::list_events_tab_handler))
         .route("/contacts/stats", get(contacts::contacts_stats_handler))
+        .route("/contacts/audience", get(contacts::audience_handler))
         .route("/contacts/sync", post(contacts::sync_contacts_handler))
         // Organization management (protected — super admin CRUD)
         .route("/orgs", get(orgs::list_orgs).post(orgs::create_org))
@@ -374,6 +392,9 @@ pub fn routes(state: AppState) -> Router<()> {
             get(campaigns::list_campaign_progress),
         )
         .route("/campaigns/{id}/stats", get(campaigns::campaign_stats))
+        // Merge the cache-no-store sub-router (live dashboard) so it inherits
+        // require_auth from the outer layer while keeping its own no-store policy.
+        .merge(protected_no_store)
         .layer(middleware::from_fn_with_state(
             state.clone(),
             crate::auth::require_auth,

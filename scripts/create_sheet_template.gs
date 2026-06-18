@@ -55,6 +55,17 @@ function createBeThereTemplate() {
   }
   statusMsg += "\n\nSafe to re-run — existing data is preserved.";
 
+  // ── 3. Surface the admin values (sheet_id + make-a-copy link) ──────────
+  var sheetId = ss.getId();
+  // Edit URL → copy URL. Anyone with this link gets a one-click copy of the
+  // full template structure (columns, formatting, dropdowns all carried over).
+  var copyUrl = ss.getUrl().replace(/\/edit.*$/i, "") + "/copy";
+  statusMsg += "\n\n──────── FOR THE ADMIN (save these) ────────";
+  statusMsg += "\nSpreadsheet ID:\n  " + sheetId;
+  statusMsg += "\n\nMake-a-copy link (share view-only with organizers):\n  " + copyUrl;
+  statusMsg += "\n\nNote: copies do NOT inherit editors — each organizer must";
+  statusMsg += "\nre-share their copy with the service account after copying.";
+
   SpreadsheetApp.getUi().alert(statusMsg);
 }
 

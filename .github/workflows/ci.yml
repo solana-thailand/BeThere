@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [develop, main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+jobs:
+  build-test:
+    name: check + clippy + test (domain, worker)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Cache cargo registry + target
+        uses: Swatinem/rust-cache@v2
+
+      - name: Stub frontend dist for worker include_str!
+        # `worker/src/lib.rs` does `include_str!("../../frontend-leptos/dist/index.html")`
+        # for the SPA fallback. `frontend-leptos/` is gitignored and excluded from the
+        # cargo workspace, so a fresh checkout has no dist. CI only needs the file to
+        # *exist* for `include_str!` to resolve — it does not validate frontend output
+        # here (frontend is a separate WASM project built by trunk in deploy.sh).
+        run: |
+          mkdir -p frontend-leptos/dist
+          printf '<!DOCTYPE html><html><head><title>ci-stub</title></head><body></body></html>\n' \
+            > frontend-leptos/dist/index.html
+
+      - name: cargo check (workspace)
+        run: cargo check --workspace --locked --all-targets
+
+      - name: cargo clippy (workspace, -D warnings)
+        run: cargo clippy --workspace --locked --all-targets -- -D warnings
+
+      - name: cargo test (workspace)
+        run: cargo test --workspace --locked

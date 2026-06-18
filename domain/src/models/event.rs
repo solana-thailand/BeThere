@@ -239,6 +239,10 @@ pub struct EventMeta {
     /// NFT badge image URL (for event card display).
     #[serde(default)]
     pub nft_image_url: String,
+    /// Marketing poster URL for the event page hero (served path or external URL).
+    /// Empty = fall back to `nft_image_url` on the public event page.
+    #[serde(default)]
+    pub poster_url: String,
 
     // ── Capacity settings ─────────────────────────────────────────────
     /// Maximum number of in-person attendees. None = unlimited.
@@ -322,6 +326,12 @@ pub struct EventConfig {
     /// NFT badge image URL.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub nft_image_url: String,
+    /// Marketing poster URL for the event page hero (served path or external URL).
+    /// Empty = fall back to `nft_image_url` on the public event page.
+    /// Kept separate from `nft_image_url` because that field feeds the on-chain
+    /// cNFT mint metadata and must not be overloaded with a marketing image.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub poster_url: String,
     /// NFT name template (e.g. "BeThere - {event_name}").
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub nft_name_template: String,
@@ -488,6 +498,7 @@ impl EventConfig {
             location: self.location.clone(),
             video_url: self.video_url.clone(),
             nft_image_url: self.nft_image_url.clone(),
+            poster_url: self.poster_url.clone(),
             in_person_capacity: self.in_person_capacity,
             online_capacity: self.online_capacity,
             visibility: self.visibility.clone(),
@@ -624,6 +635,7 @@ impl EventConfig {
             nft_collection_mint: nft_collection_mint.to_string(),
             nft_metadata_uri: nft_metadata_uri.to_string(),
             nft_image_url: nft_image_url.to_string(),
+            poster_url: String::new(),
             nft_name_template: String::new(),
             nft_symbol: nft_symbol.to_string(),
             nft_description_template: String::new(),
@@ -709,6 +721,10 @@ pub struct CreateEventRequest {
     /// NFT badge image URL.
     #[serde(default)]
     pub nft_image_url: String,
+    /// Marketing poster URL for the event page hero.
+    /// Empty = fall back to `nft_image_url` on the public event page.
+    #[serde(default)]
+    pub poster_url: String,
     /// NFT name template (supports `{event_name}` placeholder).
     #[serde(default)]
     pub nft_name_template: String,
@@ -808,9 +824,26 @@ pub struct CreateEventRequest {
     #[serde(default)]
     pub calendar_subscribe_url: String,
 }
+
+/// Request body for POST /api/events/{id}/duplicate — copy event settings
+/// into a new Draft. All fields optional; defaults to copying source verbatim
+/// with de-collided slug and "(Copy)" name suffix.
+///
+/// See `.issues/055_duplicate_event.md` for design (Decisions A1 + B1).
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct DuplicateEventRequest {
+    /// Override the source's sheet_id. If empty, source's sheet_id is reused
+    /// (with a UI warning) because sheet_id is a required field downstream.
+    #[serde(default)]
+    pub new_sheet_id: String,
+    /// Override the auto-generated "{name} (Copy)" display name.
+    #[serde(default)]
+    pub new_name: String,
+}
+
 /// Request body for PUT /api/events/{id} — update an existing event.
 /// All fields are optional; only provided fields are updated.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct UpdateEventRequest {
     /// New display name.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -857,6 +890,10 @@ pub struct UpdateEventRequest {
     /// New NFT image URL.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub nft_image_url: Option<String>,
+    /// New marketing poster URL (served path or external URL).
+    /// Empty string clears the field, falling the hero back to `nft_image_url`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub poster_url: Option<String>,
     /// New NFT name template.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub nft_name_template: Option<String>,
@@ -1138,6 +1175,7 @@ mod tests {
             nft_collection_mint: String::new(),
             nft_metadata_uri: String::new(),
             nft_image_url: String::new(),
+            poster_url: String::new(),
             nft_name_template: String::new(),
             nft_symbol: String::new(),
             nft_description_template: String::new(),

@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::types::{ApiError, ApiResponse};
-use super::{api_delete, api_get, api_post, api_post_json, api_put_json, fetch::response_json};
+use super::{api_delete, api_get, api_post, api_post_blob, api_post_json, api_put_json, fetch::response_json};
 
 // ===== Event Management Types =====
 
@@ -220,6 +220,9 @@ pub struct EventDetail {
     pub nft_metadata_uri: String,
     #[serde(default)]
     pub nft_image_url: String,
+    /// Marketing poster URL for the event page hero (served path or external URL).
+    #[serde(default)]
+    pub poster_url: String,
     #[serde(default)]
     pub nft_name_template: String,
     #[serde(default)]
@@ -333,6 +336,9 @@ pub struct CreateEventBody {
     pub nft_metadata_uri: String,
     #[serde(default)]
     pub nft_image_url: String,
+    /// Marketing poster URL for the event page hero.
+    #[serde(default)]
+    pub poster_url: String,
     #[serde(default)]
     pub nft_name_template: String,
     #[serde(default)]
@@ -430,6 +436,9 @@ pub struct UpdateEventBody {
     pub nft_metadata_uri: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub nft_image_url: Option<String>,
+    /// Marketing poster URL (served path or external URL). Empty string clears it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub poster_url: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub nft_name_template: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -594,6 +603,82 @@ pub async fn update_event(id: &str, body: &UpdateEventBody) -> Result<EventMutat
     api_put_json(&path, body).await
 }
 
+/// Response shape for poster upload/delete. `poster_url` is the served path
+/// (`/api/storage/posters/{event_id}`) — always use this URL as `form.poster_url`.
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct PosterMutationData {
+    pub id: String,
+    pub poster_url: String,
+    #[serde(default)]
+    pub updated_at: String,
+}
+
+/// POST /api/events/{id}/poster — upload marketing poster (raw image bytes).
+/// Caller passes the file's `Blob` and its content-type (e.g. `image/png`).
+/// Returns the served URL to store into `form.poster_url`.
+pub async fn upload_poster(
+    event_id: &str,
+    blob: &web_sys::Blob,
+    content_type: &str,
+) -> Result<PosterMutationData, ApiError> {
+    let path = format!("/events/{event_id}/poster");
+    let response = api_post_blob(&path, blob, content_type).await?;
+
+    if !response.ok() {
+        let body: ApiResponse<()> = response_json(&response).await.unwrap_or(ApiResponse {
+            success: false,
+            data: None,
+            error: Some("Upload failed".to_string()),
+            correlation_id: None,
+        });
+        return Err(ApiError {
+            message: body.error.unwrap_or_else(|| format!("HTTP {}", response.status())),
+            status: response.status(),
+        });
+    }
+
+    let wrapper: ApiResponse<PosterMutationData> =
+        response_json(&response).await.map_err(|e| ApiError {
+            message: format!("Failed to parse poster response: {e}"),
+            status: response.status(),
+        })?;
+
+    wrapper.data.ok_or_else(|| ApiError {
+        message: wrapper.error.unwrap_or_else(|| "No data in response".to_string()),
+        status: response.status(),
+    })
+}
+
+/// DELETE /api/events/{id}/poster — clear `poster_url` and delete the R2 object.
+pub async fn delete_poster(event_id: &str) -> Result<PosterMutationData, ApiError> {
+    let path = format!("/events/{event_id}/poster");
+    let response = api_delete(&path).await?;
+
+    if !response.ok() {
+        let body: ApiResponse<()> = response_json(&response).await.unwrap_or(ApiResponse {
+            success: false,
+            data: None,
+            error: Some("Delete failed".to_string()),
+            correlation_id: None,
+        });
+        return Err(ApiError {
+            message: body.error.unwrap_or_else(|| format!("HTTP {}", response.status())),
+            status: response.status(),
+        });
+    }
+
+    let wrapper: ApiResponse<PosterMutationData> =
+        response_json(&response).await.map_err(|e| ApiError {
+            message: format!("Failed to parse poster response: {e}"),
+            status: response.status(),
+        })?;
+
+    wrapper.data.ok_or_else(|| ApiError {
+        message: wrapper.error.unwrap_or_else(|| "No data in response".to_string()),
+        status: response.status(),
+    })
+}
+
 /// POST /api/escrow/init — combined ATA + create_event in one transaction.
 pub async fn init_escrow(body: &InitEscrowRequest) -> Result<InitEscrowResponse, ApiError> {
     api_post_json("/escrow/init", body).await
@@ -708,6 +793,65 @@ pub async fn restore_event(id: &str) -> Result<EventMutationData, ApiError> {
     let wrapper: ApiResponse<EventMutationData> =
         response_json(&response).await.map_err(|e| ApiError {
             message: format!("Failed to parse restore response: {e}"),
+            status: 0,
+        })?;
+
+    wrapper.data.ok_or_else(|| ApiError {
+        message: wrapper.error.unwrap_or("No data".to_string()),
+        status: 0,
+    })
+}
+
+/// Response payload for POST /api/events/{id}/duplicate.
+///
+/// Mirrors `EventMutationData` plus the source event id and a list of
+/// non-fatal warnings (e.g. sheet_id collision risk under Decision A1)
+/// that the UI should surface as a yellow toast.
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+pub struct DuplicateEventData {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub slug: String,
+    #[serde(default)]
+    pub status: String,
+    /// The id of the event this Draft was copied from.
+    #[serde(default)]
+    pub source_id: String,
+    /// Non-fatal warnings (e.g. shared sheet_id). Empty when no warnings.
+    #[serde(default)]
+    pub warnings: Vec<String>,
+    #[serde(default)]
+    pub updated_at: String,
+}
+
+/// POST /api/events/{id}/duplicate — copy an event's settings into a new Draft.
+///
+/// On success, callers should render `data.warnings` (if any) as a yellow
+/// toast in addition to the success toast, per Decision A1 in
+/// `.issues/055_duplicate_event.md`.
+pub async fn duplicate_event(id: &str) -> Result<DuplicateEventData, ApiError> {
+    let path = format!("/events/{id}/duplicate");
+    let response = api_post(&path).await?;
+
+    if !response.ok() {
+        let body: ApiResponse<()> = response_json(&response).await.unwrap_or(ApiResponse {
+            success: false,
+            data: None,
+            error: Some("Duplicate failed".to_string()),
+            correlation_id: None,
+        });
+        return Err(ApiError {
+            message: body.error.unwrap_or_default(),
+            status: 0,
+        });
+    }
+
+    let wrapper: ApiResponse<DuplicateEventData> =
+        response_json(&response).await.map_err(|e| ApiError {
+            message: format!("Failed to parse duplicate response: {e}"),
             status: 0,
         })?;
 

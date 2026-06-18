@@ -20,12 +20,12 @@ BeThere is a **Solana-powered event check-in platform** that combines:
 
 | Metric | Value |
 |--------|-------|
-| On-chain program size | 63 KB (optimized) |
+| On-chain program size | 88 KB (optimized, 89,856 bytes) |
 | Check-in latency | < 500ms (edge worker) |
 | NFT mint cost | ~$0.001 per badge (cNFT) |
 | Platform stack | Rust + Solana + Cloudflare Workers + Leptos WASM |
 | Program ID | `C6HDeZES9aPpNwe3UvS9ecmfcRhH1XeJb8PGJmLG3z3T` |
-| Test coverage | 61 tests (39 worker + 22 on-chain) |
+| Test coverage | 250 tests (54 on-chain + 73 domain + 123 worker) + 147 frontend specs + 16 Kani harnesses |
 
 ---
 
@@ -341,14 +341,14 @@ A complete event management platform that:
 ```
 Rust + Solana + Cloudflare Workers + WASM
 ```
-- **63 KB on-chain program** — minimal footprint
+- **88 KB on-chain program** — minimal footprint
 - **Edge-deployed globally** — < 500ms check-in
 - **$0.001 NFT minting** — compressed NFTs on Solana
 - **100% Rust codebase** — shared types, zero serialization bugs
 
 **Traction**
 - Originated from manual deposit/refund events — now automated on-chain
-- End-to-end tested on devnet (61 tests passing)
+- End-to-end tested on devnet (250 tests passing)
 - Ready for mainnet deployment (1.5 SOL cost)
 - Supports both USDC (on-chain) and PromptPay THB (fiat) deposits
 
@@ -478,11 +478,11 @@ sequenceDiagram
 | Feature | BeThere | Luma | Eventbrite | POAP |
 |---------|---------|------|------------|------|
 | On-chain deposits | ✅ USDC escrow | ❌ | ❌ | ❌ |
-| Attendance NFTs | ✅ cNFT (Solana) | ❌ | ❌ | ✅ (Ethereum) |
+| Attendance NFTs | ✅ cNFT (Solana) | ❌ | ❌ | ✅ (Gnosis) |
 | Deposit refund | ✅ Automatic | ❌ | Manual | ❌ |
 | No-show penalty | ✅ Forfeit to org | ❌ | ❌ | ❌ |
 | Quiz/Adventure gating | ✅ Built-in | ❌ | ❌ | ❌ |
-| Cost per NFT | ~$0.001 | N/A | N/A | ~$0.50 |
+| Cost per NFT | ~$0.001 | N/A | N/A | ~$0.05–0.20 |
 | Self-serve setup | ✅ Google Sheets | ✅ | ✅ | Partial |
 | Open source | ✅ | ❌ | ❌ | ❌ |
 

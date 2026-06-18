@@ -7,6 +7,7 @@ pub mod adventure_config;
 pub mod audit_panel;
 pub mod campaigns_page;
 pub mod claim;
+pub mod dashboard_live;
 pub mod data_privacy;
 pub mod deposit;
 pub mod dev_dashboard;

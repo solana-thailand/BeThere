@@ -88,6 +88,17 @@ pub fn orb_nft_url(asset_id: &str, cluster: &str) -> String {
     format!("https://orbmarkets.io/token/{asset_id}/metadata{cluster_param}")
 }
 
+/// Build a Google Sheets editor URL from a spreadsheet ID.
+/// Pattern: https://docs.google.com/spreadsheets/d/{SHEET_ID}/edit
+/// Returns empty string for an empty/whitespace input (caller decides what to render).
+pub fn google_sheet_url(sheet_id: &str) -> String {
+    let trimmed = sheet_id.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+    format!("https://docs.google.com/spreadsheets/d/{trimmed}/edit")
+}
+
 /// Result of parsing a participation type string into a display badge.
 #[derive(Debug, Clone)]
 pub struct ParticipationBadge {

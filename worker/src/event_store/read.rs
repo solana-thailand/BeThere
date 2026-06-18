@@ -168,8 +168,11 @@ pub async fn resolve_event_or_fallback(
                                 slug = %config.slug,
                                 "D1 fallback: recovered event not found in KV"
                             );
-                            // Rebuild KV from D1 data
-                            super::write::save_event_config(kv, &config).await.ok();
+                            // D1 is the source of truth — do NOT write back to KV.
+                            // The write-back was burning the free-tier write quota
+                            // (1,000 writes/day) on every event resolution that missed
+                            // KV. All read paths fall back to D1, so the KV cache is
+                            // redundant here. See issue #053 (KV→D1 migration).
                             return Ok(config);
                         }
                     }
@@ -481,6 +484,97 @@ pub async fn find_attendee_by_wallet(
     Ok(None)
 }
 
+/// Find attendee API ID by on-chain tx_signature within a specific event's deposit records.
+///
+/// KV-fallback mirror of `find_attendee_by_wallet`. Used by the read-path
+/// recovery guard to detect when a discovered signature is already bound to
+/// a *different* attendee (double-registration defence).
+pub async fn find_attendee_by_tx_signature(
+    kv: &KvStore,
+    event_id: &str,
+    tx_signature: &str,
+    d1: Option<&D1Database>,
+) -> Result<Option<String>, String> {
+    if tx_signature.is_empty() {
+        return Ok(None);
+    }
+    if let Some(db) = d1 {
+        return crate::db::deposit_statuses::find_attendee_by_tx_signature(
+            db,
+            event_id,
+            tx_signature,
+        )
+        .await;
+    }
+    let deposits = list_deposit_statuses(kv, event_id, None).await?;
+    for d in &deposits {
+        if d.tx_signature.as_deref() == Some(tx_signature) {
+            return Ok(Some(d.attendee_id.clone()));
+        }
+    }
+    Ok(None)
+}
+
+// ---------------------------------------------------------------------------
+// KV-optional fallback lookups (plan 003 — double-registration defence)
+// ---------------------------------------------------------------------------
+
+/// Find attendee API ID by wallet address, with KV/D1 fallback.
+///
+/// D1-first (indexed lookup via `idx_deposit_statuses_wallet`); falls back to
+/// KV scan only if D1 is unavailable. Returns `None` if neither store has a
+/// row matching `(event_id, wallet_address)`. Used by Guard 1 (deposit
+/// initiation) and Guard 2 (read-path recovery binding check).
+pub async fn find_attendee_by_wallet_with_fallback(
+    kv: Option<&KvStore>,
+    d1: Option<&D1Database>,
+    event_id: &str,
+    wallet_address: &str,
+) -> Result<Option<String>, String> {
+    if wallet_address.is_empty() {
+        return Ok(None);
+    }
+    if let Some(db) = d1
+        && let Some(id) =
+            crate::db::deposit_statuses::find_attendee_by_wallet(db, event_id, wallet_address)
+                .await?
+    {
+        return Ok(Some(id));
+    }
+    if let Some(kv_ref) = kv {
+        return find_attendee_by_wallet(kv_ref, event_id, wallet_address, None).await;
+    }
+    Ok(None)
+}
+
+/// Find attendee API ID by on-chain tx_signature, with KV/D1 fallback.
+///
+/// D1-first (indexed lookup via `idx_deposit_statuses_tx`); falls back to KV
+/// scan only if D1 is unavailable. Used by Guard 2 (read-path recovery binding
+/// check) to detect when a discovered signature is already bound to a
+/// *different* attendee.
+pub async fn find_attendee_by_tx_signature_with_fallback(
+    kv: Option<&KvStore>,
+    d1: Option<&D1Database>,
+    event_id: &str,
+    tx_signature: &str,
+) -> Result<Option<String>, String> {
+    if tx_signature.is_empty() {
+        return Ok(None);
+    }
+    if let Some(db) = d1
+        && let Some(id) =
+            crate::db::deposit_statuses::find_attendee_by_tx_signature(db, event_id, tx_signature)
+                .await?
+    {
+        return Ok(Some(id));
+    }
+    if let Some(kv_ref) = kv {
+        return find_attendee_by_tx_signature(kv_ref, event_id, tx_signature, None).await;
+    }
+    Ok(None)
+}
+
 // ---------------------------------------------------------------------------
 // KV-optional fallback reads (P3.2)
 // ---------------------------------------------------------------------------
@@ -561,28 +655,23 @@ pub async fn increment_deposit_counter_with_fallback(
     Ok(1)
 }
 
-/// Save deposit status with D1 primary + KV best-effort.
+/// Save deposit status — D1 only.
 ///
-/// Writes to D1 first (dedicated deposit_statuses table), then best-effort to KV.
+/// KV write removed: it was burning the free-tier write quota (1,000/day) on
+/// every check-in, and all read paths are D1-first with KV fallback anyway, so
+/// the KV cache was redundant. See issue #053 Phase 3e (acceptance criteria
+/// already stated "KV keys no longer read or written for deposit status").
+///
+/// The `kv` parameter is retained in the signature for API stability; it is
+/// intentionally unused.
 pub async fn save_deposit_status_with_fallback(
-    kv: Option<&KvStore>,
+    _kv: Option<&KvStore>,
     d1: Option<&D1Database>,
     status: &event_checkin_domain::models::deposit::DepositStatus,
 ) -> Result<(), String> {
-    // D1 write (primary)
+    // D1 write (primary, and now sole, store)
     if let Some(db) = d1 {
         crate::db::deposit_statuses::save_deposit_status(db, status).await?;
-    }
-
-    // KV write (best-effort cache)
-    if let Some(kv) = kv
-        && let Err(e) = super::write::save_deposit_status(kv, status, None).await
-    {
-        tracing::warn!(
-            attendee_id = %status.attendee_id,
-            error = %e,
-            "KV deposit status save failed (non-fatal, D1 is primary)"
-        );
     }
 
     Ok(())

@@ -291,6 +291,30 @@ pub async fn get_public_ticket(
     .ok()
     .flatten();
 
+    // --- Read-path self-heal (USDC only) ---
+    // Recover a missing tx_signature from on-chain PDA history and verify the
+    // deposit via signer cross-check. This makes the ticket page self-healing:
+    // every 10s poll while `!verified` either discovers the signature or
+    // verifies it, until `verified == true` and the ticket tier-upgrades to
+    // AwaitingCheckIn. Idempotent: returns immediately when already verified.
+    // THB deposits are excluded (admin verifies slips manually).
+    let deposit_status = match deposit_status {
+        Some(s)
+            if s.method
+                == event_checkin_domain::models::deposit::DepositMethod::Usdc =>
+        {
+            Some(
+                crate::handlers::deposit::usdc::recover_and_verify_deposit(
+                    &state,
+                    &event,
+                    s,
+                )
+                .await,
+            )
+        }
+        other => other,
+    };
+
     // Lazy QR backfill: ensure the attendee has a valid QR URL pointing at the
     // current deployment. Triggers when:
     //   - qr_url is missing/empty (verified before the D1 QR-write fix), OR

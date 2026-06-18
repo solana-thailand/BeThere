@@ -26,16 +26,12 @@ pub use durable_objects::EventDurableObject;
 
 use std::sync::OnceLock;
 
-use axum::Router;
+use axum::response::IntoResponse;
 use tower_service::Service;
 use worker::*;
 
 /// Logger initialized once per Workers isolate.
 static LOG_INITIALIZED: OnceLock<()> = OnceLock::new();
-
-/// Cached router skeleton — route definitions + middleware layers are static.
-/// Only the per-request state (worker_ctx) changes, injected via Extension.
-static CACHED_ROUTER: OnceLock<Router> = OnceLock::new();
 
 /// Embedded `index.html` for SPA fallback — serves the Leptos WASM frontend
 /// for any non-API route (e.g. `/staff`, `/admin`, `/claim/xxx`).
@@ -54,12 +50,24 @@ async fn spa_fallback() -> axum::response::Html<&'static str> {
     axum::response::Html(INDEX_HTML)
 }
 
-/// Build the router skeleton — route definitions + middleware layers.
-///
-/// Route tables and middleware stacks are identical across all requests.
-/// State is injected per-request via `Extension` for `worker_ctx`.
-fn build_router_skeleton() -> Router {
-    Router::new().fallback(spa_fallback)
+/// Returns true if the request path should be served as the SPA fallback
+/// (any non-API HTML navigation route). Static assets (JS/CSS/WASM) are
+/// served by Cloudflare's `[assets]` binding before the worker is invoked.
+fn is_spa_route(path: &str) -> bool {
+    !path.starts_with("/api/")
+}
+
+/// Build a minimal 503 JSON response for when the worker cannot initialize
+/// state or process a request. Avoids opaque Cloudflare error 1101 by
+/// returning a structured error instead of propagating via `?` or panicking.
+fn service_unavailable() -> axum::http::Response<axum::body::Body> {
+    axum::http::Response::builder()
+        .status(axum::http::StatusCode::SERVICE_UNAVAILABLE)
+        .header("content-type", "application/json")
+        .body(axum::body::Body::from(
+            r#"{"success":false,"error":"service unavailable"}"#,
+        ))
+        .expect("static 503 response is always valid")
 }
 
 #[event(fetch)]
@@ -76,30 +84,42 @@ async fn fetch(
         tracing_wasm::set_as_global_default();
     });
 
-    let state = state::AppState::from_env(&env)?.with_ctx(_ctx);
+    // SPA fallback: serve index.html for non-API routes WITHOUT requiring
+    // state initialization. This guarantees the frontend (login, claim pages,
+    // admin UI) remains available even if a secret is missing or AppState
+    // build fails. Static assets (JS/CSS/WASM) are served by Cloudflare's
+    // [assets] binding before the worker is invoked.
+    let path = req.uri().path();
+    if is_spa_route(path) {
+        return Ok(spa_fallback().await.into_response());
+    }
 
-    // H1: Cache router skeleton — routes + middleware are static
-    let router = match CACHED_ROUTER.get() {
-        Some(cached) => cached.clone(),
-        None => {
-            let skeleton = build_router_skeleton();
-            let _ = CACHED_ROUTER.set(skeleton.clone());
-            skeleton
+    // API routes require AppState (bindings + config + secrets).
+    // Build state; on failure return 503 instead of propagating via `?`
+    // (which would surface as opaque Cloudflare error 1101 on every request).
+    let state = match state::AppState::from_env(&env) {
+        Ok(s) => s.with_ctx(_ctx),
+        Err(e) => {
+            tracing::error!(error = %e, "AppState::from_env failed");
+            return Ok(service_unavailable());
         }
     };
 
-    // Merge state-dependent API routes per request
-    // Middleware from the skeleton covers its own routes (SPA fallback),
-    // but merged routes need their own layer application.
-    let api_routes = handlers::routes(state)
+    // Build the API router with middleware stack.
+    let mut api_routes = handlers::routes(state)
         .layer(axum::middleware::from_fn(middleware::rate_limit_layer))
         .layer(axum::middleware::from_fn(middleware::correlation_id_layer))
         .layer(axum::middleware::from_fn(
             middleware::security_headers_layer,
         ));
-    let mut router = router.merge(api_routes);
-    let resp = router.call(req).await.expect("router call is infallible");
-    Ok(resp)
+
+    // Dispatch to the API router. Router::call's error type is Infallible
+    // (axum always produces a response), so the Err branch is unreachable —
+    // `match e {}` exhausts the Infallible enum.
+    match api_routes.call(req).await {
+        Ok(resp) => Ok(resp),
+        Err(e) => match e {},
+    }
 }
 
 /// Cron-triggered cleanup — runs daily at 03:00 UTC.

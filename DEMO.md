@@ -2,7 +2,44 @@
 
 > **Duration:** 3 minutes | **Network:** Solana Devnet | **Wallet:** Phantom
 
+---
+
+## ⚠️ CRITICAL: Phantom Devnet Pre-Flight Checklist
+
+> **If you skip this, the USDC deposit demo WILL fail.**
+> The worker verifies transactions on **devnet**. If Phantom is on **mainnet**,
+> the TX signs successfully (you get a signature) but the worker never finds it
+> on devnet → the page hangs on "Confirming deposit..." forever.
+
+**Do this 2 minutes before the demo:**
+
+1. **Open Phantom** → Settings → Developer Settings
+2. **Toggle "Testnet Mode" ON** (this switches Phantom to devnet)
+3. **Verify you have devnet SOL:**
+   - Phantom should show a "Devnet" badge
+   - Balance should be ≥ 0.05 SOL for transaction fees
+   - If empty: tap "Get SOL" in Phantom, or run:
+     ```bash
+     solana airdrop 2 <WALLET_ADDRESS> --url devnet
+     ```
+4. **Verify the cluster visually:**
+   - Phantom home screen should show "Devnet" or "Testnet" indicator
+   - If you see real USD balances, you're still on mainnet — go back to step 2
+5. **Keep Phantom on devnet for the entire demo** — do not toggle back
+
+> **Why this happens:** Phantom's injected provider does not expose which cluster
+> it's connected to. The frontend cannot auto-detect a mainnet/devnet mismatch.
+> The signed transaction goes to whatever network Phantom is on. The worker then
+> queries devnet RPC and never finds the signature. This is a known limitation
+> (see handover #035) — the worker now handles this gracefully (returns "pending,
+> retry" instead of erroring), but the deposit will never confirm if the networks
+> don't match.
+
+---
+
 ## Pre-Demo Setup (do before recording/live)
+
+> **Big-screen setup:** Open `/dashboard/live` in a separate browser tab on the projector **before** the demo starts. Sign in with the staff account. Leave it running throughout — it polls every 2.5s and updates as the room acts.
 
 ```bash
 # 1. Start the worker
@@ -41,6 +78,30 @@ cd worker && npx wrangler dev --port 8787
 - Show check-in confirmed
 - Key stat: "< 500ms latency, edge-deployed"
 
+### 5. Live Aggregate Dashboard (project throughout — 30 sec spotlight)
+
+**This is the demo centerpiece for IslandDAO V4.** Project `/dashboard/live` on the big screen so the room watches their own deposits, check-ins, and NFTs land in real time.
+
+**Setup (before the demo starts):**
+- Open `/dashboard/live` on the projector in a separate tab
+- Sign in with a staff account (auth is enforced — projector mishap can't leak data)
+- The dashboard polls D1 every 2.5s, cache-bypassed
+
+**Spotlight beats (call the room's attention at these moments):**
+1. **After the first deposit lands** — "Look at the screen — Registered just ticked to 1, and USDC Locked reflects the real on-chain value."
+2. **After staff check-in** — "Checked-In just climbed, and watch the funnel conversion update — that's a real Solana check-in reflected in under 2.5 seconds."
+3. **After the first NFT mint** — "NFTs Minted just went to 1. That's a compressed NFT on Solana, minted for a tenth of a cent."
+
+**What the room sees:**
+- Five color-coded tiles: Registered · Checked-In · Deposits Verified · USDC Locked · NFTs Minted
+- Four-stage funnel: Registered → Deposited → Checked-In → NFT Minted, with per-stage conversion %
+- Live activity feed (audit log entries sliding in as they happen)
+- "Updated Xs ago" badge — never stale, never frozen
+
+**Resilience note (if asked):** Each of the five aggregates degrades independently — a transient D1 blip drops a tile to zero briefly rather than blanking the whole screen. The frontend keeps the last good snapshot on a poll error.
+
+Key stat: "2.5s real-time polling, edge-deployed, 100% Rust"
+
 ### 5.5. Rollover Deposit (Optional — 15 sec)
 - Show attendee's ticket page after check-in
 - Click "Roll Over Deposit" → wallet signs → deposit moves to next event atomically
@@ -52,7 +113,7 @@ cd worker && npx wrangler dev --port 8787
 - Click "Claim Refund" → wallet signs → USDC returned
 - Click "Mint Badge" → cNFT minted
 - **Show in Phantom wallet** → the NFT badge appears
-- Key stat: "$0.001 mint cost, 990x cheaper than POAP"
+- Key stat: "$0.001 mint cost, ~50× cheaper than POAP (Gnosis)"
 
 ### 6. No-Show Path (20 sec)
 - Show organizer dashboard
@@ -61,20 +122,23 @@ cd worker && npx wrangler dev --port 8787
 - Key point: "Skin in the game works"
 
 ### 7. Wrap-Up (10 sec)
-- Cost comparison: $0.87 for 1000 attendees vs $500+ on Ethereum
+- Cost comparison: $1.00 for 1,000 cNFT badges vs $50–200 POAP on Gnosis
 - "We started with manual deposits — now it's on-chain"
 - "100% Rust, open source, ready for mainnet"
 
 ## Key Talking Points
 
+> Figures below are sourced with confidence levels in [`docs/sources.md`](docs/sources.md).
+
 | Point | Detail |
 |-------|--------|
 | **Problem** | 30-40% no-show rate for free events |
 | **Solution** | USDC deposit commitment, refundable on check-in |
-| **Cost** | $0.001 NFT, $0.00087 TX — 990x cheaper than alternatives |
+| **Cost** | $0.001 NFT, $0.00087 TX — ~50× cheaper than POAP |
 | **Security** | 15 findings audited, 12 fixed, on-chain escrow with time-locked refunds |
 | **Innovation** | Dual-track (USDC + PromptPay THB), quiz/adventure gating, atomic deposit rollover, 100% Rust |
-| **Traction** | 85 tests (47 unit + 38 on-chain SVM), devnet validated, ready for mainnet |
+| **Traction** | 250 tests (54 on-chain + 73 domain + 123 worker) + 147 frontend specs + 16 Kani harnesses, devnet validated |
+| **Live Dashboard** | Real-time aggregate view — 2.5s polling, 5 tiles, 4-stage funnel, audit-log feed |
 
 ## What If Demo Fails?
 

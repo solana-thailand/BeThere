@@ -67,10 +67,16 @@ pub async fn sync_delete_event_from_d1(d1: Option<&worker::D1Database>, event_id
 // Escrow index writes
 // ---------------------------------------------------------------------------
 
-/// Write the escrow → event reverse index entry — D1 + KV (dual-write).
+/// Write the escrow → event reverse index entry — D1 only.
+///
+/// KV write removed: it was a redundant dual-write (D1 is the source of truth)
+/// that consumed the scarce free-tier write quota. `get_event_id_by_escrow` is
+/// D1-first with KV fallback, so reads are unaffected. The `kv` parameter is
+/// retained in the signature for API stability; it is intentionally unused.
+/// See issue #053 Phase 3b (on-chain index migration).
 pub async fn save_escrow_index(
     d1: Option<&worker::D1Database>,
-    kv: Option<&KvStore>,
+    _kv: Option<&KvStore>,
     escrow_address: &str,
     event_id: &str,
 ) -> Result<(), String> {
@@ -78,23 +84,12 @@ pub async fn save_escrow_index(
         return Ok(()); // no escrow to index
     }
 
-    // D1 write (primary)
+    // D1 write (primary, and now sole, store)
     if let Some(db) = d1
         && let Err(e) =
             crate::db::escrow_index::upsert_escrow_index_to_d1(db, escrow_address, event_id).await
     {
         tracing::warn!(escrow_address, error = %e, "D1 escrow index write failed");
-    }
-
-    // KV write (fallback / legacy)
-    if let Some(kv_ref) = kv {
-        let key = escrow_index_key(escrow_address);
-        kv_ref
-            .put(&key, event_id)
-            .map_err(|e| format!("failed to build escrow index put: {e:?}"))?
-            .execute()
-            .await
-            .map_err(|e| format!("failed to write escrow index to KV: {e:?}"))?;
     }
 
     Ok(())
@@ -233,6 +228,7 @@ pub async fn create_event(
         nft_collection_mint: req.nft_collection_mint.trim().to_string(),
         nft_metadata_uri: req.nft_metadata_uri.trim().to_string(),
         nft_image_url: req.nft_image_url.trim().to_string(),
+        poster_url: req.poster_url.trim().to_string(),
         nft_name_template: req.nft_name_template.trim().to_string(),
         nft_symbol: req.nft_symbol.trim().to_string(),
         nft_description_template: req.nft_description_template.trim().to_string(),
@@ -449,6 +445,9 @@ pub async fn update_event(
     if let Some(ref v) = req.nft_image_url {
         config.nft_image_url = v.trim().to_string();
     }
+    if let Some(ref v) = req.poster_url {
+        config.poster_url = v.trim().to_string();
+    }
     if let Some(ref v) = req.nft_name_template {
         config.nft_name_template = v.trim().to_string();
     }
@@ -575,6 +574,9 @@ pub async fn update_event(
     }
     if let Some(ref url) = req.calendar_subscribe_url {
         config.calendar_subscribe_url = url.clone();
+    }
+    if let Some(ref url) = req.poster_url {
+        config.poster_url = url.trim().to_string();
     }
 
     config.updated_at = chrono::Utc::now().to_rfc3339();
@@ -713,6 +715,9 @@ pub fn apply_update(config: &mut EventConfig, req: &UpdateEventRequest) -> Resul
     if let Some(ref v) = req.nft_image_url {
         config.nft_image_url = v.trim().to_string();
     }
+    if let Some(ref v) = req.poster_url {
+        config.poster_url = v.trim().to_string();
+    }
     if let Some(ref v) = req.nft_name_template {
         config.nft_name_template = v.trim().to_string();
     }
@@ -833,6 +838,9 @@ pub fn apply_update(config: &mut EventConfig, req: &UpdateEventRequest) -> Resul
     }
     if let Some(ref url) = req.calendar_subscribe_url {
         config.calendar_subscribe_url = url.clone();
+    }
+    if let Some(ref url) = req.poster_url {
+        config.poster_url = url.trim().to_string();
     }
 
     Ok(())
@@ -1122,6 +1130,7 @@ pub async fn seed_from_config(
         dev_profile_enabled: false,
         community_links: vec![],
         calendar_subscribe_url: String::new(),
+        poster_url: String::new(),
     };
 
     // Save full config
@@ -1184,8 +1193,14 @@ pub async fn seed_kv_from_d1(kv: &KvStore, d1: &worker::D1Database) -> Result<us
 // Deposit writes
 // ---------------------------------------------------------------------------
 
-/// Save deposit status for an attendee.
-/// Save deposit status record (D1-first, KV fallback).
+/// Save deposit status (D1-first, KV fallback for D1-absent deployments).
+///
+/// When D1 is available (production), writes D1 only and returns — skipping
+/// the KV write + `add_to_deposit_list` KV maintenance. The unconditional KV
+/// write was burning the free-tier write quota (1,000/day) on every check-in,
+/// and all read paths (`get_deposit_status_with_fallback`,
+/// `list_deposit_statuses`) are D1-first with KV fallback anyway. Mirrors the
+/// `save_thb_deposit` pattern. See issue #053 Phase 3e.
 pub async fn save_deposit_status(
     kv: &KvStore,
     status: &event_checkin_domain::models::deposit::DepositStatus,
@@ -1193,8 +1208,10 @@ pub async fn save_deposit_status(
 ) -> Result<(), String> {
     if let Some(db) = d1 {
         crate::db::deposit_statuses::save_deposit_status(db, status).await?;
+        return Ok(());
     }
 
+    // Legacy KV-only fallback (used only when D1 is not bound).
     let key = deposit_status_key(&status.event_id, &status.attendee_id);
     let json = serde_json::to_string(status)
         .map_err(|e| format!("failed to serialize deposit status: {e}"))?;
