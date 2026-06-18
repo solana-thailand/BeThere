@@ -226,6 +226,10 @@ pub fn routes(state: AppState) -> Router<()> {
             "/attendee/{id}",
             get(attendee::get_attendee).delete(attendee::delete_attendee),
         )
+        .route(
+            "/attendee/{id}/participation-type",
+            patch(attendee::update_participation_type),
+        )
         .route("/checkin/{id}", post(checkin::check_in))
         .route("/attendee/{id}/undo-checkin", post(checkin::undo_check_in))
         .route("/generate-qrs", post(qr::generate_qrs))

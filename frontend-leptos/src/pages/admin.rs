@@ -268,6 +268,11 @@ pub fn Admin() -> impl IntoView {
     let (confirm_delete_id, set_confirm_delete_id) = signal(None::<String>);
     let (deleting_ids, set_deleting_ids) = signal(HashSet::<String>::new());
 
+    // Participation-type override state — tracks which attendees have a
+    // pending PATCH /participation-type request so we can disable their
+    // toggle button and show a spinner.
+    let (switching_ids, set_switching_ids) = signal(HashSet::<String>::new());
+
     // Event selector state
     let (events_list, set_events_list) = signal(Vec::<api::EventMeta>::new());
     let (active_event_id, set_active_event_id) = signal(None::<String>);
@@ -308,6 +313,21 @@ pub fn Admin() -> impl IntoView {
                     .iter()
                     .find(|e| e.id == id)
                     .map(|e| e.event_format.clone())
+            })
+            .unwrap_or_default()
+    });
+
+    // Current event's Google Sheet ID — drives the "View Sheet" sidebar link.
+    // Empty when no event is selected or the event has no sheet_id.
+    let current_sheet_id = Memo::new(move |_| {
+        active_event_id
+            .get()
+            .and_then(|id| {
+                events_list
+                    .get()
+                    .iter()
+                    .find(|e| e.id == id)
+                    .map(|e| e.sheet_id.clone())
             })
             .unwrap_or_default()
     });
@@ -994,6 +1014,32 @@ pub fn Admin() -> impl IntoView {
                                 <span class="admin-sidebar-kbd">"Alt+7"</span>
                             </button>
                         </Show>
+                        // Google Sheet link — one per event (Sheet is shared by both tabs).
+                        // Hidden when no event selected or sheet_id is empty.
+                        <Show
+                            when=move || !current_sheet_id.get().trim().is_empty()
+                            fallback=|| view! { <span></span> }
+                        >
+                            <a
+                                class="admin-sidebar-item admin-sidebar-link-external"
+                                href=move || crate::utils::google_sheet_url(&current_sheet_id.get())
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                title="Open this event's Google Sheet in a new tab"
+                            >
+                                <span class="admin-sidebar-icon">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                        <polyline points="14 2 14 8 20 8"></polyline>
+                                        <line x1="18" y1="13" x2="6" y2="13"></line>
+                                        <line x1="18" y1="17" x2="6" y2="17"></line>
+                                        <line x1="8" y1="9" x2="6" y2="9"></line>
+                                    </svg>
+                                </span>
+                                "View Google Sheet"
+                                <span class="admin-sidebar-external-arrow">"↗"</span>
+                            </a>
+                        </Show>
                     </div>
 
                     // ── Group 3: Payments (deposit & escrow) — only for events with in-person track ──
@@ -1388,6 +1434,11 @@ pub fn Admin() -> impl IntoView {
                                     let is_selected = selected.contains(&attendee.api_id);
                                     let api_id = attendee.api_id.clone();
                                     let delete_id = api_id.clone();
+                                    // Dedicated clone for the participation-toggle children
+                                    // closure (Fn) — avoids moving api_id out of the
+                                    // environment, which would break other closures.
+                                    let switch_display_id = api_id.clone();
+                                    let switch_click_id = api_id.clone();
                                     let badge_class = if is_checked_in { "badge badge-success" } else { "badge badge-warning" };
                                     let badge_text = if is_checked_in { "Checked In" } else { "Pending" };
                                     let participation = utils::get_participation_badge(&attendee.participation_type);
@@ -1538,6 +1589,68 @@ pub fn Admin() -> impl IntoView {
                                                         >
                                                             "Deposit"
                                                         </a>
+                                                    </Show>
+                                                    // Participation-type toggle — flip In-Person ⇄ Online.
+                                                    // Use case: attendee chose deposit/in-person but confirmed
+                                                    // out-of-band they'll attend online (or vice-versa).
+                                                    // Hidden for walk-ins (their participation_type is 'walkin').
+                                                    <Show
+                                                        when=move || !is_walkin
+                                                        fallback=|| view! { <span></span> }
+                                                    >
+                                                        <button
+                                                            class="btn btn-outline btn-xs btn-xs-override admin-participation-toggle"
+                                                            disabled=switching_ids.get().contains(&switch_display_id)
+                                                            title=if is_attendee_in_person {
+                                                                "Switch to Online (confirmed out-of-band)"
+                                                            } else {
+                                                                "Switch to In-Person"
+                                                            }
+                                                            on:click={
+                                                                let switch_id = switch_click_id.clone();
+                                                                let target_mode = if is_attendee_in_person { "Online" } else { "In-Person" };
+                                                                let target_label = target_mode.to_string();
+                                                                let set_toast = set_toast;
+                                                                let set_switching_ids = set_switching_ids;
+                                                                let set_refresh_counter = set_refresh_counter;
+                                                                let eid = event_id_for_delete.get();
+                                                                move |_| {
+                                                                    let aid = switch_id.clone();
+                                                                    let mode = target_label.clone();
+                                                                    let set_toast = set_toast;
+                                                                    let set_switching_ids = set_switching_ids;
+                                                                    let set_refresh_counter = set_refresh_counter;
+                                                                    let eid = eid.clone();
+                                                                    set_switching_ids.update(|ids| { ids.insert(aid.clone()); });
+                                                                    leptos::task::spawn_local(async move {
+                                                                        match api::update_participation_type(&aid, eid.as_deref(), &mode).await {
+                                                                            Ok(_) => {
+                                                                                api::invalidate_attendee_cache();
+                                                                                set_refresh_counter.update(|c| *c += 1);
+                                                                                components::show_toast(
+                                                                                    &set_toast,
+                                                                                    &format!("Switched to {mode}"),
+                                                                                    ToastType::Success,
+                                                                                );
+                                                                            }
+                                                                            Err(e) => {
+                                                                                components::show_toast(
+                                                                                    &set_toast,
+                                                                                    &format!("Switch failed: {e}"),
+                                                                                    ToastType::Error,
+                                                                                );
+                                                                            }
+                                                                        }
+                                                                        set_switching_ids.update(|ids| { ids.remove(&aid); });
+                                                                    });
+                                                                }
+                                                            }
+                                                        >
+                                                            // Static label (computed once, like the Delete button).
+                                                            // The whole list re-renders via refresh_counter after success,
+                                                            // so no reactive closure is needed here.
+                                                            {if is_attendee_in_person { "→ Online" } else { "→ In-Person" }}
+                                                        </button>
                                                     </Show>
                                                     <button
                                                         class="btn btn-outline btn-xs btn-xs-override"
