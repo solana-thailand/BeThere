@@ -126,6 +126,11 @@ pub fn routes(state: AppState) -> Router<()> {
             "/storage/badges/{event_id}",
             get(crate::storage::serve_badge),
         )
+        // R2 poster serving (public — event marketing hero image on /e/{slug})
+        .route(
+            "/storage/posters/{event_id}",
+            get(crate::storage::serve_poster),
+        )
         // Wallet NFT verification (public — no auth needed to read on-chain data)
         .route("/wallet/leaderboard", get(wallet::get_leaderboard))
         .route("/wallet/{address}/nfts", get(wallet::get_wallet_nfts))
@@ -275,6 +280,10 @@ pub fn routes(state: AppState) -> Router<()> {
         )
         .route("/events/{id}/restore", post(events::restore_event))
         .route("/events/{id}/duplicate", post(events::duplicate_event))
+        .route(
+            "/events/{id}/poster",
+            post(events::upload_poster).delete(events::delete_poster),
+        )
         .route("/events/{id}/delete", delete(events::hard_delete_event))
         .route("/events/{id}/audit", get(events::get_event_audit))
         // Registration form config (protected — organizer configures per-event form fields)
@@ -337,10 +346,7 @@ pub fn routes(state: AppState) -> Router<()> {
         .route("/contacts", get(contacts::list_contacts_handler))
         .route("/contacts/events", get(contacts::list_events_tab_handler))
         .route("/contacts/stats", get(contacts::contacts_stats_handler))
-        .route(
-            "/contacts/audience",
-            get(contacts::audience_handler),
-        )
+        .route("/contacts/audience", get(contacts::audience_handler))
         .route("/contacts/sync", post(contacts::sync_contacts_handler))
         // Organization management (protected — super admin CRUD)
         .route("/orgs", get(orgs::list_orgs).post(orgs::create_org))

@@ -9,6 +9,8 @@
 //!   PUT    /api/events/{id}          — update event config
 //!   DELETE /api/events/{id}          — archive (soft-delete) event
 //!   POST   /api/events/{id}/duplicate — copy event settings into a new Draft (Issue #055)
+//!   POST   /api/events/{id}/poster   — upload a marketing poster to R2 (Plan 009)
+//!   DELETE /api/events/{id}/poster   — clear the poster + delete the R2 object (Plan 009)
 //!   POST   /api/events/reseed-kv     — reseed KV index from D1 (super admin only)
 
 pub mod audit;
@@ -16,6 +18,7 @@ pub mod create;
 pub mod duplicate;
 pub mod lifecycle;
 pub mod list;
+pub mod poster;
 pub mod read;
 pub mod seed;
 pub mod sync;
@@ -26,6 +29,7 @@ pub use create::create_event;
 pub use duplicate::duplicate_event;
 pub use lifecycle::{archive_event, hard_delete_event, restore_event};
 pub use list::list_events;
+pub use poster::{delete_poster, upload_poster};
 pub use read::get_event;
 pub use seed::{migrate_quiz, reseed_kv_from_d1, seed_event};
 pub use sync::sync_sheet_to_d1;

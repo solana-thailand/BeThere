@@ -154,6 +154,51 @@ pub(crate) async fn patch(
     fetch("PATCH", url, headers, body).await
 }
 
+/// POST request with a raw (non-string) body — used for binary uploads like
+/// the event poster. The caller passes a `JsValue` body (e.g. a `web_sys::Blob`
+/// from a file input) and a `Content-Type` header in `headers`.
+pub(crate) async fn post_raw(
+    url: &str,
+    headers: &[(&str, &str)],
+    body: web_sys::Blob,
+) -> Result<Response, ApiError> {
+    let opts = RequestInit::new();
+    opts.set_method("POST");
+    opts.set_mode(RequestMode::Cors);
+    opts.set_body(&body);
+
+    let request = Request::new_with_str_and_init(url, &opts)
+        .map_err(|e| ApiError {
+            message: format!("Failed to create request: {e:?}"),
+            status: 0,
+        })?;
+
+    let req_headers = request.headers();
+    for (key, value) in headers {
+        req_headers
+            .set(*key, *value)
+            .map_err(|e| ApiError {
+                message: format!("Failed to set header: {e:?}"),
+                status: 0,
+            })?;
+    }
+
+    let window = web_sys::window().ok_or_else(|| ApiError {
+        message: "No window".to_string(),
+        status: 0,
+    })?;
+
+    let promise = window.fetch_with_request(&request);
+    let resp_value = JsFuture::from(promise)
+        .await
+        .map_err(|e| ApiError {
+            message: format!("Fetch failed: {e:?}"),
+            status: 0,
+        })?;
+
+    Ok(Response::from(resp_value))
+}
+
 /// Convenience: DELETE request.
 pub(crate) async fn delete(url: &str, headers: &[(&str, &str)]) -> Result<Response, ApiError> {
     fetch("DELETE", url, headers, None).await

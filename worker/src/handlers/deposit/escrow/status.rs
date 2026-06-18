@@ -216,6 +216,7 @@ pub async fn confirm_escrow_init_handler(
             nft_collection_mint: None,
             nft_metadata_uri: None,
             nft_image_url: None,
+            poster_url: None,
             nft_name_template: None,
             nft_symbol: None,
             nft_description_template: None,

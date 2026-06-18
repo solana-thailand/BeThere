@@ -5,6 +5,7 @@
 
 use std::sync::Arc;
 use leptos::prelude::*;
+use wasm_bindgen::JsCast;
 
 use crate::api;
 use crate::components;
@@ -29,6 +30,7 @@ pub struct EventForm {
     pub nft_collection_mint: String,
     pub nft_metadata_uri: String,
     pub nft_image_url: String,
+    pub poster_url: String,
     pub nft_name_template: String,
     pub nft_symbol: String,
     pub nft_description_template: String,
@@ -167,6 +169,7 @@ pub fn default_form() -> EventForm {
         nft_collection_mint: String::new(),
         nft_metadata_uri: String::new(),
         nft_image_url: String::new(),
+        poster_url: String::new(),
         nft_name_template: String::new(),
         nft_symbol: String::new(),
         nft_description_template: String::new(),
@@ -235,6 +238,7 @@ pub fn form_from_detail(detail: &api::EventDetail) -> EventForm {
         nft_collection_mint: detail.nft_collection_mint.clone(),
         nft_metadata_uri: detail.nft_metadata_uri.clone(),
         nft_image_url: detail.nft_image_url.clone(),
+        poster_url: detail.poster_url.clone(),
         nft_name_template: detail.nft_name_template.clone(),
         nft_symbol: detail.nft_symbol.clone(),
         nft_description_template: detail.nft_description_template.clone(),
@@ -339,6 +343,7 @@ pub fn EventFormComponent(
     let (sec_capacity_open, set_sec_capacity_open) = signal(true);
     let (sec_people_open, set_sec_people_open) = signal(true);
     let (sec_community_open, set_sec_community_open) = signal(false);
+    let (sec_poster_open, set_sec_poster_open) = signal(true);
 
     // Community links — managed as a separate signal for easier row-level editing
     let (cl_links, set_cl_links) = signal(form.get().community_links.clone());
@@ -358,6 +363,7 @@ pub fn EventFormComponent(
     let (slug_manually_edited, set_slug_manually_edited) = signal(false);
     let (slug_taken, set_slug_taken) = signal(false);
     let (saving, set_saving) = signal(false);
+    let (poster_busy, set_poster_busy) = signal(false);
 
     // Wallet connection state for combined Create Event + Escrow Init flow
     let (create_wallet_name, set_create_wallet_name) = signal(String::new());
@@ -537,6 +543,7 @@ pub fn EventFormComponent(
                 nft_collection_mint: current_form.nft_collection_mint.trim().to_string(),
                 nft_metadata_uri: current_form.nft_metadata_uri.trim().to_string(),
                 nft_image_url: current_form.nft_image_url.trim().to_string(),
+                poster_url: current_form.poster_url.trim().to_string(),
                 nft_name_template: current_form.nft_name_template.trim().to_string(),
                 nft_symbol: current_form.nft_symbol.trim().to_string(),
                 nft_description_template: current_form.nft_description_template.trim().to_string(),
@@ -710,6 +717,7 @@ pub fn EventFormComponent(
                 nft_collection_mint: Some(current_form.nft_collection_mint.trim().to_string()),
                 nft_metadata_uri: Some(current_form.nft_metadata_uri.trim().to_string()),
                 nft_image_url: Some(current_form.nft_image_url.trim().to_string()),
+                poster_url: Some(current_form.poster_url.trim().to_string()),
                 nft_name_template: Some(current_form.nft_name_template.trim().to_string()),
                 nft_symbol: Some(current_form.nft_symbol.trim().to_string()),
                 nft_description_template: Some(current_form.nft_description_template.trim().to_string()),
@@ -1020,6 +1028,164 @@ pub fn EventFormComponent(
                         />
                     </div>
                 </div>
+                </div>
+            </div>
+
+            // ── Event Poster (marketing hero image) ──
+            <div class="form-section">
+                <div class="form-section-header" on:click=move |_| set_sec_poster_open.update(|v| *v = !*v)>
+                    <span class="form-section-icon form-section-icon-nft"></span>
+                    <span class="form-section-title">"Event Poster"</span>
+                    <span class="form-section-badge form-section-badge-optional">"Optional"</span>
+                    <span class="form-section-toggle" class:form-section-toggle-open=move || sec_poster_open.get()>"▼"</span>
+                </div>
+                <div class="form-section-body" class:form-section-body-hidden=move || !sec_poster_open.get()>
+                    <div class="quiz-setting-item event-form-span-full">
+                        <div class="hint-info event-form-nft-intro">
+                            "Shown at the top of the public event page (/e/{{slug}}). Falls back to the NFT badge if not set."
+                        </div>
+                        // Live preview — mirrors the badge preview pattern
+                        <div class="event-form-nft-actions">
+                            <Show
+                                when=move || !form.get().poster_url.is_empty()
+                                fallback=|| view! { <div></div> }
+                            >
+                                <img
+                                    src=move || form.get().poster_url
+                                    alt="Event poster preview"
+                                    class="event-form-badge-preview"
+                                />
+                                <span class="event-form-badge-type-label">
+                                    {move || {
+                                        let url = form.get().poster_url;
+                                        if url.starts_with("/api/storage/posters") { "Uploaded poster" } else { "External poster" }.to_string()
+                                    }}
+                                </span>
+                            </Show>
+                        </div>
+                    </div>
+                    <div class="quiz-settings-grid">
+                        // File upload — only available once the event exists (needs an event_id).
+                        <div class="quiz-setting-item event-form-span-full">
+                            <label class="quiz-field-label">"Upload Image"</label>
+                            <Show
+                                when=move || !editing_id.get().unwrap_or_default().is_empty()
+                                fallback=|| view! {
+                                    <div class="quiz-setting-hint">
+                                        "Save the event first, then return here to upload a poster file."
+                                    </div>
+                                }
+                            >
+                                <div class="event-form-nft-actions">
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        prop:disabled=move || poster_busy.get()
+                                        on:change=move |ev| {
+                                            let target = match ev.target() {
+                                                Some(t) => t,
+                                                None => return,
+                                            };
+                                            let input: web_sys::HtmlInputElement = target.unchecked_into();
+                                            let file = input.files().and_then(|fl| fl.item(0));
+                                            let eid = editing_id.get().unwrap_or_default();
+                                            if eid.is_empty() {
+                                                components::show_toast(&set_toast, "Save the event before uploading a poster", components::ToastType::Error);
+                                                return;
+                                            }
+                                            let Some(file) = file else { return };
+                                            let content_type = file.type_();
+                                            if !content_type.starts_with("image/") {
+                                                components::show_toast(&set_toast, "Please choose an image file", components::ToastType::Error);
+                                                return;
+                                            }
+                                            set_poster_busy.set(true);
+                                            leptos::task::spawn_local(async move {
+                                                match api::upload_poster(&eid, &file, &content_type).await {
+                                                    Ok(res) => {
+                                                        let url = res.poster_url.clone();
+                                                        set_form.update(|f| f.poster_url = url.clone());
+                                                        components::show_toast(&set_toast, "Poster uploaded", components::ToastType::Success);
+                                                    }
+                                                    Err(e) => {
+                                                        log::error!("[event-form] poster upload failed: {e}");
+                                                        components::show_toast(&set_toast, &format!("Failed to upload poster: {e}"), components::ToastType::Error);
+                                                    }
+                                                }
+                                                set_poster_busy.set(false);
+                                            });
+                                        }
+                                    />
+                                    <Show
+                                        when=move || poster_busy.get()
+                                        fallback=|| view! { <span></span> }
+                                    >
+                                        <span class="quiz-setting-hint">"Uploading…"</span>
+                                    </Show>
+                                </div>
+                            </Show>
+                            <span class="quiz-setting-hint">"Max 5 MB. PNG / JPG / WebP / SVG."</span>
+                        </div>
+                        // URL override — always available (also covers pre-save case).
+                        <div class="quiz-setting-item event-form-span-full">
+                            <label class="quiz-field-label">"Poster URL (override)"</label>
+                            <div class="event-form-nft-actions">
+                                <input
+                                    type="text"
+                                    class="quiz-number-input"
+                                    placeholder="/api/storage/posters/<id> or https://..."
+                                    prop:value=move || form.get().poster_url
+                                    on:input=move |ev| set_form.update(|f| f.poster_url = event_target_value(&ev))
+                                />
+                                <Show
+                                    when=move || !form.get().poster_url.is_empty() && !editing_id.get().unwrap_or_default().is_empty()
+                                    fallback=|| view! { <span></span> }
+                                >
+                                    <button
+                                        class="btn btn-outline btn-sm"
+                                        prop:disabled=move || poster_busy.get()
+                                        on:click=move |_| {
+                                            let eid = editing_id.get().unwrap_or_default();
+                                            if eid.is_empty() {
+                                                set_form.update(|f| f.poster_url = String::new());
+                                                return;
+                                            }
+                                            set_poster_busy.set(true);
+                                            leptos::task::spawn_local(async move {
+                                                match api::delete_poster(&eid).await {
+                                                    Ok(_) => {
+                                                        set_form.update(|f| f.poster_url = String::new());
+                                                        components::show_toast(&set_toast, "Poster removed", components::ToastType::Success);
+                                                    }
+                                                    Err(e) => {
+                                                        log::error!("[event-form] poster delete failed: {e}");
+                                                        components::show_toast(&set_toast, &format!("Failed to remove poster: {e}"), components::ToastType::Error);
+                                                    }
+                                                }
+                                                set_poster_busy.set(false);
+                                            });
+                                        }
+                                    >
+                                        "✕ Remove"
+                                    </button>
+                                </Show>
+                            </div>
+                            <Show
+                                when=move || {
+                                    let v = form.get().poster_url.trim().to_string();
+                                    !v.is_empty()
+                                        && !v.starts_with("http://")
+                                        && !v.starts_with("https://")
+                                        && !v.starts_with("/api/storage/posters")
+                                }
+                                fallback=|| view! { <div></div> }
+                            >
+                                <div class="hint-warning-xs">
+                                    "URL should start with http://, https://, or /api/storage/posters"
+                                </div>
+                            </Show>
+                        </div>
+                    </div>
                 </div>
             </div>
 
