@@ -72,6 +72,14 @@ pub fn already_deposited_view(
     };
     let usdc_fmt = format_usdc(data.deposit_amount_usdc);
     let refund_info = compute_refund_info(&data);
+    // Refund window check: mirrors bethere-escrow refund instruction's
+    // two-path model (checked-in → [event_end, ∞); no-show →
+    // [event_end, refund_deadline)). The on-chain program is the source of
+    // truth; this gate is advisory and hides the CTA to avoid offering a TX
+    // that would revert. Fails safe on missing data. See
+    // `event_refund_window_open` for the full contract.
+    let event_ended =
+        event_refund_window_open(data.event_end_ms, data.refund_deadline_ms, data.checked_in);
 
     let data_clone_for_refund = data.clone();
     let refund_info_clone = refund_info.clone();
@@ -106,7 +114,7 @@ pub fn already_deposited_view(
                     if info.currency == "THB" {
                         format!("฿{}", info.amount)
                     } else {
-                        format!("{} {}", info.amount, info.currency)
+                        format!("{} {}", format_usdc(info.amount), info.currency)
                     }
                 }}
                 " deposited"
@@ -128,7 +136,7 @@ pub fn already_deposited_view(
                             if info.currency == "THB" {
                                 format!("฿{}", info.amount)
                             } else {
-                                format!("{} {}", info.amount, info.currency)
+                                format!("{} {}", format_usdc(info.amount), info.currency)
                             }
                         }}
                     </span>
@@ -170,8 +178,11 @@ pub fn already_deposited_view(
                         }.into_any(),
                         None => ().into_any(),
                     }}
-                    // Refund CTA (only if refundable)
-                    {if info.refundable {
+                    // Refund CTA — three states:
+                    //   (a) refundable tier AND event ended → claim button
+                    //   (b) refundable tier AND event not ended → "available after event" notice
+                    //   (c) not refundable tier → muted badge (unchanged)
+                    {if info.refundable && event_ended {
                         let data_clone_for_refund = data_clone_for_refund.clone();
                         view! {
                             <div class="dep2-refund-cta">
@@ -186,6 +197,14 @@ pub fn already_deposited_view(
                                 >
                                     "Claim Refund"
                                 </button>
+                            </div>
+                        }.into_any()
+                    } else if info.refundable {
+                        view! {
+                            <div class="dep2-info-note">
+                                <p class="hint-note">
+                                    "Refund will be available after the event ends."
+                                </p>
                             </div>
                         }.into_any()
                     } else {

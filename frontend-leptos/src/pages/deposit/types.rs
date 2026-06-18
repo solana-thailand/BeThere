@@ -176,6 +176,54 @@ pub fn deposit_step(
 // Helper functions
 // ---------------------------------------------------------------------------
 
+/// Current time as Unix epoch milliseconds, read from the client clock.
+/// Used to gate time-based UI (e.g. refund availability) on the deposit page.
+/// Note: the on-chain program remains the source of truth for actual refund
+/// validity; this is advisory only and tolerant of client clock skew.
+pub fn now_ms() -> i64 {
+    js_sys::Date::now() as i64
+}
+
+/// Whether the on-chain refund window is open as of the client clock.
+///
+/// Mirrors `bethere-escrow::instructions::refund::validate_and_update`, which
+/// enforces a two-path model:
+///   - Refund requires `clock >= event_end` (else `RefundNotYetAllowed`).
+///   - If the attendee was NOT checked in, refund additionally requires
+///     `clock < refund_deadline` (else `RefundDeadlinePassed`). Checked-in
+///     attendees may refund anytime after `event_end` — they showed up.
+///
+/// The on-chain check uses seconds; we compare in milliseconds for
+/// consistency with `DepositStatusResponse.event_end_ms`. The on-chain
+/// program remains the source of truth — this gate is advisory (tolerant of
+/// client clock skew) and only hides the CTA to avoid offering a TX that
+/// would revert. `checked_in` here reflects the off-chain check-in state
+/// (Google Sheets / D1), which the organizer keeps in sync with the on-chain
+/// `mark_checked_in` instruction.
+///
+/// Fails safe:
+///   - `event_end_ms <= 0` (legacy/missing) → returns `false` (CTA hidden).
+///   - `refund_deadline_ms <= 0` (missing deadline) → only the checked-in
+///     path can open the window; no-shows are treated as past-deadline
+///     (CTA hidden).
+pub fn event_refund_window_open(
+    event_end_ms: i64,
+    refund_deadline_ms: i64,
+    checked_in: bool,
+) -> bool {
+    // Event must have ended (on-chain: clock >= event_end).
+    if event_end_ms <= 0 || now_ms() < event_end_ms {
+        return false;
+    }
+    // Checked-in attendees: window is [event_end, ∞).
+    if checked_in {
+        return true;
+    }
+    // No-show attendees: window is [event_end, refund_deadline).
+    // Missing deadline → fail safe (treat as closed).
+    refund_deadline_ms > 0 && now_ms() < refund_deadline_ms
+}
+
 /// Format epoch ms to a short readable date for the refund deadline.
 pub fn format_refund_deadline(ms: i64) -> String {
     let date = js_sys::Date::new(&wasm_bindgen::JsValue::from_f64(ms as f64));
