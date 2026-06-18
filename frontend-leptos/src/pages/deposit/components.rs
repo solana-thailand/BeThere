@@ -141,6 +141,38 @@ pub fn back_to_event_link(event_slug: &str) -> AnyView {
     }
 }
 
+/// Non-mainnet cluster warning banner.
+///
+/// Surfaces upfront that the deployment is on Devnet/Testnet/etc. so attendees
+/// switch their wallet before connecting, instead of discovering the mismatch
+/// at the "Send USDC" step (the hard pre-check in `make_send_deposit` rejects
+/// the TX with a toast error there).
+///
+/// Reuses `.dep2-deadline--warning` styling — same look as the refund-window
+/// banner. Returns the view unconditionally; caller is responsible for gating
+/// on `cluster != "mainnet-beta"` and non-THB-only states.
+pub fn cluster_warning_banner(cluster: &str) -> AnyView {
+    // Display label: "devnet" → "Devnet", "mainnet-beta" → "Mainnet Beta".
+    let label = match cluster {
+        "mainnet-beta" => "Mainnet Beta",
+        "devnet" => "Devnet",
+        "testnet" => "Testnet",
+        "localnet" => "Localnet",
+        other => other,
+    };
+    view! {
+        <div class="dep2-deadline dep2-deadline--warning">
+            <Icon icon=IconName::Warning class="icon-sm" />
+            <p class="dep2-deadline-text">
+                {format!(
+                    "This event runs on Solana {label}. Switch your wallet to {label} before paying with USDC — funds sent on another network won't reach this escrow."
+                )}
+            </p>
+        </div>
+    }
+        .into_any()
+}
+
 /// Show a toast error.
 pub fn show_error(set_toast: &WriteSignal<Option<components::ToastMessage>>, msg: &str) {
     components::show_toast(set_toast, msg, ToastType::Error);

@@ -68,6 +68,13 @@ pub fn Deposit() -> impl IntoView {
     let file_input_ref = NodeRef::<leptos::html::Input>::new();
     let (slip_preview, set_slip_preview) = signal(None::<String>);
 
+    // Cluster signal — fetched from `/api/health` on mount.
+    // Defaults to "devnet" (matches `utils::get_cluster()` fallback), so the
+    // warning banner renders optimistically until the fetch resolves. On a
+    // mainnet deployment the fetch will set this to "mainnet-beta" and the
+    // banner disappears.
+    let (cluster, set_cluster) = signal(crate::utils::get_cluster());
+
     // Extract attendee_id from URL path and event_id from query params, then fetch status
     Effect::new(move |_| {
         let attendee_id = match params.get() {
@@ -131,6 +138,20 @@ pub fn Deposit() -> impl IntoView {
             }
             log::info!("[deposit] detected wallets: {:?}", wallets);
             set_dw.set(wallets);
+        });
+    }
+
+    // --- Fetch cluster from `/api/health` on mount ---
+    // Drives the non-mainnet warning banner. The hard pre-check in
+    // `make_send_deposit` uses the cached value via `utils::get_cluster()`;
+    // this `fetch_cluster()` call also populates that cache so both code paths
+    // agree on the same cluster.
+    {
+        let set_c = set_cluster;
+        leptos::task::spawn_local(async move {
+            let c = crate::utils::fetch_cluster().await;
+            log::info!("[deposit] cluster: {c}");
+            set_c.set(c);
         });
     }
 
@@ -213,6 +234,28 @@ pub fn Deposit() -> impl IntoView {
                             components::deposit_stepper(flow, current, total)
                         }
                         None => ().into_any(),
+                    }
+                }}
+
+                // Non-mainnet cluster warning banner.
+                // Shown on every state except THB-only states (THB deposits don't
+                // touch a Solana wallet, so the warning would be noise there).
+                // The hard pre-check in `make_send_deposit` rejects wrong-network
+                // TXs at send time; this banner gives attendees a heads-up *before*
+                // they connect, so they switch networks proactively.
+                {move || {
+                    let c = cluster.get();
+                    let s = state.get();
+                    let is_thb_only = matches!(
+                        s,
+                        DepositPageState::ThbUploading(_)
+                            | DepositPageState::ThbUploaded(..)
+                            | DepositPageState::ThbRejected(_)
+                    );
+                    if c != "mainnet-beta" && !is_thb_only {
+                        components::cluster_warning_banner(&c)
+                    } else {
+                        ().into_any()
                     }
                 }}
 
