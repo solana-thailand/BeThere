@@ -42,6 +42,18 @@ pub struct DepositStatusResponse {
     pub event_end_ms: i64,
     #[serde(default)]
     pub refund_deadline_hours: u32,
+    /// Absolute refund deadline as Unix epoch milliseconds
+    /// (= `event_end_ms + refund_deadline_hours * 3_600_000`).
+    /// Precomputed by the worker so the gate can evaluate the no-show path
+    /// without recomputing. `0` when not configured (legacy/missing data).
+    #[serde(default)]
+    pub refund_deadline_ms: i64,
+    /// Whether the attendee has checked in (off-chain source of truth).
+    /// Drives the two-path refund window: checked-in attendees may refund
+    /// anytime after `event_end`; no-shows may only refund before
+    /// `refund_deadline_ms`.
+    #[serde(default)]
+    pub checked_in: bool,
     #[serde(default)]
     pub event_name: String,
     #[serde(default)]
