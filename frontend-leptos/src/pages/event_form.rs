@@ -975,15 +975,30 @@ pub fn EventFormComponent(
 
                     <div class="quiz-settings-grid">
                         <div class="quiz-setting-item">
-                            <label class="quiz-field-label">"Sheet ID"<span class="field-required-badge">"Required"</span></label>
-                        <input
-                            type="text"
-                            class="quiz-number-input"
-                            placeholder="Paste Google Sheet ID here"
-                            prop:value=move || form.get().sheet_id
-                            on:input=move |ev| set_form.update(|f| f.sheet_id = event_target_value(&ev))
-                        />
-                    </div>
+                                <label class="quiz-field-label">"Sheet ID"<span class="field-required-badge">"Required"</span></label>
+                            <input
+                                type="text"
+                                class="quiz-number-input"
+                                placeholder="Paste Google Sheet ID here"
+                                prop:value=move || form.get().sheet_id
+                                on:input=move |ev| set_form.update(|f| f.sheet_id = event_target_value(&ev))
+                            />
+                            <div class="quiz-setting-hint event-form-hint-row">
+                                <Show
+                                    when=move || !form.get().sheet_id.trim().is_empty()
+                                    fallback=|| view! { <span></span> }
+                                >
+                                    <a
+                                        href=move || crate::utils::google_sheet_url(&form.get().sheet_id)
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        class="event-form-link-sm"
+                                    >
+                                        "Open in Google Sheets ↗"
+                                    </a>
+                                </Show>
+                            </div>
+                        </div>
                     <div class="quiz-setting-item">
                         <label class="quiz-field-label">"Sheet Name"</label>
                         <input
