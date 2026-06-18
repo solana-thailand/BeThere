@@ -1185,7 +1185,13 @@ pub(crate) async fn clear_attendee_pii(db: &D1Database, attendee_id: &str) -> Re
 /// deposits, QR, refunds). Used by the Sheet → D1 sync endpoint.
 ///
 /// Idempotent: ON CONFLICT updates all lifecycle columns from the sheet data.
-/// Uses `db.exec()` with format string per project convention (avoids prepared stmt issues).
+///
+/// Uses parameterized `prepare().bind_refs().run()` — NOT `db.exec()`.
+/// D1's `exec()` truncates multi-line `INSERT ... ON CONFLICT` statements
+/// ("incomplete input: SQLITE_ERROR" at `INSERT INTO attendees (`), which is
+/// why every other function in this module uses the parameterized path.
+/// Empty optional strings bind as NULL so the `COALESCE(excluded.X, attendees.X)`
+/// branches preserve existing values instead of overwriting with ''.
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn upsert_attendee_full(
     db: &D1Database,
@@ -1211,81 +1217,91 @@ pub(crate) async fn upsert_attendee_full(
     bank_account_name: Option<&str>,
     sheet_row_index: Option<i32>,
 ) -> Result<(), String> {
-    let esc = |s: &str| s.replace('\'', "\'\'");
-    let null_or = |opt: Option<&str>| -> String {
-        match opt {
-            Some(v) if !v.is_empty() => format!("'{}'", esc(v)),
-            _ => "NULL".to_string(),
-        }
-    };
+    // Map an Option<&str> to a D1 bind, falling back to an empty string.
+    // We intentionally do NOT use `D1Type::Null` — the rest of this module
+    // binds empty strings for optionals (D1's `bind_refs` rejects `Null` with
+    // "D1_TYPE_ERROR: Type 'object' not supported"). To preserve the
+    // "empty ⇒ keep existing value" semantics on conflict, the SQL wraps each
+    // preserve-column in `COALESCE(NULLIF(excluded.X, ''), attendees.X)`.
+    // Declared as a named fn (not a closure) so a single lifetime `'a` ties
+    // the borrowed input to the returned `D1Type<'a>`.
+    fn opt_text<'a>(opt: Option<&'a str>) -> D1Type<'a> {
+        D1Type::Text(opt.unwrap_or(""))
+    }
 
-    let sql = format!(
-        "INSERT INTO attendees (
-            id, event_id, email, name, approval_status, participation_type,
-            contact_channel, contact_handle,
-            checked_in_at, checked_in_by, claim_token, claimed_at, qr_url,
-            deposit_status, deposit_tx_hash,
-            refund_tx_hash, refund_link,
-            bank_name, bank_account_number, bank_account_name,
-            sheet_row_index, synced_at, created_at, updated_at
-        ) VALUES (
-            '{id}', '{event_id}', '{email}', '{name}', '{approval_status}', '{participation_type}',
-            '{contact_channel}', '{contact_handle}',
-            {checked_in_at}, {checked_in_by}, {claim_token}, {claimed_at}, {qr_url},
-            '{deposit_status}', {deposit_tx_hash},
-            {refund_tx_hash}, {refund_link},
-            {bank_name}, {bank_account_number}, {bank_account_name},
-            {sheet_row_index}, datetime('now'), datetime('now'), datetime('now')
-        )
-        ON CONFLICT (id) DO UPDATE SET
-            name = excluded.name,
-            approval_status = excluded.approval_status,
-            participation_type = excluded.participation_type,
-            contact_channel = excluded.contact_channel,
-            contact_handle = excluded.contact_handle,
-            checked_in_at = COALESCE(excluded.checked_in_at, attendees.checked_in_at),
-            checked_in_by = COALESCE(excluded.checked_in_by, attendees.checked_in_by),
-            claim_token = COALESCE(excluded.claim_token, attendees.claim_token),
-            claimed_at = COALESCE(excluded.claimed_at, attendees.claimed_at),
-            qr_url = COALESCE(excluded.qr_url, attendees.qr_url),
-            deposit_status = excluded.deposit_status,
-            deposit_tx_hash = COALESCE(excluded.deposit_tx_hash, attendees.deposit_tx_hash),
-            refund_tx_hash = COALESCE(excluded.refund_tx_hash, attendees.refund_tx_hash),
-            refund_link = COALESCE(excluded.refund_link, attendees.refund_link),
-            bank_name = COALESCE(excluded.bank_name, attendees.bank_name),
-            bank_account_number = COALESCE(excluded.bank_account_number, attendees.bank_account_number),
-            bank_account_name = COALESCE(excluded.bank_account_name, attendees.bank_account_name),
-            sheet_row_index = excluded.sheet_row_index,
-            synced_at = datetime('now'),
-            updated_at = datetime('now')",
-        id = esc(id),
-        event_id = esc(event_id),
-        email = esc(email),
-        name = esc(name),
-        approval_status = esc(approval_status),
-        participation_type = esc(participation_type),
-        contact_channel = esc(contact_channel),
-        contact_handle = esc(contact_handle),
-        checked_in_at = null_or(checked_in_at),
-        checked_in_by = null_or(checked_in_by),
-        claim_token = null_or(claim_token),
-        claimed_at = null_or(claimed_at),
-        qr_url = null_or(qr_url),
-        deposit_status = esc(deposit_status),
-        deposit_tx_hash = null_or(deposit_tx_hash),
-        refund_tx_hash = null_or(refund_tx_hash),
-        refund_link = null_or(refund_link),
-        bank_name = null_or(bank_name),
-        bank_account_number = null_or(bank_account_number),
-        bank_account_name = null_or(bank_account_name),
-        sheet_row_index = sheet_row_index
-            .map(|i| i.to_string())
-            .unwrap_or_else(|| "NULL".to_string()),
+    let stmt = db.prepare(
+        "INSERT INTO attendees ( \
+         id, event_id, email, name, approval_status, participation_type, \
+         contact_channel, contact_handle, \
+         checked_in_at, checked_in_by, claim_token, claimed_at, qr_url, \
+         deposit_status, deposit_tx_hash, \
+         refund_tx_hash, refund_link, \
+         bank_name, bank_account_number, bank_account_name, \
+         sheet_row_index, synced_at, created_at, updated_at \
+         ) VALUES ( \
+         ?1, ?2, ?3, ?4, ?5, ?6, \
+         ?7, ?8, \
+         NULLIF(?9, ''), NULLIF(?10, ''), NULLIF(?11, ''), NULLIF(?12, ''), NULLIF(?13, ''), \
+         ?14, NULLIF(?15, ''), \
+         NULLIF(?16, ''), NULLIF(?17, ''), \
+         NULLIF(?18, ''), NULLIF(?19, ''), NULLIF(?20, ''), \
+         ?21, datetime('now'), datetime('now'), datetime('now') \
+         ) \
+         ON CONFLICT (id) DO UPDATE SET \
+         name = excluded.name, \
+         approval_status = excluded.approval_status, \
+         participation_type = excluded.participation_type, \
+         contact_channel = excluded.contact_channel, \
+         contact_handle = excluded.contact_handle, \
+         checked_in_at = COALESCE(excluded.checked_in_at, attendees.checked_in_at), \
+         checked_in_by = COALESCE(excluded.checked_in_by, attendees.checked_in_by), \
+         claim_token = COALESCE(excluded.claim_token, attendees.claim_token), \
+         claimed_at = COALESCE(excluded.claimed_at, attendees.claimed_at), \
+         qr_url = COALESCE(excluded.qr_url, attendees.qr_url), \
+         deposit_status = excluded.deposit_status, \
+         deposit_tx_hash = COALESCE(excluded.deposit_tx_hash, attendees.deposit_tx_hash), \
+         refund_tx_hash = COALESCE(excluded.refund_tx_hash, attendees.refund_tx_hash), \
+         refund_link = COALESCE(excluded.refund_link, attendees.refund_link), \
+         bank_name = COALESCE(excluded.bank_name, attendees.bank_name), \
+         bank_account_number = COALESCE(excluded.bank_account_number, attendees.bank_account_number), \
+         bank_account_name = COALESCE(excluded.bank_account_name, attendees.bank_account_name), \
+         sheet_row_index = CASE WHEN excluded.sheet_row_index = 0 THEN attendees.sheet_row_index ELSE excluded.sheet_row_index END, \
+         synced_at = datetime('now'), \
+         updated_at = datetime('now')",
     );
 
-    db.exec(&sql)
-        .await
-        .map_err(|e| format!("D1 upsert_attendee_full exec: {e:?}"))?;
+    // sheet_row_index is 1-based (sheet row 2+), so 0 is a safe "unset" sentinel.
+    // Avoids `D1Type::Null` (rejected by `bind_refs`); the ON CONFLICT clause
+    // treats 0 as "preserve existing".
+    let sheet_row_bind = D1Type::Integer(sheet_row_index.unwrap_or(0));
+
+    stmt.bind_refs(&[
+        D1Type::Text(id),                              // ?1
+        D1Type::Text(event_id),                        // ?2
+        D1Type::Text(email),                           // ?3
+        D1Type::Text(name),                            // ?4
+        D1Type::Text(approval_status),                 // ?5
+        D1Type::Text(participation_type),              // ?6
+        D1Type::Text(contact_channel),                 // ?7
+        D1Type::Text(contact_handle),                  // ?8
+        opt_text(checked_in_at),                       // ?9
+        opt_text(checked_in_by),                       // ?10
+        opt_text(claim_token),                         // ?11
+        opt_text(claimed_at),                          // ?12
+        opt_text(qr_url),                              // ?13
+        D1Type::Text(deposit_status),                  // ?14
+        opt_text(deposit_tx_hash),                     // ?15
+        opt_text(refund_tx_hash),                      // ?16
+        opt_text(refund_link),                         // ?17
+        opt_text(bank_name),                           // ?18
+        opt_text(bank_account_number),                 // ?19
+        opt_text(bank_account_name),                   // ?20
+        sheet_row_bind,                                // ?21
+    ])
+    .map_err(|e| format!("D1 upsert_attendee_full bind: {e:?}"))?
+    .run()
+    .await
+    .map_err(|e| format!("D1 upsert_attendee_full run: {e:?}"))?;
 
     Ok(())
 }
