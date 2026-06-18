@@ -85,6 +85,8 @@ pub struct D1EventRow {
     pub form_config: Option<String>,
     // Columns added for organization calendar subscribe
     pub calendar_subscribe_url: Option<String>,
+    // Columns added by migration 0019 (event poster)
+    pub poster_url: Option<String>,
 }
 
 impl D1EventRow {
@@ -202,6 +204,7 @@ impl D1EventRow {
             )
             .unwrap_or_default(),
             calendar_subscribe_url: self.calendar_subscribe_url.clone().unwrap_or_default(),
+            poster_url: self.poster_url.clone().unwrap_or_default(),
         }
     }
 }
@@ -314,7 +317,7 @@ pub async fn upsert_event(
          in_person_capacity, online_capacity, \
          online_open_mode, online_registration_open, \
          deposit_deadline_hours, updated_by, dev_profile_enabled, community_links, \
-         calendar_subscribe_url) \
+         calendar_subscribe_url, poster_url) \
          VALUES ('{id}', '{name}', '{slug}', '{status}', '{event_format}', \
          {event_start_ms}, {event_end_ms}, \
          {deposit_enabled}, {deposit_amount_usdc}, {deposit_amount_thb}, \
@@ -333,7 +336,7 @@ pub async fn upsert_event(
          {in_person_capacity}, {online_capacity}, \
          '{online_open_mode}', {online_registration_open}, \
          {deposit_deadline_hours}, '{updated_by}', {dev_profile_enabled}, '{community_links}', \
-         '{calendar_subscribe_url}') \
+         '{calendar_subscribe_url}', '{poster_url}') \
          ON CONFLICT (id) DO UPDATE SET \
          name = excluded.name, slug = excluded.slug, status = excluded.status, \
          event_format = excluded.event_format, \
@@ -378,7 +381,8 @@ pub async fn upsert_event(
          updated_by = excluded.updated_by, \
          dev_profile_enabled = excluded.dev_profile_enabled, \
          community_links = excluded.community_links, \
-         calendar_subscribe_url = excluded.calendar_subscribe_url",
+         calendar_subscribe_url = excluded.calendar_subscribe_url, \
+         poster_url = excluded.poster_url",
         id = config.id,
         name = config.name.replace('\'', "''"),
         slug = config.slug,
@@ -438,6 +442,7 @@ pub async fn upsert_event(
         community_links =
             serde_json::to_string(&config.community_links).unwrap_or_else(|_| "[]".to_string()),
         calendar_subscribe_url = config.calendar_subscribe_url,
+        poster_url = config.poster_url,
     );
 
     db.exec(&sql)

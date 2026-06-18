@@ -9,6 +9,7 @@
 //! | `slips/` | THB payment slip images | `slips/{event_id}/{attendee_id}.jpg` |
 //! | `refunds/` | Refund transfer receipts | `refunds/{event_id}/{attendee_id}.jpg` |
 //! | `badges/` | Event badge SVG files | `badges/{event_id}.svg` |
+//! | `posters/` | Event marketing posters | `posters/{event_id}.{ext}` |
 //! | `metadata/` | NFT metadata JSON | `metadata/{event_id}.json` |
 //! | `exports/` | Walk-in CSV exports | `exports/{event_id}/{timestamp}.csv` |
 
@@ -30,6 +31,9 @@ pub const PREFIX_REFUNDS: &str = "refunds/";
 /// R2 key prefix for event badge SVG files.
 pub const PREFIX_BADGES: &str = "badges/";
 
+/// R2 key prefix for event marketing poster images.
+pub const PREFIX_POSTERS: &str = "posters/";
+
 /// R2 key prefix for NFT metadata JSON files.
 pub const PREFIX_METADATA: &str = "metadata/";
 
@@ -49,6 +53,12 @@ pub fn refund_key(event_id: &str, attendee_id: &str) -> String {
 /// Build an R2 key for an event badge SVG.
 pub fn badge_key(event_id: &str) -> String {
     format!("{PREFIX_BADGES}{event_id}.svg")
+}
+
+/// Build an R2 key for an event marketing poster.
+/// Extension is derived from the uploaded content-type (png/jpg/webp/svg).
+pub fn poster_key(event_id: &str, ext: &str) -> String {
+    format!("{PREFIX_POSTERS}{event_id}.{ext}")
 }
 
 /// Build an R2 key for an NFT metadata JSON file.
@@ -164,6 +174,16 @@ pub async fn serve_refund(
 #[worker::send]
 pub async fn serve_badge(State(state): State<AppState>, Path(event_id): Path<String>) -> Response {
     serve_r2_object(&state, &badge_key(&event_id)).await
+}
+
+/// GET /api/storage/posters/{event_id}
+///
+/// Serves an event marketing poster from R2. `serve_r2_object` tries common
+/// image extensions (.png/.jpg/.webp/.svg) so the served path is extension-agnostic,
+/// letting organizers re-upload in a different format without changing the stored URL.
+#[worker::send]
+pub async fn serve_poster(State(state): State<AppState>, Path(event_id): Path<String>) -> Response {
+    serve_r2_object(&state, &format!("{PREFIX_POSTERS}{event_id}")).await
 }
 
 /// Internal: serve an R2 object by key, trying common image extensions if

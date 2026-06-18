@@ -5,8 +5,8 @@
 //! (Decisions A1 + B1).
 
 use axum::Extension;
-use axum::extract::{Path, State};
 use axum::Json;
+use axum::extract::{Path, State};
 use serde_json::json;
 
 use crate::error::ApiOk;
@@ -131,6 +131,7 @@ pub async fn duplicate_event(
         nft_collection_mint: source.nft_collection_mint.clone(),
         nft_metadata_uri: source.nft_metadata_uri.clone(),
         nft_image_url: source.nft_image_url.clone(),
+        poster_url: source.poster_url.clone(),
         nft_name_template: source.nft_name_template.clone(),
         nft_symbol: source.nft_symbol.clone(),
         nft_description_template: source.nft_description_template.clone(),
@@ -182,7 +183,10 @@ pub async fn duplicate_event(
         })?;
 
     // ── 5. Audit log — reuse EventCreated with metadata noting source ───────
-    let audit_desc = format!("event '{}' duplicated from '{}'", new_config.name, source_id);
+    let audit_desc = format!(
+        "event '{}' duplicated from '{}'",
+        new_config.name, source_id
+    );
     let audit_meta = json!({ "source_id": source_id });
 
     if let Some(kv_ref) = kv {

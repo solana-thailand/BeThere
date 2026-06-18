@@ -195,6 +195,7 @@ pub async fn get_public_event(
         "deposit_amount_thb": config.deposit_amount_thb,
         "event_format": config.event_format.as_str(),
         "nft_image_url": config.nft_image_url,
+        "poster_url": config.poster_url,
         "nft_name_template": config.nft_name_template,
         "nft_symbol": config.nft_symbol,
         "nft_description_template": config.nft_description_template,

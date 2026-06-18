@@ -228,6 +228,7 @@ pub async fn create_event(
         nft_collection_mint: req.nft_collection_mint.trim().to_string(),
         nft_metadata_uri: req.nft_metadata_uri.trim().to_string(),
         nft_image_url: req.nft_image_url.trim().to_string(),
+        poster_url: req.poster_url.trim().to_string(),
         nft_name_template: req.nft_name_template.trim().to_string(),
         nft_symbol: req.nft_symbol.trim().to_string(),
         nft_description_template: req.nft_description_template.trim().to_string(),
@@ -444,6 +445,9 @@ pub async fn update_event(
     if let Some(ref v) = req.nft_image_url {
         config.nft_image_url = v.trim().to_string();
     }
+    if let Some(ref v) = req.poster_url {
+        config.poster_url = v.trim().to_string();
+    }
     if let Some(ref v) = req.nft_name_template {
         config.nft_name_template = v.trim().to_string();
     }
@@ -570,6 +574,9 @@ pub async fn update_event(
     }
     if let Some(ref url) = req.calendar_subscribe_url {
         config.calendar_subscribe_url = url.clone();
+    }
+    if let Some(ref url) = req.poster_url {
+        config.poster_url = url.trim().to_string();
     }
 
     config.updated_at = chrono::Utc::now().to_rfc3339();
@@ -708,6 +715,9 @@ pub fn apply_update(config: &mut EventConfig, req: &UpdateEventRequest) -> Resul
     if let Some(ref v) = req.nft_image_url {
         config.nft_image_url = v.trim().to_string();
     }
+    if let Some(ref v) = req.poster_url {
+        config.poster_url = v.trim().to_string();
+    }
     if let Some(ref v) = req.nft_name_template {
         config.nft_name_template = v.trim().to_string();
     }
@@ -828,6 +838,9 @@ pub fn apply_update(config: &mut EventConfig, req: &UpdateEventRequest) -> Resul
     }
     if let Some(ref url) = req.calendar_subscribe_url {
         config.calendar_subscribe_url = url.clone();
+    }
+    if let Some(ref url) = req.poster_url {
+        config.poster_url = url.trim().to_string();
     }
 
     Ok(())
@@ -1117,6 +1130,7 @@ pub async fn seed_from_config(
         dev_profile_enabled: false,
         community_links: vec![],
         calendar_subscribe_url: String::new(),
+        poster_url: String::new(),
     };
 
     // Save full config

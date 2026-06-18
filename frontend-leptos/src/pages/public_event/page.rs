@@ -401,6 +401,7 @@ fn render_loaded_event(
     let description = data.description.clone();
     let link = data.link.clone();
     let nft_image_url = data.nft_image_url.clone();
+    let poster_url = data.poster_url.clone();
     let community_links = data.community_links.clone();
 
     // Deposit label for registration form checkbox
@@ -454,8 +455,12 @@ fn render_loaded_event(
     let slug_for_signin = current_slug.clone();
     let slug_for_reg = data.slug.clone();
 
-    // OG image meta tag — render separately since we need nft_image_url
-    let og_image = nft_image_url.clone();
+    // OG image meta tag — prefer the marketing poster, fall back to the NFT badge image.
+    let og_image = if !poster_url.is_empty() {
+        poster_url.clone()
+    } else {
+        nft_image_url.clone()
+    };
 
     view! {
         // OG image meta
@@ -469,8 +474,8 @@ fn render_loaded_event(
             ().into_any()
         }}
 
-        // NFT Badge Image (hero)
-        {event_hero(&nft_image_url)}
+        // Event hero — prefer marketing poster, fall back to NFT badge image, then Ticket icon.
+        {event_hero(&poster_url, &nft_image_url)}
 
         // Event Name + Tagline
         <div class="pe-name-block">
