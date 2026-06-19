@@ -3,6 +3,7 @@
 use leptos::prelude::*;
 
 use crate::api::CommunityLink;
+use crate::pages::ticket::access_logistics::GUIDE_PLATFORM;
 
 /// Render a platform icon SVG.
 fn platform_icon(platform: &str) -> &'static str {
@@ -71,7 +72,13 @@ pub fn community_links_section(
         return ().into_any();
     }
 
-    let filtered: Vec<_> = links.into_iter().filter(|l| !l.url.is_empty()).collect();
+    let filtered: Vec<_> = links
+        .into_iter()
+        // Exclude guide links — they are logistics docs (building access,
+        // ID exchange, transportation) rendered by `access_logistics_section`,
+        // not social/community links.
+        .filter(|l| !l.url.is_empty() && l.platform != GUIDE_PLATFORM)
+        .collect();
 
     if filtered.is_empty() {
         return ().into_any();

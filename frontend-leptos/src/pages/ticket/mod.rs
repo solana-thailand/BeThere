@@ -1,3 +1,4 @@
+pub mod access_logistics;
 pub mod action_cards;
 pub mod calendar_links;
 pub mod community_links;

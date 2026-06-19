@@ -9919,6 +9919,77 @@ nav a.active {
     font-weight: 500;
 }
 
+/* Access & Logistics card (in-person ticket only) — guide links tagged
+   with platform "guide": building access, ID exchange, transportation.
+   Builds on the ticket-action-card--info base class. */
+
+.access-logistics-inner {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    width: 100%;
+}
+
+.access-logistics-title {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.access-logistics-title .icon-sm {
+    color: var(--info);
+    flex-shrink: 0;
+}
+
+.access-logistics-hint {
+    margin: 0;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    line-height: 1.4;
+}
+
+.access-logistics-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-top: 0.25rem;
+}
+
+.access-logistics-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.55rem 0.75rem;
+    border-radius: 8px;
+    background: var(--bg-card);
+    text-decoration: none;
+    color: var(--text-primary);
+    transition:
+        background 0.15s,
+        transform 0.1s;
+}
+
+.access-logistics-item:hover {
+    background: var(--accent-hover);
+    transform: translateY(-1px);
+}
+
+.access-logistics-label {
+    font-size: 0.85rem;
+    font-weight: 500;
+}
+
+.access-logistics-arrow {
+    display: flex;
+    align-items: center;
+    color: var(--info);
+    flex-shrink: 0;
+}
+
 /* Public event page community links */
 .pe-community-title-icon {
     display: inline-flex;
