@@ -59,13 +59,13 @@ This plan consolidates the scattered free-tier optimization work that already li
 | Subrequests / request | 50 | D1+R2+RPC+Sheets+Helius | — | OK |
 | Simultaneous connections | 6 | parallel fan-out | — | Watch |
 | **Worker size (gzip)** | **3 MB** | **1.47 MB** | `ls -lh` | **51% free** |
-| **KV writes/day** | **1,000** | **510 (51%) pre-fix** | `scripts/diag_kv_usage.py` | **Fix pending deploy** |
+| **KV writes/day** | **1,000** | **510 (51%) pre-fix** | `scripts/diag_kv_usage.py` | **Fix merged to `main`/`develop` (`ebd0e97`) — verify prod deploy + usage drop** |
 | KV reads/day | 100,000 | ~12K (12%) | diag script | OK |
 | Static asset file size | 25 MiB | 3.9 MB WASM | `ls` | OK |
 | Env vars / Worker | 64 | ~15 + secrets | wrangler.toml | OK |
 | Cron triggers / account | 5 | 1 | wrangler.toml | OK |
 
-**Two real risks**: (a) **KV writes** — already fixed on branch, not deployed; (b) **CPU time per request** — never measured, could be the silent killer on the escrow mint/refund path.
+**Two real risks**: (a) **KV writes** — fix is **merged** to `main`/`develop` (`ebd0e97`, handover #100; `feature/kv_write_elimination` branch deleted); only **prod deploy verification** remains (see P0.1); (b) **CPU time per request** — never measured, could be the silent killer on the escrow mint/refund path.
 
 ---
 
@@ -126,11 +126,17 @@ These are completed work from issues #039 / #041 / #046 / #053. Listed here so n
 
 ### 🔴 P0 — Must-do before Jun 22 (blocking free-tier safety)
 
-#### P0.1 — Deploy the KV write elimination fix
-- **Branch**: `feature/kv_write_elimination` (2 commits, clean FF from `develop`)
-- **Risk**: 🟢 Zero — read paths already D1-first, only write paths removed
+#### P0.1 — Verify the KV write elimination fix in prod
+- **Status (updated 2026-06-19)**: the fix is **merged** to `main` and `develop`
+  (`ebd0e97 fix(event_store): eliminate redundant KV writes`, `404aeb7` handover #100).
+  The `feature/kv_write_elimination` branch has been deleted after merge — there is no
+  separate branch to deploy. The pre-merge framing of this section ("deploy the branch")
+  was stale; updated here.
+- **Risk**: 🟢 Zero — read paths already D1-first, only redundant write paths were removed
 - **Impact**: drops KV writes from ~510/day → ~0/day (frees 51% of write quota)
-- **Action**: `cd worker && ./deploy.sh`, then verify with `python3 scripts/diag_kv_usage.py --days 3`
+- **Remaining action**: confirm the live prod worker is at current `main` HEAD, then verify
+  with `python3 scripts/diag_kv_usage.py --days 3`. (Code deploy is the normal gitflow path
+  `develop → main → wrangler`; no separate "deploy the branch" step is needed.)
 - **Ref**: handover #100, issue #053
 
 #### P0.2 — Measure CPU time per request (the unknown risk)
@@ -192,7 +198,7 @@ These are the unfinished items from issue #041. Each requires a code change + D1
 ## 6. Pre-Demo-Day Checklist (Jun 18 → Jun 22)
 
 ```
-[ ] P0.1  Deploy KV write elimination (feature/kv_write_elimination)
+[ ] P0.1  Confirm prod worker is at main HEAD (KV fix ebd0e97 is merged, branch deleted)
 [ ] P0.1  Verify writes dropped: python3 scripts/diag_kv_usage.py --days 3
 [ ] P0.2  wrangler tail — record cpuTime for: checkin, claim, deposit, refund
 [ ] P0.2  If any path >10ms CPU, escalate immediately
