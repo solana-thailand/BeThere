@@ -11,6 +11,11 @@ use crate::api;
 use crate::components;
 use crate::icons::{Icon, IconName};
 
+/// Maximum number of community links per event. Covers both social links
+/// (Telegram, Discord, X, etc.) and guide links (platform "guide" — rendered
+/// as the Access & Logistics card). 10 = ~5 social + ~5 guide.
+const MAX_COMMUNITY_LINKS: usize = 10;
+
 // ===== Form State =====
 
 /// Form state for creating/editing events.
@@ -350,7 +355,7 @@ pub fn EventFormComponent(
 
     let add_community_link = move || {
         set_cl_links.update(|links| {
-            if links.len() < 5 {
+            if links.len() < MAX_COMMUNITY_LINKS {
                 links.push(crate::api::CommunityLink {
                     platform: "discord".to_string(),
                     url: String::new(),
@@ -2126,7 +2131,7 @@ pub fn EventFormComponent(
                         }}
                         {move || {
                             let count = cl_links.get().len();
-                            if count < 5 {
+                            if count < MAX_COMMUNITY_LINKS {
                                 view! {
                                     <button
                                         class="btn btn-outline btn-sm community-link-add"
