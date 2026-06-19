@@ -292,6 +292,49 @@ pub async fn delete_attendee(attendee_id: &str, event_id: Option<&str>) -> Resul
     Ok(())
 }
 
+/// Response shape for participation_type override.
+/// Mirrors PATCH /api/attendee/{id}/participation-type.
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct ParticipationTypeUpdate {
+    pub attendee_id: String,
+    pub event_id: String,
+    pub participation_type: String,
+    #[serde(default)]
+    pub sheet_row_updated: bool,
+    #[serde(default)]
+    pub d1_updated: bool,
+}
+
+/// Request body for PATCH /api/attendee/:id/participation-type.
+#[derive(Debug, Clone, Serialize)]
+struct ParticipationTypeBody<'a> {
+    participation_type: &'a str,
+}
+
+/// PATCH /api/attendee/:id/participation-type?event_id=xxx
+///
+/// Manually override an attendee's participation_type (In-Person ⇄ Online).
+/// Use case: attendee chose the deposit flow, never returned to the system,
+/// and later confirmed out-of-band that they'll attend online (or vice versa).
+///
+/// `new_value` must be exactly "In-Person" or "Online" — the backend rejects
+/// anything else. Deposit records are left intact; this is purely a
+/// participation-mode change.
+pub async fn update_participation_type(
+    attendee_id: &str,
+    event_id: Option<&str>,
+    new_value: &str,
+) -> Result<ParticipationTypeUpdate, ApiError> {
+    let path = match event_id {
+        Some(eid) if !eid.is_empty() => format!("/attendee/{attendee_id}/participation-type?event_id={eid}"),
+        _ => format!("/attendee/{attendee_id}/participation-type"),
+    };
+    let body = ParticipationTypeBody {
+        participation_type: new_value,
+    };
+    super::api_patch_json(&path, &body).await
+}
+
 // ===== Walk-in API functions =====
 
 /// POST /api/walkin/register

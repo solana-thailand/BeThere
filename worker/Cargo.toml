@@ -29,6 +29,10 @@ curve25519-dalek = { version = "4.1", default-features = false }
 # Encoding — WASM-compatible
 base64 = "0.22"
 
+# MD5 integrity checksum for R2 puts (worker 0.8.x unconditionally sends an
+# `md5` PutOptions field; we must provide a real digest or R2 rejects it).
+md-5 = "0.10"
+
 # URL encoding — WASM-compatible
 urlencoding = "2"
 
@@ -43,6 +47,9 @@ event-checkin-domain = { path = "../domain", features = ["qr"] }
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
 js-sys = "0.3"
+# Minimal web-sys: only `Response` (used to materialize an R2 ReadableStream
+# into bytes, bypassing the broken worker 0.8.x get builder).
+web-sys = { version = "0.3", features = ["Response"] }
 
 # UUID generation (v7 for claim tokens)
 uuid = { version = "1", features = ["v7", "serde", "js"] }

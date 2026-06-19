@@ -175,6 +175,32 @@ pub(crate) async fn set_qr_url(db: &D1Database, id: &str, qr_url: &str) -> Resul
     Ok(())
 }
 
+/// Write a new `participation_type` to D1 for a single attendee.
+///
+/// Used by the manual admin override (PATCH /attendee/:id/participation-type)
+/// to fix attendees stuck in the wrong track — e.g. someone who chose
+/// deposit/in-person but confirmed out-of-band that they'll attend online.
+///
+/// NOTE: the deposit-deadline auto-switch (`check_and_switch_deadline`)
+/// only writes the Sheet, not D1. This helper keeps D1 in sync for the
+/// manual path so the public ticket page and admin list agree.
+pub(crate) async fn set_participation_type(
+    db: &D1Database,
+    id: &str,
+    participation_type: &str,
+) -> Result<(), String> {
+    let stmt = db.prepare(
+        "UPDATE attendees \n         SET participation_type = ?1, updated_at = datetime('now') \n         WHERE id = ?2",
+    );
+    stmt.bind_refs(&[D1Type::Text(participation_type), D1Type::Text(id)])
+        .map_err(|e| format!("D1 set_participation_type bind: {e:?}"))?
+        .run()
+        .await
+        .map_err(|e| format!("D1 set_participation_type run: {e:?}"))?;
+
+    Ok(())
+}
+
 /// Write QR URLs to D1 for multiple attendees in one statement.
 ///
 /// `entries` is `(attendee_id, qr_url)` pairs. Used by batch QR generation.
@@ -1276,27 +1302,27 @@ pub(crate) async fn upsert_attendee_full(
     let sheet_row_bind = D1Type::Integer(sheet_row_index.unwrap_or(0));
 
     stmt.bind_refs(&[
-        D1Type::Text(id),                              // ?1
-        D1Type::Text(event_id),                        // ?2
-        D1Type::Text(email),                           // ?3
-        D1Type::Text(name),                            // ?4
-        D1Type::Text(approval_status),                 // ?5
-        D1Type::Text(participation_type),              // ?6
-        D1Type::Text(contact_channel),                 // ?7
-        D1Type::Text(contact_handle),                  // ?8
-        opt_text(checked_in_at),                       // ?9
-        opt_text(checked_in_by),                       // ?10
-        opt_text(claim_token),                         // ?11
-        opt_text(claimed_at),                          // ?12
-        opt_text(qr_url),                              // ?13
-        D1Type::Text(deposit_status),                  // ?14
-        opt_text(deposit_tx_hash),                     // ?15
-        opt_text(refund_tx_hash),                      // ?16
-        opt_text(refund_link),                         // ?17
-        opt_text(bank_name),                           // ?18
-        opt_text(bank_account_number),                 // ?19
-        opt_text(bank_account_name),                   // ?20
-        sheet_row_bind,                                // ?21
+        D1Type::Text(id),                 // ?1
+        D1Type::Text(event_id),           // ?2
+        D1Type::Text(email),              // ?3
+        D1Type::Text(name),               // ?4
+        D1Type::Text(approval_status),    // ?5
+        D1Type::Text(participation_type), // ?6
+        D1Type::Text(contact_channel),    // ?7
+        D1Type::Text(contact_handle),     // ?8
+        opt_text(checked_in_at),          // ?9
+        opt_text(checked_in_by),          // ?10
+        opt_text(claim_token),            // ?11
+        opt_text(claimed_at),             // ?12
+        opt_text(qr_url),                 // ?13
+        D1Type::Text(deposit_status),     // ?14
+        opt_text(deposit_tx_hash),        // ?15
+        opt_text(refund_tx_hash),         // ?16
+        opt_text(refund_link),            // ?17
+        opt_text(bank_name),              // ?18
+        opt_text(bank_account_number),    // ?19
+        opt_text(bank_account_name),      // ?20
+        sheet_row_bind,                   // ?21
     ])
     .map_err(|e| format!("D1 upsert_attendee_full bind: {e:?}"))?
     .run()

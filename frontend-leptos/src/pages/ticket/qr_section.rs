@@ -4,6 +4,7 @@ use leptos::prelude::*;
 use wasm_bindgen::prelude::*;
 
 use super::view_data::TicketViewData;
+use crate::components::{ImageLightbox, LightboxSizing};
 use crate::icons::{Icon, IconName};
 
 /// Pulsing indicator that the backend is actively checking.
@@ -187,7 +188,8 @@ pub fn QrSection(
     }
 }
 
-/// Fullscreen QR overlay — rendered outside main layout.
+/// Fullscreen QR overlay — delegates to the shared `ImageLightbox` so the
+/// poster, slip preview, and QR all use the same click-to-dismiss pattern.
 #[component]
 pub fn FullscreenQrOverlay(
     /// Whether the overlay is visible
@@ -199,38 +201,19 @@ pub fn FullscreenQrOverlay(
     get_name: Memo<String>,
     #[prop(into)] get_qr_image: Memo<String>,
 ) -> impl IntoView {
+    // Convert Memo<String> -> Signal<String> so it satisfies ImageLightbox's
+    // caption prop. With `#[prop(optional, into)]`, the call site passes the
+    // inner `Signal<String>` (the macro wraps it in `Some`).
+    let caption_signal: Signal<String> = get_name.into();
     view! {
-        <Show
-            when=move || fullscreen_qr.get()
-            fallback=|| view! { <div></div> }
-        >
-            <div
-                class="ticket-fullscreen-overlay"
-                on:click=move |_| set_fullscreen_qr.set(false)
-            >
-                <div
-                    class="ticket-fullscreen-card"
-                    on:click=move |ev| ev.stop_propagation()
-                >
-                    <div class="ticket-fullscreen-header">
-                        <span class="ticket-fullscreen-name">
-                            {move || get_name.get()}
-                        </span>
-                        <button
-                            class="ticket-fullscreen-close"
-                            on:click=move |_| set_fullscreen_qr.set(false)
-                        >
-                            "✕"
-                        </button>
-                    </div>
-                    <img
-                        src=move || get_qr_image.get()
-                        alt="QR Code"
-                        class="ticket-fullscreen-qr"
-                    />
-                    <p class="ticket-fullscreen-hint">"Show this code to staff"</p>
-                </div>
-            </div>
-        </Show>
+        <ImageLightbox
+            visible=fullscreen_qr
+            set_visible=set_fullscreen_qr
+            src=get_qr_image
+            alt="QR Code".to_string()
+            caption=caption_signal
+            hint="Show this code to staff".to_string()
+            sizing=LightboxSizing::Square
+        />
     }
 }

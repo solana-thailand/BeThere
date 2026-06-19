@@ -1,7 +1,8 @@
 //! Shared UI components extracted from page modules.
 //!
-//! Provides reusable Toast notifications, AppHeader, and ProtectedRoute wrapper
-//! to eliminate code duplication between scanner and admin pages.
+//! Provides reusable Toast notifications, AppHeader, ProtectedRoute wrapper,
+//! and a generic ImageLightbox (click-to-fullscreen image viewer) to eliminate
+//! code duplication between scanner and admin pages.
 
 use leptos::prelude::*;
 use leptos_router::components::A;
@@ -242,5 +243,182 @@ pub fn ProtectedRoute(children: Children) -> impl IntoView {
         >
             {child_view}
         </div>
+    }
+}
+
+// ===== Image Lightbox =====
+
+/// Image sizing strategy for the fullscreen lightbox.
+///
+/// - `Contain`: large image preserving aspect ratio (posters, slips). Default.
+/// - `Square`: bounded by `min(70vw, 70vh)` — used for QR codes so they stay
+///   scannable on small screens rather than filling the viewport.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum LightboxSizing {
+    #[default]
+    Contain,
+    Square,
+}
+
+/// Generic click-to-dismiss fullscreen image overlay.
+///
+/// Renders always-present in the DOM but hidden via CSS when not visible —
+/// this avoids the `FnOnce`/`Fn` tension that `<Show>` creates around owned
+/// `alt`/`hint` values, and lets the same overlay be opened from multiple
+/// triggers (inline thumbnail + separate "Full Screen" button).
+///
+/// `src` and `caption` accept any `Signal<String>` source — `ReadSignal`,
+/// `Memo`, or `Signal::derive(...)` — so reactive content (like the current
+/// attendee's QR code) updates live while the overlay is open. Pass an empty
+/// `Signal<String>` (or use `LightboxImage` without `caption`) to hide it.
+#[component]
+pub fn ImageLightbox(
+    /// Whether the overlay is currently shown.
+    visible: ReadSignal<bool>,
+    /// Close handler — invoked on backdrop click, close button, or Escape.
+    set_visible: WriteSignal<bool>,
+    /// Image URL (may be reactive).
+    #[prop(into)]
+    src: Signal<String>,
+    /// Alt text for the image.
+    #[prop(into)]
+    alt: String,
+    /// Caption shown in the header (e.g. attendee name, event title).
+    /// Rendered as empty/hidden when the signal yields an empty string.
+    #[prop(into, default = Signal::derive(String::new))]
+    caption: Signal<String>,
+    /// Footer hint (e.g. "Show this code to staff"). Empty = hidden.
+    #[prop(into, default = String::new())]
+    hint: String,
+    /// Image sizing strategy. Defaults to `Contain` (large, aspect-preserved).
+    #[prop(optional)]
+    sizing: LightboxSizing,
+) -> impl IntoView {
+    let img_class = match sizing {
+        LightboxSizing::Contain => "lightbox-img",
+        LightboxSizing::Square => "lightbox-img lightbox-img--square",
+    };
+
+    // Escape closes the overlay — register only while visible to avoid
+    // stealing Escape from other handlers on the page.
+    Effect::new(move |_| {
+        if !visible.get() {
+            return;
+        }
+        let cleanup = window_event_listener(leptos::ev::keydown, move |ev: web_sys::KeyboardEvent| {
+            if ev.key() == "Escape" {
+                set_visible.set(false);
+            }
+        });
+        on_cleanup(move || drop(cleanup));
+    });
+
+    view! {
+        <div
+            class="lightbox-overlay"
+            class:is-visible=move || visible.get()
+            on:click=move |_| set_visible.set(false)
+        >
+            <div
+                class="lightbox-card"
+                on:click=move |ev: web_sys::MouseEvent| ev.stop_propagation()
+            >
+                <div class="lightbox-header">
+                    <span class="lightbox-caption">
+                        {move || {
+                            let v = caption.get();
+                            if v.is_empty() { None } else { Some(v) }
+                        }}
+                    </span>
+                    <button
+                        class="lightbox-close"
+                        aria-label="Close"
+                        on:click=move |_| set_visible.set(false)
+                    >
+                        "\u{2715}"
+                    </button>
+                </div>
+                <img
+                    src=move || src.get()
+                    alt=alt
+                    class=img_class
+                />
+                {move || {
+                    let h = hint.clone();
+                    if h.is_empty() {
+                        view! { <div></div> }.into_any()
+                    } else {
+                        view! { <p class="lightbox-hint">{h}</p> }.into_any()
+                    }
+                }}
+            </div>
+        </div>
+    }
+}
+
+/// Convenience wrapper that renders a clickable thumbnail plus its own
+/// fullscreen lightbox, owning the open/close state internally.
+///
+/// Use this for static images (posters, slip previews) where the caller
+/// doesn't need cross-component control of the open state. For cases where
+/// multiple triggers open the same overlay (e.g. QR section's "Full Screen"
+/// button) use `ImageLightbox` directly with a shared signal.
+#[component]
+pub fn LightboxImage(
+    /// Image URL.
+    #[prop(into)]
+    src: String,
+    /// Alt text for both the thumbnail and the fullscreen image.
+    #[prop(into)]
+    alt: String,
+    /// CSS class(es) applied to the inline thumbnail `<img>`.
+    thumb_class: &'static str,
+    /// Optional caption shown in the lightbox header.
+    #[prop(optional, into)]
+    caption: Option<String>,
+    /// Optional footer hint.
+    #[prop(optional, into)]
+    hint: Option<String>,
+    /// Image sizing strategy inside the lightbox. Defaults to `Contain`.
+    #[prop(optional)]
+    sizing: LightboxSizing,
+) -> impl IntoView {
+    let (open, set_open) = signal(false);
+    // Convert the optional static caption to a Signal<String> (empty when
+    // absent) so it matches ImageLightbox's caption prop type. An empty
+    // signal renders as a hidden caption inside the lightbox header.
+    let caption_signal: Signal<String> = caption
+        .as_ref()
+        .map(|c| {
+            let c = c.clone();
+            Signal::derive(move || c.clone())
+        })
+        .unwrap_or_else(|| Signal::derive(String::new));
+    // Hint: pass empty string when absent — ImageLightbox hides empty hints.
+    let hint_str = hint.unwrap_or_default();
+    view! {
+        <img
+            src=src.clone()
+            alt=alt.clone()
+            class=thumb_class
+            role="button"
+            tabindex="0"
+            on:click=move |_| set_open.set(true)
+            on:keydown=move |ev: web_sys::KeyboardEvent| {
+                if ev.key() == "Enter" || ev.key() == " " {
+                    ev.prevent_default();
+                    set_open.set(true);
+                }
+            }
+        />
+        <ImageLightbox
+            visible=open
+            set_visible=set_open
+            src=Signal::derive(move || src.clone())
+            alt=alt
+            caption=caption_signal
+            hint=hint_str
+            sizing=sizing
+        />
     }
 }

@@ -170,6 +170,302 @@ body {
     z-index: 1;
 }
 
+/* ===== Public Event — Latent Space Background =====
+   Scoped to .pe-bg-anim (only the /e/{slug} page).
+   A bold, cinematic "latent space" / nebula aesthetic: a multi-channel
+   nebula mesh, four drifting intertwined color blobs (indigo / magenta /
+   teal / violet), a slow colorful aurora sweep, and a twinkling starfield.
+   All purely decorative — layered behind content (z-index: 0) and animated
+   with transform/opacity for GPU-friendly compositing.
+   Palette: indigo #6366f1, magenta #ec4899, teal #06b6d4, violet #8b5cf6,
+   solana #9945ff. */
+.pe-bg-anim {
+    overflow: hidden;
+}
+
+/* The decorative background layer sits behind everything.
+   Override the global `.center-page > * { z-index: 1 }` rule. */
+.pe-bg-anim > .pe-bg-layer {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+/* Nebula mesh base: a large multi-stop radial gradient that slowly breathes
+   and shifts hue, giving the "embedding cloud" foundation. */
+.pe-bg-nebula {
+    position: absolute;
+    inset: -20%;
+    background:
+        radial-gradient(
+            circle at 25% 30%,
+            rgba(99, 102, 241, 0.28) 0%,
+            transparent 45%
+        ),
+        radial-gradient(
+            circle at 75% 70%,
+            rgba(139, 92, 246, 0.26) 0%,
+            transparent 45%
+        ),
+        radial-gradient(
+            circle at 60% 20%,
+            rgba(236, 72, 153, 0.18) 0%,
+            transparent 40%
+        ),
+        radial-gradient(
+            circle at 30% 80%,
+            rgba(6, 182, 212, 0.16) 0%,
+            transparent 40%
+        );
+    filter: blur(30px);
+    animation: pe-nebula-shift 30s ease-in-out infinite alternate;
+    will-change: transform, opacity;
+}
+
+/* Drifting color blobs — each on its own slow, swirling path so the motion
+   feels fluid and intertwined (like t-SNE / UMAP clusters drifting). */
+.pe-bg-orb {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(60px);
+    opacity: 0.55;
+    will-change: transform, opacity;
+}
+
+.pe-bg-orb-1 {
+    width: 520px;
+    height: 520px;
+    top: -15%;
+    left: -10%;
+    background: radial-gradient(
+        circle,
+        rgba(99, 102, 241, 0.7),
+        transparent 70%
+    );
+    animation: pe-orb-float-1 18s ease-in-out infinite;
+}
+
+.pe-bg-orb-2 {
+    width: 460px;
+    height: 460px;
+    bottom: -15%;
+    right: -12%;
+    background: radial-gradient(
+        circle,
+        rgba(236, 72, 153, 0.5),
+        transparent 70%
+    );
+    animation: pe-orb-float-2 22s ease-in-out infinite;
+}
+
+.pe-bg-orb-3 {
+    width: 400px;
+    height: 400px;
+    top: 40%;
+    left: 50%;
+    background: radial-gradient(
+        circle,
+        rgba(6, 182, 212, 0.42),
+        transparent 70%
+    );
+    animation: pe-orb-float-3 26s ease-in-out infinite;
+}
+
+.pe-bg-orb-4 {
+    width: 380px;
+    height: 380px;
+    top: 10%;
+    right: 5%;
+    background: radial-gradient(
+        circle,
+        rgba(139, 92, 246, 0.5),
+        transparent 70%
+    );
+    animation: pe-orb-float-4 24s ease-in-out infinite;
+}
+
+/* Slow, full-bleed colorful aurora sweep using a rotated conic gradient. */
+.pe-bg-aurora {
+    position: absolute;
+    inset: -25%;
+    background: conic-gradient(
+        from 0deg,
+        rgba(99, 102, 241, 0) 0deg,
+        rgba(99, 102, 241, 0.1) 60deg,
+        rgba(236, 72, 153, 0.12) 140deg,
+        rgba(6, 182, 212, 0.1) 220deg,
+        rgba(139, 92, 246, 0.1) 300deg,
+        rgba(99, 102, 241, 0) 360deg
+    );
+    filter: blur(50px);
+    opacity: 0.7;
+    animation: pe-aurora-spin 42s linear infinite;
+    will-change: transform;
+}
+
+/* Twinkling starfield / dust layer — small scattered points built from
+   layered radial gradients on a tiled background, gently pulsing. */
+.pe-bg-stars {
+    position: absolute;
+    inset: 0;
+    background-image:
+        radial-gradient(
+            1.5px 1.5px at 25px 40px,
+            rgba(255, 255, 255, 0.9),
+            transparent
+        ),
+        radial-gradient(
+            1px 1px at 80px 120px,
+            rgba(196, 181, 253, 0.8),
+            transparent
+        ),
+        radial-gradient(
+            1.5px 1.5px at 140px 70px,
+            rgba(255, 255, 255, 0.7),
+            transparent
+        ),
+        radial-gradient(
+            1px 1px at 190px 160px,
+            rgba(165, 243, 252, 0.7),
+            transparent
+        ),
+        radial-gradient(
+            1px 1px at 50px 200px,
+            rgba(255, 255, 255, 0.6),
+            transparent
+        ),
+        radial-gradient(
+            1.5px 1.5px at 170px 30px,
+            rgba(244, 114, 182, 0.6),
+            transparent
+        );
+    background-repeat: repeat;
+    background-size: 220px 220px;
+    opacity: 0.5;
+    animation: pe-twinkle 5s ease-in-out infinite alternate;
+    will-change: opacity;
+}
+
+@keyframes pe-nebula-shift {
+    0% {
+        transform: translate(0, 0) scale(1) rotate(0deg);
+    }
+    100% {
+        transform: translate(3%, -2%) scale(1.08) rotate(8deg);
+    }
+}
+
+@keyframes pe-orb-float-1 {
+    0%,
+    100% {
+        transform: translate(0, 0) scale(1);
+    }
+    33% {
+        transform: translate(50px, 70px) scale(1.1);
+    }
+    66% {
+        transform: translate(-30px, 35px) scale(0.95);
+    }
+}
+
+@keyframes pe-orb-float-2 {
+    0%,
+    100% {
+        transform: translate(0, 0) scale(1);
+    }
+    33% {
+        transform: translate(-60px, -50px) scale(1.08);
+    }
+    66% {
+        transform: translate(40px, -25px) scale(0.9);
+    }
+}
+
+@keyframes pe-orb-float-3 {
+    0%,
+    100% {
+        transform: translate(-50%, -50%) scale(1);
+        opacity: 0.4;
+    }
+    50% {
+        transform: translate(-40%, -58%) scale(1.14);
+        opacity: 0.58;
+    }
+}
+
+@keyframes pe-orb-float-4 {
+    0%,
+    100% {
+        transform: translate(0, 0) scale(1);
+        opacity: 0.45;
+    }
+    50% {
+        transform: translate(-45px, 50px) scale(1.12);
+        opacity: 0.6;
+    }
+}
+
+@keyframes pe-aurora-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes pe-twinkle {
+    0% {
+        opacity: 0.3;
+    }
+    100% {
+        opacity: 0.6;
+    }
+}
+
+/* Accessibility: respect reduced-motion preference — freeze all motion. */
+@media (prefers-reduced-motion: reduce) {
+    .pe-bg-nebula,
+    .pe-bg-orb,
+    .pe-bg-aurora,
+    .pe-bg-stars {
+        animation: none;
+    }
+}
+
+/* Mobile: smaller blobs + lighter blur to keep compositing cheap,
+   and dim the starfield slightly to save fill rate. */
+@media (max-width: 480px) {
+    .pe-bg-orb {
+        filter: blur(42px);
+    }
+    .pe-bg-orb-1 {
+        width: 340px;
+        height: 340px;
+    }
+    .pe-bg-orb-2 {
+        width: 300px;
+        height: 300px;
+    }
+    .pe-bg-orb-3 {
+        width: 260px;
+        height: 260px;
+    }
+    .pe-bg-orb-4 {
+        width: 250px;
+        height: 250px;
+    }
+    .pe-bg-nebula {
+        filter: blur(22px);
+    }
+    .pe-bg-aurora {
+        filter: blur(36px);
+    }
+    .pe-bg-stars {
+        opacity: 0.4;
+        background-size: 180px 180px;
+    }
+}
+
 /* ===== Typography ===== */
 h1 {
     font-size: clamp(1.75rem, 5vw, 2.75rem);
@@ -779,6 +1075,24 @@ nav a.active {
     align-items: center;
     gap: 0.25rem;
     flex-shrink: 0;
+}
+
+/* Participation-type toggle — visually distinct from other outline buttons
+   because it changes a consequential field (In-Person ⇄ Online), not just
+   navigates. Dashed border signals "state change"; accent color on hover
+   reinforces that it's an active mutation. */
+.admin-participation-toggle {
+    border-style: dashed;
+}
+
+.admin-participation-toggle:hover:not(:disabled) {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.admin-participation-toggle:disabled {
+    opacity: 0.5;
+    cursor: progress;
 }
 
 /* .attendee-status removed — replaced by .attendee-actions in card layout */
@@ -4162,6 +4476,32 @@ nav a.active {
 .admin-sidebar-item:hover .admin-sidebar-kbd,
 .admin-sidebar-item.active .admin-sidebar-kbd {
     opacity: 1;
+}
+
+/* External link variant (e.g. "View Google Sheet") — anchors look like sidebar
+   items but navigate to an external URL in a new tab. The ↗ marker replaces
+   the keyboard-shortcut badge and is always visible (external nav should be
+   discoverable, not hidden behind hover). */
+.admin-sidebar-link-external {
+    text-decoration: none;
+    color: var(--text-secondary);
+}
+
+.admin-sidebar-link-external:hover {
+    color: var(--accent);
+}
+
+.admin-sidebar-external-arrow {
+    margin-left: auto;
+    font-size: 0.75rem;
+    color: var(--text-muted, #888);
+    opacity: 0.7;
+    transition: opacity 0.15s ease;
+}
+
+.admin-sidebar-link-external:hover .admin-sidebar-external-arrow {
+    opacity: 1;
+    color: var(--accent);
 }
 
 .admin-sidebar-stats {
@@ -8439,6 +8779,25 @@ nav a.active {
     max-height: 220px;
     object-fit: contain;
     border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: transform 0.18s ease;
+}
+.slip-preview-img:hover {
+    transform: scale(1.01);
+}
+/* Persistent hint that the slip preview is tap-to-enlarge. Lives at the
+   bottom of the preview container, mirroring the remove button at the top. */
+.slip-preview-zoom-hint {
+    position: absolute;
+    bottom: 4px;
+    left: 4px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.6);
+    color: #fff;
+    font-size: 0.7rem;
+    pointer-events: none;
+    user-select: none;
 }
 
 .slip-preview-remove {
@@ -9381,8 +9740,14 @@ nav a.active {
     }
 }
 
-/* Ticket fullscreen QR overlay */
-.ticket-fullscreen-overlay {
+/* === Image Lightbox (shared click-to-fullscreen image overlay) ===
+ * Used by: event poster, deposit slip preview, ticket QR fullscreen.
+ * Driven by `ImageLightbox` / `LightboxImage` in components.rs.
+ */
+/* Always rendered in the DOM; visibility is toggled via the `.is-visible`
+ * class so the opacity transition runs on both open AND close (display:none
+ * would yank the element out of the render tree and skip the fade-out). */
+.lightbox-overlay {
     position: fixed;
     inset: 0;
     z-index: 50;
@@ -9391,8 +9756,19 @@ nav a.active {
     align-items: center;
     justify-content: center;
     cursor: pointer;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition:
+        opacity 200ms ease,
+        visibility 200ms ease;
 }
-.ticket-fullscreen-card {
+.lightbox-overlay.is-visible {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+}
+.lightbox-card {
     cursor: default;
     background: #fff;
     border-radius: var(--radius);
@@ -9401,21 +9777,60 @@ nav a.active {
     flex-direction: column;
     align-items: center;
     gap: 1rem;
-    max-width: 90vw;
+    /* Match the image's natural proportions (capped by viewport) so the card
+       hugs the image rather than letting it overflow. `overflow: hidden` is a
+       safety net — if an edge case miscalculation happens, the image clips to
+       the card edge instead of bleeding outside. */
+    max-width: min(90vw, 85vh);
     max-height: 90vh;
+    overflow: hidden;
+    transform: scale(0.96);
+    transition: transform 200ms ease;
 }
-.ticket-fullscreen-header {
+.lightbox-overlay.is-visible .lightbox-card {
+    transform: scale(1);
+}
+/* Default sizing: large image, aspect ratio preserved. Posters & slips.
+ * Fades in slightly after the backdrop so the layering feels deliberate.
+ *
+ * The two `min-*: 0` rules are the critical fix for the overflow bug:
+ * `.lightbox-card` is `display: flex; flex-direction: column`, so the `<img>`
+ * is a flex item and defaults to `min-width: auto` / `min-height: auto` —
+ * which equals the image's intrinsic pixel size (e.g. 1080x1920 for a poster).
+ * Per CSS spec, `min-width` WINS over `max-width` when they conflict, so
+ * `max-width: 100%` was being ignored and the image overflowed the card.
+ * Setting `min-width: 0; min-height: 0` lets the image actually shrink. */
+.lightbox-img {
+    display: block;
+    min-width: 0;
+    min-height: 0;
+    max-width: 100%;
+    max-height: calc(90vh - 8rem);
+    object-fit: contain;
+    border-radius: var(--radius-sm);
+    opacity: 0;
+    transition: opacity 200ms ease 40ms;
+}
+.lightbox-overlay.is-visible .lightbox-img {
+    opacity: 1;
+}
+.lightbox-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
     width: 100%;
+    /* When caption is empty, header collapses so the image gets the space. */
+    min-height: 1.5rem;
 }
-.ticket-fullscreen-name {
+.lightbox-caption {
     font-weight: 700;
     color: #111;
     font-size: 1.1rem;
 }
-.ticket-fullscreen-close {
+.lightbox-caption:empty {
+    display: none;
+}
+.lightbox-close {
     background: none;
     border: none;
     font-size: 1.5rem;
@@ -9423,15 +9838,19 @@ nav a.active {
     color: var(--text-muted);
     padding: 0 0.25rem;
 }
-.ticket-fullscreen-close:hover {
+.lightbox-close:hover {
     color: #111;
 }
-.ticket-fullscreen-qr {
+
+/* Square sizing: QR codes stay scannable rather than filling the viewport. */
+.lightbox-img--square {
     width: min(70vw, 70vh);
     height: min(70vw, 70vh);
-    display: block;
+    max-width: none;
+    max-height: none;
+    object-fit: fill;
 }
-.ticket-fullscreen-hint {
+.lightbox-hint {
     color: var(--text-muted);
     font-size: 0.85rem;
     margin: 0;
@@ -9498,6 +9917,77 @@ nav a.active {
 .community-link-label {
     font-size: 0.85rem;
     font-weight: 500;
+}
+
+/* Access & Logistics card (in-person ticket only) — guide links tagged
+   with platform "guide": building access, ID exchange, transportation.
+   Builds on the ticket-action-card--info base class. */
+
+.access-logistics-inner {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    width: 100%;
+}
+
+.access-logistics-title {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.access-logistics-title .icon-sm {
+    color: var(--info);
+    flex-shrink: 0;
+}
+
+.access-logistics-hint {
+    margin: 0;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    line-height: 1.4;
+}
+
+.access-logistics-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-top: 0.25rem;
+}
+
+.access-logistics-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.55rem 0.75rem;
+    border-radius: 8px;
+    background: var(--bg-card);
+    text-decoration: none;
+    color: var(--text-primary);
+    transition:
+        background 0.15s,
+        transform 0.1s;
+}
+
+.access-logistics-item:hover {
+    background: var(--accent-hover);
+    transform: translateY(-1px);
+}
+
+.access-logistics-label {
+    font-size: 0.85rem;
+    font-weight: 500;
+}
+
+.access-logistics-arrow {
+    display: flex;
+    align-items: center;
+    color: var(--info);
+    flex-shrink: 0;
 }
 
 /* Public event page community links */
@@ -9810,11 +10300,41 @@ nav a.active {
     margin-bottom: 1.5rem;
 }
 
+/* Marketing poster — sized large enough to read inner text/details.
+   Portrait posters keep their aspect ratio: width-driven, no forced
+   square crop. Capped by viewport so it never overflows the card.
+   The poster is click-to-fullscreen (see LightboxImage) — pointer cursor
+   and a subtle lift on hover signal the affordance. */
 .pe-hero-img {
-    max-width: 180px;
-    max-height: 180px;
+    display: block;
+    margin: 0 auto;
+    width: auto;
+    max-width: min(460px, 100%);
+    height: auto;
+    max-height: 80vh;
+    object-fit: contain;
     border-radius: var(--radius);
     box-shadow: var(--shadow);
+    cursor: pointer;
+    transition:
+        transform 0.18s ease,
+        box-shadow 0.18s ease;
+}
+.pe-hero-img:hover,
+.pe-hero-img:focus-visible {
+    transform: scale(1.01);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+}
+
+/* On small screens, let the poster breathe within the card while
+   staying readable — cap at viewport width minus card padding. */
+@media (max-width: 480px) {
+    .pe-hero-img {
+        max-width: calc(100vw - 2.5rem);
+        max-height: 70vh;
+    }
 }
 
 /* Event name + tagline */

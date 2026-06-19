@@ -30,15 +30,24 @@ jobs:
 
       - name: Check brief ↔ CSS drift
         run: |
-          # Extract bg tokens from CSS :root
-          css_bg_primary=$(grep -oP '(?<=--bg-primary:\s*)#[0-9a-fA-F]+' frontend-leptos/style.css)
-          css_bg_secondary=$(grep -oP '(?<=--bg-secondary:\s*)#[0-9a-fA-F]+' frontend-leptos/style.css)
-          css_bg_card=$(grep -oP '(?<=--bg-card:\s*)#[0-9a-fA-F]+' frontend-leptos/style.css)
+          # Extract bg tokens from CSS :root.
+          # Uses \K (not a lookbehind) because the gap is variable-length
+          # (see NOTE below). Leading '--' on the pattern requires the '--'
+          # option terminator so grep doesn't parse the token as a flag.
+          css_bg_primary=$(grep -oP -- '--bg-primary:\s*\K#[0-9a-fA-F]+' frontend-leptos/style.css)
+          css_bg_secondary=$(grep -oP -- '--bg-secondary:\s*\K#[0-9a-fA-F]+' frontend-leptos/style.css)
+          css_bg_card=$(grep -oP -- '--bg-card:\s*\K#[0-9a-fA-F]+' frontend-leptos/style.css)
 
-          # Extract bg tokens from brief
-          brief_bg_primary=$(grep -oP '(?<=--bg-primary.*\|\s`)#[0-9a-fA-F]+' .design/brief.md | head -1)
-          brief_bg_secondary=$(grep -oP '(?<=--bg-secondary.*\|\s`)#[0-9a-fA-F]+' .design/brief.md | head -1)
-          brief_bg_card=$(grep -oP '(?<=--bg-card.*\|\s`)#[0-9a-fA-F]+' .design/brief.md | head -1)
+          # Extract bg tokens from brief.
+          # NOTE: cannot use a lookbehind for EITHER extraction because the gap
+          # between the token name and the hex value is variable-length (CSS
+          # uses ':\s*' indentation, brief uses '|\s*' table padding), which
+          # PCRE (and PCRE2) rejects ('length of lookbehind assertion is not
+          # limited'). Using \K to reset the match start instead — semantically
+          # equivalent and fixed-length-safe.
+          brief_bg_primary=$(grep -oP '^\|\s*`--bg-primary`\s*\|\s*`\K#[0-9a-fA-F]+' .design/brief.md | head -1)
+          brief_bg_secondary=$(grep -oP '^\|\s*`--bg-secondary`\s*\|\s*`\K#[0-9a-fA-F]+' .design/brief.md | head -1)
+          brief_bg_card=$(grep -oP '^\|\s*`--bg-card`\s*\|\s*`\K#[0-9a-fA-F]+' .design/brief.md | head -1)
 
           drift=0
           check() {

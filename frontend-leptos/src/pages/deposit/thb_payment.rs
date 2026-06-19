@@ -6,6 +6,7 @@
 use leptos::prelude::*;
 
 use crate::api::DepositStatusResponse;
+use crate::components::LightboxImage;
 use super::js_interop;
 use super::types::*;
 
@@ -144,11 +145,18 @@ pub fn thb_payment_form_view(
                     }
                 />
 
-                // Slip image preview
+                // Slip image preview — click to view fullscreen so the user
+                // can verify the slip is legible before submitting.
                 {move || match slip_preview.get() {
                     Some(url) => view! {
                         <div class="slip-preview-container">
-                            <img src=&url class="slip-preview-img" />
+                            <LightboxImage
+                                src=url
+                                alt="Payment slip preview"
+                                thumb_class="slip-preview-img"
+                                hint="Tap the image or backdrop to close".to_string()
+                            />
+                            <span class="slip-preview-zoom-hint">"\u{1f50d} Tap to enlarge"</span>
                             <button
                                 class="slip-preview-remove"
                                 on:click=move |_| {
@@ -158,7 +166,7 @@ pub fn thb_payment_form_view(
                                     }
                                 }
                             >
-                                "✕"
+                                "\u{2715}"
                             </button>
                         </div>
                     }.into_any(),

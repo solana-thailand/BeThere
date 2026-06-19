@@ -323,6 +323,7 @@ pub(crate) async fn api_post_blob(
 enum HttpMethod {
     Post,
     Put,
+    Patch,
 }
 
 /// Shared implementation for POST/PUT requests with JSON body.
@@ -349,6 +350,7 @@ async fn api_json_with_body<T: serde::de::DeserializeOwned + Default>(
     let response = match method {
         HttpMethod::Post => http_post(&url, &hdrs, Some(json_body)).await?,
         HttpMethod::Put => http_put(&url, &hdrs, Some(json_body)).await?,
+        HttpMethod::Patch => fetch::patch(&url, &hdrs, Some(json_body)).await?,
     };
 
     if response.status() == 401 {
@@ -406,6 +408,17 @@ pub(crate) async fn api_put_json<T: serde::de::DeserializeOwned + Default>(
     body: &impl serde::Serialize,
 ) -> Result<T, ApiError> {
     api_json_with_body(HttpMethod::Put, path, body).await
+}
+
+/// Make an authenticated PATCH request with JSON body to the API.
+///
+/// Used for partial-field updates on a resource (e.g. flipping an attendee's
+/// participation_type without touching any other field).
+pub(crate) async fn api_patch_json<T: serde::de::DeserializeOwned + Default>(
+    path: &str,
+    body: &impl serde::Serialize,
+) -> Result<T, ApiError> {
+    api_json_with_body(HttpMethod::Patch, path, body).await
 }
 
 // ===== Public Auth API functions =====
