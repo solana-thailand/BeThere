@@ -2050,7 +2050,7 @@ pub fn EventFormComponent(
                     </div>
                     <div class="form-section-body" class:form-section-body-hidden=move || !sec_community_open.get()>
                         <p class="quiz-setting-hint">
-                            "Add links to your community channels (Discord, Telegram, X, Facebook, LINE). These appear on the event registration and ticket pages."
+                            "Add links to your community channels (Discord, Telegram, X, Facebook, LINE). These appear on the event registration and ticket pages. Use the ‘Guide (logistics)’ type for building access, ID exchange, or transportation docs — these show as an ‘Access & Logistics’ card on in-person tickets."
                         </p>
                         {move || {
                             let links = cl_links.get();
@@ -2078,6 +2078,7 @@ pub fn EventFormComponent(
                                             <option value="facebook" selected=platform == "facebook">"Facebook"</option>
                                             <option value="line" selected=platform == "line">"LINE"</option>
                                             <option value="website" selected=platform == "website">"Website"</option>
+                                            <option value="guide" selected=platform == "guide">"Guide (logistics)"</option>
                                         </select>
                                         <input
                                             type="url"

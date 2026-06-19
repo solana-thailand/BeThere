@@ -3,6 +3,9 @@ use std::sync::{Arc, OnceLock};
 
 use worker::{Bucket, Context, D1Database, Env, KvStore, ObjectNamespace};
 
+// JsCast for converting the raw R2 binding handle to `js_sys::Object`.
+use wasm_bindgen::JsCast;
+
 // ---------------------------------------------------------------------------
 // Cached bindings — stable per Workers isolate, avoid JS interop on every request
 // ---------------------------------------------------------------------------
@@ -16,6 +19,11 @@ struct CachedBindings {
     events_kv: Option<KvStore>,
     d1: Option<Arc<D1Database>>,
     r2: Option<Bucket>,
+    /// Raw JS handle to the R2 binding. `worker` 0.8.x's `get` builder sends a
+    /// `range: null` option that makes R2 throw internal error 10001 on every
+    /// get (even missing keys). We call `bucket.get(key)` directly via this raw
+    /// object (no options) to bypass that bug. See `storage::get_bytes`.
+    r2_raw: Option<js_sys::Object>,
     event_do: Option<ObjectNamespace>,
 }
 
@@ -68,6 +76,9 @@ pub struct AppState {
     /// `None` if the `ASSETS_BUCKET` binding is not configured.
     #[allow(dead_code)]
     pub r2: Option<Bucket>,
+    /// Raw JS handle to the R2 binding — used to bypass the `worker` 0.8.x
+    /// get-options bug (see `CachedBindings.r2_raw`).
+    pub r2_raw: Option<js_sys::Object>,
     /// Durable Object namespace for ACID event writes (Issue #050).
     /// `None` if the `EVENT_DO` binding is not configured.
     pub event_do: Option<ObjectNamespace>,
@@ -249,11 +260,23 @@ impl AppState {
         let bindings = match CACHED_BINDINGS.get() {
             Some(cached) => cached,
             None => {
+                let r2 = env.bucket("ASSETS_BUCKET").ok();
+                // Raw JS handle for direct `bucket.get(key)` calls — bypasses
+                // the worker 0.8.x get-options `range: null` bug (R2 error 10001).
+                // Only needed for reads; falls back to the typed `Bucket` if absent.
+                let r2_raw = js_sys::Reflect::get(
+                    env.as_ref(),
+                    &wasm_bindgen::JsValue::from("ASSETS_BUCKET"),
+                )
+                .ok()
+                .filter(|v| !v.is_undefined() && !v.is_null())
+                .and_then(|v| v.dyn_into::<js_sys::Object>().ok());
                 let b = CachedBindings {
                     quiz_kv: env.kv("QUIZ").ok(),
                     events_kv: env.kv("EVENTS").ok(),
                     d1: env.d1("DB").ok().map(Arc::new),
-                    r2: env.bucket("ASSETS_BUCKET").ok(),
+                    r2,
+                    r2_raw,
                     event_do: env.durable_object("EVENT_DO").ok(),
                 };
                 let _ = CACHED_BINDINGS.set(b);
@@ -265,6 +288,7 @@ impl AppState {
         let events_kv = bindings.events_kv.clone();
         let d1 = bindings.d1.clone();
         let r2 = bindings.r2.clone();
+        let r2_raw = bindings.r2_raw.clone();
         let event_do = bindings.event_do.clone();
 
         let webhook_secret = get_var(env, "WEBHOOK_SECRET").unwrap_or_default();
@@ -286,6 +310,7 @@ impl AppState {
             events_kv,
             d1,
             r2,
+            r2_raw,
             event_do,
             webhook_secret,
             worker_ctx: None,

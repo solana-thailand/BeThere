@@ -80,6 +80,10 @@ pub enum AuditAction {
     // Admin
     AttendeeDeleted,
     ForceDeleteUsed,
+    /// Admin manually overrode an attendee's participation_type
+    /// (e.g. deposit-pending attendee confirmed via out-of-band contact
+    /// that they will attend online instead).
+    ParticipationTypeChanged,
 
     // Privacy (PDPA)
     DataDeletionRequested,

@@ -4,6 +4,7 @@ use leptos::prelude::*;
 use leptos_router::components::A;
 use wasm_bindgen::prelude::*;
 
+use super::access_logistics::access_logistics_section;
 use super::action_cards::*;
 use super::calendar_links::CalendarLinks;
 use super::event_context::EventContext;
@@ -76,6 +77,14 @@ pub fn InPersonView(
         event_name: _,
         ..
     } = view_data;
+
+    // Split community links: "guide"-tagged entries are logistics guides
+    // (building access, ID exchange, transportation) routed to the dedicated
+    // Access & Logistics card; everything else stays in "Join the Community".
+    // See `access_logistics::GUIDE_PLATFORM`.
+    let (guide_links, social_links): (Vec<_>, Vec<_>) = community_links
+        .into_iter()
+        .partition(|l| l.platform == super::access_logistics::GUIDE_PLATFORM);
 
     // Determine hero variant
     let (hero_variant, hero_icon, hero_title, hero_subtitle) = if is_checked_in {
@@ -169,6 +178,11 @@ pub fn InPersonView(
                 set_show_qr=set_show_qr
                 set_fullscreen_qr=set_fullscreen_qr
             />
+
+            // ── Access & Logistics (in-person only) ──
+            // Building access / ID exchange / transportation guides.
+            // Empty (hidden) unless the organizer configured guide links.
+            {access_logistics_section(guide_links.clone())}
 
             // ── Attendee info ──
             <div class="ticket-info">
@@ -355,8 +369,9 @@ pub fn InPersonView(
             view! { <div></div> }.into_any()
         }}
 
-        // Community links
-        {crate::pages::ticket::community_links::community_links_section(community_links.clone(), crate::pages::ticket::community_links::CommunityLinksVariant::Ticket)}
+        // Community links (social only — guide links are rendered above
+        // in the Access & Logistics card)
+        {crate::pages::ticket::community_links::community_links_section(social_links.clone(), crate::pages::ticket::community_links::CommunityLinksVariant::Ticket)}
 
         // 6. Footer
         <div class="ticket-footer">
