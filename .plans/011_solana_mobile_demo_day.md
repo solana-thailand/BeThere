@@ -177,21 +177,27 @@ Per Solana Mobile docs, MWA is structurally Android-only. iOS users get the exis
 
 ## 7. Pre-flight checklist (before starting)
 
-- [ ] Confirm with operator: Phase A+B only, dApp Store deferred? (this plan assumes yes)
+- [x] Confirm with operator: Phase A+B only, dApp Store deferred? → **YES** (locked 2026-06-20)
 - [ ] Verify `frontend-leptos/index.html` exists and is the entry HTML
 - [ ] Confirm what wallet library / pattern the frontend currently uses (grep `window.solana` / `wallet-standard`)
-- [ ] Have an Android device or Seeker available for on-device testing (cannot substitute emulator for MWA)
-- [ ] Have Phantom or Solflare installed on the test device
-- [ ] Pin MWA library version before deploy (no `@latest` in prod)
+- [x] Have an Android device available for on-device testing (no Seeker; Phantom will be the test wallet)
+- [x] Have Phantom installed on the test device
+- [ ] Pin MWA library version before prod deploy (no `@latest` in prod)
 
 ---
 
-## 8. Open questions for operator
+## 8. Decisions (locked 2026-06-20)
 
-1. **Is a Seeker available** for the on-device test, or are we testing on a generic Android + Phantom? (Both work; Seeker gives Seed Vault Wallet which is the most demo-impressive.)
-2. **Cluster**: devnet or mainnet for the demo deposit? Plan assumes devnet (matches current `cluster:devnet` from `/api/health`). Real USDC on mainnet would be more impressive but requires mainnet escrow init.
-3. **Who staff-scans during the demo** — operator or another team member? Their phone also needs an MWA wallet.
-4. **Pin versions**: confirm operator is OK with whatever MWA lib version is latest at deploy time, or pick a specific version now.
+| # | Decision | Implication |
+|---|---|---|
+| 1 | **Phantom on Android** (no Seeker available) | Standard MWA → Phantom path. No Seed-Vault-specific code. |
+| 2 | **Devnet** for demo deposit/claim/refund | Matches current `cluster:devnet` from `/api/health`. No real money at risk. |
+| 3 | **Staff scanner: assigned later** | ⚠️ **Demo logistics risk** — on-chain `mark_checked_in` TX needs *someone* with Phantom installed + SOL for fees. Operator must designate a scanner + ensure their phone is set up before the demo. |
+| 4 | **MWA lib `@latest`** for dev | Pin a specific version before prod deploy (record the pinned version in `index.html` comment). |
+
+### Risk flag: staff scanner
+
+The check-in step of the demo requires an MWA wallet on the **scanner's** phone, not just the attendee's. If no one is designated and prepared, the demo flow breaks at step 5 (staff scans → on-chain check-in). **Fallback if no scanner is ready**: skip the on-chain check-in in the live demo and show a recorded video of it, OR use the existing admin dashboard check-in (off-chain, in D1 only) for the live demo and explain the on-chain version is identical but signed via MWA.
 
 ---
 

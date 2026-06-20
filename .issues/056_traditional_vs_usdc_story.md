@@ -84,37 +84,49 @@ Each beat = one panel. Two columns (Traditional | BeThere). Same character appea
 
 ---
 
-## 3. Open decisions (block drafting)
+## 3. Decisions (locked 2026-06-20)
 
-### 3.1 Output format
+| # | Decision | Implication |
+|---|---|---|
+| 3.1 | **Keynote slide format** | Need to produce a `.key` deck (or Markdown → export to Keynote). Visual style TBD by operator when drafting. |
+| 3.2 | **Mixed audience** (judges + attendees) | Plain English with light jargon. Explain "escrow" as "smart contract holds the money". Use "NFT badge" not "cNFT". |
+| 3.3 | **Reframe: 3-way comparison** — not just traditional vs BeThere, but **traditional + modern competitors (Eventbrite, Luma, Meetup)** vs BeThere. | See §3.3 expanded below — this is the key narrative shift. |
+| 3.4 | **Vendor wallet logos OK to use** | Solflare/Backpack/Phantom logos allowed on the BeThere side for credibility. |
 
-| Option | Pro | Con | Effort |
+### 3.3 The 3-way comparison (reframed)
+
+Original framing was 2-column (Traditional | BeThere). Operator insight: BeThere isn't just better than paper-and-WhatsApp — it has to **stand out against the modern competitors organizers already use**. The contrast needs a third column.
+
+#### Proposed 3-column structure
+
+| Beat | Traditional (WhatsApp + bank transfer) | Modern competitor (Eventbrite / Luma / Meetup) | BeThere + USDC |
 |---|---|---|---|
-| **A. Static slides** (Marp/Markdown → PDF, or Keynote/Google Slides) | Fastest, universal, easy to iterate on copy, projects cleanly | Not interactive | Lowest (~30 min for content, +2–3h if illustrating) |
-| **B. HTML slides** (run in browser, can be hosted at `/pitch` or as a standalone page) | Reusable as a BeThere marketing page, can be linked from the submission | More upfront work | Medium (~2–4h) |
-| **C. Embedded in BeThere admin** (organizer generates a per-event comparison) | Real product feature, demoable beyond the pitch | Multi-day feature work | High (1–2 days) |
+| 1. Register | WhatsApp + Google Form | Web form, account required | Magic link, no password |
+| 2. Deposit | Bank transfer, screenshot | Credit card (2.5–3.5% fee + Stripe) | USDC escrow, 0.0001¢ fee |
+| 3. No-show refund | Manual bank transfer, days/weeks | Manual via dashboard, days (or "no refunds" policy) | **Smart contract auto-refund, instant** |
+| 4. Show up | Scroll through Sheet, name lookup | QR scan, online DB lookup | QR scan + on-chain verify |
+| 5. Badge / takeaway | None | Email receipt | **cNFT in wallet, permanent** |
+| 6. Payment rails | Bank (closed, slow, permissioned) | Stripe (closed, fast, 2.9% + chargeback risk) | **USDC (open, instant, no chargebacks)** |
+| 7. Custody of funds | Admin's bank account | Eventbrite holds funds for 5–7 days post-event | **Escrow PDA — neither side holds** |
+| 8. Audit | Bank CSV + Sheet reconciliation | Eventbrite dashboard (opaque) | **Solana Explorer (public, immutable)** |
 
-**Recommendation: A for the demo, B as a follow-up if time permits.** Don't do C before Demo Day — it's real feature work that competes with mobile (plan #011) for engineering time.
+#### The 3 sharp differentiators vs modern competitors
 
-### 3.2 Audience
+These are where BeThere wins against Eventbrite/Luma/Meetup, not just against paper:
 
-- **Judges only** (technical + business) → can use jargon ("escrow PDA", "cNFT"), assume Solana familiarity
-- **Mixed judges + attendees** → plain English, minimal jargon, emphasize the human pain
-- **General public / marketing material** → pure narrative, no technical terms
+1. **Payment fees** — Eventbrite charges 2.5% + $0.99 + Stripe's 2.9% + 30¢. On a $50 ticket that's ~$3.25 lost. BeThere: USDC transfer costs ~$0.001. **Story: where does the 6.5% go?**
+2. **Custody** — Eventbrite/Luma hold your funds for days after the event. BeThere's escrow PDA is non-custodial: neither organizer nor platform can run away with deposits. **Story: trust the code, not the company.**
+3. **No-show refund automation** — On Eventbrite, refunds are a manual organizer decision (and many events have "no refunds"). On BeThere, the smart contract releases the deposit on check-in and refunds on no-show automatically. **Story: fairness isn't a policy, it's a guarantee.**
 
-### 3.3 The "traditional" baseline
+#### What the modern-competitor framing buys us
 
-What's the actual current process being contrasted against? My inference from the codebase (PromptPay slip upload, Google Sheet sync, manual THB verify) suggests the traditional baseline is:
+- Judges who have used Eventbrite/Luma immediately get the contrast (no need to explain what paper tickets are).
+- Positions BeThere as "the modern option, but better" rather than "better than the past".
+- Opens the door to a future positioning slide: "BeThere = Eventbrite UX + Solana settlement."
 
-- **Bank transfer** (or PromptPay QR) → screenshot → admin manually verifies in Sheet → manual reconciliation
-- **Cash at door** as a fallback
-- **No refund** or **manual refund via bank transfer** (days/weeks)
+#### Risk to flag
 
-Is this accurate, or is the real-world baseline something else (Eventbrite? Meetup.com? Paper list at the door? WhatsApp-only registration)? The contrast is only sharp if the "traditional" side is real and recognizable.
-
-### 3.4 Brand assets
-
-The repo has `solflare-brand-kit/`, `jupiter-brand-kit/`, `Backpack Media Kit/`. Should the comic use Solana/Solflare/Backpack logos for the BeThere side, or stick to a generic "wallet" icon to stay vendor-neutral? Vendor logos add credibility but create implicit endorsement.
+Eventbrite has features BeThere doesn't (paid tickets, marketing tools, discovery). Don't claim "BeThere replaces Eventbrite" — claim "BeThere replaces the *payment + deposit* layer with something better" for the deposit-gated event niche. The pitch is sharper if scoped honestly.
 
 ---
 
