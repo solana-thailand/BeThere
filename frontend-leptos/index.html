@@ -62,6 +62,47 @@
         <meta name="theme-color" content="#0f0f0f" />
         <meta name="color-scheme" content="dark" />
 
+        <!-- PWA — Web App Manifest (Phase B of plan #011) -->
+        <!-- Trunk copy-file directive puts manifest.json in dist/ -->
+        <link data-trunk rel="copy-file" href="manifest.json" />
+        <!-- Browser manifest link (served from dist root) -->
+        <link rel="manifest" href="/manifest.json" />
+
+        <!-- PWA — iOS Safari meta tags (Add to Home Screen). iOS doesn't support
+             MWA so wallet flows won't work, but ticket/registration pages get
+             a native-feeling fullscreen install. -->
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="mobile-web-app-capable" content="yes" />
+        <meta
+            name="apple-mobile-web-app-status-bar-style"
+            content="black-translucent"
+        />
+        <meta name="apple-mobile-web-app-title" content="BeThere" />
+        <link rel="apple-touch-icon" href="/api/badge.svg" />
+
+        <!-- PWA — Service worker boot. Trunk copy-file puts sw.js in dist/. -->
+        <link data-trunk rel="copy-file" href="sw.js" />
+        <!-- Inline SW registration is allowed here (no eval, just a register()
+             call). Project CSP (handover 007) restricts eval(), not inline
+             <script> registration calls. -->
+        <script>
+            if ("serviceWorker" in navigator) {
+                window.addEventListener("load", function () {
+                    navigator.serviceWorker
+                        .register("/sw.js")
+                        .then(function (reg) {
+                            console.log(
+                                "[sw] registered with scope:",
+                                reg.scope,
+                            );
+                        })
+                        .catch(function (err) {
+                            console.warn("[sw] registration failed:", err);
+                        });
+                });
+            }
+        </script>
+
         <!-- Structured Data (JSON-LD) -->
         <script type="application/ld+json">
             {
