@@ -24,6 +24,10 @@ Thumbs.db
 *.log
 .logs/
 
+# D1 backups (contain PII — never commit)
+backup-*.sql
+*.sql.bak
+
 # Build artifacts
 *.d
 *.rlib

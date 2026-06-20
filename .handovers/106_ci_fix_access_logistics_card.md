@@ -1,10 +1,31 @@
 # Handover 106 — design-lint CI Repair + Access & Logistics Ticket Card
 
-> **Branch**: `feature/r2_lightbox_admin` (7 commits ahead of `develop`, pushed to `origin`)
-> **Status**: ✅ **Pushed** + **PR #15 open** against `develop`, `mergeStateStatus: CLEAN` / `mergeable: MERGEABLE`, both CI checks green. **NOT deployed** — prod-affecting, awaiting operator go-ahead + D1 backup.
+> **Branch**: `feature/r2_lightbox_admin` (merged; branch deletion pending)
+> **Status**: ✅ **Merged to `develop` (`c2e2263`) → `main` (`3172838`)** and **deployed to prod twice**.
 > **Commits**: `a59733b` (CI fix) + `e0d1620` (feature) added on top of handover #105's 5 commits
 > **Predecessor**: handover #105 (R2 fix + participation override + ImageLightbox)
 > **Created**: 2026-06-19
+>
+> ---
+> **ADDENDUM 2026-06-20** (status correction — supersedes the original framing below)
+>
+> The original "Status: NOT deployed" framing was written before deploy and is **stale**.
+> Verified production state via `wrangler deployments list`:
+> 1. `2026-06-19T16:39:16Z` — `main` @ `3172838` → wasm `8b01d70a371251ef` (PUT fallback; versions-API bug 10013 still active)
+> 2. `2026-06-19T23:37:35Z` — `main` @ `2150242` → wasm `bed016db30307733` (community-links cap 5 → 10)
+>
+> All features in §3–4 are live. Manual UI verification (operator-confirmed):
+> - Guide links added via admin (platform "Guide (logistics)") ✅
+> - In-person ticket → "Access & Logistics" card after QR ✅
+> - Guide links do NOT appear in "Join the Community" ✅
+> - Online attendees do NOT see the card ✅
+>
+> Open items remaining (none are P0 for the merged feature itself):
+> - P0.2 CPU-time measurement — see plan #010; do NOT blindly hit `/api/claim` / `/api/escrow/refund` in prod (they mint NFTs / move USDC respectively). Use passive `wrangler tail` during a rehearsal instead.
+> - P0.1 KV write verification — `scripts/diag_kv_usage.py` currently fails with `"not authorized for that account"`; the wrangler OAuth token lacks GraphQL Analytics scope. Workaround: create an API token with `Account > Workers Analytics > Read` and set `CF_API_TOKEN`.
+> - Feature branch `feature/r2_lightbox_admin` still exists locally + on origin (housekeeping deletion pending).
+>
+> ---
 
 ---
 
