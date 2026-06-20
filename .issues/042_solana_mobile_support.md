@@ -1,9 +1,11 @@
 # 042 — Solana Mobile Support
 
 > **Date**: 2026-05-28
-> **Status**: 📋 Planned
-> **Priority**: P2 (post-mainnet)
-> **Depends on**: Phase 10 (mainnet deployment)
+> **Status**: 📋 Planned — **Phase A + B reprioritized to P0 for Demo Day 2026-06-23** (see Plan 011)
+> **Priority**: P0 (Phase A + B) / P2 (Phase C dApp Store listing — deferred)
+> **Depends on**: nothing for Phase A+B (was incorrectly listed as "Phase 10 mainnet"; that was the old framing). Phase C (dApp Store) requires Publisher Account KYC.
+>
+> **Update 2026-06-20**: This issue was originally scoped as post-mainnet P2. For Demo Day 2026-06-23 the operator has reprioritized Phase A (MWA Web) + Phase B (PWA) to P0 — the demo outcome is "works on a Seeker/Android handset." Phase C (dApp Store listing) remains deferred because Publisher KYC cannot complete in 1 day. Full scope, validation, and risk in `.plans/011_solana_mobile_demo_day.md`.
 
 ## Summary
 
