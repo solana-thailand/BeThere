@@ -67,6 +67,56 @@ pub struct ClaimResult {
 // Internal helpers
 // ---------------------------------------------------------------------------
 
+/// Resolve the correct `event_id` for a claim token when the caller did not
+/// provide one.
+///
+/// Public claim URLs (`/claim/{token}`) carry no event context. Without this
+/// lookup, `resolve_event(None)` falls back to the "first active event" —
+/// which may NOT be the attendee's event, causing the claim page to show the
+/// wrong event's name, NFT image, quiz, and deposit config, and (worse) the
+/// mint POST to potentially target the wrong collection/sheet.
+///
+/// Returns `Some(event_id)` when the token maps to a known attendee in D1;
+/// `None` when not found or D1 is unavailable (caller then falls back to the
+/// active-event default).
+async fn resolve_event_id_from_token(state: &AppState, token: &str) -> Option<String> {
+    let d1 = state.d1.as_ref()?;
+    match crate::db::attendees::get_attendee_event_id_by_claim_token(d1, token).await {
+        Ok(Some(id)) => {
+            tracing::info!(
+                claim_token = %token,
+                resolved_event_id = %id,
+                "claim: resolved event_id from D1 by claim token"
+            );
+            Some(id)
+        }
+        Ok(None) => None,
+        Err(e) => {
+            tracing::warn!(
+                claim_token = %token,
+                error = %e,
+                "claim: could not peek event_id from D1, falling back to active event"
+            );
+            None
+        }
+    }
+}
+
+/// Coalesce the caller-provided `event_id` with a D1-derived one.
+///
+/// If the caller passed a non-empty event_id, it wins (explicit context).
+/// Otherwise we try to recover the attendee's real event_id from D1.
+async fn coalesce_event_id(
+    state: &AppState,
+    token: &str,
+    event_id: Option<&str>,
+) -> Option<String> {
+    if let Some(id) = event_id.filter(|s| !s.is_empty()) {
+        return Some(id.to_string());
+    }
+    resolve_event_id_from_token(state, token).await
+}
+
 /// Build an Orb Markets explorer URL for the claimed NFT.
 fn orb_nft_url(asset_id: &str, cluster: &str) -> String {
     let cluster_param = if cluster == "mainnet-beta" {
@@ -89,7 +139,12 @@ pub async fn lookup_claim(
 ) -> Result<ClaimLookup, AppError> {
     tracing::info!(claim_token = %token, "claim lookup");
 
-    let event = resolve_event(state, event_id).await?;
+    // Resolve the correct event BEFORE any other logic. The public claim URL
+    // `/claim/{token}` carries no event_id; without this coalesce, the fallback
+    // picks the "first active event", which may be a different event than the
+    // one this attendee registered for.
+    let resolved_event_id = coalesce_event_id(state, token, event_id).await;
+    let event = resolve_event(state, resolved_event_id.as_deref()).await?;
     let kv = resolve_kv(state);
 
     // ── Walk-in path: D1-only (walk-ins are stored in D1 as primary) ──
@@ -166,9 +221,9 @@ pub async fn lookup_claim(
             Ok((Some(a), checked_in, claimed)) => (a, checked_in, claimed),
             Ok((None, _, _)) => {
                 // Sheets returned nothing — try D1 fallback (online attendees may
-                // have claim_token in D1 but not yet synced to Sheets).
-                // Use get_attendee_by_claim_token (no event filter) because
-                // resolve_event may return a different event than the attendee's.
+                // have claim_token in D1 but not yet synced to Sheets). The
+                // event is already correctly resolved above via coalesce_event_id,
+                // so this fallback uses the attendee's real event.
                 tracing::info!(claim_token = %token, "claim lookup: Sheets miss, trying D1 fallback");
                 if let Some(ref d1) = state.d1 {
                     match crate::db::attendees::get_attendee_by_claim_token(d1, token).await {
@@ -351,8 +406,12 @@ pub async fn execute_claim(
 ) -> Result<ClaimResult, AppError> {
     tracing::info!(claim_token = %token, "claim mint request");
 
-    // 1. Resolve event context
-    let event = resolve_event(state, event_id).await?;
+    // 1. Resolve event context. Same coalesce as lookup_claim: the public POST
+    //    `/claim/{token}` carries no event_id, so recover the attendee's real
+    //    event from D1 before minting — otherwise we could mint against the
+    //    wrong event's collection/sheet.
+    let resolved_event_id = coalesce_event_id(state, token, event_id).await;
+    let event = resolve_event(state, resolved_event_id.as_deref()).await?;
     let kv = resolve_kv(state);
 
     // 2. Check walk-in path: D1-only

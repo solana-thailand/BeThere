@@ -606,6 +606,31 @@ pub(crate) async fn get_attendee_by_claim_token(
     Ok(Some(row.to_attendee()))
 }
 
+/// Fetch only the `event_id` for an attendee by claim token.
+///
+/// Lightweight scalar query used to resolve the correct event context for a
+/// claim token when the caller has no event_id (e.g. the public claim URL
+/// `/claim/{token}` carries no event). Without this, the claim flow falls
+/// back to the "first active event", which may NOT be the attendee's event —
+/// causing the claim page to show the wrong event's name/NFT/deposit config.
+pub(crate) async fn get_attendee_event_id_by_claim_token(
+    db: &D1Database,
+    claim_token: &str,
+) -> Result<Option<String>, String> {
+    #[derive(Deserialize)]
+    struct EventIdRow {
+        event_id: Option<String>,
+    }
+    let stmt = db.prepare("SELECT event_id FROM attendees WHERE claim_token = ?1");
+    let row = stmt
+        .bind_refs(&[D1Type::Text(claim_token)])
+        .map_err(|e| format!("D1 get_attendee_event_id_by_claim_token bind: {e:?}"))?
+        .first::<EventIdRow>(Some("event_id"))
+        .await
+        .map_err(|e| format!("D1 get_attendee_event_id_by_claim_token first: {e:?}"))?;
+    Ok(row.and_then(|r| r.event_id.filter(|s| !s.is_empty())))
+}
+
 /// Fetch all attendees for a given event from D1.
 ///
 /// Uses JSON.stringify-based deserialization to avoid the panic in
