@@ -82,6 +82,11 @@
 
         <!-- PWA — Service worker boot. Trunk copy-file puts sw.js in dist/. -->
         <link data-trunk rel="copy-file" href="sw.js" />
+        <!-- Cache-control for static assets (_headers is parsed by Workers Assets,
+             not served). Forces a fresh index.html/sw.js on every load so a
+             stale shell can't reference purged, content-hashed JS/WASM (the
+             blank-page-after-deploy bug). Hashed assets cache forever. -->
+        <link data-trunk rel="copy-file" href="_headers" />
         <!-- Inline SW registration is allowed here (no eval, just a register()
              call). Project CSP (handover 007) restricts eval(), not inline
              <script> registration calls. -->

@@ -22,7 +22,11 @@
 // SW activation. Without this, stale-while-revalidate can serve an old
 // index.html whose hashed <script src=...> references no-longer-existing WASM,
 // producing a blank page until a hard refresh.
-var CACHE_VERSION = "bethere-v2";
+//
+// v3 (2026-06): also made navigation/API fetches use `cache: "no-store"` so the
+// SW never serves a browser-HTTP-cached (stale) index.html. See _headers for
+// the matching edge-cache fix (no-store on the shell).
+var CACHE_VERSION = "bethere-v3";
 var SHELL_CACHE = CACHE_VERSION + "-shell";
 var ASSET_CACHE = CACHE_VERSION + "-assets";
 
@@ -120,7 +124,14 @@ self.addEventListener("fetch", function (event) {
 });
 
 function networkFirst(req) {
-  return fetch(req)
+  // `cache: "no-store"` bypasses the browser HTTP cache entirely, forcing a
+  // fresh round-trip to the edge for navigations and API calls. The edge
+  // serves index.html with `Cache-Control: no-store` (see _headers), so this
+  // guarantees the SW always sees the current index.html — never a stale one
+  // whose hashed <script> references have been purged by the latest deploy
+  // (the blank-page-after-deploy bug).
+  var isNav = req.mode === "navigate" || req.destination === "document";
+  return fetch(req, { cache: "no-store" })
     .then(function (res) {
       // Only cache successful responses. A 3xx/4xx/5xx must NOT shadow the
       // network — otherwise a transient error response gets cached and served
@@ -131,10 +142,22 @@ function networkFirst(req) {
           cache.put(req, clone);
         });
       }
+      if (isNav) {
+        console.log(
+          "[sw] nav served from network:",
+          new URL(req.url).pathname,
+          "status=" + (res && res.status),
+        );
+      }
       return res;
     })
-    .catch(function () {
+    .catch(function (err) {
       // Offline — try cache, then fall back to SPA shell
+      console.warn(
+        "[sw] nav fetch failed, falling back to cache:",
+        new URL(req.url).pathname,
+        err,
+      );
       return caches.match(req).then(function (cached) {
         return cached || caches.match("/index.html");
       });
