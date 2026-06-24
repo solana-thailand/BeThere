@@ -455,7 +455,7 @@ To keep this from becoming a surprise as the worker grows, this plan adds `worke
 
 ### Migration
 
-- `worker/migrations/0019_event_summaries_post_event.sql` — **new**
+- `worker/migrations/0020_event_summaries_post_event.sql` — **new** (renumbered from 0019; slot taken by `0019_event_poster.sql`)
 
 ### Domain
 

@@ -9,6 +9,7 @@ pub mod dashboard;
 pub mod deposit_statuses;
 pub mod developers;
 pub mod escrow_index;
+pub mod event_summaries;
 pub mod events;
 pub mod jwt_blacklist;
 pub mod onchain_events;

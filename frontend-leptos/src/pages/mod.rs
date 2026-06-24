@@ -14,6 +14,7 @@ pub mod dev_dashboard;
 pub mod dev_profile;
 pub mod escrow_init;
 pub mod event_form;
+pub mod event_summary;
 pub mod events_page;
 pub mod form_builder;
 pub mod landing;
@@ -24,3 +25,5 @@ pub mod public_event;
 pub mod quiz_editor;
 pub mod scanner;
 pub mod ticket;
+
+pub use event_summary::EventSummary;

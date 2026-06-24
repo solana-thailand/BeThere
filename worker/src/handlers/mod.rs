@@ -284,6 +284,12 @@ pub fn routes(state: AppState) -> Router<()> {
         )
         .route("/events/{id}/restore", post(events::restore_event))
         .route("/events/{id}/duplicate", post(events::duplicate_event))
+        // Post-event summary (Plan 008 — Phase 1): lazy freeze + manual trigger.
+        .route("/events/{id}/summary", get(events::get_event_summary))
+        .route(
+            "/events/{id}/summary/freeze",
+            post(events::freeze_event_summary),
+        )
         .route(
             "/events/{id}/poster",
             post(events::upload_poster).delete(events::delete_poster),
