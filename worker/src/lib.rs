@@ -39,15 +39,36 @@ static LOG_INITIALIZED: OnceLock<()> = OnceLock::new();
 /// Rebuild after frontend changes: `cd frontend-leptos && trunk build`
 const INDEX_HTML: &str = include_str!("../../frontend-leptos/dist/index.html");
 
-/// SPA fallback handler — returns the embedded `index.html` for non-API routes.
+/// `Cache-Control: no-store` for the SPA shell.
+///
+/// `index.html` references content-hashed JS/WASM whose filenames change every
+/// deploy. A stale `index.html` (cached in the browser or at the edge) would
+/// reference purged asset hashes → 404 → blank page, only fixed by a hard
+/// refresh. `no-store` forces a fresh shell on every navigation.
+///
+/// NOTE: Cloudflare's `_headers` file does NOT apply to Worker-generated
+/// responses (only to responses served by the Static Assets binding). The SPA
+/// fallback is Worker-generated for non-asset routes (`/claim/*`, `/staff`,
+/// `/admin`), so the header must be set here, not in `_headers`.
+static SPA_NO_STORE: std::sync::LazyLock<axum::http::HeaderValue> =
+    std::sync::LazyLock::new(|| axum::http::HeaderValue::from_static("no-store"));
+
+/// SPA fallback handler — returns the embedded `index.html` for non-API routes
+/// with `Cache-Control: no-store` and the standard security headers.
 ///
 /// The `[assets]` binding in wrangler.toml serves static files (JS, CSS, WASM)
 /// from the edge. For HTML navigation routes that don't match a static file,
 /// this fallback serves `index.html` so the Leptos client-side router can
-/// handle the path.
+/// handle the path. Because this response is Worker-generated, the
+/// `security_headers_layer` middleware (which only wraps `api_routes`) and the
+/// `_headers` file (which only applies to Static Asset responses) do NOT run —
+/// headers must be attached here.
 #[worker::send]
-async fn spa_fallback() -> axum::response::Html<&'static str> {
-    axum::response::Html(INDEX_HTML)
+async fn spa_fallback() -> axum::http::Response<axum::body::Body> {
+    let mut resp = axum::response::Html(INDEX_HTML).into_response();
+    let headers = resp.headers_mut();
+    headers.insert(axum::http::header::CACHE_CONTROL, SPA_NO_STORE.clone());
+    middleware::headers::add_security_headers(resp)
 }
 
 /// Returns true if the request path should be served as the SPA fallback
@@ -91,7 +112,7 @@ async fn fetch(
     // [assets] binding before the worker is invoked.
     let path = req.uri().path();
     if is_spa_route(path) {
-        return Ok(spa_fallback().await.into_response());
+        return Ok(spa_fallback().await);
     }
 
     // API routes require AppState (bindings + config + secrets).

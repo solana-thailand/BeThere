@@ -75,7 +75,7 @@ pub async fn security_headers_layer(req: Request, next: Next) -> Response {
     add_security_headers(response)
 }
 
-fn add_security_headers(mut response: Response) -> Response {
+pub fn add_security_headers(mut response: Response) -> Response {
     let headers = response.headers_mut();
     headers.insert(
         header::STRICT_TRANSPORT_SECURITY,
