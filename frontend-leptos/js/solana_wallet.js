@@ -23,7 +23,14 @@
 export function getDetectedWallets() {
   var wallets = [];
 
-  // Legacy adapter detection — check multiple injection patterns
+  // Legacy adapter detection — order matters: this drives the button order
+  // in the UI. Solflare is listed first because it's the primary recommended
+  // wallet for this app's deposit/claim flows.
+
+  // Solflare: window.solflare or window.solflare.isSolflare
+  if (window.solflare && window.solflare.isSolflare) {
+    wallets.push("Solflare");
+  }
 
   // Phantom: primary (window.solana.isPhantom) + secondary (window.phantom.solana)
   if (window.solana && window.solana.isPhantom) {
@@ -41,11 +48,6 @@ export function getDetectedWallets() {
     wallets.push("Backpack");
   } else if (window.backpack && window.backpack._isBackpack) {
     wallets.push("Backpack");
-  }
-
-  // Solflare: window.solflare or window.solflare.isSolflare
-  if (window.solflare && window.solflare.isSolflare) {
-    wallets.push("Solflare");
   }
 
   // Coinbase: window.coinbaseSolana or window.coinbaseSolana?.isCoinbase
@@ -209,7 +211,41 @@ export async function connectWallet(walletName) {
 }
 
 /**
+ * Resolve the user's PublicKey from a connect() response or the provider
+ * instance itself.
+ *
+ * @param {*} response - value returned by provider.connect()
+ * @param {*} provider - the provider instance (may carry .publicKey directly)
+ * @returns {object|null} PublicKey-like object with toBase58(), or null
+ */
+function resolvePublicKey(response, provider) {
+  // 1. Phantom/Backpack legacy: response.publicKey
+  if (response && response.publicKey) {
+    // Some Wallet Standard adapters nest it: response.publicKey.publicKey
+    if (response.publicKey.publicKey) {
+      return response.publicKey.publicKey;
+    }
+    return response.publicKey;
+  }
+
+  // 2. Solflare legacy: publicKey lives on the provider after connect()
+  if (provider && provider.publicKey) {
+    console.log("[solana_wallet] Using provider.publicKey (Solflare-style)");
+    return provider.publicKey;
+  }
+
+  return null;
+}
+
+/**
  * Internal: perform the actual connect call on a provider.
+ *
+ * Public key resolution handles three provider conventions:
+ * 1. Phantom/Backpack legacy: connect() resolves to { publicKey: PublicKey }
+ * 2. Wallet Standard / nested adapters: response.publicKey.publicKey
+ * 3. Solflare legacy: connect() resolves to undefined/true, and the public key
+ *    is exposed at provider.publicKey after connect completes (and may be set
+ *    asynchronously, hence the short poll).
  */
 async function doConnect(provider, walletName) {
   try {
@@ -217,7 +253,25 @@ async function doConnect(provider, walletName) {
     var response = await provider.connect();
     console.log("[solana_wallet] Connect response:", response);
 
-    var publicKey = response.publicKey;
+    var publicKey = resolvePublicKey(response, provider);
+
+    // Solflare's legacy provider sets publicKey asynchronously in some
+    // versions — poll briefly before giving up.
+    if (!publicKey && provider && !provider.publicKey) {
+      for (var i = 0; i < 10; i++) {
+        await sleep(100);
+        if (provider.publicKey) {
+          publicKey = provider.publicKey;
+          console.log(
+            "[solana_wallet] publicKey appeared after",
+            (i + 1) * 100,
+            "ms",
+          );
+          break;
+        }
+      }
+    }
+
     if (!publicKey) {
       console.error("[solana_wallet] No public key in response");
       return JSON.stringify({
@@ -292,6 +346,82 @@ export async function getConnectedPublicKey(walletName) {
  * @param {string} transactionB64 - Base64-encoded serialized transaction
  * @returns {Promise<string|null>} Transaction signature (base58), or null on failure
  */
+var web3Promise = null;
+
+function loadWeb3() {
+  if (!web3Promise) {
+    web3Promise = new Promise(function (resolve, reject) {
+      if (window.solanaWeb3) {
+        resolve(window.solanaWeb3);
+        return;
+      }
+      var script = document.createElement("script");
+      script.src = "https://unpkg.com/@solana/web3.js@1.95.3/lib/index.iife.min.js";
+      script.onload = function () {
+        if (window.solanaWeb3) {
+          console.log("[solana_wallet] Loaded @solana/web3.js from unpkg");
+          resolve(window.solanaWeb3);
+        } else {
+          tryFallback();
+        }
+      };
+      script.onerror = function () {
+        tryFallback();
+      };
+      document.head.appendChild(script);
+
+      function tryFallback() {
+        console.log("[solana_wallet] unpkg failed, trying jsdelivr fallback...");
+        var fallbackScript = document.createElement("script");
+        fallbackScript.src = "https://cdn.jsdelivr.net/npm/@solana/web3.js@1.95.3/lib/index.iife.min.js";
+        fallbackScript.onload = function () {
+          if (window.solanaWeb3) {
+            console.log("[solana_wallet] Loaded @solana/web3.js from jsdelivr");
+            resolve(window.solanaWeb3);
+          } else {
+            reject(new Error("@solana/web3.js loaded from jsdelivr but solanaWeb3 global not found"));
+          }
+        };
+        fallbackScript.onerror = function () {
+          reject(new Error("Failed to load @solana/web3.js from both unpkg and jsdelivr"));
+        };
+        document.head.appendChild(fallbackScript);
+      }
+    });
+  }
+  return web3Promise;
+}
+
+async function getRpcUrl() {
+  try {
+    var response = await fetch("/api/health");
+    if (response.ok) {
+      var data = await response.json();
+      var cluster = data.cluster || "devnet";
+      if (cluster === "mainnet-beta") {
+        return "https://api.mainnet-beta.solana.com";
+      } else if (cluster === "testnet") {
+        return "https://api.testnet.solana.com";
+      } else if (cluster === "localnet") {
+        return "http://localhost:8899";
+      }
+    }
+  } catch (e) {
+    console.warn("[solana_wallet] Failed to fetch cluster from /api/health:", e);
+  }
+  return "https://api.devnet.solana.com"; // Fallback to devnet
+}
+
+/**
+ * Sign and send a base64-encoded serialized transaction.
+ *
+ * Decodes the transaction, signs it with the connected wallet,
+ * and sends it to the Solana network.
+ *
+ * @param {string} walletName - Name of the wallet
+ * @param {string} transactionB64 - Base64-encoded serialized transaction
+ * @returns {Promise<string|null>} Transaction signature (base58), or null on failure
+ */
 export async function signAndSendTransaction(walletName, transactionB64) {
   if (!walletName || !walletName.trim()) {
     console.error("[solana_wallet] signAndSendTransaction: empty wallet name");
@@ -314,6 +444,9 @@ export async function signAndSendTransaction(walletName, transactionB64) {
       });
     }
 
+    // Load web3.js dynamically
+    var web3 = await loadWeb3();
+
     // Decode base64 to Uint8Array
     var binaryString = atob(transactionB64);
     var bytes = new Uint8Array(binaryString.length);
@@ -321,49 +454,59 @@ export async function signAndSendTransaction(walletName, transactionB64) {
       bytes[i] = binaryString.charCodeAt(i);
     }
 
-    // Wrap raw bytes in a minimal Transaction-like object.
-    // Wallet providers (Phantom, Solflare, Backpack) expect an object with
-    // a .serialize() method, not a raw Uint8Array.
-    var tx = {
-      serialize: function () {
-        return bytes;
-      },
-    };
+    // Deserialize transaction bytes into a real @solana/web3.js Transaction/VersionedTransaction
+    var tx;
+    try {
+      // In versioned transactions, the first byte of the serialized message (after signatures) has MSB set.
+      var offset = 0;
+      var numSigs = 0;
+      var shift = 0;
+      while (true) {
+        var byte = bytes[offset++];
+        numSigs |= (byte & 0x7f) << shift;
+        if ((byte & 0x80) === 0) break;
+        shift += 7;
+      }
+      offset += numSigs * 64; // skip signatures
+      var firstMessageByte = bytes[offset];
+      var isVersioned = (firstMessageByte & 0x80) !== 0;
 
-    // Sign and send the transaction
-    // Most wallets support signAndSendTransaction which handles both signing
-    // and broadcasting in one call
+      if (isVersioned && web3.VersionedTransaction) {
+        tx = web3.VersionedTransaction.deserialize(bytes);
+        console.log("[solana_wallet] Deserialized versioned transaction");
+      } else {
+        tx = web3.Transaction.from(bytes);
+        console.log("[solana_wallet] Deserialized legacy transaction");
+      }
+    } catch (err) {
+      console.warn("[solana_wallet] Versioned/detailed deserialization check failed, falling back to legacy:", err);
+      tx = web3.Transaction.from(bytes);
+    }
+
+    // Use signTransaction first to allow manual broadcast via the correct RPC connection.
+    // This avoids wallet-side network mismatches (e.g., wallet on Mainnet but app on Devnet)
+    // since the transaction is broadcast using the dApp's connection rather than the wallet's internally configured node.
+    if (provider.signTransaction) {
+      console.log("[solana_wallet] Using signTransaction + manual broadcast to avoid network mismatch");
+      var signedTx = await provider.signTransaction(tx);
+      
+      var rpcUrl = await getRpcUrl();
+      var connection = new web3.Connection(rpcUrl, "confirmed");
+      console.log("[solana_wallet] Sending raw transaction to RPC:", rpcUrl);
+      var signature = await connection.sendRawTransaction(signedTx.serialize(), {
+        skipPreflight: true,
+      });
+      console.log("[solana_wallet] Transaction sent successfully, signature:", signature);
+      return signature;
+    }
+
+    // Fallback: signAndSendTransaction
     if (provider.signAndSendTransaction) {
+      console.log("[solana_wallet] signTransaction not available, using signAndSendTransaction fallback");
       var result = await provider.signAndSendTransaction(tx, {
         skipPreflight: true,
       });
       return result.signature || result.toString();
-    }
-
-    // Fallback: sign separately, then send manually via RPC
-    if (provider.signTransaction) {
-      var signedTx = await provider.signTransaction(tx);
-      // For the fallback path, we need to broadcast via RPC
-      // Return the signature from the signed transaction
-      // The signed transaction contains signatures in the first bytes
-      // Solana transaction format: num_signatures (1 byte) + signatures (64 bytes each) + ...
-      if (signedTx.signature) {
-        // Some wallets return a signature directly
-        return typeof signedTx.signature === "string"
-          ? signedTx.signature
-          : btoa(String.fromCharCode.apply(null, signedTx.signature));
-      }
-      // Extract from the signed transaction bytes
-      // First byte is number of signatures, then 64 bytes per signature
-      var numSigs = signedTx instanceof Uint8Array ? signedTx[0] : 0;
-      if (
-        numSigs > 0 &&
-        signedTx instanceof Uint8Array &&
-        signedTx.length >= 65
-      ) {
-        var sigBytes = signedTx.slice(1, 65);
-        return btoa(String.fromCharCode.apply(null, sigBytes));
-      }
     }
 
     console.error(
