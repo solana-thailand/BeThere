@@ -2,19 +2,27 @@
  * BeThere service worker — minimal PWA shell caching.
  *
  * Strategy:
- *  - Network-first for /api/* (always need fresh data; backend is the source
- *    of truth for events, attendees, deposits).
+ *  - Network-first for /api/* AND for HTML navigations. The SPA shell
+ *    (index.html) references content-hashed WASM/JS that changes every build,
+ *    so it must always be fetched fresh — a stale cached index.html whose
+ *    <script src=...> points at no-longer-cached asset filenames produces a
+ *    blank page (only fixed by a hard refresh).
  *  - Cache-first for static assets (WASM, JS, CSS, fonts, images) — they are
- *    content-hashed by trunk so cached versions are always valid.
- *  - Stale-while-revalidate for the SPA shell (/ and /index.html) — serves
- *    instantly from cache, updates in the background.
+ *    content-hashed by trunk so cached versions are always valid for their URL.
+ *  - Stale-while-revalidate for everything else (manifest, icons, etc.).
  *
  * Scope is intentionally minimal: this exists to satisfy PWA installability
  * criteria and give a usable offline shell, NOT to make BeThere fully
  * offline-capable. Wallet flows always require network.
  */
 
-var CACHE_VERSION = "bethere-v1";
+// Bump this on every deploy that ships a new WASM build. The activate handler
+// evicts any cache whose name doesn't start with the current version, so old
+// stale index.html / WASM entries from a previous build are purged on the next
+// SW activation. Without this, stale-while-revalidate can serve an old
+// index.html whose hashed <script src=...> references no-longer-existing WASM,
+// producing a blank page until a hard refresh.
+var CACHE_VERSION = "bethere-v2";
 var SHELL_CACHE = CACHE_VERSION + "-shell";
 var ASSET_CACHE = CACHE_VERSION + "-assets";
 
@@ -96,15 +104,28 @@ self.addEventListener("fetch", function (event) {
     return;
   }
 
-  // Everything else (HTML navigation, manifest, icons) — stale-while-revalidate
+  // HTML navigations (full page loads via <a href> or window.location.href):
+  // network-first. The SPA shell (index.html) references content-hashed WASM/JS
+  // that changes every build, so serving a stale cached index.html yields a
+  // blank page (old HTML references old asset filenames that may no longer be
+  // cached). Network-first guarantees the latest index.html; falls back to
+  // cache (or the generic SPA shell) when offline.
+  if (req.mode === "navigate" || req.destination === "document") {
+    event.respondWith(networkFirst(req));
+    return;
+  }
+
+  // Everything else (manifest, icons, fonts, etc.) — stale-while-revalidate
   event.respondWith(staleWhileRevalidate(SHELL_CACHE, req));
 });
 
 function networkFirst(req) {
   return fetch(req)
     .then(function (res) {
-      // Only cache successful responses
-      if (res && res.status === 200) {
+      // Only cache successful responses. A 3xx/4xx/5xx must NOT shadow the
+      // network — otherwise a transient error response gets cached and served
+      // as a stale blank page on the next navigation.
+      if (res && res.status === 200 && res.type !== "opaqueredirect") {
         var clone = res.clone();
         caches.open(SHELL_CACHE).then(function (cache) {
           cache.put(req, clone);
