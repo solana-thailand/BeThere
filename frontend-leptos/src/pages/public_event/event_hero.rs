@@ -4,22 +4,18 @@ use leptos::prelude::*;
 
 /// Public event page hero image.
 ///
-/// Prefers the marketing `poster_url`; falls back to the NFT badge image
-/// (`nft_image_url`); falls back to a Ticket icon when neither is set.
-///
-/// `poster_url` and `nft_image_url` are deliberately separate fields — the
-/// NFT image is baked into the on-chain cNFT mint metadata, so overloading it
-/// with a marketing poster would corrupt every claimed NFT. See Plan 009.
+/// Shows the marketing `poster_url` when set; otherwise renders a Ticket icon
+/// empty-state. We deliberately do NOT fall back to `nft_image_url` — that
+/// asset is baked into the on-chain cNFT mint metadata and using it as a hero
+/// is a semantic/aspect-ratio mismatch (see Plan 009).
 ///
 /// The rendered image is click-to-fullscreen via the shared `LightboxImage`
 /// component — attendees often need to read dense agenda text on the poster.
-pub fn event_hero(poster_url: &str, nft_image_url: &str) -> AnyView {
-    // Prefer the marketing poster; fall back to the NFT badge image.
-    let url = if !poster_url.is_empty() {
-        poster_url
-    } else {
-        nft_image_url
-    };
+///
+/// `nft_image_url` is kept in the signature for caller compatibility but is
+/// intentionally unused here.
+pub fn event_hero(poster_url: &str, _nft_image_url: &str) -> AnyView {
+    let url = poster_url;
     if url.is_empty() {
         view! {
             <div class="pe-hero">

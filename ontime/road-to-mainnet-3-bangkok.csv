@@ -1,0 +1,6 @@
+Time start,Link start,Duration,Cue,Title,Skip,Note,Colour,End action,Timer type,Time warning,Time danger,Presenter
+13:00,false,00:30,1,Setup,false,Doors open / registration desk,grey,load-next,count-down,00:05:00,00:01:00,
+13:30,false,01:00,2,Rust ep 4: Hello Latent Space,false,Deep dive session,blue,load-next,count-down,00:05:00,00:02:00,Katopz
+14:30,false,00:05,3,Break,false,5 minute break,yellow,load-next,count-down,00:01:00,00:00:30,
+14:35,false,01:25,4,Rust + DFlow: Autonomous Bots & Onchain DeFi,false,Tech talk,green,load-next,count-down,00:05:00,00:02:00,Luke (DFlow)
+16:00,false,00:00,5,End,false,Event ends,grey,none,count-down,00:00:00,00:00:00,
