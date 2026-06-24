@@ -127,91 +127,117 @@ for root, dirs, files in os.walk(dist):
 print(json.dumps({'manifest': manifest}))
 ")
 
-  # Initialize asset upload session
-  echo "$MANIFEST" > /tmp/bethere_manifest.json
-  INIT_RESPONSE=$(curl -s -X POST \
-    "${API_BASE}/workers/scripts/${WORKER_NAME}/assets-upload-session" \
-    -H "Authorization: Bearer ${OAUTH_TOKEN}" \
-    -H "Content-Type: application/json" \
-    -d @/tmp/bethere_manifest.json)
-  rm -f /tmp/bethere_manifest.json
+  # Initialize asset upload session, upload only the requested files, and
+  # obtain the COMPLETION JWT (not the init/upload JWT).
+  #
+  # The assets upload flow (matching wrangler's syncAssets):
+  #   1. POST .../assets-upload-session with the manifest → init JWT + buckets
+  #   2. If buckets is non-empty, POST .../workers/assets/upload?base64=true
+  #      as multipart/form-data (NOT JSON), one request per bucket, each field
+  #      named by file hash with the base64 content as the value. Auth uses the
+  #      init JWT. Each response's result.jwt is the running completion JWT.
+  #   3. The final completion JWT is what the PUT API needs in assets.jwt.
+  #
+  # Previous bugs this fixes:
+  #   - Uploaded ALL files every time instead of only the requested buckets.
+  #   - Used Content-Type: application/json; the API requires multipart/form-data
+  #     (uploads silently failed → no completion JWT → fell back to init JWT).
+  #   - Did not strip the `cfwau_` prefix the new API adds to every JWT.
+  ASSETS_JWT=$(echo "$MANIFEST" | /opt/homebrew/bin/python3 -c "
+import json, sys, base64, os
+from urllib.request import Request, urlopen
+from urllib.error import HTTPError
 
-  # Extract JWT and buckets
-  ASSETS_JWT=$(echo "$INIT_RESPONSE" | /opt/homebrew/bin/python3 -c "import json,sys; r=json.load(sys.stdin); print(r.get('result',{}).get('jwt',''))" 2>/dev/null)
-  BUCKETS=$(echo "$INIT_RESPONSE" | /opt/homebrew/bin/python3 -c "
-import json, sys
-r = json.load(sys.stdin)
-buckets = r.get('result',{}).get('buckets',[])
-count = sum(len(b) for b in buckets)
-print(count)
-" 2>/dev/null)
+def status(msg):
+    # Progress goes to stderr so it isn't captured into ASSETS_JWT.
+    print(msg, file=sys.stderr)
 
-  if [ -z "$ASSETS_JWT" ]; then
-    echo "❌ Failed to get assets JWT"
-    echo "$INIT_RESPONSE" | /opt/homebrew/bin/python3 -m json.tool 2>/dev/null || echo "$INIT_RESPONSE"
+manifest_body = json.load(sys.stdin)['manifest']
+api_base = '${API_BASE}'
+script = '${WORKER_NAME}'
+oauth = '${OAUTH_TOKEN}'
+dist = '${DIST_DIR}'
+
+# Build hash → base64-content lookup (matches the manifest hashing).
+content_by_hash = {}
+for rel, info in manifest_body.items():
+    fp = os.path.join(dist, rel.lstrip('/'))
+    raw = open(fp, 'rb').read()
+    content_by_hash[info['hash']] = base64.b64encode(raw).decode()
+
+# 1. Initialize upload session.
+init_req = Request(
+    f'{api_base}/workers/scripts/{script}/assets-upload-session',
+    data=json.dumps({'manifest': manifest_body}).encode(),
+    headers={'Authorization': f'Bearer {oauth}', 'Content-Type': 'application/json'},
+    method='POST',
+)
+with urlopen(init_req) as r:
+    init = json.load(r)['result']
+init_jwt = init['jwt']
+buckets = init.get('buckets', [])
+requested = [h for bucket in buckets for h in bucket]
+
+if not requested:
+    status(f'   Assets already up-to-date (no new files to upload)')
+    print(init_jwt)
+    sys.exit(0)
+
+status(f'   Uploading {len(requested)} asset file(s)...')
+
+# 2. Upload each requested file via multipart/form-data. The API returns a
+#    fresh completion JWT in result.jwt on every successful upload.
+completion_jwt = ''
+upload_url = f'{api_base}/workers/assets/upload?base64=true'
+for i, file_hash in enumerate(requested, 1):
+    b64 = content_by_hash[file_hash]
+    # Build multipart/form-data body by hand (field name = hash, value = b64).
+    boundary = '----bethere' + os.urandom(8).hex()
+    body = (
+        f'--{boundary}\r\n'
+        f'Content-Disposition: form-data; name=\"{file_hash}\"; filename=\"{file_hash}\"\r\n'
+        f'Content-Type: application/octet-stream\r\n\r\n'
+        f'{b64}\r\n'
+        f'--{boundary}--\r\n'
+    ).encode()
+    req = Request(
+        upload_url,
+        data=body,
+        headers={
+            'Authorization': f'Bearer {init_jwt}',
+            'Content-Type': f'multipart/form-data; boundary={boundary}',
+        },
+        method='POST',
+    )
+    try:
+        with urlopen(req) as r:
+            resp = json.load(r)
+        new_jwt = resp.get('result', {}).get('jwt', '')
+        if new_jwt:
+            completion_jwt = new_jwt
+        status(f'  Uploaded {i}/{len(requested)}')
+    except HTTPError as e:
+        status(f'  Upload {i}/{len(requested)} FAILED: {e.code} {e.read().decode()[:300]}')
+        sys.exit(1)
+
+if not completion_jwt:
+    status('   No completion JWT returned by upload API')
+    sys.exit(1)
+print(completion_jwt)
+")
+  UPLOAD_EXIT=$?
+  if [ "$UPLOAD_EXIT" -ne 0 ]; then
+    echo "❌ Asset upload failed."
     restore_pnp
     exit 1
   fi
 
-  if [ "$BUCKETS" = "0" ]; then
-    echo "   Assets already up-to-date (no new files to upload)"
-  else
-    echo "   Uploading ${BUCKETS} asset file(s)..."
-
-    # Upload each file that needs uploading
-    /opt/homebrew/bin/python3 -c "
-import os, json, base64, subprocess, tempfile
-import blake3
-
-dist = '${DIST_DIR}'
-token = '${ASSETS_JWT}'
-api = '${API_BASE}/workers/assets/upload?base64=true'
-
-# Build file lookup by hash
-manifest = {}
-for root, dirs, files in os.walk(dist):
-    for f in files:
-        fp = os.path.join(root, f)
-        contents = open(fp, 'rb').read()
-        b64 = base64.b64encode(contents).decode()
-        ext = os.path.splitext(fp)[1].lstrip('.')
-        h = blake3.blake3((b64 + ext).encode()).hexdigest()[:32]
-        manifest[h] = base64.b64encode(contents).decode()
-
-# For each file, upload via the API using temp file to avoid arg length limit
-count = 0
-total = len(manifest)
-for file_hash, content_b64 in manifest.items():
-    count += 1
-    payload = json.dumps({file_hash: content_b64})
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as tf:
-        tf.write(payload)
-        tf_path = tf.name
-    result = subprocess.run([
-        'curl', '-s', '-X', 'POST', api,
-        '-H', f'Authorization: Bearer {token}',
-        '-H', 'Content-Type: application/json',
-        '-d', f'@{tf_path}'
-    ], capture_output=True, text=True)
-    os.unlink(tf_path)
-
-    try:
-        resp = json.loads(result.stdout)
-        new_jwt = resp.get('result', {}).get('jwt', '')
-        if new_jwt:
-            with open('/tmp/bethere_assets_jwt.txt', 'w') as jf:
-                jf.write(new_jwt)
-        print(f'  Uploaded {count}/{total}')
-    except:
-        print(f'  Upload {count}/{total} response: {result.stdout[:200]}')
-"
-
-    # Read the final JWT after all uploads
-    if [ -f /tmp/bethere_assets_jwt.txt ]; then
-      ASSETS_JWT=$(cat /tmp/bethere_assets_jwt.txt)
-      rm -f /tmp/bethere_assets_jwt.txt
-    fi
-  fi
+  # Defensive: strip the `cfwau_` prefix if present. The assets-upload-session
+  # API prefixes upload-token JWTs with `cfwau_` (Cloudflare Workers Assets
+  # Upload). Completion JWTs returned after upload don't carry it, but the init
+  # JWT (used verbatim when nothing needs uploading) sometimes does. The legacy
+  # PUT API rejects a prefixed JWT with 10021 "could not JSON decode header".
+  ASSETS_JWT="${ASSETS_JWT#cfwau_}"
 
   echo "   Assets JWT obtained: ${ASSETS_JWT:0:20}..."
 
