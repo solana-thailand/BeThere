@@ -5,7 +5,7 @@
 //! (Decisions A1 + B1).
 
 use axum::Extension;
-use axum::Json;
+use axum::body::Bytes;
 use axum::extract::{Path, State};
 use serde_json::json;
 
@@ -31,9 +31,20 @@ pub async fn duplicate_event(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
     Path(source_id): Path<String>,
-    body: Option<Json<DuplicateEventRequest>>,
+    body: Bytes,
 ) -> Result<ApiOk<serde_json::Value>, crate::error::WorkerError> {
-    let body = body.map(|Json(b)| b).unwrap_or_default();
+    // Body is optional per the API contract (.issues/055 §Endpoint).
+    // We parse defensively instead of using `Option<Json<T>>` because
+    // axum 0.8's `OptionalFromRequest` for `Json<T>` returns a hard
+    // `Err(JsonSyntaxError)` (plain-text 400) when Content-Type: application/json
+    // is set but the body is empty — which is what the frontend's `api_post`
+    // always sends. `Bytes` never rejects, so the handler always runs.
+    let body: DuplicateEventRequest = if body.is_empty() {
+        DuplicateEventRequest::default()
+    } else {
+        serde_json::from_slice(&body)
+            .map_err(|e| AppError::Validation(format!("invalid duplicate request body: {e}")))?
+    };
     let kv = state.events_kv.as_ref();
 
     tracing::info!(

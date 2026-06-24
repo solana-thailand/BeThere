@@ -251,6 +251,12 @@ pub async fn delete_sheet_row(
 ) -> Result<(), String> {
     let access_token = get_cached_access_token(state, kv).await?;
 
+    // Resolve the REAL numeric GID for this tab. The old hardcoded map
+    // ("attendees" => 0) was wrong — Google assigns arbitrary GIDs, so
+    // deleting with sheetId=0 was a silent no-op.
+    let gid =
+        crate::sheets::resolve_sheet_gid(state, sheet_id, sheet_name, kv, &access_token).await?;
+
     // Use batchUpdate with DeleteDimensionRequest to remove the entire row
     // This shifts all subsequent rows up, leaving no gaps
     let url = format!("https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}:batchUpdate");
@@ -263,7 +269,7 @@ pub async fn delete_sheet_row(
         "requests": [{
             "deleteDimension": {
                 "range": {
-                    "sheetId": resolve_sheet_gid(sheet_name),
+                    "sheetId": gid,
                     "dimension": "ROWS",
                     "startIndex": zero_based_row,
                     "endIndex": zero_based_row + 1
@@ -313,19 +319,9 @@ pub async fn delete_sheet_row(
     Ok(())
 }
 
-/// Resolve a sheet tab name to its numeric GID for dimension operations.
-///
-/// The `deleteDimension` API requires a `sheetId` (numeric GID), not the tab name.
-/// Common defaults: first tab = 0, "Attendees" = 0, "Staff" = 1.
-/// Falls back to 0 for the first/default tab.
-pub(super) fn resolve_sheet_gid(sheet_name: &str) -> i64 {
-    match sheet_name.to_lowercase().as_str() {
-        "attendees" => 0,
-        "staff" => 1,
-        // Default to first tab — covers most cases
-        _ => 0,
-    }
-}
+// resolve_sheet_gid removed — use super::resolve_sheet_gid() instead, which
+// fetches the real GID from spreadsheet metadata. The hardcoded map here was
+// wrong (the "Attendees" tab is NOT GID 0), causing row deletes to no-op.
 
 // ---------------------------------------------------------------------------
 // Participation Type Update (deposit deadline auto-switch)

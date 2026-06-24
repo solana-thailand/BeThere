@@ -829,7 +829,25 @@ pub async fn delete_sheet_row(
         }
     };
 
-    let gid = resolve_sheet_gid(&sheet_name);
+    // Resolve the REAL numeric GID for this tab. The old hardcoded map
+    // ("attendees" => 0) was wrong — Google assigns arbitrary GIDs (e.g.
+    // 104609663), so deleting with sheetId=0 was a silent no-op and the row
+    // never disappeared from the sheet.
+    let gid =
+        match super::resolve_sheet_gid(&state, &sheet_id, &sheet_name, kv.as_ref(), &access_token)
+            .await
+        {
+            Ok(g) => g,
+            Err(e) => {
+                tracing::error!(
+                    sheet_id = %sheet_id,
+                    sheet_name = %sheet_name,
+                    error = %e,
+                    "bg_sync delete_sheet_row: failed to resolve gid"
+                );
+                return;
+            }
+        };
 
     let url = format!("https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}:batchUpdate");
 
@@ -861,14 +879,7 @@ pub async fn delete_sheet_row(
     invalidate_column_map_cache(kv.as_ref(), &sheet_id, &sheet_name).await;
 }
 
-// ---------------------------------------------------------------------------
-// Helper: resolve sheet GID (simple mapping, matches write.rs)
-// ---------------------------------------------------------------------------
-
-fn resolve_sheet_gid(sheet_name: &str) -> i64 {
-    match sheet_name.to_lowercase().as_str() {
-        "attendees" => 0,
-        "staff" => 1,
-        _ => 0,
-    }
-}
+// resolve_sheet_gid removed — sheet GIDs are resolved dynamically via
+// super::resolve_sheet_gid() in sheets/mod.rs, which fetches the real GID
+// from the spreadsheet metadata. The hardcoded map here was wrong (the
+// "Attendees" tab is NOT GID 0), causing row deletes to silently no-op.
