@@ -298,8 +298,11 @@ pub async fn get_claim(token: &str) -> Result<ClaimLookupData, ApiError> {
 /// Fetch quiz questions for the frontend (no correct answers).
 ///
 /// Public endpoint — no authentication required.
-pub async fn get_quiz() -> Result<QuizQuestionsData, ApiError> {
-    let url = format!("{}/quiz", api_base());
+pub async fn get_quiz(event_id: Option<&str>) -> Result<QuizQuestionsData, ApiError> {
+    let mut url = format!("{}/quiz", api_base());
+    if let Some(eid) = event_id.filter(|e| !e.is_empty()) {
+        url = format!("{url}?event_id={eid}");
+    }
     let response = super::fetch::get(&url, &[]).await?;
 
     if !response.ok() {
@@ -479,8 +482,11 @@ pub async fn get_public_adventure_config(
 /// Get adventure status and progress for a claim token.
 ///
 /// Public endpoint — no authentication required.
-pub async fn get_adventure_status(token: &str) -> Result<AdventureStatusData, ApiError> {
-    let url = format!("{}/adventure/{token}/status", api_base());
+pub async fn get_adventure_status(token: &str, event_id: Option<&str>) -> Result<AdventureStatusData, ApiError> {
+    let mut url = format!("{}/adventure/{token}/status", api_base());
+    if let Some(eid) = event_id.filter(|e| !e.is_empty()) {
+        url = format!("{url}?event_id={eid}");
+    }
     let response = super::fetch::get(&url, &[]).await?;
 
     if !response.ok() {

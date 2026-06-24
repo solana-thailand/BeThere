@@ -75,8 +75,9 @@ pub fn Adventure() -> impl IntoView {
         let levels = restore_levels.get();
         let set_g = restore_set_game.clone();
         let set_completed = restore_set_completed.clone();
+        let eid_for_status = restore_event_id.clone();
         leptos::task::spawn_local(async move {
-            match api::get_adventure_status(&token).await {
+            match api::get_adventure_status(&token, eid_for_status.as_deref()).await {
                 Ok(status_data) => {
                     if let Some(progress) = status_data.progress {
                         if !progress.levels_completed.is_empty() {

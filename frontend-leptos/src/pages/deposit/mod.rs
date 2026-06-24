@@ -98,7 +98,28 @@ pub fn Deposit() -> impl IntoView {
                         if status.rejected {
                             set_state.set(DepositPageState::ThbRejected(data));
                         } else {
-                            set_state.set(DepositPageState::AlreadyDeposited(data));
+                            // A USDC deposit initiation that was never signed is
+                            // an orphan — `deposit_usdc` saved a pending record
+                            // before the wallet prompt, and the user rejected the
+                            // TX (or closed the wallet). With no tx_signature and
+                            // not verified, treat it as not-yet-deposited so the
+                            // user can retry. THB pending slips and any real USDC
+                            // deposit (verified or carrying a signature) are
+                            // genuine deposits.
+                            let is_usdc_orphan = !status.verified
+                                && matches!(
+                                    status.method,
+                                    crate::api::DepositMethod::Usdc
+                                )
+                                && status
+                                    .tx_signature
+                                    .as_deref()
+                                    .is_none_or(|t| t.is_empty());
+                            if is_usdc_orphan {
+                                set_state.set(DepositPageState::ChoosePayment(data));
+                            } else {
+                                set_state.set(DepositPageState::AlreadyDeposited(data));
+                            }
                         }
                     } else {
                         set_state.set(DepositPageState::ChoosePayment(data));

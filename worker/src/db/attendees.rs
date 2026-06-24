@@ -332,18 +332,14 @@ pub(crate) async fn count_deposits_by_event(
         "SELECT COUNT(*) as cnt FROM attendees \
          WHERE event_id = ?1 AND deposit_status IS NOT NULL AND deposit_status != ''",
     );
-    #[derive(Deserialize)]
-    struct CountRow {
-        cnt: i64,
-    }
-    let row = stmt
+    let cnt = stmt
         .bind_refs(&[D1Type::Text(event_id)])
         .map_err(|e| format!("D1 count_deposits bind: {e:?}"))?
-        .first::<CountRow>(Some("cnt"))
+        .first::<i64>(Some("cnt"))
         .await
         .map_err(|e| format!("D1 count_deposits first: {e:?}"))?;
 
-    Ok(row.map(|r| r.cnt as u32).unwrap_or(0))
+    Ok(cnt.map(|c| c as u32).unwrap_or(0))
 }
 
 /// Write refund status to D1.
@@ -606,6 +602,35 @@ pub(crate) async fn get_attendee_by_claim_token(
     Ok(Some(row.to_attendee()))
 }
 
+/// Fetch only the `event_id` for an attendee by claim token.
+///
+/// Lightweight scalar query used to resolve the correct event context for a
+/// claim token when the caller has no event_id (e.g. the public claim URL
+/// `/claim/{token}` carries no event). Without this, the claim flow falls
+/// back to the "first active event", which may NOT be the attendee's event —
+/// causing the claim page to show the wrong event's name/NFT/deposit config.
+pub(crate) async fn get_attendee_event_id_by_claim_token(
+    db: &D1Database,
+    claim_token: &str,
+) -> Result<Option<String>, String> {
+    // `.first(Some(col_name))` returns the *scalar* value of `col_name` from the
+    // first row (a string), NOT a row object. Deserializing into a struct here is
+    // a type mismatch that silently fails — the caller (`resolve_event_id_from_token`)
+    // then returns None and the claim flow falls back to the "first active event",
+    // showing the wrong event's name/NFT/deposit on the claim page.
+    //
+    // `first::<String>` returns `Option<String>`: `None` when no row matches (or
+    // the column is NULL), `Some(value)` otherwise — no struct wrapper needed.
+    let stmt = db.prepare("SELECT event_id FROM attendees WHERE claim_token = ?1");
+    let event_id = stmt
+        .bind_refs(&[D1Type::Text(claim_token)])
+        .map_err(|e| format!("D1 get_attendee_event_id_by_claim_token bind: {e:?}"))?
+        .first::<String>(Some("event_id"))
+        .await
+        .map_err(|e| format!("D1 get_attendee_event_id_by_claim_token first: {e:?}"))?;
+    Ok(event_id.filter(|s| !s.is_empty()))
+}
+
 /// Fetch all attendees for a given event from D1.
 ///
 /// Uses JSON.stringify-based deserialization to avoid the panic in
@@ -780,20 +805,16 @@ async fn count_claimed(db: &D1Database, event_id: &str) -> Result<usize, String>
 }
 
 async fn count_by_status(db: &D1Database, event_id: &str, column: &str) -> Result<usize, String> {
-    #[derive(Deserialize)]
-    struct CountRow {
-        cnt: i64,
-    }
     let stmt = db.prepare(format!(
         "SELECT COUNT(*) as cnt FROM attendees WHERE event_id = ?1 AND {column} IS NOT NULL"
     ));
-    let row = stmt
+    let cnt = stmt
         .bind_refs(&[D1Type::Text(event_id)])
         .map_err(|e| format!("D1 count_by_status bind: {e:?}"))?
-        .first::<CountRow>(Some("cnt"))
+        .first::<i64>(Some("cnt"))
         .await
         .map_err(|e| format!("D1 count_by_status first: {e:?}"))?;
-    Ok(row.map(|r| r.cnt as usize).unwrap_or(0))
+    Ok(cnt.map(|c| c as usize).unwrap_or(0))
 }
 
 /// Look up attendee by claim token and return event-level claim counts.
@@ -887,18 +908,14 @@ pub(crate) async fn count_in_person_attendees(
           OR participation_type = '' \
           OR participation_type IS NULL)",
     );
-    #[derive(Deserialize)]
-    struct CountRow {
-        cnt: i64,
-    }
-    let row = stmt
+    let cnt = stmt
         .bind_refs(&[D1Type::Text(event_id)])
         .map_err(|e| format!("D1 count_in_person bind: {e:?}"))?
-        .first::<CountRow>(Some("cnt"))
+        .first::<i64>(Some("cnt"))
         .await
         .map_err(|e| format!("D1 count_in_person first: {e:?}"))?;
 
-    Ok(row.map(|r| r.cnt as usize).unwrap_or(0))
+    Ok(cnt.map(|c| c as usize).unwrap_or(0))
 }
 
 // ==========================================================================
@@ -917,18 +934,14 @@ pub(crate) async fn check_walkin_duplicate(
         "SELECT COUNT(*) as cnt FROM attendees \
          WHERE event_id = ?1 AND email = ?2 AND participation_type = 'walkin'",
     );
-    #[derive(Deserialize)]
-    struct CountRow {
-        cnt: i64,
-    }
-    let row = stmt
+    let cnt = stmt
         .bind_refs(&[D1Type::Text(event_id), D1Type::Text(email)])
         .map_err(|e| format!("D1 check_walkin_duplicate bind: {e:?}"))?
-        .first::<CountRow>(Some("cnt"))
+        .first::<i64>(Some("cnt"))
         .await
         .map_err(|e| format!("D1 check_walkin_duplicate first: {e:?}"))?;
 
-    Ok(row.map(|r| r.cnt > 0).unwrap_or(false))
+    Ok(cnt.map(|c| c > 0).unwrap_or(false))
 }
 
 /// Attempt to insert a walk-in attendee, rejecting duplicates atomically.
@@ -995,18 +1008,14 @@ pub(crate) async fn count_walkin_attendees(db: &D1Database, event_id: &str) -> R
         "SELECT COUNT(*) as cnt FROM attendees \
          WHERE event_id = ?1 AND participation_type = 'walkin'",
     );
-    #[derive(Deserialize)]
-    struct CountRow {
-        cnt: i64,
-    }
-    let row = stmt
+    let cnt = stmt
         .bind_refs(&[D1Type::Text(event_id)])
         .map_err(|e| format!("D1 count_walkin_attendees bind: {e:?}"))?
-        .first::<CountRow>(Some("cnt"))
+        .first::<i64>(Some("cnt"))
         .await
         .map_err(|e| format!("D1 count_walkin_attendees first: {e:?}"))?;
 
-    Ok(row.map(|r| r.cnt as u32).unwrap_or(0))
+    Ok(cnt.map(|c| c as u32).unwrap_or(0))
 }
 
 /// Fetch walk-in attendees for an event from D1.

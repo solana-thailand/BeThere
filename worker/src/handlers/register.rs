@@ -995,20 +995,30 @@ fn build_next_step(
     }
 
     if format.has_in_person() {
-        match deposit {
-            Some(_) => {
-                // Deposit exists (verified or pending) — show ticket page
-                NextStep {
-                    step_type: "ticket".to_string(),
-                    url: format!("/ticket/{api_id}?event_id={event_id}"),
-                }
+        // A USDC deposit initiation that was never signed is an orphan
+        // (user rejected the wallet prompt after `deposit_usdc` saved a
+        // pending record). Treat it as "no deposit" so the attendee is sent
+        // back to the deposit page to retry, not to the ticket page.
+        // Real deposits (verified, or carrying a tx_signature) count.
+        let real_deposit = deposit.is_some_and(|d| {
+            d.verified
+                || !matches!(
+                    d.method,
+                    event_checkin_domain::models::deposit::DepositMethod::Usdc
+                )
+                || d.tx_signature.as_deref().is_some_and(|t| !t.is_empty())
+        });
+        if real_deposit {
+            // Deposit exists (verified or pending with a TX) — show ticket page
+            NextStep {
+                step_type: "ticket".to_string(),
+                url: format!("/ticket/{api_id}?event_id={event_id}"),
             }
-            None => {
-                // No deposit yet — go to deposit page
-                NextStep {
-                    step_type: "deposit".to_string(),
-                    url: format!("/deposit/{api_id}?event_id={event_id}"),
-                }
+        } else {
+            // No real deposit yet — go to deposit page
+            NextStep {
+                step_type: "deposit".to_string(),
+                url: format!("/deposit/{api_id}?event_id={event_id}"),
             }
         }
     } else {

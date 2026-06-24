@@ -693,7 +693,7 @@ fn build_quiz_action(
                 let lw_c = lw.clone();
                 let ss_c = ss.clone();
                 leptos::task::spawn_local(async move {
-                    match api::get_adventure_status(&token_adv).await {
+                    match api::get_adventure_status(&token_adv, Some(&claim_data_adv.event_id)).await {
                         Ok(status_data) => {
                             match status_data.status {
                                 AdventureStatusType::NotRequired | AdventureStatusType::Passed => {
@@ -1131,7 +1131,7 @@ pub fn Claim() -> impl IntoView {
                         // Quiz required — fetch questions, then route to Quiz state
                         let claim_data = data.clone();
                         leptos::task::spawn_local(async move {
-                            match api::get_quiz().await {
+                            match api::get_quiz(Some(&claim_data.event_id)).await {
                                 Ok(quiz_data) if quiz_data.configured => {
                                     set_state.set(ClaimState::Quiz(claim_data, quiz_data));
                                 }
@@ -1162,7 +1162,7 @@ pub fn Claim() -> impl IntoView {
                         let claim_data_for_adventure = data.clone();
                         let token_for_adventure = token.clone();
                         leptos::task::spawn_local(async move {
-                            match api::get_adventure_status(&token_for_adventure).await {
+                            match api::get_adventure_status(&token_for_adventure, Some(&claim_data_for_adventure.event_id)).await {
                                 Ok(status_data) => {
                                     match status_data.status {
                                         AdventureStatusType::NotRequired => {
@@ -1675,7 +1675,11 @@ pub fn Claim() -> impl IntoView {
                                 Ok(p) => p.token.unwrap_or_default(),
                                 Err(_) => String::new(),
                             };
-                            let adventure_url = format!("/adventure?token={token_val}");
+                            let adventure_url = if data.event_id.is_empty() {
+                                format!("/adventure?token={token_val}")
+                            } else {
+                                format!("/adventure?token={token_val}&event_id={}", data.event_id)
+                            };
                             let status_msg = match adv_status {
                                 AdventureStatusType::NotStarted => "You haven't started the Rust Adventure yet. Complete it to unlock your NFT!",
                                 AdventureStatusType::InProgress => "You're making progress! Keep going to complete the adventure.",

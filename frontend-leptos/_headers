@@ -1,0 +1,36 @@
+# BeThere cache control — prevents the blank-page-after-deploy bug.
+#
+# ROOT CAUSE: index.html references content-hashed JS/WASM whose filenames
+# change every deploy. If a stale index.html is served (from edge or browser
+# cache), it references asset hashes that the new deploy has purged → the
+# <script>/<modulepreload> requests 404 → blank page, fixed only by a hard
+# refresh that bypasses every cache. SRI (integrity="sha384-…") turns any
+# stale-but-present asset into a hard failure too.
+#
+# FIX: never cache the version-critical shell/SW (force fresh on every load);
+# cache content-hashed assets forever (their URL changes per build).
+
+/
+  Cache-Control: no-store
+
+/index.html
+  Cache-Control: no-store
+
+/sw.js
+  Cache-Control: no-store
+
+/manifest.json
+  Cache-Control: no-cache, must-revalidate
+
+# Content-hashed assets — filename changes per build, so long caching is safe.
+/event-checkin-frontend-*.js
+  Cache-Control: public, max-age=31536000, immutable
+
+/event-checkin-frontend-*.wasm
+  Cache-Control: public, max-age=31536000, immutable
+
+/snippets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/style-*.css
+  Cache-Control: public, max-age=31536000, immutable

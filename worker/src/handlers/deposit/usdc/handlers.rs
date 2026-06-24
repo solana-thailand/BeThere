@@ -291,13 +291,27 @@ pub async fn deposit_usdc_handler(
     crate::solana::validate_wallet_address(&body.wallet_address)
         .map_err(event_checkin_domain::models::error::AppError::Validation)?;
 
-    // Check if already deposited
+    // Check if already deposited.
+    //
+    // IMPORTANT: `deposit_usdc` is called *before* the wallet signs the TX, so
+    // it always saves a pending `DepositStatus` (verified=false, no
+    // tx_signature). If the user rejects the wallet prompt, that record is an
+    // orphan. We allow re-initiation in that case (reusing the existing
+    // deposit_order so the refundable tier isn't double-assigned), and only
+    // reject when a real deposit already exists (verified, or carries a TX
+    // signature that was actually signed/sent).
     let existing =
         event_store::get_deposit_status_with_fallback(kv, d1, &event.id, &body.attendee_id)
             .await
             .map_err(event_checkin_domain::models::error::AppError::Internal)?;
 
-    if existing.is_some() {
+    let is_orphan = existing.as_ref().is_some_and(|s| {
+        !s.verified
+            && matches!(s.method, DepositMethod::Usdc)
+            && s.tx_signature.as_deref().is_none_or(|t| t.is_empty())
+    });
+
+    if existing.is_some() && !is_orphan {
         return Err(event_checkin_domain::models::error::AppError::Validation(
             "attendee already has a deposit".to_string(),
         )
@@ -334,12 +348,23 @@ pub async fn deposit_usdc_handler(
         _ => {}
     }
 
-    // Atomically increment deposit counter for this event
-    let deposit_order = event_store::increment_deposit_counter_with_fallback(kv, d1, &event.id)
-        .await
-        .map_err(event_checkin_domain::models::error::AppError::Internal)?;
-    let refundable =
-        event.max_refundable_deposits == 0 || deposit_order <= event.max_refundable_deposits;
+    // Assign deposit order.
+    //
+    // For a re-initiation of an orphan (user rejected the previous wallet
+    // prompt), reuse the orphan's existing deposit_order and refundable flag
+    // so the counter isn't double-incremented and the refundable tier stays
+    // consistent. For a fresh initiation, increment the counter normally.
+    let (deposit_order, refundable) = match existing.as_ref().filter(|_| is_orphan) {
+        Some(orphan) => (orphan.deposit_order, orphan.refundable),
+        None => {
+            let order = event_store::increment_deposit_counter_with_fallback(kv, d1, &event.id)
+                .await
+                .map_err(event_checkin_domain::models::error::AppError::Internal)?;
+            let refundable =
+                event.max_refundable_deposits == 0 || order <= event.max_refundable_deposits;
+            (order, refundable)
+        }
+    };
 
     // Record a pending deposit status
     let deposit_status = DepositStatus {
@@ -593,7 +618,10 @@ pub async fn confirm_deposit_handler(
                         // verified signer so future refunds/check-ins have it.
                         let mut updated = status.clone();
                         updated.verified = true;
-                        if updated.wallet_address.as_deref().is_none_or(|w| w.is_empty())
+                        if updated
+                            .wallet_address
+                            .as_deref()
+                            .is_none_or(|w| w.is_empty())
                             && let Some(signer) = outcome.signer()
                         {
                             updated.wallet_address = Some(signer.to_string());
@@ -803,10 +831,7 @@ pub async fn confirm_deposit_handler(
                     // signature so the next poll re-enters the normal
                     // verification path above with full signer cross-check +
                     // sheet write + QR generation.
-                    let wallet_addr = status
-                        .wallet_address
-                        .as_deref()
-                        .filter(|w| !w.is_empty());
+                    let wallet_addr = status.wallet_address.as_deref().filter(|w| !w.is_empty());
 
                     let escrow_addr = if !event.escrow_address.is_empty() {
                         Some(event.escrow_address.clone())
@@ -840,10 +865,9 @@ pub async fn confirm_deposit_handler(
                             );
                             let mut updated = status.clone();
                             updated.tx_signature = Some(discovered_sig);
-                            let _ = event_store::save_deposit_status_with_fallback(
-                                kv, d1, &updated,
-                            )
-                            .await;
+                            let _ =
+                                event_store::save_deposit_status_with_fallback(kv, d1, &updated)
+                                    .await;
                             // Return pending — the next poll will verify the
                             // now-recorded signature through the normal path
                             // (with sheet write + QR generation side effects).

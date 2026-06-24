@@ -4,6 +4,7 @@ pub mod components;
 pub mod icons;
 pub mod pages;
 pub mod utils;
+pub mod wallet;
 pub mod wallet_error;
 
 use leptos::prelude::*;
@@ -33,6 +34,13 @@ use crate::pages::{
 /// which handles auth checking, token capture from URL, and user email loading.
 #[component]
 pub fn App() -> impl IntoView {
+    // Register Mobile Wallet Adapter once at app boot.
+    // No-op on non-Android platforms. After registration, MWA wallets
+    // (Phantom, Solflare, Seed Vault) appear in the Wallet Standard registry
+    // and are picked up by existing deposit/claim/escrow wallet detection.
+    // See `.plans/011_solana_mobile_demo_day.md`.
+    wallet::init_mobile_wallet_adapter();
+
     view! {
         <Router>
             <Title text="BeThere — Event Check-In" />

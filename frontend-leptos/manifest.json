@@ -1,0 +1,40 @@
+{
+  "name": "BeThere — Deposit-Backed Event Check-In on Solana",
+  "short_name": "BeThere",
+  "description": "Put down a deposit, show up, get refunded. Solana-powered event check-in with compressed NFT badges.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f0f0f",
+  "theme_color": "#0f0f0f",
+  "categories": ["events", "productivity", "finance"],
+  "icons": [
+    {
+      "src": "/api/badge.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/api/badge.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "My Ticket",
+      "short_name": "Ticket",
+      "url": "/staff",
+      "description": "Open the staff scanner"
+    },
+    {
+      "name": "Register for Event",
+      "short_name": "Register",
+      "url": "/",
+      "description": "Browse upcoming events"
+    }
+  ]
+}

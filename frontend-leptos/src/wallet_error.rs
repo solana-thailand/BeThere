@@ -114,6 +114,12 @@ pub fn parse_wallet_js_value(val: &wasm_bindgen::JsValue) -> WalletResult {
 
 /// Generate a user-friendly error message with actionable guidance.
 pub fn user_friendly_message(error: &WalletError) -> String {
+    let code = error.code;
+    let msg = &error.raw_message;
+    if code == Some(-32603) || msg.contains("Internal error") {
+        return "Transaction failed (Internal error). Please check if your wallet extension network settings match the app's network (e.g., Devnet) and that you have enough SOL for fees.".to_string();
+    }
+
     if error.is_user_rejected() {
         return "You cancelled the transaction. Tap the button to try again when ready."
             .to_string();
