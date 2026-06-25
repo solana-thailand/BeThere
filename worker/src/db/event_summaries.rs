@@ -96,11 +96,13 @@ pub async fn upsert_summary(
         "INSERT INTO event_summaries (\
             event_id, registered_count, deposited_count, checked_in_count, no_show_count, \
             claimed_count, refunded_count, post_event_reg_count, \
+            in_person_registered_count, in_person_checked_in_count, \
             usdc_deposited_total, usdc_refunded_total, thb_deposited_total, thb_refunded_total, \
             event_start_ms, event_end_ms, frozen_at, frozen_by, updated_at\
          ) VALUES (\
             '{event_id}', {registered}, {deposited}, {checked_in}, {no_show}, \
             {claimed}, {refunded}, {post_event_reg}, \
+            {in_person_reg}, {in_person_chk}, \
             {usdc_dep}, {usdc_ref}, {thb_dep}, {thb_ref}, \
             {start_ms}, {end_ms}, '{frozen_at}', '{frozen_by}', datetime('now')\
          ) ON CONFLICT(event_id) DO UPDATE SET \
@@ -108,6 +110,8 @@ pub async fn upsert_summary(
             checked_in_count=excluded.checked_in_count, no_show_count=excluded.no_show_count, \
             claimed_count=excluded.claimed_count, refunded_count=excluded.refunded_count, \
             post_event_reg_count=excluded.post_event_reg_count, \
+            in_person_registered_count=excluded.in_person_registered_count, \
+            in_person_checked_in_count=excluded.in_person_checked_in_count, \
             usdc_deposited_total=excluded.usdc_deposited_total, \
             usdc_refunded_total=excluded.usdc_refunded_total, \
             thb_deposited_total=excluded.thb_deposited_total, \
@@ -123,6 +127,8 @@ pub async fn upsert_summary(
         claimed = f.claimed_count,
         refunded = f.refunded_count,
         post_event_reg = f.post_event_reg_count,
+        in_person_reg = f.in_person_registered_count,
+        in_person_chk = f.in_person_checked_in_count,
         usdc_dep = fin.usdc_deposited_total,
         usdc_ref = fin.usdc_refunded_total,
         thb_dep = fin.thb_deposited_total,
@@ -162,7 +168,15 @@ pub async fn compute_snapshot(
     let registered = dashboard::count_registered(db, event_id).await?;
     let checked_in = dashboard::count_checked_in(db, event_id).await?;
     let claimed = dashboard::count_claims_minted(db, event_id).await?;
-    let no_show = registered.saturating_sub(checked_in);
+
+    // No-show is computed only across the in-person slice. Online attendees'
+    // attendance is not signaled by check-in (quest completion is opt-in, and
+    // joining the call isn't recorded), so counting unchecked-in online
+    // registrants as no-shows is misleading. See Plan 008 follow-up +
+    // `dashboard::IN_PERSON_PREDICATE`.
+    let in_person_registered = dashboard::count_in_person_registered(db, event_id).await?;
+    let in_person_checked_in = dashboard::count_in_person_checked_in(db, event_id).await?;
+    let no_show = in_person_registered.saturating_sub(in_person_checked_in);
 
     // Deposited = verified USDC + verified THB counts.
     let usdc = dashboard::verified_usdc_summary(db, event_id).await?;
@@ -190,6 +204,8 @@ pub async fn compute_snapshot(
             claimed_count: claimed,
             refunded_count,
             post_event_reg_count,
+            in_person_registered_count: in_person_registered,
+            in_person_checked_in_count: in_person_checked_in,
         },
         financials: FinancialSnapshot {
             usdc_deposited_total: usdc.total_amount,
@@ -390,6 +406,8 @@ fn row_to_summary(row: serde_json::Value) -> EventSummary {
             claimed_count: get_u64("claimed_count"),
             refunded_count: get_u64("refunded_count"),
             post_event_reg_count: get_u64("post_event_reg_count"),
+            in_person_registered_count: get_u64("in_person_registered_count"),
+            in_person_checked_in_count: get_u64("in_person_checked_in_count"),
         },
         financials: FinancialSnapshot {
             usdc_deposited_total: get_u64("usdc_deposited_total"),
@@ -439,10 +457,12 @@ mod tests {
             "registered_count": 10,
             "deposited_count": 7,
             "checked_in_count": 5,
-            "no_show_count": 5,
+            "no_show_count": 2,
             "claimed_count": 4,
             "refunded_count": 2,
             "post_event_reg_count": 1,
+            "in_person_registered_count": 6,
+            "in_person_checked_in_count": 4,
             "usdc_deposited_total": 350000000,
             "usdc_refunded_total": 0,
             "thb_deposited_total": 3500,
@@ -454,7 +474,10 @@ mod tests {
         });
         let s = row_to_summary(row);
         assert_eq!(s.funnel.checked_in_count, 5);
-        assert_eq!(s.funnel.no_show_count, 5);
+        // no_show_count is now the in-person slice (6 − 4 = 2), not 10 − 5.
+        assert_eq!(s.funnel.no_show_count, 2);
+        assert_eq!(s.funnel.in_person_registered_count, 6);
+        assert_eq!(s.funnel.in_person_checked_in_count, 4);
         assert_eq!(s.funnel.refunded_count, 2);
         assert_eq!(s.financials.usdc_deposited_total, 350000000);
         assert_eq!(s.financials.thb_deposited_total, 3500);

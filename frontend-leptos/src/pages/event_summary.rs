@@ -212,6 +212,7 @@ fn FunnelTiles(funnel: api::FunnelSnapshotData) -> impl IntoView {
     let no_show = funnel.no_show_count;
     let post_reg = funnel.post_event_reg_count;
     let refunded = funnel.refunded_count;
+    let in_person_registered = funnel.in_person_registered_count;
 
     // Conversion of each stage against the registered count (the funnel entry).
     let conv = |stage: u64| -> String {
@@ -221,11 +222,25 @@ fn FunnelTiles(funnel: api::FunnelSnapshotData) -> impl IntoView {
             format!("{:.0}%", (stage as f64 / registered as f64) * 100.0)
         }
     };
-    // No-show rate is checked_in-eligible no-shows over registered attendees.
-    let no_show_rate = if registered == 0 {
+    // No-show rate is computed across the in-person slice only — online
+    // registrants are excluded because their attendance isn't signaled by
+    // check-in (quest completion is opt-in; joining the call isn't recorded).
+    // For online-only events (no in-person attendees) the rate is N/A.
+    let no_show_rate = if in_person_registered == 0 {
+        "online".to_string()
+    } else {
+        format!(
+            "{:.0}% of {} in-person",
+            (no_show as f64 / in_person_registered as f64) * 100.0,
+            in_person_registered
+        )
+    };
+    // Online-only events show no no-show value (we have no attendance signal);
+    // in-person / hybrid events show the in-person no-show count.
+    let no_show_value = if in_person_registered == 0 {
         "—".to_string()
     } else {
-        format!("{:.0}%", (no_show as f64 / registered as f64) * 100.0)
+        format!("{no_show}")
     };
 
     view! {
@@ -237,10 +252,14 @@ fn FunnelTiles(funnel: api::FunnelSnapshotData) -> impl IntoView {
         </section>
 
         <section class="dashboard-tiles" style="margin-top:1rem;">
-            <Tile label="No-show" value=format!("{no_show}") sub=no_show_rate emoji="🚫" />
+            <Tile label="No-show (in-person)" value=no_show_value sub=no_show_rate emoji="🚫" />
             <Tile label="Post-event Reg" value=format!("{post_reg}") sub="walk-ins".to_string() emoji="🚪" />
             <Tile label="Refunded" value=format!("{refunded}") sub="returned".to_string() emoji="↩️" />
         </section>
+
+        <p class="subtitle" style="margin-top:0.75rem;font-size:0.85rem;">
+            "Online registrants are excluded from no-show — their attendance isn't recorded via check-in."
+        </p>
     }
 }
 

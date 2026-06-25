@@ -919,6 +919,12 @@ pub struct FunnelSnapshotData {
     pub refunded_count: u64,
     #[serde(default)]
     pub post_event_reg_count: u64,
+    /// In-person registrants — denominator for `no_show_count`.
+    #[serde(default)]
+    pub in_person_registered_count: u64,
+    /// In-person registrants who checked in.
+    #[serde(default)]
+    pub in_person_checked_in_count: u64,
 }
 
 /// Financial totals for the post-event summary. USDC amounts are atomic

@@ -93,6 +93,74 @@ pub async fn count_claims_minted(db: &D1Database, event_id: &str) -> Result<u64,
     .await
 }
 
+/// SQL fragment matching in-person attendees. Mirrors the Rust logic in
+/// `Attendee::is_in_person()` (domain crate): empty / unrecognized values
+/// default to in-person for legacy events, and substring matching covers the
+/// sheet's inconsistent capitalization / spacing
+/// ("In-Person", "in person", "IN_PERSON", ...).
+///
+/// Kept as a single `const` so the registered and checked-in in-person counts
+/// use the identical predicate and can never drift.
+const IN_PERSON_PREDICATE: &str = "(\
+    participation_type IS NULL \
+    OR TRIM(LOWER(participation_type)) = '' \
+    OR LOWER(participation_type) LIKE '%in-person%' \
+    OR LOWER(participation_type) LIKE '%in person%' \
+    OR LOWER(participation_type) LIKE '%in_person%'\
+)";
+
+/// Count approved in-person registrants. Used as the no-show denominator.
+///
+/// Online attendees are excluded because their attendance is not signaled by
+/// check-in (quest completion is opt-in; joining the call isn't recorded), so
+/// counting them as no-shows is misleading — see Plan 008 follow-up.
+pub async fn count_in_person_registered(db: &D1Database, event_id: &str) -> Result<u64, String> {
+    count_attendees_by_predicate(
+        db,
+        event_id,
+        IN_PERSON_PREDICATE,
+        "count_in_person_registered",
+    )
+    .await
+}
+
+/// Count in-person registrants who have checked in. `no_show_count` is this
+/// subtracted from `count_in_person_registered`.
+pub async fn count_in_person_checked_in(db: &D1Database, event_id: &str) -> Result<u64, String> {
+    let predicate: &'static str = "(checked_in_at IS NOT NULL)";
+    // Combine the in-person predicate with the check-in predicate at the SQL
+    // level via an AND, keeping a single COUNT(*) round-trip.
+    let sql = format!(
+        "SELECT COUNT(*) AS cnt FROM attendees \
+         WHERE event_id = ?1 AND {IN_PERSON_PREDICATE} AND ({predicate})"
+    );
+    let stmt = db.prepare(&sql);
+    let bound = stmt
+        .bind_refs(&[D1Type::Text(event_id)])
+        .map_err(|e| format!("D1 count_in_person_checked_in bind: {e:?}"))?;
+
+    let raw_first = wasm_bindgen_futures::JsFuture::from(
+        bound
+            .inner()
+            .first(None)
+            .map_err(|e| format!("D1 count_in_person_checked_in first() call: {e:?}"))?,
+    )
+    .await
+    .map_err(|e| format!("D1 count_in_person_checked_in first() await: {e:?}"))?;
+
+    if raw_first.is_null() || raw_first.is_undefined() {
+        return Ok(0);
+    }
+    let json_str = js_sys::JSON::stringify(&raw_first)
+        .map(|s| s.as_string().unwrap_or_default())
+        .unwrap_or_default();
+    if json_str.is_empty() {
+        return Ok(0);
+    }
+    let row: serde_json::Value = serde_json::from_str(&json_str).unwrap_or_default();
+    Ok(row.get("cnt").and_then(|v| v.as_i64()).unwrap_or(0) as u64)
+}
+
 /// Aggregate verified USDC deposits for an event: count + total amount.
 ///
 /// Reads from `deposit_statuses` (Phase 3e source of truth), not the legacy

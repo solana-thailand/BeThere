@@ -34,13 +34,17 @@ pub struct EventSummary {
 /// Funnel counters — the top-line attendance funnel.
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct FunnelSnapshot {
-    /// Approved pre-event registrations.
+    /// Approved pre-event registrations (all tracks: in-person + online).
     pub registered_count: u64,
     /// Verified USDC + THB deposits combined.
     pub deposited_count: u64,
-    /// Attendees who checked in.
+    /// Attendees who checked in (physical + virtual).
     pub checked_in_count: u64,
-    /// Registered but did not check in (`registered − checked_in`).
+    /// In-person registrants who did **not** check in. Computed only across the
+    /// in-person slice: `in_person_registered − in_person_checked_in`. Online
+    /// attendees are excluded because their attendance is not signaled by
+    /// check-in (quest completion is opt-in, and joining the call isn't
+    /// recorded) — counting them as no-shows is misleading.
     pub no_show_count: u64,
     /// Attendees whose cNFT badge was claimed/minted.
     pub claimed_count: u64,
@@ -49,6 +53,15 @@ pub struct FunnelSnapshot {
     /// Post-event registrations (Phase 3; always 0 in Phase 1).
     #[serde(default)]
     pub post_event_reg_count: u64,
+    /// In-person registrants — the denominator for `no_show_count`. Online
+    /// attendees are excluded. Mirrors `Attendee::is_in_person()` (empty /
+    /// unrecognized defaults to in-person for legacy events).
+    #[serde(default)]
+    pub in_person_registered_count: u64,
+    /// In-person registrants who checked in. `no_show_count` is this subtracted
+    /// from `in_person_registered_count`.
+    #[serde(default)]
+    pub in_person_checked_in_count: u64,
 }
 
 /// Financial totals in atomic units.
