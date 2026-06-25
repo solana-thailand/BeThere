@@ -73,18 +73,23 @@ in prod (no canonical form — values come straight from the Google Sheet):
 | `"online"` | 53 |
 | `"test"` | 1 |
 
-The domain crate has **no `ParticipationType` enum** — it's stored/compared as raw
-strings. There's an `Attendee::is_in_person()` method using substring matching, but every
-read site re-implements or relies on the inconsistent raw value. This affects more than
-summaries: online capacity gating, hybrid track routing, and any feature keyed on
-participation type are all fragile.
+The domain crate had **no `ParticipationType` enum** — it was stored/compared as raw
+strings. `Attendee::is_in_person()` used substring matching, and the worker SQL
+`IN_PERSON_PREDICATE` (`worker/src/db/dashboard.rs`) re-implements the same rules for
+DB counts (SQL can't call the Rust fn, so this duplication is unavoidable but
+documented). This affects more than summaries: online capacity gating, hybrid track
+routing, and any feature keyed on participation type are all fragile.
 
 **Recommended fix (separate project):**
-1. Add a `ParticipationType` enum to the domain crate (canonical snake_case).
-2. Normalize at the source: canonicalize when writing from the Google Sheet sync and the
-   registration path.
-3. One-time D1 migration to backfill existing rows to canonical values.
-4. Replace substring-matching read sites with the typed enum.
+1. ✅ **Done (`fa5b1c8`)** — Add a `ParticipationType` enum to the domain crate
+   (canonical snake_case `in_person`/`online`/`other`) with `parse()` handling all
+   known prod variants; `Attendee::is_in_person()` now delegates to it (behavior
+   preserved; verified by `is_in_person` + new `participation_type` unit tests).
+2. ⬜ Normalize at the source: canonicalize when writing from the Google Sheet sync and
+   the registration path.
+3. ⬜ One-time D1 migration to backfill existing rows to canonical values.
+4. ⬜ Replace remaining substring-matching read sites with the typed enum (the SQL
+   `IN_PERSON_PREDICATE` stays, but can be simplified once rows are canonical).
 
 This is **not** blocking the summary fix — `IN_PERSON_PREDICATE` handles all known
 variants defensively — but it's a latent bug across the platform.
