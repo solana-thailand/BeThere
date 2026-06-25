@@ -87,7 +87,10 @@ impl ParticipationType {
         if lower.is_empty() {
             return Self::InPerson;
         }
-        if lower.contains("in-person") || lower.contains("in person") || lower.contains("in_person")
+        if lower.contains("in-person")
+            || lower.contains("in person")
+            || lower.contains("in_person")
+            || lower.contains("physical")
         {
             return Self::InPerson;
         }
@@ -1042,6 +1045,10 @@ mod tests {
         );
         assert_eq!(
             ParticipationType::parse("IN-PERSON (PHYSICAL)"),
+            ParticipationType::InPerson
+        );
+        assert_eq!(
+            ParticipationType::parse("physical attendance"),
             ParticipationType::InPerson
         );
         // Online variants observed in prod

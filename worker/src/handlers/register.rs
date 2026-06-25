@@ -13,6 +13,7 @@ use futures_util::future::join_all;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use event_checkin_domain::models::attendee::ParticipationType;
 use event_checkin_domain::models::auth::Claims;
 use event_checkin_domain::models::error::AppError;
 use event_checkin_domain::models::event::{EventFormat, EventStatus};
@@ -1032,8 +1033,13 @@ fn build_next_step(
 }
 
 fn is_online_participation(participation_type: &str) -> bool {
-    let lower = participation_type.trim().to_lowercase();
-    lower.contains("online") || lower.contains("virtual")
+    // Delegates to the canonical ParticipationType enum (single source of truth).
+    // Equivalent to "contains online/virtual" for all realistic inputs; an
+    // ambiguous value mentioning both tracks now resolves in-person-first.
+    matches!(
+        ParticipationType::parse(participation_type),
+        ParticipationType::Online
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -1050,15 +1056,14 @@ async fn enforce_capacity(
 ) -> Result<(), AppError> {
     use event_checkin_domain::models::event::OnlineOpenMode;
 
-    let is_in_person = participation_type
-        .trim()
-        .to_lowercase()
-        .contains("in-person")
-        || participation_type
-            .trim()
-            .to_lowercase()
-            .contains("in person")
-        || participation_type.trim().is_empty();
+    // Judge the registering attendee with the SAME canonical enum used for
+    // existing attendees (Attendee::is_in_person) below — keeps both checks
+    // consistent and covers the `in_person`/`physical` variants the old inline
+    // matcher missed.
+    let is_in_person = matches!(
+        ParticipationType::parse(participation_type),
+        ParticipationType::InPerson
+    );
 
     // Count current attendees from sheet
     let attendees = crate::sheets::get_attendees_for_event(
@@ -1306,5 +1311,79 @@ async fn write_developer_data(data: &DeveloperData<'_>) {
             error = %e,
             "D1 batch registration responses failed (non-fatal)"
         );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use event_checkin_domain::models::attendee::ParticipationType;
+    use event_checkin_domain::models::event::EventFormat;
+
+    #[test]
+    fn is_online_participation_uses_canonical_enum() {
+        // resolve_participation_type produces these for the registration path
+        assert!(is_online_participation("Online"));
+        assert!(is_online_participation("online"));
+        assert!(is_online_participation("Virtual"));
+        assert!(!is_online_participation("In-Person"));
+        assert!(!is_online_participation("in_person"));
+        assert!(!is_online_participation("physical"));
+        // Empty defaults to in-person (legacy), not online
+        assert!(!is_online_participation(""));
+        // walk-in sentinel is neither online nor in-person
+        assert!(!is_online_participation("walkin"));
+    }
+
+    #[test]
+    fn resolve_participation_type_defaults_by_format() {
+        assert_eq!(
+            resolve_participation_type(&EventFormat::InPerson, None).unwrap(),
+            "In-Person"
+        );
+        assert_eq!(
+            resolve_participation_type(&EventFormat::Online, None).unwrap(),
+            "Online"
+        );
+        // Hybrid honors the user's choice, defaulting to in-person when absent
+        assert_eq!(
+            resolve_participation_type(&EventFormat::Hybrid, Some("Online")).unwrap(),
+            "Online"
+        );
+        assert_eq!(
+            resolve_participation_type(&EventFormat::Hybrid, None).unwrap(),
+            "In-Person"
+        );
+    }
+
+    /// enforce_capacity judges the registering attendee via ParticipationType::parse
+    /// (the same enum as Attendee::is_in_person), so its in-person detection is
+    /// covered by the domain crate's participation_type tests. This pins the
+    /// shared contract that both checks now use.
+    #[test]
+    fn registering_in_person_detection_matches_canonical_enum() {
+        for v in [
+            "In-Person",
+            "in_person",
+            "in person",
+            "IN-PERSON",
+            "physical",
+            "",
+        ] {
+            assert_eq!(
+                ParticipationType::parse(v),
+                ParticipationType::InPerson,
+                "expected '{v}' to be in-person"
+            );
+        }
+        for v in ["Online", "online", "Virtual"] {
+            assert_eq!(
+                ParticipationType::parse(v),
+                ParticipationType::Online,
+                "expected '{v}' to be online"
+            );
+        }
+        // walk-in sentinel stays out of both tracks
+        assert_eq!(ParticipationType::parse("walkin"), ParticipationType::Other);
     }
 }
