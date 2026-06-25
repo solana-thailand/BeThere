@@ -44,6 +44,74 @@ impl std::fmt::Display for CheckInStatus {
     }
 }
 
+/// Canonical attendee participation type.
+///
+/// Normalized from the raw Google Sheet `participation_type` column, which has
+/// inconsistent casing/formatting in production (`In-Person`, `IN_PERSON`,
+/// `in person`, `Online`, `online`, `""`, `test`, ...). Use [`Self::parse`] to
+/// canonicalize; [`Attendee::is_in_person`] delegates to this enum.
+///
+/// Canonical wire form is snake_case (`in_person` / `online` / `other`),
+/// matching `EventFormat`'s convention.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum ParticipationType {
+    #[default]
+    InPerson,
+    Online,
+    /// Unrecognized value (e.g. "test", "TBD"). Treated as NOT in-person.
+    Other,
+}
+
+impl ParticipationType {
+    /// Canonical snake_case identifier.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::InPerson => "in_person",
+            Self::Online => "online",
+            Self::Other => "other",
+        }
+    }
+
+    /// Canonicalize a raw participation_type string into a typed value.
+    ///
+    /// Handles all known production variants via case-insensitive substring
+    /// matching (the sheet value may be longer, e.g.
+    /// "In-Person (Physical Attendance)"). Empty/whitespace defaults to
+    /// `InPerson` — legacy events predate this column and were all in-person.
+    ///
+    /// In-person is checked first to preserve prior `is_in_person` behavior
+    /// for ambiguous values that mention both tracks.
+    pub fn parse(s: &str) -> Self {
+        let lower = s.trim().to_lowercase();
+        if lower.is_empty() {
+            return Self::InPerson;
+        }
+        if lower.contains("in-person") || lower.contains("in person") || lower.contains("in_person")
+        {
+            return Self::InPerson;
+        }
+        if lower.contains("online") || lower.contains("virtual") {
+            return Self::Online;
+        }
+        Self::Other
+    }
+}
+
+impl FromStr for ParticipationType {
+    type Err = std::convert::Infallible;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Self::parse(s))
+    }
+}
+
+impl fmt::Display for ParticipationType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Attendee {
     pub api_id: String,
@@ -117,17 +185,16 @@ impl Attendee {
 
     /// Check if attendee's participation type is "In-Person".
     /// Online attendees should not be checked in at the physical event.
-    /// Uses substring matching since the sheet value may be longer
-    /// (e.g. "In-Person (Physical Attendance)", "In Person", "IN-PERSON").
     ///
-    /// Defaults to `true` when participation_type is empty — legacy events
-    /// predate this field and were all in-person.
+    /// Delegates to [`ParticipationType::parse`]; defaults to in-person when
+    /// `participation_type` is empty (legacy events predate this field).
     pub fn is_in_person(&self) -> bool {
-        let lower = self.participation_type.trim().to_lowercase();
-        if lower.is_empty() {
-            return true;
-        }
-        lower.contains("in-person") || lower.contains("in person") || lower.contains("in_person")
+        self.participation_type_enum() == ParticipationType::InPerson
+    }
+
+    /// Canonical typed participation type (see [`ParticipationType`]).
+    pub fn participation_type_enum(&self) -> ParticipationType {
+        ParticipationType::parse(&self.participation_type)
     }
 
     pub fn display_name(&self) -> &str {
@@ -952,6 +1019,63 @@ mod tests {
     fn test_is_not_in_person_other() {
         assert!(!make_attendee("Unknown").is_in_person());
         assert!(!make_attendee("TBD").is_in_person());
+    }
+
+    // -----------------------------------------------------------------------
+    // ParticipationType canonicalization
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_participation_type_parse_prod_variants() {
+        // In-person variants observed in prod
+        assert_eq!(
+            ParticipationType::parse("In-Person"),
+            ParticipationType::InPerson
+        );
+        assert_eq!(
+            ParticipationType::parse("in_person"),
+            ParticipationType::InPerson
+        );
+        assert_eq!(
+            ParticipationType::parse("in person"),
+            ParticipationType::InPerson
+        );
+        assert_eq!(
+            ParticipationType::parse("IN-PERSON (PHYSICAL)"),
+            ParticipationType::InPerson
+        );
+        // Online variants observed in prod
+        assert_eq!(
+            ParticipationType::parse("Online"),
+            ParticipationType::Online
+        );
+        assert_eq!(
+            ParticipationType::parse("online"),
+            ParticipationType::Online
+        );
+        assert_eq!(
+            ParticipationType::parse("Virtual"),
+            ParticipationType::Online
+        );
+        // Empty defaults to in-person (legacy)
+        assert_eq!(ParticipationType::parse(""), ParticipationType::InPerson);
+        assert_eq!(ParticipationType::parse("   "), ParticipationType::InPerson);
+        // Unrecognized prod junk → Other
+        assert_eq!(ParticipationType::parse("test"), ParticipationType::Other);
+        assert_eq!(ParticipationType::parse("TBD"), ParticipationType::Other);
+    }
+
+    #[test]
+    fn test_participation_type_as_str_and_default() {
+        assert_eq!(ParticipationType::InPerson.as_str(), "in_person");
+        assert_eq!(ParticipationType::Online.as_str(), "online");
+        assert_eq!(ParticipationType::Other.as_str(), "other");
+        assert_eq!(ParticipationType::default(), ParticipationType::InPerson);
+        // is_in_person now delegates to the typed enum (behavior preserved)
+        assert!(make_attendee("In-Person").is_in_person());
+        assert!(!make_attendee("Online").is_in_person());
+        assert!(!make_attendee("test").is_in_person());
+        assert!(make_attendee("").is_in_person());
     }
 
     // -----------------------------------------------------------------------
