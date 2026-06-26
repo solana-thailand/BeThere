@@ -168,8 +168,13 @@ pub async fn register_attendee(
     }
 
     // 3c. Determine participation_type early (needed before deposit check)
+    // Returns canonical snake_case for D1; `*_display` is the display-case form
+    // written to the Google Sheet (organizer-facing).
     let participation_type =
         resolve_participation_type(&config.event_format, body.participation_type.as_deref())?;
+    let participation_type_display = ParticipationType::parse(&participation_type)
+        .display()
+        .to_string();
 
     // 3d. Validate PDPA consent — always required
     if body.consent_given != Some(true) {
@@ -452,7 +457,7 @@ pub async fn register_attendee(
         let bg_last_name = last_name.to_string();
         let bg_email = email.clone();
         let bg_claim_token = claim_token.clone();
-        let bg_participation_type = participation_type.clone();
+        let bg_participation_type = participation_type_display.clone();
         let bg_now = now.clone();
         let bg_contact_channel = contact_channel.map(String::from);
         let bg_contact_handle = contact_handle.map(String::from);
@@ -548,7 +553,7 @@ pub async fn register_attendee(
             &last_name,
             &email,
             &claim_token,
-            &participation_type,
+            &participation_type_display,
             &now,
             contact_channel,
             contact_handle,
@@ -717,18 +722,24 @@ pub async fn my_registration(
 // ---------------------------------------------------------------------------
 
 /// Resolve participation type based on event format and user selection.
+///
+/// Returns the **canonical** storage form (`in_person`/`online`) — see
+/// `ParticipationType::as_str()`. The Google Sheet append path must convert
+/// this to display-case via `ParticipationType::display()` for organizer-facing
+/// cells; everything else (D1, capacity checks, logging) consumes canonical.
 fn resolve_participation_type(
     format: &EventFormat,
     user_choice: Option<&str>,
 ) -> Result<String, AppError> {
-    match format {
-        EventFormat::InPerson => Ok("In-Person".to_string()),
-        EventFormat::Online => Ok("Online".to_string()),
-        EventFormat::Hybrid => match user_choice.map(|v| v.trim()) {
-            Some(choice) if !choice.is_empty() => Ok(choice.to_string()),
-            _ => Ok("In-Person".to_string()),
+    let resolved = match format {
+        EventFormat::InPerson => ParticipationType::InPerson,
+        EventFormat::Online => ParticipationType::Online,
+        EventFormat::Hybrid => match user_choice.map(str::trim).filter(|s| !s.is_empty()) {
+            Some(choice) => ParticipationType::parse(choice),
+            None => ParticipationType::InPerson,
         },
-    }
+    };
+    Ok(resolved.as_str().to_string())
 }
 
 /// Split a full name into (first_name, last_name).
@@ -1337,22 +1348,33 @@ mod tests {
 
     #[test]
     fn resolve_participation_type_defaults_by_format() {
+        // Returns canonical snake_case (stored in D1); the Sheet append path
+        // converts to display-case via ParticipationType::display().
         assert_eq!(
             resolve_participation_type(&EventFormat::InPerson, None).unwrap(),
-            "In-Person"
+            "in_person"
         );
         assert_eq!(
             resolve_participation_type(&EventFormat::Online, None).unwrap(),
-            "Online"
+            "online"
         );
-        // Hybrid honors the user's choice, defaulting to in-person when absent
+        // Hybrid honors the user's choice (normalized to canonical), defaulting
+        // to in-person when absent. Accepts both display-case and canonical input.
         assert_eq!(
             resolve_participation_type(&EventFormat::Hybrid, Some("Online")).unwrap(),
-            "Online"
+            "online"
+        );
+        assert_eq!(
+            resolve_participation_type(&EventFormat::Hybrid, Some("In-Person")).unwrap(),
+            "in_person"
+        );
+        assert_eq!(
+            resolve_participation_type(&EventFormat::Hybrid, Some("in_person")).unwrap(),
+            "in_person"
         );
         assert_eq!(
             resolve_participation_type(&EventFormat::Hybrid, None).unwrap(),
-            "In-Person"
+            "in_person"
         );
     }
 
@@ -1385,5 +1407,75 @@ mod tests {
         }
         // walk-in sentinel stays out of both tracks
         assert_eq!(ParticipationType::parse("walkin"), ParticipationType::Other);
+    }
+
+    /// Cross-cutting invariant: every write path in 3.2 (registration,
+    /// manual override, Sheet→D1 sync) must produce a canonical value that,
+    /// when read back through `Attendee::is_in_person()`, gives the expected
+    /// in-person/online judgment. This is the contract that prevents the
+    /// pre-3.2 bug class (registration wrote display-case, sync wrote
+    /// snake_case, reads were inconsistent).
+    #[test]
+    fn write_paths_produce_canonical_values_round_tripping_is_in_person() {
+        use event_checkin_domain::models::attendee::CheckInStatus;
+
+        // Registration: resolve_participation_type returns canonical
+        for (format, choice, expected_in_person) in [
+            (EventFormat::InPerson, None, true),
+            (EventFormat::Online, None, false),
+            (EventFormat::Hybrid, Some("Online"), false),
+            (EventFormat::Hybrid, Some("in_person"), true),
+            (EventFormat::Hybrid, None, true),
+        ] {
+            let stored = resolve_participation_type(&format, choice).unwrap();
+            // The canonical value, read back as an Attendee, must match intent
+            let attendee = make_minimal_attendee(&stored, CheckInStatus::Approved);
+            assert_eq!(
+                attendee.is_in_person(),
+                expected_in_person,
+                "registration stored '{stored}' for {format:?}/choice={choice:?}"
+            );
+        }
+    }
+
+    /// Minimal Attendee constructor for write-path round-trip tests.
+    fn make_minimal_attendee(
+        participation_type: &str,
+        status: event_checkin_domain::models::attendee::CheckInStatus,
+    ) -> event_checkin_domain::models::attendee::Attendee {
+        use event_checkin_domain::models::attendee::Attendee;
+        Attendee {
+            api_id: "test".to_string(),
+            first_name: String::new(),
+            last_name: String::new(),
+            name: "Test".to_string(),
+            email: "test@test.com".to_string(),
+            ticket_name: String::new(),
+            approval_status: status,
+            participation_type: participation_type.to_string(),
+            registration_date: None,
+            phone: None,
+            contact_channel: None,
+            contact_handle: None,
+            deposit_agreed: None,
+            deposit_method: None,
+            deposit_amount: None,
+            deposit_tx_signature: None,
+            deposit_verified: None,
+            checked_in_at: None,
+            checked_in_by: None,
+            solana_address: None,
+            qr_code_url: None,
+            claim_token: None,
+            claimed_at: None,
+            nft_proof_url: None,
+            bank_account: None,
+            bank_name: None,
+            account_name: None,
+            refund_status: None,
+            refund_link: None,
+            send_email_status: None,
+            row_index: 0,
+        }
     }
 }

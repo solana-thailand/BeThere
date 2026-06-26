@@ -64,12 +64,23 @@ pub enum ParticipationType {
 }
 
 impl ParticipationType {
-    /// Canonical snake_case identifier.
+    /// Canonical snake_case identifier (stored in D1).
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::InPerson => "in_person",
             Self::Online => "online",
             Self::Other => "other",
+        }
+    }
+
+    /// Human-readable label for the Google Sheet and UI (display-case).
+    /// Inverse of `parse` for the two participation modes; `Other` passes
+    /// through as a capitalized "Other".
+    pub fn display(&self) -> &'static str {
+        match self {
+            Self::InPerson => "In-Person",
+            Self::Online => "Online",
+            Self::Other => "Other",
         }
     }
 
@@ -1083,6 +1094,30 @@ mod tests {
         assert!(!make_attendee("Online").is_in_person());
         assert!(!make_attendee("test").is_in_person());
         assert!(make_attendee("").is_in_person());
+    }
+
+    #[test]
+    fn test_participation_type_display() {
+        // display() is the inverse of parse() for the two participation modes
+        // and is what gets written to the Google Sheet (organizer-facing).
+        assert_eq!(ParticipationType::InPerson.display(), "In-Person");
+        assert_eq!(ParticipationType::Online.display(), "Online");
+        assert_eq!(ParticipationType::Other.display(), "Other");
+        // round-trip: canonical → display → parse → same variant
+        for v in ["In-Person", "in_person", "in person", "physical", ""] {
+            assert_eq!(
+                ParticipationType::parse(ParticipationType::parse(v).display()),
+                ParticipationType::parse(v),
+                "display round-trip failed for '{v}'"
+            );
+        }
+        for v in ["Online", "online", "Virtual"] {
+            assert_eq!(
+                ParticipationType::parse(ParticipationType::parse(v).display()),
+                ParticipationType::parse(v),
+                "display round-trip failed for '{v}'"
+            );
+        }
     }
 
     // -----------------------------------------------------------------------

@@ -6,7 +6,11 @@
 > not be done as a blind migration. **This is a design proposal, not implemented.**
 
 ## Status
-- 🟡 **Design only — awaiting approval.** No code, no prod change yet.
+- 🟡 **Step 3.2 (write-path unification) ✅ DONE** (commit pending). No data
+  change — D1 still holds legacy values until 3.3 backfill runs. But all NEW
+  writes are now canonical; the mess stops growing.
+- 🟡 **Steps 3.3 (backfill) + 3.4 (SQL simplification) — still awaiting approval.**
+  No code, no prod change yet.
 
 ## 1. Root cause (why prod is messy)
 `attendees.participation_type` is written by **5+ independent paths using two

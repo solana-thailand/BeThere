@@ -16,6 +16,7 @@ use crate::error::ApiOk;
 use event_checkin_domain::models::api::{
     AttendeeListItem, AttendeeResponse, RecentCheckIn, StatsResponse,
 };
+use event_checkin_domain::models::attendee::ParticipationType;
 use event_checkin_domain::models::auth::Claims;
 use event_checkin_domain::models::error::AppError;
 
@@ -1039,15 +1040,30 @@ pub async fn delete_attendee(
     })))
 }
 
-/// Canonical participation_type values accepted by the manual override endpoint.
+/// Normalize a manual participation_type override into its canonical form.
 ///
-/// Restricted to exactly these two strings (rather than free-form) for two reasons:
-/// 1. `Attendee::is_in_person()` parses by substring match — a typo would
-///    silently flip check-in eligibility the wrong way.
-/// 2. The existing deposit-deadline auto-switch and slip-upload flows write
-///    exactly these literals, so staying consistent keeps every code path
-///    in agreement about what "in-person" vs "online" means.
-const ALLOWED_PARTICIPATION_TYPES: &[&str] = &["In-Person", "Online"];
+/// Accepts both display-case (`In-Person`/`Online`) and canonical
+/// (`in_person`/`online`) input — the frontend currently sends display-case.
+/// Rejects `Other` (covers `walkin`, `test`, junk) so this endpoint can't be
+/// used to clobber the `walkin` sentinel or set garbage.
+///
+/// Returns `(canonical_for_d1, display_for_sheet)`.
+fn normalize_override(raw: &str) -> Result<ParticipationType, AppError> {
+    // Reject empty explicitly — the parse() default-to-in-person behavior is for
+    // legacy reads, not for an explicit manual override (empty is a no-op/error).
+    if raw.trim().is_empty() {
+        return Err(AppError::Validation(
+            "participation_type must not be empty".to_string(),
+        ));
+    }
+    let parsed = ParticipationType::parse(raw);
+    if parsed == ParticipationType::Other {
+        return Err(AppError::Validation(format!(
+            "participation_type must be in-person or online, got '{raw}'"
+        )));
+    }
+    Ok(parsed)
+}
 
 /// Request body for `PATCH /attendee/:id/participation-type`.
 #[derive(serde::Deserialize)]
@@ -1076,14 +1092,10 @@ pub async fn update_participation_type(
     Query(query): Query<EventIdQuery>,
     axum::Json(body): axum::Json<UpdateParticipationTypeBody>,
 ) -> Result<ApiOk<serde_json::Value>, crate::error::WorkerError> {
-    let new_value = body.participation_type.trim().to_string();
-    if !ALLOWED_PARTICIPATION_TYPES.contains(&new_value.as_str()) {
-        return Err(AppError::Validation(format!(
-            "participation_type must be one of {:?}, got '{new_value}'",
-            ALLOWED_PARTICIPATION_TYPES
-        ))
-        .into());
-    }
+    let resolved = normalize_override(body.participation_type.trim())?;
+    // Canonical form for D1 storage; display form for the organizer-facing Sheet.
+    let new_value = resolved.as_str().to_string();
+    let new_value_display = resolved.display().to_string();
 
     tracing::info!(
         attendee_id = %id,
@@ -1126,7 +1138,7 @@ pub async fn update_participation_type(
             ctx.wait_until(crate::sheets::bg_sync::update_participation_type(
                 state.clone(),
                 row_index,
-                new_value.clone(),
+                new_value_display.clone(),
                 mapping,
                 event.sheet_id.clone(),
                 event.sheet_name.clone(),
@@ -1136,7 +1148,7 @@ pub async fn update_participation_type(
             // Fallback: blocking Sheets write when worker_ctx unavailable (tests)
             crate::sheets::write::update_participation_type(
                 row_index,
-                &new_value,
+                &new_value_display,
                 &mapping,
                 &state,
                 &event.sheet_id,
@@ -1211,4 +1223,79 @@ pub async fn update_participation_type(
         "sheet_row_updated": row_index.is_some(),
         "d1_updated": d1_updated,
     })))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::normalize_override;
+    use event_checkin_domain::models::attendee::ParticipationType;
+    use event_checkin_domain::models::error::AppError;
+
+    #[test]
+    fn normalize_override_accepts_display_case() {
+        // Frontend currently sends display-case — must keep working.
+        assert_eq!(
+            normalize_override("In-Person").unwrap(),
+            ParticipationType::InPerson
+        );
+        assert_eq!(
+            normalize_override("Online").unwrap(),
+            ParticipationType::Online
+        );
+    }
+
+    #[test]
+    fn normalize_override_accepts_canonical() {
+        // New canonical form (post-Tier-B) also accepted.
+        assert_eq!(
+            normalize_override("in_person").unwrap(),
+            ParticipationType::InPerson
+        );
+        assert_eq!(
+            normalize_override("online").unwrap(),
+            ParticipationType::Online
+        );
+    }
+
+    #[test]
+    fn normalize_override_accepts_case_variants_and_synonyms() {
+        assert_eq!(
+            normalize_override("IN-PERSON").unwrap(),
+            ParticipationType::InPerson
+        );
+        assert_eq!(
+            normalize_override("physical").unwrap(),
+            ParticipationType::InPerson
+        );
+        assert_eq!(
+            normalize_override("Virtual").unwrap(),
+            ParticipationType::Online
+        );
+    }
+
+    #[test]
+    fn normalize_override_rejects_walkin_sentinel() {
+        // `walkin` is a status sentinel, not a participation mode — this endpoint
+        // must never set it (would corrupt walk-in detection).
+        assert!(matches!(
+            normalize_override("walkin"),
+            Err(AppError::Validation(_))
+        ));
+    }
+
+    #[test]
+    fn normalize_override_rejects_junk_and_empty() {
+        assert!(matches!(
+            normalize_override("test"),
+            Err(AppError::Validation(_))
+        ));
+        assert!(matches!(
+            normalize_override(""),
+            Err(AppError::Validation(_))
+        ));
+        assert!(matches!(
+            normalize_override("TBD"),
+            Err(AppError::Validation(_))
+        ));
+    }
 }
