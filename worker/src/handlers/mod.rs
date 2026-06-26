@@ -9,6 +9,7 @@ pub mod contacts;
 pub mod dashboard;
 pub mod deposit;
 pub mod escrow_index;
+pub mod event_series;
 pub mod events;
 pub mod ext;
 pub mod health;
@@ -43,6 +44,13 @@ pub fn routes(state: AppState) -> Router<()> {
     // Public event detail: 120s cache (individual events rarely change)
     let public_events_detail = Router::new()
         .route("/public/event/{slug}", get(public_event::get_public_event))
+        // Event series (related events / prev-next). Shares the 120s cache —
+        // series structure changes rarely and the payload is derived from
+        // campaign_events + events, both already cached at this granularity.
+        .route(
+            "/public/event-series/{event_id}",
+            get(event_series::get_event_series),
+        )
         .layer(middleware::from_fn(
             crate::middleware::cache_public_120_layer,
         ));
