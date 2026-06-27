@@ -280,17 +280,28 @@ pub async fn get_public_ticket(
     // Mask email for privacy: "john@example.com" → "j***@example.com"
     response.email = mask_email(&response.email);
 
-    // Fetch deposit status for context (pending verification, etc.)
-    // Uses D1-first fallback so deposit data is found even when KV is empty.
-    let deposit_status = crate::event_store::get_deposit_status_with_fallback(
-        kv,
-        state.d1.as_deref(),
-        &event.id,
-        &attendee.api_id,
-    )
-    .await
-    .ok()
-    .flatten();
+    // Fetch USDC deposit status and THB deposit concurrently (Plan 014 Phase
+    // 4.3.2). Both reads depend only on (event.id, attendee.api_id) and are
+    // independent of each other — collapsing two sequential D1/KV round-trips
+    // into one concurrent step. The plan's original "3 sequential reads" claim
+    // was overstated: event→attendee is a dependency chain (attendee needs
+    // event.sheet_id), so only these two post-attendee reads are parallelizable.
+    let (usdc_status_res, thb_deposit_res) = futures_util::join!(
+        crate::event_store::get_deposit_status_with_fallback(
+            kv,
+            state.d1.as_deref(),
+            &event.id,
+            &attendee.api_id,
+        ),
+        crate::event_store::get_thb_deposit_with_fallback(
+            kv,
+            state.d1.as_deref(),
+            &event.id,
+            &attendee.api_id,
+        ),
+    );
+    let deposit_status = usdc_status_res.ok().flatten();
+    let thb_deposit = thb_deposit_res.ok().flatten();
 
     // --- Read-path self-heal (USDC only) ---
     // Recover a missing tx_signature from on-chain PDA history and verify the
@@ -350,17 +361,7 @@ pub async fn get_public_ticket(
         None => None,
     };
 
-    // Fetch THB deposit for refund proof URL (D1-first, KV fallback)
-    let thb_deposit = crate::event_store::get_thb_deposit_with_fallback(
-        kv,
-        state.d1.as_deref(),
-        &event.id,
-        &attendee.api_id,
-    )
-    .await
-    .ok()
-    .flatten();
-
+    // thb_deposit was fetched concurrently with deposit_status above (join!).
     let deposit_info = deposit_status.as_ref().map(|d| {
         serde_json::json!({
             "method": match d.method {
