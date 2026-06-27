@@ -315,9 +315,20 @@ regardless of workload. They are the highest-ROI part of this plan.
   reasons. Our equivalent hard rule for monetary code: **deterministic, never
   stochastic**. No RNG in policy decisions, no probabilistic gates on refunds.
   Encode as a clippy lint or `#[deny]`-style test where feasible.
-- [ ] **5.4 Zero-allocation hot-path audits.** katgpt-rs measures allocs/call on
+- [x] **5.4 Zero-allocation hot-path audits.** katgpt-rs measures allocs/call on
   every hot kernel. Apply the same to the zero-copy decode path from Phase 1
   (`#[cfg(feature = "alloc_count")]` + a test asserting 0 allocs after warmup).
+  **DONE** — `alloc_count` feature added to `domain/Cargo.toml`;
+  `domain/tests/alloc_count.rs` installs a counting global allocator and
+  asserts 0 allocs after warmup. Audit measured 10 shapes (single value,
+  empty/1/3/4-row slice boundary, 50/500/10000-row slice, 100× repeats)
+  on blake3 1.8.5: **every shape is 0 allocs in steady state**, including
+  the 10000-row / 160 KB stress test. blake3's `Hasher` uses
+  `InlineSubCtxStack` (fixed-size stack array, not a `Vec`), and
+  `bytemuck::cast_slice` / `from_bytes` are pointer reinterprets. The
+  decode path is genuinely zero-alloc. Corrected the `unpack_slice` doc
+  comment that previously overstated allocations as "BLAKE3 hasher's
+  internal scratch" — there are none.
 - [ ] **5.5 Feature-flag every Phase 1–4 change.** Every optimization ships
   behind a Cargo feature (`wire`, `policy-traits`, `batch-kv-writes`) and a
   runtime config flag. Default-off until GOAT-gated; default-on only after
