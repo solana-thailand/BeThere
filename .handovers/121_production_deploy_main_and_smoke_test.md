@@ -3,7 +3,7 @@
 **Date:** 2026-06-27
 **Branch:** `main` (merge from `develop` — no feature branch; this was a deploy session)
 **Deploy range:** `c2a1309..6f4a7b3` (41 commits, Plans 008/011/013/014)
-**Outcome:** ✅ DEPLOYED, LIVE-VERIFIED (6 checks), SMOKE-TESTED (3 surfaces). One honest untested-live path (Plan 008 freeze write).
+**Outcome:** ✅ DEPLOYED, LIVE-VERIFIED (6 checks), SMOKE-TESTED (3 surfaces). Plan 008 lazy-freeze path **verified-live** (1 row frozen 2026-06-25); manual `POST /summary/freeze` + browser-level UI rendering remain unexercised live.
 **Test delta:** 0 (no `.rs`, no `Cargo.toml`, no migrations authored — this session shipped already-merged code to production).
 
 ---
@@ -56,7 +56,7 @@ The prior session's summary claimed *"No schema changes; rollback is `wrangler r
 |---|---|---|
 | **Wire format** (Plan 014 Phase 1.7) | 56-byte payload fetched live, decoded via real `domain::wire::unpack::<LevelScore>` — **BLAKE3 verified**, all fields match (`moves=7, puzzles_solved=2, time_seconds=45, stars=2`) | ✅ **Definitively verified** — round-trip clean |
 | **Event series nav** (Plan 013) | `/api/public/events` 200; `/api/public/event-series/{id}` 404 *"not part of a campaign"* | ✅ **Live, no data yet** — `campaigns`=0 rows, `campaign_events`=0 rows. The 404 is correct. |
-| **Post-event summary** (Plan 008) | `/api/events/{id}/summary` **401** (route exists, enforcing auth) | 🟡 **Route live, freeze write untested** — `event_summaries`=0 rows; can't drive OAuth headlessly with `DEV_MODE=0` |
+| **Post-event summary** (Plan 008) | `/api/events/{id}/summary` **401** (route exists, enforcing auth) | ✅ **Route live + freeze path verified-live (prior session)** — `event_summaries`=1 row (frozen 2026-06-25, `no_show_count=0`). The smoke test's 401 confirms the route on the new deploy; the freeze write itself was exercised live 2 days earlier (issue #058). |
 
 ### Deliverables (this session)
 
@@ -118,9 +118,28 @@ This proves the deployed worker's encoder and the domain crate's decoder agree e
 
 One mid-test puzzle: production payload was 16 bytes but the handler references `_pad`. Resolved by reading the real struct definition — `_pad: [u8; 3]` (3 bytes), not `[u32; 3]` (12 bytes). Didn't guess.
 
-### 3.4 The two 404s that are correct, not bugs
+### 3.4 The 404 that is correct, and the freeze that already ran
 
-Both `event-series/{id}` (404 *"not part of a campaign"*) and `event_summaries` (empty table) return "missing data" responses that prove the **code is live and structured correctly**. The endpoints exist, the auth gates fire, the structured error messages come back — they just have no data to return because no organizer has grouped events into a campaign or frozen an ended event yet.
+`event-series/{id}` (404 *"not part of a campaign"*) is a "missing data" response that proves the **code is live and structured correctly** — the endpoint exists, the auth gate fires, the structured error comes back. It has no data because no organizer has grouped events into a campaign yet (`campaigns`=0, `campaign_events`=0).
+
+`event_summaries` is **NOT** empty — it has **1 row**, frozen 2026-06-25T04:54:57Z for `solana-in-latent-space-part-1-copy` (an online event, `in_person_registered_count=0`, `no_show_count=0`). This freeze ran live 2 days before this deploy session (documented in issue #058), proving the lazy-on-first-read-after-`event_end_ms` write path works end-to-end against real D1. The freeze wrote the **fixed** value (`no_show_count=0`) — old logic would have written 25.
+
+**Correction note:** an earlier draft of this handover (and the session summary it was based on) claimed `event_summaries`=0 rows / "freeze path untested-live." Verified directly against prod D1 during the post-deploy audit — that claim was wrong. See §8 caveat #8.
+
+### 3.5 Verified production D1 state (post-deploy audit)
+
+Queried directly against prod `bethere-db` during the post-deploy audit (`npx wrangler d1 execute bethere-db --remote --json`). These are **facts**, not claims inherited from any summary:
+
+| Table | Count | Notes |
+|---|---|---|
+| `events` | **9** | Includes the public Road-to-Mainnet series (#1–#4 Bangkok), Solana-in-Latent-Space (Parts 1–3), `intro-to-vibing-on-solana`, `islanddao-v4-demo`, plus `solana-in-latent-space-part-1-copy` (non-public test event that owns the frozen summary) |
+| `campaigns` | **0** | No campaigns created yet — Plan 013 series nav self-hides |
+| `campaign_events` | **0** | — |
+| `event_summaries` | **1** | Frozen 2026-06-25T04:54:57Z, `event_id=solana-in-latent-space-part-1-copy`, `no_show_count=0`, `in_person_registered_count=0` (online event, fixed logic) |
+
+The public-API smoke test's view of "3 events" was a **filtered subset** (only published events surface in `/api/public/events`), not the production total. The production DB has 9 events; the public listing shows fewer. Both counts are correct in their own scope — the error was framing the public-API count as "events in production."
+
+The frozen `solana-in-latent-space-part-1-copy` event still exists in the `events` table (verified — not an orphaned summary row). It is simply non-public, which is why it doesn't appear in `/api/public/events` even though its summary is frozen.
 
 ---
 
@@ -134,13 +153,17 @@ The instinct to run `git log main..develop --stat` before deploying caught a sco
 
 In the pre-stop verification, I initially declared the wire bench N/A, then noticed the deploy range included 2 commits touching wire code (`787e62d` + `617d7dc`) and re-investigated rather than skip on assumption. The re-investigation confirmed `617d7dc` was a **doc-comment-only** change to `wire.rs` plus a test-only `alloc_count` feature — the decode logic is byte-identical to what the GOAT-gate measured. So the bench genuinely is N/A: re-running would measure unchanged code. The honest call was to skip it with justification, not manufacture a 5-minute bench run to look thorough.
 
-### Solved: distinguished "live" from "tested-live"
+### Solved (in the audit pass): caught a propagated inaccuracy about the freeze path
 
-The smoke test could not drive OAuth (`DEV_MODE=0` in production), so the summary freeze write path remained untested-live. Rather than claim it "works" because the route returns 401-not-404 (which proves the route exists but not the freeze write), I marked it 🟡 and named the exact precondition for proper validation (browser session against Road-to-Mainnet #1, which has `event_end_ms` in the past).
+The initial smoke test marked the Plan 008 freeze write path "🟡 untested-live" and the first draft of this handover claimed `event_summaries`=0 rows / "no freeze has ever run in production." That claim was inherited from the session summary without independent verification. The post-deploy audit queried prod D1 directly and found **1 row**, frozen 2026-06-25T04:54:57Z — the freeze path IS tested-live (issue #058 documented it, the row confirms it). Corrected the handover (§3.4, §5 #1, §8 #4) rather than leaving the wrong claim in place. The honest lesson: "a session summary is a claim, not a fact." When a handover records prod state, verify the prod state directly.
+
+### Solved: did NOT distinguish "live" from "tested-live" prematurely
+
+The smoke test's 401-not-404 check was correctly framed as "route exists, enforcing auth" — that part was honest. The overclaim was extending it to "freeze write untested-live" without checking whether a prior session had already exercised the freeze. The correction (verify against D1) turned the 🟡 into a ✅ on the lazy-freeze path. The **manual** `POST /summary/freeze` variant remains genuinely unexercised live (§5 #1), and that distinction is now accurate.
 
 ### No real struggles
 
-The session's mechanics (push, merge, deploy) were routine. The only friction was the Wrangler 4.x versions API bug, which `deploy.sh` already handles via fallback. No debugging rabbit holes.
+The session's mechanics (push, merge, deploy) were routine. The only friction was the Wrangler 4.x versions API bug, which `deploy.sh` already handles via fallback, and the brief wrangler-CLI invocation puzzles during the post-deploy audit (DB name is `bethere-db`, not `bethere`; `--json` output structure varies between calls). No debugging rabbit holes.
 
 ---
 
@@ -148,7 +171,7 @@ The session's mechanics (push, merge, deploy) were routine. The only friction wa
 
 ### Untested-live (needs human/browser)
 
-1. **Plan 008 summary freeze write path** — the `event_summaries` table is empty; no freeze has ever run in production. Needs an authenticated organizer session against an ended event. Road-to-Mainnet #1 is freeze-eligible (`event_end_ms` in the past). Both the lazy-on-first-read-after-`event_end_ms` path and the manual `POST /summary/freeze` path need exercise.
+1. **Plan 008 summary — manual `POST /summary/freeze` path** — the **lazy** freeze path (on first read after `event_end_ms`) is **verified-live** (1 row frozen 2026-06-25). The **manual** freeze endpoint (`POST`) has not been exercised live. Lower priority since the lazy path works.
 2. **Browser-level UI rendering** of the 3 new surfaces (summary page, series nav, wire decoder). Curl/protocol checks confirm the data layer but not Leptos component rendering. Open the app in a browser as an organizer and watch for console errors.
 
 ### Process follow-up (not blocking, worth flagging)
@@ -270,10 +293,12 @@ git log --oneline -1 main                # b432ac5 (== origin/main == develop)
 
 3. **Rollback now leaves orphaned schema.** Pre-this-deploy, `wrangler rollback` was a clean revert. Post-this-deploy, rollback reverts the worker but leaves `event_summaries` + the new `events`/`attendees` columns orphaned. Not data-corrupting, but operationally confusing on a future audit. A full schema revert would require a manual reversing migration.
 
-4. **The Plan 008 summary freeze write path is untested-live.** The 401-not-404 result proves the route exists and enforces auth, but does NOT prove the freeze write works. The `event_summaries` table is empty — no freeze has ever run in production. Both the lazy-on-first-read path and the manual `POST /summary/freeze` path need browser-session validation. I did not claim this works; I marked it 🟡.
+4. **The Plan 008 summary freeze write path IS verified-live (corrected).** An earlier draft of this handover claimed the path was "untested-live" and `event_summaries` was empty. That was wrong — propagated from an inaccurate session summary without independent verification. The post-deploy audit queried prod D1 directly: `event_summaries` has **1 row**, frozen 2026-06-25T04:54:57Z for `solana-in-latent-space-part-1-copy` with `no_show_count=0` (the fixed value). The lazy-on-first-read freeze path works end-to-end against real D1. Only the **manual** `POST /summary/freeze` variant remains unexercised live (lower priority — see §5 item 1).
 
 5. **Browser-level UI rendering is untested.** Curl/protocol checks confirm the data layer (routes exist, payloads round-trip), but no Leptos component rendering was validated in a real browser. The three new surfaces (summary page, series nav, wire decoder) could still have console errors or render bugs invisible to curl.
 
 6. **The wire bench is N/A, not skipped.** The deployed wire decode logic is byte-identical to what the GOAT-gate bench measured at commit `787e62d` (6.2× decode, 73.5% size reduction). The only wire.rs change in the deploy range (`617d7dc`) was a doc-comment correction plus a test-only `alloc_count` feature. Re-running the bench would measure unchanged code — busywork, not verification. The deploy's correctness was instead proven by the live BLAKE3 round-trip smoke test, which exercises the actual deployed encoder.
 
-7. **This session shipped no new code.** All 41 deployed commits were authored in prior sessions. This session's contribution was: scope correction, frontend rebuild, merge topology resolution, deploy, and live verification. The handover exists to record the deploy event and its operational consequences (schema drift, orphaned-on-rollback schema, untested-live paths), not to claim code authorship.
+7. **This session shipped no new code.** All 41 deployed commits were authored in prior sessions. This session's contribution was: scope correction, frontend rebuild, merge topology resolution, deploy, and live verification. The handover exists to record the deploy event and its operational consequences (schema drift, orphaned-on-rollback schema), not to claim code authorship.
+
+8. **I propagated inaccuracies from the session summary and caught them during the post-deploy audit.** The session summary I trusted claimed: (a) `event_summaries`=0 rows / freeze path untested-live, (b) "3 events" in production. Both were wrong. The post-deploy audit (this handover's §3.4 + §8 #4 corrections) verified directly against prod D1: `event_summaries`=1 row (freeze ran 2026-06-25), and the events table has **9 rows** (the "3 events" was a public-API-filtered count, not the production total). The lesson: a session summary is a claim, not a fact. When a handover records prod state, verify the prod state directly — don't inherit the prior summary's claims. The wire-format round-trip and campaigns-count claims in this handover WERE independently verified during the smoke test and remain accurate.
