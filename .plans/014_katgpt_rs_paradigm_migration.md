@@ -259,10 +259,12 @@ honest version of Objective 2 is: **finish the SSOT migration, don't build a VM.
   architecture note. **R3:** do NOT implement the plan's type-state FSM.
   Full findings in `.plans/014_phase2_4_typestate_audit.md`; negative-results
   entry #10 in `.plans/014_negative_results.md`.
-- [ ] **2.5 Do NOT compile business logic to a standalone WASM module.** The
+- [x] **2.5 Do NOT compile business logic to a standalone WASM module.** The
   worker already runs as WASM; the leptos client already runs as WASM; both link
   `domain`. A separate "logic WASM" would add a third WASM artifact with zero
-  benefit. Document this decision in `.plans/014_no_transformer_vm.md`.
+  benefit. Decision documented in `.plans/014_no_transformer_vm.md` — covers the
+  narrower "plain standalone logic WASM" concern; the broader Transformer VM /
+  Percepta demotion lives in negative-results entry #1. No code or test change.
 
 **Non-goals (explicitly):**
 - No Transformer VM. No WASM-in-weights. No Percepta-style interpreter. These

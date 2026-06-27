@@ -26,6 +26,11 @@ textbook definition of over-engineering. There is nothing to inference.
 added to the codebase (recommendation engine, fraud scoring). Not on any
 current roadmap.
 
+**Related (narrower) demotion:** Phase 2.5 (`.plans/014_no_transformer_vm.md`)
+covers the "plain standalone logic WASM" variant — same family, no
+transformer. If someone re-proposes a shared `logic.wasm` without the
+Percepta framing, point them there.
+
 ---
 
 ## 2. Neuro-symbolic policy graphs (Plan 014 Phase 3, original framing)
