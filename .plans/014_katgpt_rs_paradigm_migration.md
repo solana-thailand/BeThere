@@ -416,14 +416,43 @@ regardless of workload. They are the highest-ROI part of this plan.
 
 ### Tasks
 
-- [ ] **5.1 GOAT-gate every perf claim.** Adopt katgpt-rs's discipline: any
+- [x] **5.1 GOAT-gate every perf claim.** Adopt katgpt-rs's discipline: any
   optimization (Phase 1 zero-copy, Phase 4.3 cache wins) must have a measurable
   target gate (e.g. "≥3× decode speedup") and a documented "GOAT FAILED → demote"
   outcome if it misses. No "it feels faster".
-- [ ] **5.2 Negative-results log.** Create `.plans/014_negative_results.md`
+  **DONE — see `.plans/014_goat_gate_discipline.md`. Audit traced every Plan 014
+  optimization through both requirements (measurable gate + documented outcome):
+  (1) Phase 1.7 wire format had a two-axis numeric gate (`≥3× decode AND ≥40%
+  size reduction`) and a documented PASSED outcome (6.2× decode, 73.5% size
+  reduction at 500 rows). (2) Six optimizations failed their gates and were
+  demoted with documented reasons — neg-results entries #4 (EventMetaWire,
+  variable strings), #5 (AttendeeListItemWire, cost/benefit), #6 (quiz/adventure
+  batch, wrong scope), #7 (`EventPolicy` trait, no polymorphism), #9 (blockhash
+  TTL, premise factually wrong), #10 (type-state FSM, premise structurally
+  wrong). (3) Two optimizations were already satisfied by existing code, so no
+  new gate was needed (4.3.1 KV cache, 4.3.3 quiz batching). The
+  `014_negative_results.md` "Reference: GOAT-gate outcomes" table is itself the
+  GOAT-gate outcome registry — 10 entries with reason classes. One honest
+  caveat: the 4.3.2 `join!` parallelization shipped without a formal numeric
+  gate, but its win is structural (`max(a,b) ≤ a+b` by construction), not an
+  empirical claim that could fail measurement — same reasoning as Phase 5.5 §6.
+  Zero optimizations shipped on "it feels faster." Docs-only closure; zero `.rs`
+  / `Cargo.toml` / tests touched.**
+- [x] **5.2 Negative-results log.** Create `.plans/014_negative_results.md`
   modeled on katgpt-rs's `.docs/20_negative_results.md`. Record every demoted
   idea (Transformer VM, neuro-symbolic policies, SIMD) with the *reason*. Future
   agents/readers save time by not re-proposing them.
+  **DONE — `.plans/014_negative_results.md` exists with 10 entries, exceeding
+  the task's scope. The three named ideas are covered: entry #1 (Transformer VM
+  — no workload, over-engineering), entry #2 (neuro-symbolic policy graphs —
+  deterministic code, no uncertainty to filter), entry #3 (SIMD — I/O-bound, no
+  dense f32 math). Seven additional entries cover every other demotion
+  (EventMetaWire, AttendeeListItemWire, quiz/adventure batches, `EventPolicy`
+  trait, deposit/refund SSOT, blockhash TTL, type-state escrow FSM). Each entry
+  has prose with reason, proof, and re-open preconditions. The file additionally
+  contains a "Reference: GOAT-gate outcomes recorded in this log" table (10
+  entries + positive 1.7 contrast) that serves as the discipline registry for
+  Phase 5.1. Docs-only closure.**
 - [x] **5.3 Sigmoid-not-softmax discipline → deterministic-not-stochastic.**
   katgpt-rs has a hard rule "sigmoid, never softmax" for sound mathematical
   reasons. Our equivalent hard rule for monetary code: **deterministic, never
@@ -543,7 +572,7 @@ Phase 5.2 (negative log) ← updated throughout
   Phase 3.2's trait demotion is entry #7; Phase 4.4's SIMD doc still pending
   Phase 4.1 profile data.)*
 - [ ] Phase 4.1 profile data is captured and cited in every Phase 4 decision.
-- [ ] Phase 5.2 negative-results log has entries for: Transformer VM,
+- [x] Phase 5.2 negative-results log has entries for: Transformer VM,
   neuro-symbolic policies, SIMD — each with the reason.
   *(DONE — `.plans/014_negative_results.md` entries 1, 2, 3 cover these. Entry 7
   additionally covers the Phase 3.2 trait demotion.)*
