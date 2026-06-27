@@ -264,6 +264,70 @@ retroactive cleanup tool for the deposit/refund predicates.
 
 ---
 
+## 9. Solana blockhash cache TTL promotion 30s → 90s (Plan 014 Phase 4.3.4)
+
+**Status:** Demoted after audit against Solana protocol constants. **The plan's
+"blockhash valid ~120s" premise is factually wrong.**
+
+**Original framing:** Promote the blockhash cache TTL in
+`worker/src/solana_escrow/wire.rs` from 30s to ~90s, on the claim that
+"blockhash valid ~120s" so a 90s cache "halves RPC calls."
+
+**Why demoted — three layers:**
+
+1. **The "~120s" premise confuses two unrelated Solana constants.** The plan
+   cites `MAX_HASH_AGE_IN_SECONDS = 120`, but that constant is used to compute
+   the size of the recent-blockhash ring buffer (`MAX_RECENT_BLOCKHASHES = 300`),
+   *not* transaction validity. The actual transaction validity limit is
+   `MAX_PROCESSING_AGE = 150` **blocks** (from `solana-sdk/clock/src/lib.rs`:
+   "The maximum age of a blockhash that will be accepted by the leader"). This
+   is the hard limit: transactions referencing a blockhash older than 150 blocks
+   are rejected by the network.
+
+2. **150 blocks ≠ 120 seconds.** Block time is ~400ms/slot, but blocks ≠ slots
+   (~5% of slots are skipped). 150 blocks therefore takes **~60–90s wall-clock**
+   in practice. Empirical observations across the ecosystem confirm this:
+   Flash Trade docs say "approximately 60 seconds (~150 slots)"; Chainstack
+   docs say "about 80-90 seconds"; Helius docs give "~2 minutes" as the upper
+   bound. **None** support a 120s validity window.
+
+3. **BeThere uses `"commitment": "finalized"`, which makes the problem worse.**
+   Solana's transaction-confirmation guide warns that finalized commitment
+   *"effectively reduces the expiration of your transactions by about 13
+   seconds"* because finalized is ~32 slots behind confirmed. So the blockhash
+   is **already ~13s stale at fetch time** — before the cache TTL even starts
+   counting.
+
+**The concrete failure mode if implemented as written:** A 90s cache TTL would
+let the worker hand the frontend a blockhash up to ~90s (cache age) + ~13s
+(finalized staleness) ≈ **103s old** — past the 150-block (~60–90s) validity
+window. The frontend would then submit a transaction that the network rejects
+with "Blockhash not found" / "block height exceeded." These failures are
+intermittent (depend on cache hit timing) and hard to debug — exactly the
+symptom class handover #086 already documented during rollover testing.
+
+**The current 30s is the correct, defensible value.** The existing code comment
+("Solana blockhashes expire after ~60s on mainnet; 30s gives a good trade-off
+between RPC call reduction and freshness") is accurate and well-reasoned. A
+30s cache means worst-case blockhash age at frontend submission ≈ 30s (cache) +
+~13s (finalized) + ~15s (wallet signing) + ~2s (network) ≈ ~60s — comfortably
+within the 150-block window.
+
+**Proof:** `solana-sdk/clock/src/lib.rs` lines defining `MAX_PROCESSING_AGE =
+150` and `MAX_HASH_AGE_IN_SECONDS = 120`; Solana transaction-confirmation guide
+on finalized commitment's ~13s expiration reduction; BeThere's
+`fetch_blockhash_from_rpc` uses `"commitment": "finalized"`.
+
+**Preconditions that would re-open it:**
+- BeThere switches to `"commitment": "confirmed"` (gains ~13s of validity
+  headroom at the cost of ~5% blockhash-from-dropped-fork risk). Not planned.
+- Solana protocol changes `MAX_PROCESSING_AGE` upward (protocol-level decision,
+  not under our control).
+- A durable-nonce transaction path replaces the recent-blockhash path for
+  escrow flows (eliminates the staleness window entirely). Not on roadmap.
+
+---
+
 ## Pending evaluations (not yet demoted or promoted)
 
 These are listed for completeness — they have not been evaluated yet and may
@@ -282,10 +346,26 @@ end up in this log or in a positive-results companion.
 - **Phase 4.1 profile** — not yet run. Determines whether any Phase 4.3 I/O win
   is worth pursuing and is the precondition for re-evaluating SIMD. Blocked on
   a staged 200-attendee event (infrastructure coordination).
-- **Phase 4.3.1–4.3.4 I/O wins** — four concrete candidates (KV cache public
-  event-series, parallelize `get_public_ticket` reads, batch quiz/adventure KV
-  writes, extend Solana blockhash cache TTL). None implemented; all are
-  independent of Phase 1's outcome.
+- **Phase 4.3.1–4.3.4 I/O wins** — **CONCLUDED 2026-06-27.** Audit found that
+  Plan 014's premises were wrong for 3 of 4 items, mirroring the pattern of
+  earlier audit misses:
+  - **4.3.1 (KV cache event-series)** — already satisfied; the endpoint is
+    already server-cached at 120s via `cache_public_120_layer` in
+    `worker/src/handlers/mod.rs:50-57`. Plan was written before Plan 013
+    shipped this. No code change.
+  - **4.3.2 (parallelize `get_public_ticket`)** — shipped (commit `c6f89d2`)
+    with scope corrected: the plan's "3 sequential reads" was overstated
+    (event→attendee is a dependency chain); only the two independent post-
+    attendee deposit reads (USDC + THB) were `join!`'d.
+  - **4.3.3 (batch quiz/adventure writes)** — already satisfied; the per-answer
+    write anti-pattern does not exist. `worker/src/quiz.rs:356` grades all
+    answers in-memory then writes once via `save_quiz_progress`. Adventure is
+    one write per `/save` request (natural granularity). No code change.
+  - **4.3.4 (blockhash TTL 30s→90s)** — **DEMOTED** (see entry #9). The
+    "blockhash valid ~120s" premise confuses `MAX_HASH_AGE_IN_SECONDS` with
+    `MAX_PROCESSING_AGE=150 blocks` (~60–90s). A 90s cache would cause
+    intermittent stale-blockhash transaction failures. The current 30s is
+    correct.
 
 ---
 
@@ -301,6 +381,7 @@ end up in this log or in a positive-results companion.
 | 6. Quiz/adventure batches | Demote | Wrong scope — never batched |
 | 7. `EventPolicy` trait | Demote | No behavioral polymorphism — variation is data, not behavior |
 | 8. Deposit/refund SSOT consolidation | Demote | Audit miss — "duplication" is a deliberate two-stage guard; unit split is a domain boundary (4th miss) |
+| 9. Blockhash cache TTL 30s→90s | Demote | Plan premise factually wrong — `MAX_HASH_AGE_IN_SECONDS=120` ≠ transaction validity (`MAX_PROCESSING_AGE=150 blocks` ≈ 60–90s); 90s TTL would cause stale-blockhash failures (5th miss) |
 
 **Positive result for contrast:** Phase 1.7 GOAT-gate on `LevelScore` cleared
 both thresholds at every row count (smallest: 4.7× decode, 71.8% size reduction

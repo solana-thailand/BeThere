@@ -240,17 +240,52 @@ SIMD would provide **measurably zero** benefit. The "green software" win here is
   vectorize a loop that is (a) >5% of total CPU and (b) over contiguous f32/u64.
   Do not SIMD-ify string/JSON/branchy code — it will be slower (katgpt-rs's own
   "DFlare Progressive Budget: GOAT FAILED" is the cautionary tale).
-- [ ] **4.3 Real green-software wins to pursue instead** (these are the
+- [x] **4.3 Real green-software wins to pursue instead** (these are the
   I/O-bound equivalents of katgpt-rs's "skip dead compute" philosophy):
-  - [ ] **4.3.1** KV cache the public event-series endpoint (Plan 013) at 120s —
-    currently uncached, every ticket view hits D1.
-  - [ ] **4.3.2** Collapse the 3 sequential KV reads in `get_public_ticket`
+  *(Phase 4.3 audit concluded 2026-06-27 — see per-task notes. 2 of 4 were
+  already satisfied by existing code; 1 shipped; 1 demoted as unsafe.)*
+  - [x] **4.3.1** KV cache the public event-series endpoint (Plan 013) at 120s —
+    **ALREADY SATISFIED (no code change needed).** The audit found the endpoint
+    is already server-cached: `worker/src/handlers/mod.rs:50-57` registers
+    `/public/event-series/{event_id}` under the `public_events_detail` sub-router,
+    which applies `cache_public_120_layer` — exactly the 120s cache this task
+    asked for. The plan's "currently uncached" premise was written before Plan
+    013 (issue #060) shipped the endpoint with the cache layer attached.
+  - [x] **4.3.2** Collapse the 3 sequential KV reads in `get_public_ticket`
     (event → attendee → lock) into `join!`. Each sequential read is ~5–50ms;
     parallelizing is a pure latency win with zero compute cost.
-  - [ ] **4.3.3** Batch the quiz/adventure KV writes — currently one PUT per
+    **SHIPPED (commit `c6f89d2`) — scope corrected by audit.** The plan's
+    "3 sequential reads" framing was overstated: `event`→`attendee` is a
+    dependency chain (attendee needs `event.sheet_id`) and cannot be
+    parallelized. Only the two post-attendee reads are genuinely independent:
+    `get_deposit_status_with_fallback` (USDC) + `get_thb_deposit_with_fallback`
+    (THB). Those are now `join!`'d in `worker/src/handlers/attendee.rs`,
+    following the established pattern at `worker/src/handlers/deposit/escrow/
+    status.rs:88`. Two sequential D1/KV round-trips collapse to one concurrent
+    step; zero behavior change.
+  - [x] **4.3.3** Batch the quiz/adventure KV writes — currently one PUT per
     answer; batch into a single PUT per submit.
-  - [ ] **4.3.4** Promote the Solana blockhash cache TTL from 30s to the
-    ~90s effective lifetime (blockhash valid ~120s) — halves RPC calls.
+    **ALREADY SATISFIED (no code change needed).** The audit found the
+    per-answer-write anti-pattern does not exist: `worker/src/quiz.rs:356`
+    (`submit_quiz`) grades all answers in-memory then calls
+    `save_quiz_progress` **once**. Adventure is the same — one write per
+    `/adventure/{token}/save` request (one per level completion, the natural
+    granularity). The plan's "one PUT per answer" premise was wrong.
+  - [ ] **4.3.4 — DEMOTED (unsafe).** Promote the Solana blockhash cache TTL
+    from 30s to the ~90s effective lifetime (blockhash valid ~120s) — halves
+    RPC calls.
+    **DEMOTED after audit.** The plan's "blockhash valid ~120s" premise is
+    factually wrong — it confuses `MAX_HASH_AGE_IN_SECONDS=120` (sizes the
+    recent-blockhash ring buffer) with `MAX_PROCESSING_AGE=150 blocks` (the
+    actual transaction validity limit, from `solana-sdk/clock/src/lib.rs`).
+    Real validity is **~60–90s wall-clock**. BeThere also fetches with
+    `"commitment": "finalized"`, which Solana docs note *"effectively reduces
+    the expiration of your transactions by about 13 seconds."* A 90s cache TTL
+    would let the worker hand the frontend a blockhash up to ~90s (cache) +
+    ~13s (finalized staleness) old — past the 150-block window, causing
+    intermittent "Blockhash not found" / "block height exceeded" failures.
+    The current 30s is the correct, defensible value. Full reasoning in
+    `.plans/014_negative_results.md` entry #9.
 - [ ] **4.4 Do NOT add `wide`, `pulp`, or `std::simd` dependencies.** Document
   the decision in `.plans/014_no_simd.md` with the profile evidence from 4.1.
 
