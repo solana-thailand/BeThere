@@ -155,14 +155,16 @@ honest version of Objective 2 is: **finish the SSOT migration, don't build a VM.
   **Worker escrow-side: NOT duplicated** (worker uses domain's typed
   `EscrowStatus` directly; zero status-string comparisons found).
 
-  **Recommendations for Phase 2.2** (documented in `.plans/014_ssot_audit.md`,
-  not implemented): R1 — widen Phase 2.3 guard's `MIRROR_FILES` to include
+  **Recommendations for Phase 2.2** (documented in `.plans/014_ssot_audit.md`):
+  R1 — widen Phase 2.3 guard's `MIRROR_FILES` to include
   `api/event.rs` and `api/admin.rs`, and add the 3 uncovered predicates to the
   allowlist with documented reasons (highest priority, closes silent gap);
   R2 — eliminate the 2 `DepositMethod` serialization sites in worker (zero
   behavior change); R3 — defer the substantive EventFormat/EscrowStatus
   type-merge decision to a dedicated session.
-- [ ] **2.2 Move all duplicated business predicates into `domain/src/policy/`.**
+  **R1 IMPLEMENTED (Phase 2.2 — guard scope fix).** See handover 114.
+  R2 and R3 remain open.
+- [~] **2.2 Move all duplicated business predicates into `domain/src/policy/`.**
   These are deterministic functions over typed models — the *real* equivalent of
   katgpt-rs's pure-algorithm crates (`katgpt-core`). No traits-for-the-sake-of-traits;
   just `pub fn is_refundable(d: &Deposit, now_ms: i64, event_end_ms: i64) -> bool`.
@@ -171,6 +173,18 @@ honest version of Objective 2 is: **finish the SSOT migration, don't build a VM.
   The scope of *what to move* is therefore smaller than this task assumed; the
   remaining candidates (participation-type normalization, deposit-status enum
   mapping) still need their own audit (Task 2.1) before any moves.
+  **R1 IMPLEMENTED (Phase 2.2 — guard scope fix):** `frontend-leptos/tests/ssot_mirror_audit.rs`
+  `MIRROR_FILES` widened from `["src/api/types.rs"]` to
+  `["src/api/types.rs", "src/api/event.rs", "src/api/admin.rs"]`, closing the
+  Phase 2.3 silent-gap. Added 3 entries to `ALLOWED_MIRROR_PREDICATES`:
+  `EscrowStatus::is_active` (0 call sites; retained for parity),
+  `EventFormat::has_in_person` (7 call sites, load-bearing),
+  `EventFormat::has_online` (1 call site). Live-injection re-verification
+  extended to all 3 files in scope — guard fires correctly across each.
+  See handover 114. **R2 (eliminate worker `DepositMethod` serialization
+  sites) and R3 (substantive EventFormat/EscrowStatus type-merge decision)
+  remain open** — neither is required to close the Phase 2.3 guard gap; both
+  are tracked in `.plans/014_ssot_audit.md`.
 - [x] **2.3 Compile-gate both crates against `domain`.** Add a CI check that
   greps `worker/src/` and `frontend-leptos/src/` for re-implementations of any
   function exported from `domain::policy`. This is the structural enforcement

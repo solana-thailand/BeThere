@@ -321,16 +321,19 @@ domain `Display`/`as_str()`, tracked here but not actionable as predicates.
 
 ---
 
-## Recommendations for Phase 2.2 (NOT implemented in this audit)
+## Recommendations for Phase 2.2 (R1 implemented; R2/R3 open)
 
 Per Plan 014 Phase 2.2's own gate ("the remaining candidates ... still need
 their own audit (Task 2.1) before any moves"), this audit's output feeds 2.2.
-**No code changes made in this phase.** Recommended Phase 2.2 scope, in
-priority order:
+**No code changes were made in Phase 2.1 itself** — but R1 below was
+subsequently implemented as the Phase 2.2 guard scope fix (see handover 114).
+Recommended Phase 2.2 scope, in priority order:
 
-### R1. Fix the Phase 2.3 guard scope (highest priority — closes the silent gap)
+### R1. Fix the Phase 2.3 guard scope (highest priority — closes the silent gap) — ✅ IMPLEMENTED
 
-Widen `MIRROR_FILES` to include `api/event.rs` and `api/admin.rs`:
+**Status: Implemented in Phase 2.2 (guard scope fix). See handover 114.**
+
+Widened `MIRROR_FILES` from `["src/api/types.rs"]` to:
 ```rust
 const MIRROR_FILES: &[&str] = &[
     "src/api/types.rs",
@@ -338,10 +341,14 @@ const MIRROR_FILES: &[&str] = &[
     "src/api/admin.rs",
 ];
 ```
-Then add the three uncovered predicates to `ALLOWED_MIRROR_PREDICATES` with
+Added the three uncovered predicates to `ALLOWED_MIRROR_PREDICATES` with
 documented reasons (same `is_approved` pattern: mirror type with
-`#[serde(default)]`, delegation deferred until types merge). This converts
-the silent gap into a documented decision.
+`#[serde(default)]`, delegation deferred until types merge). The silent gap
+is now converted into a documented decision. Live-injection re-verification
+extended across all 3 files in scope — guard fires correctly on each. Audit
+baseline self-test updated to assert `mirror_predicates.len() == 4`.
+Frontend tests: 159 passing (unchanged). Workspace tests: 308 passing
+(unchanged). Zero new clippy warnings on the test file.
 
 ### R2. Eliminate the two `DepositMethod` serialization sites (worker)
 
@@ -429,6 +436,11 @@ is small, low-risk, and preserves the forward-looking regression-guard
 discipline. The two `DepositMethod` serialization sites (R2) are genuine,
 removable, zero-behavior-change refactors for Phase 2.2.
 
-**Phase 2.1 is complete.** No code changes were made. Output is this document.
-Phase 2.2 (moving predicates / eliminating duplication) remains gated on
-review of these findings, per the plan's own sequencing.
+**Phase 2.1 is complete.** No code changes were made during Phase 2.1 itself;
+the output was this document. **R1 has since been implemented** as the
+Phase 2.2 guard scope fix (see handover 114) — `MIRROR_FILES` widened,
+3 predicates added to the allowlist, live-injection re-verification extended
+across all 3 files in scope, audit baseline self-test updated to expect 4
+mirror predicates. R2 (worker `DepositMethod` serialization sites) and R3
+(substantive EventFormat/EscrowStatus type-merge decision) remain open and
+are not required to close the guard gap.

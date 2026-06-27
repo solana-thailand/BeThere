@@ -37,26 +37,31 @@
 //!   `Attendee::is_checked_in()` inline, not as a named method. Detecting this
 //!   requires semantic analysis of boolean expressions, not text scanning.
 //!   Documented as a known gap in `.plans/014_ssot_audit.md`.
-//! - **Mirror types outside `api/types.rs`.** The audit found that
-//!   `api/types.rs` is the only file with the `/// Mirrors domain::...` doc
-//!   comment pattern. If a second mirror-types file appears, this guard's
-//!   scope constant (`MIRROR_FILES`) must be updated.
+//! - **Mirror types outside `MIRROR_FILES`.** The guard scans only the files
+//!   listed in `MIRROR_FILES` (currently `api/types.rs`, `api/event.rs`,
+//!   `api/admin.rs`). If a new mirror-types file appears elsewhere in
+//!   `frontend-leptos/src/`, it must be added to `MIRROR_FILES` or coverage
+//!   silently drops. The Phase 2.1 audit found this was a real risk — the
+//!   Phase 2.3 version of this guard listed only `api/types.rs`, missing 3
+//!   load-bearing predicates in `api/event.rs`. See `.plans/014_ssot_audit.md`
+//!   §"Why the Phase 2.3 guard missed them".
 //! - **UI helper methods** (`as_str()`, `label()`, `css_class()`). These are
 //!   explicitly part of the mirror types' value-add and are NOT business
 //!   predicates. The guard only looks at `is_*`/`can_*`/`has_*`/etc.
 //!
-//! ## Audit baseline (2026-06-27)
+//! ## Audit baseline
 //!
-//! The audit-first pass found:
-//!
-//! - Domain exports 18 business predicates across 5 model types
-//!   (`Attendee`, `EventConfig`, `EventFormat`, `EscrowStatus`, `DepositStatus`,
-//!   plus `AppError` and `ColumnMapping` utility predicates).
-//! - Frontend mirror file `api/types.rs` re-implements exactly ONE business
-//!   predicate: `CheckInStatus::is_approved()` mirroring
-//!   `domain::models::attendee::CheckInStatus` (delegated via
-//!   `Attendee::is_approved()`).
-//! - The other 17 domain predicates are not mirrored in the frontend.
+//! - **2026-06-27 (Phase 2.3):** Initial audit. Domain exports 18 business
+//!   predicates across 5 model types (`Attendee`, `EventConfig`,
+//!   `EventFormat`, `EscrowStatus`, `DepositStatus`, plus `AppError` and
+//!   `ColumnMapping` utility predicates). Found 1 mirrored predicate
+//!   (`is_approved`) in `api/types.rs`.
+//! - **Phase 2.1 SSOT audit** (see `.plans/014_ssot_audit.md`): Re-audit
+//!   discovered the Phase 2.3 scope was too narrow. `api/event.rs` carries 3
+//!   additional mirrored business predicates (`EscrowStatus::is_active`,
+//!   `EventFormat::has_in_person`, `EventFormat::has_online`) — surfaced by
+//!   widening `MIRROR_FILES`, not by new code. Total mirrored predicates is
+//!   now **4**. The other 14 domain predicates are not mirrored.
 //!
 //! ## Run
 //!
@@ -87,7 +92,11 @@ fn workspace_root() -> PathBuf {
 /// **Adding a file here is a conscious decision.** If a new mirror-types file
 /// appears in the frontend, it must be added to this list or the guard's
 /// coverage silently drops.
-const MIRROR_FILES: &[&str] = &["src/api/types.rs"];
+const MIRROR_FILES: &[&str] = &[
+    "src/api/types.rs",
+    "src/api/event.rs",
+    "src/api/admin.rs",
+];
 
 /// Business-predicate naming prefixes. A method whose name starts with one of
 /// these prefixes is considered a business predicate (a function that encodes
@@ -126,15 +135,53 @@ struct AllowedMirrorPredicate {
 /// To add an entry: append a struct literal, fill in all three fields with a
 /// non-empty string, and re-run the test. The manifest self-check will verify
 /// your entry is well-formed.
-const ALLOWED_MIRROR_PREDICATES: &[AllowedMirrorPredicate] = &[AllowedMirrorPredicate {
-    method_name: "is_approved",
-    domain_source: "domain::models::attendee::Attendee::is_approved",
-    reason: "frontend CheckInStatus is a mirror type with #[serde(default)] \
+const ALLOWED_MIRROR_PREDICATES: &[AllowedMirrorPredicate] = &[
+    AllowedMirrorPredicate {
+        method_name: "is_approved",
+        domain_source: "domain::models::attendee::Attendee::is_approved",
+        reason: "frontend CheckInStatus is a mirror type with #[serde(default)] \
                  for safe partial-JSON deserialization. is_approved gates UI \
                  state (scanner tone, ticket hero variant) and must match \
                  domain's Approved|CheckedIn membership. Delegation deferred \
-                 until Phase 2.1 SSOT migration merges the two types.",
-}];
+                 until Phase 2.2 substantive type-merge decision (R3 in \
+                 .plans/014_ssot_audit.md).",
+    },
+    AllowedMirrorPredicate {
+        method_name: "is_active",
+        domain_source: "domain::models::event::EscrowStatus::is_active",
+        reason: "frontend EscrowStatus is a mirror type with #[serde(default)] \
+                 for safe partial-JSON deserialization. is_active encodes \
+                 domain's Initialized|Deactivated membership and blocks \
+                 archive/delete. 0 direct call sites as of Phase 2.1 audit \
+                 (UI uses string compare in cancel flow at \
+                 pages/admin_cancel.rs:129), but retained to surface the \
+                 predicate if cancel flow moves to typed comparisons. \
+                 Delegation deferred until Phase 2.2 substantive type-merge \
+                 decision (R3 in .plans/014_ssot_audit.md).",
+    },
+    AllowedMirrorPredicate {
+        method_name: "has_in_person",
+        domain_source: "domain::models::event::EventFormat::has_in_person",
+        reason: "frontend EventFormat is a mirror type with #[serde(default)] \
+                 for safe partial-JSON deserialization. has_in_person is \
+                 load-bearing (7 call sites: admin nav/scanner/deposit gates) \
+                 and must match domain's InPerson|Hybrid membership. If \
+                 domain adds a 4th variant, mirror must update in lockstep \
+                 or the UI silently shows wrong nav groups. Delegation \
+                 deferred until Phase 2.2 substantive type-merge decision \
+                 (R3 in .plans/014_ssot_audit.md).",
+    },
+    AllowedMirrorPredicate {
+        method_name: "has_online",
+        domain_source: "domain::models::event::EventFormat::has_online",
+        reason: "frontend EventFormat is a mirror type with #[serde(default)] \
+                 for safe partial-JSON deserialization. has_online gates \
+                 online registration UI (1 call site: admin form) and must \
+                 match domain's Online|Hybrid membership. Delegation \
+                 deferred until Phase 2.2 substantive type-merge decision \
+                 (R3 in .plans/014_ssot_audit.md).",
+    },
+];
 
 // ---------------------------------------------------------------------------
 // Layer 1 — Manifest well-formedness
@@ -472,21 +519,27 @@ mod self_tests {
 
     #[test]
     fn allowlist_covers_current_audit_baseline() {
-        // The 2026-06-27 audit found exactly one mirror predicate. If that
+        // After widening MIRROR_FILES to include api/event.rs (Phase 2.1
+        // audit fix), the audit baseline is 4 mirror predicates. If that
         // changes (more mirrors added and documented), update this test.
         // If it changes without documentation, the Layer 2 test will catch it.
         let mirror_predicates = collect_mirror_predicates();
         assert_eq!(
             mirror_predicates.len(),
-            1,
-            "audit baseline expected 1 mirror predicate, found {}. \
+            4,
+            "audit baseline expected 4 mirror predicates, found {}. \
              If you added a new mirror predicate, update this baseline test \
              AND add the predicate to ALLOWED_MIRROR_PREDICATES.",
             mirror_predicates.len()
         );
-        assert_eq!(
-            mirror_predicates[0], "is_approved",
-            "audit baseline expected the one mirror predicate to be `is_approved`"
-        );
+        // Verify the four known predicates are covered. Using contains rather
+        // than index-based assertions so a failure points at the missing
+        // predicate by name rather than as an index mismatch.
+        for expected in ["has_in_person", "has_online", "is_active", "is_approved"] {
+            assert!(
+                mirror_predicates.contains(&expected.to_string()),
+                "audit baseline expected mirror predicate `{expected}` but it was not found"
+            );
+        }
     }
 }
