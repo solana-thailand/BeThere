@@ -134,7 +134,7 @@ honest version of Objective 2 is: **finish the SSOT migration, don't build a VM.
   The scope of *what to move* is therefore smaller than this task assumed; the
   remaining candidates (participation-type normalization, deposit-status enum
   mapping) still need their own audit (Task 2.1) before any moves.
-- [ ] **2.3 Compile-gate both crates against `domain`.** Add a CI check that
+- [x] **2.3 Compile-gate both crates against `domain`.** Add a CI check that
   greps `worker/src/` and `frontend-leptos/src/` for re-implementations of any
   function exported from `domain::policy`. This is the structural enforcement
   katgpt-rs gets from `katgpt-core` being the only place SIMD kernels live.
@@ -142,6 +142,25 @@ honest version of Objective 2 is: **finish the SSOT migration, don't build a VM.
   duplication). The Phase 3.1 audit showed the retroactive remediation list for
   deposit/refund predicates is near-empty — the existing "duplication" there is
   intentional (entry #8). Build the detector; don't expect a big cleanup payoff.
+  **DONE — scope corrected** — the plan's premise (`domain::policy` exists) was
+  wrong: that module was never created. Business predicates are idiomatic
+  methods on `domain::models::*` (`Attendee::is_approved`, `DepositStatus::is_refundable_tier`,
+  etc., 18 predicates across 5 model types). The 6th consecutive Plan 014 audit
+  miss. The intended forward-looking guard shipped as
+  `frontend-leptos/tests/ssot_mirror_audit.rs` (9 tests, 4 layers):
+  (1) manifest well-formedness — every allowed mirror predicate has a non-empty
+  reason and a domain source; (2) mirror-file scan — every business predicate
+  (`is_*`/`can_*`/`has_*`/`should_*`/`requires_*`/`allows_*`) found in
+  `frontend-leptos/src/api/types.rs` must be in the allowlist; (3) manifest
+  drift — catches removed predicates whose allowlist entries were left behind;
+  (4) SSOT baseline — confirms domain's predicate count stays above the audit
+  floor (~18, floor 10). Audit baseline: domain exports 18 predicates; frontend
+  mirrors exactly one (`CheckInStatus::is_approved`), documented in the
+  allowlist as deferred to Phase 2.1 SSOT migration. A live injection test
+  confirmed the guard fires on `is_early_bird_eligible` with an actionable
+  message. Out of scope (documented in the test's doc comment): inline
+  re-implementations like `let is_checked_in = x.is_some()` — those need
+  semantic analysis, not text scanning.
 - [ ] **2.4 Type-state the escrow lifecycle** (`Created → DepositOpen →
   CheckedIn → Refundable → Claimable → Closed`). This is the *legitimate* sibling
   of katgpt-rs's `ConstraintPruner` trait — a compile-time FSM that makes invalid
