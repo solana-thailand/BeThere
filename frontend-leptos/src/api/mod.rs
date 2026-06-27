@@ -19,6 +19,7 @@ mod admin;
 mod privacy;
 mod profile;
 mod wallet;
+mod wire;
 
 // Re-export everything so existing `use crate::api::*` still works.
 pub use types::*;
@@ -34,6 +35,7 @@ pub use admin::*;
 pub use privacy::*;
 pub use profile::*;
 pub use wallet::*;
+pub use wire::*;
 
 use std::cell::RefCell;
 use std::collections::HashMap;

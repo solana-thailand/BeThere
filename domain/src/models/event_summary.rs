@@ -32,7 +32,13 @@ pub struct EventSummary {
 }
 
 /// Funnel counters — the top-line attendance funnel.
-#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+///
+/// Wire-ready (Plan 014 Phase 1.2a): pure `u64` fields, `#[repr(C)]` layout.
+/// Under the `wire` feature this also derives `Pod`/`Zeroable` so it can be
+/// shipped as a zero-copy binary blob alongside the canonical JSON form.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[repr(C)]
+#[cfg_attr(feature = "wire", derive(bytemuck::Pod, bytemuck::Zeroable))]
 pub struct FunnelSnapshot {
     /// Approved pre-event registrations (all tracks: in-person + online).
     pub registered_count: u64,
@@ -68,7 +74,11 @@ pub struct FunnelSnapshot {
 ///
 /// `usdc_*` use USDC atomic units (1 USDC = 1_000_000). `thb_*` use satang
 /// (1 THB = 100 satang). Convert to human amounts in the UI.
-#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+///
+/// Wire-ready (Plan 014 Phase 1.2a): pure `u64` fields, `#[repr(C)]` layout.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[repr(C)]
+#[cfg_attr(feature = "wire", derive(bytemuck::Pod, bytemuck::Zeroable))]
 pub struct FinancialSnapshot {
     pub usdc_deposited_total: u64,
     /// Phase 1 v1: USDC refunds are not summed (no `refunded` flag on

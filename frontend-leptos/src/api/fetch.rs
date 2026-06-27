@@ -4,6 +4,7 @@
 //! Uses `web_sys::window().fetch_with_request()` + `wasm_bindgen_futures::JsFuture`.
 
 use wasm_bindgen::prelude::*;
+use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{Request, RequestCache, RequestInit, RequestMode, Response};
 
@@ -115,6 +116,38 @@ pub(crate) async fn response_json<T: serde::de::DeserializeOwned>(
         message: format!("Failed to parse JSON: {e}"),
         status: 0,
     })
+}
+
+/// Read the response body as raw bytes via `ArrayBuffer`.
+///
+/// Used for the zero-copy wire path (Plan 014 Phase 1.3): when the worker
+/// responds with `Content-Type: application/x-bethere-bin`, the body is a
+/// BLAKE3-committed binary envelope that decoders cast in place via
+/// `bytemuck::from_bytes` — no string round-trip, no JSON parse.
+///
+/// The single copy here (ArrayBuffer → `Vec<u8>`) is unavoidable in the
+/// WASM↔JS boundary; the savings come from skipping `serde_json` on the result.
+pub(crate) async fn response_array_buffer(response: &Response) -> Result<Vec<u8>, ApiError> {
+    let promise = response.array_buffer().map_err(|e| ApiError {
+        message: format!("Failed to get response array_buffer promise: {e:?}"),
+        status: 0,
+    })?;
+    let ab_value = JsFuture::from(promise)
+        .await
+        .map_err(|e| ApiError {
+            message: format!("Failed to read response array_buffer: {e:?}"),
+            status: 0,
+        })?;
+    let array_buffer: js_sys::ArrayBuffer = ab_value
+        .dyn_into()
+        .map_err(|_| ApiError {
+            message: "Response body is not an ArrayBuffer".to_string(),
+            status: 0,
+        })?;
+    let u8_array = js_sys::Uint8Array::new(&array_buffer);
+    let mut buf = vec![0u8; u8_array.length() as usize];
+    u8_array.copy_to(&mut buf);
+    Ok(buf)
 }
 
 /// Convenience: GET request.

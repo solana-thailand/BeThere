@@ -25,6 +25,7 @@ pub mod user_log;
 pub mod waitlist;
 pub mod walkin;
 pub mod wallet;
+pub mod wire;
 
 use crate::state::AppState;
 use axum::{
@@ -85,6 +86,10 @@ pub fn routes(state: AppState) -> Router<()> {
         .route("/metadata/{event_id}", get(metadata::get_metadata))
         .route("/badge.svg", get(metadata::get_badge_svg))
         .route("/badge-hd.svg", get(metadata::get_badge_hd_svg))
+        // Wire-protocol smoke endpoint (Plan 014 Phase 1.3) — public, no auth.
+        // Returns a fixed LevelScore sample as JSON (default) or binary
+        // (?fmt=bin). Safe to remove after the GOAT-gate (Task 1.7) clears.
+        .route("/wire-sample/level-score", get(wire::level_score_sample))
         .merge(public_events_list)
         .merge(public_events_detail)
         .merge(auth_routes)

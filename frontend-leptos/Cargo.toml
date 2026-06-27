@@ -63,6 +63,22 @@ urlencoding = "2"
 # QR code — only the matrix/data structure, not the SVG renderer
 qrcode = { version = "0.14", default-features = false }
 
+# Shared domain crate (Plan 014 Phase 2.0 — SSOT prerequisite for wire format).
+# Path dep resolves to the workspace sibling; `frontend-leptos` is excluded from
+# the workspace Cargo.toml so it builds in isolation under `trunk`, but the path
+# is stable relative to the repo root.
+# `wire` feature is enabled so the frontend can decode zero-copy `*Wire` payloads
+# from `?fmt=bin` endpoints (Plan 014 Phase 1.3+). Existing JSON mirrors in
+# `api/types.rs` are deliberately kept — they carry defensive `#[serde(default)]`
+# and UI helper methods that the domain types intentionally lack.
+event-checkin-domain = { path = "../domain", features = ["wire"] }
+
+# Wire-format primitives — same versions as `domain` (Plan 014 Phase 1.2a).
+# Needed directly in the frontend because the decode path runs here (the worker
+# encodes, the Leptos client decodes). Both compile cleanly on `wasm32`.
+bytemuck = { version = "1", features = ["derive"] }
+blake3 = "1"
+
 [profile.release]
 opt-level = "z"
 lto = true
