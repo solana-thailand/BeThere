@@ -470,10 +470,28 @@ regardless of workload. They are the highest-ROI part of this plan.
   decode path is genuinely zero-alloc. Corrected the `unpack_slice` doc
   comment that previously overstated allocations as "BLAKE3 hasher's
   internal scratch" — there are none.
-- [ ] **5.5 Feature-flag every Phase 1–4 change.** Every optimization ships
+- [x] **5.5 Feature-flag every Phase 1–4 change.** Every optimization ships
   behind a Cargo feature (`wire`, `policy-traits`, `batch-kv-writes`) and a
   runtime config flag. Default-off until GOAT-gated; default-on only after
   proof. This is how katgpt-rs keeps 359 flags manageable.
+  **DONE — see `.plans/014_feature_flag_discipline.md`. Audit found the
+  discipline is correctly applied: (1) the `wire` feature (the only Phase 1–4
+  optimization that warranted a flag) is default-off in `domain/Cargo.toml`,
+  GOAT-gated by Phase 1.7 (6.2× decode, 73.5% size reduction), enabled in
+  consumers only after the gate cleared, and runtime-opt-in per request via
+  `?fmt=bin` (JSON stays default at every layer, smoke route at
+  `worker/src/handlers/mod.rs:92`). (2) The `policy-traits` flag does not
+  exist because Phase 3.2 was DEMOTED (negative-results entry #7 — no
+  behavioral polymorphism to gate; cannot flag an optimization that was
+  correctly never built). (3) The `batch-kv-writes` flag does not exist
+  because Phase 4.3's outcomes were all either already-satisfied by existing
+  code (4.3.1 cache, 4.3.3 quiz batching), a zero-behavior-change `join!`
+  parallelization (4.3.2 — flagging would be cargo-cult), or demoted as
+  unsafe (4.3.4). No optimization shipped default-on without GOAT-gate proof.
+  One honest caveat noted in the decision record: the `frontend-leptos/Cargo.toml`
+  comment slightly overstates wire usage (calls it production-active; only the
+  smoke route uses it). Docs-only closure; zero `.rs` / `Cargo.toml` / tests
+  touched.**
 
 ---
 
