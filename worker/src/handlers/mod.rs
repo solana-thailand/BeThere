@@ -9,6 +9,7 @@ pub mod contacts;
 pub mod dashboard;
 pub mod deposit;
 pub mod escrow_index;
+pub mod event_series;
 pub mod events;
 pub mod ext;
 pub mod health;
@@ -24,6 +25,7 @@ pub mod user_log;
 pub mod waitlist;
 pub mod walkin;
 pub mod wallet;
+pub mod wire;
 
 use crate::state::AppState;
 use axum::{
@@ -43,6 +45,13 @@ pub fn routes(state: AppState) -> Router<()> {
     // Public event detail: 120s cache (individual events rarely change)
     let public_events_detail = Router::new()
         .route("/public/event/{slug}", get(public_event::get_public_event))
+        // Event series (related events / prev-next). Shares the 120s cache —
+        // series structure changes rarely and the payload is derived from
+        // campaign_events + events, both already cached at this granularity.
+        .route(
+            "/public/event-series/{event_id}",
+            get(event_series::get_event_series),
+        )
         .layer(middleware::from_fn(
             crate::middleware::cache_public_120_layer,
         ));
@@ -77,6 +86,10 @@ pub fn routes(state: AppState) -> Router<()> {
         .route("/metadata/{event_id}", get(metadata::get_metadata))
         .route("/badge.svg", get(metadata::get_badge_svg))
         .route("/badge-hd.svg", get(metadata::get_badge_hd_svg))
+        // Wire-protocol smoke endpoint (Plan 014 Phase 1.3) — public, no auth.
+        // Returns a fixed LevelScore sample as JSON (default) or binary
+        // (?fmt=bin). Safe to remove after the GOAT-gate (Task 1.7) clears.
+        .route("/wire-sample/level-score", get(wire::level_score_sample))
         .merge(public_events_list)
         .merge(public_events_detail)
         .merge(auth_routes)
@@ -284,6 +297,12 @@ pub fn routes(state: AppState) -> Router<()> {
         )
         .route("/events/{id}/restore", post(events::restore_event))
         .route("/events/{id}/duplicate", post(events::duplicate_event))
+        // Post-event summary (Plan 008 — Phase 1): lazy freeze + manual trigger.
+        .route("/events/{id}/summary", get(events::get_event_summary))
+        .route(
+            "/events/{id}/summary/freeze",
+            post(events::freeze_event_summary),
+        )
         .route(
             "/events/{id}/poster",
             post(events::upload_poster).delete(events::delete_poster),

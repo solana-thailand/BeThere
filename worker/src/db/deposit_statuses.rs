@@ -2,6 +2,8 @@
 //!
 //! Deposit statuses stored exclusively in D1 (Phase 3e complete).
 
+use std::str::FromStr;
+
 use worker::D1Database;
 use worker::d1::D1Type;
 
@@ -349,15 +351,11 @@ fn row_to_deposit_status(row: serde_json::Value) -> Result<DepositStatus, String
         |field: &str| -> bool { row.get(field).and_then(|v| v.as_i64()).unwrap_or(0) != 0 };
 
     let method_str = get_str("method");
-    let method = match method_str.as_str() {
-        "usdc" => DepositMethod::Usdc,
-        "thb" => DepositMethod::Thb,
-        "credit_thb" => DepositMethod::CreditThb,
-        "credit_usdc" => DepositMethod::CreditUsdc,
-        other => {
-            return Err(format!("unknown DepositMethod: '{other}'"));
-        }
-    };
+    // SSOT: domain FromStr parses the snake_case wire form. Hand-mapping
+    // removed (Plan 014 Phase 2.2 R2). Error format is identical to the
+    // prior worker-side message ("unknown DepositMethod: '{other}'") so
+    // logs and e2e scripts see no behavior change.
+    let method = DepositMethod::from_str(&method_str)?;
 
     Ok(DepositStatus {
         attendee_id: get_str("attendee_id"),

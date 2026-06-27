@@ -51,7 +51,17 @@ pub struct AdventureProgress {
 }
 
 /// Score for a completed level.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+///
+/// Wire-ready (Plan 014 Phase 1.2a): all fixed-size primitives, `#[repr(C)]`
+/// layout (3 × u32 + u8 + 3 bytes explicit padding = 16 bytes). The `_pad`
+/// field is required by `bytemuck::Pod` — Pod rejects implicit compiler padding
+/// (uninitialized bytes), so the padding must be explicit and skipped on the
+/// JSON side. JSON output is byte-identical to the pre-wire form.
+///
+/// Used as the smoke-test target for the zero-copy wire pipeline.
+#[derive(Clone, Debug, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[repr(C)]
+#[cfg_attr(feature = "wire", derive(bytemuck::Pod, bytemuck::Zeroable))]
 pub struct LevelScore {
     /// Number of moves taken.
     pub moves: u32,
@@ -61,6 +71,10 @@ pub struct LevelScore {
     pub time_seconds: u32,
     /// Star rating (1-3) based on performance.
     pub stars: u8,
+    /// Explicit padding to make the struct 16 bytes with no holes — required
+    /// for `Pod`. Skipped on the JSON wire; receivers should zero it on encode.
+    #[serde(skip)]
+    pub _pad: [u8; 3],
 }
 
 /// Request to save level completion progress.

@@ -3,6 +3,7 @@
 //! Campaigns group events into series with completion tracking and rewards.
 //! Three tables: campaigns, campaign_events, developer_campaign_progress.
 
+use wasm_bindgen_futures::JsFuture;
 use worker::D1Database;
 
 // ---------------------------------------------------------------------------
@@ -618,4 +619,274 @@ pub(crate) async fn on_event_checkin(db: &D1Database, event_id: &str, developer_
 #[derive(Debug, Clone, serde::Deserialize)]
 struct TotalCountRow {
     cnt: i64,
+}
+
+// ---------------------------------------------------------------------------
+// Event Series Navigation (Plan 013 — public read for ticket page)
+// ---------------------------------------------------------------------------
+
+/// One entry in a campaign's ordered event list — only the public-facing fields
+/// needed to render prev/next + playlist links. Joined from `campaign_events`
+/// and `events`.
+#[derive(Debug, Clone, serde::Deserialize, PartialEq)]
+pub struct EventSeriesEntry {
+    pub event_id: String,
+    pub name: String,
+    pub slug: String,
+    pub event_start_ms: i64,
+    pub sequence_order: i64,
+}
+
+/// Reverse lookup: find the (first) campaign that contains this event.
+/// A campaign can always be resolved from an event because `campaign_events`
+/// has `idx_campaign_events_event` on `event_id`.
+///
+/// Returns `Ok(None)` when the event belongs to no campaign — the caller treats
+/// that as "hide the series section".
+pub(crate) async fn get_campaign_for_event(
+    db: &D1Database,
+    event_id: &str,
+) -> Result<Option<CampaignRow>, String> {
+    let sql = format!(
+        "SELECT c.* FROM campaigns c \
+         INNER JOIN campaign_events ce ON ce.campaign_id = c.id \
+         WHERE ce.event_id = '{event_id}' \
+         LIMIT 1"
+    );
+    // Bypass `.first::<T>()` — crashes on JsValue(null) when no row matches.
+    let stmt = db.prepare(&sql);
+    let raw_result = JsFuture::from(
+        stmt.inner()
+            .all()
+            .map_err(|e| format!("D1 get_campaign_for_event all() call: {e:?}"))?,
+    )
+    .await
+    .map_err(|e| format!("D1 get_campaign_for_event all() await: {e:?}"))?;
+
+    let results_key = wasm_bindgen::JsValue::from_str("results");
+    let raw_rows =
+        js_sys::Reflect::get(&raw_result, &results_key).unwrap_or(wasm_bindgen::JsValue::NULL);
+    let json_str = js_sys::JSON::stringify(&raw_rows)
+        .map(|s| s.as_string().unwrap_or_default())
+        .unwrap_or_default();
+
+    let mut rows: Vec<CampaignRow> =
+        serde_json::from_str(&json_str).map_err(|e| format!("deserialize campaign rows: {e:?}"))?;
+    Ok(rows.pop())
+}
+
+/// List a campaign's events in `sequence_order`, joined to `events` for the
+/// public-facing fields. Uses the raw JSON path to survive nullable columns
+/// and a missing `events` row (defensive — a dangling `campaign_events` row
+/// should not 500 the whole section).
+pub(crate) async fn list_campaign_event_summaries(
+    db: &D1Database,
+    campaign_id: &str,
+) -> Result<Vec<EventSeriesEntry>, String> {
+    let sql = format!(
+        "SELECT ce.event_id AS event_id, e.name AS name, e.slug AS slug, \
+                COALESCE(e.event_start_ms, 0) AS event_start_ms, ce.sequence_order AS sequence_order \
+         FROM campaign_events ce \
+         LEFT JOIN events e ON e.id = ce.event_id \
+         WHERE ce.campaign_id = '{campaign_id}' \
+         ORDER BY ce.sequence_order ASC, e.event_start_ms ASC"
+    );
+
+    let stmt = db.prepare(&sql);
+    let raw_result = JsFuture::from(
+        stmt.inner()
+            .all()
+            .map_err(|e| format!("D1 list_campaign_event_summaries all() call: {e:?}"))?,
+    )
+    .await
+    .map_err(|e| format!("D1 list_campaign_event_summaries all() await: {e:?}"))?;
+
+    let results_key = wasm_bindgen::JsValue::from_str("results");
+    let raw_rows =
+        js_sys::Reflect::get(&raw_result, &results_key).unwrap_or(wasm_bindgen::JsValue::NULL);
+    let json_str = js_sys::JSON::stringify(&raw_rows)
+        .map(|s| s.as_string().unwrap_or_default())
+        .unwrap_or_default();
+
+    // Deserialize defensively: skip any row missing an event_id (orphan link).
+    let rows: Vec<serde_json::Value> = serde_json::from_str(&json_str).unwrap_or_default();
+    let mut out = Vec::with_capacity(rows.len());
+    for r in rows {
+        let event_id = r.get("event_id").and_then(|v| v.as_str()).unwrap_or("");
+        if event_id.is_empty() {
+            continue;
+        }
+        out.push(EventSeriesEntry {
+            event_id: event_id.to_string(),
+            name: r
+                .get("name")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+            slug: r
+                .get("slug")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+            event_start_ms: r
+                .get("event_start_ms")
+                .and_then(|v| v.as_i64())
+                .unwrap_or(0),
+            sequence_order: r
+                .get("sequence_order")
+                .and_then(|v| v.as_i64())
+                .unwrap_or(0),
+        });
+    }
+    Ok(out)
+}
+
+/// Locate `current_event_id` within an ordered `events` list and resolve its
+/// previous/next neighbors by position.
+///
+/// Pure (no I/O) so the edge cases — first, last, single, orphan (linked but
+/// missing from the joined events list) — are unit-tested directly. Returns:
+///
+/// - `(index, Some(prev), Some(next))` in the middle of the list,
+/// - `(0, None, Some(next))` for the first event,
+/// - `(last, Some(prev), None)` for the last event,
+/// - `(-1, None, None)` when the event is not in the list (orphan link),
+///   or when the list is empty.
+///
+/// The index is `i64` (not `usize`) so `-1` can be serialized in the API
+/// response and the frontend can render the badge without a null-check dance.
+pub fn compute_series_neighbors(
+    events: &[EventSeriesEntry],
+    current_event_id: &str,
+) -> (i64, Option<EventSeriesEntry>, Option<EventSeriesEntry>) {
+    match events.iter().position(|e| e.event_id == current_event_id) {
+        Some(i) => {
+            let prev = if i > 0 {
+                events.get(i - 1).cloned()
+            } else {
+                None
+            };
+            let next = events.get(i + 1).cloned();
+            (i as i64, prev, next)
+        }
+        // Event is linked to the campaign but missing from the joined list
+        // (orphan campaign_events row, or events row deleted). Still return the
+        // series so the badge can show; just no prev/next.
+        None => (-1, None, None),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn entry(id: &str, seq: i64) -> EventSeriesEntry {
+        EventSeriesEntry {
+            event_id: id.to_string(),
+            name: format!("Event {id}"),
+            slug: format!("slug-{id}"),
+            event_start_ms: 0,
+            sequence_order: seq,
+        }
+    }
+
+    // Series with 3 events: A → B → C. Reused across the position tests.
+    fn three_event_series() -> Vec<EventSeriesEntry> {
+        vec![entry("A", 1), entry("B", 2), entry("C", 3)]
+    }
+
+    // --- Edge: empty list ---
+    #[test]
+    fn empty_list_returns_orphan_index() {
+        let (idx, prev, next) = compute_series_neighbors(&[], "A");
+        assert_eq!(idx, -1);
+        assert!(prev.is_none());
+        assert!(next.is_none());
+    }
+
+    // --- Edge: orphan (linked but missing from joined events list) ---
+    #[test]
+    fn orphan_event_returns_negative_index_and_no_neighbors() {
+        let events = three_event_series();
+        let (idx, prev, next) = compute_series_neighbors(&events, "ZZZ");
+        assert_eq!(idx, -1);
+        assert!(prev.is_none());
+        assert!(next.is_none());
+    }
+
+    // --- Edge: single-event campaign ---
+    #[test]
+    fn single_event_has_index_zero_and_no_neighbors() {
+        let events = vec![entry("solo", 1)];
+        let (idx, prev, next) = compute_series_neighbors(&events, "solo");
+        assert_eq!(idx, 0);
+        assert!(prev.is_none(), "single event should have no previous");
+        assert!(next.is_none(), "single event should have no next");
+    }
+
+    // --- Edge: first event in a multi-event series ---
+    #[test]
+    fn first_event_has_no_previous() {
+        let events = three_event_series();
+        let (idx, prev, next) = compute_series_neighbors(&events, "A");
+        assert_eq!(idx, 0);
+        assert!(prev.is_none(), "first event should have no previous");
+        assert_eq!(next.as_ref().unwrap().event_id, "B");
+    }
+
+    // --- Edge: last event in a multi-event series ---
+    #[test]
+    fn last_event_has_no_next() {
+        let events = three_event_series();
+        let (idx, prev, next) = compute_series_neighbors(&events, "C");
+        assert_eq!(idx, 2);
+        assert_eq!(prev.as_ref().unwrap().event_id, "B");
+        assert!(next.is_none(), "last event should have no next");
+    }
+
+    // --- Middle of the series ---
+    #[test]
+    fn middle_event_has_both_neighbors() {
+        let events = three_event_series();
+        let (idx, prev, next) = compute_series_neighbors(&events, "B");
+        assert_eq!(idx, 1);
+        assert_eq!(prev.as_ref().unwrap().event_id, "A");
+        assert_eq!(next.as_ref().unwrap().event_id, "C");
+    }
+
+    // --- Position is by list index, not sequence_order ---
+    // A campaign_events row could (theoretically) carry the same sequence_order
+    // twice; the handler relies on list position as the source of truth.
+    #[test]
+    fn neighbors_use_list_index_not_sequence_order() {
+        // Deliberately non-sequential order values; list order is A,B,C.
+        let events = vec![entry("A", 5), entry("B", 5), entry("C", 1)];
+        let (idx, prev, next) = compute_series_neighbors(&events, "B");
+        assert_eq!(idx, 1);
+        assert_eq!(prev.as_ref().unwrap().event_id, "A");
+        assert_eq!(next.as_ref().unwrap().event_id, "C");
+    }
+
+    // --- Neighbors are cloned by value, not by reference ---
+    #[test]
+    fn neighbors_carry_full_entry_payload() {
+        let events = three_event_series();
+        let (_, _, next) = compute_series_neighbors(&events, "B");
+        let n = next.unwrap();
+        assert_eq!(n.event_id, "C");
+        assert_eq!(n.name, "Event C");
+        assert_eq!(n.slug, "slug-C");
+        assert_eq!(n.sequence_order, 3);
+    }
+
+    // --- First match wins when an id appears twice (defensive) ---
+    #[test]
+    fn duplicate_event_id_uses_first_match() {
+        let events = vec![entry("dup", 1), entry("other", 2), entry("dup", 3)];
+        // First "dup" is at index 0 → no previous, next is "other".
+        let (idx, prev, next) = compute_series_neighbors(&events, "dup");
+        assert_eq!(idx, 0);
+        assert!(prev.is_none());
+        assert_eq!(next.as_ref().unwrap().event_id, "other");
+    }
 }

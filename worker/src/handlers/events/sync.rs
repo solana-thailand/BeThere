@@ -11,6 +11,7 @@ use axum::extract::{Path, State};
 use serde::Serialize;
 
 use event_checkin_domain::models::attendee::Attendee;
+use event_checkin_domain::models::attendee::ParticipationType;
 use event_checkin_domain::models::auth::Claims;
 use event_checkin_domain::models::error::AppError;
 
@@ -129,8 +130,7 @@ pub async fn sync_sheet_to_d1(
     // anyway, and the sync's job is identity + lifecycle, not the historical
     // (often meaningless) claim token from the sheet.
     let dup_tokens: std::collections::HashSet<String> = {
-        let mut counts: std::collections::HashMap<&str, usize> =
-            std::collections::HashMap::new();
+        let mut counts: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
         for a in &sheet_attendees {
             if let Some(t) = a.claim_token.as_deref().filter(|t| !t.is_empty()) {
                 *counts.entry(t).or_default() += 1;
@@ -288,15 +288,26 @@ fn normalize_approval_status(s: &str) -> String {
     }
 }
 
-/// Normalize participation type (sheet may have "In-Person", D1 stores "in_person").
+/// Normalize a participation_type value from the Sheet for D1 storage.
+///
+/// The Sheet is display-case (`In-Person`/`Online`) and may carry legacy or
+/// organizer-entered variants. D1 stores canonical snake_case.
+///
+/// Delegates to `ParticipationType::parse` for the two real participation
+/// modes, but **preserves non-participation sentinels** (`walkin`, `test`,
+/// empty) that are queried literally elsewhere or represent an unspecified
+/// value. Canonicalizing `walkin` to `other` would break walk-in detection;
+/// canonicalizing empty to `in_person` would be a silent data change on sync
+/// (deferred to the explicit backfill in Tier B 3.3).
 fn normalize_participation_type(s: &str) -> String {
-    match s.to_lowercase().as_str() {
-        s if s.contains("in-person") || s.contains("in person") || s.contains("physical") => {
-            "in_person".to_string()
-        }
-        s if s.contains("online") || s.contains("virtual") => "online".to_string(),
-        _ => s.to_lowercase(),
+    let lower = s.trim().to_lowercase();
+    // Pass through non-participation values unchanged: sentinels queried
+    // literally (`walkin`), junk reserved for manual review (`test`), and
+    // empty (unspecified — left for the explicit backfill to handle).
+    if lower.is_empty() || matches!(lower.as_str(), "walkin" | "test") {
+        return lower;
     }
+    ParticipationType::parse(s).as_str().to_string()
 }
 
 /// Derive deposit_status from the sheet's deposit columns.
@@ -334,4 +345,56 @@ fn opt_str(opt: &Option<String>) -> Option<&str> {
 /// Convert Option<String> to &str for required (non-nullable) D1 columns.
 fn req_str(opt: &Option<String>) -> &str {
     opt.as_deref().unwrap_or("")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::normalize_participation_type;
+
+    #[test]
+    fn normalize_display_case_to_canonical() {
+        // Sheet stores display-case; D1 stores canonical snake_case.
+        assert_eq!(normalize_participation_type("In-Person"), "in_person");
+        assert_eq!(normalize_participation_type("Online"), "online");
+    }
+
+    #[test]
+    fn normalize_canonical_stays_canonical() {
+        assert_eq!(normalize_participation_type("in_person"), "in_person");
+        assert_eq!(normalize_participation_type("online"), "online");
+    }
+
+    #[test]
+    fn normalize_handles_all_prod_variants() {
+        // Fixes the latent bug where the old matcher missed `in_person` (underscore).
+        assert_eq!(normalize_participation_type("IN-PERSON"), "in_person");
+        assert_eq!(normalize_participation_type("in person"), "in_person");
+        assert_eq!(normalize_participation_type("physical"), "in_person");
+        assert_eq!(normalize_participation_type("Virtual"), "online");
+    }
+
+    #[test]
+    fn normalize_preserves_walkin_sentinel() {
+        // `walkin` is a status marker queried literally — must NOT be
+        // canonicalized to `other` or `in_person`.
+        assert_eq!(normalize_participation_type("walkin"), "walkin");
+        assert_eq!(normalize_participation_type("Walkin"), "walkin");
+        assert_eq!(normalize_participation_type("WALKIN"), "walkin");
+    }
+
+    #[test]
+    fn normalize_preserves_test_sentinel() {
+        assert_eq!(normalize_participation_type("test"), "test");
+    }
+
+    #[test]
+    fn normalize_preserves_empty_and_maps_unknown_to_other() {
+        // Empty stays empty (not silently coerced to in_person on sync —
+        // that's deferred to the explicit backfill in Tier B 3.3).
+        assert_eq!(normalize_participation_type(""), "");
+        assert_eq!(normalize_participation_type("   "), "");
+        // Genuinely unrecognized junk → `other`.
+        assert_eq!(normalize_participation_type("TBD"), "other");
+        assert_eq!(normalize_participation_type("maybe"), "other");
+    }
 }

@@ -5,4 +5,5 @@ pub mod auth;
 pub mod deposit;
 pub mod error;
 pub mod event;
+pub mod event_summary;
 pub mod org;

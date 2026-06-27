@@ -1,5 +1,7 @@
 //! Deposit-related domain types for dual-track payment (USDC on-chain + THB off-chain).
 
+use std::str::FromStr;
+
 use serde::{Deserialize, Serialize};
 
 fn default_true() -> bool {
@@ -27,6 +29,25 @@ impl std::fmt::Display for DepositMethod {
             Self::Thb => write!(f, "thb"),
             Self::CreditThb => write!(f, "credit_thb"),
             Self::CreditUsdc => write!(f, "credit_usdc"),
+        }
+    }
+}
+
+// SSOT for string → enum parsing. Inverse of `Display`. Eliminates
+// cross-crate duplication: `worker` previously hand-mapped these strings in
+// `db/deposit_statuses.rs` (Plan 014 Phase 2.2 R2). The error format
+// `unknown DepositMethod: '{other}'` matches the prior worker-side message
+// exactly so error consumers (logs, e2e scripts) see no behavior change.
+impl FromStr for DepositMethod {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "usdc" => Ok(Self::Usdc),
+            "thb" => Ok(Self::Thb),
+            "credit_thb" => Ok(Self::CreditThb),
+            "credit_usdc" => Ok(Self::CreditUsdc),
+            other => Err(format!("unknown DepositMethod: '{other}'")),
         }
     }
 }
@@ -354,5 +375,75 @@ mod tests {
         // 0 hours → deadline == event_end_ms
         assert!(!deposit.is_past_deadline(event_end_ms, 0, event_end_ms));
         assert!(deposit.is_past_deadline(event_end_ms, 0, event_end_ms + 1));
+    }
+
+    // ── FromStr / Display round-trip (Plan 014 Phase 2.2 R2) ────────
+    //
+    // The worker previously hand-mapped these strings in
+    // `db/deposit_statuses.rs` and `handlers/attendee.rs`. The domain
+    // `FromStr`/`Display` impls are now the SSOT; these tests pin the
+    // exact wire strings so a future change cannot drift silently.
+
+    #[test]
+    fn test_deposit_method_from_str_round_trip() {
+        // Display → FromStr → identity for every variant.
+        for original in [
+            DepositMethod::Usdc,
+            DepositMethod::Thb,
+            DepositMethod::CreditThb,
+            DepositMethod::CreditUsdc,
+        ] {
+            let s = original.to_string();
+            let parsed: DepositMethod = s.parse().expect("round-trip should succeed");
+            assert_eq!(
+                parsed, original,
+                "Display/FromStr round-trip broke for {original:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_deposit_method_from_str_wire_strings() {
+        // Pin the exact snake_case wire strings emitted by serde
+        // (`rename_all = "snake_case"`) and accepted by `FromStr`. If
+        // either drifts, downstream workers, e2e scripts, and the D1
+        // `method` column all break.
+        assert_eq!(
+            "usdc".parse::<DepositMethod>().unwrap(),
+            DepositMethod::Usdc
+        );
+        assert_eq!("thb".parse::<DepositMethod>().unwrap(), DepositMethod::Thb);
+        assert_eq!(
+            "credit_thb".parse::<DepositMethod>().unwrap(),
+            DepositMethod::CreditThb
+        );
+        assert_eq!(
+            "credit_usdc".parse::<DepositMethod>().unwrap(),
+            DepositMethod::CreditUsdc
+        );
+
+        // Display output must match exactly (this is what the attendee
+        // handler now emits as the JSON `"method"` field via to_string()).
+        assert_eq!(DepositMethod::Usdc.to_string(), "usdc");
+        assert_eq!(DepositMethod::Thb.to_string(), "thb");
+        assert_eq!(DepositMethod::CreditThb.to_string(), "credit_thb");
+        assert_eq!(DepositMethod::CreditUsdc.to_string(), "credit_usdc");
+    }
+
+    #[test]
+    fn test_deposit_method_from_str_rejects_unknown_with_canonical_message() {
+        // Worker `db/deposit_statuses.rs` now propagates the FromStr error
+        // directly via `?`. The error format MUST stay
+        // `unknown DepositMethod: '{other}'` so logs, e2e scripts, and any
+        // error-display code see no behavior change. Pin the exact message.
+        let err = "bitcoin".parse::<DepositMethod>().unwrap_err();
+        assert_eq!(err, "unknown DepositMethod: 'bitcoin'");
+
+        // Empty string and PascalCase are also rejected (serde rejects
+        // PascalCase too — see frontend-leptos/tests/serde_contract.rs).
+        let err = "".parse::<DepositMethod>().unwrap_err();
+        assert_eq!(err, "unknown DepositMethod: ''");
+        let err = "Usdc".parse::<DepositMethod>().unwrap_err();
+        assert_eq!(err, "unknown DepositMethod: 'Usdc'");
     }
 }

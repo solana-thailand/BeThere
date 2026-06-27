@@ -119,7 +119,7 @@ pub async fn save_level_completion(
     // Update score (keep best)
     let existing = progress.scores.get(level_id);
     let best_score = match existing {
-        Some(prev) if prev.stars >= score.stars => prev.clone(),
+        Some(prev) if prev.stars >= score.stars => *prev,
         _ => score,
     };
     progress.scores.insert(level_id.to_string(), best_score);

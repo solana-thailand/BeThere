@@ -311,6 +311,11 @@ pub fn OnlineView(
         // Community links
         {crate::pages::ticket::community_links::community_links_section(community_links.clone(), crate::pages::ticket::community_links::CommunityLinksVariant::Ticket)}
 
+        // 5b. Event series navigation (Plan 013) — "Part of {Series}" + prev/next.
+        // Renders nothing when the event has no campaign, so it's safe to mount
+        // unconditionally; the component self-hides on 404/error/loading.
+        <super::series_nav::SeriesNav event_id=event_id.clone() />
+
         // 6. Footer
         <div class="ticket-footer">
             <div class="ticket-nav">

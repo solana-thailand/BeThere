@@ -17,8 +17,8 @@ use crate::icons::{Icon, IconName};
 use crate::pages::{
     admin::Admin, adventure::page::Adventure, claim::Claim, dashboard_live::DashboardLive,
     data_privacy::DataPrivacy, deposit::Deposit, dev_dashboard::DevDashboard,
-    dev_profile::DevProfile, landing::Landing, login::Login, privacy::Privacy,
-    public_event::PublicEvent, scanner::Scanner, ticket::page::Ticket,
+    dev_profile::DevProfile, event_summary::EventSummary, landing::Landing, login::Login,
+    privacy::Privacy, public_event::PublicEvent, scanner::Scanner, ticket::page::Ticket,
 };
 
 /// Main application component.
@@ -71,6 +71,7 @@ pub fn App() -> impl IntoView {
                     <Route path=path!("/staff") view=ProtectedScanner />
                     <Route path=path!("/admin") view=ProtectedAdmin />
                     <Route path=path!("/dashboard/live") view=ProtectedLiveDashboard />
+                    <Route path=path!("/events/:id/summary") view=ProtectedEventSummary />
                 </Routes>
             </main>
         </Router>
@@ -115,6 +116,21 @@ fn ProtectedLiveDashboard() -> impl IntoView {
     view! {
         <ProtectedRoute>
             <DashboardLive />
+        </ProtectedRoute>
+    }
+}
+
+/// Protected wrapper for the post-event summary page.
+///
+/// Same auth guard as `ProtectedAdmin`. Organizer-only view of the frozen
+/// funnel + financials snapshot; the freeze mutation is also organizer+
+/// (enforced server-side), so wrapping in `ProtectedRoute` prevents a Staff
+/// user from even loading the page and seeing the summary data.
+#[component]
+fn ProtectedEventSummary() -> impl IntoView {
+    view! {
+        <ProtectedRoute>
+            <EventSummary />
         </ProtectedRoute>
     }
 }

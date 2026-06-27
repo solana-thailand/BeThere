@@ -8,6 +8,15 @@ description = "Shared domain types and logic for event-checkin (compiles x86_64 
 default = ["qr"]
 # QR code generation (SVG + URL builder). Used by worker for batch QR generation.
 qr = ["dep:qrcode", "dep:base64"]
+# Zero-copy wire protocol (Plan 014 Phase 1.2a). Off by default — JSON stays the
+# canonical wire format. Enables `Pod`/`Zeroable` derives on flat snapshot types
+# and a BLAKE3-committed binary envelope. Opt-in per endpoint via `?fmt=bin`.
+wire = ["dep:bytemuck", "dep:blake3"]
+# Allocation-counting instrumentation for Plan 014 Phase 5.4 zero-alloc audits.
+# Test-only; never enabled in production builds. When active, the
+# `domain/tests/alloc_count.rs` integration test installs a counting global
+# allocator and asserts decode-path allocation counts after warmup.
+alloc_count = []
 
 [dependencies]
 # Serialization — WASM-compatible
@@ -25,3 +34,22 @@ urlencoding = "2"
 
 # Time — WASM-compatible
 chrono = { version = "0.4", features = ["serde"] }
+
+# Zero-copy wire primitives (Plan 014 Phase 1.2a). Feature-gated under `wire`.
+# `bytemuck` is a no-op cast on both x86_64 and wasm32 — zero allocation, zero copy.
+bytemuck = { version = "1", features = ["derive"], optional = true }
+# BLAKE3 commitment for wire envelope integrity + cache invalidation.
+blake3 = { version = "1", optional = true }
+
+[dev-dependencies]
+# Microbench harness for Plan 014 Phase 1.7 (GOAT-gate).
+# Real-only: criterion uses `instant`/`time` which are desktop-only, so the
+# bench does NOT compile on wasm32 — and the GOAT-gate is a *host* decision
+# (is JSON decode fast enough that we shouldn't ship a new format?). The
+# bench is therefore x86_64-only.
+criterion = { version = "0.5", default-features = false, features = ["plotters", "cargo_bench_support"] }
+
+[[bench]]
+name = "wire_bench"
+harness = false
+required-features = ["wire"]

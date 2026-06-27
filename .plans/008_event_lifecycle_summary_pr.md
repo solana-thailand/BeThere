@@ -70,9 +70,12 @@ Plan 004 shipped the refund-gate fix; plans 005–007 are about hardening and ne
 
 ## 3. Implementation
 
-### 3.0 Migration 0019 — schema foundation
+### 3.0 Migration 0020 — schema foundation
 
-New file: `worker/migrations/0019_event_summaries_post_event.sql`
+> **Note (updated 2026-06-24):** The `0019` slot was taken by `0019_event_poster.sql`
+> (Plan 009 — event poster URL). This migration is renumbered to **0020**.
+
+New file: `worker/migrations/0020_event_summaries_post_event.sql`
 
 ```sql
 -- Plan 008: Event lifecycle — summary snapshots, recap, post-event registration.
@@ -452,7 +455,7 @@ To keep this from becoming a surprise as the worker grows, this plan adds `worke
 
 ### Migration
 
-- `worker/migrations/0019_event_summaries_post_event.sql` — **new**
+- `worker/migrations/0020_event_summaries_post_event.sql` — **new** (renumbered from 0019; slot taken by `0019_event_poster.sql`)
 
 ### Domain
 

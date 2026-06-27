@@ -11,6 +11,7 @@ mod campaign;
 mod contacts;
 mod dashboard;
 mod event;
+mod event_series;
 mod attendee;
 mod deposit;
 mod claim;
@@ -18,6 +19,7 @@ mod admin;
 mod privacy;
 mod profile;
 mod wallet;
+mod wire;
 
 // Re-export everything so existing `use crate::api::*` still works.
 pub use types::*;
@@ -25,6 +27,7 @@ pub use campaign::*;
 pub use contacts::*;
 pub use dashboard::*;
 pub use event::*;
+pub use event_series::*;
 pub use attendee::*;
 pub use deposit::*;
 pub use claim::*;
@@ -32,6 +35,7 @@ pub use admin::*;
 pub use privacy::*;
 pub use profile::*;
 pub use wallet::*;
+pub use wire::*;
 
 use std::cell::RefCell;
 use std::collections::HashMap;

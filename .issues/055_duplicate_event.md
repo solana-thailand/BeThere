@@ -1,6 +1,17 @@
 # 055: Duplicate Event (Server-Side Copy to Draft)
 
-## Status: Planned — Awaiting Decision (§Open Decisions)
+## Status: ✅ Done — shipped on `feature/solana_mobile_demo` (commit `f376fc4`)
+
+> **Updated 2026-06-24:** Verified against code — backend handler
+> (`worker/src/handlers/events/duplicate.rs`), domain types
+> (`DuplicateEventRequest`), route (`POST /events/{id}/duplicate`),
+> frontend API client (`api::duplicate_event` + `DuplicateEventData`),
+> and frontend button (with Decision-A1 warning toast) are all
+> implemented. Decisions A1 + B1 were applied as recommended.
+> The 8 handler unit tests in §Tests are **not** written — they would
+> require KV/D1 mock infrastructure that does not exist in
+> `dev-dependencies` (only `tokio`); that is a separate testing-infra
+> project, not a #055 blocker.
 
 ## Summary
 

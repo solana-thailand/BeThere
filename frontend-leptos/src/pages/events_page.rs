@@ -199,6 +199,7 @@ pub fn EventsPage(
                                 let restore_id = evt.id.clone();
                                 let delete_id = evt.id.clone();
                                 let dup_id = evt.id.clone();
+                                let summary_id = evt.id.clone();
                                 let can_manage = components::can_manage_events(&user_role.get());
                                 let is_draft = evt.status == api::EventStatus::Draft;
                                 let is_archived = evt.status == api::EventStatus::Archived;
@@ -252,6 +253,21 @@ pub fn EventsPage(
                                                     }>
                                                         "Edit Event"
                                                     </button>
+                                                }.into_any()
+                                            } else {
+                                                view! { <span></span> }.into_any()
+                                            }}
+                                            // Summary link — gated by can_manage_events (organizer+).
+                                            // Opens the post-event summary view (Plan 008 Phase 1).
+                                            {if can_manage {
+                                                let sid = summary_id.clone();
+                                                view! {
+                                                    <a
+                                                        class="btn btn-outline btn-sm"
+                                                        href=format!("/events/{sid}/summary")
+                                                    >
+                                                        "Summary"
+                                                    </a>
                                                 }.into_any()
                                             } else {
                                                 view! { <span></span> }.into_any()
@@ -476,6 +492,7 @@ pub fn EventsPage(
                             let edit_id = event.id.clone();
                             let archive_id = event.id.clone();
                             let event_slug = event.slug.clone();
+                            let summary_id = event.id.clone();
                             let badge_class = status_badge_class(&event.status);
                             let status_text = status_label(&event.status);
                             let start = format_date_display(event.event_start_ms);
@@ -538,6 +555,13 @@ pub fn EventsPage(
                                                 rel="noopener noreferrer"
                                             >
                                                 "Public Link"
+                                            </a>
+                                            // Summary link — post-event summary view (Plan 008 Phase 1).
+                                            <a
+                                                class="btn btn-outline btn-sm"
+                                                href=format!("/events/{summary_id}/summary")
+                                            >
+                                                "Summary"
                                             </a>
                                             <button
                                                 class="btn btn-outline btn-sm"
