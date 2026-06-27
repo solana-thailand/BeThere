@@ -310,11 +310,38 @@ regardless of workload. They are the highest-ROI part of this plan.
   modeled on katgpt-rs's `.docs/20_negative_results.md`. Record every demoted
   idea (Transformer VM, neuro-symbolic policies, SIMD) with the *reason*. Future
   agents/readers save time by not re-proposing them.
-- [ ] **5.3 Sigmoid-not-softmax discipline → deterministic-not-stochastic.**
+- [x] **5.3 Sigmoid-not-softmax discipline → deterministic-not-stochastic.**
   katgpt-rs has a hard rule "sigmoid, never softmax" for sound mathematical
   reasons. Our equivalent hard rule for monetary code: **deterministic, never
   stochastic**. No RNG in policy decisions, no probabilistic gates on refunds.
   Encode as a clippy lint or `#[deny]`-style test where feasible.
+  **DONE** — custom clippy lints require nightly, so the discipline is encoded
+  as a multi-layer regression guard in `worker/tests/deterministic_monetary_code.rs`
+  (23 tests). Audit-first pass confirmed the codebase is already compliant:
+  no `rand` / `fastrand` / `getrandom` / `rand_core` dependency anywhere in
+  the workspace; every monetary decision path (refund verify, claim lock
+  acquisition, escrow status, deposit verify, THB slip verify) already uses
+  purely deterministic business rules. The guard then locks that state in:
+  (1) **dependency layer** — asserts `worker/Cargo.toml` declares no direct
+  RNG crate (`rand`, `fastrand`, `getrandom`, `rand_core`, `rand_chacha`,
+  `rand_pcg`, `rand_xorshift`); (2) **source-scan layer** — recursively
+  scans every `.rs` file under the monetary module tree
+  (`claim/`, `solana_escrow/`, `escrow_indexer/`, `handlers/deposit/`, plus
+  explicit `claim.rs`, `escrow_index.rs`, `checkin.rs`, `register.rs`,
+  `walkin.rs`, `wallet.rs`) for forbidden direct RNG patterns
+  (`rand::thread_rng`, `OsRng`, `StdRng`, `ChaCha*Rng`, `RngCore`,
+  `Math::random`, `getRandomValues`, `get_random_values`, `gen_range`,
+  `fill_bytes`); (3) **scope-sanity layer** — catches the silent-regression
+  case where a refactor moves monetary code out of the scanned tree. 20
+  self-tests prove the patterns catch real RNG introductions (rand crate,
+  OsRng, ChaCha20Rng, JS `Math::random`, Web Crypto `getRandomValues`,
+  `RngCore` trait) while rejecting deterministic lookalikes
+  (`Uuid::now_v7`, `chrono::Utc::now`, BLAKE3, SHA-256, FNV-1a,
+  deterministic shuffles). A live injection test confirmed the guard fires
+  with a clear file:line message when a forbidden pattern is introduced.
+  `Uuid::now_v7()` is explicitly allowed — it generates identifiers, not
+  decisions; its random tail is collision-avoidance for same-millisecond
+  UUIDs, never a policy input.
 - [x] **5.4 Zero-allocation hot-path audits.** katgpt-rs measures allocs/call on
   every hot kernel. Apply the same to the zero-copy decode path from Phase 1
   (`#[cfg(feature = "alloc_count")]` + a test asserting 0 allocs after warmup).
