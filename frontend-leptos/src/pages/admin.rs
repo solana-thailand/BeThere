@@ -241,6 +241,20 @@ pub fn Admin() -> impl IntoView {
     // Active section — Events by default (organizers create event first)
     let (active_section, set_active_section) = signal(AdminSection::Events);
 
+    // Promote-event-→-campaign handoff: EventsPage writes the payload, the
+    // watcher Effect below switches section to Campaigns, and CampaignsPage
+    // consumes the payload on mount (then clears the signal).
+    let (pending_promote_event, set_pending_promote_event) =
+        signal(None::<crate::pages::campaigns_page::PromoteEventPayload>);
+
+    // When a promote payload appears, jump to the Campaigns section so
+    // CampaignsPage mounts and can consume it.
+    Effect::new(move |_| {
+        if pending_promote_event.get().is_some() {
+            set_active_section.set(AdminSection::Campaigns);
+        }
+    });
+
     // Active tab — In-Person by default
     let (active_tab, set_active_tab) = signal(DashboardTab::InPerson);
 
@@ -1804,12 +1818,21 @@ pub fn Admin() -> impl IntoView {
 
                 // Campaigns section (Issue #049 Phase 3)
                 <Show when=move || active_section.get() == AdminSection::Campaigns fallback=|| view! { <div></div> }>
-                    <crate::pages::campaigns_page::CampaignsPage set_toast=set_toast active_event_id=active_event_id />
+                    <crate::pages::campaigns_page::CampaignsPage
+                        set_toast=set_toast
+                        active_event_id=active_event_id
+                        pending_promote_event=pending_promote_event
+                        set_pending_promote_event=set_pending_promote_event
+                    />
                 </Show>
 
                 // Events section
                 <Show when=move || active_section.get() == AdminSection::Events fallback=|| view! { <div></div> }>
-                    <crate::pages::events_page::EventsPage set_toast=set_toast active_event_id=active_event_id />
+                    <crate::pages::events_page::EventsPage
+                        set_toast=set_toast
+                        active_event_id=active_event_id
+                        set_pending_promote_event=set_pending_promote_event
+                    />
                 </Show>
                 </main>
             </div>

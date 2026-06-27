@@ -33,6 +33,10 @@ enum EventsView {
 pub fn EventsPage(
     #[prop(name = "set_toast")] set_toast: WriteSignal<Option<components::ToastMessage>>,
     #[prop(name = "active_event_id")] active_event_id: ReadSignal<Option<String>>,
+    #[prop(name = "set_pending_promote_event")]
+    set_pending_promote_event: WriteSignal<
+        Option<crate::pages::campaigns_page::PromoteEventPayload>,
+    >,
 ) -> impl IntoView {
     // Get user role from ProtectedRoute context for role-based UI
     let user_role = use_context::<ReadSignal<String>>().unwrap_or_else(|| {
@@ -324,6 +328,31 @@ pub fn EventsPage(
                                                         }
                                                     >
                                                         "Duplicate"
+                                                    </button>
+                                                }.into_any()
+                                            } else {
+                                                view! { <span></span> }.into_any()
+                                            }}
+                                            // Promote to Campaign — gated by can_manage_events.
+                                            // Hands the event off to CampaignsPage, which pre-fills
+                                            // the create form and auto-links this event as the first
+                                            // campaign event on save.
+                                            {if can_manage {
+                                                let pid = evt.id.clone();
+                                                let pname = evt.name.clone();
+                                                view! {
+                                                    <button
+                                                        class="btn btn-outline btn-sm"
+                                                        on:click=move |_| {
+                                                            set_pending_promote_event.set(Some(
+                                                                crate::pages::campaigns_page::PromoteEventPayload {
+                                                                    event_id: pid.clone(),
+                                                                    event_name: pname.clone(),
+                                                                },
+                                                            ));
+                                                        }
+                                                    >
+                                                        "Promote to Campaign"
                                                     </button>
                                                 }.into_any()
                                             } else {
