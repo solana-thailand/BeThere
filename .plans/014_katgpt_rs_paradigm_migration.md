@@ -120,11 +120,48 @@ honest version of Objective 2 is: **finish the SSOT migration, don't build a VM.
 
 ### Tasks
 
-- [ ] **2.1 Audit logic duplicated across `worker/src/` and `frontend-leptos/src/`.**
+- [x] **2.1 Audit logic duplicated across `worker/src/` and `frontend-leptos/src/`.**
   Candidates: participation-type normalization (worker has `normalize_override`,
   leptos likely re-implements display logic), deposit-status enum mapping (worker
   matches on `DepositMethod` → string in 3+ places), escrow-state predicates.
   Produce list in `.plans/014_ssot_audit.md`.
+  **DONE → `.plans/014_ssot_audit.md`.** The 7th consecutive Plan 014 audit
+  where the plan's premises did not match the codebase — but this time the
+  audit surfaced a real, actionable finding:
+
+  - **Participation-type normalization: NOT duplicated.** Domain provides the
+    full SSOT (`ParticipationType::parse`/`as_str`/`display`); worker's
+    `normalize_override` is a thin HTTP-input validation wrapper that delegates
+    to domain; frontend carries `participation_type` as a raw string and does
+    not parse client-side. Legitimate separation of concerns (same pattern as
+    Phase 3.1's two-stage guard / negative-results #8).
+  - **DepositMethod mapping: 2 genuine removable sites (not "3+").** Worker
+    hand-maps `enum → string` at `handlers/attendee.rs:367-372` (duplicates
+    `Display::to_string()`) and `string → enum` at `db/deposit_statuses.rs:352-360`
+    (duplicates serde deserialize). The 9 sites of `method == DepositMethod::Usdc`
+    are type-safe equality checks, not serialization dup — mild ergonomic smell
+    only. Frontend `label()`/`icon_name()` are legitimately UI presentation.
+  - **Escrow/EventFormat predicates: 3 mirrored business predicates UNCOVERED
+    by the Phase 2.3 guard.** `api/event.rs` mirrors `EscrowStatus::is_active()`,
+    `EventFormat::has_in_person()` (7 active call sites), and
+    `EventFormat::has_online()` (1 call site) — all three are uncovered because
+    the Phase 2.3 guard's `MIRROR_FILES = &["src/api/types.rs"]` excludes
+    `api/event.rs`. The guard's own doc comment assumed `api/types.rs` was the
+    only mirror file, based on a text-pattern search for `/// Mirrors domain::`
+    that missed `api/event.rs`'s lowercase `mirrors backend X` wording. If
+    domain tightens `has_in_person()`, the frontend mirror silently diverges.
+
+  **Domain predicate baseline re-verified: 18** (matches Phase 2.3 baseline).
+  **Worker escrow-side: NOT duplicated** (worker uses domain's typed
+  `EscrowStatus` directly; zero status-string comparisons found).
+
+  **Recommendations for Phase 2.2** (documented in `.plans/014_ssot_audit.md`,
+  not implemented): R1 — widen Phase 2.3 guard's `MIRROR_FILES` to include
+  `api/event.rs` and `api/admin.rs`, and add the 3 uncovered predicates to the
+  allowlist with documented reasons (highest priority, closes silent gap);
+  R2 — eliminate the 2 `DepositMethod` serialization sites in worker (zero
+  behavior change); R3 — defer the substantive EventFormat/EscrowStatus
+  type-merge decision to a dedicated session.
 - [ ] **2.2 Move all duplicated business predicates into `domain/src/policy/`.**
   These are deterministic functions over typed models — the *real* equivalent of
   katgpt-rs's pure-algorithm crates (`katgpt-core`). No traits-for-the-sake-of-traits;
