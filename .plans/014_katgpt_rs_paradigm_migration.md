@@ -220,11 +220,45 @@ honest version of Objective 2 is: **finish the SSOT migration, don't build a VM.
   message. Out of scope (documented in the test's doc comment): inline
   re-implementations like `let is_checked_in = x.is_some()` — those need
   semantic analysis, not text scanning.
-- [ ] **2.4 Type-state the escrow lifecycle** (`Created → DepositOpen →
+- [x] **2.4 Type-state the escrow lifecycle** (`Created → DepositOpen →
   CheckedIn → Refundable → Claimable → Closed`). This is the *legitimate* sibling
   of katgpt-rs's `ConstraintPruner` trait — a compile-time FSM that makes invalid
   state transitions not compile. Limit to escrow (the one place state-machine
   correctness has monetary consequences).
+  **DONE — plan demoted, audit-first concluded (8th consecutive audit miss).**
+  The plan's 6-state premise does not match the codebase. Reality is three
+  separate state surfaces that the plan conflates into one:
+  (1) **Event-level escrow** (`domain::models::event::EscrowStatus`, 5 states:
+  `None → Initialized → Deactivated → Closed` + parallel `Cancelled`). Doc
+  comment at `domain/src/models/event.rs:117-118` names this machine explicitly.
+  (2) **Per-attendee deposit** (`DepositStatus`, `ThbDeposit`) — **no typed
+  state at all**; lifecycle is independent boolean flags (`verified`,
+  `refundable`, `rejected` on `DepositStatus`; `verified`, `refunded` on
+  `ThbDeposit`). The plan's `CheckedIn` and `Claimable` states aren't even
+  represented off-chain.
+  (3) **On-chain program** — `EventEscrow.is_active: bool` + `AttendeeDeposit.checked_in: bool`
+  + `refunded: bool`. No status enum on-chain; the off-chain `EscrowStatus` is
+  a projection/summary.
+  **Transition enforcement already exists in three layers**: (a) on-chain
+  Anchor `constraints` (e.g. `deactivate_event.rs:25` requires `is_active()`);
+  (b) worker runtime allowlist at `worker/src/event_store/write.rs:502-506`
+  covering all 5 legal transitions with typed error `invalid escrow status
+  transition: {source} → {target}`; (c) drift detection at
+  `worker/src/handlers/deposit/escrow/status.rs:373-383` (`escrow_health_handler`).
+  **A compile-time type-state FSM is the wrong tool** because it cannot reach
+  across the off-chain/on-chain boundary (the authoritative state machine lives
+  in Anchor/Quasar, not Rust type-state) or across the domain/worker crate
+  boundary (writes go through serde deserialization, which cannot preserve
+  type-state). The genuine monetary-correctness risk is **drift between the
+  three layers**, not missing enforcement. Type-state cannot solve cross-layer
+  drift.
+  **Recommendation R1 (positive follow-up):** add a contract test pinning the
+  worker's runtime transition allowlist (5 legal × 20 illegal transitions,
+  exact error format) — same discipline as the Phase 2.3 SSOT guard and the
+  Phase 5.3 deterministic guard. **R2:** this audit document is the
+  architecture note. **R3:** do NOT implement the plan's type-state FSM.
+  Full findings in `.plans/014_phase2_4_typestate_audit.md`; negative-results
+  entry #10 in `.plans/014_negative_results.md`.
 - [ ] **2.5 Do NOT compile business logic to a standalone WASM module.** The
   worker already runs as WASM; the leptos client already runs as WASM; both link
   `domain`. A separate "logic WASM" would add a third WASM artifact with zero

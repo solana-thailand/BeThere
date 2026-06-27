@@ -328,6 +328,84 @@ on finalized commitment's ~13s expiration reduction; BeThere's
 
 ---
 
+## 10. Type-state escrow lifecycle FSM (Plan 014 Phase 2.4)
+
+**Status:** Demoted after audit-first pass. **The plan's premise — a single
+6-state typed FSM — does not match the codebase.** This is the **8th
+consecutive Plan 014 audit miss**. See `.plans/014_phase2_4_typestate_audit.md`
+for the full findings; this entry is the durable negative-results record.
+
+**Original framing:** Implement a compile-time type-state FSM over the
+"escrow lifecycle" with 6 states (`Created → DepositOpen → CheckedIn →
+Refundable → Claimable → Closed`). The plan described this as "the
+legitimate sibling of katgpt-rs's `ConstraintPruner` trait — a compile-time
+FSM that makes invalid state transitions not compile. Limit to escrow (the
+one place state-machine correctness has monetary consequences)."
+
+**Why demoted — three layers:**
+
+1. **The plan's 6 states don't exist as a single typed FSM anywhere.** The
+   codebase has **two separate state surfaces** that the plan conflates into
+   one:
+   - **Event-level escrow** (`domain::models::event::EscrowStatus`, 5 states:
+     `None, Initialized, Deactivated, Closed, Cancelled`). Doc comment at
+     `domain/src/models/event.rs:117-118` explicitly names the state machine
+     as `None → Initialized → Deactivated → Closed`.
+   - **Per-attendee deposit** (`DepositStatus`, `ThbDeposit`) — **no typed
+     state at all**. Lifecycle is encoded as independent boolean flags
+     (`verified`, `refundable`, `rejected` on `DepositStatus`; `verified`,
+     `refunded` on `ThbDeposit`). The states `CheckedIn` and `Claimable`
+     from the plan's premise are not even represented off-chain — they live
+     only on the on-chain `AttendeeDeposit` account.
+
+2. **The on-chain program uses booleans, not a typed state.** `EventEscrow`
+   has `is_active: bool`; `AttendeeDeposit` has `checked_in: bool` +
+   `refunded: bool`. The `EscrowStatus` enum in `domain` is an off-chain
+   projection/summary of these booleans, not a type the program enforces.
+   Type-state is intra-crate and cannot reach across the off-chain/on-chain
+   boundary — the authoritative state machine lives in Anchor/Quasar
+   constraints, not in Rust type-state.
+
+3. **Transition enforcement already exists at runtime.** The worker has an
+   explicit allowlist guard at `worker/src/event_store/write.rs:502-506`
+   (mirrored at `:768-772`) covering all 5 legal transitions:
+   `(None→Initialized)`, `(Initialized→Deactivated)`, `(Deactivated→Closed)`,
+   `(Closed→None)`, `(Cancelled→None)`. Illegal transitions produce the
+   typed error `invalid escrow status transition: {source} → {target}`.
+   The on-chain program additionally enforces preconditions via Anchor
+   `constraints` (e.g. `bethere-escrow/src/instructions/deactivate_event.rs:25`
+   requires `event_escrow.is_active()`).
+
+**The real monetary-correctness risk is not missing enforcement — it is
+drift between the three layers** (runtime allowlist vs `EscrowStatus::is_active()`
+predicate vs on-chain constraints). A compile-time type-state FSM cannot
+solve cross-layer drift. The genuine value is captured by a **contract
+test** pinning the runtime transition allowlist (audit R1) — same pattern
+as the Phase 2.3 SSOT guard and the Phase 5.3 deterministic guard.
+
+**Proof:** `rg "pub enum EscrowStatus"` → `domain/src/models/event.rs:119-129`;
+`rg "EscrowStatus::(Deactivated|Closed|Cancelled)"` →
+`worker/src/event_store/write.rs:502-506` and `:768-772` (the runtime
+allowlist); `bethere-escrow/src/state.rs` (`is_active: bool`, `checked_in: bool`,
+`refunded: bool`); `bethere-escrow/src/instructions/deactivate_event.rs:20-26`
+(Anchor constraint). Full audit at `.plans/014_phase2_4_typestate_audit.md`.
+
+**Preconditions that would re-open it:**
+- The on-chain program grows a typed `EventEscrowStatus` enum field (replacing
+  the `is_active: bool` projection). Not on roadmap; would require a program
+  migration.
+- The per-attendee deposit surface (`DepositStatus`/`ThbDeposit`) is
+  redesigned to carry a typed lifecycle enum. The current boolean-flag
+  representation is composable and works; no driver for this exists.
+- The off-chain/on-chain boundary is collapsed (e.g. the worker is replaced
+  by direct on-chain calls). Not on any roadmap.
+
+The smaller positive follow-up (audit R1 — contract test pinning the
+runtime allowlist) is tracked separately and is the durable artifact of
+Phase 2.4's audit.
+
+---
+
 ## Pending evaluations (not yet demoted or promoted)
 
 These are listed for completeness — they have not been evaluated yet and may
@@ -382,6 +460,7 @@ end up in this log or in a positive-results companion.
 | 7. `EventPolicy` trait | Demote | No behavioral polymorphism — variation is data, not behavior |
 | 8. Deposit/refund SSOT consolidation | Demote | Audit miss — "duplication" is a deliberate two-stage guard; unit split is a domain boundary (4th miss) |
 | 9. Blockhash cache TTL 30s→90s | Demote | Plan premise factually wrong — `MAX_HASH_AGE_IN_SECONDS=120` ≠ transaction validity (`MAX_PROCESSING_AGE=150 blocks` ≈ 60–90s); 90s TTL would cause stale-blockhash failures (5th miss) |
+| 10. Type-state escrow lifecycle FSM | Demote | Plan premise structurally wrong — 6 states don't map to any single typed surface (event-level enum + per-attendee booleans + on-chain booleans); runtime transition allowlist already exists; type-state can't reach cross-layer/cross-boundary drift (8th miss) |
 
 **Positive result for contrast:** Phase 1.7 GOAT-gate on `LevelScore` cleared
 both thresholds at every row count (smallest: 4.7× decode, 71.8% size reduction
