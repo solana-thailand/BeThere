@@ -3,8 +3,8 @@
 **Date:** 2026-06-27
 **Branch:** `feature/campaign_from_event` (off `develop` @ `28c143a`, NOT yet merged)
 **Commit:** `a81208d` — `feat(frontend): promote event to campaign one-click flow`
-**Outcome:** ✅ Implemented + compiles clean (`cargo check --target wasm32-unknown-unknown` 0/0). NOT yet merged to `develop`. NOT yet browser-tested. NO backend changes.
-**Test delta:** 0 automated tests added (frontend-leptos has no wasm test harness for admin UI; behavior is reactive signal flow verified by `cargo check` only).
+**Outcome:** ✅ Implemented + verified by TWO bounded checks: `cargo check --target wasm32-unknown-unknown` (0/0) AND `trunk build --release` (full WASM bundling pipeline passes — bundle hash `ea22be3c86ad2a40`). NOT yet merged to `develop`. NOT yet browser-tested. NO backend changes.
+**Test delta:** 0 automated tests added (frontend-leptos has no wasm test harness for admin UI; behavior is reactive signal flow verified by `cargo check` + full `trunk build --release` only — runtime timing still owes a browser test).
 
 ---
 
@@ -111,11 +111,20 @@ This change is **not** tied to a numbered `.issues/` entry — it was an ad-hoc 
 
 ## 6. How to dev / test
 
-### Local build check (already verified clean)
+### Local build check (already verified clean — two bounded checks)
+
+**Check 1 — type check:**
 ```
 cd frontend-leptos
 cargo check --target wasm32-unknown-unknown --quiet
 ```
+
+**Check 2 — full release bundle** (strictly stronger — runs wasm-bindgen, wasm-opt, asset hashing, the same pipeline production uses):
+```
+cd frontend-leptos
+~/.cargo/bin/trunk build --release
+```
+Result this session: `✅ success`, output `dist/event-checkin-frontend-ea22be3c86ad2a40_bg.wasm` (4.2M), `dist/index.html` (9.3k). Bundle hash differs from production (`d334df8c0d54958b`), confirming the feature code is compiled in.
 
 ### Clippy on this branch's files (verify no new lints)
 ```
@@ -150,7 +159,7 @@ git branch -d feature/campaign_from_event
 
 ## 7. Honest caveats
 
-- **Not browser-tested.** The signal-flow logic is verified by `cargo check` only. There's a small chance the `Effect::new` consume-on-mount fires at the wrong time (e.g. if Leptos batches the section switch + payload set in a way that defers the CampaignsPage mount past the Effect's first run). The defensive design (payload is set BEFORE section switch in the same synchronous handler; `<Show>` remounts the component) should make this robust, but only the browser test in §6 confirms it.
+- **Not browser-tested.** The signal-flow logic is verified by `cargo check` + a full `trunk build --release` (the whole WASM bundling pipeline passes), so there is no compile/bundle risk. The remaining risk is purely runtime: a small chance the `Effect::new` consume-on-mount fires at the wrong time (e.g. if Leptos batches the section switch + payload set in a way that defers the CampaignsPage mount past the Effect's first run). The defensive design (payload is set BEFORE section switch in the same synchronous handler; `<Show>` remounts the component) should make this robust, but only the browser test in §6 confirms it.
 - **Not merged.** Lives on `feature/campaign_from_event`. `develop` and `main` are unchanged.
 - **No backend changes** — but the campaign id collision behavior is the backend's responsibility. If `{event.id}-campaign` already exists as a campaign id, `create_campaign` will fail with whatever D1 unique-constraint error the handler surfaces. The default suffix `-campaign` makes this unlikely but not impossible.
 - **Pre-fill is minimal by design.** Only id, title, and reward_type are pre-filled. Description, organization_id, completion_criteria, and reward_config (NFT collection mint etc.) are left blank for the organizer to fill. This was a deliberate "easiest path" decision, not a limitation — richer pre-fill would require fetching `EventDetail` (an extra async hop on click, like the Edit button does).
