@@ -12,6 +12,12 @@
   Supersedes the prior `085fb790` deploy. Tier A (#058 hygiene) + Tier B 3.2
   (#059 write-path unification) are now also live (they were in `develop` but
   the previous prod deploy predated them).
+- 🔄 **Superseded** — `aba9161c` was itself superseded by the Handover 121 deploy
+  (2026-06-27, `main` → `b432ac5`, frontend bundle `d334df8c0d54958b`). 060's code
+  (`b3e923d`) remains live — it's an ancestor of `main` at `b432ac5`. The newer
+  deploy was a superset (Plan 014 Phase 1.7 wire format + Plan 008 endpoint), not a
+  regression of 060. Exact Cloudflare version ID of the Handover 121 deploy not
+  recorded in-doc; verify via `wrangler deployments list` if needed.
 - ✅ **Verified** — read path tested end-to-end against real prod data (see §3).
 - ⏳ **Dormant** — no campaigns exist in prod yet (`campaigns`=0,
   `campaign_events`=0). Feature self-hides (SeriesNav renders nothing on 404)

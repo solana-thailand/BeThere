@@ -2,6 +2,7 @@
 
 ## Status
 - **Summary no-show bug**: ✅ Fixed (commit `4e6b4f0`, migration 0021 applied to prod)
+- **Deployed to `main`**: ✅ `b432ac5` (2026-06-27, Handover 121) — fix + Tier A read-side consolidation now live
 - **`participation_type` data hygiene**: 🟡 Open (follow-up — see bottom)
 
 ## Summary
@@ -58,7 +59,7 @@ The "No-show" tile is now "No-show (in-person)":
 - Re-freeze confirmed in prod: a GET after deploy auto-froze `solana-in-latent-space-part-1-copy`
   (online, 25 registered) with `no_show_count = 0`, `in_person_registered_count = 0` — old logic
   would have written 25. Frozen at `2026-06-25T04:54:57Z`.
-- Git: `develop` at `4e6b4f0`. `main` still at `c2a1309` (does not include Phase 1 or the fix).
+- Git: `develop` at `4e6b4f0` (2026-06-25). **`main` now at `b432ac5` (2026-06-27, Handover 121)** — DOES include Phase 1 + the fix. Verified ancestors of `main`: `4e6b4f0` (summary fix), `fa5b1c8` + `fefa404` (Tier A — read-side consolidation onto `ParticipationType`), `7114c03` (Tier B 3.2 — write-path unification, see #059). All deployed via Handover 121's `scripts/deploy.sh` run (frontend bundle `d334df8c0d54958b`).
 
 ## 🟡 Follow-up: `participation_type` data hygiene
 While fixing this, discovered `attendees.participation_type` has **inconsistent values**
