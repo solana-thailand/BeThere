@@ -132,9 +132,13 @@ pub fn pack_slice<T: Pod>(values: &[T]) -> Vec<u8> {
 /// the returned slice; it is also covered by the BLAKE3 tag, so a sender cannot
 /// change it without invalidating the hash.
 ///
-/// On the happy path the only allocations are the BLAKE3 hasher's internal
-/// scratch (one-time) — the returned slice is a `bytemuck::cast_slice` of the
-/// input buffer.
+/// **Zero allocations on the happy path** (verified by Plan 014 Phase 5.4 audit
+/// in `domain/tests/alloc_count.rs`, 2026-06-27, blake3 1.8.5). BLAKE3's
+/// `Hasher` uses an `InlineSubCtxStack` (a fixed-size stack array, not a
+/// `Vec`), so the chunk-merge tree never grows the heap — confirmed zero-alloc
+/// up to a 160 KB / 10000-row payload. The returned slice is a
+/// `bytemuck::cast_slice` of the input buffer (a pointer reinterpret, no
+/// allocation).
 ///
 /// Returns the same error set as [`unpack`], plus [`WireError::Truncated`] when
 /// the encoded row count doesn't fit the body.
