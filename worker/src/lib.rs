@@ -8,7 +8,12 @@ mod db;
 mod durable_objects;
 mod error;
 mod escrow_indexer;
-mod event_store;
+// Public so that `worker/tests/escrow_transition_contract.rs` (Plan 014
+// Phase 2.4 R1) can call `apply_update` directly. Behaviorally a no-op:
+// the worker compiles to a cdylib (WASM) with no downstream Rust consumer
+// other than integration tests. The `event_store` module's own items were
+// already `pub`; only the module declaration was private.
+pub mod event_store;
 mod handlers;
 mod http;
 mod middleware;
