@@ -364,12 +364,9 @@ pub async fn get_public_ticket(
     // thb_deposit was fetched concurrently with deposit_status above (join!).
     let deposit_info = deposit_status.as_ref().map(|d| {
         serde_json::json!({
-            "method": match d.method {
-                event_checkin_domain::models::deposit::DepositMethod::Usdc => "usdc",
-                event_checkin_domain::models::deposit::DepositMethod::Thb => "thb",
-                event_checkin_domain::models::deposit::DepositMethod::CreditThb => "credit_thb",
-                event_checkin_domain::models::deposit::DepositMethod::CreditUsdc => "credit_usdc",
-            },
+            // SSOT: domain Display produces the snake_case wire form.
+            // Hand-mapping removed (Plan 014 Phase 2.2 R2).
+            "method": d.method.to_string(),
             "verified": d.verified,
             "currency": d.currency,
             "refunded": thb_deposit.as_ref().is_some_and(|t| t.refunded),

@@ -163,7 +163,8 @@ honest version of Objective 2 is: **finish the SSOT migration, don't build a VM.
   behavior change); R3 — defer the substantive EventFormat/EscrowStatus
   type-merge decision to a dedicated session.
   **R1 IMPLEMENTED (Phase 2.2 — guard scope fix).** See handover 114.
-  R2 and R3 remain open.
+  **R2 IMPLEMENTED (Phase 2.2 — worker DepositMethod SSOT).** See handover 115.
+  Only R3 (substantive EventFormat/EscrowStatus type-merge decision) remains open.
 - [~] **2.2 Move all duplicated business predicates into `domain/src/policy/`.**
   These are deterministic functions over typed models — the *real* equivalent of
   katgpt-rs's pure-algorithm crates (`katgpt-core`). No traits-for-the-sake-of-traits;
@@ -181,10 +182,17 @@ honest version of Objective 2 is: **finish the SSOT migration, don't build a VM.
   `EventFormat::has_in_person` (7 call sites, load-bearing),
   `EventFormat::has_online` (1 call site). Live-injection re-verification
   extended to all 3 files in scope — guard fires correctly across each.
-  See handover 114. **R2 (eliminate worker `DepositMethod` serialization
-  sites) and R3 (substantive EventFormat/EscrowStatus type-merge decision)
-  remain open** — neither is required to close the Phase 2.3 guard gap; both
-  are tracked in `.plans/014_ssot_audit.md`.
+  See handover 114. **R2 IMPLEMENTED (Phase 2.2 — worker DepositMethod SSOT):**
+  domain `DepositMethod` gained a `FromStr` impl (inverse of `Display`, error
+  format `unknown DepositMethod: '{other}'` preserved verbatim). Worker
+  `db/deposit_statuses.rs` replaced its 4-arm string→enum match with
+  `DepositMethod::from_str(&method_str)?`; `handlers/attendee.rs` replaced its
+  4-arm enum→string match with `d.method.to_string()`. 3 new domain tests pin
+  the wire strings and the error format. Workspace tests: 311 (was 308, +3 new
+  pinning tests). Frontend tests: 159 (unchanged). See handover 115. **Only
+  R3 (substantive EventFormat/EscrowStatus type-merge decision) remains open** —
+  not required to close the Phase 2.3 guard gap; tracked in
+  `.plans/014_ssot_audit.md`.
 - [x] **2.3 Compile-gate both crates against `domain`.** Add a CI check that
   greps `worker/src/` and `frontend-leptos/src/` for re-implementations of any
   function exported from `domain::policy`. This is the structural enforcement

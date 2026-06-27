@@ -350,15 +350,30 @@ baseline self-test updated to assert `mirror_predicates.len() == 4`.
 Frontend tests: 159 passing (unchanged). Workspace tests: 308 passing
 (unchanged). Zero new clippy warnings on the test file.
 
-### R2. Eliminate the two `DepositMethod` serialization sites (worker)
+### R2. Eliminate the two `DepositMethod` serialization sites (worker) — ✅ IMPLEMENTED
 
-- `worker/src/handlers/attendee.rs:367-372`: replace match with
-  `d.method.to_string()` (domain `Display` already produces the same string).
-- `worker/src/db/deposit_statuses.rs:352-360`: derive `FromStr` on domain
-  `DepositMethod` (or use serde), preserving the "unknown variant" error
-  context.
+**Status: Implemented in Phase 2.2 (worker DepositMethod SSOT). See handover 115.**
 
-Both are zero-behavior-change refactors with the test suite as the safety net.
+Domain `DepositMethod` gained a `FromStr` impl (inverse of the existing
+`Display`, with `type Err = String` and error format
+`unknown DepositMethod: '{other}'` preserved verbatim from the prior
+worker-side message so logs, e2e scripts, and any error-display code see
+no behavior change). Worker `db/deposit_statuses.rs` replaced its 4-arm
+string→enum match with `DepositMethod::from_str(&method_str)?`; worker
+`handlers/attendee.rs` replaced its 4-arm enum→string match with
+`d.method.to_string()` (delegating to domain's `Display`).
+
+Three new domain tests pin the wire strings and the error format:
+`test_deposit_method_from_str_round_trip` (Display→FromStr identity for
+every variant), `test_deposit_method_from_str_wire_strings` (exact
+snake_case strings, both directions), and
+`test_deposit_method_from_str_rejects_unknown_with_canonical_message`
+(pins the `unknown DepositMethod: '{other}'` format that the worker now
+propagates directly via `?`).
+
+Verification: workspace tests 311 (was 308, +3 from the new pinning
+tests); frontend tests 159 (unchanged — R2 does not touch frontend);
+zero new clippy warnings on domain or worker.
 
 ### R3. Decide on the EventFormat/EscrowStatus mirror types (larger scope)
 
@@ -441,6 +456,12 @@ the output was this document. **R1 has since been implemented** as the
 Phase 2.2 guard scope fix (see handover 114) — `MIRROR_FILES` widened,
 3 predicates added to the allowlist, live-injection re-verification extended
 across all 3 files in scope, audit baseline self-test updated to expect 4
-mirror predicates. R2 (worker `DepositMethod` serialization sites) and R3
-(substantive EventFormat/EscrowStatus type-merge decision) remain open and
-are not required to close the guard gap.
+mirror predicates. **R2 has since been implemented** as the Phase 2.2 worker
+`DepositMethod` SSOT refactor (see handover 115) — domain `DepositMethod`
+gained a `FromStr` impl (inverse of `Display`, error format preserved
+verbatim); the two worker serialization sites in `handlers/attendee.rs` and
+`db/deposit_statuses.rs` were replaced by `to_string()` and `from_str()?`
+respectively; 3 new domain tests pin the wire strings and error format;
+workspace tests 311 (was 308, +3), frontend 159 (unchanged). Only R3
+(substantive EventFormat/EscrowStatus type-merge decision) remains open and
+is not required to close the guard gap.
