@@ -6,9 +6,10 @@
 > not be done as a blind migration. **This is a design proposal, not implemented.**
 
 ## Status
-- 🟡 **Step 3.2 (write-path unification) ✅ DONE** (commit pending). No data
-  change — D1 still holds legacy values until 3.3 backfill runs. But all NEW
-  writes are now canonical; the mess stops growing.
+- ✅ **Step 3.2 (write-path unification) DONE** — commit `7114c03`, deployed to
+  `main` at `b432ac5` via Handover 121 (2026-06-27). No data change — D1 still
+  holds legacy values until 3.3 backfill runs. But all NEW writes are now
+  canonical; the mess stops growing.
 - 🟡 **Steps 3.3 (backfill) + 3.4 (SQL simplification) — still awaiting approval.**
   No code, no prod change yet.
 

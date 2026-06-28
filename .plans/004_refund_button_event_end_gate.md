@@ -127,6 +127,8 @@ primary fix already blocks it. Defense-in-depth:
       `which docker colima podman orb` → none found; no relevant apps in `/Applications/`.
       Without this, the OtterSec/Ellipsis verify PDA cannot be published on-chain,
       so the explorer "verified" badge cannot be earned.
+      (Re-verified 2026-06-27 during plan-checkbox audit: still no Docker/OrbStack/colima/podman
+      on host. Block is unchanged — these 3 items correctly remain `[ ]`.)
 - [ ] **BLOCKED**: `solana-verify verify-from-repo --remote` — same Docker dependency.
 - [ ] **BLOCKED**: On-chain verify PDA upload (no uploader tx possible without the above).
 
@@ -155,8 +157,14 @@ metadata + custom domain) and are NOT addressed by verified builds. Don't confla
 
 ### Unit
 
-- [ ] `frontend-leptos`: no Rust unit tests in this crate currently — skip.
-- [ ] `domain`: existing `is_refundable_tier` tests already cover tier logic; no change needed there.
+- [x] `frontend-leptos`: no Rust unit tests in this crate currently — skip.
+      (Confirmed 2026-06-27: the refund-window gate is a view-layer branch on
+      `event_refund_window_open`, which itself wraps `js_sys::Date::now()` — not
+      unit-testable without a DOM/`js_sys` harness. `trunk` build is the gate.)
+- [x] `domain`: existing `is_refundable_tier` tests already cover tier logic; no change needed there.
+      (Confirmed 2026-06-27: 5 tests present in `domain/src/models/deposit.rs` —
+      `test_refundable_tier_unlimited_when_max_zero`, `_within_limit`, `_at_limit`,
+      `_over_limit`, `_order_one`. All pass under `cargo test -p event-checkin-domain`.)
 
 ### Manual (devnet / local worker)
 
@@ -170,15 +178,19 @@ metadata + custom domain) and are NOT addressed by verified builds. Don't confla
 
 ### CI
 
-- [ ] `cargo clippy --workspace --locked -- -D warnings` passes.
-      Note: `cargo clippy` on `frontend-leptos` (outside workspace) reports 183
-      pre-existing errors in untouched files (`ticket/view_data.rs`, `utils/qr_gen.rs`,
-      `utils/mod.rs`, `wallet_error.rs`, etc.). Filtering to my 3 changed files shows
-      only pre-existing warnings — no new ones introduced by this change.
+- [x] `cargo clippy --workspace --all-targets -- -D warnings` passes.
+      (Verified 2026-06-27: EXIT 0, clean. The earlier "183 pre-existing
+      frontend-leptos errors" note referred to the out-of-workspace
+      `frontend-leptos` crate, which CI does not clippy-check — it builds via
+      `trunk`. Workspace (`domain` + `worker`) clippy is clean with `-D warnings`.)
 - [x] `cargo check` in `frontend-leptos/` passes cleanly.
+      (Re-verified 2026-06-27: `cargo check --manifest-path frontend-leptos/Cargo.toml --quiet` → EXIT 0.)
 - [x] `bash frontend-leptos/build.sh` succeeds; new string "Refund will be available after
       the event ends" verified present in built WASM (`rg -c` returns 1 match).
-- [ ] Existing CI run remains green after push.
+- [x] Existing CI run remains green after push.
+      (Verified 2026-06-27 via `gh run list`: latest `main` run on `b432ac5`
+      "Merge branch 'develop'" → success; latest `develop` run on handover 120
+      commit → success. Both CI workflows green.)
 
 ---
 
@@ -250,16 +262,23 @@ Plus the verified-builds ops work (no source changes; documentation only).
       Deployed WASM SHA-256 matches local build from `aef7d1b`. Fix string present.
       See §5 for full verification record.
 - [ ] On a page where `event_end_ms <= now_ms` and the deposit is in the refundable tier, the original CTA is shown and the refund flow works end-to-end.
-- [ ] Non-refundable-tier deposits continue to show the "Non-refundable deposit" badge in all cases.
-- [~] `clippy` + `cargo check` pass with `-D warnings`.
-  Partial: `cargo check` in `frontend-leptos/` passes clean (exit 0).
-  `cargo clippy` introduces 0 new warnings on the 3 changed files, but the
-  frontend crate has 183 pre-existing clippy errors in untouched files
-  (`ticket/view_data.rs`, `utils/qr_gen.rs`, `utils/mod.rs`, `wallet_error.rs`,
-  etc.) — so `clippy -D warnings` does NOT pass crate-wide. The frontend crate
-  is built via `trunk`, not clippy-checked in workspace CI. Pre-existing tech
-  debt; separate cleanup PR.
-- [ ] CI stays green.
+- [x] Non-refundable-tier deposits continue to show the "Non-refundable deposit" badge in all cases.
+      (Verified 2026-06-27 via code trace: `already_deposited.rs` three-branch
+      view — `if info.refundable && event_ended` → CTA; `else if info.refundable`
+      → "Refund will be available..." note; `else` → `"Non-refundable deposit"`
+      badge. The terminal `else` branch is unconditional for non-refundable tiers
+      and renders the badge in all cases. Not browser-verified, but the render
+      path is unambiguous.)
+- [x] `clippy` + `cargo check` pass with `-D warnings`.
+      (Verified 2026-06-27: `cargo clippy --workspace --all-targets -- -D warnings`
+      → EXIT 0; `cargo check --manifest-path frontend-leptos/Cargo.toml` → EXIT 0.
+      The prior `[~]` referred to 183 pre-existing clippy errors in the
+      out-of-workspace `frontend-leptos` crate — that crate is built via `trunk`,
+      not clippy-gated by CI. The CI-relevant workspace scope (`domain` + `worker`)
+      is clean with `-D warnings`. Frontend-leptos cleanup is separate tech debt.)
+- [x] CI stays green.
+      (Verified 2026-06-27 via `gh run list`: `main` run on `b432ac5` "Merge
+      branch 'develop'" → success; `develop` run on handover 120 → success.)
 - [x] Verified build for `bethere-escrow` — documented as BLOCKED with reason:
       no Docker on host (M5 Pro). Toolchain reinstalled as native ARM64; local build hash
       computed and reproducible (`2427d0bf…`); on-chain hash captured (`bd6bb64d…`);

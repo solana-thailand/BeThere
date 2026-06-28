@@ -8,6 +8,17 @@ use crate::api;
 use crate::components::{self, ToastType};
 use crate::icons::{Icon, IconName};
 
+// ===== Promote-from-event payload =====
+
+/// Payload produced by `EventsPage` when an organizer chooses to promote an
+/// existing event into a new campaign. Consumed by `CampaignsPage` on mount
+/// to pre-fill the create form and auto-link the source event.
+#[derive(Debug, Clone, Default)]
+pub struct PromoteEventPayload {
+    pub event_id: String,
+    pub event_name: String,
+}
+
 // ===== View State =====
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -41,6 +52,12 @@ fn status_badge_class(status: &str) -> &'static str {
 pub fn CampaignsPage(
     #[prop(name = "set_toast")] set_toast: WriteSignal<Option<components::ToastMessage>>,
     #[prop(name = "active_event_id")] _active_event_id: ReadSignal<Option<String>>,
+    #[prop(name = "pending_promote_event")] pending_promote_event: ReadSignal<
+        Option<PromoteEventPayload>,
+    >,
+    #[prop(name = "set_pending_promote_event")] set_pending_promote_event: WriteSignal<
+        Option<PromoteEventPayload>,
+    >,
 ) -> impl IntoView {
     let (current_view, set_current_view) = signal(CampaignView::List);
     let (detail_tab, set_detail_tab) = signal(DetailTab::Events);
@@ -69,6 +86,9 @@ pub fn CampaignsPage(
     let (add_event_id, set_add_event_id) = signal(String::new());
     let (add_seq_order, set_add_seq_order) = signal(0i64);
     let (add_is_required, set_add_is_required) = signal(true);
+    // Event id awaiting auto-link after a successful create (set when the
+    // create form was pre-filled via "promote from event").
+    let (pending_event_to_link, set_pending_event_to_link) = signal(None::<String>);
     // Load campaign list
     Effect::new(move |_| {
         let _ = refresh_counter.get();
@@ -202,10 +222,41 @@ pub fn CampaignsPage(
         );
     };
 
+    // Consume any pending "promote event → campaign" payload (sent from
+    // `EventsPage`). The admin shell sets the signal and switches section to
+    // Campaigns, which mounts this component fresh — so this Effect runs once
+    // on mount with the payload present.
+    Effect::new(move |_| {
+        if let Some(p) = pending_promote_event.get() {
+            // Bind locals because Rust's inline format capture does not
+            // support field access (e.g. `{p.event_id}`).
+            let event_id = p.event_id.clone();
+            let event_name = p.event_name.clone();
+            reset_form();
+            set_form_id.set(format!("{event_id}-campaign"));
+            set_form_title.set(if event_name.is_empty() {
+                String::new()
+            } else {
+                format!("{event_name} Campaign")
+            });
+            // Sensible default reward type; organizers can change it.
+            set_form_reward_type.set("none".to_string());
+            // Remember the source event so we auto-link it after create.
+            set_pending_event_to_link.set(Some(event_id));
+            set_editing_id.set(None);
+            set_current_view.set(CampaignView::Create);
+            // Clear the payload so it isn't re-consumed on a future mount.
+            set_pending_promote_event.set(None);
+        }
+    });
+
     // Create new
     let handle_create_new = move |_: web_sys::MouseEvent| {
         reset_form();
         set_editing_id.set(None);
+        // A manual "+ Create Campaign" click should never inherit a leftover
+        // "promote from event" auto-link intent.
+        set_pending_event_to_link.set(None);
         set_current_view.set(CampaignView::Create);
     };
 
@@ -227,6 +278,9 @@ pub fn CampaignsPage(
         set_current_view.set(CampaignView::List);
         set_selected_id.set(None);
         set_editing_id.set(None);
+        // Forget any "promote from event" auto-link intent if the organizer
+        // cancels out of the form, so a later manual create isn't auto-linked.
+        set_pending_event_to_link.set(None);
         do_reload();
     };
     // Save (create or update)
@@ -308,15 +362,50 @@ pub fn CampaignsPage(
                     reward_type: form_reward_type.get(),
                     reward_config,
                 };
+                // If this create was triggered via "promote from event",
+                // capture the source event id so we can auto-link it.
+                let link_event_id = pending_event_to_link.get();
+                let id_for_link = req.id.clone();
                 leptos::task::spawn_local(async move {
                     match api::create_campaign(&req).await {
                         Ok(_) => {
+                            // Auto-link the source event as the first campaign event.
+                            if let Some(eid) = link_event_id.as_ref() {
+                                let events = vec![api::CampaignEventInput {
+                                    event_id: eid.clone(),
+                                    sequence_order: 0,
+                                    is_required: true,
+                                }];
+                                if let Err(e) =
+                                    api::set_campaign_events(&id_for_link, events).await
+                                {
+                                    log::warn!(
+                                        "[campaigns-page] auto-link source event failed: {e}"
+                                    );
+                                    components::show_toast(
+                                        &set_toast,
+                                        &format!(
+                                            "Campaign created, but failed to link event: {e}"
+                                        ),
+                                        ToastType::Warning,
+                                    );
+                                }
+                            }
+                            set_pending_event_to_link.set(None);
                             components::show_toast(
                                 &set_toast,
                                 "Campaign created",
                                 ToastType::Success,
                             );
-                            set_current_view.set(CampaignView::List);
+                            // If promoted from an event, open the new campaign's
+                            // detail so the organizer sees the linked event.
+                            if link_event_id.is_some() {
+                                set_selected_id.set(Some(id_for_link));
+                                set_detail_tab.set(DetailTab::Events);
+                                set_current_view.set(CampaignView::Detail);
+                            } else {
+                                set_current_view.set(CampaignView::List);
+                            }
                             do_reload();
                         }
                         Err(e) => {
