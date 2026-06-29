@@ -813,7 +813,6 @@ pub fn CampaignsPage(
                             >
                                 <option value="none">"None"</option>
                                 <option value="nft_certificate">"NFT Certificate"</option>
-                                <option value="badge">"Badge"</option>
                             </select>
                         </div>
                         <div class="form-group">
