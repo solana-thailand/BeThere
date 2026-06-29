@@ -93,8 +93,8 @@ block (~lines 255-288).
 - [ ] Already-claimed campaigns show "Reward claimed" (no button).
 - [ ] Incomplete campaigns show no button.
 - [ ] Helius errors surface a readable toast, not a silent failure.
-- [ ] `cargo check --target wasm32-unknown-unknown` clean.
-- [ ] `~/.cargo/bin/trunk build --release` clean.
+- [x] `cargo check --target wasm32-unknown-unknown` clean.
+- [x] `~/.cargo/bin/trunk build --release` clean.
 
 ### Test data setup (needed to verify end-to-end)
 
