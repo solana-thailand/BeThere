@@ -86,9 +86,22 @@ pub fn CampaignsPage(
     let (add_event_id, set_add_event_id) = signal(String::new());
     let (add_seq_order, set_add_seq_order) = signal(0i64);
     let (add_is_required, set_add_is_required) = signal(true);
+    // Events available to link (loaded once on mount for the Events-tab picker).
+    let (events_list, set_events_list) = signal(Vec::<api::EventMeta>::new());
     // Event id awaiting auto-link after a successful create (set when the
     // create form was pre-filled via "promote from event").
     let (pending_event_to_link, set_pending_event_to_link) = signal(None::<String>);
+    // Load events list once for the Events-tab picker dropdown.
+    Effect::new(move |_| {
+        leptos::task::spawn_local(async move {
+            match api::list_events().await {
+                Ok(data) => set_events_list.set(data.events),
+                Err(e) => {
+                    log::warn!("[campaigns-page] failed to load events list: {e}");
+                }
+            }
+        });
+    });
     // Load campaign list
     Effect::new(move |_| {
         let _ = refresh_counter.get();
@@ -489,7 +502,7 @@ pub fn CampaignsPage(
             if new_event_id.trim().is_empty() {
                 components::show_toast(
                     &set_toast,
-                    "Event ID is required",
+                    "Select an event to add",
                     ToastType::Warning,
                 );
                 return;
@@ -961,13 +974,38 @@ pub fn CampaignsPage(
                             // Add event form
                             <div class="form-row">
                                 <div class="form-group form-group-sm">
-                                    <input
-                                        class="form-input"
-                                        type="text"
-                                        placeholder="Event ID"
+                                    <select
+                                        class="form-select"
                                         prop:value=move || add_event_id.get()
-                                        on:input=move |ev| set_add_event_id.set(event_target_value(&ev))
-                                    />
+                                        on:change=move |ev| set_add_event_id.set(event_target_value(&ev))
+                                    >
+                                        <option value="">"Select an event..."</option>
+                                        {move || {
+                                            // Exclude events already linked to this campaign so
+                                            // they can't be added twice.
+                                            let linked: std::collections::HashSet<String> = campaign_detail
+                                                .get()
+                                                .map(|d| d.events.iter().map(|e| e.event_id.clone()).collect())
+                                                .unwrap_or_default();
+                                            let mut available: Vec<api::EventMeta> = events_list
+                                                .get()
+                                                .into_iter()
+                                                .filter(|e| !linked.contains(&e.id))
+                                                .collect();
+                                            available.sort_by(|a, b| a.name.cmp(&b.name));
+                                            available.into_iter().map(|e| {
+                                                let id = e.id.clone();
+                                                let label = if e.name.trim().is_empty() {
+                                                    e.id.clone()
+                                                } else {
+                                                    e.name.clone()
+                                                };
+                                                view! {
+                                                    <option value=id>{label}</option>
+                                                }
+                                            }).collect::<Vec<_>>()
+                                        }}
+                                    </select>
                                 </div>
                                 <div class="form-group form-group-sm">
                                     <input
