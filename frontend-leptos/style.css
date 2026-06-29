@@ -7620,6 +7620,36 @@ nav a.active {
     margin-bottom: 0;
 }
 
+/* --- Campaign Status Banner (draft warning) --- */
+.campaign-status-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    padding: 0.75rem 1rem;
+    margin-bottom: 1rem;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    line-height: 1.4;
+}
+
+.campaign-status-banner-warning {
+    background: rgba(245, 158, 11, 0.12);
+    border: 1px solid rgba(245, 158, 11, 0.4);
+    color: var(--warning);
+}
+
+.campaign-status-banner-text {
+    flex: 1;
+    min-width: 200px;
+}
+
+.campaign-status-banner-text strong {
+    display: block;
+    margin-bottom: 0.15rem;
+}
+
 .events-header-actions {
     display: flex;
     align-items: center;

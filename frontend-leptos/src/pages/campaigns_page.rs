@@ -907,6 +907,32 @@ pub fn CampaignsPage(
                         "← Back"
                     </button>
                 </div>
+                // Draft-status warning banner (events linked but campaign not active)
+                {move || {
+                    let detail = campaign_detail.get();
+                    match detail {
+                        Some(d) if !d.events.is_empty() && d.campaign.status == "draft" => {
+                            let id_for_activate = d.campaign.id.clone();
+                            view! {
+                                <div class="campaign-status-banner campaign-status-banner-warning">
+                                    <div class="campaign-status-banner-text">
+                                        <strong>"Draft — not active"</strong>
+                                        "This campaign has events linked but isn't activated. Activate it so check-ins count toward progress and leaderboard scoring."
+                                    </div>
+                                    <button
+                                        class="btn btn-primary btn-sm"
+                                        on:click=move |_: web_sys::MouseEvent| {
+                                            handle_status_change(id_for_activate.clone(), "active".to_string());
+                                        }
+                                    >
+                                        "Activate now"
+                                    </button>
+                                </div>
+                            }.into_any()
+                        }
+                        _ => view! { <div></div> }.into_any(),
+                    }
+                }}
                 // Campaign info header
                 <div class="card">
                     <div class="card-body">
