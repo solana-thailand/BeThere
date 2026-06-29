@@ -68,6 +68,23 @@ pub struct CampaignEventItem {
     pub is_required: bool,
 }
 
+/// Per-event check-in status for a developer within a campaign. Populated only
+/// by the per-campaign progress endpoint (`GET /api/campaigns/{id}/progress`);
+/// empty for `my-progress`.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct DeveloperEventAttendance {
+    #[serde(default)]
+    pub event_id: String,
+    #[serde(default)]
+    pub event_name: String,
+    #[serde(default)]
+    pub sequence_order: i64,
+    #[serde(default)]
+    pub is_required: bool,
+    #[serde(default)]
+    pub attended: bool,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct DeveloperProgressItem {
     #[serde(default)]
@@ -84,6 +101,8 @@ pub struct DeveloperProgressItem {
     pub completed_at: Option<String>,
     #[serde(default)]
     pub reward_claimed_at: Option<String>,
+    #[serde(default)]
+    pub events: Vec<DeveloperEventAttendance>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

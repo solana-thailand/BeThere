@@ -14274,6 +14274,47 @@ a.ticket-series-card:hover {
     color: var(--warning);
 }
 
+/* --- Campaign Progress: per-event attendance chips --- */
+.attendance-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+}
+
+.attendance-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.2rem 0.5rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    line-height: 1.2;
+    border: 1px solid transparent;
+    max-width: 220px;
+}
+
+.attendance-chip-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.attendance-chip-done {
+    background: rgba(34, 197, 94, 0.12);
+    border-color: rgba(34, 197, 94, 0.4);
+    color: var(--success);
+}
+
+.attendance-chip-pending {
+    background: var(--bg-tertiary);
+    border-color: var(--border);
+    color: var(--text-secondary);
+}
+
+.attendance-chip-required {
+    font-weight: 600;
+}
+
 .dev-campaign-empty {
     text-align: center;
     padding: 2rem 0;

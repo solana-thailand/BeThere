@@ -1154,6 +1154,7 @@ pub fn CampaignsPage(
                                         <tr class="table-header">
                                             <th>"Email"</th>
                                             <th>"Completed"</th>
+                                            <th>"Events"</th>
                                             <th>"Status"</th>
                                             <th>"Reward Claimed"</th>
                                         </tr>
@@ -1174,6 +1175,52 @@ pub fn CampaignsPage(
                                                                 p.events_completed,
                                                                 p.total_required,
                                                             )}
+                                                        </td>
+                                                        <td>
+                                                            {if p.events.is_empty() {
+                                                                view! {
+                                                                    <span class="hint-xs">"—"</span>
+                                                                }.into_any()
+                                                            } else {
+                                                                view! {
+                                                                    <div class="attendance-chips">
+                                                                        {p.events.iter().map(|ev| {
+                                                                            let cls = if ev.attended {
+                                                                                "attendance-chip attendance-chip-done"
+                                                                            } else {
+                                                                                "attendance-chip attendance-chip-pending"
+                                                                            };
+                                                                            let req_cls = if ev.is_required {
+                                                                                "attendance-chip-name attendance-chip-required"
+                                                                            } else {
+                                                                                "attendance-chip-name"
+                                                                            };
+                                                                            let icon = if ev.attended {
+                                                                                IconName::Check
+                                                                            } else {
+                                                                                IconName::Circle
+                                                                            };
+                                                                            let icon_cls = if ev.attended {
+                                                                                "icon-sm icon-success"
+                                                                            } else {
+                                                                                "icon-sm icon-muted"
+                                                                            };
+                                                                            let display_name = if ev.event_name.trim().is_empty() {
+                                                                                ev.event_id.clone()
+                                                                            } else {
+                                                                                ev.event_name.clone()
+                                                                            };
+                                                                            let title_text = display_name.clone();
+                                                                            view! {
+                                                                                <span class=cls title=title_text.clone()>
+                                                                                    <Icon icon=icon class=icon_cls />
+                                                                                    <span class=req_cls>{display_name.clone()}</span>
+                                                                                </span>
+                                                                            }
+                                                                        }).collect::<Vec<_>>()}
+                                                                    </div>
+                                                                }.into_any()
+                                                            }}
                                                         </td>
                                                         <td>
                                                             {if is_complete {
