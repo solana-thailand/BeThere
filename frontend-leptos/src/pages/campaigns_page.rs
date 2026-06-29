@@ -817,11 +817,14 @@ pub fn CampaignsPage(
                             </select>
                         </div>
                         <div class="form-group">
-                            <label class="form-label">"Completion Criteria (JSON)"</label>
+                            <label class="form-label">"Completion Criteria (descriptive only)"</label>
+                            <p class="hint-note-sm">
+                                "Descriptive only — the enforced rule is: attend all required events. Use this field for notes only."
+                            </p>
                             <textarea
                                 class="form-input"
                                 rows="3"
-                                placeholder=r#"{"type": "all_events"}"#
+                                placeholder="e.g. Complete all 3 events in the series"
                                 prop:value=move || form_criteria.get()
                                 on:input=move |ev| set_form_criteria.set(event_target_value(&ev))
                             />
