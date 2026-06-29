@@ -15,6 +15,7 @@ use crate::api::{
     self, DeveloperProgressItem,
     calculate_weighted_score, compute_tier, get_wallet_nfts, NftItem, Tier,
 };
+use crate::components::{show_toast, Toast, ToastMessage, ToastType};
 use crate::icons::{wallet_icon_name, Icon, IconName};
 use crate::utils::metaplex_explorer_url;
 
@@ -221,7 +222,15 @@ fn ScoreBreakdown(total_nfts: i64, tier: Tier, score: i64) -> impl IntoView {
 // ---------------------------------------------------------------------------
 
 #[component]
-fn CampaignProgress(items: Vec<DeveloperProgressItem>) -> impl IntoView {
+fn CampaignProgress(
+    items: Vec<DeveloperProgressItem>,
+    wallet_address: String,
+    set_toast: WriteSignal<Option<ToastMessage>>,
+    set_campaign_progress: WriteSignal<Vec<DeveloperProgressItem>>,
+) -> impl IntoView {
+    let (claiming_id, set_claiming_id) = signal(None::<String>);
+    let wallet = wallet_address;
+
     if items.is_empty() {
         return view! {
             <div class="dev-campaign-empty">
@@ -251,6 +260,7 @@ fn CampaignProgress(items: Vec<DeveloperProgressItem>) -> impl IntoView {
                 } else {
                     "badge badge-warning"
                 };
+                let campaign_id = item.campaign_id.clone();
 
                 view! {
                     <div class="dev-campaign-item">
@@ -274,10 +284,69 @@ fn CampaignProgress(items: Vec<DeveloperProgressItem>) -> impl IntoView {
                                 </div>
                             }.into_any()
                         } else if item.is_complete {
+                            let cid_click = campaign_id.clone();
+                            let cid_label = campaign_id.clone();
+                            let w = wallet.clone();
                             view! {
                                 <div class="dev-campaign-reward dev-campaign-reward-pending">
-                                    <Icon icon=IconName::Gift class="icon-sm icon-warning" />
-                                    " Reward available to claim!"
+                                    <button
+                                        class="btn btn-primary btn-sm dev-campaign-claim-btn"
+                                        disabled=move || claiming_id.get().is_some()
+                                        on:click=move |_| {
+                                            let cid = cid_click.clone();
+                                            let w = w.clone();
+                                            set_claiming_id.set(Some(cid.clone()));
+                                            leptos::task::spawn_local(async move {
+                                                match api::claim_campaign_reward(&cid, &w).await {
+                                                    Ok(resp) => {
+                                                        // Refresh progress so the row flips to "Reward claimed"
+                                                        if let Ok(progress) = api::my_campaign_progress().await {
+                                                            set_campaign_progress.set(progress);
+                                                        }
+                                                        set_claiming_id.set(None);
+                                                        let short = if resp.asset_id.len() > 12 {
+                                                            format!(
+                                                                "{}...{}",
+                                                                &resp.asset_id[..6],
+                                                                &resp.asset_id[resp.asset_id.len() - 4..]
+                                                            )
+                                                        } else {
+                                                            resp.asset_id.clone()
+                                                        };
+                                                        show_toast(
+                                                            &set_toast,
+                                                            &format!("Campaign reward claimed! NFT asset: {short}"),
+                                                            ToastType::Success,
+                                                        );
+                                                    }
+                                                    Err(e) => {
+                                                        set_claiming_id.set(None);
+                                                        let msg = if e.status == 422
+                                                            && e.message.contains("already claimed")
+                                                        {
+                                                            "Reward already claimed for this campaign.".to_string()
+                                                        } else if e.status == 502 {
+                                                            format!(
+                                                                "Reward service unavailable. Please retry. ({})",
+                                                                e.message
+                                                            )
+                                                        } else {
+                                                            format!("Claim failed: {}", e.message)
+                                                        };
+                                                        show_toast(&set_toast, &msg, ToastType::Error);
+                                                    }
+                                                }
+                                            });
+                                        }
+                                    >
+                                        {move || {
+                                            if claiming_id.get().as_deref() == Some(cid_label.as_str()) {
+                                                "Claiming..."
+                                            } else {
+                                                "Claim Reward"
+                                            }
+                                        }}
+                                    </button>
                                 </div>
                             }.into_any()
                         } else {
@@ -305,6 +374,7 @@ pub fn DevDashboard() -> impl IntoView {
     let (cluster, set_cluster) = signal("devnet".to_string());
     let (campaign_progress, set_campaign_progress) = signal(Vec::<DeveloperProgressItem>::new());
     let (auth_checked, set_auth_checked) = signal(false);
+    let (toast, set_toast) = signal(None::<ToastMessage>);
 
     // Fetch cluster on mount
     {
@@ -446,6 +516,7 @@ pub fn DevDashboard() -> impl IntoView {
 
     view! {
         <Title text="Developer Dashboard — BeThere" />
+        <Toast toast_signal=toast />
         <div class="dev-dashboard">
             <div class="dev-dashboard-header">
                 <h1 class="dev-dashboard-title">
@@ -581,6 +652,7 @@ pub fn DevDashboard() -> impl IntoView {
                         }.into_any()
                     }
                     DashboardState::Loaded(data) => {
+                        let wallet_address = data.wallet_address.clone();
                         let cp = campaign_progress.get();
                         let show_campaigns = auth_checked.get() && !cp.is_empty();
                         view! {
@@ -625,7 +697,12 @@ pub fn DevDashboard() -> impl IntoView {
                                                 <Icon icon=IconName::Target class="icon-sm" />
                                                 " Campaign Progress"
                                             </h2>
-                                            <CampaignProgress items=cp />
+                                            <CampaignProgress
+                                                items=cp
+                                                wallet_address=wallet_address.clone()
+                                                set_toast=set_toast
+                                                set_campaign_progress=set_campaign_progress
+                                            />
                                         </div>
                                     }.into_any()
                                 } else {
