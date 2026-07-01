@@ -89,11 +89,15 @@ The existing `GET /orgs` is **SuperAdmin-only**. Plain organizers (who can creat
 - **(B) Auto-resolve from session** — if Claims carry the user's org, pre-fill and hide the field. Needs investigation of whether `Claims`/admin profile has an org binding (not yet verified).
 - **(C) Graceful fallback** — try `list_orgs`; on 403 fall back to the raw text input. Avoids backend change but keeps the bad UX for non-super-admins.
 
+**Decision (resolved):** Option **A** — widened read access on `GET /orgs` to any authenticated admin/organizer (`worker/src/handlers/orgs.rs`: role check dropped from `list_orgs`; create/update/delete + single-org detail remain SuperAdmin-only). Mutating endpoints untouched.
+
 **Acceptance**
-- [ ] As a SuperAdmin, the org field is a dropdown populated with all orgs; selecting one sets `organization_id` on save.
-- [ ] Edit view pre-selects the existing org.
-- [ ] (Per chosen option A/B/C) a plain organizer can either pick their org (A), has it auto-filled (B), or falls back cleanly (C) — **decide and document before implement**.
-- [ ] wasm32 check clean; `cargo check -p worker` clean if backend touched.
+- [x] As a SuperAdmin, the org field is a dropdown populated with all orgs; selecting one sets `organization_id` on save.
+- [x] (Option A) a plain organizer can pick their org from the same dropdown — read access widened, no `403`.
+- [~] Edit view pre-selects the existing org — **n/a**: org is immutable post-create (`UpdateCampaignRequest` has no `organization_id`), and the field is intentionally hidden on edit (`<Show when=editing_id.is_none()>`). The dropdown only renders on create; edit-view behavior is unchanged.
+- [x] wasm32 check clean; `cargo check -p worker` clean; `cargo clippy -p worker -- -D warnings` clean.
+
+**Deploy note:** requires a **worker redeploy** for the access widening to take effect for non-super-admins (a frontend-only deploy is not sufficient — plain organizers would still get `403` until the worker is redeployed).
 
 ---
 
@@ -101,8 +105,9 @@ The existing `GET /orgs` is **SuperAdmin-only**. Plain organizers (who can creat
 
 ### P1.1 — Advanced (optional) disclosure
 - Move `Image URL`, `Metadata URI`, `Collection Mint` into a `<details><summary>"Advanced (optional)"</summary>` block inside the NFT section.
-- Add a one-line explainer under Collection Mint: *"Optional. If set, NFTs in this collection score 3× on the leaderboard; otherwise 1×. Leave blank if unsure."*
-- Collapsed by default.
+- Add a one-line explainer under Collection Mint.
+  **Honest correction:** the original "3× leaderboard scoring" claim was **verified false**. A `grep` across `worker/src` for `collection_mint|multiplier|leaderboard|score` found **no** scoring logic — `collection_mint` is never read for any multiplier. Its only real usage is in `frontend-leptos/src/pages/dev_dashboard.rs`, where it classifies an NFT as a campaign reward vs an event NFT (counting, not a multiplier). The implemented hint is therefore accurate rather than speculative: *"Optional. Groups minted NFTs into an on-chain Solana collection and is used to tell campaign rewards apart from event NFTs. Leave blank if unsure."*
+- Collapsed by default (`<details>` with no `open` attribute).
 
 ### P1.2 — Required-field markers + inline validation
 - Append ` *` (red) to labels for `Campaign ID (slug)`, `Title`, `Organization` (when shown).
@@ -149,11 +154,11 @@ The existing `GET /orgs` is **SuperAdmin-only**. Plain organizers (who can creat
 ## 8. Status
 - [x] P0.1 auto-slug (wasm32 check clean; manual click-through pending)
 - [x] P0.2 optional hints (wasm32 check clean; manual click-through pending)
-- [ ] P0.3 org dropdown (blocked on §2 access decision)
-- [ ] P1.1 advanced disclosure
+- [x] P0.3 org dropdown — **option A** (wasm32 + worker check + clippy `-D warnings` clean; manual click-through pending; **requires worker redeploy** for non-super-admin access)
+- [x] P1.1 advanced disclosure (wasm32 check clean; the false "3× leaderboard" claim was corrected — see §3 P1.1)
 - [ ] P1.2 required markers
 - [ ] P1.3 post-create nudge
 - [ ] P2 deferred
 
-**Decision needed from user before P0.3:** choose option **A / B / C** for the org-dropdown access constraint (§2).
+**P0.3 decision (resolved):** Option **A** — widened `GET /orgs` read access to any authenticated admin; mutations stay SuperAdmin-only. Worker redeploy required.
 ````
