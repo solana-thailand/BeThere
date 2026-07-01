@@ -113,11 +113,26 @@ The existing `GET /orgs` is **SuperAdmin-only**. Plain organizers (who can creat
 - Append ` *` (red) to labels for `Campaign ID (slug)`, `Title`, `Organization` (when shown).
 - On Save: in addition to existing Title + slug checks, validate an org is selected/present (warning toast if blank) — matches existing toast pattern.
 
+**Acceptance**
+- [x] Red `*` appended to `Campaign ID (slug)`, `Title`, and `Organization` labels via a reusable `.required-marker` CSS class (`color: var(--danger)`).
+- [x] On Save (create path): org validation added — blank org → `ToastType::Warning` "Organization is required", returns without saving. Mirrors the existing title/slug guard pattern.
+- [x] wasm32 check clean; no new clippy findings (verified: 10 pre-existing findings unchanged, 0 introduced).
+- [ ] Manual click-through pending.
+
 ### P1.3 — Post-create nudge
 - After a successful create, instead of (or in addition to) the success toast, navigate to the new campaign's **Detail → Events tab** with a visible banner: *"Campaign created as draft. Add events to activate."*
-- Reuse existing navigation signals; no new state.
 
-**Acceptance (P1)**: each item visually verified; wasm32 check clean.
+**Honest deviation from "no new state":** the plan called for reusing existing navigation signals with no new state. The implementation adds **one** local `Signal<bool>` (`draft_nudge`) — a one-shot flag set `true` on the pure-create success path and cleared on `handle_view` / `handle_back` / `handle_create_new` (and dismissible via a "Dismiss" button). This is the minimal local state needed for a dismissible, one-shot banner; no global or persistent state was introduced.
+
+**Acceptance**
+- [x] On a pure create (non-promote), success navigates to the new campaign's Detail → Events tab (previously: returned to List view). The success toast is unchanged.
+- [x] A `.campaign-nudge` banner renders at the top of the Events tab when `draft_nudge` is true: *"Campaign created as draft. Add events to activate it."* with a "Dismiss" button.
+- [x] Banner auto-clears on navigation away (handle_view/handle_back/handle_create_new) and is dismissible inline.
+- [x] The promote-from-event path is unchanged (it already navigates to Detail and auto-links the source event; the nudge is intentionally skipped there since a campaign promoted from an event already has an event linked).
+- [x] wasm32 check clean; no new clippy findings.
+- [ ] Manual click-through pending.
+
+**Acceptance (P1)**: each item wasm32-check clean (verified); manual click-through still pending for all P1 items.
 
 ---
 
@@ -156,8 +171,8 @@ The existing `GET /orgs` is **SuperAdmin-only**. Plain organizers (who can creat
 - [x] P0.2 optional hints (wasm32 check clean; manual click-through pending)
 - [x] P0.3 org dropdown — **option A** (wasm32 + worker check + clippy `-D warnings` clean; manual click-through pending; **requires worker redeploy** for non-super-admin access)
 - [x] P1.1 advanced disclosure (wasm32 check clean; the false "3× leaderboard" claim was corrected — see §3 P1.1)
-- [ ] P1.2 required markers
-- [ ] P1.3 post-create nudge
+- [x] P1.2 required markers (wasm32 check clean; added org validation on create; manual click-through pending)
+- [x] P1.3 post-create nudge (wasm32 check clean; honest deviation — one local `draft_nudge` signal added, see §3 P1.3; manual click-through pending)
 - [ ] P2 deferred
 
 **P0.3 decision (resolved):** Option **A** — widened `GET /orgs` read access to any authenticated admin; mutations stay SuperAdmin-only. Worker redeploy required.
