@@ -46,6 +46,33 @@ fn status_badge_class(status: &str) -> &'static str {
     }
 }
 
+/// Convert a free-form title into a URL-safe kebab-case slug.
+/// Lowercases; replaces runs of non-[a-z0-9] with '-'; trims leading/trailing
+/// dashes; caps length at 60 chars. Returns empty string for empty/whitespace input.
+fn slugify(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut prev_dash = false;
+    for c in s.chars() {
+        if c.is_ascii_alphanumeric() {
+            out.push(c.to_ascii_lowercase());
+            prev_dash = false;
+        } else if !prev_dash && !out.is_empty() {
+            out.push('-');
+            prev_dash = true;
+        }
+    }
+    while out.ends_with('-') {
+        out.pop();
+    }
+    if out.len() > 60 {
+        out.truncate(60);
+        while out.ends_with('-') {
+            out.pop();
+        }
+    }
+    out
+}
+
 // ===== Page Component =====
 
 #[component]
@@ -72,6 +99,8 @@ pub fn CampaignsPage(
     let (saving, set_saving) = signal(false);
     let (refresh_counter, set_refresh_counter) = signal(0u32);
     let (form_id, set_form_id) = signal(String::new());
+    // True once the user manually edits the slug; suppresses auto-fill from Title.
+    let (slug_manually_edited, set_slug_manually_edited) = signal(false);
     let (form_title, set_form_title) = signal(String::new());
     let (form_description, set_form_description) = signal(String::new());
     let (form_org_id, set_form_org_id) = signal(String::new());
@@ -176,6 +205,7 @@ pub fn CampaignsPage(
 
     let reset_form = move || {
         set_form_id.set(String::new());
+        set_slug_manually_edited.set(false);
         set_form_title.set(String::new());
         set_form_description.set(String::new());
         set_form_org_id.set(String::new());
@@ -769,7 +799,10 @@ pub fn CampaignsPage(
                                 placeholder="e.g. solana-hacker-series-2025"
                                 disabled=move || editing_id.get().is_some()
                                 prop:value=move || form_id.get()
-                                on:input=move |ev| set_form_id.set(event_target_value(&ev))
+                                on:input=move |ev| {
+                                    set_form_id.set(event_target_value(&ev));
+                                    set_slug_manually_edited.set(true);
+                                }
                             />
                         </div>
                         <div class="form-group">
@@ -779,7 +812,15 @@ pub fn CampaignsPage(
                                 type="text"
                                 placeholder="Campaign title"
                                 prop:value=move || form_title.get()
-                                on:input=move |ev| set_form_title.set(event_target_value(&ev))
+                                on:input=move |ev| {
+                                    let v = event_target_value(&ev);
+                                    set_form_title.set(v.clone());
+                                    // Auto-fill slug from title on create, unless the user
+                                    // has manually edited the slug field.
+                                    if editing_id.get().is_none() && !slug_manually_edited.get() {
+                                        set_form_id.set(slugify(&v));
+                                    }
+                                }
                             />
                         </div>
                         <div class="form-group">
@@ -831,6 +872,7 @@ pub fn CampaignsPage(
                         <Show when=move || form_reward_type.get() == "nft_certificate" fallback=|| view! { <div></div> }>
                             <div class="form-section">
                                 <h4 class="form-section-title">"NFT Reward Configuration"</h4>
+                                <p class="hint-note-sm">"All fields below are optional — sensible defaults are applied on mint."</p>
                                 <div class="form-group">
                                     <label class="form-label">"NFT Name"</label>
                                     <input class="form-input" type="text"
@@ -838,6 +880,7 @@ pub fn CampaignsPage(
                                         prop:value=move || form_rc_name.get()
                                         on:input=move |ev| set_form_rc_name.set(event_target_value(&ev))
                                     />
+                                    <p class="hint-note-sm">"Leave blank to use '{Title} - Campaign Complete' on mint."</p>
                                 </div>
                                 <div class="form-group">
                                     <label class="form-label">"Symbol"</label>
@@ -846,6 +889,7 @@ pub fn CampaignsPage(
                                         prop:value=move || form_rc_symbol.get()
                                         on:input=move |ev| set_form_rc_symbol.set(event_target_value(&ev))
                                     />
+                                    <p class="hint-note-sm">"Leave blank to use 'CAMPAIGN' on mint."</p>
                                 </div>
                                 <div class="form-group">
                                     <label class="form-label">"Description"</label>
@@ -854,6 +898,7 @@ pub fn CampaignsPage(
                                         prop:value=move || form_rc_description.get()
                                         on:input=move |ev| set_form_rc_description.set(event_target_value(&ev))
                                     />
+                                    <p class="hint-note-sm">"Leave blank to use 'Completed the {Title} campaign' on mint."</p>
                                 </div>
                                 <div class="form-group">
                                     <label class="form-label">"Image URL"</label>
