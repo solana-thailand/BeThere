@@ -119,6 +119,10 @@ pub fn CampaignsPage(
     let (events_list, set_events_list) = signal(Vec::<api::EventMeta>::new());
     // Organizations available to pick in the create-form org dropdown.
     let (orgs_list, set_orgs_list) = signal(Vec::<api::OrgOption>::new());
+    // One-shot nudge flag: set true right after a fresh (non-promote) create so
+    // the Detail → Events tab can show a "add events to activate" banner.
+    // Cleared on any navigation away from the just-created detail view.
+    let (draft_nudge, set_draft_nudge) = signal(false);
     // Event id awaiting auto-link after a successful create (set when the
     // create form was pre-filled via "promote from event").
     let (pending_event_to_link, set_pending_event_to_link) = signal(None::<String>);
@@ -315,6 +319,8 @@ pub fn CampaignsPage(
         // A manual "+ Create Campaign" click should never inherit a leftover
         // "promote from event" auto-link intent.
         set_pending_event_to_link.set(None);
+        // Also clear any stale draft nudge from a prior create.
+        set_draft_nudge.set(false);
         set_current_view.set(CampaignView::Create);
     };
 
@@ -327,6 +333,9 @@ pub fn CampaignsPage(
     };
     // View detail
     let handle_view = move |id: String| {
+        // Selecting a different campaign clears any stale draft nudge left
+        // over from a prior just-created campaign.
+        set_draft_nudge.set(false);
         set_selected_id.set(Some(id));
         set_detail_tab.set(DetailTab::Events);
         set_current_view.set(CampaignView::Detail);
@@ -339,6 +348,8 @@ pub fn CampaignsPage(
         // Forget any "promote from event" auto-link intent if the organizer
         // cancels out of the form, so a later manual create isn't auto-linked.
         set_pending_event_to_link.set(None);
+        // Leaving the detail view dismisses any draft nudge.
+        set_draft_nudge.set(false);
         do_reload();
     };
     // Save (create or update)
@@ -359,6 +370,18 @@ pub fn CampaignsPage(
                 components::show_toast(
                     &set_toast,
                     "Campaign ID (slug) is required",
+                    ToastType::Warning,
+                );
+                return;
+            }
+            // Organization is chosen from a dropdown and is immutable after
+            // create — require it here so an empty draft with no org cannot
+            // be saved.
+            let org_id = form_org_id.get();
+            if org_id.trim().is_empty() {
+                components::show_toast(
+                    &set_toast,
+                    "Organization is required",
                     ToastType::Warning,
                 );
                 return;
@@ -462,7 +485,14 @@ pub fn CampaignsPage(
                                 set_detail_tab.set(DetailTab::Events);
                                 set_current_view.set(CampaignView::Detail);
                             } else {
-                                set_current_view.set(CampaignView::List);
+                                // Pure create (not promoted from an event):
+                                // drop the organizer into the new campaign's
+                                // Events tab and show a one-shot "add events to
+                                // activate" nudge instead of returning to List.
+                                set_draft_nudge.set(true);
+                                set_selected_id.set(Some(id_for_link));
+                                set_detail_tab.set(DetailTab::Events);
+                                set_current_view.set(CampaignView::Detail);
                             }
                             do_reload();
                         }
@@ -807,7 +837,7 @@ pub fn CampaignsPage(
                 <div class="card">
                     <div class="card-body">
                         <div class="form-group">
-                            <label class="form-label">"Campaign ID (slug)"</label>
+                            <label class="form-label">"Campaign ID (slug)" <span class="required-marker">"*"</span></label>
                             <input
                                 class="form-input"
                                 type="text"
@@ -821,7 +851,7 @@ pub fn CampaignsPage(
                             />
                         </div>
                         <div class="form-group">
-                            <label class="form-label">"Title"</label>
+                            <label class="form-label">"Title" <span class="required-marker">"*"</span></label>
                             <input
                                 class="form-input"
                                 type="text"
@@ -850,7 +880,7 @@ pub fn CampaignsPage(
                         </div>
                         <Show when=move || editing_id.get().is_none() fallback=|| view! { <div></div> }>
                             <div class="form-group">
-                                <label class="form-label">"Organization"</label>
+                                <label class="form-label">"Organization" <span class="required-marker">"*"</span></label>
                                 <select
                                     class="form-select"
                                     prop:value=move || form_org_id.get()
@@ -1083,6 +1113,22 @@ pub fn CampaignsPage(
                 </div>
                 // --- Events Tab ---
                 <Show when=move || detail_tab.get() == DetailTab::Events fallback=|| view! { <div></div> }>
+                    // One-shot "add events to activate" nudge shown right after
+                    // a fresh (non-promote) create. Dismissable and auto-cleared
+                    // on any navigation away from this detail view.
+                    <Show when=move || draft_nudge.get() fallback=|| view! { <div></div> }>
+                        <div class="campaign-nudge">
+                            <strong>"Campaign created as draft."</strong>
+                            " Add events to activate it."
+                            <button
+                                class="btn btn-sm btn-secondary"
+                                style="margin-left: 0.75rem; padding: 0.15rem 0.5rem; font-size: 0.75rem;"
+                                on:click=move |_: web_sys::MouseEvent| set_draft_nudge.set(false)
+                            >
+                                "Dismiss"
+                            </button>
+                        </div>
+                    </Show>
                     <div class="card">
                         <div class="card-header">
                             <h3>"Campaign Events"</h3>
