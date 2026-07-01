@@ -117,6 +117,8 @@ pub fn CampaignsPage(
     let (add_is_required, set_add_is_required) = signal(true);
     // Events available to link (loaded once on mount for the Events-tab picker).
     let (events_list, set_events_list) = signal(Vec::<api::EventMeta>::new());
+    // Organizations available to pick in the create-form org dropdown.
+    let (orgs_list, set_orgs_list) = signal(Vec::<api::OrgOption>::new());
     // Event id awaiting auto-link after a successful create (set when the
     // create form was pre-filled via "promote from event").
     let (pending_event_to_link, set_pending_event_to_link) = signal(None::<String>);
@@ -127,6 +129,19 @@ pub fn CampaignsPage(
                 Ok(data) => set_events_list.set(data.events),
                 Err(e) => {
                     log::warn!("[campaigns-page] failed to load events list: {e}");
+                }
+            }
+        });
+    });
+    // Load orgs list once for the create-form org picker dropdown. Read access
+    // was widened to any authenticated admin (worker handlers/orgs.rs), so this
+    // succeeds for plain organizers, not just super admins.
+    Effect::new(move |_| {
+        leptos::task::spawn_local(async move {
+            match api::list_orgs().await {
+                Ok(data) => set_orgs_list.set(data),
+                Err(e) => {
+                    log::warn!("[campaigns-page] failed to load orgs list: {e}");
                 }
             }
         });
@@ -835,14 +850,34 @@ pub fn CampaignsPage(
                         </div>
                         <Show when=move || editing_id.get().is_none() fallback=|| view! { <div></div> }>
                             <div class="form-group">
-                                <label class="form-label">"Organization ID"</label>
-                                <input
-                                    class="form-input"
-                                    type="text"
-                                    placeholder="Organization ID"
+                                <label class="form-label">"Organization"</label>
+                                <select
+                                    class="form-select"
                                     prop:value=move || form_org_id.get()
-                                    on:input=move |ev| set_form_org_id.set(event_target_value(&ev))
-                                />
+                                    on:change=move |ev| set_form_org_id.set(event_target_value(&ev))
+                                >
+                                    <option value="">"— Select organization —"</option>
+                                    {move || {
+                                        // Mirror the Events-tab picker: sort by name,
+                                        // fall back to id when the name is blank.
+                                        let mut orgs = orgs_list.get();
+                                        orgs.sort_by(|a, b| a.name.cmp(&b.name));
+                                        orgs.into_iter().map(|o| {
+                                            let id = o.id.clone();
+                                            let label = if o.name.trim().is_empty() {
+                                                o.id.clone()
+                                            } else {
+                                                o.name.clone()
+                                            };
+                                            view! {
+                                                <option value=id>{label}</option>
+                                            }
+                                        }).collect::<Vec<_>>()
+                                    }}
+                                </select>
+                                <p class="hint-note-sm">
+                                    "Organization is set on create and cannot be changed after."
+                                </p>
                             </div>
                         </Show>
                         <div class="form-group">
@@ -900,30 +935,39 @@ pub fn CampaignsPage(
                                     />
                                     <p class="hint-note-sm">"Leave blank to use 'Completed the {Title} campaign' on mint."</p>
                                 </div>
-                                <div class="form-group">
-                                    <label class="form-label">"Image URL"</label>
-                                    <input class="form-input" type="url"
-                                        placeholder="https://arweave.net/... or IPFS URL"
-                                        prop:value=move || form_rc_image_url.get()
-                                        on:input=move |ev| set_form_rc_image_url.set(event_target_value(&ev))
-                                    />
-                                </div>
-                                <div class="form-group">
-                                    <label class="form-label">"Metadata URI"</label>
-                                    <input class="form-input" type="url"
-                                        placeholder="https://arweave.net/... (off-chain metadata JSON)"
-                                        prop:value=move || form_rc_metadata_uri.get()
-                                        on:input=move |ev| set_form_rc_metadata_uri.set(event_target_value(&ev))
-                                    />
-                                </div>
-                                <div class="form-group">
-                                    <label class="form-label">"Collection Mint"</label>
-                                    <input class="form-input" type="text"
-                                        placeholder="Solana collection mint address (optional)"
-                                        prop:value=move || form_rc_collection_mint.get()
-                                        on:input=move |ev| set_form_rc_collection_mint.set(event_target_value(&ev))
-                                    />
-                                </div>
+                                <details class="form-advanced">
+                                    <summary class="form-advanced-summary">"Advanced (optional)"</summary>
+                                    <p class="hint-note-sm">
+                                        "Optional fields for custom artwork, off-chain metadata, or on-chain collection grouping. Leave blank to use defaults."
+                                    </p>
+                                    <div class="form-group">
+                                        <label class="form-label">"Image URL"</label>
+                                        <input class="form-input" type="url"
+                                            placeholder="https://arweave.net/... or IPFS URL"
+                                            prop:value=move || form_rc_image_url.get()
+                                            on:input=move |ev| set_form_rc_image_url.set(event_target_value(&ev))
+                                        />
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="form-label">"Metadata URI"</label>
+                                        <input class="form-input" type="url"
+                                            placeholder="https://arweave.net/... (off-chain metadata JSON)"
+                                            prop:value=move || form_rc_metadata_uri.get()
+                                            on:input=move |ev| set_form_rc_metadata_uri.set(event_target_value(&ev))
+                                        />
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="form-label">"Collection Mint"</label>
+                                        <input class="form-input" type="text"
+                                            placeholder="Solana collection mint address (optional)"
+                                            prop:value=move || form_rc_collection_mint.get()
+                                            on:input=move |ev| set_form_rc_collection_mint.set(event_target_value(&ev))
+                                        />
+                                        <p class="hint-note-sm">
+                                            "Optional. Groups minted NFTs into an on-chain Solana collection and is used to tell campaign rewards apart from event NFTs. Leave blank if unsure."
+                                        </p>
+                                    </div>
+                                </details>
                             </div>
                         </Show>
                         <div class="form-actions">

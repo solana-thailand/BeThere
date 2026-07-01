@@ -1,11 +1,17 @@
 //! Organization API handlers — CRUD for organizations.
 //!
-//! Protected endpoints (require super admin auth):
-//!   GET    /api/orgs           — list all organizations
-//!   POST   /api/orgs           — create organization
-//!   GET    /api/orgs/{id}      — get organization details
-//!   PUT    /api/orgs/{id}      — update organization
-//!   DELETE /api/orgs/{id}      — delete organization
+//! Access policy:
+//!   - Read (list) is available to any authenticated admin/organizer so they
+//!     can populate org dropdowns (e.g. the campaign creation form).
+//!   - All mutations (create/update/delete) and single-org detail remain
+//!     SuperAdmin-only.
+//!
+//! Endpoints:
+//!   GET    /api/orgs           — list all organizations   (admin read)
+//!   POST   /api/orgs           — create organization      (super admin)
+//!   GET    /api/orgs/{id}      — get organization details (super admin)
+//!   PUT    /api/orgs/{id}      — update organization      (super admin)
+//!   DELETE /api/orgs/{id}      — delete organization      (super admin)
 
 use axum::{
     Extension,
@@ -36,13 +42,9 @@ pub async fn list_orgs(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
 ) -> Result<ApiOk<OrgListResponse>, crate::error::WorkerError> {
-    let role = crate::auth::resolve_user_role(&claims.email, &state, None).await;
-    if role != crate::auth::UserRole::SuperAdmin {
-        return Err(
-            AppError::Forbidden("only super admins can manage organizations".into()).into(),
-        );
-    }
-
+    // Read access is intentionally open to any authenticated admin/organizer
+    // (the route sits behind the admin-authed router, so `claims` proves a
+    // valid staff session). Mutating endpoints below remain SuperAdmin-only.
     let db = state
         .d1
         .as_ref()
@@ -51,6 +53,12 @@ pub async fn list_orgs(
     let orgs = crate::org_store::list_orgs(db)
         .await
         .map_err(AppError::Internal)?;
+
+    tracing::debug!(
+        staff_email = %claims.email,
+        org_count = orgs.len(),
+        "org list read"
+    );
 
     Ok(ApiOk::new(OrgListResponse { orgs }))
 }
