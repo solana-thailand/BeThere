@@ -60,7 +60,7 @@ The `reward_config` is **not** a raw JSON textarea (good) — it's already struc
 - [ ] Manually editing the slug stops auto-fill for the rest of the session.
 - [ ] Empty/whitespace title leaves slug empty (no `---` garbage).
 - [ ] Edit view never overwrites the existing slug.
-- [ ] `cargo check --target wasm32-unknown-unknown` clean.
+- [x] `cargo check --target wasm32-unknown-unknown` clean (commit `4c99532`).
 
 ### P0.2 — Reward fields optional + default hints
 **Behavior**
@@ -72,9 +72,9 @@ The `reward_config` is **not** a raw JSON textarea (good) — it's already struc
 - No behavior change to save/claim (defaults already exist in `claim_campaign_reward`).
 
 **Acceptance**
-- [ ] Hints render under the three fields and update the `{Title}` substitution live.
+- [ ] Hints render under NFT Name, Symbol, and Description, each showing the literal default template applied on mint (e.g. `'{Title} - Campaign Complete'`, `'CAMPAIGN'`, `'Completed the {Title} campaign'`). `{Title}` is shown as a placeholder, not substituted live.
 - [ ] Saving with all three blank still mints with correct defaults (covered by existing claim path — no regression).
-- [ ] wasm32 check clean.
+- [x] wasm32 check clean (commit `4c99532`).
 
 ### P0.3 — Organization ID → dropdown  ⚠️ has open access-control decision
 **Behavior (frontend)**
@@ -147,8 +147,8 @@ The existing `GET /orgs` is **SuperAdmin-only**. Plain organizers (who can creat
 ---
 
 ## 8. Status
-- [ ] P0.1 auto-slug
-- [ ] P0.2 optional hints
+- [x] P0.1 auto-slug (wasm32 check clean; manual click-through pending)
+- [x] P0.2 optional hints (wasm32 check clean; manual click-through pending)
 - [ ] P0.3 org dropdown (blocked on §2 access decision)
 - [ ] P1.1 advanced disclosure
 - [ ] P1.2 required markers
