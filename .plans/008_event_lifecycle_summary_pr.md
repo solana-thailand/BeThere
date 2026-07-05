@@ -1,6 +1,6 @@
 # Plan 008 — Event Lifecycle: Summary, Recap, Post-Event Registration, PR Generator
 
-> **Status**: DRAFT — not started
+> **Status**: Phase 1 (Post-Event Summary) ✅ shipped · Phase 2 (Public Recap + Past Events) ✅ shipped on `feature/event_recap` · Phases 3–4 pending
 > **Type**: feature (event lifecycle workflow) + content (PR/recap generation)
 > **Priority**: P2 — closes the "what happens after an event ends" gap and turns past events into lead-capture surfaces. Independent of plans 005/006/007; can start in parallel.
 > **Created**: 2026-06-23
@@ -214,21 +214,21 @@ New file: `frontend-leptos/src/pages/organizer/event_summary.rs`
 
 New file: `worker/src/handlers/events/recap.rs`
 
-- [ ] `PUT /api/events/{id}/recap` (protected, organizer+):
+- [x] `PUT /api/events/{id}/recap` (protected, organizer+): ✅ `worker/src/handlers/events/recap.rs::put_recap`
   - Body: `{ recap_markdown: String, recap_image_url: String, publish: bool }`.
   - Validates: markdown ≤ 16KB; image_url must be https if non-empty.
   - Ensures a frozen `event_summaries` row exists (refuses to publish a recap for an event with no frozen summary — recaps without numbers are misleading). If none, returns 409 with a helpful message ("Freeze the summary first").
   - Updates `event_summaries.recap_markdown`, `recap_image_url`, `recap_published_at` (set to now if `publish=true`, null if false).
-  - Mirrors `recap_published` flag on the `events` row (denormalized for cheap public-listing query).
+  - Mirrors `recap_published` flag on the `events` row (denormalized for cheap public-listing query) + syncs KV EventConfig + EventIndex.
   - Audit: `AuditAction::EventRecapPublished` / `EventRecapUnpublished`.
-- [ ] `GET /api/events/{id}/recap` (protected) — returns draft recap to the organizer (even if unpublished).
+- [x] `GET /api/events/{id}/recap` (protected) — returns draft recap to the organizer (even if unpublished). ✅ `recap.rs::get_recap_handler`
 
 #### 3.2.2 Public recap + past events listing
 
 Extend `worker/src/handlers/public_event.rs`:
 
-- [ ] `GET /api/public/events/past` — list `status == Completed AND recap_published == 1` events, sanitized (same field exclusion as `list_public_events`). Sorted by `event_end_ms DESC`. Cache 60s.
-- [ ] `GET /api/public/event/{slug}/recap` — returns `{ event_meta, recap_markdown, recap_image_url, frozen_at, funnel: { registered, deposited, checked_in } }` for a published recap. Sensitive financials (refunded totals, no-show counts) are **excluded** from the public payload — only headline funnel + recap content. Cache 120s.
+- [x] `GET /api/public/events/past` — list `status == Completed AND recap_published == 1` events, sanitized (same field exclusion as `list_public_events`). Sorted by `event_end_ms DESC`. Cache 60s. ✅ `public_event.rs::list_past_events` + `db/events.rs::list_past_events_raw`
+- [x] `GET /api/public/event/{slug}/recap` — returns `{ event_meta, recap_markdown, recap_image_url, frozen_at, funnel: { registered, deposited, checked_in } }` for a published recap. Sensitive financials (refunded totals, no-show counts) are **excluded** from the public payload — only headline funnel + recap content. Cache 120s. ✅ `public_event.rs::get_public_recap`
   - If recap not published → 404 (looks like the event has no public recap).
   - If event is still Active → 404 (no recap yet).
   - If event is Completed but `recap_published == 0` → 404.
@@ -246,17 +246,17 @@ Extend `worker/src/handlers/public_event.rs`:
 
 #### 3.2.4 Frontend — public recap page + past-events listing
 
-- [ ] New page `frontend-leptos/src/pages/public/past_events.rs` — grid of completed events with published recaps. Each card: name, date, tagline, location, attendance count, "Read recap" CTA.
-- [ ] New page `frontend-leptos/src/pages/public/event_recap.rs` — the recap view: hero image, event name + date, recap markdown (rendered), funnel headline ("X developers gathered, Y checked in"), link back to past-events listing.
-- [ ] Link the landing page's "Past Events" nav entry to `/past-events`.
-- [ ] Link each past-event card to `/events/{slug}/recap`.
+- [x] New page `frontend-leptos/src/pages/public/past_events.rs` — grid of completed events with published recaps. Each card: name, date, tagline, location, attendance count, "Read recap" CTA. ✅
+- [x] New page `frontend-leptos/src/pages/public/event_recap.rs` — the recap view: hero image, event name + date, recap markdown (rendered as preformatted text in v1 — `pulldown-cmark` deferred), funnel headline ("X registered · Y checked in · Z claimed"), link back to past-events listing. ✅
+- [x] Link the landing page's "Past Events" nav entry to `/past-events`. ✅ Added to both desktop nav + mobile menu in `landing.rs`.
+- [x] Link each past-event card to `/events/{slug}/recap`. ✅
 
 #### 3.2.5 Frontend — organizer recap editor
 
-- [ ] Extend `event_summary.rs` page (from 3.1.5) with a "Recap" tab.
-- [ ] Markdown editor (textarea + live preview via existing markdown renderer, or pull in `pulldown-cmark` if not already in deps — check `frontend-leptos/Cargo.toml`).
-- [ ] Image URL field (organizer pastes an R2/Cloudflare Images URL — no upload flow in v1).
-- [ ] "Save Draft" + "Publish" buttons. Publish confirms ("Public immediately at /events/{slug}/recap").
+- [x] Extend `event_summary.rs` page (from 3.1.5) with a "Recap" tab. ✅ Added `RecapSection` component rendered below `FreezeSection`.
+- [x] Markdown editor (textarea + live preview via existing markdown renderer, or pull in `pulldown-cmark` if not already in deps — check `frontend-leptos/Cargo.toml`). ✅ Textarea editor + byte counter; v1 renders markdown as preformatted text on the public page (pulldown-cmark deferred — no existing markdown renderer in deps).
+- [x] Image URL field (organizer pastes an R2/Cloudflare Images URL — no upload flow in v1). ✅
+- [x] "Save Draft" + "Publish" buttons. Publish confirms ("Public immediately at /events/{slug}/recap"). ✅
 
 ### 3.3 Phase 3 — Post-Event Registration (lead capture)
 

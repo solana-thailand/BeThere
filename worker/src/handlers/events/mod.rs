@@ -13,6 +13,8 @@
 //!   POST   /api/events/{id}/summary/freeze — manually freeze the post-event summary (Plan 008)
 //!   POST   /api/events/{id}/poster   — upload a marketing poster to R2 (Plan 009)
 //!   DELETE /api/events/{id}/poster   — clear the poster + delete the R2 object (Plan 009)
+//!   GET    /api/events/{id}/recap    — fetch the current draft/published recap (Plan 008 Phase 2)
+//!   PUT    /api/events/{id}/recap    — author + publish/unpublish the public recap (Plan 008 Phase 2)
 //!   POST   /api/events/reseed-kv     — reseed KV index from D1 (super admin only)
 
 pub mod audit;
@@ -22,6 +24,7 @@ pub mod lifecycle;
 pub mod list;
 pub mod poster;
 pub mod read;
+pub mod recap;
 pub mod seed;
 pub mod summary;
 pub mod sync;
@@ -34,6 +37,7 @@ pub use lifecycle::{archive_event, hard_delete_event, restore_event};
 pub use list::list_events;
 pub use poster::{delete_poster, upload_poster};
 pub use read::get_event;
+pub use recap::{get_recap_handler, put_recap};
 pub use seed::{migrate_quiz, reseed_kv_from_d1, seed_event};
 pub use summary::{freeze_event_summary, get_event_summary};
 pub use sync::sync_sheet_to_d1;

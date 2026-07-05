@@ -31,6 +31,38 @@ pub struct EventSummary {
     pub frozen_by: String,
 }
 
+/// Public recap content for a completed event (Plan 008 — Phase 2).
+///
+/// Author-authored markdown + hero image, stored on the `event_summaries` row
+/// alongside the frozen snapshot. Recap publishing is gated on a frozen
+/// summary existing — "recaps without numbers are misleading" (Plan 008 §3.2.1).
+///
+/// Returned by:
+///   - `GET /api/events/{id}/recap` (organizer; includes draft state)
+///   - `GET /api/public/event/{slug}/recap` (public; only when `published_at` is `Some`)
+///
+/// `frozen_at` is mirrored from the parent summary row so the public recap
+/// page can render "Snapshot frozen {date}" without a second lookup.
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+pub struct EventRecap {
+    pub event_id: String,
+    /// Markdown body (≤ 16 KB enforced server-side).
+    #[serde(default)]
+    pub recap_markdown: String,
+    /// Hero image URL (https only; empty = no image).
+    #[serde(default)]
+    pub recap_image_url: String,
+    /// ISO 8601 timestamp the recap was published at. `None` = draft (not yet
+    /// visible publicly). Toggled by `PUT /api/events/{id}/recap` with
+    /// `publish: bool`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recap_published_at: Option<String>,
+    /// ISO 8601 timestamp the underlying summary was frozen at. Mirrored from
+    /// `event_summaries.frozen_at` for display on the public recap page.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub frozen_at: Option<String>,
+}
+
 /// Funnel counters — the top-line attendance funnel.
 ///
 /// Wire-ready (Plan 014 Phase 1.2a): pure `u64` fields, `#[repr(C)]` layout.
