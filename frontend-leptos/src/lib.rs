@@ -19,6 +19,7 @@ use crate::pages::{
     data_privacy::DataPrivacy, deposit::Deposit, dev_dashboard::DevDashboard,
     dev_profile::DevProfile, event_summary::EventSummary, landing::Landing, login::Login,
     privacy::Privacy, public_event::PublicEvent, scanner::Scanner, ticket::page::Ticket,
+    EventRecap, PastEvents,
 };
 
 /// Main application component.
@@ -63,6 +64,11 @@ pub fn App() -> impl IntoView {
                     <Route path=path!("/deposit/:attendee_id") view=Deposit />
                     <Route path=path!("/ticket/:attendee_id") view=Ticket />
                     <Route path=path!("/e/:slug") view=PublicEvent />
+                    // Public past-events feed + recap pages (Plan 008 — Phase 2).
+                    // `/past-events` lists completed events with a published recap;
+                    // `/events/:slug/recap` renders one published recap.
+                    <Route path=path!("/past-events") view=PastEvents />
+                    <Route path=path!("/events/:slug/recap") view=EventRecap />
                     <Route path=path!("/privacy") view=Privacy />
                     <Route path=path!("/data-privacy") view=DataPrivacy />
                     <Route path=path!("/adventure") view=Adventure />

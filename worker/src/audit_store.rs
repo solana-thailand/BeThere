@@ -39,6 +39,10 @@ pub enum AuditAction {
     EventHardDeleted,
     /// Post-event summary snapshot was frozen (Plan 008 — Phase 1).
     EventSummaryFrozen,
+    /// Public recap was published for an event (Plan 008 — Phase 2).
+    EventRecapPublished,
+    /// Public recap was unpublished / draft-saved (Plan 008 — Phase 2).
+    EventRecapUnpublished,
 
     // Escrow lifecycle
     EscrowInitialized,

@@ -243,6 +243,12 @@ pub struct EventMeta {
     /// Empty = fall back to `nft_image_url` on the public event page.
     #[serde(default)]
     pub poster_url: String,
+    /// Denormalized flag mirroring `events.recap_published` (Plan 008 — Phase 2).
+    /// Canonical source is `event_summaries.recap_published_at`; duplicated so
+    /// the past-events listing filter works without joining. Set by
+    /// `PUT /api/events/{id}/recap`.
+    #[serde(default)]
+    pub recap_published: bool,
 
     // ── Capacity settings ─────────────────────────────────────────────
     /// Maximum number of in-person attendees. None = unlimited.
@@ -332,6 +338,12 @@ pub struct EventConfig {
     /// cNFT mint metadata and must not be overloaded with a marketing image.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub poster_url: String,
+    /// Denormalized flag mirroring `events.recap_published` (migration 0020).
+    /// Canonical source is `event_summaries.recap_published_at`; this flag is
+    /// duplicated onto the events row so `GET /api/public/events/past` can
+    /// filter without joining. Set by `PUT /api/events/{id}/recap` (Plan 008 §3.2).
+    #[serde(default)]
+    pub recap_published: bool,
     /// NFT name template (e.g. "BeThere - {event_name}").
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub nft_name_template: String,
@@ -499,6 +511,7 @@ impl EventConfig {
             video_url: self.video_url.clone(),
             nft_image_url: self.nft_image_url.clone(),
             poster_url: self.poster_url.clone(),
+            recap_published: self.recap_published,
             in_person_capacity: self.in_person_capacity,
             online_capacity: self.online_capacity,
             visibility: self.visibility.clone(),
@@ -636,6 +649,7 @@ impl EventConfig {
             nft_metadata_uri: nft_metadata_uri.to_string(),
             nft_image_url: nft_image_url.to_string(),
             poster_url: String::new(),
+            recap_published: false,
             nft_name_template: String::new(),
             nft_symbol: nft_symbol.to_string(),
             nft_description_template: String::new(),
@@ -1176,6 +1190,7 @@ mod tests {
             nft_metadata_uri: String::new(),
             nft_image_url: String::new(),
             poster_url: String::new(),
+            recap_published: false,
             nft_name_template: String::new(),
             nft_symbol: String::new(),
             nft_description_template: String::new(),

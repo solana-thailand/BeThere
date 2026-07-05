@@ -148,6 +148,125 @@ pub async fn upsert_summary(
 }
 
 // ---------------------------------------------------------------------------
+// Recap authoring (Plan 008 — Phase 2)
+// ---------------------------------------------------------------------------
+
+/// Maximum allowed markdown body length (16 KB). Guards D1 row size + worker
+/// memory when rendering. Enforced by the `put_recap` handler before this call.
+pub const MAX_RECAP_MARKDOWN_BYTES: usize = 16 * 1024;
+
+/// Read the recap slice of an `event_summaries` row.
+///
+/// Returns `Ok(None)` when no summary row exists yet (the organizer hasn't
+/// frozen a snapshot). The caller decides whether that's an error (PUT path:
+/// refuse to publish without a freeze) or an empty draft (GET path).
+pub async fn get_recap(
+    db: &D1Database,
+    event_id: &str,
+) -> Result<Option<event_checkin_domain::models::event_summary::EventRecap>, String> {
+    use event_checkin_domain::models::event_summary::EventRecap;
+
+    let sql = "SELECT event_id, recap_markdown, recap_image_url, recap_published_at, frozen_at \
+               FROM event_summaries WHERE event_id = ?1";
+    let stmt = db.prepare(sql);
+    let bound = stmt
+        .bind_refs(&[D1Type::Text(event_id)])
+        .map_err(|e| format!("D1 get_recap bind: {e:?}"))?;
+
+    let raw_first = wasm_bindgen_futures::JsFuture::from(
+        bound
+            .inner()
+            .first(None)
+            .map_err(|e| format!("D1 get_recap first() call: {e:?}"))?,
+    )
+    .await
+    .map_err(|e| format!("D1 get_recap first() await: {e:?}"))?;
+
+    if raw_first.is_null() || raw_first.is_undefined() {
+        return Ok(None);
+    }
+
+    let json_str = js_sys::JSON::stringify(&raw_first)
+        .map(|s| s.as_string().unwrap_or_default())
+        .unwrap_or_default();
+    if json_str.is_empty() {
+        return Ok(None);
+    }
+
+    let row: serde_json::Value = serde_json::from_str(&json_str).map_err(|e| {
+        tracing::warn!(
+            error = %e,
+            json = %json_str.chars().take(300).collect::<String>(),
+            "D1 get_recap: deserialize failed"
+        );
+        format!("D1 get_recap deserialize: {e}")
+    })?;
+
+    let get_str = |field: &str| -> String {
+        row.get(field)
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string()
+    };
+    let parse_ts = |field: &str| -> Option<String> {
+        let s = get_str(field);
+        if s.is_empty() { None } else { Some(s) }
+    };
+
+    Ok(Some(EventRecap {
+        event_id: get_str("event_id"),
+        recap_markdown: get_str("recap_markdown"),
+        recap_image_url: get_str("recap_image_url"),
+        recap_published_at: parse_ts("recap_published_at"),
+        frozen_at: parse_ts("frozen_at"),
+    }))
+}
+
+/// Persist recap content + publish state onto an existing `event_summaries` row.
+///
+/// Callers must have already verified that a frozen row exists (the handler
+/// refuses to publish a recap without a frozen summary — Plan 008 §3.2.1).
+/// `published_at` is `Some(now_iso)` when publishing, `None` when saving a draft
+/// (which clears the public visibility flag).
+pub async fn set_recap(
+    db: &D1Database,
+    event_id: &str,
+    markdown: &str,
+    image_url: &str,
+    published_at: Option<&str>,
+) -> Result<(), String> {
+    // Escape single quotes in text fields to keep the interpolated SQL valid.
+    // Both fields are organizer-authored but authenticated + role-gated; the
+    // escaping is defensive against legitimate content (e.g. apostrophes).
+    let esc = |s: &str| s.replace('\'', "''");
+
+    let published_sql = match published_at {
+        Some(ts) => format!("'{}'", esc(ts)),
+        None => "NULL".to_string(),
+    };
+
+    let sql = format!(
+        "UPDATE event_summaries SET \
+            recap_markdown = '{markdown}', \
+            recap_image_url = '{image_url}', \
+            recap_published_at = {published_sql}, \
+            updated_at = datetime('now') \
+         WHERE event_id = '{event_id}'",
+        markdown = esc(markdown),
+        image_url = esc(image_url),
+        published_sql = published_sql,
+        event_id = esc(event_id),
+    );
+
+    db.prepare(&sql)
+        .run()
+        .await
+        .map_err(|e| format!("D1 set_recap run: {e:?}"))?;
+
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
 // Live computation
 // ---------------------------------------------------------------------------
 
