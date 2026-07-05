@@ -323,6 +323,7 @@ pub async fn list_past_events_raw(db: &D1Database) -> Result<Vec<serde_json::Val
                created_at, in_person_capacity, online_capacity, visibility \
                FROM events \
                WHERE status = 'completed' AND recap_published = 1 \
+               AND visibility = 'public' \
                ORDER BY event_end_ms DESC";
 
     let stmt = db.prepare(sql);
