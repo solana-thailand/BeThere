@@ -87,6 +87,11 @@ pub struct D1EventRow {
     pub calendar_subscribe_url: Option<String>,
     // Columns added by migration 0019 (event poster)
     pub poster_url: Option<String>,
+    // Columns added by migration 0020 (Plan 008 — denormalized recap flag).
+    // Canonical source is `event_summaries.recap_published_at`; this flag is
+    // duplicated onto the events row so `GET /api/public/events/past` can
+    // filter without a join.
+    pub recap_published: Option<i64>,
 }
 
 impl D1EventRow {
@@ -205,6 +210,7 @@ impl D1EventRow {
             .unwrap_or_default(),
             calendar_subscribe_url: self.calendar_subscribe_url.clone().unwrap_or_default(),
             poster_url: self.poster_url.clone().unwrap_or_default(),
+            recap_published: self.recap_published.unwrap_or(0) != 0,
         }
     }
 }
@@ -280,6 +286,129 @@ pub async fn save_form_config(
 }
 
 // ---------------------------------------------------------------------------
+// Recap helpers (Plan 008 — Phase 2)
+// ---------------------------------------------------------------------------
+
+/// Flip the denormalized `recap_published` flag on the `events` row.
+///
+/// Canonical source is `event_summaries.recap_published_at`; this flag is
+/// duplicated onto the events row so `GET /api/public/events/past` can filter
+/// without a join. Mirrors the migration 0020 column added by Phase 1.
+pub async fn set_recap_published_flag(
+    db: &D1Database,
+    event_id: &str,
+    published: bool,
+) -> Result<(), String> {
+    let value = if published { 1 } else { 0 };
+    let sql = format!("UPDATE events SET recap_published = {value} WHERE id = '{event_id}'",);
+    db.exec(&sql)
+        .await
+        .map_err(|e| format!("D1 set_recap_published_flag: {e:?}"))?;
+    Ok(())
+}
+
+/// List completed events with a published recap, for the public past-events
+/// feed (Plan 008 — Phase 2 §3.2.2). Mirrors `list_public_events_raw` but
+/// filters on `status = 'completed' AND recap_published = 1` and sorts by
+/// `event_end_ms DESC` (most recent events first).
+///
+/// Returns the same sanitized field set as `list_public_events_raw`, plus
+/// `poster_url` (Phase 2 cards prefer the marketing poster over the NFT badge
+/// image, matching the dedicated event page hero).
+pub async fn list_past_events_raw(db: &D1Database) -> Result<Vec<serde_json::Value>, String> {
+    use event_checkin_domain::models::event::*;
+
+    let sql = "SELECT id, name, slug, status, event_format, event_start_ms, event_end_ms, \
+               time_tba, deposit_enabled, tagline, location, nft_image_url, poster_url, \
+               created_at, in_person_capacity, online_capacity, visibility \
+               FROM events \
+               WHERE status = 'completed' AND recap_published = 1 \
+               ORDER BY event_end_ms DESC";
+
+    let stmt = db.prepare(sql);
+    let raw_result = JsFuture::from(
+        stmt.inner()
+            .all()
+            .map_err(|e| format!("D1 list_past_events_raw all() call: {e:?}"))?,
+    )
+    .await
+    .map_err(|e| format!("D1 list_past_events_raw all() await: {e:?}"))?;
+
+    let results_key = wasm_bindgen::JsValue::from_str("results");
+    let raw_rows =
+        js_sys::Reflect::get(&raw_result, &results_key).unwrap_or(wasm_bindgen::JsValue::NULL);
+
+    let json_str = js_sys::JSON::stringify(&raw_rows)
+        .map(|s| s.as_string().unwrap_or_default())
+        .unwrap_or_default();
+
+    // Parse into a relaxed row shape (mirror of PublicEventRow with poster_url).
+    #[derive(serde::Deserialize, Default)]
+    #[serde(default)]
+    struct PastEventRow {
+        id: Option<String>,
+        name: Option<String>,
+        slug: Option<String>,
+        status: Option<String>,
+        event_format: Option<String>,
+        event_start_ms: Option<i64>,
+        event_end_ms: Option<i64>,
+        time_tba: Option<i64>,
+        deposit_enabled: Option<i64>,
+        tagline: Option<String>,
+        location: Option<String>,
+        nft_image_url: Option<String>,
+        poster_url: Option<String>,
+        created_at: Option<String>,
+        in_person_capacity: Option<i64>,
+        online_capacity: Option<i64>,
+        visibility: Option<String>,
+    }
+
+    let rows: Vec<PastEventRow> = serde_json::from_str(&json_str).unwrap_or_default();
+
+    Ok(rows
+        .into_iter()
+        .map(|r| {
+            let status: EventStatus = serde_json::from_value(serde_json::Value::String(
+                r.status.clone().unwrap_or_default(),
+            ))
+            .unwrap_or_default();
+            let event_format: EventFormat = serde_json::from_value(serde_json::Value::String(
+                r.event_format.clone().unwrap_or_default(),
+            ))
+            .unwrap_or_default();
+            let visibility: EventVisibility = serde_json::from_value(serde_json::Value::String(
+                r.visibility
+                    .clone()
+                    .unwrap_or_else(|| "public".to_string()),
+            ))
+            .unwrap_or_default();
+
+            serde_json::json!({
+                "id": r.id.unwrap_or_default(),
+                "name": r.name.unwrap_or_default(),
+                "slug": r.slug.unwrap_or_default(),
+                "status": status.as_str(),
+                "event_start_ms": r.event_start_ms.unwrap_or(0),
+                "event_end_ms": r.event_end_ms.unwrap_or(0),
+                "time_tba": r.time_tba.unwrap_or(0) == 1,
+                "deposit_enabled": r.deposit_enabled.unwrap_or(0) != 0,
+                "event_format": event_format.as_str(),
+                "tagline": r.tagline.unwrap_or_default(),
+                "location": r.location.unwrap_or_default(),
+                "nft_image_url": r.nft_image_url.unwrap_or_default(),
+                "poster_url": r.poster_url.unwrap_or_default(),
+                "created_at": r.created_at.unwrap_or_default(),
+                "in_person_capacity": r.in_person_capacity.and_then(|v| if v >= 0 { Some(v as u32) } else { None }),
+                "online_capacity": r.online_capacity.and_then(|v| if v >= 0 { Some(v as u32) } else { None }),
+                "visibility": visibility.as_str(),
+            })
+        })
+        .collect())
+}
+
+// ---------------------------------------------------------------------------
 // Write operations
 // ---------------------------------------------------------------------------
 
@@ -317,7 +446,7 @@ pub async fn upsert_event(
          in_person_capacity, online_capacity, \
          online_open_mode, online_registration_open, \
          deposit_deadline_hours, updated_by, dev_profile_enabled, community_links, \
-         calendar_subscribe_url, poster_url) \
+         calendar_subscribe_url, poster_url, recap_published) \
          VALUES ('{id}', '{name}', '{slug}', '{status}', '{event_format}', \
          {event_start_ms}, {event_end_ms}, \
          {deposit_enabled}, {deposit_amount_usdc}, {deposit_amount_thb}, \
@@ -336,7 +465,7 @@ pub async fn upsert_event(
          {in_person_capacity}, {online_capacity}, \
          '{online_open_mode}', {online_registration_open}, \
          {deposit_deadline_hours}, '{updated_by}', {dev_profile_enabled}, '{community_links}', \
-         '{calendar_subscribe_url}', '{poster_url}') \
+         '{calendar_subscribe_url}', '{poster_url}', {recap_published}) \
          ON CONFLICT (id) DO UPDATE SET \
          name = excluded.name, slug = excluded.slug, status = excluded.status, \
          event_format = excluded.event_format, \
@@ -382,7 +511,8 @@ pub async fn upsert_event(
          dev_profile_enabled = excluded.dev_profile_enabled, \
          community_links = excluded.community_links, \
          calendar_subscribe_url = excluded.calendar_subscribe_url, \
-         poster_url = excluded.poster_url",
+         poster_url = excluded.poster_url, \
+         recap_published = excluded.recap_published",
         id = config.id,
         name = config.name.replace('\'', "''"),
         slug = config.slug,
@@ -443,6 +573,7 @@ pub async fn upsert_event(
             serde_json::to_string(&config.community_links).unwrap_or_else(|_| "[]".to_string()),
         calendar_subscribe_url = config.calendar_subscribe_url,
         poster_url = config.poster_url,
+        recap_published = config.recap_published as i32,
     );
 
     db.exec(&sql)

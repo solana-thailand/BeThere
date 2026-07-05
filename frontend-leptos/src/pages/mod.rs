@@ -21,9 +21,11 @@ pub mod landing;
 pub mod login;
 pub mod onchain_events_panel;
 pub mod privacy;
+pub mod public;
 pub mod public_event;
 pub mod quiz_editor;
 pub mod scanner;
 pub mod ticket;
 
 pub use event_summary::EventSummary;
+pub use public::{EventRecap, PastEvents};

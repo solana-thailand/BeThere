@@ -38,6 +38,10 @@ pub fn routes(state: AppState) -> Router<()> {
     // Public event list: 60s cache (changes infrequently)
     let public_events_list = Router::new()
         .route("/public/events", get(public_event::list_public_events))
+        // Past events feed (Plan 008 — Phase 2): completed events with a
+        // published recap. Same 60s cache — recaps are author-published and
+        // rarely change once live.
+        .route("/public/events/past", get(public_event::list_past_events))
         .layer(middleware::from_fn(
             crate::middleware::cache_public_60_layer,
         ));
@@ -45,6 +49,13 @@ pub fn routes(state: AppState) -> Router<()> {
     // Public event detail: 120s cache (individual events rarely change)
     let public_events_detail = Router::new()
         .route("/public/event/{slug}", get(public_event::get_public_event))
+        // Public recap for a completed event (Plan 008 — Phase 2). Shares the
+        // 120s cache — recaps are immutable once published; unpublishing is
+        // rare and a short stale window is acceptable.
+        .route(
+            "/public/event/{slug}/recap",
+            get(public_event::get_public_recap),
+        )
         // Event series (related events / prev-next). Shares the 120s cache —
         // series structure changes rarely and the payload is derived from
         // campaign_events + events, both already cached at this granularity.
@@ -306,6 +317,12 @@ pub fn routes(state: AppState) -> Router<()> {
         .route(
             "/events/{id}/poster",
             post(events::upload_poster).delete(events::delete_poster),
+        )
+        // Public recap authoring (Plan 008 — Phase 2): organizer fetches +
+        // authors + publishes the public recap (gated on a frozen summary).
+        .route(
+            "/events/{id}/recap",
+            get(events::get_recap_handler).put(events::put_recap),
         )
         .route("/events/{id}/delete", delete(events::hard_delete_event))
         .route("/events/{id}/audit", get(events::get_event_audit))
