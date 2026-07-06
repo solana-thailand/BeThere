@@ -312,7 +312,17 @@ client-side gate is currently wrong.
 - [x] `deposit_order` / `max_refundable_deposits` tier logic present (`is_refundable_tier`) and
       server-enforced (`status.refundable` check in `refund_and_close_tx_handler`).
 - [x] `close_deposit` ↔ `refund` coupling (SEC-010) audited; worker pairs them.
-- [ ] Fix #19: expose `checked_in` + absolute `refund_deadline_ms` in `DepositStatusResponse`.
-- [ ] Fix #19: rewrite `event_refund_window_open` to the two-path predicate + correct doc comment.
-- [ ] LiteSVM test for the two refund paths (plan 005 §3.3).
-- [ ] E2E harness flow: `refund_no_show_deadline` (plan 005 §3.4).
+- [x] Fix #19: expose `checked_in` + absolute `refund_deadline_ms` in `DepositStatusResponse`
+      — shipped in `worker/src/handlers/deposit/usdc/handlers.rs` (block annotated
+      `plan 005 §3.2 — divergence fix #19`; surfaces both fields plus `checked_in` from
+      `sheets::get_attendee_by_id`).
+- [x] Fix #19: rewrite `event_refund_window_open` to the two-path predicate + correct doc comment
+      — shipped in `frontend-leptos/src/pages/deposit/types.rs#L209-226` (checked-in →
+      `[event_end, ∞)`; no-show → `[event_end, refund_deadline_ms)`; missing data fails safe).
+- [x] LiteSVM test for the two refund paths (plan 005 §3.3) — **superseded by equivalent
+      coverage**: `quasar-svm` (Quasar's SVM simulator, analogous to LiteSVM) tests in
+      `bethere-escrow/src/tests/refund.rs` already exercise both paths:
+      `test_refund`, `test_refund_not_checked_in` (SEC-001 fix), `test_refund_already_refunded`,
+      `test_refund_checked_in_after_deadline`. No marginal value in duplicating under LiteSVM.
+- [ ] E2E harness flow: `refund_no_show_deadline` (plan 005 §3.4) — **blocked**: requires the
+      staging worker env (§3.1) + Helius devnet RPC; pending infra provisioning decisions.
