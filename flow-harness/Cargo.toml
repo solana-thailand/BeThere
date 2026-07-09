@@ -1,0 +1,82 @@
+[package]
+name = "flow-harness"
+version = "0.1.0"
+edition = "2021"
+description = "E2E regression harness for plan 005 §3.4 (drives the staging worker over HTTP)."
+publish = false
+
+# Mark this crate as its own workspace root so cargo does NOT auto-attach it to
+# the parent event-checkin workspace. Without this, building the harness drags
+# in the worker (wasm32) and domain targets. See README.md §"Why it's a
+# standalone crate".
+[workspace]
+
+# IMPORTANT: this crate is intentionally NOT a member of the root workspace
+# (event-checkin/Cargo.toml). Keeping it standalone ensures its heavy native
+# deps (solana-sdk, spl-token, reqwest with TLS) never pollute the worker's
+# wasm32 build or the domain crate's x86_64+wasm32 dual-target. Build with:
+#   cd flow-harness && cargo test      # offline unit suites
+#   cd flow-harness && cargo run --    # CLI runner (needs env + staging live)
+
+[lib]
+name = "flow_harness"
+path = "src/lib.rs"
+
+[[bin]]
+name = "flow-harness"
+path = "src/main.rs"
+
+[dependencies]
+# Shared domain types (DepositStatusResponse, UsdcDepositResponse, etc.).
+# Renamed to `domain` at the use-site for readability; default features
+# disabled so the harness does not pull qrcode/base64 (it only reads the
+# deposit models, which are unconditionally compiled).
+domain = { package = "event-checkin-domain", path = "../domain", default-features = false }
+
+# HTTP client. rustls-tls (no openssl) for portability across macOS/Linux CI;
+# `json` for the typed response decoding in `client.rs`.
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+
+# Async runtime. `macros` for #[tokio::test], `rt-multi-thread` for the CLI's
+# multi-thread runtime, `time` for the deposit-verification poll loop's
+# `tokio::time::sleep`.
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "time"] }
+
+# Serialization.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Error ergonomics. thiserror for the typed HarnessError enum; anyhow for the
+# catch-all Other(#[from] anyhow::Error) variant used during scaffolding.
+thiserror = "1"
+anyhow = "1"
+
+# async_trait is required because the Flow trait is object-safe (held as
+# Box<dyn Flow>) and native async traits are not yet object-safe on stable.
+async-trait = "0.1"
+
+# URL parsing for StagingContext / WorkerClient. Pulled in by reqwest too, but
+# declared explicitly so the harness does not rely on a transitive dep.
+url = "2"
+
+# Timestamps for the results directory name + summary.json.
+chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
+
+# CLI parsing for main.rs.
+clap = { version = "4", features = ["derive"] }
+
+# Solana SDK for keypair loading, PDA derivation, and (once staging is live)
+# transaction signing. Pinned to 2.2.x for compatibility with the current
+# Agave toolchain.
+solana-sdk = "2.2"
+
+# SPL token program id + ATA derivation used by StagingContext::vault_ata_address.
+# Kept narrow: no SPL-token-2022 features are needed for the harness's
+# address-derivation use case.
+spl-token = "7.0"
+spl-associated-token-account = "6.0"
+
+[dev-dependencies]
+# TempDir for the runner's offline orchestration tests (write_summary,
+# .last-green sentinel mtime, exit-code semantics).
+tempfile = "3"

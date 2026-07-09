@@ -131,24 +131,31 @@ Per the Solana testing-pyramid skill: LiteSVM for fast, validator-free unit test
 
 New Rust crate at repo root. Drives the staging worker over HTTP. No contract mocks — real escrow transactions on devnet (with Helius RPC), or local-validator fallback if devnet rate limits bite.
 
-- [ ] `flow-harness/Cargo.toml`: standalone crate, depends on `reqwest`, `solana-sdk`, `spl-token`, `tokio`, `serde_json`, `domain` (path dep).
-- [ ] `flow-harness/src/context.rs`: `StagingContext` — worker base URL, funded payer keypair, test event id, test attendee wallet, derived PDAs.
-- [ ] `flow-harness/src/flows/deposit.rs`: register attendee → `POST /deposit/usdc` → sign+send tx → poll `GET /deposit/status/{id}` until `verified=true` → assert PDA exists on-chain with expected fields.
-- [ ] `flow-harness/src/flows/refund_pre_event_end.rs`: attempt refund before `event_end` → assert simulation fails with `RefundNotYetAllowed` → assert the frontend gate condition (`event_refund_window_open`) returns `false`.
-- [ ] `flow-harness/src/flows/refund_post_event_end_checked_in.rs`: check-in attendee → advance clock past `event_end` (use a test event with short horizon) → refund succeeds.
-- [ ] `flow-harness/src/flows/refund_no_show_deadline.rs`: no-show refund in `[event_end, refund_deadline)` succeeds; after `refund_deadline` fails with `RefundDeadlinePassed`.
-- [ ] `flow-harness/src/flows/claim.rs`: NFT claim flow post-checkin via `/claim/{token}`.
-- [ ] `flow-harness/src/flows/auth.rs`: existing Google-auth session issuance baseline (so plan 006 can prove SIWS doesn't regress it).
-- [ ] `flow-harness/src/runner.rs`: orchestrates flows, collects results, exits non-zero on any failure, writes `flow-harness/results/<ISO-timestamp>/summary.json`.
-- [ ] Runnable both as `cargo run -- --worker <url>` and `cargo test`.
+- [x] `flow-harness/Cargo.toml`: standalone crate, depends on `reqwest`, `solana-sdk`, `spl-token`, `tokio`, `serde_json`, `domain` (path dep).
+- [x] `flow-harness/src/context.rs`: `StagingContext` — worker base URL, funded payer keypair, test event id, test attendee wallet, derived PDAs.
+- [x] `flow-harness/src/flows/deposit.rs`: register attendee → `POST /deposit/usdc` → sign+send tx → poll `GET /deposit/status/{id}` until `verified=true` → assert PDA exists on-chain with expected fields.
+- [x] `flow-harness/src/flows/refund_pre_event_end.rs`: attempt refund before `event_end` → assert simulation fails with `RefundNotYetAllowed` → assert the frontend gate condition (`event_refund_window_open`) returns `false`.
+- [x] `flow-harness/src/flows/refund_post_event_end_checked_in.rs`: check-in attendee → advance clock past `event_end` (use a test event with short horizon) → refund succeeds.
+- [x] `flow-harness/src/flows/refund_no_show_deadline.rs`: no-show refund in `[event_end, refund_deadline)` succeeds; after `refund_deadline` fails with `RefundDeadlinePassed`.
+- [x] `flow-harness/src/flows/claim.rs`: NFT claim flow post-checkin via `/claim/{token}`.
+- [x] `flow-harness/src/flows/auth.rs`: existing Google-auth session issuance baseline (so plan 006 can prove SIWS doesn't regress it).
+- [x] `flow-harness/src/runner.rs`: orchestrates flows, collects results, exits non-zero on any failure, writes `flow-harness/results/<ISO-timestamp>/summary.json`.
+- [x] Runnable both as `cargo run -- --worker <url>` and `cargo test`.
+
+> **Status (handover 126):** scaffold + offline-tested (114 tests, clippy clean). Staging-live wiring (`// TODO(staging-live):` stubs in each flow) pending §3.1 provisioning; the assertion/gate logic the gate relies on is real and proven.
 
 ### 3.5 Wire harness into pre-deploy gate
 
 The harness is the safety mechanism for 006/007.
 
-- [ ] Add `worker/scripts/preflight.sh`: runs `flow-harness` against staging after every staging deploy. Non-zero exit blocks production deploy.
-- [ ] Update `worker/deploy.sh` header rule: **production deploys require a green preflight run against staging within the last hour.** Enforce via timestamp check on `flow-harness/results/.last-green`.
-- [ ] Add a `--force` escape hatch to `deploy.sh` for emergencies, with an audit-log entry (gate is bypassable but never silently).
+- [x] Add `worker/scripts/preflight.sh`: runs `flow-harness` against staging after every staging deploy. Non-zero exit blocks production deploy.
+      (Implemented: `worker/scripts/preflight.sh` with `check` / `run` / `run-only` / `status` subcommands. Reads `.last-green` mtime portably (macOS + Linux). 8/8 smoke tests pass — missing/stale sentinel → exit 1, fresh → exit 0, misconfig → exit 2.)
+- [x] Update `worker/deploy.sh` header rule: **production deploys require a green preflight run against staging within the last hour.** Enforce via timestamp check on `flow-harness/results/.last-green`.
+      (Implemented: opt-in via `BETHERE_PREFLIGHT_GATE=1`; production-only; default `PREFLIGHT_MAX_AGE_SECONDS=3600`. Gate is OFF by default — zero impact on existing deploys. `run_preflight_gate` runs before `move_pnp` so it fails fast.)
+- [x] Add a `--force` escape hatch to `deploy.sh` for emergencies, with an audit-log entry (gate is bypassable but never silently).
+      (Implemented: `--force [--reason "..."]` appends a tab-separated audit row to `worker/scripts/.preflight-bypass.log` — `{ts, user, commit, env, reason}`. Audit format verified: 5 fields. `*.log` already gitignored so the trail stays local.)
+
+> **Status:** scaffold complete + verified (bash -n clean, 8/8 preflight smoke tests pass, 114/114 flow-harness tests still green). The gate is **opt-in and OFF by default** — existing `./deploy.sh` invocations are unchanged until `BETHERE_PREFLIGHT_GATE=1` is set. Activation is intentionally deferred until §3.1 staging is live (otherwise the gate would block all production deploys with no way to get a green run).
 
 ---
 

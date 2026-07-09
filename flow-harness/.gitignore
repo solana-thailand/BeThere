@@ -1,0 +1,18 @@
+
+# Run artifacts — timestamped summary.json directories are per-run and
+# gitignored. The `.last-green` sentinel is the exception (the §3.5
+# preflight gate reads its mtime), so it is re-included below.
+/results/*
+!/results/.last-green
+
+# Local env files (never commit secrets / session cookies).
+.env
+.env.local
+.env.*.local
+
+# macOS / editor noise.
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
