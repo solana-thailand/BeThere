@@ -324,6 +324,8 @@ pub fn routes(state: AppState) -> Router<()> {
             "/events/{id}/recap",
             get(events::get_recap_handler).put(events::put_recap),
         )
+        // PR pack generator (Plan 008 — Phase 4): deterministic marketing copy.
+        .route("/events/{id}/pr-pack", get(events::get_pr_pack))
         .route("/events/{id}/delete", delete(events::hard_delete_event))
         .route("/events/{id}/audit", get(events::get_event_audit))
         // Registration form config (protected — organizer configures per-event form fields)
