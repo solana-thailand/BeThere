@@ -3,9 +3,15 @@
 # Handles Yarn PnP (~/.pnp.cjs) conflict with wrangler's esbuild bundler.
 #
 # Usage:
-#   ./deploy.sh              # Deploy to production
+#   ./deploy.sh              # Deploy to production (default)
+#   ./deploy.sh staging      # Deploy to staging (bethere-staging) — reads [env.staging]
 #   ./deploy.sh dev          # Start dev server with remote KV (production data)
 #   ./deploy.sh dev --local  # Start dev server with local SQLite KV (empty)
+#
+# Staging note: the PUT API fallback below is PRODUCTION-ONLY (its bindings/vars
+# are hardcoded for the prod worker). `deploy.sh staging` uses the standard
+# `wrangler deploy --env staging` path only; if that fails, it reports and exits
+# rather than falling back to the production-hardcoded PUT flow.
 #
 # Wrangler 4.x uses the /versions API which returns 500 (code 10013).
 # This script works around it by:
@@ -33,6 +39,11 @@ PNP_BACKUP="$HOME/.pnp.cjs.bak"
 MOVED=false
 
 WORKER_NAME="bethere"
+WRANGLER_ENV_FLAG=""
+if [ "${1:-}" = "staging" ]; then
+  WORKER_NAME="bethere-staging"
+  WRANGLER_ENV_FLAG="--env staging"
+fi
 ACCOUNT_ID="bb8f9ffa91e24d9ce850cbbc4fd45935"
 DIST_DIR="../frontend-leptos/dist"
 
@@ -67,16 +78,30 @@ if [ "${1:-}" = "dev" ]; then
     npx wrangler dev --port 8787 --remote
   fi
 else
-  echo "🚀 Deploying to Cloudflare Workers..."
+  if [ -n "$WRANGLER_ENV_FLAG" ]; then
+    echo "🚀 Deploying to Cloudflare Workers (STAGING: ${WORKER_NAME})..."
+  else
+    echo "🚀 Deploying to Cloudflare Workers (production: ${WORKER_NAME})..."
+  fi
 
   # ── Step 1: Try standard wrangler deploy ──
   # wrangler deploy uploads assets via assets-upload-session (which works),
   # then calls /versions (which fails with 10013).
   # The assets are already uploaded and cached by Cloudflare at this point.
-  if CI=true npx wrangler deploy 2>&1; then
+  if CI=true npx wrangler deploy $WRANGLER_ENV_FLAG 2>&1; then
     echo "✅ Deployed via wrangler"
     restore_pnp
     exit 0
+  fi
+
+  # Staging has no PUT API fallback (that path is production-hardcoded; see
+  # header note). Surface the failure clearly and stop.
+  if [ -n "$WRANGLER_ENV_FLAG" ]; then
+    echo "❌ wrangler deploy --env staging failed."
+    echo "   Staging intentionally does not use the production PUT API fallback."
+    echo "   Re-run once the Cloudflare versions API recovers, or check [env.staging] config."
+    restore_pnp
+    exit 1
   fi
 
   echo ""
