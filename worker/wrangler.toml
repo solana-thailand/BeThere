@@ -145,3 +145,71 @@ bucket_name = "bethere-assets"
 # [[migrations]]
 # tag = "v1"
 # new_sqlite_classes = ["EventDurableObject"]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Staging environment (Plan 005 §3.1).
+# Fully isolated from production: separate D1/KV/R2 + staging-only event vars
+# + DEV_MODE so SIWS (006) and mobile (007) dev never touches prod data.
+# Deploy with:  bash worker/deploy.sh staging
+#
+# Inheritance (wrangler semantics): a named env INHERITS top-level scalar
+# config (compatibility_date/flags, assets, build, placement, triggers) but
+# `vars` and bindings (kv/d1/r2) are NON-INHERITABLE and must be redeclared.
+# Below we set the staging name, redeclare the full var set + three bindings
+# (with staging resource ids), and override DEV_MODE + the staging URLs.
+#
+# ── ONE-TIME PROVISIONING (run once, then paste the returned ids) ─────────────
+#   npx wrangler d1 create bethere-db-staging
+#   npx wrangler kv namespace create EVENTS_STAGING
+#   npx wrangler r2 bucket create bethere-assets-staging
+#   npx wrangler d1 migrations apply bethere-db-staging --remote
+# Then replace the TODO_PROVISION_* placeholders below with the printed ids.
+# ─────────────────────────────────────────────────────────────────────────────
+[env.staging]
+name = "bethere-staging"
+
+[env.staging.vars]
+# IMPORTANT (wrangler semantics): `vars` and bindings are NON-INHERITABLE — a
+# named env does NOT merge top-level [vars]. Staging must redeclare every var
+# it needs (Cloudflare docs: "Non-inheritable keys … must be specified per
+# environment"). Below mirrors production and overrides the env-specific ones.
+SERVER_URL = "https://bethere-staging.solana-thailand.workers.dev"
+CLAIM_BASE_URL = "https://bethere-staging.solana-thailand.workers.dev/claim"
+GOOGLE_SHEET_NAME = "Attendees"
+GOOGLE_STAFF_SHEET_NAME = "staff"
+PLATFORM_SHEET_ID = "1oF54ia6mquO_kB869aQxmz3RD8nDcTRWfXIX0VmndxM"
+# DEV_MODE=1 permits test shortcuts on staging ONLY (production stays 0).
+DEV_MODE = "1"
+DEV_EMAIL = "ratchapon.poc@gmail.com"
+SUPER_ADMIN_EMAILS = "ratchapon.poc@gmail.com,hackathon@colosseum.org"
+# Test event (seed via worker/scripts/seed-staging.sh). Short horizons so the
+# flow-harness can exercise both refund paths without waiting hours.
+EVENT_NAME = "Flow Harness Test Event (staging)"
+EVENT_TAGLINE = "Staging — do not promote"
+EVENT_LINK = ""
+# 0 = defer to the per-event values stored in D1 by seed-staging.sh.
+EVENT_START_MS = "0"
+EVENT_END_MS = "0"
+
+# Separate D1 — overrides the production [[d1_databases]] binding via the same `binding` name.
+[[env.staging.d1_databases]]
+binding = "DB"
+database_name = "bethere-db-staging"
+database_id = "TODO_PROVISION_D1"   # from: npx wrangler d1 create bethere-db-staging
+migrations_dir = "migrations"
+
+# Separate KV namespace.
+[[env.staging.kv_namespaces]]
+binding = "EVENTS"
+id = "TODO_PROVISION_KV"            # from: npx wrangler kv namespace create EVENTS_STAGING
+preview_id = "TODO_PROVISION_KV_PREVIEW"
+
+# Separate R2 bucket.
+[[env.staging.r2_buckets]]
+binding = "ASSETS_BUCKET"
+bucket_name = "bethere-assets-staging"
+
+# NOTE: DO bindings (EVENT_DO) remain commented out for staging too — the PUT API
+# fallback in deploy.sh rejects durable_object bindings (10021). When the CF
+# versions API recovers and DOs are re-enabled in production, mirror the binding
+# here. The worker already handles event_do=None gracefully.
