@@ -43,6 +43,8 @@ pub enum AuditAction {
     EventRecapPublished,
     /// Public recap was unpublished / draft-saved (Plan 008 — Phase 2).
     EventRecapUnpublished,
+    /// Post-event registration (lead capture) was toggled open/closed (Plan 008 — Phase 3).
+    PostEventRegistrationToggled,
 
     // Escrow lifecycle
     EscrowInitialized,

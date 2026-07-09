@@ -230,6 +230,8 @@ pub async fn create_event(
         nft_image_url: req.nft_image_url.trim().to_string(),
         poster_url: req.poster_url.trim().to_string(),
         recap_published: false,
+        post_event_registration_open: false,
+        post_event_registration_until_ms: None,
         nft_name_template: req.nft_name_template.trim().to_string(),
         nft_symbol: req.nft_symbol.trim().to_string(),
         nft_description_template: req.nft_description_template.trim().to_string(),
@@ -1133,6 +1135,8 @@ pub async fn seed_from_config(
         calendar_subscribe_url: String::new(),
         poster_url: String::new(),
         recap_published: false,
+        post_event_registration_open: false,
+        post_event_registration_until_ms: None,
     };
 
     // Save full config

@@ -16,6 +16,7 @@
 //!   GET    /api/events/{id}/recap    — fetch the current draft/published recap (Plan 008 Phase 2)
 //!   PUT    /api/events/{id}/recap    — author + publish/unpublish the public recap (Plan 008 Phase 2)
 //!   GET    /api/events/{id}/pr-pack  — generate copy-pasteable marketing copy (Plan 008 Phase 4)
+//!   PUT    /api/events/{id}/post-event-registration — toggle post-event lead capture (Plan 008 Phase 3)
 //!   POST   /api/events/reseed-kv     — reseed KV index from D1 (super admin only)
 
 pub mod audit;
@@ -23,6 +24,7 @@ pub mod create;
 pub mod duplicate;
 pub mod lifecycle;
 pub mod list;
+pub mod post_event_registration;
 pub mod poster;
 pub mod pr_pack;
 pub mod read;
@@ -37,6 +39,7 @@ pub use create::create_event;
 pub use duplicate::duplicate_event;
 pub use lifecycle::{archive_event, hard_delete_event, restore_event};
 pub use list::list_events;
+pub use post_event_registration::put_post_event_registration;
 pub use poster::{delete_poster, upload_poster};
 pub use pr_pack::get_pr_pack;
 pub use read::get_event;

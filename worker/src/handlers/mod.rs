@@ -168,6 +168,12 @@ pub fn routes(state: AppState) -> Router<()> {
         .route("/auth/me", get(auth::auth_me))
         // Self-registration (requires verified email from JWT)
         .route("/public/register", post(register::register_attendee))
+        // Post-event lead capture (Plan 008 — Phase 3): same JWT gate as normal
+        // registration. Visitor signs in with Google, submits a stripped form.
+        .route(
+            "/public/event/{slug}/register-post-event",
+            post(register::register_post_event),
+        )
         // Attendee's own registration lookup (requires verified email from JWT)
         .route("/my-registration/{slug}", get(register::my_registration))
         // All registrations for the signed-in user across all events
@@ -326,6 +332,12 @@ pub fn routes(state: AppState) -> Router<()> {
         )
         // PR pack generator (Plan 008 — Phase 4): deterministic marketing copy.
         .route("/events/{id}/pr-pack", get(events::get_pr_pack))
+        // Post-event registration toggle (Plan 008 — Phase 3): organizer opens/closes
+        // lead capture + optional deadline for a completed event.
+        .route(
+            "/events/{id}/post-event-registration",
+            put(events::put_post_event_registration),
+        )
         .route("/events/{id}/delete", delete(events::hard_delete_event))
         .route("/events/{id}/audit", get(events::get_event_audit))
         // Registration form config (protected — organizer configures per-event form fields)

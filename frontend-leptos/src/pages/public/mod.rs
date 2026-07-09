@@ -7,6 +7,8 @@
 //! - [`event_recap::EventRecap`] — `/events/:slug/recap` view of one
 //!   published recap: hero image, event meta, rendered markdown body, and the
 //!   headline attendance funnel (registered / deposited / checked in).
+//! - [`post_event_register::PostEventRegister`] — `/events/:slug/post-event-register`
+//!   lead-capture form for a completed event (Plan 008 — Phase 3).
 //!
 //! Both pages are unauthenticated and consume the public API endpoints added
 //! in Plan 008 Phase 2 (`GET /api/public/events/past` and
@@ -16,6 +18,8 @@
 
 pub mod event_recap;
 pub mod past_events;
+pub mod post_event_register;
 
 pub use event_recap::EventRecap;
 pub use past_events::PastEvents;
+pub use post_event_register::PostEventRegister;
