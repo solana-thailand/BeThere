@@ -3,12 +3,16 @@
 //! Provides endpoints for listing, syncing, and querying the deduplicated
 //! master contacts sheet that tracks all attendees across all events.
 //! Also manages the Events tab (event registry in the same sheet).
+//!
+//! Plan 008 §3.5 adds `GET /api/contacts/{email}/history`, which reads from
+//! the `attendees` table (source of truth) rather than the deprecated
+//! `contacts.events_joined` CSV column.
 
-use axum::extract::{Query, State};
 use axum::Extension;
+use axum::extract::{Path, Query, State};
 use serde::Serialize;
 
-use crate::db::contacts::{AudienceRow, audience_aggregate};
+use crate::db::contacts::{AudienceRow, ContactEventRow, audience_aggregate, list_contact_events};
 use crate::error::{ApiOk, WorkerError};
 use crate::sheets;
 use crate::sheets::contacts::{self, ContactUpsert};
@@ -539,4 +543,58 @@ fn escape_csv(s: &str) -> String {
         true => format!("\"{}\"", s.replace('"', "\"\"")),
         false => s.to_string(),
     }
+}
+
+// ---------------------------------------------------------------------------
+// GET /api/contacts/{email}/history — per-contact event history (Plan 008 §3.5)
+// ---------------------------------------------------------------------------
+
+/// Response for `GET /api/contacts/{email}/history`.
+#[derive(Serialize)]
+pub struct ContactHistoryResponse {
+    /// The email the history was requested for (lowercased for lookup).
+    pub email: String,
+    /// Events this contact has attended, newest first.
+    /// Source of truth: the `attendees` table — NOT `contacts.events_joined`.
+    pub events: Vec<ContactEventRow>,
+    /// Convenience: `events.len()`, surfaced for quick UI badge counts.
+    pub total: usize,
+}
+
+/// `GET /api/contacts/{email}/history` — list every event a contact attended.
+///
+/// Reads from the `attendees` table JOINed to `events` (source of truth),
+/// NOT the deprecated `contacts.events_joined` CSV column — see
+/// [`crate::db::contacts::list_contact_events`] for the deprecation rationale.
+///
+/// Protected: requires an authenticated organizer (any organizer can look up
+/// any contact — there is no per-event scoping on the contacts master list).
+/// The email is bound as a positional SQL parameter, never interpolated, to
+/// guard against SQL injection.
+#[worker::send]
+pub async fn contact_history_handler(
+    State(state): State<AppState>,
+    Extension(_claims): Extension<Claims>,
+    Path(email): Path<String>,
+) -> Result<ApiOk<ContactHistoryResponse>, WorkerError> {
+    let db = state
+        .d1
+        .as_deref()
+        .ok_or_else(|| AppError::Internal("D1 database not available".to_string()))?;
+
+    // Normalize: trim whitespace + lowercase to match the `contacts.email` PK
+    // convention. The SQL query also LOWER()s both sides, so this is belt-and-
+    // suspenders, but it makes the returned `email` field canonical.
+    let email = email.trim().to_lowercase();
+
+    let events = list_contact_events(db, &email)
+        .await
+        .map_err(AppError::Internal)?;
+
+    let total = events.len();
+    Ok(ApiOk::new(ContactHistoryResponse {
+        email,
+        events,
+        total,
+    }))
 }
