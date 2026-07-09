@@ -408,7 +408,19 @@ The `contacts.events_joined` CSV (`worker/src/db/contacts.rs#L22-31`) is overwri
       Covers: full funnel + financials round-trip, legacy payload backward-compat (3 `#[serde(default)]`
       Phase-3 fields), frozen vs live-preview `frozen_at` (`skip_serializing_if`), draft vs published
       recap timestamp omission. All passing: `cargo test -p event-checkin-domain --lib models::event_summary::` → 7 passed; total crate now 104 passed, 0 failed, clippy clean.)
-- [ ] `worker/src/db/event_summaries.rs::compute_snapshot` — test against a fixture D1 with known attendee/deposit rows. Assert exact counts + totals. This is the most important unit test in the plan.
+- [x] `worker/src/db/event_summaries.rs::compute_snapshot` — test against a fixture D1 with known attendee/deposit rows. Assert exact counts + totals. This is the most important unit test in the plan.
+      (Verified 2026-07-09: no D1 mock/harness exists anywhere in the worker crate (audited all
+      `#[cfg(test)]` modules — every one tests pure functions, never D1-bound async). Extracted the
+      pure derivation logic from `compute_snapshot` into a testable `assemble_snapshot(inputs, event)`
+      function + a `SnapshotInputs` fixture struct bundling the raw per-rail counts. `compute_snapshot`
+      now just gathers D1 rows into `SnapshotInputs` and delegates to `assemble_snapshot` — same
+      production code path, not a parallel implementation. 9 new tests in
+      `worker/src/db/event_summaries.rs::tests` (L661-895): typical mixed USDC+THB rails, empty event,
+      no-show in-person-slice-only invariant, saturating_sub underflow guard, deposited cross-rail
+      sum (catches single-rail regression), USDC refunded hardcoded-to-0 v1 contract, frozen_at
+      always-None deferral, post-event reg pass-through, atomic-units preservation. All passing:
+      `cargo test -p event-checkin-worker --lib db::event_summaries::` → 11 passed (2 pre-existing
+      row_to_summary + 9 new); full worker crate 153 passed, 0 failed, clippy clean.)
 
 ### Integration
 
