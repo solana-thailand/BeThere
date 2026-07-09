@@ -277,6 +277,8 @@ mod tests {
             nft_image_url: String::new(),
             poster_url: String::new(),
             recap_published: false,
+            post_event_registration_open: false,
+            post_event_registration_until_ms: None,
             nft_name_template: String::new(),
             nft_symbol: String::new(),
             nft_description_template: String::new(),

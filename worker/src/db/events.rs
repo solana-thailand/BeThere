@@ -92,6 +92,9 @@ pub struct D1EventRow {
     // duplicated onto the events row so `GET /api/public/events/past` can
     // filter without a join.
     pub recap_published: Option<i64>,
+    // Columns added by migration 0020 (Plan 008 — Phase 3 post-event registration).
+    pub post_event_registration_open: Option<i64>,
+    pub post_event_registration_until_ms: Option<i64>,
 }
 
 impl D1EventRow {
@@ -211,6 +214,8 @@ impl D1EventRow {
             calendar_subscribe_url: self.calendar_subscribe_url.clone().unwrap_or_default(),
             poster_url: self.poster_url.clone().unwrap_or_default(),
             recap_published: self.recap_published.unwrap_or(0) != 0,
+            post_event_registration_open: self.post_event_registration_open.unwrap_or(0) != 0,
+            post_event_registration_until_ms: self.post_event_registration_until_ms,
         }
     }
 }
@@ -300,10 +305,38 @@ pub async fn set_recap_published_flag(
     published: bool,
 ) -> Result<(), String> {
     let value = if published { 1 } else { 0 };
-    let sql = format!("UPDATE events SET recap_published = {value} WHERE id = '{event_id}'",);
+    let sql = format!("UPDATE events SET recap_published = {value} WHERE id = '{event_id}'");
     db.exec(&sql)
         .await
         .map_err(|e| format!("D1 set_recap_published_flag: {e:?}"))?;
+    Ok(())
+}
+
+/// Set the post-event registration toggle + optional deadline on the `events`
+/// row (Plan 008 — Phase 3 §3.3.1).
+///
+/// `until_ms = None` clears the deadline (open indefinitely). The flag +
+/// deadline are also mirrored onto the KV `EventConfig` by the toggle handler
+/// so the KV-first read path stays consistent.
+pub async fn set_post_event_registration(
+    db: &D1Database,
+    event_id: &str,
+    open: bool,
+    until_ms: Option<i64>,
+) -> Result<(), String> {
+    let open_val = if open { 1 } else { 0 };
+    // NULL deadline when None; the migration column is nullable.
+    let until_sql = match until_ms {
+        Some(ms) => format!("{ms}"),
+        None => "NULL".to_string(),
+    };
+    let sql = format!(
+        "UPDATE events SET post_event_registration_open = {open_val}, \
+         post_event_registration_until_ms = {until_sql} WHERE id = '{event_id}'"
+    );
+    db.exec(&sql)
+        .await
+        .map_err(|e| format!("D1 set_post_event_registration: {e:?}"))?;
     Ok(())
 }
 

@@ -1,6 +1,6 @@
 # Plan 008 — Event Lifecycle: Summary, Recap, Post-Event Registration, PR Generator
 
-> **Status**: Phase 1 (Post-Event Summary) ✅ shipped (`48d25b1`, deployed) · Phase 2 (Public Recap + Past Events) ✅ shipped (`9549532`, deployed) · Phases 3–4 pending (not started — no post-event-registration or pr-pack code exists). Phase 1+2 acceptance criteria verified via code trace 2026-07-08; cross-cutting checks (clippy clean, tests green) re-run and passing.
+> **Status**: Phase 1 (Post-Event Summary) ✅ shipped (`48d25b1`, deployed) · Phase 2 (Public Recap + Past Events) ✅ shipped (`9549532`, deployed) · Phase 3 (Post-Event Registration) ✅ implemented 2026-07-09 (toggle + public register + frontend form; live validation blocked on Plan 005 staging) · Phase 4 (PR Generator) ✅ implemented 2026-07-09 (`63270ac`). Cross-cutting checks (clippy clean, tests green) re-run and passing.
 > **Type**: feature (event lifecycle workflow) + content (PR/recap generation)
 > **Priority**: P2 — closes the "what happens after an event ends" gap and turns past events into lead-capture surfaces. Independent of plans 005/006/007; can start in parallel.
 > **Created**: 2026-06-23
@@ -274,17 +274,22 @@ Extend `worker/src/handlers/public_event.rs`:
 
 New file: `worker/src/handlers/events/post_event_registration.rs`
 
-- [ ] `PUT /api/events/{id}/post-event-registration` (protected, organizer+):
+- [x] `PUT /api/events/{id}/post-event-registration` (protected, organizer+):
   - Body: `{ open: bool, until_ms: Option<i64> }`.
   - Validates: `event.status == Completed` (cannot open post-event reg for a not-yet-started event — that's just normal registration). If `open == true` and `until_ms` is `Some`, require `until_ms > now_ms`.
   - Updates `events.post_event_registration_open` + `post_event_registration_until_ms`.
   - Audit: `AuditAction::PostEventRegistrationToggled`.
+      (Verified 2026-07-09: `worker/src/handlers/events/post_event_registration.rs::put_post_event_registration`.
+      Mirrors `recap.rs` — `load_event` + `enforce_organizer`, status==Completed gate, until_ms > now_ms
+      validation, dedicated `db::events::set_post_event_registration` (mirrors `set_recap_published_flag`),
+      KV EventConfig + EventIndex sync, `AuditAction::PostEventRegistrationToggled` audit. Body type
+      `PutPostEventRegistrationRequest { open, until_ms }`.)
 
 #### 3.3.2 Public registration endpoint
 
 Extend `worker/src/handlers/register.rs`:
 
-- [ ] `POST /api/public/event/{slug}/register-post-event` (public, JWT-required for spam resistance — anon users must sign in with Google first, same as normal registration):
+- [x] `POST /api/public/event/{slug}/register-post-event` (public, JWT-required for spam resistance — anon users must sign in with Google first, same as normal registration):
   - Loads event by slug. Rejects 404 if not found, 409 if `status != Completed`, 409 if `post_event_registration_open != 1`, 410 if `until_ms` is set and `now_ms >= until_ms`.
   - Accepts a subset of `RegisterRequest` (name, contact_channel, contact_handle, consent flags, all developer profile fields, `profile_fields` map). Ignores `participation_type`, `deposit_agreed`, `photo_consent_given` (not relevant — they're not attending).
   - Creates `attendees` row with:
@@ -294,22 +299,42 @@ Extend `worker/src/handlers/register.rs`:
     - `checked_in_at = NULL`, no `claim_token` (no NFT to claim)
   - Upserts `contacts` and `developer_profiles` exactly like normal registration (reuse existing helpers).
   - Returns `{ attendee_id, message: "Thanks! We'll notify you about future events." }`.
+      (Verified 2026-07-09: `worker/src/handlers/register.rs::register_post_event` + `PostEventRegisterRequest`.
+      Reuses `write_developer_data` / `DeveloperData` from normal registration. 409 uses the new
+      `AppError::Conflict` variant (added); 410 uses the new `AppError::Gone` variant (added).
+      Dedicated `db::attendees::upsert_post_event_attendee` writes registration_phase='post_event' +
+      approval_status='post_event_registered' (the existing `upsert_attendee` does not set
+      registration_phase). Contact upsert reuses `db::contacts::upsert_contact`. Route wired into the
+      `attendee_authed` group (`require_identity`) at `/public/event/{slug}/register-post-event`.)
 
 #### 3.3.3 Route wiring
 
 ```rust
 // public group (JWT still required — wired into the auth-required public sub-router)
-.route("/public/event/{slug}/register-post-event", post(public_register::register_post_event))
+.route("/public/event/{slug}/register-post-event", post(register::register_post_event))
 
 // protected group
 .route("/events/{id}/post-event-registration", put(events::put_post_event_registration))
 ```
+    (Verified 2026-07-09: both routes wired in `worker/src/handlers/mod.rs`. The public route lives
+    in the `attendee_authed` group (`require_identity` middleware — JWT gate) alongside
+    `/public/register`; the toggle route lives in the `protected` group (staff auth) alongside
+    `/events/{id}/recap` + `/events/{id}/pr-pack`. The plan's `public_register::` module reference
+    was a typo — registration lives in the `register` module.)
 
 #### 3.3.4 Frontend — post-event registration form
 
-- [ ] Extend `event_recap.rs` page (from 3.2.4): if `event.post_event_registration_open == true`, render a "Missed this event? Join the community" CTA below the recap.
-- [ ] New component `frontend-leptos/src/pages/public/post_event_register.rs` — form mirroring the normal registration form but stripped of deposit/participation fields. Shows developer-profile questions (experience_level, tech_stack, interests, etc.) — this is the **primary value** of post-event reg.
-- [ ] Submit success state: "You're on the list. We'll email you about the next event."
+- [x] Extend `event_recap.rs` page (from 3.2.4): if `event.post_event_registration_open == true`, render a "Missed this event? Join the community" CTA below the recap.
+- [x] New component `frontend-leptos/src/pages/public/post_event_register.rs` — form mirroring the normal registration form but stripped of deposit/participation fields. Shows developer-profile questions (experience_level, tech_stack, interests, etc.) — this is the **primary value** of post-event reg.
+- [x] Submit success state: "You're on the list. We'll email you about the next event."
+    (Verified 2026-07-09: CTA card added to `event_recap.rs::render_recap` (gated on
+    `event.post_event_registration_open`). New form page `post_event_register.rs` (route
+    `/events/:slug/post-event-register`) with name, contact channel/handle, experience_level,
+    tech_stack, interests, consent checkboxes. Auth-gated via `get_me()` + redirect to /login
+    (self-gate pattern, same as dev-profile). Success state "You're on the list!". API types
+    (`PostEventRegisterBody`, `register_post_event`, `put_post_event_registration`) in
+    `api/event.rs`. `PublicRecapEvent` gained `post_event_registration_open`; worker's
+    `get_public_recap` now serializes it.)
 
 ### 3.4 Phase 4 — Upcoming PR Generator
 
@@ -485,9 +510,16 @@ To keep this from becoming a surprise as the worker grows, this plan adds `worke
 
 **Phase 3**
 
-- [ ] Toggle + register + frontend form.
+- [x] Toggle + register + frontend form.
+      (Verified 2026-07-09: backend toggle handler + public register endpoint + frontend form page
+      + recap CTA all implemented and compiling. `cargo test --workspace` green (97 domain incl. 4 new
+      Phase-3 tests); `cargo check` wasm frontend clean.)
 - [ ] Same branch / PR flow.
-- [ ] Validate: register as a brand-new email → confirm `developer_profiles` row appears with expected fields → confirm `approval_status = 'post_event_registered'` excludes from capacity / check-in queries.
+- [~] Validate: register as a brand-new email → confirm `developer_profiles` row appears with expected fields → confirm `approval_status = 'post_event_registered'` excludes from capacity / check-in queries.
+      (Code-trace verified: `upsert_post_event_attendee` sets approval_status='post_event_registered' +
+      registration_phase='post_event'; existing capacity/check-in queries filter on approval_status='approved'
+      and registration_phase='pre_event', so post-event rows are naturally excluded. Live validation against
+      a real completed event needs staging infra — blocked on Plan 005.)
 
 **Phase 4**
 

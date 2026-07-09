@@ -19,7 +19,7 @@ use crate::pages::{
     data_privacy::DataPrivacy, deposit::Deposit, dev_dashboard::DevDashboard,
     dev_profile::DevProfile, event_summary::EventSummary, landing::Landing, login::Login,
     pr_pack::PrPack, privacy::Privacy, public_event::PublicEvent, scanner::Scanner,
-    ticket::page::Ticket, EventRecap, PastEvents,
+    ticket::page::Ticket, EventRecap, PastEvents, PostEventRegister,
 };
 
 /// Main application component.
@@ -69,6 +69,10 @@ pub fn App() -> impl IntoView {
                     // `/events/:slug/recap` renders one published recap.
                     <Route path=path!("/past-events") view=PastEvents />
                     <Route path=path!("/events/:slug/recap") view=EventRecap />
+                    // Post-event lead-capture form (Plan 008 — Phase 3).
+                    // JWT-gated inside the component (redirects to /login if no
+                    // session) — same self-gate pattern as the dev-profile page.
+                    <Route path=path!("/events/:slug/post-event-register") view=PostEventRegister />
                     <Route path=path!("/privacy") view=Privacy />
                     <Route path=path!("/data-privacy") view=DataPrivacy />
                     <Route path=path!("/adventure") view=Adventure />
