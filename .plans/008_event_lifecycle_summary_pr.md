@@ -397,8 +397,17 @@ The `contacts.events_joined` CSV (`worker/src/db/contacts.rs#L22-31`) is overwri
 
 ### Unit
 
-- [ ] `domain/src/pr_pack.rs` — snapshot-style tests for each generator function (input `EventConfig` fixture → expected output string). Cover: missing tagline, missing location, multi-organizer CSV, deposit disabled, very long name (truncation behavior).
-- [ ] `domain/src/models/event_summary.rs` — serde round-trip tests (mirror the pattern in `frontend-leptos/tests/serde_contract.rs`).
+- [x] `domain/src/pr_pack.rs` — snapshot-style tests for each generator function (input `EventConfig` fixture → expected output string). Cover: missing tagline, missing location, multi-organizer CSV, deposit disabled, very long name (truncation behavior).
+      (Verified 2026-07-09: 14 unit tests in `domain/src/pr_pack.rs::tests` (L255-473) — headline
+      fallback, social post truncation, deposit terms, organizers dedupe, determinism, etc.
+      All passing: `cargo test -p event-checkin-domain --lib pr_pack::` → 14 passed.)
+- [x] `domain/src/models/event_summary.rs` — serde round-trip tests (mirror the pattern in `frontend-leptos/tests/serde_contract.rs`).
+      (Verified 2026-07-09: 7 serde round-trip tests added in `domain/src/models/event_summary.rs::tests`
+      (L124-355). Uses an `assert_wire_contract` helper that compares via JSON re-serialization
+      (no `PartialEq` required on `EventSummary`/`EventRecap`, which only derive `Serialize`/`Deserialize`).
+      Covers: full funnel + financials round-trip, legacy payload backward-compat (3 `#[serde(default)]`
+      Phase-3 fields), frozen vs live-preview `frozen_at` (`skip_serializing_if`), draft vs published
+      recap timestamp omission. All passing: `cargo test -p event-checkin-domain --lib models::event_summary::` → 7 passed; total crate now 104 passed, 0 failed, clippy clean.)
 - [ ] `worker/src/db/event_summaries.rs::compute_snapshot` — test against a fixture D1 with known attendee/deposit rows. Assert exact counts + totals. This is the most important unit test in the plan.
 
 ### Integration
