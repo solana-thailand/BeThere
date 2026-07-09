@@ -18,8 +18,8 @@ use crate::pages::{
     admin::Admin, adventure::page::Adventure, claim::Claim, dashboard_live::DashboardLive,
     data_privacy::DataPrivacy, deposit::Deposit, dev_dashboard::DevDashboard,
     dev_profile::DevProfile, event_summary::EventSummary, landing::Landing, login::Login,
-    privacy::Privacy, public_event::PublicEvent, scanner::Scanner, ticket::page::Ticket,
-    EventRecap, PastEvents,
+    pr_pack::PrPack, privacy::Privacy, public_event::PublicEvent, scanner::Scanner,
+    ticket::page::Ticket, EventRecap, PastEvents,
 };
 
 /// Main application component.
@@ -78,6 +78,7 @@ pub fn App() -> impl IntoView {
                     <Route path=path!("/admin") view=ProtectedAdmin />
                     <Route path=path!("/dashboard/live") view=ProtectedLiveDashboard />
                     <Route path=path!("/events/:id/summary") view=ProtectedEventSummary />
+                    <Route path=path!("/events/:id/pr-pack") view=ProtectedPrPack />
                 </Routes>
             </main>
         </Router>
@@ -137,6 +138,20 @@ fn ProtectedEventSummary() -> impl IntoView {
     view! {
         <ProtectedRoute>
             <EventSummary />
+        </ProtectedRoute>
+    }
+}
+
+/// Protected wrapper for the PR Pack page (Plan 008 Phase 4).
+///
+/// Organizer-only view of generated marketing copy. The backend enforces the
+/// role gate too, so this wrapper just prevents a Staff user from loading the
+/// page UI before the API rejects them.
+#[component]
+fn ProtectedPrPack() -> impl IntoView {
+    view! {
+        <ProtectedRoute>
+            <PrPack />
         </ProtectedRoute>
     }
 }
