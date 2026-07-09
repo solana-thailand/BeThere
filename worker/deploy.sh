@@ -8,6 +8,12 @@
 #   ./deploy.sh dev          # Start dev server with remote KV (production data)
 #   ./deploy.sh dev --local  # Start dev server with local SQLite KV (empty)
 #
+# §3.5 preflight gate (OPT-IN, production-only):
+#   Set BETHERE_PREFLIGHT_GATE=1 to require a green flow-harness run within the
+#   last hour before a production deploy. The gate reads the .last-green sentinel
+#   mtime (see worker/scripts/preflight.sh).
+#   ./deploy.sh --force --reason "hotfix X"   # Bypass the gate (logs an audit entry)
+#
 # Staging note: the PUT API fallback below is PRODUCTION-ONLY (its bindings/vars
 # are hardcoded for the prod worker). `deploy.sh staging` uses the standard
 # `wrangler deploy --env staging` path only; if that fails, it reports and exits
@@ -38,9 +44,37 @@ PNP_FILE="$HOME/.pnp.cjs"
 PNP_BACKUP="$HOME/.pnp.cjs.bak"
 MOVED=false
 
+# ── Argument parsing ─────────────────────────────────────────────────────────
+# Backward-compatible positional env (production | staging | dev) plus §3.5
+# flags: --force (bypass the preflight gate, logs an audit entry) and
+# --reason "..." (recorded in the audit entry). The preflight gate is OPT-IN:
+# it only runs when BETHERE_PREFLIGHT_GATE=1 and the deploy targets production.
+DEPLOY_ENV="production"
+DEPLOY_DEV_LOCAL=false
+DEPLOY_FORCE=false
+DEPLOY_FORCE_REASON=""
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    staging)         DEPLOY_ENV="staging"; shift ;;
+    dev)             DEPLOY_ENV="dev"; shift ;;
+    --local)         DEPLOY_DEV_LOCAL=true; shift ;;
+    --force)         DEPLOY_FORCE=true; shift ;;
+    --reason)
+      if [ $# -ge 2 ]; then
+        DEPLOY_FORCE_REASON="$2"; shift 2
+      else
+        echo "❌ deploy.sh: --reason requires a value" >&2; exit 2
+      fi
+      ;;
+    --reason=*)      DEPLOY_FORCE_REASON="${1#--reason=}"; shift ;;
+    *)               echo "❌ deploy.sh: unknown argument: $1" >&2; exit 2 ;;
+  esac
+done
+
 WORKER_NAME="bethere"
 WRANGLER_ENV_FLAG=""
-if [ "${1:-}" = "staging" ]; then
+if [ "$DEPLOY_ENV" = "staging" ]; then
   WORKER_NAME="bethere-staging"
   WRANGLER_ENV_FLAG="--env staging"
 fi
@@ -64,10 +98,76 @@ restore_pnp() {
 
 trap restore_pnp EXIT INT TERM
 
+# ── §3.5 Preflight gate (opt-in, production-only) ────────────────────────────
+# When BETHERE_PREFLIGHT_GATE=1, production deploys require a green flow-harness
+# run within the last hour (PREFLIGHT_MAX_AGE_SECONDS). --force bypasses the
+# gate but appends a mandatory audit entry to worker/scripts/.preflight-bypass.log
+# (gate is bypassable but never silently). Staging/dev deploys skip the gate.
+SCRIPTS_DIR="$(cd "$(dirname "$0")/scripts" && pwd)"
+PREFLIGHT_SCRIPT="$SCRIPTS_DIR/preflight.sh"
+PREFLIGHT_AUDIT_LOG="$SCRIPTS_DIR/.preflight-bypass.log"
+
+# Append a structured audit entry when --force bypasses the gate.
+log_preflight_bypass() {
+  local ts user commit reason
+  ts=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+  user=$(whoami 2>/dev/null || echo "unknown")
+  commit=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+  reason="${DEPLOY_FORCE_REASON:-<no reason given>}"
+  printf '%s\tuser=%s\tcommit=%s\tenv=%s\treason=%s\n' \
+    "$ts" "$user" "$commit" "$DEPLOY_ENV" "$reason" >> "$PREFLIGHT_AUDIT_LOG"
+}
+
+# Enforce the preflight gate. Returns 0 to proceed, non-zero to block.
+run_preflight_gate() {
+  # Only production deploys are gated.
+  if [ "$DEPLOY_ENV" != "production" ]; then
+    return 0
+  fi
+
+  # Opt-in: the gate is inert unless explicitly enabled.
+  if [ "${BETHERE_PREFLIGHT_GATE:-0}" != "1" ]; then
+    return 0
+  fi
+
+  # --force bypasses the gate but logs an audit entry (never silent).
+  if [ "$DEPLOY_FORCE" = true ]; then
+    log_preflight_bypass
+    echo "⚠️  Preflight gate BYPASSED via --force (audit entry logged to .preflight-bypass.log)."
+    if [ -n "$DEPLOY_FORCE_REASON" ]; then
+      echo "    reason: $DEPLOY_FORCE_REASON"
+    fi
+    return 0
+  fi
+
+  if [ ! -f "$PREFLIGHT_SCRIPT" ]; then
+    echo "❌ Preflight gate enabled (BETHERE_PREFLIGHT_GATE=1) but preflight.sh not found:" >&2
+    echo "   $PREFLIGHT_SCRIPT" >&2
+    return 1
+  fi
+
+  echo "🔍 Running preflight gate (BETHERE_PREFLIGHT_GATE=1, env=production)..."
+  if bash "$PREFLIGHT_SCRIPT"; then
+    echo "✅ Preflight gate passed — proceeding with production deploy."
+    return 0
+  else
+    local rc=$?
+    echo "" >&2
+    echo "❌ Preflight gate FAILED (exit $rc) — production deploy blocked." >&2
+    echo "   Remediation:" >&2
+    echo "     1. Run a green harness:  bash worker/scripts/preflight.sh run" >&2
+    echo "     2. Or bypass with audit: bash worker/deploy.sh --force --reason \"<why>\"" >&2
+    return 1
+  fi
+}
+
+# Run the gate before any deploy work (fail fast, before touching ~/.pnp.cjs).
+run_preflight_gate || { echo "Aborting production deploy."; exit 1; }
+
 move_pnp
 
-if [ "${1:-}" = "dev" ]; then
-  if [ "${2:-}" = "--local" ]; then
+if [ "$DEPLOY_ENV" = "dev" ]; then
+  if [ "$DEPLOY_DEV_LOCAL" = true ]; then
     echo "🔧 Starting local dev server (SQLite KV) on http://localhost:8787 ..."
     echo "   ⚠️  Local KV is empty — use --remote for real data or seed first."
     npx wrangler dev --port 8787 --local
