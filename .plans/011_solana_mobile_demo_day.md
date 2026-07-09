@@ -1,6 +1,6 @@
 # Plan 011 — Solana Mobile Demo-Day Slice (MWA + PWA)
 
-> **Status**: PLANNED — awaiting operator go-ahead to start coding.
+> **Status**: IMPLEMENTED (Phases A+B) — pre-flight checklist closed 2026-07-08. Phase A (MWA) lives in `frontend-leptos/js/mobile_wallet.js` + `frontend-leptos/src/wallet.rs` (pinned to `@solana-mobile/wallet-standard-mobile@0.5.3`). Phase B (PWA shell) wired into `frontend-leptos/index.html` (`manifest.json`, `sw.js`, `_headers`, iOS meta tags via trunk `copy-file`). On-device demo validation (§6) not re-executed in this audit — requires physical Android handset.
 > **Type**: feature (frontend + minimal worker touch)
 > **Priority**: P0 for Demo Day (2026-06-23). Submission deadline 2026-06-22 midnight UTC.
 > **Created**: 2026-06-20
@@ -178,11 +178,24 @@ Per Solana Mobile docs, MWA is structurally Android-only. iOS users get the exis
 ## 7. Pre-flight checklist (before starting)
 
 - [x] Confirm with operator: Phase A+B only, dApp Store deferred? → **YES** (locked 2026-06-20)
-- [ ] Verify `frontend-leptos/index.html` exists and is the entry HTML
-- [ ] Confirm what wallet library / pattern the frontend currently uses (grep `window.solana` / `wallet-standard`)
+- [x] Verify `frontend-leptos/index.html` exists and is the entry HTML
+      (Re-verified 2026-07-08: file present at `frontend-leptos/index.html`, 153 lines,
+      trunk entry HTML — confirmed by `<link data-trunk rel="css" href="style.css" />`
+      and trunk `copy-file` directives. Already contains Phase B PWA wiring: manifest,
+      sw.js, iOS meta tags.)
+- [x] Confirm what wallet library / pattern the frontend currently uses (grep `window.solana` / `wallet-standard`)
+      (Re-verified 2026-07-08: frontend uses **Wallet Standard** — wallets discovered via
+      `window.navigator.wallets`, picked up by `solana_wallet.js#getDetectedWallets()`.
+      MWA registered as an additive provider through `js/mobile_wallet.js` → `wallet.rs`.
+      No `window.solana` / `window.phantom` global polling — relies on Wallet Standard
+      registry. Existing deposit/claim/escrow flows pick up MWA wallets automatically.)
 - [x] Have an Android device available for on-device testing (no Seeker; Phantom will be the test wallet)
 - [x] Have Phantom installed on the test device
-- [ ] Pin MWA library version before prod deploy (no `@latest` in prod)
+- [x] Pin MWA library version before prod deploy (no `@latest` in prod)
+      (Re-verified 2026-07-08: already pinned to `@solana-mobile/wallet-standard-mobile@0.5.3`
+      in `frontend-leptos/js/mobile_wallet.js` L71-72 — first stable line with the Local
+      Network Access mitigation required for Android 14+. Comment explains the pinning
+      rationale and instructs bumping deliberately with LNA re-verification.)
 
 ---
 

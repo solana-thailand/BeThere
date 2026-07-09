@@ -86,13 +86,30 @@ block (~lines 255-288).
 
 ### Acceptance criteria
 
-- [ ] Completed campaign (test row: `is_complete = true`, `reward_claimed_at = null`)
+- [x] Completed campaign (test row: `is_complete = true`, `reward_claimed_at = null`)
       shows a "Claim Reward" button on `/dev-dashboard`.
-- [ ] Clicking mints the cNFT — verify via returned `asset_id` + `signature`
+      (Code-trace verified 2026-07-08: `dev_dashboard.rs` L279-354 three-branch view —
+      `if item.reward_claimed_at.is_some()` → "Reward claimed" text; `else if item.is_complete`
+      → "Claim Reward" button (L286-351); `else` → empty div (L352-353). The button renders
+      exactly when `is_complete && reward_claimed_at.is_none()`. Visibility gate proven.)
+- [~] Clicking mints the cNFT — verify via returned `asset_id` + `signature`
       and the row flipping to "Reward claimed".
-- [ ] Already-claimed campaigns show "Reward claimed" (no button).
-- [ ] Incomplete campaigns show no button.
-- [ ] Helius errors surface a readable toast, not a silent failure.
+      (Code-trace verified 2026-07-08 for the **call path**: L300 calls
+      `api::claim_campaign_reward(&cid, &w)`; L303-305 refreshes `my_campaign_progress()`
+      so the row flips; L307-320 surfaces `asset_id` in a success toast. The actual
+      Helius mint + on-chain TX landing requires a runtime wallet + funded test
+      campaign — not executed in this audit. Implementation path is correct; runtime
+      verification still pending.)
+- [x] Already-claimed campaigns show "Reward claimed" (no button).
+      (Code-trace verified 2026-07-08: L279 `if item.reward_claimed_at.is_some()` branch
+      renders `<div>..."Reward claimed"</div>` with a Gift icon — no button element.)
+- [x] Incomplete campaigns show no button.
+      (Code-trace verified 2026-07-08: L352 `else` branch renders an empty `<div></div>`.)
+- [x] Helius errors surface a readable toast, not a silent failure.
+      (Code-trace verified 2026-07-08: L322-337 Err arm maps 422+"already claimed" →
+      "Reward already claimed for this campaign."; 502 → "Reward service unavailable.
+      Please retry. ({msg})"; else → "Claim failed: {msg}". All paths call `show_toast`
+      with `ToastType::Error`. No silent failure path.)
 - [x] `cargo check --target wasm32-unknown-unknown` clean.
 - [x] `~/.cargo/bin/trunk build --release` clean.
 
@@ -136,9 +153,18 @@ The events list can be loaded either by:
 
 ### Acceptance
 
-- [ ] Add-event shows a dropdown of event names (not a text input for IDs).
-- [ ] Selecting an event and clicking Add links it using `event.id`.
-- [ ] Events already in the campaign are excluded or disabled in the dropdown.
+- [x] Add-event shows a dropdown of event names (not a text input for IDs).
+      (Code-trace verified 2026-07-08: `campaigns_page.rs` L1140 `<select class="form-select">`
+      replaces the raw text input. Options at L1159-1169 use `event.name` as the label
+      (falling back to `event.id` only when name is empty) and `event.id` as the value.)
+- [x] Selecting an event and clicking Add links it using `event.id`.
+      (Code-trace verified 2026-07-08: L1143 `on:change` stores `event_target_value(&ev)`
+      into `add_event_id`; option `value=id` (L1167) so the stored value is the event id.
+      Add handler at L576 reads `add_event_id.get()` as `new_event_id`.)
+- [x] Events already in the campaign are excluded or disabled in the dropdown.
+      (Code-trace verified 2026-07-08: L1149-1157 builds a `linked` HashSet from
+      `campaign_detail.events` event_ids and filters `events_list` with
+      `.filter(|e| !linked.contains(&e.id))`. Linked events never appear in the dropdown.)
 
 ---
 

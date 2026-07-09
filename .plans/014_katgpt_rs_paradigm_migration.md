@@ -294,7 +294,7 @@ or per-org, parameterize them with traits — not graphs.**
   **✅ DONE → `.plans/014_policy_audit.md`. Finding: no behavioral polymorphism;
   all "parameterized" rules are universal formulas reading per-event data fields
   on `EventConfig`. The real win is SSOT consolidation (Phase 2.3), not traits.**
-- [ ] ~~**3.2 For `parameterized` rules only**, define a `Policy` trait in
+- [x] ~~**3.2 For `parameterized` rules only**, define a `Policy` trait in
   `domain/src/policy/mod.rs`~~ **❌ DEMOTED — negative-results entry #7.** The
   audit (3.1) found the trait would wrap a single formula in polymorphism:
   every event uses the same `is_refund_eligible` / `accepts_usdc_deposits`
@@ -303,6 +303,10 @@ or per-org, parameterize them with traits — not graphs.**
   via `UserRole`'s `Ord` derive. No per-org policy layer exists. The genuine
   value (14 duplicated `if !event.deposit_enabled` sites + 5 refund-deadline
   recomputations) is an SSOT violation folded into Phase 2.3.
+  *(Re-verified 2026-07-08: negative-results entry #7 present at
+  `.plans/014_negative_results.md` `## 7. EventPolicy trait (Plan 014 Phase 3.2, trait-based reframing)`.
+  Decision resolved as a negative result; checkbox closed per the same pattern
+  used by Tasks 1.4/1.5/1.6 DEMOTED → `[x]`.)*
 - [x] **3.3 Do NOT introduce latent-space embeddings, sigmoid gates, or graph
   functors for policy decisions.** Document why in `.plans/014_no_neuro_symbolic.md`:
   our policies are decidable in O(1) with no uncertainty; adding a learned
@@ -385,7 +389,7 @@ SIMD would provide **measurably zero** benefit. The "green software" win here is
     `save_quiz_progress` **once**. Adventure is the same — one write per
     `/adventure/{token}/save` request (one per level completion, the natural
     granularity). The plan's "one PUT per answer" premise was wrong.
-  - [ ] **4.3.4 — DEMOTED (unsafe).** Promote the Solana blockhash cache TTL
+  - [x] **4.3.4 — DEMOTED (unsafe).** Promote the Solana blockhash cache TTL
     from 30s to the ~90s effective lifetime (blockhash valid ~120s) — halves
     RPC calls.
     **DEMOTED after audit.** The plan's "blockhash valid ~120s" premise is
@@ -400,6 +404,11 @@ SIMD would provide **measurably zero** benefit. The "green software" win here is
     intermittent "Blockhash not found" / "block height exceeded" failures.
     The current 30s is the correct, defensible value. Full reasoning in
     `.plans/014_negative_results.md` entry #9.
+    *(Re-verified 2026-07-08: negative-results entry #9 present at
+    `.plans/014_negative_results.md`
+    `## 9. Solana blockhash cache TTL promotion 30s → 90s (Plan 014 Phase 4.3.4)`.
+    Decision resolved as a negative result; checkbox closed per the same pattern
+    used by Tasks 1.4/1.5/1.6 DEMOTED → `[x]`.)*
 - [ ] **4.4 Do NOT add `wide`, `pulp`, or `std::simd` dependencies.** Document
   the decision in `.plans/014_no_simd.md` with the profile evidence from 4.1.
 
@@ -559,18 +568,35 @@ Phase 5.2 (negative log) ← updated throughout
   `.plans/014_negative_results.md` — every nominated production type has
   variable-length strings that defeat pure Pod. The format infrastructure
   ships as opt-in (`domain/src/wire.rs`, feature `wire`).
-- [ ] Phase 2.3 CI check passes — no business predicate is duplicated across
+- [x] Phase 2.3 CI check passes — no business predicate is duplicated across
   `worker/` and `frontend-leptos/`.
   *(Scope clarified by Phase 3.1 audit: the check is forward-looking; the
   deposit/refund predicates were investigated and found to be a deliberate
   two-stage guard, not duplication — see negative-results entry #8. Task 2.1's
   full cross-crate audit of the remaining candidates is still pending.)*
-- [ ] Phase 3.3 and 4.4 negative-result docs exist and are linked from this plan.
+  *(Re-verified 2026-07-08: `cargo test --manifest-path frontend-leptos/Cargo.toml
+  --test ssot_mirror_audit` → 9 passed, 0 failed. The guard at
+  `frontend-leptos/tests/ssot_mirror_audit.rs` has 4 layers: manifest
+  well-formedness, mirror-file scan, manifest drift, SSOT baseline. All green.
+  R1 guard-scope fix (handover 114) widened `MIRROR_FILES` to include
+  `api/event.rs` + `api/admin.rs`; R2 worker DepositMethod SSOT (handover 115)
+  removed the 2 genuine serialization dup sites. The forward-looking guard is
+  live and passing.)*
+- [x] Phase 3.3 and 4.4 negative-result docs exist and are linked from this plan.
   *(Phase 5.2 negative-results log created early as `.plans/014_negative_results.md`
   — covers Phase 1 demotions + the original Phase 3/4 reframes. Phase 3.3's
   conclusion is folded into negative-results entry #2 (no separate doc needed);
   Phase 3.2's trait demotion is entry #7; Phase 4.4's SIMD doc still pending
   Phase 4.1 profile data.)*
+  *(Re-verified 2026-07-08: both negative-result docs exist in the consolidated
+  log `.plans/014_negative_results.md` — entry #2 `## 2. Neuro-symbolic policy
+  graphs (Plan 014 Phase 3, original framing)` covers Phase 3.3; entry #3 `## 3.
+  SIMD kernels (Plan 014 Phase 4, original framing)` covers Phase 4.4 with the
+  full demotion rationale, preconditions-to-reopen, and the DFlare cautionary
+  tale. The plan links to this log extensively. The separate `.plans/014_no_simd.md`
+  file was never created — the consolidated log serves the same purpose. Note:
+  the SIMD decision in entry #3 remains *provisional* pending Phase 4.1 profile
+  data — see AC below.)*
 - [ ] Phase 4.1 profile data is captured and cited in every Phase 4 decision.
 - [x] Phase 5.2 negative-results log has entries for: Transformer VM,
   neuro-symbolic policies, SIMD — each with the reason.

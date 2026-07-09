@@ -56,10 +56,28 @@ The `reward_config` is **not** a raw JSON textarea (good) — it's already struc
 - Disabled on edit view (slug is immutable post-create — already enforced by `disabled=...editing_id...`).
 
 **Acceptance**
-- [ ] Typing `"Solana Hacker Series 2025"` in Title fills slug with `solana-hacker-series-2025`.
-- [ ] Manually editing the slug stops auto-fill for the rest of the session.
-- [ ] Empty/whitespace title leaves slug empty (no `---` garbage).
-- [ ] Edit view never overwrites the existing slug.
+- [x] Typing `"Solana Hacker Series 2025"` in Title fills slug with `solana-hacker-series-2025`.
+      (Code-trace verified 2026-07-08: `slugify` at `campaigns_page.rs:52-74` lowercases each
+      ASCII alphanumeric char and replaces runs of non-`[a-z0-9]` with a single `-`.
+      Tracing `"Solana Hacker Series 2025"` char-by-char: `Solana`→`solana`, space→`-`
+      (prev_dash=false, out non-empty), `Hacker`→`hacker`, space→`-`, `Series`→`series`,
+      space→`-`, `2025`→`2025`. No trailing dash. Result: `solana-hacker-series-2025`. ✓)
+- [x] Manually editing the slug stops auto-fill for the rest of the session.
+      (Code-trace verified 2026-07-08: slug input `on:input` at `campaigns_page.rs:847-850`
+      calls `set_slug_manually_edited.set(true)`. Title input at L860-868 guards with
+      `if editing_id.get().is_none() && !slug_manually_edited.get()`. The flag is reset
+      only in `reset_form` (L225-239), which fires on new-campaign — so manual edits
+      persist for the session as required.)
+- [x] Empty/whitespace title leaves slug empty (no `---` garbage).
+      (Code-trace verified 2026-07-08: `slugify("")` → loop never pushes, returns `""`.
+      `slugify("   ")` → spaces are not alphanumeric; the dash-push branch requires
+      `!out.is_empty()`, so no dash is pushed when out is empty. Returns `""`. No
+      `---` possible.)
+- [x] Edit view never overwrites the existing slug.
+      (Code-trace verified 2026-07-08: Title handler guard at L865 requires
+      `editing_id.get().is_none()` — auto-fill only runs on create. Slug input at
+      L845 is `disabled=move || editing_id.get().is_some()` — field is read-only on
+      edit. Both paths blocked on edit view.)
 - [x] `cargo check --target wasm32-unknown-unknown` clean (commit `4c99532`).
 
 ### P0.2 — Reward fields optional + default hints
@@ -72,8 +90,19 @@ The `reward_config` is **not** a raw JSON textarea (good) — it's already struc
 - No behavior change to save/claim (defaults already exist in `claim_campaign_reward`).
 
 **Acceptance**
-- [ ] Hints render under NFT Name, Symbol, and Description, each showing the literal default template applied on mint (e.g. `'{Title} - Campaign Complete'`, `'CAMPAIGN'`, `'Completed the {Title} campaign'`). `{Title}` is shown as a placeholder, not substituted live.
-- [ ] Saving with all three blank still mints with correct defaults (covered by existing claim path — no regression).
+- [x] Hints render under NFT Name, Symbol, and Description, each showing the literal default template applied on mint (e.g. `'{Title} - Campaign Complete'`, `'CAMPAIGN'`, `'Completed the {Title} campaign'`). `{Title}` is shown as a placeholder, not substituted live.
+      (Code-trace verified 2026-07-08: `campaigns_page.rs` L948 (`Leave blank to use '{Title} - Campaign Complete' on mint.`),
+      L957 (`Leave blank to use 'CAMPAIGN' on mint.`), L966 (`Leave blank to use
+      'Completed the {Title} campaign' on mint.`). `{Title}` is a literal string
+      in all three, not a format substitution. Section header note at L940:
+      `All fields below are optional — sensible defaults are applied on mint.`)
+- [x] Saving with all three blank still mints with correct defaults (covered by existing claim path — no regression).
+      (Code-trace verified 2026-07-08: backend defaults still present in
+      `worker/src/handlers/campaigns.rs` L637 (`format!("{} - Campaign Complete",
+      campaign.title)`), L647 (`.unwrap_or("CAMPAIGN")`), L650
+      (`format!("Completed the {} campaign", campaign.title)`). Frontend P0.2 change
+      adds hints only — no save/claim behavior change. Defaults applied when fields
+      blank, exactly as the hints advertise.)
 - [x] wasm32 check clean (commit `4c99532`).
 
 ### P0.3 — Organization ID → dropdown  ⚠️ has open access-control decision
