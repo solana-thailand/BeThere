@@ -1,6 +1,6 @@
 # Plan 009 — Event Poster (marketing hero image on `/e/{slug}`)
 
-> **Status**: IMPLEMENTED & MERGED — PR #14 (`3081f71 feat(events): event marketing poster on /e/{slug} (Plan 009)`). Full-stack plumbing landed: D1 migration 0019, domain field on all 4 structs, persistence, R2 storage helpers, Organizer-gated upload/delete handlers, public API field, frontend types + admin form. Serde contract tests pass (7/7, verified 2026-07-08). **One deliberate deviation from §3.9 / AC6 / AC8**: the hero does NOT fall back to `nft_image_url` (only `poster → Ticket icon`) — see AC6 annotation. This is a visible behavior change for existing events without a poster (they now show a Ticket icon instead of the NFT badge image). Operator decision needed: accept the deviation or restore the nft_image_url fallback tier.
+> **Status**: IMPLEMENTED & MERGED — PR #14 (`3081f71 feat(events): event marketing poster on /e/{slug} (Plan 009)`). Full-stack plumbing landed: D1 migration 0019, domain field on all 4 structs, persistence, R2 storage helpers, Organizer-gated upload/delete handlers, public API field, frontend types + admin form. Serde contract tests pass (7/7, verified 2026-07-08). **AC6/AC8 deviation resolved 2026-07-09**: operator chose option (b) and restored the 3-tier hero fallback (`poster → nft_image_url → Ticket icon`) in `event_hero.rs`, fixing the regression for existing events and matching the past-events listing card. wasm32 `cargo check` + `clippy` clean. The follow-up commit lands on `feature/event_recap`.
 > **Type**: feature (full-stack)
 > **Priority**: P2 (UX enhancement — better event-page marketing image; no fund/protocol impact)
 > **Created**: 2026-06-18
@@ -330,30 +330,21 @@ Also run frontend clippy locally (CI won't catch it; there are pre-existing fron
 - [x] `GET /api/public/event/{slug}` includes `poster_url`.
       (Code-trace verified 2026-07-08: `worker/src/handlers/public_event.rs` L198
       `"poster_url": config.poster_url` in `get_public_event` JSON response. Also at L281, L386.)
-- [~] `/e/{slug}` hero shows **poster** when set, else **nft_image_url**, else **Ticket icon**.
-      **DELIBERATE DEVIATION** (verified 2026-07-08): the implemented hero at
-      `frontend-leptos/src/pages/public_event/event_hero.rs` has signature
-      `event_hero(poster_url, _nft_image_url)` — the second param is prefixed with `_`
-      and intentionally unused. The actual logic is `poster_url → Ticket icon` (2 tiers),
-      NOT the 3-tier fallback specified here. The doc-comment (L7-10) explains the
-      rationale: `nft_image_url` is baked into the on-chain cNFT mint metadata and using
-      it as a hero is a semantic/aspect-ratio mismatch. This is a reasonable engineering
-      judgment but it **contradicts the written AC**. The call site at `page.rs:490`
-      still has a stale comment claiming the 3-tier fallback. **Operator decision needed:**
-      (a) accept the deviation and update this AC + the page.rs comment, or (b) restore
-      the nft_image_url fallback tier in `event_hero.rs` to match the spec.
+- [x] `/e/{slug}` hero shows **poster** when set, else **nft_image_url**, else **Ticket icon**.
+      (Verified 2026-07-09: operator chose option (b) — restore the 3-tier fallback.
+      `event_hero.rs` now reads `poster_url → nft_image_url → Ticket icon`, the second
+      param is no longer `_`-prefixed, and `alt` reflects the source ("Event poster"
+      vs "Event badge"). wasm32 `cargo check` + `clippy` clean. This also matches the
+      past-events listing card (`past_events.rs` L140-144) which already used the same
+      `poster → nft` fallback, so the two surfaces are now consistent.)
 - [x] NFT mint flow (`claim/mint.rs`) still uses `nft_image_url` — untouched, no regression.
       (Code-trace verified 2026-07-08: `worker/src/claim/mint.rs` L699 and L874 both pass
       `image_url: &event.nft_image_url` into the Helius mint JSON-RPC. No `poster_url`
       reference anywhere in `claim/`. Mint path fully isolated from the poster field.)
-- [~] Existing events (no poster) behave exactly as before (fallback to NFT image).
-      **REGRESSION** (verified 2026-07-08, consequence of the AC6 deviation): before this
-      plan the hero rendered `nft_image_url`. After the plan, events without a poster
-      render the Ticket icon (the nft_image_url fallback tier was dropped). This is a
-      visible behavior change for every existing event that has an NFT badge image but
-      no marketing poster. Tied to the AC6 decision — restoring the fallback tier fixes
-      both. If the operator accepts the AC6 deviation, this AC should be reworded to
-      "existing events without a poster show the Ticket icon (intentional change)".
+- [x] Existing events (no poster) behave exactly as before (fallback to NFT image).
+      (Verified 2026-07-09: regression fixed by the AC6 option-(b) change — events with an
+      NFT badge image but no poster now render that badge image again instead of the
+      Ticket icon, restoring pre-Plan-009 behavior for historical events.)
 - [x] Over-5MB upload rejected.
       (Code-trace verified 2026-07-08: `poster.rs` L29 `MAX_POSTER_BYTES = 5 * 1024 * 1024`;
       L68-75 rejects with `AppError::Validation` when `bytes.len() > MAX_POSTER_BYTES`;
