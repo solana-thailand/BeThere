@@ -386,10 +386,37 @@ New file: `worker/src/handlers/events/pr_pack.rs`
 
 The `contacts.events_joined` CSV (`worker/src/db/contacts.rs#L22-31`) is overwritten on every upsert and not queryable. The source of truth for "which events did this contact attend" is the `attendees` table (one row per event per email, scoped by `registration_phase = 'pre_event' AND approval_status IN ('approved')`).
 
-- [ ] New helper `pub async fn list_contact_events(db, email) -> Result<Vec<EventMeta>, String>` in `worker/src/db/contacts.rs` — joins `attendees` → `events` for the email.
-- [ ] New endpoint `GET /api/contacts/{email}/history` (protected) returning the event list.
-- [ ] Document in a code comment that `contacts.events_joined` is **deprecated as a read path** and will be removed in a future migration. Write paths continue updating it for backward compat with any external consumer.
-- [ ] Note: full removal (deleting the column + write paths) is out of scope — logged as follow-up tech debt.
+- [x] New helper `pub async fn list_contact_events(db, email) -> Result<Vec<ContactEventRow>, String>` in `worker/src/db/contacts.rs` — joins `attendees` → `events` for the email.
+      (Verified 2026-07-09: `list_contact_events` at `worker/src/db/contacts.rs` JOINs attendees→events,
+      scoped to `registration_phase = 'pre_event' AND LOWER(approval_status) = 'approved'`, ordered by
+      `event_start_ms DESC`. Email is bound as positional `?1` (not interpolated) — guards against SQL
+      injection, mirroring `audience_aggregate` rather than the `exec`-with-format `clear_contact_pii`.
+      Return type renamed from the plan's `EventMeta` to a new `ContactEventRow` that carries
+      per-registration detail (`checked_in_at`, `participation_type`, `registered_at`) essential for a
+      history view — the domain `EventMeta` is a listing summary without registration context. Uses
+      `safe_all_rows` for NULL-safety. 4 new deserialization tests cover full-row mapping, NULL
+      `checked_in_at` → `None` (the no-show signal), missing-column defaults, and
+      `skip_serializing_if` wire contract. All passing.)
+- [x] New endpoint `GET /api/contacts/{email}/history` (protected) returning the event list.
+      (Verified 2026-07-09: `contact_history_handler` in `worker/src/handlers/contacts.rs` — protected
+      via `Extension(claims): Extension<Claims>`, takes `Path(email)`, normalizes email
+      (trim+lowercase), returns `ContactHistoryResponse { email, events, total }`. Route registered
+      at `worker/src/handlers/mod.rs` as `/contacts/{email}/history` (3 segments — no ambiguity with
+      the existing 2-segment `/contacts/events`, `/contacts/stats`, etc.). D1-missing check follows
+      the `audience_handler` idiom. Compiles clean.)
+- [x] Document in a code comment that `contacts.events_joined` is **deprecated as a read path** and will be removed in a future migration. Write paths continue updating it for backward compat with any external consumer.
+      (Verified 2026-07-09: crate-level doc comment at the top of `worker/src/db/contacts.rs` adds a
+      "Source of truth: `attendees` table (not `contacts.events_joined`)" section explaining the
+      deprecation. The `upsert_contact` doc comment expands on why the CSV column drifts (denormalized,
+      overwrite-on-every-upsert, not queryable) and explicitly states the read path is deprecated while
+      writes continue for backward compat. `list_contact_events` doc reinforces "This is the source of
+      truth" with a back-reference to the crate doc.)
+- [x] Note: full removal (deleting the column + write paths) is out of scope — logged as follow-up tech debt.
+      (Verified 2026-07-09: documented in both the crate-level doc ("Full column removal is tracked as
+      follow-up tech debt — out of scope for Plan 008") and the `upsert_contact` doc ("Full removal
+      (dropping the column + these write paths) is out of scope for Plan 008 and is tracked as
+      follow-up tech debt: it requires a migration to drop the column plus an audit of every upsert
+      caller"). No column drop migration shipped; write paths untouched.)
 
 ---
 
@@ -535,7 +562,8 @@ To keep this from becoming a surprise as the worker grows, this plan adds `worke
       (Verified 2026-07-09: backend toggle handler + public register endpoint + frontend form page
       + recap CTA all implemented and compiling. `cargo test --workspace` green (97 domain incl. 4 new
       Phase-3 tests); `cargo check` wasm frontend clean.)
-- [ ] Same branch / PR flow.
+- [x] Same branch / PR flow.
+      (Verified 2026-07-09: committed at `6b11137 feat(event-lifecycle): Plan 008 Phase 3 — post-event registration (lead capture)` (2026-07-09 13:08 +0700) on `feature/event_recap`. Phase 3 code is live on the branch alongside Phase 1+2.)
 - [~] Validate: register as a brand-new email → confirm `developer_profiles` row appears with expected fields → confirm `approval_status = 'post_event_registered'` excludes from capacity / check-in queries.
       (Code-trace verified: `upsert_post_event_attendee` sets approval_status='post_event_registered' +
       registration_phase='post_event'; existing capacity/check-in queries filter on approval_status='approved'
@@ -544,8 +572,10 @@ To keep this from becoming a surprise as the worker grows, this plan adds `worke
 
 **Phase 4**
 
-- [ ] Generator + endpoint + frontend page.
-- [ ] Same branch / PR flow.
+- [x] Generator + endpoint + frontend page.
+      (Verified 2026-07-09: delivered at `63270ac feat(event-lifecycle): Plan 008 Phase 4 — PR pack generator` (2026-07-09 08:53 +0700). Generator pure-fns in `domain/src/pr_pack.rs` (471 lines, 14 unit tests) + `domain/src/lib.rs` re-export; endpoint `worker/src/handlers/events/pr_pack.rs` (99 lines) + route `GET /api/events/{id}/pr-pack` in `handlers/mod.rs`; frontend page `frontend-leptos/src/pages/pr_pack.rs` (286 lines) + `api/event.rs` client + `lib.rs` route + `pages/mod.rs`. §3.4 sub-item checkboxes already `[x]` for all 4 details.)
+- [x] Same branch / PR flow.
+      (Verified 2026-07-09: committed at `63270ac` on `feature/event_recap`, same feature-branch flow as Phases 1–3. No separate PR — Phase 4 landed directly on the feature branch per the project's single-branch convention for this plan.)
 - [ ] Validate: copy a generated social post → post to a test account → confirm readability.
 
 ### Rollback
