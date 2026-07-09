@@ -295,6 +295,37 @@ fn render_recap(payload: PublicRecapData) -> impl IntoView {
                     .into_any()
             }
         }}
+
+        // ── Post-event registration CTA (Plan 008 — Phase 3) ──
+        // Shown only when the organizer has opened lead capture for this
+        // completed event. Links to the stripped registration form.
+        {move || {
+            let slug = event.slug.clone();
+            let open = event.post_event_registration_open;
+            if !open {
+                view! { <div></div> }.into_any()
+            } else {
+                view! {
+                    <div class="card" style="width:100%;margin-bottom:1.5rem;text-align:center;">
+                        <span style="display:block;margin-bottom:0.5rem;opacity:0.7;">
+                            <Icon icon=IconName::Lightbulb class="icon-lg" />
+                        </span>
+                        <h2 style="margin:0 0 0.5rem;font-size:1.125rem;">
+                            "Missed this event?"
+                        </h2>
+                        <p class="subtitle" style="margin:0 0 1rem;">
+                            "Join the community — we'll notify you about the next one."
+                        </p>
+                        <A href=format!("/events/{slug}/post-event-register")
+                            attr:class="btn btn-primary"
+                        >
+                            "Join the community"
+                        </A>
+                    </div>
+                }
+                    .into_any()
+            }
+        }}
     }
 }
 

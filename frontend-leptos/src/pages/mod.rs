@@ -30,4 +30,4 @@ pub mod ticket;
 
 pub use event_summary::EventSummary;
 pub use pr_pack::PrPack;
-pub use public::{EventRecap, PastEvents};
+pub use public::{EventRecap, PastEvents, PostEventRegister};

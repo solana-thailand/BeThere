@@ -385,6 +385,7 @@ pub async fn get_public_recap(
             "event_format": config.event_format.as_str(),
             "poster_url": config.poster_url,
             "nft_image_url": config.nft_image_url,
+            "post_event_registration_open": config.post_event_registration_open,
         },
         "recap_markdown": recap.recap_markdown,
         "recap_image_url": recap.recap_image_url,
