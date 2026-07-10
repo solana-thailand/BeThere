@@ -158,12 +158,13 @@ bucket_name = "bethere-assets"
 # Below we set the staging name, redeclare the full var set + three bindings
 # (with staging resource ids), and override DEV_MODE + the staging URLs.
 #
-# ── ONE-TIME PROVISIONING (run once, then paste the returned ids) ─────────────
+# ── ONE-TIME PROVISIONING (provisioned 2026-07-10 — ids pasted below) ────────
 #   npx wrangler d1 create bethere-db-staging
 #   npx wrangler kv namespace create EVENTS_STAGING
 #   npx wrangler r2 bucket create bethere-assets-staging
-#   npx wrangler d1 migrations apply bethere-db-staging --remote
-# Then replace the TODO_PROVISION_* placeholders below with the printed ids.
+#   npx wrangler d1 migrations apply bethere-db-staging --remote --env staging
+# NOTE: d1 migrations apply needs --env staging (it resolves via the [env.staging]
+# binding); d1 execute resolves by name and works without it.
 # ─────────────────────────────────────────────────────────────────────────────
 [env.staging]
 name = "bethere-staging"
@@ -195,14 +196,14 @@ EVENT_END_MS = "0"
 [[env.staging.d1_databases]]
 binding = "DB"
 database_name = "bethere-db-staging"
-database_id = "TODO_PROVISION_D1"   # from: npx wrangler d1 create bethere-db-staging
+database_id = "951fce4e-b874-4ab0-ae70-39a27dbf1d8c"   # provisioned 2026-07-10 (APAC)
 migrations_dir = "migrations"
 
 # Separate KV namespace.
 [[env.staging.kv_namespaces]]
 binding = "EVENTS"
-id = "TODO_PROVISION_KV"            # from: npx wrangler kv namespace create EVENTS_STAGING
-preview_id = "TODO_PROVISION_KV_PREVIEW"
+id = "dd1d541c936242ecb1533ba6ac6a9851"            # provisioned 2026-07-10
+preview_id = "dd1d541c936242ecb1533ba6ac6a9851"   # staging shares the main namespace (no separate preview ns)
 
 # Separate R2 bucket.
 [[env.staging.r2_buckets]]
