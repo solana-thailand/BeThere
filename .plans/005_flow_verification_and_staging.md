@@ -65,17 +65,21 @@ Plan 004 fixed a UX symptom. This plan fixes the **structural absence of a safet
 
 Goal: mobile/SIWS dev cannot reach production data even by accident.
 
-- [ ] Add `[env.staging]` block to `worker/wrangler.toml` with:
+- [x] Add `[env.staging]` block to `worker/wrangler.toml` with:
   - `name = "bethere-staging"`
   - Separate D1 binding (`bethere-db-staging`, created via `wrangler d1 create bethere-db-staging`)
   - Separate KV binding (`EVENTS_STAGING`, new namespace via `wrangler kv namespace create EVENTS_STAGING`)
   - Separate R2 binding (`bethere-assets-staging`)
   - Test-event values for `EVENT_END_MS` / `EVENT_START_MS` (not the production event)
   - `DEV_MODE = "1"` to allow test shortcuts on staging only
-- [ ] Update `worker/deploy.sh` to accept an env arg: `bash deploy.sh staging` → deploys to `bethere-staging`; `bash deploy.sh` → production (default, unchanged).
+      (Shipped — `worker/wrangler.toml#L169` `[env.staging]`: `name="bethere-staging"` (L170), D1 `bethere-db-staging` (L198), KV `[[env.staging.kv_namespaces]]` (L203), R2 `bethere-assets-staging` (L211), `DEV_MODE="1"` staging-only (L183), test `EVENT_START_MS`/`EVENT_END_MS` (L192-193).)
+- [x] Update `worker/deploy.sh` to accept an env arg: `bash deploy.sh staging` → deploys to `bethere-staging`; `bash deploy.sh` → production (default, unchanged).
+      (Shipped — `worker/deploy.sh#L59` `staging) DEPLOY_ENV="staging"; shift` + usage doc L7; resolves to `wrangler deploy --env staging`.)
 - [ ] Document staging secrets setup: `wrangler secret put JWT_SECRET --env staging`, plus Google OAuth secrets with a separate redirect URI (`https://bethere-staging.solana-thailand.workers.dev/api/auth/callback`). Register this URI in the Google Cloud OAuth app.
-- [ ] Add `worker/scripts/seed-staging.sh`: idempotent seeding of a test event (`flow-test-event`) with known `event_start_ms`/`event_end_ms`/`refund_deadline` plus a test attendee + deposit row.
-- [ ] Add `worker/.env.staging.example` documenting the staging URL for plan 007 to consume: `STAGING_WORKER_URL=https://bethere-staging.solana-thailand.workers.dev`.
+- [x] Add `worker/scripts/seed-staging.sh`: idempotent seeding of a test event (`flow-test-event`) with known `event_start_ms`/`event_end_ms`/`refund_deadline` plus a test attendee + deposit row.
+      (Shipped — `worker/scripts/seed-staging.sh` (5891 B, +x); `EVENT_ID="flow-test-event"` L48; seeds `event_start=now-4h`, `event_end=now-2h`, `refund_deadline_hours=6`; scoped to staging only.)
+- [x] Add `worker/.env.staging.example` documenting the staging URL for plan 007 to consume: `STAGING_WORKER_URL=https://bethere-staging.solana-thailand.workers.dev`.
+      (Shipped — `worker/.env.staging.example` (2086 B).)
 - [ ] Verify isolation: after staging deploy, confirm `wrangler d1 execute bethere-db-staging --remote --command "SELECT count(*) FROM attendees"` returns the seeded count (not production count).
 
 ### 3.2 Contract surface inventory
@@ -176,7 +180,8 @@ The harness is the safety mechanism for 006/007.
 - [x] Implement LiteSVM tests (§3.3) — ship first, fastest payoff.
       (Superseded by `quasar-svm` coverage in `bethere-escrow/src/tests/refund.rs` — see §3.3.)
 - [ ] Implement E2E harness (§3.4) — ship second.
-- [ ] Wire preflight gate (§3.5) — ship last; this is what blocks 006/007 from proceeding.
+- [x] Wire preflight gate (§3.5) — ship last; this is what blocks 006/007 from proceeding.
+      (Shipped — `worker/scripts/preflight.sh` (8734 B, +x) + `worker/deploy.sh#L165` `run_preflight_gate || { echo "Aborting production deploy."; exit 1; }`; opt-in via `BETHERE_PREFLIGHT_GATE=1` (L129), `--force` escape hatch appends to `.preflight-bypass.log` (L118).)
 - [ ] One-time baseline: run harness read-only flows against production to confirm current behavior matches expectations (no writes).
 
 ---
