@@ -33,7 +33,14 @@ pub use wire::{check_escrow_pda_available, derive_escrow_address, verify_escrow_
 // ---------------------------------------------------------------------------
 
 /// Bethere-escrow program ID on devnet.
-pub(crate) const ESCROW_PROGRAM_ID: &str = "C6HDeZES9aPpNwe3UvS9ecmfcRhH1XeJb8PGJmLG3z3T";
+pub(crate) const ESCROW_PROGRAM_ID_DEVNET: &str = "C6HDeZES9aPpNwe3UvS9ecmfcRhH1XeJb8PGJmLG3z3T";
+
+/// Bethere-escrow program ID on mainnet.
+/// TODO(mainnet): set after generating the mainnet program keypair and deploying
+/// `bethere_escrow.so` to mainnet-beta (handover #126 §4.③.1). Left empty intentionally —
+/// selecting `mainnet-beta` without a value here fails loudly at base58 parsing rather than
+/// silently routing mainnet USDC to the devnet program.
+pub(crate) const ESCROW_PROGRAM_ID_MAINNET: &str = "";
 
 /// Devnet USDC mint.
 /// Mainnet: EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1m
@@ -48,6 +55,17 @@ pub(crate) fn usdc_mint() -> &'static str {
     match std::env::var("SOLANA_CLUSTER").unwrap_or_default().as_str() {
         "mainnet-beta" => USDC_MINT_MAINNET,
         _ => USDC_MINT_DEVNET,
+    }
+}
+
+/// Returns the escrow program ID based on the `SOLANA_CLUSTER` env var.
+/// Defaults to devnet if not set. Mirrors `usdc_mint()` so a cluster flip changes both the
+/// USDC mint AND the program ID atomically — without this, flipping the cluster would route
+/// mainnet USDC against a devnet-program PDA (unrecoverable funds).
+pub(crate) fn escrow_program_id() -> &'static str {
+    match std::env::var("SOLANA_CLUSTER").unwrap_or_default().as_str() {
+        "mainnet-beta" => ESCROW_PROGRAM_ID_MAINNET,
+        _ => ESCROW_PROGRAM_ID_DEVNET,
     }
 }
 

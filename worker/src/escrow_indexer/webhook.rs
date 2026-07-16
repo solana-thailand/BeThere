@@ -4,7 +4,7 @@ use chrono::Utc;
 use serde::Deserialize;
 use worker::D1Database;
 
-use super::{ESCROW_PROGRAM_ID, EscrowInstruction, IndexSummary, OnChainEvent};
+use super::{EscrowInstruction, IndexSummary, OnChainEvent, escrow_program_id};
 
 // ---------------------------------------------------------------------------
 // Helius enhanced webhook types
@@ -146,7 +146,7 @@ pub fn parse_helius_transaction(tx: &HeliusEnhancedTransaction) -> Option<OnChai
     }
 
     for instr in &tx.instruction_data {
-        if instr.program_id != ESCROW_PROGRAM_ID {
+        if instr.program_id != escrow_program_id() {
             continue;
         }
 

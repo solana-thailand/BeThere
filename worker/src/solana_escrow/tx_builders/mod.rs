@@ -9,8 +9,8 @@ use super::wire::{
     serialize_transaction,
 };
 use super::{
-    ASSOCIATED_TOKEN_PROGRAM_ID, ESCROW_PROGRAM_ID, EscrowError, INSTRUCTIONS_SYSVAR_ID,
-    PubkeyBytes, RENT_SYSVAR_ID, SYSTEM_PROGRAM_ID, TOKEN_PROGRAM_ID,
+    ASSOCIATED_TOKEN_PROGRAM_ID, EscrowError, INSTRUCTIONS_SYSVAR_ID, PubkeyBytes, RENT_SYSVAR_ID,
+    SYSTEM_PROGRAM_ID, TOKEN_PROGRAM_ID, escrow_program_id,
 };
 
 pub(crate) mod close;
@@ -90,7 +90,7 @@ impl EscrowCtx {
         organizer_pubkey: &str,
         event_id: u64,
     ) -> Result<Self, EscrowError> {
-        let program_id = pubkey_from_base58(ESCROW_PROGRAM_ID)?;
+        let program_id = pubkey_from_base58(escrow_program_id())?;
         let organizer = pubkey_from_base58(organizer_pubkey)?;
         let (event_escrow, _) = find_program_address(
             &[b"escrow", organizer.as_slice(), &event_id.to_le_bytes()],
@@ -278,7 +278,7 @@ mod tests {
     };
     use crate::solana_escrow::wire::encode_compact_u16;
     use crate::solana_escrow::{
-        ASSOCIATED_TOKEN_PROGRAM_ID, ESCROW_PROGRAM_ID, SYSTEM_PROGRAM_ID, TOKEN_PROGRAM_ID,
+        ASSOCIATED_TOKEN_PROGRAM_ID, SYSTEM_PROGRAM_ID, TOKEN_PROGRAM_ID, escrow_program_id,
         usdc_mint,
     };
 
@@ -317,9 +317,10 @@ mod tests {
 
     #[test]
     fn test_base58_roundtrip_escrow_program() {
-        let pk = pubkey_from_base58(ESCROW_PROGRAM_ID).unwrap();
+        let id = escrow_program_id();
+        let pk = pubkey_from_base58(id).unwrap();
         let encoded = pubkey_to_base58(&pk);
-        assert_eq!(encoded, ESCROW_PROGRAM_ID);
+        assert_eq!(encoded, id);
     }
 
     #[test]
@@ -395,7 +396,7 @@ mod tests {
     /// Expected: 3CzSgvftMgjQE1Du9uyamJe6xVCMmu1tvEhHc172Z4JD (bump=255)
     #[tokio::test]
     async fn test_find_event_escrow_pda() {
-        let program_id = pubkey_from_base58(ESCROW_PROGRAM_ID).unwrap();
+        let program_id = pubkey_from_base58(escrow_program_id()).unwrap();
         let organizer = pubkey_from_base58("9ZNTfG4NyQgxy2SWjSiQoUyBPEvXT2xo7fKc5hPYYJ7b").unwrap();
         let event_id: u64 = 1u64;
 
@@ -415,7 +416,7 @@ mod tests {
     /// Expected: EwGrFaXTJdY8cv3T4d93shtASJZdp1t34Y7rGtbf5Fhi (bump=255)
     #[tokio::test]
     async fn test_find_attendee_deposit_pda() {
-        let program_id = pubkey_from_base58(ESCROW_PROGRAM_ID).unwrap();
+        let program_id = pubkey_from_base58(escrow_program_id()).unwrap();
         let organizer = pubkey_from_base58("9ZNTfG4NyQgxy2SWjSiQoUyBPEvXT2xo7fKc5hPYYJ7b").unwrap();
         let event_id: u64 = 1u64;
         let attendee = pubkey_from_base58("9ZNTfG4NyQgxy2SWjSiQoUyBPEvXT2xo7fKc5hPYYJ7b").unwrap();
@@ -449,7 +450,7 @@ mod tests {
     /// Expected: DXiJimCs3Rzv1i3W93oeRSoxcT8Coeo2YqA7iUaQKndQ (bump=255)
     #[tokio::test]
     async fn test_find_vault_ata() {
-        let program_id = pubkey_from_base58(ESCROW_PROGRAM_ID).unwrap();
+        let program_id = pubkey_from_base58(escrow_program_id()).unwrap();
         let organizer = pubkey_from_base58("9ZNTfG4NyQgxy2SWjSiQoUyBPEvXT2xo7fKc5hPYYJ7b").unwrap();
         let event_id: u64 = 1u64;
 

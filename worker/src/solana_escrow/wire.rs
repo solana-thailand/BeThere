@@ -3,7 +3,7 @@
 use worker::KvStore;
 
 use super::crypto::{find_program_address, pubkey_from_base58, pubkey_to_base58};
-use super::{ESCROW_PROGRAM_ID, EscrowError, PubkeyBytes};
+use super::{EscrowError, PubkeyBytes, escrow_program_id};
 
 // ---------------------------------------------------------------------------
 // Blockhash cache constants
@@ -148,7 +148,7 @@ pub async fn derive_escrow_address(
     event_id: u64,
 ) -> Result<String, EscrowError> {
     let organizer = pubkey_from_base58(organizer_pubkey)?;
-    let program_id = pubkey_from_base58(ESCROW_PROGRAM_ID)?;
+    let program_id = pubkey_from_base58(escrow_program_id())?;
 
     let (event_escrow, _) = find_program_address(
         &[b"escrow", organizer.as_slice(), &event_id.to_le_bytes()],
@@ -172,7 +172,7 @@ pub async fn verify_escrow_account_exists(
     event_id: u64,
 ) -> Result<(), EscrowError> {
     let organizer = pubkey_from_base58(organizer_pubkey)?;
-    let program_id = pubkey_from_base58(ESCROW_PROGRAM_ID)?;
+    let program_id = pubkey_from_base58(escrow_program_id())?;
 
     let (event_escrow, _) = find_program_address(
         &[b"escrow", organizer.as_slice(), &event_id.to_le_bytes()],
@@ -235,7 +235,7 @@ pub async fn verify_escrow_account_exists(
         )),
         Some(info) => {
             let owner = info.get("owner").and_then(|v| v.as_str()).unwrap_or("");
-            if owner != ESCROW_PROGRAM_ID {
+            if owner != escrow_program_id() {
                 return Err(EscrowError::AccountNotFound(format!(
                     "account exists but is not owned by escrow program (owner: {owner})"
                 )));
@@ -263,7 +263,7 @@ pub async fn check_escrow_pda_available(
     event_id: u64,
 ) -> Result<String, EscrowError> {
     let organizer = pubkey_from_base58(organizer_pubkey)?;
-    let program_id = pubkey_from_base58(ESCROW_PROGRAM_ID)?;
+    let program_id = pubkey_from_base58(escrow_program_id())?;
 
     let (event_escrow, _) = find_program_address(
         &[b"escrow", organizer.as_slice(), &event_id.to_le_bytes()],
@@ -328,7 +328,7 @@ pub async fn check_escrow_pda_available(
         Some(info) => {
             // Account exists — check if it's owned by the escrow program
             let owner = info.get("owner").and_then(|v| v.as_str()).unwrap_or("");
-            if owner == ESCROW_PROGRAM_ID {
+            if owner == escrow_program_id() {
                 // True collision: escrow already initialized
                 Err(EscrowError::AccountNotFound(format!(
                     "escrow PDA {escrow_b58} already initialized on-chain for this organizer+event_id"

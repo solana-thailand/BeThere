@@ -6,7 +6,7 @@ use serde::Deserialize;
 use worker::D1Database;
 
 use super::{
-    ESCROW_PROGRAM_ID, EscrowInstruction, IndexSummary, OnChainEvent, POLL_BATCH_SIZE, save_cursor,
+    EscrowInstruction, IndexSummary, OnChainEvent, POLL_BATCH_SIZE, escrow_program_id, save_cursor,
 };
 
 // ---------------------------------------------------------------------------
@@ -314,7 +314,7 @@ pub(crate) fn parse_rpc_transaction(
         let program_id_index = instr.program_id_index as usize;
         let program_id = tx.transaction.message.account_keys.get(program_id_index)?;
 
-        if program_id != ESCROW_PROGRAM_ID {
+        if program_id != escrow_program_id() {
             continue;
         }
 
