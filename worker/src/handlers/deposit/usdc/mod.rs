@@ -661,7 +661,7 @@ pub(crate) async fn discover_deposit_tx_on_chain(
     escrow_address: &str,
     attendee_wallet: &str,
 ) -> Option<String> {
-    use crate::solana_escrow::{pubkey_from_base58, pubkey_to_base58, ESCROW_PROGRAM_ID};
+    use crate::solana_escrow::{escrow_program_id, pubkey_from_base58, pubkey_to_base58};
 
     // Derive the AttendeeDeposit PDA: seeds = [b"deposit", escrow, attendee].
     let escrow_pubkey = match pubkey_from_base58(escrow_address) {
@@ -678,10 +678,10 @@ pub(crate) async fn discover_deposit_tx_on_chain(
             return None;
         }
     };
-    let program_id = match pubkey_from_base58(ESCROW_PROGRAM_ID) {
+    let program_id = match pubkey_from_base58(escrow_program_id()) {
         Ok(pk) => pk,
         Err(e) => {
-            tracing::error!(error = %e, "invalid ESCROW_PROGRAM_ID constant");
+            tracing::error!(error = %e, "invalid escrow program id for active cluster");
             return None;
         }
     };
