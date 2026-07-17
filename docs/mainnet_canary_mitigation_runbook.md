@@ -34,73 +34,94 @@ Pick **one** before the mainnet cutover. Each has different prerequisites.
 
 | Path | Strategy | Native canary? | Rollback cost | Prerequisite |
 |------|----------|----------------|---------------|--------------|
-| **A** | Feature-flag the cluster toggle | Effectively yes (decouples code deploy from mainnet cutover) | Flip a secret (seconds) | `ESCROW_PROGRAM_ID` must be safe under the cluster flip — see §3 |
+| **A** | Feature-flag the cluster toggle | Effectively yes (decouples code deploy from mainnet cutover) | Flip a secret (seconds) | ✅ **Resolved by PR #21** (merged to `develop`) — see §3 |
 | **B** | Accept full-cut with fast rollback | No | Dashboard/CLI rollback (≈1 min) | None — works today |
 
-**Default recommendation: Path A** *if and only if* the prerequisite in §3 is resolved. It is strictly
-safer because the worker code can be deployed and soaked on the production URL while still talking
-to devnet, then cut over to mainnet by flipping a single secret — and rolled back the same way.
+**Recommendation: Path A.** The §3 prerequisite (cluster-aware `ESCROW_PROGRAM_ID` that flips in
+lockstep with `usdc_mint()`) shipped in PR #21 — verified across all six consumer sites (`wire.rs`,
+`tx_builders/mod.rs`, `poller.rs`, `webhook.rs`, `escrow_indexer/mod.rs`, `handlers/deposit/usdc/mod.rs`)
+and validated end-to-end on real devnet (init → deactivate → claim → close, rent reclaimed).
 
-Fall back to **Path B** if the team decides not to touch `ESCROW_PROGRAM_ID` before go-live.
+Path A is strictly safer because the worker code can be deployed and soaked on the production URL
+while still talking to devnet, then cut over to mainnet by flipping a single secret — and rolled
+back the same way. The only remaining prerequisite is ops-time, not code: fill
+`ESCROW_PROGRAM_ID_MAINNET` (currently the intentional `""` fail-loud guard) once the mainnet
+program is deployed — see §3.2.
+
+Reserve **Path B** only if the team explicitly prefers the simpler full-cut and accepts the
+≈1-minute rollback window instead of the seconds-long secret flip.
 
 ---
 
-## 3. ⚠️ Critical prerequisite (DECISION NEEDED): cluster-aware `ESCROW_PROGRAM_ID`
+## 3. ✅ Prerequisite RESOLVED by PR #21: cluster-aware `ESCROW_PROGRAM_ID`
 
 Path A's safety depends on **flipping `SOLANA_CLUSTER=mainnet-beta` flipping BOTH the USDC mint
 AND the escrow program ID together**. If only one flips, the worker enters an inconsistent state
 that can build malformed transactions (e.g. mainnet USDC sent to a devnet program PDA — funds
 effectively unrecoverable).
 
-### 3.1 Current state (verified on `develop` @ `803e5b8`)
+> **Status (verified on `develop` @ `c7a6e5d`): RESOLVED.** PR #21 (cluster-aware escrow, merged to
+> `develop`) chose **Option A2** below and implemented it. The devnet e2e in this session validated
+> the cluster-aware derivation on-chain (PDA `EX7WaHTj5TUr7VZGjeLo5uR6P2Te87ZmVowYGHGp7czq`,
+> TX `dw6oCpuQ…`). The original decision history is preserved in §3.2 for audit; only the
+> ops-time step (filling the mainnet const after deploy) remains.
 
-- ✅ `usdc_mint()` **is** cluster-aware:
-  ```worker/src/solana_escrow/mod.rs#L47-52
-  pub(crate) fn usdc_mint() -> &'static str {
+### 3.1 Current state (verified on `develop` @ `c7a6e5d`)
+
+- ✅ `usdc_mint()` **is** cluster-aware (unchanged).
+- ✅ `escrow_program_id()` **is now cluster-aware** — shipped in PR #21. The single hardcoded const
+  was split into per-cluster constants plus a selector mirroring `usdc_mint()`:
+  ```worker/src/solana_escrow/mod.rs#L35-69
+  pub(crate) const ESCROW_PROGRAM_ID_DEVNET: &str = "C6HDeZES9aPpNwe3UvS9ecmfcRhH1XeJb8PGJmLG3z3T";
+
+  /// TODO(mainnet): set after generating the mainnet program keypair and deploying
+  /// `bethere_escrow.so` to mainnet-beta (handover #126 §4.③.1). Left empty intentionally —
+  /// selecting `mainnet-beta` without a value here fails loudly at base58 parsing rather than
+  /// silently routing mainnet USDC to the devnet program.
+  pub(crate) const ESCROW_PROGRAM_ID_MAINNET: &str = "";
+
+  pub(crate) fn escrow_program_id() -> &'static str {
       match std::env::var("SOLANA_CLUSTER").unwrap_or_default().as_str() {
-          "mainnet-beta" => USDC_MINT_MAINNET,
-          _ => USDC_MINT_DEVNET,
+          "mainnet-beta" => ESCROW_PROGRAM_ID_MAINNET,
+          _ => ESCROW_PROGRAM_ID_DEVNET,
       }
   }
   ```
-- ❌ `ESCROW_PROGRAM_ID` **is not**. It is a hardcoded `const` in **two** places:
-  - `worker/src/solana_escrow/mod.rs:36` — used by `tx_builders/mod.rs` for PDA derivation
-    (`EscrowCtx::resolve`) and by `wire.rs` for on-chain verification.
-  - `worker/src/escrow_indexer/mod.rs:45` — used by `poller.rs` and `webhook.rs` to filter
-    which on-chain instructions belong to the escrow program.
+- ✅ **All consumer sites rewired** to `escrow_program_id()` (single source of truth, re-exported
+  from `escrow_indexer/mod.rs`):
+  - `worker/src/solana_escrow/tx_builders/mod.rs` — PDA derivation (6 call sites)
+  - `worker/src/solana_escrow/wire.rs` — on-chain verification (6 call sites)
+  - `worker/src/escrow_indexer/poller.rs:317` — instruction filtering
+  - `worker/src/escrow_indexer/webhook.rs:149` — Helius webhook parsing
+  - `worker/src/handlers/deposit/usdc/mod.rs:681` — deposit TX build
 
-  Flipping `SOLANA_CLUSTER` today changes the USDC mint but **not** the program ID.
+  Flipping `SOLANA_CLUSTER` now atomically flips **both** the USDC mint AND the program ID. The
+  empty `ESCROW_PROGRAM_ID_MAINNET` is a deliberate fail-loud guard: selecting `mainnet-beta`
+  before filling it errors at base58 parsing rather than silently misrouting funds.
 
-### 3.2 The decision
+### 3.2 Decision history (Option A2 chosen and shipped)
 
-The indexer's existing comment says:
-```worker/src/escrow_indexer/mod.rs#L43-45
-/// Bethere-escrow program ID (devnet and mainnet).
-pub const ESCROW_PROGRAM_ID: &str = "C6HDeZES9aPpNwe3UvS9ecmfcRhH1XeJb8PGJmLG3z3T";
-```
-This implies **intent to reuse the same program address on both clusters** — which is possible
-because Solana program IDs are derived from the deployer keypair, not per-cluster.
+The original open question was whether to reuse the devnet program keypair on mainnet or generate
+a new one. **PR #21 resolved this as Option A2** — the code path is implemented and merged:
 
-But handover #126 §4.③.1 says *"Generate mainnet program keypair, fund ~1.5 SOL rent, deploy
-`bethere_escrow.so` to `mainnet-beta`"* — implying a **new** keypair and therefore a **different**
-program ID.
+- **Option A1 — Reuse the devnet program keypair on mainnet.** (Not chosen.)
+  Same program ID everywhere, no code change. Cost: the devnet keypair becomes the mainnet upgrade
+  authority and must be retained as a production secret.
 
-These are mutually exclusive. Resolve **before** choosing Path A:
+- **Option A2 — Generate a new mainnet keypair.** ✅ **Chosen and shipped (PR #21).**
+  Different program ID on mainnet. Both constants became cluster-aware via `escrow_program_id()`,
+  mirroring `usdc_mint()`. All consumer sites were rewired (see §3.1). Validated on devnet e2e.
 
-- **Option A1 — Reuse the devnet program keypair on mainnet.**
-  Same program ID everywhere. The two `ESCROW_PROGRAM_ID` consts remain valid as-is. **No code
-  change needed.** Path A works today. Cost: the devnet keypair must be retained and treated as a
-  production secret (it becomes the upgrade authority on mainnet).
+**Remaining action (ops, not code):** after the mainnet program is deployed
+(handover #126 §4.③.1 — generate keypair, fund ~1.5 SOL rent, deploy `bethere_escrow.so` to
+`mainnet-beta`), fill `ESCROW_PROGRAM_ID_MAINNET` with the deployed address and redeploy the worker.
+Until then, the `""` guard keeps mainnet selection loud-failing and safe.
 
-- **Option A2 — Generate a new mainnet keypair.**
-  Different program ID on mainnet. Both consts must become cluster-aware (mirroring `usdc_mint()`).
-  This is a small but real code change — **outside the scope of "mainnet is a secret, not code"** —
-  and it touches tx building, PDA derivation, indexer polling, and webhook parsing. Path A is blocked
-  until this lands.
-
-> **Honest note:** handover #126's claim that "mainnet is a secret, not code" is only fully true
-> under Option A1. Under A2, a small code change is required. Surface this to the team rather than
-> discovering it during the cutover.
+> **Honest note (updated):** handover #126's original claim that "mainnet is a secret, not code"
+> was only fully true under Option A1. The team effectively chose A2, which required the small code
+> change that PR #21 landed. With that merged, the remaining mainnet cutover work IS now
+> secret/ops-only (cluster secret + the one const value) — the original claim holds from this point
+> forward.
 
 ---
 
