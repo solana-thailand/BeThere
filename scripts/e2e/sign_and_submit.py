@@ -7,6 +7,9 @@ Usage:
     python3 sign_and_submit.py <tx_b64> <keypair_json> <rpc_url>
 
 Prints SIGNATURE=<sig> on success or ERROR=<msg> on failure.
+
+Requires the PyNaCl package (nacl.signing for Ed25519 signing):
+    python3 -m venv .venv && .venv/bin/pip install pynacl
 """
 
 from __future__ import annotations
