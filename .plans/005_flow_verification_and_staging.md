@@ -1,12 +1,12 @@
 # Plan 005 — Flow Verification Harness + Staging Worker
 
-> **Status**: PARTIALLY DONE (code-only sections shipped; infra chain pending).
+> **Status**: PARTIALLY DONE (code scaffold merged to `develop` 2026-07-16 via PR #19; real Cloudflare provisioning + deploy verification still pending).
 > - §3.2 Contract surface audit — **DONE** (`docs/escrow_contract_surface.md`, 23 variants mapped).
 > - §3.2 Divergence fix #19 (`RefundDeadlinePassed` not pre-gated) — **SHIPPED & MERGED**: `DepositStatusResponse` gained `checked_in` + `refund_deadline_ms` (`domain/src/models/deposit.rs`), worker populates them (`worker/src/handlers/deposit/usdc/handlers.rs` "divergence fix #19" block), frontend gate rewritten to the two-path predicate (`frontend-leptos/src/pages/deposit/types.rs` L209-226) with both call sites updated.
 > - §3.3 LiteSVM tests — **SUPERSEDED**: equivalent two-path coverage already exists via `quasar-svm` tests in `bethere-escrow/src/tests/refund.rs` (`test_refund`, `test_refund_not_checked_in`, `test_refund_already_refunded`, `test_refund_checked_in_after_deadline`). No marginal value in duplicating under LiteSVM.
-> - §3.1 Staging env — **NOT STARTED** (real blocker: needs Cloudflare D1/KV/R2 provisioning + OAuth redirect URI registration + deploy.sh staging arg).
-> - §3.4 E2E harness (`flow-harness/` crate) — **NOT STARTED** (blocked on §3.1 staging + Helius devnet RPC).
-> - §3.5 Preflight gate — **NOT STARTED** (blocked on §3.4).
+> - §3.1 Staging env scaffold — **MERGED to `develop` via PR #19** (`[env.staging]` block in `wrangler.toml`, `deploy.sh staging` arg, `scripts/seed-staging.sh`, `worker/.env.staging.example`). Real provisioning still **NOT STARTED**: Cloudflare D1/KV/R2 creation + OAuth redirect URI registration + isolation verification.
+> - §3.4 E2E harness (`flow-harness/` crate) — **scaffold MERGED to `develop` via PR #19** (offline-tested, 114 unit tests green); staging-live wiring pending §3.1 provisioning + Helius devnet RPC.
+> - §3.5 Preflight gate — **scaffold MERGED to `develop` via PR #19** (`worker/scripts/preflight.sh`, opt-in and OFF by default); activation pending §3.1 staging going live (otherwise the gate would block all production deploys with no way to get a green run).
 > **Remaining critical path**: staging env → E2E harness → preflight gate (pure infra; unblocks plans 006/007).
 > **Type**: ops (staging isolation) + testing (E2E harness + contract audit)
 > **Priority**: P1 — prerequisite for plans 006 (SIWS) and 007 (Dioxus mobile). This plan is the safety net that lets us change the worker without endangering production.

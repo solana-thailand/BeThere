@@ -1,6 +1,6 @@
 # Plan 008 — Event Lifecycle: Summary, Recap, Post-Event Registration, PR Generator
 
-> **Status**: Phase 1 (Post-Event Summary) ✅ shipped (`48d25b1`, deployed) · Phase 2 (Public Recap + Past Events) ✅ implemented 2026-07-05 on `feature/event_recap` (`9549532` + visibility-fix `74bc43d`); pending merge/deploy · Phase 3 (Post-Event Registration) ✅ implemented 2026-07-09 (toggle + public register + frontend form; live validation blocked on Plan 005 staging) · Phase 4 (PR Generator) ✅ implemented 2026-07-09 (`63270ac`). Cross-cutting checks (clippy clean, tests green) re-run and passing.
+> **Status**: Phase 1 (Post-Event Summary) ✅ shipped (`48d25b1`, deployed) · Phase 2 (Public Recap + Past Events) ✅ merged to `develop` 2026-07-16 via PR #20 (rebased from `feature/event_recap` `9549532` + visibility-fix `74bc43d`); deploy pending · Phase 3 (Post-Event Registration) ✅ merged to `develop` 2026-07-16 via PR #20 (originally implemented 2026-07-09: toggle + public register + frontend form); live validation still blocked on Plan 005 staging · Phase 4 (PR Generator) ✅ merged to `develop` 2026-07-16 via PR #20 (originally `63270ac`). Cross-cutting checks (clippy clean, tests green) re-run and passing on `develop` @ `f83644f` (367 tests).
 > **Type**: feature (event lifecycle workflow) + content (PR/recap generation)
 > **Priority**: P2 — closes the "what happens after an event ends" gap and turns past events into lead-capture surfaces. Independent of plans 005/006/007; can start in parallel.
 > **Created**: 2026-06-23
@@ -513,9 +513,7 @@ To keep this from becoming a surprise as the worker grows, this plan adds `worke
 - [x] `worker/scripts/check_size.sh` committed (already created alongside this plan).
       (Verified 2026-07-08: file exists, 7937 bytes, executable. Baseline 1.446 MiB captured 2026-06-23.)
 - [x] Wire into Phase 1 rollout: run `bash scripts/check_size.sh` before every `bash deploy.sh`. Document in the per-phase checklist below.
-      (Corrected 2026-07-09: only Phase 1 (`48d25b1`) is deployed to production; Phase 2 (`9549532`)
-      is on `feature/event_recap` pending merge. Both builds were checked locally and are under the
-      3 MiB hard limit. The guard script is the documented pre-deploy step.)
+      (Corrected 2026-07-09, updated 2026-07-16: only Phase 1 (`48d25b1`) is deployed to production; Phase 2/3/4 are now merged to `develop` via PR #20 (originally on `feature/event_recap` `9549532`, rebased). Deploy to production pending. All builds were checked locally and are under the 3 MiB hard limit. The guard script is the documented pre-deploy step.)
 - [~] Optional: add as a CI gate (separate from this plan's scope — flagged for plan 005's harness work).
       (Deferred to plan 005's CI harness work — not implemented as a CI gate yet. Script exists; CI wiring pending.)
 - [x] On any deploy where the guard fails: trim dependencies, or split into a second Worker via Service Bindings (e.g. extract escrow/indexer handlers). Do **not** raise `SIZE_BUDGET_MIB` without a deliberate decision.
@@ -735,14 +733,12 @@ To keep this from becoming a surprise as the worker grows, this plan adds `worke
       Note: this project has no `pnpm test` JS suite — the test gate is `cargo test`.)
 - [x] Migration 0019 applies cleanly on a DB with prior migrations 0001–0018.
       (Verified 2026-07-08: migration shipped as **0020** (renumbered — slot 0019 taken by Plan 009).
-      Deployed to production D1 successfully with Phase 1; Phase 2+ remain on `feature/event_recap` pending merge.)
+      Deployed to production D1 successfully with Phase 1; Phase 2/3/4 merged to `develop` 2026-07-16 via PR #20 (originally on `feature/event_recap`, rebased); production D1 deploy of Phase 2+ still pending.)
 - [x] No new clippy warnings introduced (existing 183-warning debt is documented separately).
       (Verified 2026-07-08: worker + domain clippy clean with `-D warnings`. The 183-warning debt
       is in the out-of-workspace `frontend-leptos` crate, built via trunk not clippy-gated by CI.)
 - [x] `bash scripts/check_size.sh` passes (worker gzip ≤ 2.5 MiB) on the merged Phase 1 build. Baseline before plan 008: **1.446 MiB** (authoritative wrangler measurement, captured 2026-06-23). If the guard fails, do not ship — investigate the dependency/code responsible before raising the budget.
-      (Corrected 2026-07-09: only Phase 1 (`48d25b1`) is deployed to production; Phase 2 (`9549532`)
-      is on `feature/event_recap` pending merge. Size guard run locally on the Phase 2 build;
-      script exists at `worker/scripts/check_size.sh`.)
+      (Corrected 2026-07-09, updated 2026-07-16: only Phase 1 (`48d25b1`) is deployed to production; Phase 2/3/4 are now merged to `develop` via PR #20 (originally on `feature/event_recap` `9549532`, rebased). Production deploy of Phase 2+ still pending. Size guard run locally on the Phase 2 build; script exists at `worker/scripts/check_size.sh`.)
 
 ---
 
