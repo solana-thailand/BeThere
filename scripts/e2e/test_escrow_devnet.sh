@@ -24,6 +24,10 @@
 #   - HELIUS_API_KEY in worker/.dev.vars
 #   - solana CLI installed + configured for devnet
 #   - Devnet USDC in test wallet (use https://faucet.circle.com/)
+#   - Python 3 with PyNaCl (sign_and_submit.py uses nacl.signing for Ed25519).
+#       Install:  python3 -m venv .venv && .venv/bin/pip install pynacl
+#       Then run this script with the venv on PATH:
+#       PATH=".venv/bin:$PATH" bash scripts/e2e/test_escrow_devnet.sh
 #
 # Usage:
 #   bash scripts/e2e/test_escrow_devnet.sh
