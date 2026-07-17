@@ -3,6 +3,28 @@ main = "build/worker/shim.mjs"
 compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
 
+# Module aliasing — bypass global Yarn Plug'n'Play (PnP) interference.
+# On machines with a global ~/.pnp.cjs (from another project), wrangler's esbuild
+# auto-detects it and the PnP manifest forbids resolving @cloudflare/unenv-preset
+# (the nodejs_compat polyfill injected into the worker bundle), breaking both
+# `wrangler dev` and `wrangler deploy`. These aliases point esbuild directly at the
+# installed files, bypassing node resolution (and thus PnP) entirely.
+#
+# The polyfill graph is two layers deep and terminates at leaf modules:
+#   L1: @cloudflare/unenv-preset/node/{console,process}  (hoisted to top-level node_modules)
+#   L2: unenv/node/{console, internal/process/hrtime, internal/process/process}  (leaf files, zero imports)
+# `unenv` is a peer dep of unenv-preset and is NOT hoisted, so its aliases point into the
+# pnpm store at the lockfile-pinned version (unenv@2.0.0-rc.24). Paths follow each package's
+# published exports contract (`./* -> ./dist/runtime/*.mjs`).
+# Harmless no-op in clean environments (resolves to the same files PnP-free resolution finds).
+# Ref: https://developers.cloudflare.com/workers/wrangler/configuration/#bundling-issues
+[alias]
+"@cloudflare/unenv-preset/node/console" = "./node_modules/@cloudflare/unenv-preset/dist/runtime/node/console.mjs"
+"@cloudflare/unenv-preset/node/process" = "./node_modules/@cloudflare/unenv-preset/dist/runtime/node/process.mjs"
+"unenv/node/console" = "./node_modules/.pnpm/unenv@2.0.0-rc.24/node_modules/unenv/dist/runtime/node/console.mjs"
+"unenv/node/internal/process/hrtime" = "./node_modules/.pnpm/unenv@2.0.0-rc.24/node_modules/unenv/dist/runtime/node/internal/process/hrtime.mjs"
+"unenv/node/internal/process/process" = "./node_modules/.pnpm/unenv@2.0.0-rc.24/node_modules/unenv/dist/runtime/node/internal/process/process.mjs"
+
 # Static assets — serve the Leptos WASM frontend
 # SPA mode: non-API routes fall back to index.html
 [assets]
