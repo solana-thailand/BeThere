@@ -377,7 +377,7 @@ else
         SUBMIT_OUTPUT=$(sign_and_submit_tx "$TX_B64" "$ORG_KEYPAIR_JSON")
         info "Submit output: $SUBMIT_OUTPUT"
 
-        if echo "$SUBMIT_OUTPUT" | grep -q "SIGNATURE="; then
+        if echo "$SUBMIT_OUTPUT" | grep -q "STATUS=CONFIRMED"; then
             INIT_SIG=$(echo "$SUBMIT_OUTPUT" | grep "SIGNATURE=" | cut -d= -f2)
             pass "Init escrow TX submitted!"
             info "Signature: $INIT_SIG"
@@ -588,7 +588,7 @@ if [ "$DEP_INIT_SUCCESS" = "true" ]; then
         DEP_SUBMIT=$(sign_and_submit_tx "$DEP_TX_B64" "$ATT_KEYPAIR_JSON")
         info "Deposit submit: $DEP_SUBMIT"
 
-        if echo "$DEP_SUBMIT" | grep -q "SIGNATURE="; then
+        if echo "$DEP_SUBMIT" | grep -q "STATUS=CONFIRMED"; then
             DEP_SIG=$(echo "$DEP_SUBMIT" | grep "SIGNATURE=" | cut -d= -f2)
             pass "Deposit TX submitted!"
             info "Signature: $DEP_SIG"
@@ -712,7 +712,7 @@ else
         MARK_CI_SUBMIT=$(sign_and_submit_tx "$MARK_CI_TX" "$ORG_KEYPAIR_JSON")
         info "Mark checked-in submit: $MARK_CI_SUBMIT"
 
-        if echo "$MARK_CI_SUBMIT" | grep -q "SIGNATURE="; then
+        if echo "$MARK_CI_SUBMIT" | grep -q "STATUS=CONFIRMED"; then
             MARK_CI_SIG=$(echo "$MARK_CI_SUBMIT" | grep "SIGNATURE=" | cut -d= -f2)
             pass "mark_checked_in TX submitted!"
             info "Signature: $MARK_CI_SIG"
@@ -795,7 +795,7 @@ if [ "$REFUND_SUCCESS" = "yes" ]; then
         REFUND_SUBMIT=$(sign_and_submit_tx "$REFUND_TX_B64" "$ATT_KEYPAIR_JSON")
         info "Refund submit: $REFUND_SUBMIT"
 
-        if echo "$REFUND_SUBMIT" | grep -q "SIGNATURE="; then
+        if echo "$REFUND_SUBMIT" | grep -q "STATUS=CONFIRMED"; then
             REFUND_SIG=$(echo "$REFUND_SUBMIT" | grep "SIGNATURE=" | cut -d= -f2)
             pass "Refund TX submitted!"
             info "Signature: $REFUND_SIG"
@@ -837,7 +837,7 @@ else
             REFUND_SUBMIT=$(sign_and_submit_tx "$REFUND_TX_B64" "$ATT_KEYPAIR_JSON")
             info "Refund submit: $REFUND_SUBMIT"
 
-            if echo "$REFUND_SUBMIT" | grep -q "SIGNATURE="; then
+            if echo "$REFUND_SUBMIT" | grep -q "STATUS=CONFIRMED"; then
                 REFUND_SIG=$(echo "$REFUND_SUBMIT" | grep "SIGNATURE=" | cut -d= -f2)
                 pass "Refund TX submitted!"
                 info "Signature: $REFUND_SIG"
@@ -950,7 +950,7 @@ else
         DEACTIVATE_SUBMIT=$(sign_and_submit_tx "$DEACTIVATE_TX" "$ORG_KEYPAIR_JSON")
         info "Deactivate submit: $DEACTIVATE_SUBMIT"
 
-        if echo "$DEACTIVATE_SUBMIT" | grep -q "SIGNATURE="; then
+        if echo "$DEACTIVATE_SUBMIT" | grep -q "STATUS=CONFIRMED"; then
             DEACTIVATE_SIG=$(echo "$DEACTIVATE_SUBMIT" | grep "SIGNATURE=" | cut -d= -f2)
             pass "deactivate_event TX submitted!"
             info "Signature: $DEACTIVATE_SIG"
@@ -1007,7 +1007,7 @@ else
         CLAIM_SUBMIT=$(sign_and_submit_tx "$CLAIM_TX" "$ORG_KEYPAIR_JSON")
         info "Claim forfeited submit: $CLAIM_SUBMIT"
 
-        if echo "$CLAIM_SUBMIT" | grep -q "SIGNATURE="; then
+        if echo "$CLAIM_SUBMIT" | grep -q "STATUS=CONFIRMED"; then
             CLAIM_SIG=$(echo "$CLAIM_SUBMIT" | grep "SIGNATURE=" | cut -d= -f2)
             pass "claim_forfeited TX submitted!"
             info "Signature: $CLAIM_SIG"
@@ -1057,7 +1057,7 @@ else
         CLOSE_SUBMIT=$(sign_and_submit_tx "$CLOSE_TX" "$ORG_KEYPAIR_JSON")
         info "Close event submit: $CLOSE_SUBMIT"
 
-        if echo "$CLOSE_SUBMIT" | grep -q "SIGNATURE="; then
+        if echo "$CLOSE_SUBMIT" | grep -q "STATUS=CONFIRMED"; then
             CLOSE_SIG=$(echo "$CLOSE_SUBMIT" | grep "SIGNATURE=" | cut -d= -f2)
             pass "close_event TX submitted!"
             info "Signature: $CLOSE_SIG"

@@ -117,7 +117,7 @@ if [ "$INIT_SUCCESS" = "true" ]; then
     pass "Init escrow TX built: escrow=${ESCROW_ADDR:0:16}... vault=${VAULT_ADDR:0:16}... on_chain_id=$ON_CHAIN_ID"
 
     RESULT=$(sign_and_submit "$INIT_TX")
-    if echo "$RESULT" | grep -q "SIGNATURE="; then
+    if echo "$RESULT" | grep -q "STATUS=CONFIRMED"; then
         SIG=$(echo "$RESULT" | grep "SIGNATURE=" | cut -d= -f2)
         pass "Init escrow submitted: $SIG"
         info "View: https://solscan.io/tx/$SIG?cluster=devnet"
@@ -168,7 +168,7 @@ if [ "$DEACT_SUCCESS" = "true" ]; then
     pass "Deactivate event TX built"
 
     RESULT=$(sign_and_submit "$DEACT_TX")
-    if echo "$RESULT" | grep -q "SIGNATURE="; then
+    if echo "$RESULT" | grep -q "STATUS=CONFIRMED"; then
         SIG=$(echo "$RESULT" | grep "SIGNATURE=" | cut -d= -f2)
         pass "Deactivate event submitted: $SIG"
         info "View: https://solscan.io/tx/$SIG?cluster=devnet"
@@ -217,7 +217,7 @@ if [ "$CLAIM_SUCCESS" = "true" ]; then
     pass "Claim forfeited TX built"
 
     RESULT=$(sign_and_submit "$CLAIM_TX")
-    if echo "$RESULT" | grep -q "SIGNATURE="; then
+    if echo "$RESULT" | grep -q "STATUS=CONFIRMED"; then
         SIG=$(echo "$RESULT" | grep "SIGNATURE=" | cut -d= -f2)
         info "Claim forfeited submitted: $SIG"
         info "View: https://solscan.io/tx/$SIG?cluster=devnet"
@@ -255,7 +255,7 @@ if [ "$CLOSE_SUCCESS" = "true" ]; then
     pass "Close event TX built"
 
     RESULT=$(sign_and_submit "$CLOSE_TX")
-    if echo "$RESULT" | grep -q "SIGNATURE="; then
+    if echo "$RESULT" | grep -q "STATUS=CONFIRMED"; then
         SIG=$(echo "$RESULT" | grep "SIGNATURE=" | cut -d= -f2)
         pass "Close event submitted: $SIG"
         info "View: https://solscan.io/tx/$SIG?cluster=devnet"
