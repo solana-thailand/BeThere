@@ -9,15 +9,21 @@
 //!     3. Completed           (most recently completed first — DESC)
 //!   Archived events are hidden entirely.
 //! - Shows a relative date hint per event ("in 3d", "2d ago", "today")
-//! - Closes on outside click (fixed-position backdrop) or Escape
+//! - Closes on outside click (fixed-position backdrop), Escape, or any scroll
+//!   outside the panel (page or any scrollable ancestor — capture-phase
+//!   listener on `window`). Internal list scroll (`.admin-evt-list`) is
+//!   ignored so users can still scroll through many events.
 //! - Enter selects the top visible match (keyboard-friendly)
 //!
 //! The dropdown panel is `position: absolute` under the trigger. The parent
-//! `.admin-event-selector` container MUST be `position: relative` and MUST NOT
-//! clip overflow (no `overflow: hidden/auto` on any ancestor while open), or
-//! the panel will be cut off. See the `.admin-evt-*` rules in `style.css`.
+//! `.admin-evt-selector` container is `position: relative`. Because the panel
+//! closes on scroll, clipping by an `overflow: auto/hidden` ancestor is no
+//! longer a concern — scrolling dismisses the dropdown rather than letting
+//! the panel detach from the trigger.
 
 use leptos::prelude::*;
+use wasm_bindgen::{closure::Closure, JsCast};
+use web_sys::Event;
 
 use crate::api::{EventMeta, EventStatus};
 
@@ -148,6 +154,56 @@ pub fn AdminEventSelector(
             });
         }
     });
+
+    // Close the dropdown when any scrollable ancestor (or the page itself)
+    // is scrolled. Without this, the absolutely-positioned panel detaches
+    // from the trigger when the sidebar/page scrolls, while the fixed
+    // backdrop stays put — a jarring visual bug.
+    //
+    // The listener is registered ONCE on mount and `.forget()`-ed (matches
+    // the keydown-shortcut pattern in admin.rs). The closure reads the `open`
+    // signal and no-ops when closed, so there's no add/remove churn per open
+    // and no non-Send `Closure` inside `on_cleanup` (which requires Send+Sync).
+    //
+    // `capture: true` (3rd arg to addEventListener) is required because
+    // `scroll` events don't bubble — capture phase catches scrolls from any
+    // nested scrollable ancestor (sidebar, page, mobile horizontal nav).
+    //
+    // Internal list scroll (`.admin-evt-list`, used to browse many events) is
+    // excluded via `closest(".admin-evt-panel")` so users can still scroll
+    // through the results without the dropdown dismissing.
+    {
+        let open = open.clone();
+        let set_open = set_open.clone();
+        let closure = Closure::<dyn Fn(Event)>::new(move |ev: Event| {
+            // No-op when the dropdown is closed — avoids running closest() on
+            // every page scroll that happens while the selector is collapsed.
+            if !open.get() {
+                return;
+            }
+            // Skip scrolls originating inside the dropdown panel itself.
+            if let Some(target) = ev.target() {
+                if let Some(el) = target.dyn_ref::<web_sys::Element>() {
+                    if el.closest(".admin-evt-panel").ok().flatten().is_some() {
+                        return;
+                    }
+                }
+            }
+            set_open.set(false);
+        });
+        if let Some(window) = web_sys::window() {
+            // useCapture=true — scroll doesn't bubble, so capture phase is the
+            // only way to observe scrolls on nested scrollables from window.
+            let _ = window.add_event_listener_with_callback_and_bool(
+                "scroll",
+                closure.as_ref().unchecked_ref(),
+                true,
+            );
+        }
+        // Leak for the page lifetime. Bounded because the component mounts
+        // once per admin-page navigation (same lifecycle as the selector DOM).
+        closure.forget();
+    }
 
     // Shared selection handler — used by both item clicks and Enter key.
     let select_event = move |id: String| {
