@@ -696,7 +696,7 @@ else
     MARK_CI_RESPONSE=$(curl -s -X POST "$BASE_URL/api/escrow/mark-checked-in" \
         -H "Authorization: Bearer dev-token" \
         -H "Content-Type: application/json" \
-        -d "{\"event_id\": \"$EVENT_ID\", \"attendee_wallet\": \"$ATTENDEE_WALLET\"}")
+        -d "{\"event_id\": \"$EVENT_ID\", \"attendee_id\": \"$TEST_ATTENDEE_ID\", \"attendee_wallet\": \"$ATTENDEE_WALLET\"}")
 
     MARK_CI_SUCCESS=$(echo "$MARK_CI_RESPONSE" | python3 -c "import sys,json; print(str(json.load(sys.stdin).get('success','')).lower())" 2>/dev/null || echo "false")
 
@@ -1024,7 +1024,17 @@ else
         fi
     else
         ERR=$(echo "$CLAIM_RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('error', d.get('message', str(d)[:200])))" 2>/dev/null || echo "unknown")
-        warn "claim_forfeited TX build failed: $ERR"
+        # "no forfeited deposits" is the expected, correct outcome in this flow:
+        # the single attendee was refunded-and-closed in Step 9, so the hardened
+        # claim handler (filter_forfeitable_deposits) correctly drops them — their
+        # AttendeeDeposit PDA no longer exists — and reports nothing to claim.
+        # This is the honest result, NOT a failure. A genuine error fails loudly.
+        if echo "$ERR" | grep -qi "no forfeited\|nothing to claim"; then
+            pass "claim_forfeited: no forfeited deposits (expected — attendee refunded/closed; handler correctly filtered)"
+        else
+            fail "claim_forfeited TX build failed"
+            echo "   $ERR" | head -c 500
+        fi
     fi
 fi
 

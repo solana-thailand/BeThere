@@ -26,7 +26,10 @@ pub use tx_builders::{
     build_refund_transaction, build_rollover_deposit_transaction,
 };
 #[allow(unused_imports)]
-pub use wire::{check_escrow_pda_available, derive_escrow_address, verify_escrow_account_exists};
+pub use wire::{
+    check_escrow_pda_available, derive_escrow_address, filter_forfeitable_deposits,
+    verify_escrow_account_exists,
+};
 
 // ---------------------------------------------------------------------------
 // Constants
