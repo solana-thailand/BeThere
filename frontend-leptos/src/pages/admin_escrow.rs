@@ -1,13 +1,21 @@
-//! Admin escrow management — deactivate, claim forfeited, close event.
+//! Admin escrow management — full on-chain lifecycle.
 //!
-//! Shows escrow lifecycle actions for an event that has on-chain escrow
-//! initialized. Requires organizer wallet connection to sign transactions.
+//! Branches on server-side `escrow_status`:
+//! - `None`        → show Init Escrow panel (create PDA + vault ATA).
+//! - `Initialized` → show lifecycle: Deactivate → Claim Forfeited → Close.
+//! - `Deactivated` → pre-complete Step 1.
+//! - `Closed`      → pre-complete all steps.
+//!
+//! Requires organizer wallet connection to sign transactions. Reuses the
+//! shared signing/cluster-check/simulate helpers from `escrow_init.rs` so the
+//! init flow stays DRY with the Event Form's inline init.
 //!
 //! Flow:
 //! 1. Connect organizer wallet
-//! 2. Deactivate event (stops new deposits, allows refunds)
-//! 3. Claim forfeited (transfer no-show deposits to organizer)
-//! 4. Close event (reclaim rent, close escrow PDA)
+//! 2. (If `None`) Initialize escrow — single TX creates vault ATA + EventEscrow PDA
+//! 3. Deactivate event (stops new deposits, allows refunds)
+//! 4. Claim forfeited (transfer no-show deposits to organizer)
+//! 5. Close event (reclaim rent, close escrow PDA)
 
 use leptos::prelude::*;
 use wasm_bindgen::prelude::*;
@@ -65,6 +73,7 @@ async fn sign_and_send_tx_js(wallet_name: &str, transaction_b64: &str) -> crate:
 /// Escrow lifecycle actions.
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum EscrowAction {
+    InitEscrow,
     Deactivate,
     ClaimForfeited,
     CloseEvent,
@@ -73,6 +82,7 @@ enum EscrowAction {
 impl EscrowAction {
     fn label(&self) -> &'static str {
         match self {
+            Self::InitEscrow => "Initialize Escrow",
             Self::Deactivate => "Deactivate Event",
             Self::ClaimForfeited => "Claim Forfeited",
             Self::CloseEvent => "Close Event",
@@ -81,6 +91,7 @@ impl EscrowAction {
 
     fn icon(&self) -> IconName {
         match self {
+            Self::InitEscrow => IconName::Lock,
             Self::Deactivate => IconName::Pause,
             Self::ClaimForfeited => IconName::Coin,
             Self::CloseEvent => IconName::Lock,
@@ -89,6 +100,7 @@ impl EscrowAction {
 
     fn description(&self) -> &'static str {
         match self {
+            Self::InitEscrow => "Create the on-chain escrow PDA and vault ATA. Required before accepting USDC deposits.",
             Self::Deactivate => "Stops new deposits. Refunds still allowed. Required before closing.",
             Self::ClaimForfeited => "Transfer forfeited deposits (no-shows) to your USDC account.",
             Self::CloseEvent => "Reclaim rent and close the escrow account. Requires empty vault.",
@@ -97,6 +109,7 @@ impl EscrowAction {
 
     fn button_class(&self) -> &'static str {
         match self {
+            Self::InitEscrow => "btn-primary",
             Self::Deactivate => "btn btn-outline",
             Self::ClaimForfeited => "btn-primary",
             Self::CloseEvent => "btn btn-outline",
@@ -105,6 +118,7 @@ impl EscrowAction {
 
     fn button_label(&self) -> &'static str {
         match self {
+            Self::InitEscrow => "Initialize Escrow",
             Self::Deactivate => "Deactivate Event",
             Self::ClaimForfeited => "Claim Funds",
             Self::CloseEvent => "Close & Reclaim",
@@ -113,6 +127,7 @@ impl EscrowAction {
 
     fn loading_label(&self) -> &'static str {
         match self {
+            Self::InitEscrow => "Initializing...",
             Self::Deactivate => "Deactivating...",
             Self::ClaimForfeited => "Claiming...",
             Self::CloseEvent => "Closing...",
@@ -271,6 +286,16 @@ pub fn AdminEscrow(
     let (_step2_done, set_step2_done) = signal(false);
     let (confirm_close, set_confirm_close) = signal(false);
 
+    // Escrow status tracking — `None` means the on-chain escrow has not been
+    // initialized yet. Drives whether we show the Init panel vs the 3-step
+    // lifecycle (Deactivate → Claim → Close).
+    let (escrow_status, set_escrow_status) = signal(api::EscrowStatus::None);
+    // Gate step rendering until the first event-detail fetch completes, to
+    // avoid flashing the wrong view (Init vs lifecycle) during load.
+    let (escrow_status_loaded, set_escrow_status_loaded) = signal(false);
+    // Init Escrow TX in progress (building / signing). Drives the spinner.
+    let (initializing, set_initializing) = signal(false);
+
     // Reset state when event changes — also pre-populate step progress
     // from server-side escrow_status so the UI reflects reality.
     {
@@ -282,6 +307,8 @@ pub fn AdminEscrow(
         let set_s1 = set_step1_done.clone();
         let set_s2 = set_step2_done.clone();
         let set_cc = set_confirm_close.clone();
+        let set_es = set_escrow_status.clone();
+        let set_esl = set_escrow_status_loaded.clone();
         Effect::new(move |_| {
             let eid = active_event_id.get();
             set_wn.set(String::new());
@@ -292,6 +319,8 @@ pub fn AdminEscrow(
             set_s1.set(false);
             set_s2.set(false);
             set_cc.set(false);
+            set_es.set(api::EscrowStatus::None);
+            set_esl.set(false);
 
             // Fetch server-side escrow_status to pre-populate step state.
             // This handles the case where escrow was deactivated in a previous
@@ -300,11 +329,24 @@ pub fn AdminEscrow(
                 let set_s1 = set_s1.clone();
                 let set_s2 = set_s2.clone();
                 let set_ca = set_ca.clone();
+                let set_es = set_es.clone();
+                let set_esl = set_esl.clone();
                 let event_id = event_id.clone();
                 leptos::task::spawn_local(async move {
                     match api::get_event_detail(&event_id).await {
                         Ok(detail) => {
+                            // Record the fetched status + mark loaded so the
+                            // render can branch (Init panel vs lifecycle steps)
+                            // without flashing the wrong view during load.
+                            set_es.set(detail.event.escrow_status.clone());
+                            set_esl.set(true);
                             match detail.event.escrow_status {
+                                api::EscrowStatus::None => {
+                                    log::info!("[admin-escrow] escrow not initialized — showing Init panel");
+                                }
+                                api::EscrowStatus::Initialized => {
+                                    log::info!("[admin-escrow] escrow initialized — lifecycle ready");
+                                }
                                 api::EscrowStatus::Deactivated => {
                                     log::info!("[admin-escrow] escrow already deactivated on server — pre-completing step 1");
                                     set_s1.set(true);
@@ -319,9 +361,6 @@ pub fn AdminEscrow(
                                         v.push(EscrowAction::ClaimForfeited);
                                         v.push(EscrowAction::CloseEvent);
                                     });
-                                }
-                                _ => {
-                                    log::info!("[admin-escrow] escrow status: {:?} — starting from step 1", detail.event.escrow_status.as_str());
                                 }
                             }
                         }
@@ -383,6 +422,140 @@ pub fn AdminEscrow(
         });
     };
 
+    // ── Init Escrow handler ──
+    // Shown only when escrow_status == None. Builds + signs the init TX via the
+    // connected wallet (single TX: vault ATA + EventEscrow PDA), then syncs the
+    // server-side state via `confirm_escrow_init` (idempotent — reads on-chain
+    // truth, persists status + addresses). Reuses the shared signing/cluster-
+    // check/simulate helpers from `escrow_init.rs` so the flow stays DRY with
+    // the Event Form's inline init.
+    let handle_init_escrow = move |_| {
+        let wn = wallet_name.get();
+        let eid = active_event_id.get().unwrap_or_default();
+        if eid.is_empty() || wn.is_empty() {
+            return;
+        }
+        let set_init = set_initializing.clone();
+        let set_es = set_escrow_status.clone();
+        let set_esl = set_escrow_status_loaded.clone();
+        let set_s1 = set_step1_done.clone();
+        let set_ca = set_completed_actions.clone();
+        let set_ar = set_action_results.clone();
+        let set_t = set_toast.clone();
+        set_init.set(true);
+        leptos::task::spawn_local(async move {
+            // 1. Build the init TX (vault ATA + create_event in one TX).
+            let init_resp = match api::init_escrow(&api::InitEscrowRequest {
+                event_id: eid.clone(),
+            }).await {
+                Ok(r) => r,
+                Err(e) => {
+                    log::error!("[admin-escrow] init_escrow build failed: {e}");
+                    components::show_toast(
+                        &set_t,
+                        &format!("Failed to build escrow TX: {e}"),
+                        ToastType::Error,
+                    );
+                    set_init.set(false);
+                    return;
+                }
+            };
+
+            // 2. SEC-014: verify wallet cluster matches expected network.
+            let expected_cluster = crate::utils::get_cluster();
+            if let Err(cluster_err) =
+                crate::pages::escrow_init::check_wallet_cluster(&wn, &expected_cluster).await
+            {
+                log::error!("[admin-escrow] cluster mismatch: {cluster_err}");
+                components::show_toast(&set_t, &cluster_err, ToastType::Error);
+                set_init.set(false);
+                return;
+            }
+
+            // 3. Pre-sign simulation (Solana Foundation Security Checklist).
+            match crate::pages::escrow_init::simulate_transaction_js(&wn, &init_resp.transaction)
+                .await
+            {
+                Ok(sim) if sim.ok => {}
+                Ok(sim) => {
+                    let err_msg = sim.error.unwrap_or_else(|| "Simulation failed".to_string());
+                    log::error!("[admin-escrow] init simulation failed: {err_msg}");
+                    components::show_toast(
+                        &set_t,
+                        &format!("Transaction would fail: {err_msg}"),
+                        ToastType::Error,
+                    );
+                    set_init.set(false);
+                    return;
+                }
+                Err(e) => {
+                    log::warn!("[admin-escrow] simulate error (not blocking): {e}");
+                }
+            }
+
+            // 4. Sign + send via wallet.
+            match sign_and_send_tx_js(&wn, &init_resp.transaction).await {
+                crate::wallet_error::WalletResult::Success(signature) => {
+                    log::info!("[admin-escrow] init TX confirmed: {}", signature);
+                    // Persist the init signature as a result entry (Solscan link).
+                    set_ar.update(|v| {
+                        v.push((EscrowAction::InitEscrow, Ok(signature.clone())));
+                    });
+                    // 5. Sync on-chain state to server (idempotent).
+                    match api::confirm_escrow_init(&api::ConfirmEscrowInitRequest {
+                        event_id: eid.clone(),
+                    }).await
+                    {
+                        Ok(confirmed) => {
+                            log::info!(
+                                "[admin-escrow] escrow confirmed: addr={} status={:?}",
+                                confirmed.escrow_address,
+                                confirmed.escrow_status.as_str()
+                            );
+                            set_es.set(confirmed.escrow_status);
+                            set_esl.set(true);
+                            // Reset lifecycle steps — fresh start at Step 1 (Deactivate).
+                            set_s1.set(false);
+                            set_ca.update(|v| v.retain(|a| *a == EscrowAction::InitEscrow));
+                            components::show_toast(&set_t, "Escrow initialized!", ToastType::Success);
+                        }
+                        Err(e) => {
+                            log::error!("[admin-escrow] confirm_escrow_init failed: {e}");
+                            components::show_toast(
+                                &set_t,
+                                &format!(
+                                    "Escrow TX confirmed, but state sync failed: {e}. Refresh to verify."
+                                ),
+                                ToastType::Warning,
+                            );
+                        }
+                    }
+                }
+                crate::wallet_error::WalletResult::Error(e) => {
+                    let msg = crate::wallet_error::user_friendly_message(&e);
+                    log::error!(
+                        "[admin-escrow] init TX error: code={:?} msg={}",
+                        e.code,
+                        e.raw_message
+                    );
+                    set_ar.update(|v| v.push((EscrowAction::InitEscrow, Err(msg.clone()))));
+                    components::show_toast(&set_t, &msg, ToastType::Error);
+                }
+                crate::wallet_error::WalletResult::UnknownFailure => {
+                    log::error!("[admin-escrow] init TX rejected");
+                    set_ar.update(|v| {
+                        v.push((
+                            EscrowAction::InitEscrow,
+                            Err("Escrow initialization failed".to_string()),
+                        ))
+                    });
+                    components::show_toast(&set_t, "Escrow initialization failed", ToastType::Error);
+                }
+            }
+            set_init.set(false);
+        });
+    };
+
     // ── Action execution (Effect watches action_to_execute) ──
     Effect::new(move |_| {
         let action = match action_to_execute.get() {
@@ -404,6 +577,15 @@ pub fn AdminEscrow(
 
         leptos::task::spawn_local(async move {
             let tx_result: Result<String, api::ApiError> = match action {
+                // InitEscrow is handled by `handle_init_escrow`, never routed
+                // through `action_to_execute`. Unreachable here — explicit arm
+                // keeps the match exhaustive. Defensively clear signing state
+                // before bailing so a future bug can't wedge the spinner.
+                EscrowAction::InitEscrow => {
+                    set_sa.set(None);
+                    set_trigger.set(None);
+                    return;
+                }
                 EscrowAction::Deactivate => {
                     api::deactivate_event(&api::DeactivateEventRequest { event_id: eid.clone() })
                         .await
@@ -449,6 +631,8 @@ pub fn AdminEscrow(
                             log::info!("[admin-escrow] {} TX confirmed: {}", action.label(), signature);
                             set_done.update(|v| v.push(action));
                             match action {
+                                // InitEscrow never reaches here (handled separately).
+                                EscrowAction::InitEscrow => {}
                                 EscrowAction::Deactivate => set_s1.set(true),
                                 EscrowAction::ClaimForfeited => set_s2.set(true),
                                 EscrowAction::CloseEvent => {}
@@ -602,7 +786,45 @@ pub fn AdminEscrow(
                         }).collect_view()
                     }}
 
-                    // ── Lifecycle Steps ──
+                    // ── Init Escrow (shown when escrow_status == None) ──
+                    // Escrow not yet initialized on-chain — show the Init panel
+                    // instead of the 3-step lifecycle (which would fail without the PDA).
+                    <Show when=move || escrow_status_loaded.get() && matches!(escrow_status.get(), api::EscrowStatus::None) fallback=|| view! { <div></div> }>
+                        <div class="step-list">
+                            <div class="step-card">
+                                <div class="step-card-info">
+                                    <div class="step-card-title-icon">
+                                        <Icon icon=IconName::Lock class="icon-sm"/>
+                                        <span class="step-card-title">"Step 1: Initialize Escrow"</span>
+                                    </div>
+                                    <div class="step-card-desc">
+                                        "Create the on-chain escrow PDA and vault ATA in a single transaction. Required before accepting USDC deposits."
+                                    </div>
+                                </div>
+                                <div class="step-card-actions">
+                                    <span class="step-number">"①"</span>
+                                    <Show when=move || !initializing.get() fallback=|| view! { <div></div> }>
+                                        <button class="btn-primary" on:click=move |_| handle_init_escrow(())>
+                                            "Initialize Escrow"
+                                        </button>
+                                    </Show>
+                                    <Show when=move || initializing.get() fallback=|| view! { <div></div> }>
+                                        <div class="step-spinner">
+                                            <span class="spinner spinner-sm"></span>
+                                            <span>"Initializing..."</span>
+                                        </div>
+                                    </Show>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="info-note admin-escrow-info-mt">
+                            <strong>"First time only:"</strong>
+                            " This creates the escrow account on-chain. After init, the Deactivate → Claim → Close lifecycle becomes available."
+                        </div>
+                    </Show>
+
+                    // ── Lifecycle Steps (shown when escrow_status != None) ──
+                    <Show when=move || escrow_status_loaded.get() && !matches!(escrow_status.get(), api::EscrowStatus::None) fallback=|| view! { <div></div> }>
                     <div class="step-list">
                         // Step 1: Deactivate
                         {move || {
@@ -665,6 +887,7 @@ pub fn AdminEscrow(
                         " Deactivate first. Claim Forfeited is optional (skip if no deposits). "
                         "Close reclaims rent and permanently closes the escrow account."
                     </div>
+                    </Show>
                 </Show>
             </Show>
         </div>
