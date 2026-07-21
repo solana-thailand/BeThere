@@ -2,6 +2,7 @@ pub mod admin;
 pub mod admin_cancel;
 pub mod admin_deposit;
 pub mod admin_escrow;
+pub mod admin_event_selector;
 pub mod adventure;
 pub mod adventure_config;
 pub mod audit_panel;

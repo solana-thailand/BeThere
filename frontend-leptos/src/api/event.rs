@@ -144,7 +144,7 @@ fn default_true_fn() -> bool {
 }
 
 /// Lightweight event metadata from the events list endpoint.
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct EventMeta {
     #[serde(default)]
     pub id: String,

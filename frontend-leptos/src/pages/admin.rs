@@ -893,34 +893,12 @@ pub fn Admin() -> impl IntoView {
                     <Show when=move || !events_loading.get() && !events_list.get().is_empty() fallback=|| view! { <div></div> }>
                         <div class="admin-sidebar-section">
                             <div class="admin-sidebar-heading">"Event"</div>
-                            <div class="admin-event-selector">
-                                <select
-                                    class="admin-event-select"
-                                    on:change=move |ev| {
-                                        let val = event_target_value(&ev);
-                                        set_active_event_id.set(if val.is_empty() { None } else { Some(val) });
-                                        set_refresh_counter.update(|c| *c += 1);
-                                    }
-                                    prop:value=move || active_event_id.get().unwrap_or_default()
-                                >
-                                    <option value="">"— select event —"</option>
-                                    {move || events_list.get().iter()
-                                        .filter(|e| e.status != api::EventStatus::Archived)
-                                        .map(|e| {
-                                        let id = e.id.clone();
-                                        let name = e.name.clone();
-                                        let status_badge = match e.status {
-                                            api::EventStatus::Active => "●",
-                                            api::EventStatus::Draft => "○",
-                                            api::EventStatus::Completed => "✓",
-                                            api::EventStatus::Archived => "—",
-                                        };
-                                        view! {
-                                            <option value=id>{format!("{status_badge} {name}")}</option>
-                                        }
-                                    }).collect_view()}
-                                </select>
-                            </div>
+                            <crate::pages::admin_event_selector::AdminEventSelector
+                                events_list=events_list
+                                active_event_id=active_event_id
+                                set_active_event_id=set_active_event_id
+                                set_refresh_counter=set_refresh_counter
+                            />
                         </div>
                     </Show>
 
