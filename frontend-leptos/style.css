@@ -4832,12 +4832,20 @@ nav a.active {
     background: transparent;
 }
 
-/* Dropdown panel: absolutely positioned under the trigger. */
+/* Dropdown panel: absolutely positioned under the trigger.
+   The panel can grow WIDER than the trigger (like a native <select>) so long
+   event names remain readable without truncation. `min-width: 100%` keeps it
+   at least as wide as the trigger; `width: max-content` lets it fit the longest
+   item; `max-width` caps it so it never overflows the viewport on narrow screens.
+   `right: 0` is intentionally omitted — pinning both left+right would force the
+   panel back to the trigger's width and re-truncate the names. */
 .admin-evt-panel {
     position: absolute;
     top: calc(100% + 4px);
     left: 0;
-    right: 0;
+    min-width: 100%;
+    width: max-content;
+    max-width: min(440px, calc(100vw - 2rem));
     z-index: 101;
     background: var(--bg-card);
     border: 1px solid var(--border);

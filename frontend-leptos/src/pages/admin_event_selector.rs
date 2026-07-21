@@ -177,9 +177,10 @@ pub fn AdminEventSelector(
                     Some(e) => {
                         let (badge, cls) = status_badge(&e.status);
                         let hint = date_hint(e.event_start_ms, js_sys::Date::now() as i64);
+                        let full_name = e.name.clone();
                         view! {
                             <span class=format!("admin-evt-badge {cls}")>{badge}</span>
-                            <span class="admin-evt-label">
+                            <span class="admin-evt-label" title=full_name.clone()>
                                 <span class="admin-evt-name">{e.name.clone()}</span>
                                 <span class="admin-evt-hint">{hint}</span>
                             </span>
@@ -265,10 +266,12 @@ pub fn AdminEventSelector(
                                         let (badge, cls) = status_badge(&e.status);
                                         let hint = date_hint(e.event_start_ms, now);
                                         let name = e.name.clone();
+                                        let name_for_title = name.clone();
                                         view! {
                                             <button
                                                 type="button"
                                                 class="admin-evt-item"
+                                                title=name_for_title.clone()
                                                 class:selected=move || {
                                                     active_event_id.get().as_deref() == Some(&id_for_selected)
                                                 }
