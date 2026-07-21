@@ -876,6 +876,19 @@ pub fn Admin() -> impl IntoView {
             <div class="admin-layout">
                 // Sidebar
                 <aside class="admin-sidebar">
+                    // Quick nav — Home link at top of sidebar for easy exit
+                    <div class="admin-sidebar-section admin-sidebar-topnav">
+                        <a href="/" class="admin-sidebar-item admin-sidebar-home" title="Back to home">
+                            <span class="admin-sidebar-icon">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                                    <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                                </svg>
+                            </span>
+                            "Home"
+                        </a>
+                    </div>
+
                     // Event selector dropdown (always visible at top of sidebar)
                     <Show when=move || !events_loading.get() && !events_list.get().is_empty() fallback=|| view! { <div></div> }>
                         <div class="admin-sidebar-section">

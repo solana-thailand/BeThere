@@ -4,6 +4,8 @@
 //! - **Deposits**: Shows THB payment slips pending admin verification.
 //! - **Refund Queue**: Shows verified deposits awaiting refund processing.
 
+use std::collections::HashMap;
+
 use leptos::prelude::*;
 
 use crate::api::{self, MarkRefundRequest, ThbDepositInfo, VerifySlipRequest};
@@ -44,9 +46,12 @@ pub fn AdminDeposits(
     let (refresh_counter, set_refresh_counter) = signal(0u32);
     let (action_pending, set_action_pending) = signal(None::<String>);
     let (confirm_reject_id, set_confirm_reject_id) = signal(None::<String>);
-    // Refund proof: 2-step flow — first click shows input, second click confirms
+    // Refund proof: 2-step flow — first click shows input, second click confirms.
+    // Per-row state: each refund queue item has its own proof URL value,
+    // keyed by attendee_id. A single shared signal would cause typing in row A
+    // to leak into rows B/C/D — a real bug observed in production testing.
     let (refund_proof_pending_id, set_refund_proof_pending_id) = signal(None::<String>);
-    let (refund_proof_url_input, set_refund_proof_url_input) = signal(String::new());
+    let (refund_proof_urls, set_refund_proof_urls) = signal(HashMap::<String, String>::new());
 
     // Load data on mount and when active_event_id / refresh_counter changes
     let tracked_event_id = active_event_id;
@@ -193,11 +198,15 @@ pub fn AdminDeposits(
         });
     };
 
-    // Mark as refunded — takes the refund proof URL from the input signal
+    // Mark as refunded — reads this row's refund proof URL from the per-row map
     let handle_mark_refunded = move |item: ThbDepositInfo| {
         let attendee_id = item.attendee_id.clone();
         let event_id = item.event_id.clone();
-        let refund_proof_url = refund_proof_url_input.get();
+        let refund_proof_url = refund_proof_urls
+            .get()
+            .get(&attendee_id)
+            .cloned()
+            .unwrap_or_default();
 
         if refund_proof_url.trim().is_empty() {
             components::show_toast(
@@ -211,6 +220,10 @@ pub fn AdminDeposits(
         let key = format!("refund-{attendee_id}");
         set_action_pending.set(Some(key));
         set_refund_proof_pending_id.set(None);
+        // Clear this row's input on success; leave others untouched
+        set_refund_proof_urls.update(|m| {
+            m.remove(&attendee_id);
+        });
 
         leptos::task::spawn_local(async move {
             let body = MarkRefundRequest { event_id, refund_proof_url };
@@ -401,6 +414,13 @@ pub fn AdminDeposits(
                 >
                     <div class="admin-section-header">
                         <h3><Icon icon=IconName::MoneyWings class="icon-sm"/>{format!(" {} pending refund{}", refund_count.get(), if refund_count.get() != 1 { "s" } else { "" })}</h3>
+                        <p class="admin-dep-flow-hint">
+                            "Two steps per attendee: click "
+                            <strong>"Enter Refund Proof"</strong>
+                            " → paste the bank transfer receipt URL → click "
+                            <strong>"Confirm Refund"</strong>
+                            ". Each row keeps its own URL — filling one does not affect others."
+                        </p>
                     </div>
 
                     <Show
@@ -434,6 +454,11 @@ pub fn AdminDeposits(
                             let item_for_refund = item.clone();
                             let item_id_for_click = item_id.clone();
                             let item_id_for_style = item_id.clone();
+                            // Dedicated clones for the input's reactive closures.
+                            // Each closure moves its own copy — without these,
+                            // `item_id` would be moved twice (prop:value + on:input).
+                            let item_id_for_value = item_id.clone();
+                            let item_id_for_input = item_id.clone();
 
                             view! {
                                 <div class="card">
@@ -492,12 +517,16 @@ pub fn AdminDeposits(
                                                 class="btn btn-primary btn-sm"
                                                 disabled=refund_disabled
                                                 style=move || if refund_proof_pending_id.get().as_deref() == Some(&item_id_for_style) { "display:none" } else { "" }
+                                                title="Open a refund proof URL input for this attendee"
                                                 on:click=move |_| {
                                                     set_refund_proof_pending_id.set(Some(item_id_for_click.clone()));
-                                                    set_refund_proof_url_input.set(String::new());
+                                                    // Reset only this row's input — other rows are unaffected
+                                                    set_refund_proof_urls.update(|m| {
+                                                        m.insert(item_id_for_click.clone(), String::new());
+                                                    });
                                                 }
                                             >
-                                                {if refund_loading { "Processing..." } else { "Mark Refunded" }}
+                                                {if refund_loading { "Processing..." } else { "Enter Refund Proof" }}
                                             </button>
                                             <div
                                                 style=move || if refund_proof_pending_id.get().as_deref() != Some(&item_id) { "display:none" } else { "display:flex;flex-direction:column;gap:0.25rem" }
@@ -506,10 +535,12 @@ pub fn AdminDeposits(
                                                     type="text"
                                                     class="form-input dep-input"
                                                     placeholder="Paste refund proof URL (transfer receipt)"
-                                                    prop:value=move || refund_proof_url_input.get()
+                                                    prop:value=move || refund_proof_urls.get().get(&item_id_for_value).cloned().unwrap_or_default()
                                                     on:input=move |ev| {
                                                         let val = event_target_value(&ev);
-                                                        set_refund_proof_url_input.set(val);
+                                                        set_refund_proof_urls.update(|m| {
+                                                            m.insert(item_id_for_input.clone(), val);
+                                                        });
                                                     }
                                                 />
                                                 <div class="admin-dep-confirm-row">

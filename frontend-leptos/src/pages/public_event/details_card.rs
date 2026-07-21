@@ -7,7 +7,6 @@ pub fn details_card(
     countdown: ReadSignal<String>,
     event_completed: ReadSignal<bool>,
 ) -> AnyView {
-    let is_online_only = data.event_format == crate::api::EventFormat::Online;
     let has_location = !data.location.is_empty();
     let location = data.location.clone();
     let date_str = format_event_date(data.event_start_ms);
@@ -53,15 +52,11 @@ pub fn details_card(
                 </div>
             </div>
 
-            // Location
-            {if is_online_only && !has_location {
-                view! {
-                    <div class="pe-detail-row">
-                        <span>"🌐"</span>
-                        <span class="pe-detail-text">"Virtual Event"</span>
-                    </div>
-                }.into_any()
-            } else if has_location {
+            // Location — only render when an actual location string exists.
+            // For online-only events without a location, the format badge above
+            // already says "Online", so a redundant "Virtual Event" row here
+            // would just be noise.
+            {if has_location {
                 let loc = location.clone();
                 view! {
                     <div class="pe-detail-row">
