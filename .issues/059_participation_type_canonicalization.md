@@ -34,10 +34,14 @@
   (queries `= 'walkin'` literally, separate from these predicates). Gating condition
   verified pre-merge: prod has 0 non-canonical values and 0 empty/null rows.
   CI: domain tests 104 pass, worker tests 246 pass, clippy clean.
-- 🟡 **Worker redeploy** — optional. The deployed worker (Version `1e2ba935`) still
-  has the old defensive LIKEs, which produce identical results on canonical data —
-  so functionally correct without a redeploy. A redeploy would lock in the simpler
-  predicates but carries deploy risk for zero behavioral change.
+- ✅ **Worker redeployed** — prod worker `bethere` redeployed at Version
+  `66622091-677b-4750-95f3-b17b914a5e8d` (2026-07-22, standard `wrangler deploy`).
+  The simplified predicates from PR #26 are now live on prod. Frontend assets
+  reused (no source changes since the 16:42 build, so `dist/` was current —
+  deploy reported "No updated asset files to upload"). Smoke-tested: health 200,
+  `/api/contacts/audience` (exercises the simplified `audience_aggregate`) 401
+  (live + auth-gated), all protected routes 401 (not 404). D1 distribution
+  unchanged (deploy doesn't touch data): 318 online, 123 in_person, 1 test.
 
 ## 1. Root cause (why prod is messy)
 `attendees.participation_type` is written by **5+ independent paths using two

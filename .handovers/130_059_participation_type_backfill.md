@@ -3,7 +3,7 @@
 > Step 3.3: `fix/059_participation_type_backfill` → merged to `develop` (merge commit `d6074ed`, PR #25).
 > Step 3.4: `fix/059_participation_type_predicate_simplify` → merged to `develop` (merge commit `4146261`, PR #26).
 > Continues handover 129 (Issue #061 THB hold-deposit shipped). Closes #059 Steps 3.3 + 3.4 + #058 follow-up.
-> Current branch: `develop` @ `4146261`. **No Worker redeploy strictly required** — old defensive LIKEs and new canonical match produce identical results on canonical data; redeploy optional polish.
+> Current branch: `develop` @ `5a6f427`. **Worker redeployed** — prod now at Version `66622091-677b-4750-95f3-b17b914a5e8d` with simplified predicates live.
 
 ---
 
@@ -137,7 +137,7 @@ The `attendees.participation_type` column is `TEXT NOT NULL DEFAULT 'in_person'`
 | Working tree | clean |
 | `main` | unchanged (`87b821a` — release cut from handover 129) |
 | Local D1 | has 0024 applied (dry-run residue, harmless) |
-| Prod worker | still at Version `1e2ba935` (pre-0024 code); old LIKEs produce identical results on canonical data — optional redeploy only |
+| Prod worker | Version `66622091-677b-4750-95f3-b17b914a5e8d` — simplified predicates live (was `1e2ba935`, redeployed this session) |
 
 ### Predicate simplification (Step 3.4) ✅
 
@@ -183,10 +183,6 @@ Before applying, ran the exact WHERE clauses from the migration as SELECTs again
 ---
 
 ## 6. What's Left (Genuinely Optional, Non-Blocking)
-
-### 🟡 Worker redeploy (optional polish)
-
-Prod worker is still at Version `1e2ba935` (deployed in handover 129, before either Step 3.3 data or Step 3.4 code). The deployed code still has the old defensive LIKEs, which produce **identical results** on the now-canonical data — so functionally correct without a redeploy. A redeploy would lock in the simpler predicates from PR #26 (marginally faster, cleaner code on prod) but carries standard deploy risk for zero behavioral change. Defer until the next bundled deploy.
 
 ### 🟡 Frontend WASM substring matchers (separate, low-risk)
 
@@ -301,4 +297,4 @@ If not redeploying, the next item is either **frontend WASM substring matchers**
 |---|---|
 | `.handovers/130_059_participation_type_backfill.md` | **Created** (Step 3.3) + **updated** across the session (Step 3.4 addenda) |
 
-**Step 3.3 was pure data + docs (no source code, no redeploy needed).** **Step 3.4 touched 3 source files** but the old defensive LIKEs and the new canonical match produce identical results on canonical data, so redeploy is optional polish, not correctness.
+**Step 3.3 was pure data + docs (no source code, no redeploy needed).** **Step 3.4 touched 3 source files** and was deployed to prod at Version `66622091-677b-4750-95f3-b17b914a5e8d` — the simplified predicates are now live. Standard `wrangler deploy` path (no PUT API fallback needed); frontend assets reused (`dist/` was current — no frontend changes since the 16:42 build, deploy reported "No updated asset files to upload"). Smoke-tested: health 200, `/api/contacts/audience` (exercises simplified `audience_aggregate`) returns 401 (live + auth-gated), all protected routes 401 (not 404), D1 distribution unchanged.
