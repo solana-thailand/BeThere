@@ -290,6 +290,19 @@ pub fn InPersonView(
                     } else {
                         view! { <div></div> }.into_any()
                     }}
+                    // Phase 3 exit path — "Request Return of Held Credit"
+                    // (Issue #061 §D3). Rendered only when the attendee has
+                    // actually held their deposit as credit, so the exit is
+                    // meaningful. The card fetches its own already-requested
+                    // state on mount (mirrors the held_as_credit UX pattern),
+                    // so no props are needed.
+                    {if dep.held_as_credit {
+                        view! {
+                            <RequestCreditRefundCard />
+                        }.into_any()
+                    } else {
+                        view! { <div></div> }.into_any()
+                    }}
                     {if dep.refunded {
                         view! {
                             <RefundCard refund_proof_url=dep.refund_proof_url.clone().unwrap_or_default() />

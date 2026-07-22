@@ -726,3 +726,183 @@ pub fn HoldDepositCard(
         </div>
     }
 }
+
+// ---------------------------------------------------------------------------
+// RequestCreditRefundCard (Issue #061 Phase 3 — exit path)
+// ---------------------------------------------------------------------------
+
+/// State machine for the "Request Return of Held Credit" flow.
+/// Mirrors `HoldDepositState` in shape — minimal, no wallet flow, just an
+/// authenticated POST + a confirm step. Adds an initial `Loading` arm because
+/// this card fetches the attendee's own flag state on mount (so a reload mounts
+/// in `AlreadyRequested` if a prior request is open).
+#[derive(Clone)]
+enum RequestCreditRefundState {
+    /// Initial fetch of the flag state is in flight.
+    Loading,
+    /// No open request — show CTA.
+    Ready,
+    /// Confirmation step explaining what the request does (and does NOT) do.
+    Confirm,
+    /// POST in flight.
+    Requesting,
+    /// Server reports an open request from a prior call (page reload).
+    /// Distinct from `Requested` (no in-session success message to display).
+    AlreadyRequested,
+    /// Success — this call set the flag.
+    Requested { message: String },
+    /// Error.
+    Error(String),
+}
+
+/// Request Return of Held Credit action card — Phase 3 exit path so "hold
+/// forever" doesn't feel like a trap (Issue #061 §D3). Sets a visibility-only
+/// flag on the attendee's contact row; the organizer processes the actual
+/// payout through the existing refund tooling.
+///
+/// Rendered on the ticket page only when the attendee has already held their
+/// deposit as credit (`dep.held_as_credit == true`) — the exit path is
+/// meaningful only when there is held credit to exit from.
+///
+/// Backend:
+/// - `POST /api/deposit/request-credit-refund` (JWT-gated, no body — email
+///   comes from claims; VULN-012 pattern).
+/// - `GET /api/deposit/credit-refund-request` reads own flag state so a reload
+///   mounts in `AlreadyRequested` (mirrors the `held_as_credit` UX pattern).
+#[component]
+pub fn RequestCreditRefundCard() -> impl IntoView {
+    let (state, set_state) = signal(RequestCreditRefundState::Loading);
+
+    // On mount: fetch the attendee's own flag state. If already requested,
+    // mount in `AlreadyRequested` (mirrors the `held_as_credit` UX pattern —
+    // the backend idempotency is the safety net; this is the UX). A failed
+    // read degrades to `Ready` so the attendee can still trigger the request
+    // (the write path is idempotent — a duplicate just re-stamps the timestamp).
+    Effect::new(move |_| {
+        leptos::task::spawn_local(async move {
+            match api::get_credit_refund_request_status().await {
+                Ok(status) => {
+                    if status.requested {
+                        set_state.set(RequestCreditRefundState::AlreadyRequested);
+                    } else {
+                        set_state.set(RequestCreditRefundState::Ready);
+                    }
+                }
+                Err(e) => {
+                    log::warn!("[credit-refund] failed to load status: {}", e.message);
+                    set_state.set(RequestCreditRefundState::Ready);
+                }
+            }
+        });
+    });
+
+    view! {
+        <div class="ticket-action-card ticket-action-card--credit-refund">
+            <div class="ticket-action-icon">
+                <Icon icon=IconName::MoneyWings class="icon-sm" />
+            </div>
+            <div>
+                {move || match state.get() {
+                    RequestCreditRefundState::Loading => view! {
+                        <div class="ticket-action-title">"Checking your request status..."</div>
+                        <div class="ticket-action-desc ticket-action-signing-row">
+                            <span class="spinner spinner-sm"></span>
+                        </div>
+                    }.into_any(),
+
+                    RequestCreditRefundState::Ready => view! {
+                        <div class="ticket-action-title">"Request Return of Held Credit"</div>
+                        <div class="ticket-action-desc">
+                            "Need your deposit back? We'll let the organizer know to process your \
+                             refund. They'll handle it through their usual refund channel."
+                        </div>
+                        <button
+                            class="btn btn-outline btn-sm ticket-action-btn"
+                            on:click=move |_| set_state.set(RequestCreditRefundState::Confirm)
+                        >
+                            <Icon icon=IconName::Check class="icon-sm" />
+                            " Request Return"
+                        </button>
+                    }.into_any(),
+
+                    RequestCreditRefundState::Confirm => view! {
+                        <div class="ticket-action-title">"Confirm: Request Return"</div>
+                        <div class="ticket-action-desc">
+                            "The organizer will be notified that you want your held credit refunded. \
+                             They'll process it through their standard refund channel — this just \
+                             signals your request, it does not trigger an automatic payout."
+                        </div>
+                        <button
+                            class="btn btn-primary btn-sm ticket-action-btn"
+                            on:click=move |_| {
+                                set_state.set(RequestCreditRefundState::Requesting);
+                                leptos::task::spawn_local(async move {
+                                    match api::request_credit_refund().await {
+                                        Ok(resp) => {
+                                            log::info!("[credit-refund] request submitted");
+                                            set_state.set(RequestCreditRefundState::Requested {
+                                                message: resp.message,
+                                            });
+                                        }
+                                        Err(e) => {
+                                            log::error!("[credit-refund] failed: {}", e.message);
+                                            set_state.set(RequestCreditRefundState::Error(e.message));
+                                        }
+                                    }
+                                });
+                            }
+                        >
+                            <Icon icon=IconName::Check class="icon-sm" />
+                            " Confirm Request"
+                        </button>
+                        <button
+                            class="btn btn-outline btn-xs ticket-action-cancel"
+                            on:click=move |_| set_state.set(RequestCreditRefundState::Ready)
+                        >
+                            "Cancel"
+                        </button>
+                    }.into_any(),
+
+                    RequestCreditRefundState::Requesting => view! {
+                        <div class="ticket-action-title">"Submitting Request..."</div>
+                        <div class="ticket-action-desc ticket-action-signing-row">
+                            <span class="spinner spinner-sm"></span>
+                            "Processing your request..."
+                        </div>
+                    }.into_any(),
+
+                    RequestCreditRefundState::AlreadyRequested => view! {
+                        <div class="ticket-action-title ticket-action-title-success">
+                            "Refund Requested ✓"
+                        </div>
+                        <div class="ticket-action-desc">
+                            "You've already requested a return of your held credit. The organizer \
+                             has been notified and will process it through their standard refund \
+                             channel."
+                        </div>
+                    }.into_any(),
+
+                    RequestCreditRefundState::Requested { message } => view! {
+                        <div class="ticket-action-title ticket-action-title-success">
+                            "Request Submitted ✓"
+                        </div>
+                        <div class="ticket-action-desc">{message.clone()}</div>
+                    }.into_any(),
+
+                    RequestCreditRefundState::Error(msg) => view! {
+                        <div class="ticket-action-title ticket-action-title-danger">
+                            "Request Failed"
+                        </div>
+                        <div class="ticket-action-desc">{msg.clone()}</div>
+                        <button
+                            class="btn btn-outline btn-xs ticket-action-cancel-xs"
+                            on:click=move |_| set_state.set(RequestCreditRefundState::Ready)
+                        >
+                            "Try Again"
+                        </button>
+                    }.into_any(),
+                }}
+            </div>
+        </div>
+    }
+}
