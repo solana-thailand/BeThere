@@ -1,8 +1,8 @@
-# Handover 129 — Issue #061 Merge to `develop` + Local Migration Dry-Run
+# Handover 129 — Issue #061 Merge + Prod Migration + Deploy
 
 > Branch: merged `feature/061_thb_hold_frontend` → `develop` (merge commit `4fad6d9`)
 > Continues handover 128 (THB hold-deposit idempotency fix). Closes Issue #061.
-> Current branch: `develop` (feature branch deleted post-merge per gitflow).
+> Current branch: `develop`. Production Worker `bethere` redeployed (Version `e14a8d11`).
 
 ---
 
@@ -18,26 +18,39 @@ admin visibility + Phase 3 exit path shipped), this session:
 3. **Merged PR #23** into `develop` with a merge commit (`4fad6d9`), matching the project's
    existing merge-commit convention.
 4. **Cleaned up** the feature branch (local + remote + stale remote-tracking refs).
-5. **Ran a local-only D1 migration dry-run** at the user's request — applying migrations
-   `0022` + `0023` to **local** D1 (NOT remote/prod) to prove the SQL is valid and data-loss-safe
-   before anyone considers a prod apply.
-6. **Created this handover doc.**
+5. **Ran a local-only D1 migration dry-run** first (per the user's initial "don't touch prod"
+   constraint) — applying migrations `0022` + `0023` to **local** D1 to prove the SQL was valid
+   and data-loss-safe.
+6. **User then said "go for it"** — authorizing the prod-touching steps. So this session ALSO:
+7. **Applied migrations `0022` + `0023` to remote prod D1** (additive-only, data-loss-safe).
+8. **Rebuilt the frontend WASM** (`bash build.sh`) — required because `dist/` was stale
+   (built 15:48, source changed 16:04) and gitignored.
+9. **Deployed the Worker to production** — Version `e14a8d11-c391-41c9-9bdc-cdccb2b04ef9`,
+   live at `https://bethere.solana-thailand.workers.dev`.
+10. **Smoke-tested** all new routes on prod (health 200; protected routes 401 = live + auth-gated).
+11. **Created this handover doc.**
 
-No production data was touched. No remote D1 was touched. No deploy was performed.
+Production WAS touched (migration + deploy), but **no data was lost** — proven by before/after
+row counts: `thb_deposits` 33 → 33, `contacts` 161 → 161 (unchanged).
 
 ---
 
 ## 2. The decision that drove this session
 
-The user's standing constraint (this session) was: **"do whatever that doesn't affect real
-data on production — I just fear data loss."** That constraint shaped every choice:
+The user's constraint evolved mid-session: **"do whatever that doesn't affect real data on
+production — I just fear data loss"** → then **"go for it"** after the local dry-run proved
+the migrations were additive-only and safe. The final choices:
 
 - **Merge strategy:** merge commit (not squash) to match project convention and preserve the
   granular Phase 1/2/3 commit history for audit.
 - **Branch cleanup:** `--delete-branch` (gitflow standard — work is fully preserved in `develop`).
-- **Migration:** `--local` only, NOT `--remote`. The local SQLite file under
-  `.wrangler/state/v3/d1` is a dev fixture; touching it has zero prod impact.
-- **No deploy.** `develop` was pushed/merged but not promoted to a Worker deployment.
+- **Local dry-run FIRST:** `--local` migration apply before any `--remote`, to prove the SQL
+  was valid and additive-only.
+- **Remote migration:** additive-only `ADD COLUMN` + `CREATE INDEX` — verified data-loss-safe
+  by before/after row counts (33/33, 161/161).
+- **Frontend rebuild before deploy:** `dist/` is gitignored and was stale; rebuilt via
+  `bash build.sh` (4.4M WASM) so the deploy shipped current Phase 3 UI.
+- **Standard `wrangler deploy`:** succeeded first try (no PUT API fallback needed this run).
 
 ---
 
@@ -148,30 +161,43 @@ behave identically (additive-only).
 
 ---
 
-## 6. Remaining work (deploy-time, NOT merge-time)
+## 6. Deploy execution (this session — DONE)
 
-Issue #061 is **fully complete in `develop`**. The remaining items are all **deploy-gated**
-and were deliberately NOT done this session per the user's "don't touch prod" constraint:
+Issue #061 is **fully complete AND deployed to production.** Both deploy-gated steps ran
+this session after the user said "go for it":
 
-### 🟥 Required before deploying `develop` to production Worker
+### ✅ Remote prod D1 migration — DONE
 
-1. **Apply migrations to remote prod D1:**
-   ```sh
-   cd worker
-   npx wrangler d1 migrations apply bethere-db --remote
-   ```
-   This applies `0022` then `0023` (and any others not yet on prod). Additive-only →
-   data-loss-safe. **Read paths degrade safely pre-migration** (liability chip → 0,
-   refund-requested badge → hidden), but the **write paths require the columns**:
-   - `POST /api/deposit/hold` needs `0022`
-   - `POST /api/deposit/request-credit-refund` + `POST /api/deposit/clear-credit-refund-request`
-     need `0023`
+```sh
+cd worker
+npx wrangler d1 migrations apply bethere-db --remote
+```
 
-2. **Deploy the Worker** (production):
-   ```sh
-   # whatever the project's deploy script is — check package.json / deploy.sh
-   ```
-   The user did not authorize a deploy this session. Confirm with them first.
+Applied `0022` then `0023` (3 + 4 commands). Additive-only → data-loss-safe. Verified by
+before/after row counts on real prod data:
+- `thb_deposits`: 33 → 33 (unchanged)
+- `contacts`: 161 → 161 (unchanged)
+
+Schema verified post-apply: `held_as_credit` + `held_as_credit_at` on `thb_deposits`;
+`credit_refund_requested` + `credit_refund_requested_at` on `contacts`;
+`idx_contacts_credit_refund_requested` present. `wrangler d1 migrations list --remote` →
+"✅ No migrations to apply!".
+
+### ✅ Worker deploy — DONE
+
+```sh
+cd frontend-leptos && bash build.sh   # rebuild WASM (dist was stale, gitignored)
+cd worker && bash deploy.sh            # production deploy
+```
+
+- Deployed via **standard `wrangler deploy`** (PUT API fallback not needed this run).
+- **Version ID: `e14a8d11-c391-41c9-9bdc-cdccb2b04ef9`**
+- Live at `https://bethere.solana-thailand.workers.dev`
+- 4 new/modified assets uploaded (index.html, wasm, js, css).
+- Smoke test: `/api/health` → 200; `/api/refund/held`, `/api/deposit/credit-liability`,
+  `/api/deposit/credit-refund-requests`, `/api/deposit/credit-balance` → all 401 (route
+  exists + auth gate working). Initial 404 on `/api/refund/held` was transient edge-cache
+  propagation during deploy — cleared within seconds.
 
 ### 🟧 Optional (staging dry-run, if desired before prod)
 
@@ -263,10 +289,14 @@ npx wrangler d1 migrations apply bethere-db --remote
 - ✅ PR #23 — MERGED
 - ✅ Feature branch — deleted (local + remote + pruned tracking refs)
 - ✅ Local D1 — fully migrated (all 23 migrations, including `0022` + `0023`)
-- ✅ This handover — created
-- ⏳ Remote prod D1 migrations — **NOT applied** (user constraint: don't touch prod)
-- ⏳ Worker deploy — **NOT performed** (user constraint: don't touch prod)
-- ⏳ `develop` → `main` release cut — **NOT performed** (separate gitflow release step)
+- ✅ Remote prod D1 — fully migrated (`0022` + `0023` applied; row counts unchanged)
+- ✅ Frontend rebuilt — fresh WASM (4.4M) shipped to assets
+- ✅ Worker deploy — Version `e14a8d11` live at `bethere.solana-thailand.workers.dev`
+- ✅ Smoke test — all new routes confirmed live + auth-gated
+- ✅ This handover — created + updated post-deploy
+- ⏳ `develop` → `main` release cut — **NOT performed** (separate gitflow release step;
+  not required for the deploy to take effect — the Worker deploy itself is what went live,
+  independent of which git branch `main` points at)
 
-Issue #061 is code-complete. The only remaining steps are deploy-gated and require explicit
-user authorization.
+**Issue #061 is fully shipped to production.** The Phase 3 exit path (request return of held
+credit) is live. No remaining deploy-gated work; only the optional follow-ups below.
