@@ -549,6 +549,37 @@ pub fn make_upload_slip(
                 }
                 Err(e) => {
                     log::error!("[deposit] THB slip upload failed: {e}");
+                    // 401 = JWT missing/expired. The deposit page itself is
+                    // public (loads deposit status without auth), but
+                    // `/api/deposit/thb/upload` is gated by `require_identity`.
+                    // Without this branch, the user sees a generic "Failed to
+                    // upload slip" toast and has no path forward — able to
+                    // view but unable to act. Route to `ThbAuthRequired`,
+                    // which renders a clear "session expired, sign in" CTA
+                    // and unblocks the user.
+                    if e.status == 401 {
+                        app_components::show_toast(
+                            &set_toast,
+                            "Session expired. Please sign in again to upload your slip.",
+                            ToastType::Warning,
+                        );
+                        let aid = match params.get() {
+                            Ok(p) => p.attendee_id.unwrap_or_default(),
+                            Err(_) => return,
+                        };
+                        let eid = extract_event_id_from_url();
+                        match api::get_deposit_status(&aid, eid.as_deref()).await {
+                            Ok(data) => {
+                                set_state.set(DepositPageState::ThbAuthRequired(data));
+                            }
+                            Err(_) => {
+                                set_state.set(DepositPageState::Error(
+                                    "Failed to reload deposit status.".to_string(),
+                                ));
+                            }
+                        }
+                        return;
+                    }
                     let error_msg = if e.to_string().contains("413")
                         || e.to_string().contains("too large")
                     {

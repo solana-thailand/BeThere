@@ -342,6 +342,16 @@ pub fn Deposit() -> impl IntoView {
                             thb_payment::thb_rejected_view(&data, set_state, set_payment_choice)
                         }
 
+                        // ===== THB Auth Required (session expired) =====
+                        // Surfaced when `/api/deposit/thb/upload` returns 401.
+                        // The deposit page itself is public, but the upload
+                        // endpoint requires a verified JWT — without this
+                        // arm the user is stuck with a generic error toast
+                        // and no way to re-authenticate.
+                        DepositPageState::ThbAuthRequired(data) => {
+                            thb_payment::thb_auth_required_view(&data)
+                        }
+
                         // ===== Refund: Choose Wallet =====
                         // Defense-in-depth: the primary gate is the CTA in
                         // already_deposited_view, but if the state machine
