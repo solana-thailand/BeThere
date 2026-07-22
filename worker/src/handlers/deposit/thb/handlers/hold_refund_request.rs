@@ -246,13 +246,13 @@ pub struct ClearCreditRefundResponse {
 /// event_id to resolve against. The route is registered in the `protected`
 /// router block which already requires staff auth via `require_staff`.
 ///
-/// **Sheets sync limitation:** only the D1 source-of-truth row is cleared in
-/// this handler. A sibling `clear_credit_refund_requested` helper on
-/// `sheets/contacts.rs` (mirroring `set_credit_refund_requested`) is the
-/// follow-up — until that lands, column N on the human-readable master may
-/// stay stale. This is a reconciliation cosmetic, not a correctness issue:
-/// every read path in this module (admin badge, attendee status) reads from
-/// D1, which is cleared here.
+/// **Dual-write (D1 + Sheets)** — mirrors `request_credit_refund_handler`'s
+/// write path: D1 is source of truth, Sheets is the human-readable master.
+/// Both writes are best-effort (logged, not fatal): the clear is idempotent,
+/// so a transient failure on either store is recovered by the next refresh's
+/// retry. The read paths (admin badge, attendee status) read from D1, which
+/// is why a Sheets lag is reconciliation-cosmetic rather than a correctness
+/// issue.
 #[worker::send]
 pub async fn clear_credit_refund_request_handler(
     State(state): State<AppState>,
@@ -277,6 +277,42 @@ pub async fn clear_credit_refund_request_handler(
             email = %body.email,
             error = %e,
             "D1 clear_credit_refund_requested failed — flag may persist"
+        );
+    }
+
+    // Sheets clear — human-readable master (column N). Best-effort, mirroring
+    // the D1 clear's leniency: a transient Sheets outage must NOT block the
+    // admin's clear action or surface as a 500. The D1 clear above is the
+    // source of truth; a logged Sheets miss is reconciliation-cosmetic and
+    // will be picked up on the next clear retry. Skipping when KV/sheet is
+    // unconfigured (rather than erroring) preserves the clear's idempotent
+    // "always succeeds" contract.
+    let resolved = event_checkin_domain::models::org::ResolvedContactsSheet {
+        sheet_id: state.config.sheets.contacts_sheet_id.clone(),
+        contacts_sheet_name: state.config.sheets.contacts_sheet_name.clone(),
+        events_sheet_name: state.config.sheets.events_sheet_name.clone(),
+    };
+
+    if state.events_kv.is_some() && !resolved.sheet_id.is_empty() {
+        if let Err(e) = crate::sheets::contacts::clear_credit_refund_requested(
+            &state,
+            &resolved.sheet_id,
+            &resolved.contacts_sheet_name,
+            state.events_kv.as_ref(),
+            &body.email,
+        )
+        .await
+        {
+            tracing::warn!(
+                email = %body.email,
+                error = %e,
+                "Sheets clear_credit_refund_requested failed — column N may stay stale"
+            );
+        }
+    } else {
+        tracing::debug!(
+            email = %body.email,
+            "Sheets clear skipped (KV or contacts sheet not configured)"
         );
     }
 
