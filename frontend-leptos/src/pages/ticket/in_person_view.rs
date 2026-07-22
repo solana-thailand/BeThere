@@ -12,6 +12,7 @@ use super::nft_badge::NftClaimedBadge;
 use super::qr_section::QrSection;
 use super::video_section::VideoSection;
 use super::view_data::TicketViewData;
+use crate::api::DepositMethod;
 use crate::icons::{Icon, IconName};
 use crate::utils;
 
@@ -264,6 +265,25 @@ pub fn InPersonView(
                         } else {
                             view! { <div></div> }.into_any()
                         }
+                    } else {
+                        view! { <div></div> }.into_any()
+                    }}
+                    // Hold-as-credit opportunity (checked-in with verified THB deposit, not yet refunded).
+                    // THB-only counterpart to the USDC RolloverActionCard above.
+                    // NOTE: backend hold endpoint is not yet idempotent — the in-card Confirmed
+                    // state guards against same-session double-click, but reload re-shows the button.
+                    // See Issue #061 §8 (backend double-hold gap).
+                    {if dep.verified && !dep.refunded && is_checked_in && dep.method == DepositMethod::Thb {
+                        let hold_eid = event_id.clone();
+                        let hold_aid = api_id.clone();
+                        let hold_amount = deposit_amount_thb;
+                        view! {
+                            <HoldDepositCard
+                                event_id=hold_eid
+                                attendee_id=hold_aid
+                                deposit_amount_thb=hold_amount
+                            />
+                        }.into_any()
                     } else {
                         view! { <div></div> }.into_any()
                     }}
