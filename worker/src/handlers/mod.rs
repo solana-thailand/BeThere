@@ -371,6 +371,13 @@ pub fn routes(state: AppState) -> Router<()> {
             "/refund/hold/{attendee_id}",
             post(deposit::admin_hold_deposit_handler),
         )
+        // Total deposit-credit liability across all contacts — the organizer's
+        // "Total credit held" header chip (Issue #061 Phase 2 option a2).
+        // One D1 SUM/COUNT; degrades to zeros if D1 is unavailable.
+        .route(
+            "/deposit/credit-liability",
+            get(deposit::credit_liability_handler),
+        )
         .route(
             "/refund/manual/{attendee_id}",
             post(deposit::mark_manual_refund_handler),

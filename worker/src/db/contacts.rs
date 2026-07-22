@@ -265,6 +265,64 @@ pub async fn audience_aggregate(
 }
 
 // ---------------------------------------------------------------------------
+// Deposit-credit liability aggregate (Issue #061 Phase 2 — option a2 chip)
+// ---------------------------------------------------------------------------
+
+/// Total deposit-credit held by the organizer across all contacts.
+///
+/// The single figure shown in the admin "Total credit held" header chip — the
+/// organizer's cash liability from rolling deposit credit (THB held on behalf
+/// of attendees who chose credit over refund).
+///
+/// `contact_count` is the number of contacts with a non-zero balance in EITHER
+/// currency (not a sum of per-currency counts) — matches how the chip phrases
+/// "across N contacts". Both `total_*` use `COALESCE` so an empty `contacts`
+/// table yields `(0, 0, 0)` instead of a NULL row.
+#[derive(Debug, Default, Clone, serde::Deserialize, serde::Serialize)]
+pub struct CreditLiability {
+    /// Sum of `deposit_credit_thb` across contacts with any credit.
+    #[serde(default)]
+    pub total_thb: i64,
+    /// Sum of `deposit_credit_usdc` across contacts with any credit.
+    #[serde(default)]
+    pub total_usdc: i64,
+    /// Number of distinct contacts with a non-zero balance in either currency.
+    #[serde(default)]
+    pub contact_count: i64,
+}
+
+/// Aggregate the organizer's total deposit-credit liability.
+///
+/// One round-trip SUM/COUNT over the `contacts` table — the cheapest possible
+/// read for the admin liability chip. Source of truth is the `contacts` table
+/// (D1 cols K–M), the same rows `increment_credit` writes. Single-org scope:
+/// the table is not org-partitioned (Issue #029 multi-org isolation deferred).
+///
+/// Returns `CreditLiability::default()` (all zeros) when D1 is unreachable —
+/// the chip renders "0 THB" rather than failing the deposits view.
+pub async fn credit_liability(db: &D1Database) -> CreditLiability {
+    let sql = "\
+         SELECT \
+           COALESCE(SUM(deposit_credit_thb), 0)  AS total_thb, \
+           COALESCE(SUM(deposit_credit_usdc), 0) AS total_usdc, \
+           COUNT(*)                               AS contact_count \
+         FROM contacts \
+         WHERE deposit_credit_thb > 0 OR deposit_credit_usdc > 0";
+
+    let stmt = db.prepare(sql);
+    match safe_all_rows(&stmt).await {
+        Ok(rows) => rows
+            .into_iter()
+            .next()
+            .and_then(|v| serde_json::from_value::<CreditLiability>(v).ok())
+            .unwrap_or_default(),
+        // Non-fatal: the deposits view must still render without the chip's
+        // number. Logged upstream if needed; here we degrade to zero.
+        Err(_) => CreditLiability::default(),
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Per-contact event history (Plan 008 §3.5 — read-side fix)
 // ---------------------------------------------------------------------------
 

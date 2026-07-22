@@ -1,9 +1,10 @@
 //! Admin-side hold-as-credit handlers — sibling of the attendee `hold_credit.rs`.
 //!
-//! Two endpoints (both admin/staff-authed via `resolve_event_with_access`):
+//! Three endpoints (all admin/staff-authed via `resolve_event_with_access`):
 //!
 //!   GET  /api/refund/held                  — list deposits held as rolling credit
 //!   POST /api/refund/hold/{attendee_id}    — admin marks a deposit as held
+//!   GET  /api/deposit/credit-liability     — total credit held across all contacts
 //!
 //! ## Why a separate admin path?
 //!
@@ -251,7 +252,7 @@ pub async fn admin_hold_deposit_handler(
             &claims.email,
             crate::audit_store::AuditAction::DepositHeldAsCredit,
             &attendee_id,
-            &format!("admin held {held_amount} THB as rolling credit for attendee"),
+            &format!("admin held {held_amount} THB held as rolling credit for attendee"),
         ),
         state.d1.as_deref(),
     )
@@ -262,4 +263,32 @@ pub async fn admin_hold_deposit_handler(
         "held_amount": held_amount,
         "message": format!("{held_amount} THB held as credit"),
     })))
+}
+
+// ---------------------------------------------------------------------------
+// GET /api/deposit/credit-liability (admin)
+// ---------------------------------------------------------------------------
+
+/// Total deposit-credit liability across all contacts — the organizer's
+/// "Total credit held: X THB across N contacts" header chip (Issue #061 Phase 2
+/// option a2). One D1 SUM/COUNT round-trip; degrades to zeros if D1 is
+/// unavailable so the deposits view always renders.
+#[worker::send]
+pub async fn credit_liability_handler(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+) -> Result<ApiOk<crate::db::contacts::CreditLiability>, WorkerError> {
+    tracing::info!(admin_email = %claims.email, "credit liability requested");
+
+    let liability = match state.d1.as_deref() {
+        Some(db) => crate::db::contacts::credit_liability(db).await,
+        // No D1 binding → we cannot read credit state. The contacts sheet is
+        // the alternate source but a SUM over it would be a full-table scan +
+        // per-row parse via the Sheets API (expensive + rate-limited). D1 is
+        // the read path for aggregates (handover 104). Degrade to zero rather
+        // than block the deposits view.
+        None => crate::db::contacts::CreditLiability::default(),
+    };
+
+    Ok(ApiOk::new(liability))
 }
