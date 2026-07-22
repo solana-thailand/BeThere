@@ -291,12 +291,14 @@ npx wrangler d1 migrations apply bethere-db --remote
 - ✅ Local D1 — fully migrated (all 23 migrations, including `0022` + `0023`)
 - ✅ Remote prod D1 — fully migrated (`0022` + `0023` applied; row counts unchanged)
 - ✅ Frontend rebuilt — fresh WASM (4.4M) shipped to assets
-- ✅ Worker deploy — Version `e14a8d11` live at `bethere.solana-thailand.workers.dev`
-- ✅ Smoke test — all new routes confirmed live + auth-gated
-- ✅ This handover — created + updated post-deploy
-- ⏳ `develop` → `main` release cut — **NOT performed** (separate gitflow release step;
-  not required for the deploy to take effect — the Worker deploy itself is what went live,
-  independent of which git branch `main` points at)
+- ✅ Worker deploy (initial) — Version `e14a8d11` live at `bethere.solana-thailand.workers.dev`
+- ✅ Sheets clear-sync gap closed (PR #24, commit `eeb2c77`) — admin clear now dual-writes
+  D1 + Sheets column N (matches attendee request path; no asymmetry remaining)
+- ✅ Worker redeploy — Version `1e2ba935-5874-48a7-bdf9-ad46a0c57508` (Sheets clear-sync fix live)
+- ✅ Smoke test — all new routes confirmed live + auth-gated (post both deploys)
+- ✅ `develop` → `main` release cut — merge commit `87b821a` pushed to `origin/main`
+  (main now current with prod; `release: merge develop into main (Issue #061 ...)` marker)
+- ✅ This handover — created + updated across the full session
 
 **Issue #061 is fully shipped to production.** The Phase 3 exit path (request return of held
 credit) is live. No remaining deploy-gated work; only the optional follow-ups below.
