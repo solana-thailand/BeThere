@@ -13566,6 +13566,33 @@ a.ticket-series-card:hover {
     border: 1px solid rgba(255, 255, 255, 0.1);
     font-size: 0.875rem;
 }
+
+/* Issue #061 Phase 3 — "Credit Refund Requested" sub-list inside the Held tab.
+ * Warning-tinted container so the organizer sees at a glance that action is
+ * requested; per-row cards mirror the Held/Refunded card shape. */
+.admin-dep-credit-refund-requests {
+    margin-bottom: 1rem;
+    padding: 0.75rem;
+    border-radius: 0.5rem;
+    background: rgba(245, 158, 11, 0.06);
+    border: 1px solid rgba(245, 158, 11, 0.25);
+}
+.admin-dep-credit-refund-requests .admin-dep-flow-hint {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-bottom: 0.65rem;
+    color: var(--warning-bright, #eab308);
+}
+.admin-dep-credit-refund-row {
+    margin-bottom: 0.5rem;
+}
+.admin-dep-credit-refund-row:last-child {
+    margin-bottom: 0;
+}
+.admin-dep-clear-btn {
+    margin-left: 0.5rem;
+}
 .admin-refund-form-row {
     margin-top: 4px;
     flex-wrap: wrap;
