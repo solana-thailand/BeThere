@@ -129,7 +129,9 @@ Hold gets a confirm step because cash stays with the organizer. Refund stays the
       `contacts`; the chip renders at the top of `AdminDeposits` when any balance is non-zero
       ("Total credit held: X THB [+ Y USDC] across N contacts"). Cross-event (global), degrades
       to hidden when D1 is unreachable. Phase 2 option (a2).
-- [ ] Badge for "credit refund requested" attendees (Phase 3 dependency)
+- [x] Badge for "credit refund requested" attendees (delivered via Phase 3 — warning badge
+      on Held tab + per-row "Credit Refund Requested" sub-list with "✓ Clear" action, commit
+      `1a5dbb6`)
 
 **Scoping note (discovered while wiring Phase 1):** the admin page currently renders a
 per-event **attendee list** (`AttendeeListItem`), not a cross-event contacts table — contacts
