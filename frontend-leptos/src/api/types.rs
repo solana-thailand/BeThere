@@ -301,6 +301,11 @@ pub struct DepositInfo {
     /// URL of the refund transfer receipt (organizer-uploaded proof).
     #[serde(default)]
     pub refund_proof_url: Option<String>,
+    /// Whether the attendee converted this deposit to rolling credit for future
+    /// events (distinct from `refunded`). Drives the HoldDepositCard's
+    /// already-held state and hides the CTA on reload (Issue #061 idempotency).
+    #[serde(default)]
+    pub held_as_credit: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

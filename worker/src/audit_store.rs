@@ -60,6 +60,10 @@ pub enum AuditAction {
     DepositRejected,
     RefundIssued,
     RefundMarked,
+    /// Attendee held their deposit as rolling credit for future events
+    /// (off-chain THB; sibling of `RefundMarked`). Recorded for auditability
+    /// of the credit-granting action (Issue #032 / #061).
+    DepositHeldAsCredit,
     ClaimForfeited,
 
     // Check-in

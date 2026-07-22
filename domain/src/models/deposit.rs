@@ -130,6 +130,16 @@ pub struct ThbDeposit {
     /// ISO 8601 timestamp when refund was marked complete.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub refunded_at: Option<String>,
+    /// Whether the attendee chose to hold this deposit as rolling credit for
+    /// future events instead of claiming a refund. Distinct from `refunded` —
+    /// held-as-credit retains funds as organizer liability (credit the attendee
+    /// spends later), whereas `refunded` releases funds back to the attendee.
+    /// Idempotency flag for `POST /api/deposit/hold` (prevents double-credit).
+    #[serde(default)]
+    pub held_as_credit: bool,
+    /// ISO 8601 timestamp when the deposit was held as rolling credit.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub held_as_credit_at: Option<String>,
     /// Attendee display name (enriched from Google Sheets, not stored in KV).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub attendee_name: Option<String>,

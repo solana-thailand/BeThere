@@ -550,6 +550,10 @@ enum HoldDepositState {
     Holding,
     /// Success — shows the new credit balance.
     Confirmed { credit_thb: u64, credit_usdc: u64 },
+    /// Loaded from server: deposit already converted to credit on a prior call.
+    /// Distinct from `Confirmed` (no in-session balance to display) and used as
+    /// the initial state when `already_held` prop is true (Issue #061 idempotency).
+    AlreadyHeld,
     /// Error.
     Error(String),
 }
@@ -569,8 +573,19 @@ pub fn HoldDepositCard(
     attendee_id: String,
     /// THB amount being held (for the confirm copy).
     deposit_amount_thb: u64,
+    /// Whether the server reports this deposit was already converted to credit
+    /// on a prior call. Mounts the card in `AlreadyHeld` so the attendee sees a
+    /// held-confirmation (not the CTA) on reload — the backend idempotency guard
+    /// is the safety net; this is the UX (Issue #061 idempotency).
+    #[prop(default = false)]
+    already_held: bool,
 ) -> impl IntoView {
-    let (state, set_state) = signal(HoldDepositState::Ready);
+    let initial = if already_held {
+        HoldDepositState::AlreadyHeld
+    } else {
+        HoldDepositState::Ready
+    };
+    let (state, set_state) = signal(initial);
 
     // Store non-Copy props so they can be accessed from the async closure.
     let eid = StoredValue::new(event_id);
@@ -680,6 +695,19 @@ pub fn HoldDepositCard(
                             </div>
                         }.into_any()
                     },
+
+                    HoldDepositState::AlreadyHeld => view! {
+                        <div class="ticket-action-title ticket-action-title-success">
+                            "Deposit Held as Credit ✓"
+                        </div>
+                        <div class="ticket-action-desc">
+                            {format!(
+                                "Your {} THB deposit is held as rolling credit and will be \
+                                 auto-applied to your next event registration.",
+                                amount
+                            )}
+                        </div>
+                    }.into_any(),
 
                     HoldDepositState::Error(msg) => view! {
                         <div class="ticket-action-title ticket-action-title-danger">

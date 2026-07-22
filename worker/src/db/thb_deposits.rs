@@ -87,8 +87,8 @@ pub async fn list_thb_deposits(db: &D1Database, event_id: &str) -> Result<Vec<Th
 /// `raw_sql` convention does not apply here.
 pub async fn insert_thb_deposit(db: &D1Database, deposit: &ThbDeposit) -> Result<(), String> {
     let stmt = db.prepare(
-        "INSERT INTO thb_deposits (attendee_id, event_id, amount_thb, slip_url, verified, verified_by, verified_at, uploaded_at, refunded, refunded_at, attendee_name, bank_account, bank_name, account_name, refund_proof_url) \
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+        "INSERT INTO thb_deposits (attendee_id, event_id, amount_thb, slip_url, verified, verified_by, verified_at, uploaded_at, refunded, refunded_at, attendee_name, bank_account, bank_name, account_name, refund_proof_url, held_as_credit, held_as_credit_at) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
     );
     stmt.bind_refs(&[
         D1Type::Text(&deposit.attendee_id),
@@ -106,6 +106,8 @@ pub async fn insert_thb_deposit(db: &D1Database, deposit: &ThbDeposit) -> Result
         D1Type::Text(deposit.bank_name.as_deref().unwrap_or("")),
         D1Type::Text(deposit.account_name.as_deref().unwrap_or("")),
         D1Type::Text(deposit.refund_proof_url.as_deref().unwrap_or("")),
+        D1Type::Integer(deposit.held_as_credit as i32),
+        D1Type::Text(deposit.held_as_credit_at.as_deref().unwrap_or("")),
     ])
     .map_err(|e| format!("D1 insert_thb_deposit bind: {e:?}"))?
     .run()
@@ -120,8 +122,8 @@ pub async fn insert_thb_deposit(db: &D1Database, deposit: &ThbDeposit) -> Result
 /// Uses parameterized `bind_refs` — see `insert_thb_deposit` for rationale.
 pub async fn update_thb_deposit(db: &D1Database, deposit: &ThbDeposit) -> Result<(), String> {
     let stmt = db.prepare(
-        "UPDATE thb_deposits SET amount_thb = ?1, slip_url = ?2, verified = ?3, verified_by = ?4, verified_at = ?5, refunded = ?6, refunded_at = ?7, attendee_name = ?8, bank_account = ?9, bank_name = ?10, account_name = ?11, refund_proof_url = ?12 \
-         WHERE event_id = ?13 AND attendee_id = ?14",
+        "UPDATE thb_deposits SET amount_thb = ?1, slip_url = ?2, verified = ?3, verified_by = ?4, verified_at = ?5, refunded = ?6, refunded_at = ?7, attendee_name = ?8, bank_account = ?9, bank_name = ?10, account_name = ?11, refund_proof_url = ?12, held_as_credit = ?13, held_as_credit_at = ?14 \
+         WHERE event_id = ?15 AND attendee_id = ?16",
     );
     stmt.bind_refs(&[
         D1Type::Integer(deposit.amount_thb as i32),
@@ -136,6 +138,8 @@ pub async fn update_thb_deposit(db: &D1Database, deposit: &ThbDeposit) -> Result
         D1Type::Text(deposit.bank_name.as_deref().unwrap_or("")),
         D1Type::Text(deposit.account_name.as_deref().unwrap_or("")),
         D1Type::Text(deposit.refund_proof_url.as_deref().unwrap_or("")),
+        D1Type::Integer(deposit.held_as_credit as i32),
+        D1Type::Text(deposit.held_as_credit_at.as_deref().unwrap_or("")),
         D1Type::Text(&deposit.event_id),
         D1Type::Text(&deposit.attendee_id),
     ])
@@ -206,6 +210,8 @@ fn row_to_thb_deposit(row: serde_json::Value) -> Result<ThbDeposit, String> {
         uploaded_at: get_str("uploaded_at"),
         refunded: get_bool("refunded"),
         refunded_at: get_opt_str("refunded_at"),
+        held_as_credit: get_bool("held_as_credit"),
+        held_as_credit_at: get_opt_str("held_as_credit_at"),
         attendee_name: get_opt_str("attendee_name"),
         bank_account: get_opt_str("bank_account"),
         bank_name: get_opt_str("bank_name"),

@@ -270,18 +270,21 @@ pub fn InPersonView(
                     }}
                     // Hold-as-credit opportunity (checked-in with verified THB deposit, not yet refunded).
                     // THB-only counterpart to the USDC RolloverActionCard above.
-                    // NOTE: backend hold endpoint is not yet idempotent — the in-card Confirmed
-                    // state guards against same-session double-click, but reload re-shows the button.
-                    // See Issue #061 §8 (backend double-hold gap).
+                    // Backend is idempotent: the source deposit is settled via `held_as_credit`,
+                    // which the server reports back and we forward as `already_held`. The card then
+                    // mounts in its AlreadyHeld confirmation (no CTA), so reload is safe and the
+                    // backend guard is the defense-in-depth backstop (Issue #061 §8 — resolved).
                     {if dep.verified && !dep.refunded && is_checked_in && dep.method == DepositMethod::Thb {
                         let hold_eid = event_id.clone();
                         let hold_aid = api_id.clone();
                         let hold_amount = deposit_amount_thb;
+                        let hold_already = dep.held_as_credit;
                         view! {
                             <HoldDepositCard
                                 event_id=hold_eid
                                 attendee_id=hold_aid
                                 deposit_amount_thb=hold_amount
+                                already_held=hold_already
                             />
                         }.into_any()
                     } else {

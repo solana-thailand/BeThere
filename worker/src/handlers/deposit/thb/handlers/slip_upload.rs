@@ -300,6 +300,8 @@ pub async fn upload_thb_slip_handler(
         uploaded_at: now.clone(),
         refunded: false,
         refunded_at: None,
+        held_as_credit: false,
+        held_as_credit_at: None,
         attendee_name: None,
         bank_account: body.bank_account.clone(),
         bank_name: body.bank_name.clone(),
