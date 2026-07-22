@@ -93,6 +93,14 @@ pub enum DepositPageState {
     ThbUploaded(String, String, String),
     /// THB slip was rejected by admin — user can re-upload.
     ThbRejected(DepositStatusResponse),
+    /// THB upload rejected because the attendee's JWT is missing/expired.
+    /// The deposit page is public (loads deposit status without auth), but
+    /// `/api/deposit/thb/upload` is gated by `require_identity`. When the
+    /// upload fails with 401, surface a clear "session expired, sign in"
+    /// CTA instead of a generic error toast — otherwise the user is stuck
+    /// able to view but unable to act, with no obvious path forward.
+    /// See issue: deposit upload 401 UX (Session expired).
+    ThbAuthRequired(DepositStatusResponse),
     /// Refund flow — choosing wallet to connect.
     RefundChooseWallet(DepositStatusResponse),
     /// Refund flow — wallet connected, ready to claim.
@@ -172,7 +180,8 @@ pub fn deposit_step(
         DepositPageState::Loading
         | DepositPageState::Error(_)
         | DepositPageState::NotEnabled(_)
-        | DepositPageState::AlreadyDeposited(_) => None,
+        | DepositPageState::AlreadyDeposited(_)
+        | DepositPageState::ThbAuthRequired(_) => None,
     }
 }
 
@@ -303,6 +312,7 @@ pub fn extract_event_context(state: &DepositPageState) -> Option<(String, String
         | DepositPageState::UsdcQrReady(d, _)
         | DepositPageState::ThbUploading(d)
         | DepositPageState::ThbRejected(d)
+        | DepositPageState::ThbAuthRequired(d)
         | DepositPageState::RefundChooseWallet(d)
         | DepositPageState::RefundWalletConnected(d, _, _)
         | DepositPageState::RefundSigning(d, _, _)
