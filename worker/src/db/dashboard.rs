@@ -94,19 +94,32 @@ pub async fn count_claims_minted(db: &D1Database, event_id: &str) -> Result<u64,
 }
 
 /// SQL fragment matching in-person attendees. Mirrors the Rust logic in
-/// `Attendee::is_in_person()` (domain crate): empty / unrecognized values
-/// default to in-person for legacy events, and substring matching covers the
-/// sheet's inconsistent capitalization / spacing
-/// ("In-Person", "in person", "IN_PERSON", ...).
+/// `Attendee::is_in_person()` (domain crate).
+///
+/// **Post-backfill simplification (Issue #059 Step 3.4):** the defensive
+/// substring LIKEs (`%in-person%`, `%in person%`, `%in_person%`) were removed
+/// once migration `0024` canonicalized all stored rows to snake_case
+/// (`in_person` / `online`) AND Step 3.2 (`commit 7114c03`) unified all write
+/// paths so no new legacy values can appear. The schema is
+/// `participation_type TEXT NOT NULL DEFAULT 'in_person'`, so `IS NULL` is
+/// impossible and was dropped.
+///
+/// The `OR TRIM(participation_type) = ''` clause is kept as a defensive belt-
+/// and-suspenders that mirrors `ParticipationType::parse("") == InPerson` —
+/// although the schema default prevents empty values on new rows, preserving
+/// the empty→in-person semantic guarantees the SQL predicate and the Rust
+/// classifier can never disagree on classification.
+///
+/// Returns false for `online`, `test`, `walkin`, and any future unrecognized
+/// value — matching `ParticipationType::parse` (which classifies those as
+/// `Other`). Walk-in detection is separate: `claim/mint.rs` and
+/// `handlers/attendee.rs` query `participation_type = 'walkin'` literally.
 ///
 /// Kept as a single `const` so the registered and checked-in in-person counts
 /// use the identical predicate and can never drift.
 const IN_PERSON_PREDICATE: &str = "(\
-    participation_type IS NULL \
-    OR TRIM(LOWER(participation_type)) = '' \
-    OR LOWER(participation_type) LIKE '%in-person%' \
-    OR LOWER(participation_type) LIKE '%in person%' \
-    OR LOWER(participation_type) LIKE '%in_person%'\
+    participation_type = 'in_person' \
+    OR TRIM(participation_type) = ''\
 )";
 
 /// Count approved in-person registrants. Used as the no-show denominator.
