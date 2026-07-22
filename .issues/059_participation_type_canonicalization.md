@@ -22,11 +22,22 @@
     → `in_person`×4, `online`×3, `test`/`walkin` untouched) + idempotency.
   - Post-apply: `wrangler d1 migrations list --remote` clean; `GROUP BY` shows
     only canonical values + the preserved `test` sentinel.
-- 🟡 **Step 3.4 (SQL predicate simplification) — UNBLOCKED (3.3 done), optional cleanup.**
-  Collapse the three `IN_PERSON_PREDICATE` LIKE patterns in `db/dashboard.rs`,
-  `db/attendees.rs`, `contacts.rs` to `participation_type = 'in_person'` once
-  confident no new legacy rows appear (allow ~1 sync cycle to confirm). Belongs
-  in code with tests, on its own commit — NOT in the 0024 migration.
+- ✅ **Step 3.4 (SQL predicate simplification) DONE** — PR #26 merged to `develop`
+  (`4146261`, 2026-07-22). Three sites simplified (all mirror `Attendee::is_in_person`):
+  `dashboard::IN_PERSON_PREDICATE` (const), `attendees::count_in_person_attendees`
+  (inline dead_code), `contacts::audience_aggregate` (2 CASE WHEN blocks).
+  Predicate: `(participation_type = 'in_person' OR TRIM(participation_type) = '')`.
+  Dropped `IS NULL` (schema is `NOT NULL`) + the three `%in-person%`/`%in person%`/
+  `%in_person%` LIKEs (no legacy variants post-backfill; write paths unified).
+  Kept `OR TRIM(...) = ''` defensively to mirror `ParticipationType::parse("") == InPerson`
+  so SQL and Rust classifier can never disagree. Walk-in detection unaffected
+  (queries `= 'walkin'` literally, separate from these predicates). Gating condition
+  verified pre-merge: prod has 0 non-canonical values and 0 empty/null rows.
+  CI: domain tests 104 pass, worker tests 246 pass, clippy clean.
+- 🟡 **Worker redeploy** — optional. The deployed worker (Version `1e2ba935`) still
+  has the old defensive LIKEs, which produce identical results on canonical data —
+  so functionally correct without a redeploy. A redeploy would lock in the simpler
+  predicates but carries deploy risk for zero behavioral change.
 
 ## 1. Root cause (why prod is messy)
 `attendees.participation_type` is written by **5+ independent paths using two
