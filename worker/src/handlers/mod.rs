@@ -357,9 +357,19 @@ pub fn routes(state: AppState) -> Router<()> {
         )
         .route("/refund/queue", get(deposit::refund_queue_handler))
         .route("/refund/refunded", get(deposit::refunded_list_handler))
+        // Held-as-credit list (admin) — sibling of refunded list, filters on
+        // held_as_credit = true (Issue #061 Phase 2).
+        .route("/refund/held", get(deposit::held_list_handler))
         .route(
             "/refund/mark/{attendee_id}",
             post(deposit::mark_refund_handler),
+        )
+        // Admin marks a deposit as held-as-rolling-credit on behalf of an
+        // attendee (attendee confirmed verbally but didn't tap the button).
+        // Mirrors mark_refund_handler's shape + the attendee hold invariants.
+        .route(
+            "/refund/hold/{attendee_id}",
+            post(deposit::admin_hold_deposit_handler),
         )
         .route(
             "/refund/manual/{attendee_id}",
