@@ -569,3 +569,68 @@ pub struct RolloverDepositResponse {
 pub async fn rollover_deposit(body: &RolloverDepositRequest) -> Result<RolloverDepositResponse, ApiError> {
     api_post_json("/escrow/rollover-deposit", body).await
 }
+
+// ===== Hold Deposit (THB rolling credit) API =====
+
+/// Request body for POST /api/deposit/hold — attendee holds deposit as rolling credit.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct HoldDepositRequest {
+    /// Event the deposit belongs to.
+    pub event_id: String,
+    /// Attendee API ID holding the deposit.
+    pub attendee_id: String,
+}
+
+/// Response for POST /api/deposit/hold — returns the new credit balance after hold.
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+pub struct HoldDepositResponse {
+    /// THB credit balance after hold (smallest unit if applicable, here raw THB).
+    pub credit_thb: u64,
+    /// USDC credit balance after hold (smallest unit).
+    pub credit_usdc: u64,
+    /// Human-readable message.
+    pub message: String,
+}
+
+/// Response for GET /api/deposit/credit-balance — attendee's current rolling credit.
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+pub struct CreditBalanceResponse {
+    /// THB credit balance.
+    pub credit_thb: u64,
+    /// USDC credit balance.
+    pub credit_usdc: u64,
+}
+
+/// POST /api/deposit/hold — hold deposit as rolling credit (THB or USDC).
+pub async fn hold_deposit(body: &HoldDepositRequest) -> Result<HoldDepositResponse, ApiError> {
+    api_post_json("/deposit/hold", body).await
+}
+
+/// GET /api/deposit/credit-balance — fetch the authenticated attendee's rolling credit balance.
+pub async fn get_credit_balance() -> Result<CreditBalanceResponse, ApiError> {
+    let response = api_get("/deposit/credit-balance").await?;
+
+    if !response.ok() {
+        let body: ApiResponse<()> = response_json(&response).await.unwrap_or(ApiResponse {
+            success: false,
+            data: None,
+            error: Some("Failed to get credit balance".to_string()),
+            correlation_id: None,
+        });
+        return Err(ApiError {
+            message: body.error.unwrap_or_default(),
+            status: 0,
+        });
+    }
+
+    let wrapper: ApiResponse<CreditBalanceResponse> =
+        response_json(&response).await.map_err(|e| ApiError {
+            message: format!("Failed to parse credit balance: {e}"),
+            status: 0,
+        })?;
+
+    wrapper.data.ok_or_else(|| ApiError {
+        message: wrapper.error.unwrap_or("No data".to_string()),
+        status: 0,
+    })
+}
