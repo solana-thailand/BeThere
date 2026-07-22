@@ -10,8 +10,22 @@
   `main` at `b432ac5` via Handover 121 (2026-06-27). No data change — D1 still
   holds legacy values until 3.3 backfill runs. But all NEW writes are now
   canonical; the mess stops growing.
-- 🟡 **Steps 3.3 (backfill) + 3.4 (SQL simplification) — still awaiting approval.**
-  No code, no prod change yet.
+- 🟧 **Step 3.3 (backfill) — STAGED + LOCALLY VALIDATED, prod apply pending sign-off.**
+  Migration `worker/migrations/0024_attendees_participation_type_canonicalize.sql`
+  created (guarded, idempotent, mirrors §3.3 SQL exactly). Local dry-run passed:
+  seeded 9 rows across all prod variants → applied 0024 → got `in_person`×4,
+  `online`×3, `test`×1 (untouched), `walkin`×1 (untouched). Idempotency confirmed
+  (re-run on canonical data = no-op). Prod dry SELECT verifies 148 rows would
+  change (21 `""` + 16 `In-Person` → `in_person`; 111 `Online` → `online`),
+  293 already-canonical (idempotent), 1 `test` untouched, 0 `walkin` exist.
+  Prerequisites met: prod distribution confirms new writes are canonical
+  (online 53→207, in_person 66→86 since 3.2 deployed; legacy variants frozen).
+  Backup taken to `/tmp/bethere-backup-pre-0024.sql` (1.3M, 2790 INSERTs).
+  Awaiting explicit "go" per §5 (deliberate, sequenced release — not autonomous).
+- 🟡 **Step 3.4 (SQL predicate simplification) — still awaiting 3.3 completion.**
+  Optional cleanup; collapse the three `IN_PERSON_PREDICATE` LIKE patterns to
+  `participation_type = 'in_person'` once rows are canonical. Belongs in code
+  with tests, on its own commit — NOT in the 0024 migration.
 
 ## 1. Root cause (why prod is messy)
 `attendees.participation_type` is written by **5+ independent paths using two
