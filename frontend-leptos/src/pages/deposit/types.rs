@@ -68,8 +68,12 @@ pub enum DepositPageState {
     Loading,
     /// API or param error.
     Error(String),
-    /// Deposits not enabled for this event.
-    NotEnabled,
+    /// Deposits not enabled for the resolved event.
+    /// Carries the full response so the view can surface the resolved
+    /// event name/slug — critical for diagnosing the "no event_id → wrong
+    /// active-event fallback" case where the page shows "Not Available"
+    /// despite the attendee's actual event having deposits enabled.
+    NotEnabled(DepositStatusResponse),
     /// Deposit already completed.
     AlreadyDeposited(DepositStatusResponse),
     /// Ready to choose payment method.
@@ -167,7 +171,7 @@ pub fn deposit_step(
         // No stepper for terminal / pre-flow states
         DepositPageState::Loading
         | DepositPageState::Error(_)
-        | DepositPageState::NotEnabled
+        | DepositPageState::NotEnabled(_)
         | DepositPageState::AlreadyDeposited(_) => None,
     }
 }

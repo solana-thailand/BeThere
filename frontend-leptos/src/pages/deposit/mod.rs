@@ -93,7 +93,7 @@ pub fn Deposit() -> impl IntoView {
             match api::get_deposit_status(&attendee_id, event_id.as_deref()).await {
                 Ok(data) => {
                     if !data.deposit_enabled {
-                        set_state.set(DepositPageState::NotEnabled);
+                        set_state.set(DepositPageState::NotEnabled(data));
                     } else if let Some(status) = &data.status {
                         if status.rejected {
                             set_state.set(DepositPageState::ThbRejected(data));
@@ -247,7 +247,9 @@ pub fn Deposit() -> impl IntoView {
                         DepositPageState::Error(msg) => already_deposited::error_view(&msg),
 
                         // ===== Not Enabled =====
-                        DepositPageState::NotEnabled => already_deposited::not_enabled_view(),
+                        DepositPageState::NotEnabled(data) => {
+                            already_deposited::not_enabled_view(&data)
+                        }
 
                         // ===== Already Deposited =====
                         DepositPageState::AlreadyDeposited(data) => {
