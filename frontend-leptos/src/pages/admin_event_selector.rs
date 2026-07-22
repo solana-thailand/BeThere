@@ -199,10 +199,34 @@ pub fn AdminEventSelector(
                 closure.as_ref().unchecked_ref(),
                 true,
             );
+
+            // Remove the listener when the component unmounts. Without this,
+            // the leaked closure continues firing on every scroll across ALL
+            // pages the user subsequently navigates to, accessing signals
+            // (`open`, `set_open`) whose source has been disposed — which can
+            // trigger `RuntimeError: unreachable executed` panics that crash
+            // the deposit page (and any other page) after leaving /admin.
+            //
+            // `Closure<dyn Fn(Event)>` is `!Send`, so it cannot be moved into
+            // `on_cleanup` (which requires `Send + Sync + 'static`). Instead:
+            //   1. Clone the JS `Function` handle (which IS `Send + Sync` —
+            //      `JsValue` has `unsafe impl Send/Sync`)
+            //   2. Forget the Rust `Closure` (keeps the JS Function alive)
+            //   3. Move only the `Function` clone into `on_cleanup`
+            // The listener is removed on unmount, so the forgotten closure
+            // is never called again — the residual memory is bounded (one
+            // per admin-page visit) and preferable to the crash.
+            let func: js_sys::Function =
+                closure.as_ref().unchecked_ref::<js_sys::Function>().clone();
+            closure.forget();
+            leptos::prelude::on_cleanup(move || {
+                let _ = window.remove_event_listener_with_callback_and_bool(
+                    "scroll",
+                    &func,
+                    true,
+                );
+            });
         }
-        // Leak for the page lifetime. Bounded because the component mounts
-        // once per admin-page navigation (same lifecycle as the selector DOM).
-        closure.forget();
     }
 
     // Shared selection handler — used by both item clicks and Enter key.
