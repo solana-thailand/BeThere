@@ -1,6 +1,6 @@
 //! Action card components for deposit, refund, claim, and reclaim flows.
 
-use crate::api::{self, DepositMethod, RolloverDepositRequest};
+use crate::api::{self, DepositMethod, HoldDepositRequest, RolloverDepositRequest};
 use crate::components::{self, ToastType};
 use crate::icons::{Icon, IconName, wallet_icon_name};
 use crate::utils;
@@ -526,6 +526,169 @@ pub fn RolloverActionCard(
                         <button
                             class="btn btn-outline btn-xs ticket-action-cancel-xs"
                             on:click=move |_| set_state.set(RolloverState::Ready)
+                        >
+                            "Try Again"
+                        </button>
+                    }.into_any(),
+                }}
+            </div>
+        </div>
+    }
+}
+
+// ===== Hold Deposit (THB rolling credit) =====
+
+/// State machine for the THB hold-deposit-as-credit flow.
+/// Simpler than rollover: no wallet connection, just an authenticated POST.
+#[derive(Clone)]
+enum HoldDepositState {
+    /// Initial CTA.
+    Ready,
+    /// Confirmation step explaining the commitment.
+    Confirm,
+    /// POST in flight.
+    Holding,
+    /// Success — shows the new credit balance.
+    Confirmed { credit_thb: u64, credit_usdc: u64 },
+    /// Error.
+    Error(String),
+}
+
+/// Hold Deposit action card — attendee keeps their THB deposit as rolling credit
+/// instead of claiming a refund. The held credit auto-covers their next event
+/// registration. THB-only counterpart to the USDC `RolloverActionCard`.
+///
+/// Backend: `POST /api/deposit/hold` (validates ownership + requires verified deposit).
+#[component]
+pub fn HoldDepositCard(
+    /// Event the deposit belongs to.
+    #[prop(into)]
+    event_id: String,
+    /// Attendee API ID.
+    #[prop(into)]
+    attendee_id: String,
+    /// THB amount being held (for the confirm copy).
+    deposit_amount_thb: u64,
+) -> impl IntoView {
+    let (state, set_state) = signal(HoldDepositState::Ready);
+
+    // Store non-Copy props so they can be accessed from the async closure.
+    let eid = StoredValue::new(event_id);
+    let aid = StoredValue::new(attendee_id);
+    let amount = deposit_amount_thb;
+
+    view! {
+        <div class="ticket-action-card ticket-action-card--hold">
+            <div class="ticket-action-icon">
+                <Icon icon=IconName::Save class="icon-sm" />
+            </div>
+            <div>
+                {move || match state.get() {
+                    HoldDepositState::Ready => view! {
+                        <div class="ticket-action-title">"Hold Deposit for Next Event"</div>
+                        <div class="ticket-action-desc">
+                            "Keep your deposit as credit and we'll auto-apply it to your next event. \
+                             No need to pay again — just RSVP."
+                        </div>
+                        <button
+                            class="btn btn-outline btn-sm ticket-action-btn"
+                            on:click=move |_| set_state.set(HoldDepositState::Confirm)
+                        >
+                            <Icon icon=IconName::Save class="icon-sm" />
+                            " Hold Deposit"
+                        </button>
+                    }.into_any(),
+
+                    HoldDepositState::Confirm => view! {
+                        <div class="ticket-action-title">"Confirm: Hold "{amount}" THB"</div>
+                        <div class="ticket-action-desc">
+                            {format!(
+                                "We'll keep your {} THB deposit on file. It will be applied \
+                                 automatically when you register for your next event. \
+                                 You can request its return at any time.",
+                                amount
+                            )}
+                        </div>
+                        <button
+                            class="btn btn-success btn-sm ticket-action-btn"
+                            on:click=move |_| {
+                                let sv_eid = eid;
+                                let sv_aid = aid;
+                                let ss = set_state;
+                                ss.set(HoldDepositState::Holding);
+                                leptos::task::spawn_local(async move {
+                                    let body = HoldDepositRequest {
+                                        event_id: sv_eid.get_value(),
+                                        attendee_id: sv_aid.get_value(),
+                                    };
+                                    match api::hold_deposit(&body).await {
+                                        Ok(resp) => {
+                                            log::info!(
+                                                "[hold] deposit held: thb={} usdc={}",
+                                                resp.credit_thb, resp.credit_usdc
+                                            );
+                                            ss.set(HoldDepositState::Confirmed {
+                                                credit_thb: resp.credit_thb,
+                                                credit_usdc: resp.credit_usdc,
+                                            });
+                                        }
+                                        Err(e) => {
+                                            log::error!("[hold] failed: {}", e.message);
+                                            ss.set(HoldDepositState::Error(e.message));
+                                        }
+                                    }
+                                });
+                            }
+                        >
+                            <Icon icon=IconName::Check class="icon-sm" />
+                            " Confirm & Hold"
+                        </button>
+                        <button
+                            class="btn btn-outline btn-xs ticket-action-cancel"
+                            on:click=move |_| set_state.set(HoldDepositState::Ready)
+                        >
+                            "Cancel"
+                        </button>
+                    }.into_any(),
+
+                    HoldDepositState::Holding => view! {
+                        <div class="ticket-action-title">"Holding Deposit..."</div>
+                        <div class="ticket-action-desc ticket-action-signing-row">
+                            <span class="spinner spinner-sm"></span>
+                            "Processing your request..."
+                        </div>
+                    }.into_any(),
+
+                    HoldDepositState::Confirmed { credit_thb, credit_usdc } => {
+                        let balance_str = if credit_thb > 0 && credit_usdc > 0 {
+                            format!("{} THB + {} USDC", credit_thb, credit_usdc)
+                        } else if credit_thb > 0 {
+                            format!("{} THB", credit_thb)
+                        } else {
+                            format!("{} USDC", credit_usdc)
+                        };
+                        view! {
+                            <div class="ticket-action-title ticket-action-title-success">
+                                "Deposit Held as Credit ✓"
+                            </div>
+                            <div class="ticket-action-desc">
+                                {format!(
+                                    "Your {} THB is now rolling credit. Total credit: {}. \
+                                     We'll auto-apply it to your next registration.",
+                                    amount, balance_str
+                                )}
+                            </div>
+                        }.into_any()
+                    },
+
+                    HoldDepositState::Error(msg) => view! {
+                        <div class="ticket-action-title ticket-action-title-danger">
+                            "Hold Failed"
+                        </div>
+                        <div class="ticket-action-desc">{msg.clone()}</div>
+                        <button
+                            class="btn btn-outline btn-xs ticket-action-cancel-xs"
+                            on:click=move |_| set_state.set(HoldDepositState::Ready)
                         >
                             "Try Again"
                         </button>
