@@ -946,6 +946,11 @@ pub(crate) async fn get_attendee_with_claim_counts(
 }
 
 /// Count in-person attendees for an event from D1.
+///
+/// Predicate mirrors `dashboard::IN_PERSON_PREDICATE` (canonical match post-
+/// backfill; see Issue #059 Step 3.4). Inlined here rather than referencing
+/// the dashboard const to avoid a cross-module dependency for this dead-code
+/// helper; the two must stay in sync.
 #[allow(dead_code)]
 pub(crate) async fn count_in_person_attendees(
     db: &D1Database,
@@ -954,10 +959,8 @@ pub(crate) async fn count_in_person_attendees(
     let stmt = db.prepare(
         "SELECT COUNT(*) as cnt FROM attendees \
          WHERE event_id = ?1 AND \
-         (participation_type LIKE '%in-person%' \
-          OR participation_type LIKE '%in person%' \
-          OR participation_type = '' \
-          OR participation_type IS NULL)",
+         (participation_type = 'in_person' \
+          OR TRIM(participation_type) = '')",
     );
     let cnt = stmt
         .bind_refs(&[D1Type::Text(event_id)])

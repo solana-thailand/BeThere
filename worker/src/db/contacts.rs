@@ -197,9 +197,21 @@ pub async fn audience_aggregate(
         _ => (String::new(), Vec::new()),
     };
 
-    // in-person matching mirrors `Attendee::is_in_person`:
-    //   empty/null ⇒ in-person (legacy default), else substring match on the
-    //   canonical "in-person" / "in person" / "in_person" spellings.
+    // In-person matching mirrors `Attendee::is_in_person` (domain crate).
+    //
+    // Post-backfill simplification (Issue #059 Step 3.4): substring LIKEs were
+    // removed once migration `0024` canonicalized all stored rows to snake_case
+    // AND Step 3.2 unified all write paths so no new legacy values can appear.
+    // The schema is `TEXT NOT NULL DEFAULT 'in_person'`, so `IS NULL` is
+    // impossible. `TRIM(...) = ''` is kept defensively to mirror
+    // `ParticipationType::parse("") == InPerson` so the SQL and the Rust
+    // classifier can never disagree on classification.
+    //
+    // `online_count` is derived as NOT(in-person), preserving the pre-simplification
+    // behavior (it counts `online` + `test` + `walkin` + any future unrecognized
+    // value). It is NOT a strict `participation_type = 'online'` match — that
+    // would be a behavioral change beyond the scope of #059 Step 3.4.
+    let in_person_case = "(a.participation_type = 'in_person' OR TRIM(a.participation_type) = '')";
     let sql = format!(
         "SELECT \
          LOWER(a.email) AS email, \
@@ -207,22 +219,8 @@ pub async fn audience_aggregate(
          COUNT(DISTINCT a.event_id) AS events_joined, \
          SUM(CASE WHEN a.checked_in_at IS NOT NULL THEN 1 ELSE 0 END) AS checked_in_count, \
          SUM(CASE WHEN LOWER(a.approval_status) = 'approved' THEN 1 ELSE 0 END) AS approved_count, \
-         SUM(CASE \
-             WHEN a.participation_type IS NULL \
-               OR TRIM(a.participation_type) = '' \
-               OR LOWER(a.participation_type) LIKE '%in-person%' \
-               OR LOWER(a.participation_type) LIKE '%in person%' \
-               OR LOWER(a.participation_type) LIKE '%in_person%' \
-             THEN 1 ELSE 0 \
-         END) AS in_person_count, \
-         SUM(CASE \
-             WHEN a.participation_type IS NULL \
-               OR TRIM(a.participation_type) = '' \
-               OR LOWER(a.participation_type) LIKE '%in-person%' \
-               OR LOWER(a.participation_type) LIKE '%in person%' \
-               OR LOWER(a.participation_type) LIKE '%in_person%' \
-             THEN 0 ELSE 1 \
-         END) AS online_count, \
+         SUM(CASE WHEN {in_person_case} THEN 1 ELSE 0 END) AS in_person_count, \
+         SUM(CASE WHEN {in_person_case} THEN 0 ELSE 1 END) AS online_count, \
          MIN(a.created_at) AS first_registered, \
          MAX(a.created_at) AS last_registered, \
          GROUP_CONCAT(DISTINCT a.event_id) AS event_ids, \
