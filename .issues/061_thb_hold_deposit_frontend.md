@@ -87,31 +87,44 @@ Hold gets a confirm step because cash stays with the organizer. Refund stays the
 
 ## 5. Implementation tasks
 
-### Phase 1 — Attendee side (core)
+### Phase 1 — Attendee side (core) ✅ DONE (commits `3a05a37`, `41f0501`, `3c785f4`, `b5ee048`)
 
 **Backend wire shapes already match — just add frontend types + calls.**
 
-- [ ] `frontend-leptos/src/api/deposit.rs` — add:
+- [x] `frontend-leptos/src/api/deposit.rs` — add:
   - `HoldDepositRequest { event_id, attendee_id }`
   - `HoldDepositResponse { credit_thb: u64, credit_usdc: u64, message: String }`
   - `CreditBalanceResponse { credit_thb: u64, credit_usdc: u64 }`
   - `hold_deposit(body)` → `api_post_json("/deposit/hold", body)`
   - `get_credit_balance()` → `api_get("/deposit/credit-balance")`
-- [ ] `frontend-leptos/src/pages/ticket/action_cards.rs` — add `HoldDepositCard` component:
-  - State machine: `Ready` → `Confirm` → `Holding` → `Confirmed` → `Error`
-  - Props: `event_id`, `attendee_id`, `deposit_amount_thb` (for confirm copy)
+- [x] `frontend-leptos/src/pages/ticket/action_cards.rs` — add `HoldDepositCard` component:
+  - State machine: `Ready` → `Confirm` → `Holding` → `Confirmed` → `Error` → `AlreadyHeld`
+  - Props: `event_id`, `attendee_id`, `deposit_amount_thb`, `already_held`
   - On confirm: `api::hold_deposit(...)`; on success show new balance + success state
   - Model after `RolloverActionCard` but **simpler** (no wallet flow, no Solana TX)
-- [ ] `frontend-leptos/src/pages/ticket/in_person_view.rs` — insert `<HoldDepositCard />` in the
+- [x] `frontend-leptos/src/pages/ticket/in_person_view.rs` — insert `<HoldDepositCard />` in the
       deposit-action branch when: `dep.verified && !dep.refunded && is_checked_in && method == Thb`
+      (passes `already_held=dep.held_as_credit` so reload mounts in `AlreadyHeld`)
 - [ ] (Optional polish) Credit chip on ticket page that fetches `get_credit_balance()` on mount
       when `is_checked_in` — shows "Deposit Credit: 500 THB" if balance > 0.
 
-### Phase 2 — Admin side (status visibility)
+**Backend hardening landed alongside Phase 1 (commit `b5ee048`):** the double-credit gap in
+`hold_deposit_handler` is resolved via a distinct `held_as_credit` flag on `ThbDeposit`
+(migration `0022`) + settle-before-increment ordering + USDC rejection. See §8 item 0 (resolved).
+
+### Phase 2 — Admin side (status visibility) — REMAINING (scoping note)
 
 - [ ] Admin contacts view — add `credit_thb` / `credit_usdc` columns (data already in D1/Sheets K–M)
 - [ ] Liability header chip — "Total credit held: X THB across N attendees" (sum query)
 - [ ] Badge for "credit refund requested" attendees (Phase 3 dependency)
+
+**Scoping note (discovered while wiring Phase 1):** the admin page currently renders a
+per-event **attendee list** (`AttendeeListItem`), not a cross-event contacts table — contacts
+are surfaced via the `GET /api/contacts/audience` CSV export. Credit lives on the **contact**
+(`deposit_credit_thb/usdc/since`, D1 col K–M), not the per-event attendee row. So "credit
+columns" requires either (a) enriching `AttendeeListItem` with a credit join, or (b) building a
+new in-app contacts table. Decision needed before implementing — do not assume the existing
+attendee table is the home for credit data.
 
 ### Phase 3 — Exit path (lightweight)
 
