@@ -1,14 +1,21 @@
 //! Admin deposit and refund management — embedded in the admin dashboard.
 //!
-//! Two sub-tabs:
+//! Three sub-tabs:
 //! - **Deposits**: Shows THB payment slips pending admin verification.
 //! - **Refund Queue**: Shows verified deposits awaiting refund processing.
+//!   Includes a "Hold as Credit" action for attendees who confirmed hold verbally.
+//! - **Held as Credit**: Shows deposits held as rolling credit for the next event.
+//!   Includes a "Credit Refund Requested" badge + sub-list when any contact has
+//!   requested return of their held credit (Issue #061 Phase 3 — exit path).
 
 use std::collections::HashMap;
 
 use leptos::prelude::*;
 
-use crate::api::{self, MarkRefundRequest, ThbDepositInfo, VerifySlipRequest};
+use crate::api::{
+    self, AdminHoldRequest, ClearCreditRefundRequest, CreditLiability, CreditRefundRequest,
+    MarkRefundRequest, ThbDepositInfo, VerifySlipRequest,
+};
 use crate::components::{self, ToastType};
 use crate::icons::{Icon, IconName};
 use crate::utils;
@@ -22,6 +29,7 @@ enum AdminDepositTab {
     Deposits,
     RefundQueue,
     Refunded,
+    Held,
 }
 
 // ---------------------------------------------------------------------------
@@ -40,6 +48,21 @@ pub fn AdminDeposits(
     let (slips, set_slips) = signal(Vec::<ThbDepositInfo>::new());
     let (refunds, set_refunds) = signal(Vec::<ThbDepositInfo>::new());
     let (refunded_list, set_refunded_list) = signal(Vec::<ThbDepositInfo>::new());
+    let (held_list, set_held_list) = signal(Vec::<ThbDepositInfo>::new());
+    // Cross-event credit liability — organizer's total cash held as rolling
+    // deposit credit across ALL contacts (backs the header chip). Global, not
+    // per-event; loaded alongside the per-event lists for one refresh cycle.
+    let (liability, set_liability) = signal(CreditLiability::default());
+    // Cross-event credit-refund-request queue — contacts who requested return
+    // of their held credit (Issue #061 Phase 3 exit path). Backs the badge on
+    // the Held-as-Credit tab. Global, not per-event; same refresh cycle as the
+    // other reads. Empty when D1 is unreachable (admin view still renders).
+    let (credit_refund_requests, set_credit_refund_requests) =
+        signal(Vec::<CreditRefundRequest>::new());
+    // Tracks which email is currently being cleared (organizer "✓ Clear" click)
+    // — disables the row's clear button while the POST is in flight and keys
+    // per-row pending state. Idempotent clear, so a re-click is a safe retry.
+    let (clear_pending_email, set_clear_pending_email) = signal(None::<String>);
 
     // UI state
     let (loading, set_loading) = signal(true);
@@ -69,6 +92,9 @@ pub fn AdminDeposits(
 
         let set_slips = set_slips;
         let set_refunds = set_refunds;
+        let set_held_list = set_held_list;
+        let set_liability = set_liability;
+        let set_credit_refund_requests = set_credit_refund_requests;
         let set_loading = set_loading;
         let set_toast = set_toast;
 
@@ -76,6 +102,9 @@ pub fn AdminDeposits(
             let slips_result = api::get_pending_slips(eid.as_deref()).await;
             let refunds_result = api::get_refund_queue(eid.as_deref()).await;
             let refunded_result = api::get_refunded_list(eid.as_deref()).await;
+            let held_result = api::get_held_list(eid.as_deref()).await;
+            let liability_result = api::get_credit_liability().await;
+            let refund_requests_result = api::get_credit_refund_requests().await;
 
             match slips_result {
                 Ok(data) => set_slips.set(data.slips),
@@ -108,6 +137,32 @@ pub fn AdminDeposits(
                 }
             }
 
+            match held_result {
+                Ok(data) => set_held_list.set(data.held),
+                Err(e) => {
+                    log::warn!("[admin-deposit] failed to load held list: {e}");
+                }
+            }
+
+            // Liability is non-fatal — the deposits view must still render with
+            // a zero chip if D1 is unreachable (backend already degrades to 0).
+            match liability_result {
+                Ok(data) => set_liability.set(data),
+                Err(e) => {
+                    log::warn!("[admin-deposit] failed to load credit liability: {e}");
+                }
+            }
+
+            // Credit refund requests is non-fatal — the Held-as-Credit tab must
+            // still render with an empty badge if D1 is unreachable (backend
+            // already degrades to empty list). Cross-event (global).
+            match refund_requests_result {
+                Ok(data) => set_credit_refund_requests.set(data.requests),
+                Err(e) => {
+                    log::warn!("[admin-deposit] failed to load credit refund requests: {e}");
+                }
+            }
+
             set_loading.set(false);
         });
     });
@@ -115,6 +170,40 @@ pub fn AdminDeposits(
     // Helper to refresh data after an action
     let refresh_data = move || {
         set_refresh_counter.update(|c| *c += 1);
+    };
+
+    // Clear a credit-refund-request flag (Issue #061 Phase 3 — exit path).
+    // Organizer clicks "✓ Clear" after processing the payout through the
+    // existing refund tooling. Idempotent server-side, so a re-click is a safe
+    // retry; the row's clear button stays disabled while its POST is in flight.
+    let handle_clear_credit_refund_request = move |email: String| {
+        let set_toast = set_toast;
+        let set_clear_pending = set_clear_pending_email;
+        let refresh = refresh_data.clone();
+        set_clear_pending.set(Some(email.clone()));
+
+        leptos::task::spawn_local(async move {
+            let body = ClearCreditRefundRequest { email: email.clone() };
+            match api::clear_credit_refund_request(&body).await {
+                Ok(_) => {
+                    components::show_toast(
+                        &set_toast,
+                        "Cleared credit refund request.",
+                        ToastType::Success,
+                    );
+                    refresh();
+                }
+                Err(e) => {
+                    log::warn!("[admin-deposit] failed to clear credit refund request: {e}");
+                    components::show_toast(
+                        &set_toast,
+                        &format!("Failed to clear request: {e}"),
+                        ToastType::Error,
+                    );
+                }
+            }
+            set_clear_pending.set(None);
+        });
     };
 
     // Approve a slip
@@ -248,10 +337,47 @@ pub fn AdminDeposits(
         });
     };
 
+    // Mark a deposit as held-as-rolling-credit on behalf of the attendee
+    // (attendee confirmed verbally / over chat but didn't tap the button
+    // themselves). Mirrors handle_mark_refund's shape; the backend preserves
+    // all financial invariants (settle-before-increment, idempotency guards).
+    let handle_admin_hold = move |item: ThbDepositInfo| {
+        let attendee_id = item.attendee_id.clone();
+        let event_id = item.event_id.clone();
+        let key = format!("hold-{attendee_id}");
+        set_action_pending.set(Some(key));
+
+        leptos::task::spawn_local(async move {
+            let body = AdminHoldRequest { event_id };
+            match api::admin_hold_deposit(&attendee_id, &body).await {
+                Ok(_) => {
+                    components::show_toast(
+                        &set_toast,
+                        "Deposit held as rolling credit",
+                        ToastType::Success,
+                    );
+                    refresh_data();
+                }
+                Err(e) => {
+                    components::show_toast(
+                        &set_toast,
+                        &format!("Failed to hold deposit: {e}"),
+                        ToastType::Error,
+                    );
+                }
+            }
+            set_action_pending.set(None);
+        });
+    };
+
     // Computed: pending count for display
     let pending_count = Memo::new(move |_| slips.get().len());
     let refund_count = Memo::new(move |_| refunds.get().len());
     let refunded_count = Memo::new(move |_| refunded_list.get().len());
+    let held_count = Memo::new(move |_| held_list.get().len());
+    // Cross-event count of contacts who requested return of held credit
+    // (Issue #061 Phase 3). Backs the badge on the Held-as-Credit tab.
+    let refund_request_count = Memo::new(move |_| credit_refund_requests.get().len());
 
     let has_event = move || active_event_id.get().is_some();
 
@@ -266,6 +392,35 @@ pub fn AdminDeposits(
 
             // Event selected — show full content
             <Show when=move || has_event() fallback=|| view! { <div></div> }>
+            // Credit liability header chip — organizer's total cash held as
+            // rolling deposit credit across all contacts (Issue #061 Phase 2
+            // option a2). Cross-event (global); only renders when there's
+            // actual liability to surface (no clutter when balance is zero).
+            <Show when=move || { let l = liability.get(); l.total_thb > 0 || l.total_usdc > 0 } fallback=|| view! { <div></div> }>
+                <div
+                    class="admin-dep-liability-chip"
+                    title="Your total cash liability from rolling deposit credit — attendees who chose credit over refund. Auto-applies to their next event registration."
+                >
+                    <Icon icon=IconName::MoneyWings class="icon-sm"/>
+                    <span>
+                        {move || {
+                            let l = liability.get();
+                            let mut parts: Vec<String> = Vec::new();
+                            if l.total_thb > 0 {
+                                parts.push(format!("{} THB", l.total_thb));
+                            }
+                            if l.total_usdc > 0 {
+                                parts.push(format!("{} USDC", l.total_usdc));
+                            }
+                            format!(
+                                "Total credit held: {} across {} contacts",
+                                parts.join(" + "),
+                                l.contact_count
+                            )
+                        }}
+                    </span>
+                </div>
+            </Show>
             // Sub-tab navigation
             <div class="tabs">
                 <button
@@ -301,6 +456,27 @@ pub fn AdminDeposits(
                     <Show when=move || refunded_count.get() != 0 fallback=|| view! { <span></span> }>
                         <span class="badge badge-success">
                             {move || refunded_count.get()}
+                        </span>
+                    </Show>
+                </button>
+                <button
+                    class="tab"
+                    class:active=move || active_tab.get() == AdminDepositTab::Held
+                    on:click=move |_| set_active_tab.set(AdminDepositTab::Held)
+                >
+                    <Icon icon=IconName::MoneyWings class="icon-sm"/>" Held as Credit"
+                    <Show when=move || held_count.get() != 0 fallback=|| view! { <span></span> }>
+                        <span class="badge badge-success">
+                            {move || held_count.get()}
+                        </span>
+                    </Show>
+                    // Phase 3 exit path — attendees who requested return of held
+                    // credit (Issue #061 §D3). Warning badge, separate from the
+                    // success held-count badge so the organizer can see at a
+                    // glance that action is requested.
+                    <Show when=move || refund_request_count.get() != 0 fallback=|| view! { <span></span> }>
+                        <span class="badge badge-warning" title="Attendees who requested return of their held credit">
+                            {move || refund_request_count.get()}
                         </span>
                     </Show>
                 </button>
@@ -439,6 +615,9 @@ pub fn AdminDeposits(
                             let refund_key = format!("refund-{item_id}");
                             let refund_disabled = current_action.as_ref().map_or(false, |k| k == &refund_key);
                             let refund_loading = current_action.as_ref().map_or(false, |k| k == &refund_key);
+                            let hold_key = format!("hold-{item_id}");
+                            let hold_disabled = current_action.as_ref().map_or(false, |k| k == &hold_key);
+                            let hold_loading = hold_disabled;
 
                             let amount = format!("{} THB", item.amount_thb);
                             let verified_by = item.verified_by.as_deref().unwrap_or("Unknown");
@@ -452,6 +631,7 @@ pub fn AdminDeposits(
                             let display_account_name = item.account_name.clone();
 
                             let item_for_refund = item.clone();
+                            let item_for_hold = item.clone();
                             let item_id_for_click = item_id.clone();
                             let item_id_for_style = item_id.clone();
                             // Dedicated clones for the input's reactive closures.
@@ -558,6 +738,19 @@ pub fn AdminDeposits(
                                                         "Cancel"
                                                     </button>
                                                 </div>
+                                            </div>
+                                            // Hold-as-credit action — use when the attendee
+                                            // confirmed hold verbally but didn't tap their own
+                                            // button. Credits the attendee's contact row.
+                                            <div class="admin-dep-hold-row">
+                                                <button
+                                                    class="btn btn-secondary btn-sm"
+                                                    disabled=hold_disabled
+                                                    title="Hold this deposit as rolling credit for the attendee's next event (use when the attendee confirmed hold verbally)"
+                                                    on:click=move |_| handle_admin_hold(item_for_hold.clone())
+                                                >
+                                                    {if hold_loading { "Holding..." } else { "↻ Hold as Credit" }}
+                                                </button>
                                             </div>
                                         </div>
                                     </div>
@@ -672,6 +865,172 @@ pub fn AdminDeposits(
                                         </div>
                                         <div>
                                             <span class="badge badge-success">"✓ Refunded"</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                        }).collect_view()
+                    }}
+                </Show>
+
+                // ── Held as Credit Tab ──
+                <Show
+                    when=move || active_tab.get() == AdminDepositTab::Held
+                    fallback=|| view! { <div></div> }
+                >
+                    <div class="admin-section-header">
+                        <h3><Icon icon=IconName::MoneyWings class="icon-sm icon-success"/>{format!(" {} deposit{} held as credit", held_count.get(), if held_count.get() != 1 { "s" } else { "" })}</h3>
+                        <p class="admin-dep-flow-hint">
+                            "These attendees' deposits are kept as rolling credit for their next event registration. They are excluded from the refund queue. Use the " <strong>"Hold as Credit"</strong> " action in the Refund Queue when an attendee confirms hold verbally."
+                        </p>
+                    </div>
+
+                    // Phase 3 exit path — "Credit Refund Requested" sub-list
+                    // (Issue #061 §D3). Cross-event: contacts who clicked
+                    // "Request Return" on their ticket page. Rendered at the
+                    // top of the Held tab (actionable items first). The
+                    // organizer processes the actual payout through the existing
+                    // refund tooling, then clicks "✓ Clear" to dismiss the
+                    // request. Renders only when there's at least one open
+                    // request (no clutter otherwise).
+                    <Show
+                        when=move || refund_request_count.get() != 0
+                        fallback=|| view! { <div></div> }
+                    >
+                        <div class="admin-dep-credit-refund-requests">
+                            <div class="admin-dep-flow-hint">
+                                <Icon icon=IconName::Warning class="icon-sm"/>
+                                {format!(
+                                    "{} contact{} requested return of held credit. Process the payout through your refund channel, then clear the request.",
+                                    refund_request_count.get(),
+                                    if refund_request_count.get() != 1 { "s" } else { "" }
+                                )}
+                            </div>
+                            {move || {
+                                let items: Vec<_> = credit_refund_requests.get().iter().map(|req| {
+                                    let email = req.email.clone();
+                                    let name = req.name.clone();
+                                    let credit_thb = req.credit_thb;
+                                    let credit_usdc = req.credit_usdc;
+                                    let requested_at = req.requested_at.clone();
+                                    (email, name, credit_thb, credit_usdc, requested_at)
+                                }).collect();
+
+                                items.into_iter().map(|(email, name, credit_thb, credit_usdc, requested_at)| {
+                                    let pending = clear_pending_email.get();
+                                    let is_pending = pending.as_deref() == Some(email.as_str());
+                                    let display_name = if name.is_empty() { email.clone() } else { name.clone() };
+                                    let credit_str = if credit_thb > 0 && credit_usdc > 0 {
+                                        format!("{} THB + {} USDC", credit_thb, credit_usdc)
+                                    } else if credit_thb > 0 {
+                                        format!("{} THB", credit_thb)
+                                    } else if credit_usdc > 0 {
+                                        format!("{} USDC", credit_usdc)
+                                    } else {
+                                        "0".to_string()
+                                    };
+                                    let requested_display = if requested_at.is_empty() {
+                                        "N/A".to_string()
+                                    } else {
+                                        utils::format_timestamp(&requested_at)
+                                    };
+                                    let click_email = email.clone();
+                                    view! {
+                                        <div class="card admin-dep-credit-refund-row">
+                                            <div class="flex-row-wrap">
+                                                <div>
+                                                    <div class="admin-attendee-name">
+                                                        {utils::escape_html(&display_name)}
+                                                    </div>
+                                                    <div class="admin-amount-line">
+                                                        {format!("Held credit: {}", credit_str)}
+                                                    </div>
+                                                    <div class="panel-hint">
+                                                        {format!("Requested: {}", requested_display)}
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <span class="badge badge-warning">"Refund Requested"</span>
+                                                    <button
+                                                        class="btn btn-success btn-xs admin-dep-clear-btn"
+                                                        disabled=move || is_pending
+                                                        on:click=move |_| {
+                                                            handle_clear_credit_refund_request(click_email.clone());
+                                                        }
+                                                    >
+                                                        {move || if is_pending {
+                                                            view! { <span>"Clearing..."</span> }.into_any()
+                                                        } else {
+                                                            view! {
+                                                                <Icon icon=IconName::Check class="icon-sm"/>
+                                                                " ✓ Clear"
+                                                            }.into_any()
+                                                        }}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    }
+                                }).collect_view()
+                            }}
+                        </div>
+                    </Show>
+
+                    <Show
+                        when=move || held_count.get() == 0
+                        fallback=|| view! { <div></div> }
+                    >
+                        <div class="admin-empty-state">
+                            "No deposits held as credit"
+                        </div>
+                    </Show>
+
+                    {move || {
+                        let items: Vec<_> = held_list.get().iter().map(|item| {
+                            let amount = format!("{} THB", item.amount_thb);
+                            let verified_by = item.verified_by.as_deref().unwrap_or("Unknown").to_string();
+                            let held_at = item.held_as_credit_at.as_deref().map(utils::format_timestamp).unwrap_or_else(|| "N/A".to_string());
+                            let display_name = item.attendee_name.as_deref().unwrap_or(&item.attendee_id).to_string();
+                            let slip_url = item.slip_url.clone();
+                            let has_slip_url = slip_url.is_some();
+
+                            (amount, verified_by, held_at, display_name, slip_url, has_slip_url)
+                        }).collect();
+
+                        items.into_iter().map(|(amount, verified_by, held_at, display_name, slip_url, has_slip_url)| {
+                            view! {
+                                <div class="card">
+                                    <div class="flex-row-wrap">
+                                        <div>
+                                            <div class="admin-attendee-name">
+                                                {format!("Attendee: {}", utils::escape_html(&display_name))}
+                                            </div>
+                                            <div class="admin-amount-line">
+                                                {amount}
+                                            </div>
+                                            <div class="panel-hint">
+                                                {format!("Verified by: {}", utils::escape_html(&verified_by))}
+                                            </div>
+                                            <div class="panel-hint">
+                                                {format!("Held at: {held_at}")}
+                                            </div>
+
+                                            // Slip image link
+                                            <Show when=move || has_slip_url fallback=|| view! { <span></span> }>
+                                                <div class="admin-dep-slip-link-row">
+                                                    <a
+                                                        href=slip_url.clone().unwrap_or_default()
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        class="link-accent"
+                                                    >
+                                                        "View Slip"
+                                                    </a>
+                                                </div>
+                                            </Show>
+                                        </div>
+                                        <div>
+                                            <span class="badge badge-success">"✓ Held as Credit"</span>
                                         </div>
                                     </div>
                                 </div>

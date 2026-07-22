@@ -197,6 +197,19 @@ pub fn routes(state: AppState) -> Router<()> {
             "/deposit/credit-balance",
             get(deposit::credit_balance_handler),
         )
+        // Phase 3 exit path — attendee requests return of held rolling credit
+        // (Issue #061 §D3). Sets a visibility-only flag on the attendee's own
+        // contact row; organizer processes payout via existing refund tooling.
+        .route(
+            "/deposit/request-credit-refund",
+            post(deposit::request_credit_refund_handler),
+        )
+        // Read the attendee's own flag state — backs the ticket page's
+        // already-requested card state on reload (mirrors held_as_credit UX).
+        .route(
+            "/deposit/credit-refund-request",
+            get(deposit::credit_refund_request_status_handler),
+        )
         // Roll deposit to next event (attendee-authed — attendee signs the TX)
         .route(
             "/escrow/rollover-deposit",
@@ -357,9 +370,40 @@ pub fn routes(state: AppState) -> Router<()> {
         )
         .route("/refund/queue", get(deposit::refund_queue_handler))
         .route("/refund/refunded", get(deposit::refunded_list_handler))
+        // Held-as-credit list (admin) — sibling of refunded list, filters on
+        // held_as_credit = true (Issue #061 Phase 2).
+        .route("/refund/held", get(deposit::held_list_handler))
         .route(
             "/refund/mark/{attendee_id}",
             post(deposit::mark_refund_handler),
+        )
+        // Admin marks a deposit as held-as-rolling-credit on behalf of an
+        // attendee (attendee confirmed verbally but didn't tap the button).
+        // Mirrors mark_refund_handler's shape + the attendee hold invariants.
+        .route(
+            "/refund/hold/{attendee_id}",
+            post(deposit::admin_hold_deposit_handler),
+        )
+        // Total deposit-credit liability across all contacts — the organizer's
+        // "Total credit held" header chip (Issue #061 Phase 2 option a2).
+        // One D1 SUM/COUNT; degrades to zeros if D1 is unavailable.
+        .route(
+            "/deposit/credit-liability",
+            get(deposit::credit_liability_handler),
+        )
+        // Phase 3 exit path — admin lists contacts with an open "credit refund
+        // requested" flag (Issue #061 §D3). Backs the badge on the Held-as-Credit
+        // tab. One D1 round-trip via the partial index from migration 0023.
+        .route(
+            "/deposit/credit-refund-requests",
+            get(deposit::credit_refund_requests_handler),
+        )
+        // Phase 3 exit path — admin clears the flag after processing the payout
+        // (Issue #061 §D3). Sets the flag to 0 + nulls the timestamp; a subsequent
+        // attendee request starts a fresh timestamp.
+        .route(
+            "/deposit/clear-credit-refund-request",
+            post(deposit::clear_credit_refund_request_handler),
         )
         .route(
             "/refund/manual/{attendee_id}",

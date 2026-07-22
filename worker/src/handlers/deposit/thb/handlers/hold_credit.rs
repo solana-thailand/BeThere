@@ -1,4 +1,5 @@
 use axum::{Extension, Json, extract::State};
+use chrono::Utc;
 use event_checkin_domain::models::auth::Claims;
 use event_checkin_domain::models::deposit::DepositMethod;
 use event_checkin_domain::models::error::AppError;
@@ -80,7 +81,7 @@ pub async fn hold_deposit_handler(
         );
     }
 
-    // 2. Look up deposit status
+    // 2. Look up deposit status (unified view across methods)
     let deposit = event_store::get_deposit_status(kv, &event.id, &body.attendee_id, d1)
         .await
         .map_err(AppError::Internal)?
@@ -93,16 +94,34 @@ pub async fn hold_deposit_handler(
         );
     }
 
-    // 4. Determine currency from deposit method
-    let (currency, amount) = match deposit.method {
-        DepositMethod::Usdc => ("usdc", deposit.amount),
-        DepositMethod::Thb => ("thb", deposit.amount),
-        DepositMethod::CreditThb | DepositMethod::CreditUsdc => {
-            return Err(AppError::Validation("already a credit deposit".to_string()).into());
-        }
-    };
+    // 4. THB-only. USDC deposits must use the atomic on-chain rollover endpoint
+    //    (POST /api/escrow/rollover-deposit). Off-chain hold has no settleable
+    //    record for USDC, so accepting it here would allow double-credit.
+    if !matches!(deposit.method, DepositMethod::Thb) {
+        return Err(AppError::Validation(
+            "only THB deposits can be held as credit; USDC uses the on-chain rollover endpoint"
+                .to_string(),
+        )
+        .into());
+    }
 
-    // 5. Resolve contacts sheet per-org
+    // 5. Load the settleable THB record (authoritative for refund/hold state).
+    let mut thb_deposit = event_store::get_thb_deposit(kv, &event.id, &body.attendee_id, d1)
+        .await
+        .map_err(AppError::Internal)?
+        .ok_or_else(|| AppError::NotFound("THB deposit record not found".to_string()))?;
+
+    // 6. Idempotency guards — reject if already in a terminal settled state.
+    //    A prior call to /hold (or /refund) settles the deposit; without these
+    //    guards a re-call would double-increment credit.
+    if thb_deposit.refunded {
+        return Err(AppError::Validation("deposit already refunded".to_string()).into());
+    }
+    if thb_deposit.held_as_credit {
+        return Err(AppError::Validation("deposit already held as credit".to_string()).into());
+    }
+
+    // 7. Resolve contacts sheet per-org
     let resolved = if let Some(db) = state.d1.as_deref() {
         crate::org_store::resolve_contacts_sheet(db, &event, &state.config.sheets).await
     } else {
@@ -117,20 +136,33 @@ pub async fn hold_deposit_handler(
         return Err(AppError::Internal("contacts sheet not configured".to_string()).into());
     }
 
-    // 6. Increment credit
+    // 8. Settle the source deposit BEFORE incrementing credit. Failure ordering
+    //    is load-bearing: if settle succeeds but the credit increment fails, the
+    //    attendee receives no credit and the deposit is marked held — no money is
+    //    created and an admin can reconcile manually. The reverse order would
+    //    permit infinite credit via retry. Mirrors mark_refund_handler's settle.
+    let held_amount = thb_deposit.amount_thb;
+    let now = Utc::now().to_rfc3339();
+    thb_deposit.held_as_credit = true;
+    thb_deposit.held_as_credit_at = Some(now);
+    event_store::save_thb_deposit(kv, &thb_deposit, d1)
+        .await
+        .map_err(AppError::Internal)?;
+
+    // 9. Increment credit (THB only — USDC path rejected above).
     crate::sheets::contacts::increment_credit(
         &state,
         &resolved.sheet_id,
         &resolved.contacts_sheet_name,
         Some(kv),
         &claims.email,
-        currency,
-        amount,
+        "thb",
+        held_amount,
     )
     .await
     .map_err(AppError::Internal)?;
 
-    // 7. Get updated balance
+    // 10. Get updated balance
     let (credit_thb, credit_usdc) = crate::sheets::contacts::get_credit_balance(
         &state,
         &resolved.sheet_id,
@@ -144,17 +176,30 @@ pub async fn hold_deposit_handler(
     tracing::info!(
         attendee_id = %body.attendee_id,
         event_id = %event.id,
-        %currency,
-        amount,
+        amount = held_amount,
         credit_thb,
         credit_usdc,
         "deposit held as credit"
     );
 
+    // Audit the credit-granting action (sibling of RefundMarked). Non-fatal.
+    let _ = crate::audit_store::append_event_audit(
+        kv,
+        &event.id,
+        crate::audit_store::create_entry(
+            &claims.email,
+            crate::audit_store::AuditAction::DepositHeldAsCredit,
+            &body.attendee_id,
+            &format!("{held_amount} THB held as rolling credit"),
+        ),
+        state.d1.as_deref(),
+    )
+    .await;
+
     Ok(ApiOk::new(HoldDepositResponse {
         credit_thb,
         credit_usdc,
-        message: format!("{amount} {currency} deposit held as credit"),
+        message: format!("{held_amount} THB deposit held as credit"),
     }))
 }
 

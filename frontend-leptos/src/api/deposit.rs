@@ -130,6 +130,13 @@ pub struct ThbDepositInfo {
     pub uploaded_at: String,
     pub refunded: bool,
     pub refunded_at: Option<String>,
+    /// Idempotency flag — deposit was held as rolling credit (sibling of
+    /// `refunded`). Mutually exclusive with `refunded`. Surfaced by the
+    /// `/refund/held` admin endpoint (Issue #061 Phase 2).
+    #[serde(default)]
+    pub held_as_credit: bool,
+    #[serde(default)]
+    pub held_as_credit_at: Option<String>,
     #[serde(default)]
     pub attendee_name: Option<String>,
     #[serde(default)]
@@ -509,6 +516,249 @@ pub async fn get_refunded_list(
     })
 }
 
+/// Response for GET /api/refund/held — deposits held as rolling credit.
+/// Mirrors `RefundedListResponse` (sibling terminal state).
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+pub struct HeldListResponse {
+    #[serde(default)]
+    pub held: Vec<ThbDepositInfo>,
+}
+
+/// GET /api/refund/held?event_id=xxx — list THB deposits held as rolling credit.
+pub async fn get_held_list(event_id: Option<&str>) -> Result<HeldListResponse, ApiError> {
+    let path = match event_id {
+        Some(eid) if !eid.is_empty() => format!("/refund/held?event_id={eid}"),
+        _ => "/refund/held".to_string(),
+    };
+    let response = api_get(&path).await?;
+
+    if !response.ok() {
+        let body: ApiResponse<()> = response_json(&response).await.unwrap_or(ApiResponse {
+            success: false,
+            data: None,
+            error: Some("Failed to get held list".to_string()),
+            correlation_id: None,
+        });
+        return Err(ApiError {
+            message: body.error.unwrap_or_default(),
+            status: 0,
+        });
+    }
+
+    let wrapper: ApiResponse<HeldListResponse> =
+        response_json(&response).await.map_err(|e| ApiError {
+            message: format!("Failed to parse held list: {e}"),
+            status: 0,
+        })?;
+
+    wrapper.data.ok_or_else(|| ApiError {
+        message: wrapper.error.unwrap_or("No data".to_string()),
+        status: 0,
+    })
+}
+
+/// Request body for POST /api/refund/hold/{attendee_id} — admin marks a
+/// verified THB deposit as held-as-rolling-credit on behalf of an attendee.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct AdminHoldRequest {
+    pub event_id: String,
+}
+
+/// POST /api/refund/hold/{attendee_id} — admin hold deposit as rolling credit.
+pub async fn admin_hold_deposit(
+    attendee_id: &str,
+    body: &AdminHoldRequest,
+) -> Result<serde_json::Value, ApiError> {
+    let path = format!("/refund/hold/{attendee_id}");
+    api_post_json(&path, body).await
+}
+
+/// Response for GET /api/deposit/credit-liability — the organizer's total
+/// deposit-credit liability across all contacts (Issue #061 Phase 2 option a2).
+/// Backing data for the "Total credit held: X THB across N contacts" header chip.
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+pub struct CreditLiability {
+    #[serde(default)]
+    pub total_thb: i64,
+    #[serde(default)]
+    pub total_usdc: i64,
+    #[serde(default)]
+    pub contact_count: i64,
+}
+
+/// GET /api/deposit/credit-liability — total credit held across all contacts.
+pub async fn get_credit_liability() -> Result<CreditLiability, ApiError> {
+    let response = api_get("/deposit/credit-liability").await?;
+
+    if !response.ok() {
+        let body: ApiResponse<()> = response_json(&response).await.unwrap_or(ApiResponse {
+            success: false,
+            data: None,
+            error: Some("Failed to get credit liability".to_string()),
+            correlation_id: None,
+        });
+        return Err(ApiError {
+            message: body.error.unwrap_or_default(),
+            status: 0,
+        });
+    }
+
+    let wrapper: ApiResponse<CreditLiability> =
+        response_json(&response).await.map_err(|e| ApiError {
+            message: format!("Failed to parse credit liability: {e}"),
+            status: 0,
+        })?;
+
+    wrapper.data.ok_or_else(|| ApiError {
+        message: wrapper.error.unwrap_or("No data".to_string()),
+        status: 0,
+    })
+}
+
+// ===== Phase 3 — Credit Refund Request (exit path) =====
+
+/// Response for POST /api/deposit/request-credit-refund — attendee requests
+/// return of their held rolling credit (Issue #061 §D3). The flag is the queue
+/// signal only; the organizer processes the actual payout via existing refund
+/// tooling.
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+pub struct RequestCreditRefundResponse {
+    #[serde(default)]
+    pub requested: bool,
+    #[serde(default)]
+    pub message: String,
+}
+
+/// POST /api/deposit/request-credit-refund — attendee sets the flag on their
+/// own contact. No request body — the email comes from the JWT
+/// (VULN-012 pattern). Idempotent: re-calls re-stamp the timestamp.
+///
+/// `api_post_json` is generic + unwraps the `ApiResponse` envelope internally,
+/// so a one-liner returns the inner `RequestCreditRefundResponse` directly
+/// (matches the `create_campaign` / `put_admin_quiz` convention).
+pub async fn request_credit_refund() -> Result<RequestCreditRefundResponse, ApiError> {
+    let body = serde_json::json!({});
+    api_post_json("/deposit/request-credit-refund", &body).await
+}
+
+/// Response for GET /api/deposit/credit-refund-request — the attendee's own
+/// flag state. Backs the ticket page's already-requested card state on reload
+/// (mirrors the held_as_credit UX pattern).
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+pub struct CreditRefundRequestStatus {
+    #[serde(default)]
+    pub requested: bool,
+}
+
+/// GET /api/deposit/credit-refund-request — read the attendee's own flag state.
+pub async fn get_credit_refund_request_status() -> Result<CreditRefundRequestStatus, ApiError> {
+    let response = api_get("/deposit/credit-refund-request").await?;
+
+    if !response.ok() {
+        let body: ApiResponse<()> = response_json(&response).await.unwrap_or(ApiResponse {
+            success: false,
+            data: None,
+            error: Some("Failed to get credit refund request status".to_string()),
+            correlation_id: None,
+        });
+        return Err(ApiError {
+            message: body.error.unwrap_or_default(),
+            status: 0,
+        });
+    }
+
+    let wrapper: ApiResponse<CreditRefundRequestStatus> =
+        response_json(&response).await.map_err(|e| ApiError {
+            message: format!("Failed to parse credit refund request status: {e}"),
+            status: 0,
+        })?;
+
+    wrapper.data.ok_or_else(|| ApiError {
+        message: wrapper.error.unwrap_or("No data".to_string()),
+        status: 0,
+    })
+}
+
+/// One row in the admin "credit refund requested" listing (Issue #061 Phase 3).
+/// Cross-event — backs the badge on the Held-as-Credit tab. Matches the worker
+/// `CreditRefundRequest` struct field-for-field.
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+pub struct CreditRefundRequest {
+    #[serde(default)]
+    pub email: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub credit_thb: i64,
+    #[serde(default)]
+    pub credit_usdc: i64,
+    #[serde(default)]
+    pub requested_at: String,
+}
+
+/// Response for GET /api/deposit/credit-refund-requests — admin lists contacts
+/// with an open credit-refund-request flag.
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+pub struct CreditRefundRequestsResponse {
+    #[serde(default)]
+    pub requests: Vec<CreditRefundRequest>,
+}
+
+/// GET /api/deposit/credit-refund-requests — admin lists open credit-refund
+/// requests. Cross-event (global), backs the badge on the Held-as-Credit tab.
+pub async fn get_credit_refund_requests() -> Result<CreditRefundRequestsResponse, ApiError> {
+    let response = api_get("/deposit/credit-refund-requests").await?;
+
+    if !response.ok() {
+        let body: ApiResponse<()> = response_json(&response).await.unwrap_or(ApiResponse {
+            success: false,
+            data: None,
+            error: Some("Failed to get credit refund requests".to_string()),
+            correlation_id: None,
+        });
+        return Err(ApiError {
+            message: body.error.unwrap_or_default(),
+            status: 0,
+        });
+    }
+
+    let wrapper: ApiResponse<CreditRefundRequestsResponse> =
+        response_json(&response).await.map_err(|e| ApiError {
+            message: format!("Failed to parse credit refund requests: {e}"),
+            status: 0,
+        })?;
+
+    wrapper.data.ok_or_else(|| ApiError {
+        message: wrapper.error.unwrap_or("No data".to_string()),
+        status: 0,
+    })
+}
+
+/// Request body for POST /api/deposit/clear-credit-refund-request — admin
+/// clears the credit-refund-request flag after processing the payout.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ClearCreditRefundRequest {
+    pub email: String,
+}
+
+/// Response for POST /api/deposit/clear-credit-refund-request (admin).
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+pub struct ClearCreditRefundResponse {
+    #[serde(default)]
+    pub cleared: bool,
+    #[serde(default)]
+    pub message: String,
+}
+
+/// POST /api/deposit/clear-credit-refund-request — admin clears the flag after
+/// processing the payout. Email in body (not path) — emails can contain
+/// characters awkward to URL-encode in a path segment.
+pub async fn clear_credit_refund_request(
+    body: &ClearCreditRefundRequest,
+) -> Result<ClearCreditRefundResponse, ApiError> {
+    api_post_json("/deposit/clear-credit-refund-request", body).await
+}
+
 // ===== Escrow API =====
 
 /// POST /api/escrow/refund — build refund TX
@@ -568,4 +818,69 @@ pub struct RolloverDepositResponse {
 /// POST /api/escrow/rollover-deposit — build rollover_deposit TX
 pub async fn rollover_deposit(body: &RolloverDepositRequest) -> Result<RolloverDepositResponse, ApiError> {
     api_post_json("/escrow/rollover-deposit", body).await
+}
+
+// ===== Hold Deposit (THB rolling credit) API =====
+
+/// Request body for POST /api/deposit/hold — attendee holds deposit as rolling credit.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct HoldDepositRequest {
+    /// Event the deposit belongs to.
+    pub event_id: String,
+    /// Attendee API ID holding the deposit.
+    pub attendee_id: String,
+}
+
+/// Response for POST /api/deposit/hold — returns the new credit balance after hold.
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+pub struct HoldDepositResponse {
+    /// THB credit balance after hold (smallest unit if applicable, here raw THB).
+    pub credit_thb: u64,
+    /// USDC credit balance after hold (smallest unit).
+    pub credit_usdc: u64,
+    /// Human-readable message.
+    pub message: String,
+}
+
+/// Response for GET /api/deposit/credit-balance — attendee's current rolling credit.
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+pub struct CreditBalanceResponse {
+    /// THB credit balance.
+    pub credit_thb: u64,
+    /// USDC credit balance.
+    pub credit_usdc: u64,
+}
+
+/// POST /api/deposit/hold — hold deposit as rolling credit (THB or USDC).
+pub async fn hold_deposit(body: &HoldDepositRequest) -> Result<HoldDepositResponse, ApiError> {
+    api_post_json("/deposit/hold", body).await
+}
+
+/// GET /api/deposit/credit-balance — fetch the authenticated attendee's rolling credit balance.
+pub async fn get_credit_balance() -> Result<CreditBalanceResponse, ApiError> {
+    let response = api_get("/deposit/credit-balance").await?;
+
+    if !response.ok() {
+        let body: ApiResponse<()> = response_json(&response).await.unwrap_or(ApiResponse {
+            success: false,
+            data: None,
+            error: Some("Failed to get credit balance".to_string()),
+            correlation_id: None,
+        });
+        return Err(ApiError {
+            message: body.error.unwrap_or_default(),
+            status: 0,
+        });
+    }
+
+    let wrapper: ApiResponse<CreditBalanceResponse> =
+        response_json(&response).await.map_err(|e| ApiError {
+            message: format!("Failed to parse credit balance: {e}"),
+            status: 0,
+        })?;
+
+    wrapper.data.ok_or_else(|| ApiError {
+        message: wrapper.error.unwrap_or("No data".to_string()),
+        status: 0,
+    })
 }

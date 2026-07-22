@@ -84,9 +84,12 @@ pub async fn refund_queue_handler(
         .await
         .map_err(AppError::Internal)?;
 
+    // A deposit held as rolling credit is also terminal-settled (organizer
+    // retains funds as liability); exclude it from the refund queue so the
+    // admin does not double-process a deposit the attendee already converted.
     let mut pending: Vec<ThbDeposit> = all_deposits
         .into_iter()
-        .filter(|d| d.verified && !d.refunded)
+        .filter(|d| d.verified && !d.refunded && !d.held_as_credit)
         .collect();
 
     // Migrate any inline base64 slip/refund URLs to R2 (keeps response payload small)
