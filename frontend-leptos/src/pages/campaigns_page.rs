@@ -46,6 +46,33 @@ fn status_badge_class(status: &str) -> &'static str {
     }
 }
 
+/// Convert a free-form title into a URL-safe kebab-case slug.
+/// Lowercases; replaces runs of non-[a-z0-9] with '-'; trims leading/trailing
+/// dashes; caps length at 60 chars. Returns empty string for empty/whitespace input.
+fn slugify(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut prev_dash = false;
+    for c in s.chars() {
+        if c.is_ascii_alphanumeric() {
+            out.push(c.to_ascii_lowercase());
+            prev_dash = false;
+        } else if !prev_dash && !out.is_empty() {
+            out.push('-');
+            prev_dash = true;
+        }
+    }
+    while out.ends_with('-') {
+        out.pop();
+    }
+    if out.len() > 60 {
+        out.truncate(60);
+        while out.ends_with('-') {
+            out.pop();
+        }
+    }
+    out
+}
+
 // ===== Page Component =====
 
 #[component]
@@ -72,6 +99,8 @@ pub fn CampaignsPage(
     let (saving, set_saving) = signal(false);
     let (refresh_counter, set_refresh_counter) = signal(0u32);
     let (form_id, set_form_id) = signal(String::new());
+    // True once the user manually edits the slug; suppresses auto-fill from Title.
+    let (slug_manually_edited, set_slug_manually_edited) = signal(false);
     let (form_title, set_form_title) = signal(String::new());
     let (form_description, set_form_description) = signal(String::new());
     let (form_org_id, set_form_org_id) = signal(String::new());
@@ -86,9 +115,41 @@ pub fn CampaignsPage(
     let (add_event_id, set_add_event_id) = signal(String::new());
     let (add_seq_order, set_add_seq_order) = signal(0i64);
     let (add_is_required, set_add_is_required) = signal(true);
+    // Events available to link (loaded once on mount for the Events-tab picker).
+    let (events_list, set_events_list) = signal(Vec::<api::EventMeta>::new());
+    // Organizations available to pick in the create-form org dropdown.
+    let (orgs_list, set_orgs_list) = signal(Vec::<api::OrgOption>::new());
+    // One-shot nudge flag: set true right after a fresh (non-promote) create so
+    // the Detail → Events tab can show a "add events to activate" banner.
+    // Cleared on any navigation away from the just-created detail view.
+    let (draft_nudge, set_draft_nudge) = signal(false);
     // Event id awaiting auto-link after a successful create (set when the
     // create form was pre-filled via "promote from event").
     let (pending_event_to_link, set_pending_event_to_link) = signal(None::<String>);
+    // Load events list once for the Events-tab picker dropdown.
+    Effect::new(move |_| {
+        leptos::task::spawn_local(async move {
+            match api::list_events().await {
+                Ok(data) => set_events_list.set(data.events),
+                Err(e) => {
+                    log::warn!("[campaigns-page] failed to load events list: {e}");
+                }
+            }
+        });
+    });
+    // Load orgs list once for the create-form org picker dropdown. Read access
+    // was widened to any authenticated admin (worker handlers/orgs.rs), so this
+    // succeeds for plain organizers, not just super admins.
+    Effect::new(move |_| {
+        leptos::task::spawn_local(async move {
+            match api::list_orgs().await {
+                Ok(data) => set_orgs_list.set(data),
+                Err(e) => {
+                    log::warn!("[campaigns-page] failed to load orgs list: {e}");
+                }
+            }
+        });
+    });
     // Load campaign list
     Effect::new(move |_| {
         let _ = refresh_counter.get();
@@ -163,6 +224,7 @@ pub fn CampaignsPage(
 
     let reset_form = move || {
         set_form_id.set(String::new());
+        set_slug_manually_edited.set(false);
         set_form_title.set(String::new());
         set_form_description.set(String::new());
         set_form_org_id.set(String::new());
@@ -257,6 +319,8 @@ pub fn CampaignsPage(
         // A manual "+ Create Campaign" click should never inherit a leftover
         // "promote from event" auto-link intent.
         set_pending_event_to_link.set(None);
+        // Also clear any stale draft nudge from a prior create.
+        set_draft_nudge.set(false);
         set_current_view.set(CampaignView::Create);
     };
 
@@ -269,6 +333,9 @@ pub fn CampaignsPage(
     };
     // View detail
     let handle_view = move |id: String| {
+        // Selecting a different campaign clears any stale draft nudge left
+        // over from a prior just-created campaign.
+        set_draft_nudge.set(false);
         set_selected_id.set(Some(id));
         set_detail_tab.set(DetailTab::Events);
         set_current_view.set(CampaignView::Detail);
@@ -281,6 +348,8 @@ pub fn CampaignsPage(
         // Forget any "promote from event" auto-link intent if the organizer
         // cancels out of the form, so a later manual create isn't auto-linked.
         set_pending_event_to_link.set(None);
+        // Leaving the detail view dismisses any draft nudge.
+        set_draft_nudge.set(false);
         do_reload();
     };
     // Save (create or update)
@@ -301,6 +370,18 @@ pub fn CampaignsPage(
                 components::show_toast(
                     &set_toast,
                     "Campaign ID (slug) is required",
+                    ToastType::Warning,
+                );
+                return;
+            }
+            // Organization is chosen from a dropdown and is immutable after
+            // create — require it here so an empty draft with no org cannot
+            // be saved.
+            let org_id = form_org_id.get();
+            if org_id.trim().is_empty() {
+                components::show_toast(
+                    &set_toast,
+                    "Organization is required",
                     ToastType::Warning,
                 );
                 return;
@@ -404,7 +485,14 @@ pub fn CampaignsPage(
                                 set_detail_tab.set(DetailTab::Events);
                                 set_current_view.set(CampaignView::Detail);
                             } else {
-                                set_current_view.set(CampaignView::List);
+                                // Pure create (not promoted from an event):
+                                // drop the organizer into the new campaign's
+                                // Events tab and show a one-shot "add events to
+                                // activate" nudge instead of returning to List.
+                                set_draft_nudge.set(true);
+                                set_selected_id.set(Some(id_for_link));
+                                set_detail_tab.set(DetailTab::Events);
+                                set_current_view.set(CampaignView::Detail);
                             }
                             do_reload();
                         }
@@ -489,7 +577,7 @@ pub fn CampaignsPage(
             if new_event_id.trim().is_empty() {
                 components::show_toast(
                     &set_toast,
-                    "Event ID is required",
+                    "Select an event to add",
                     ToastType::Warning,
                 );
                 return;
@@ -749,24 +837,35 @@ pub fn CampaignsPage(
                 <div class="card">
                     <div class="card-body">
                         <div class="form-group">
-                            <label class="form-label">"Campaign ID (slug)"</label>
+                            <label class="form-label">"Campaign ID (slug)" <span class="required-marker">"*"</span></label>
                             <input
                                 class="form-input"
                                 type="text"
                                 placeholder="e.g. solana-hacker-series-2025"
                                 disabled=move || editing_id.get().is_some()
                                 prop:value=move || form_id.get()
-                                on:input=move |ev| set_form_id.set(event_target_value(&ev))
+                                on:input=move |ev| {
+                                    set_form_id.set(event_target_value(&ev));
+                                    set_slug_manually_edited.set(true);
+                                }
                             />
                         </div>
                         <div class="form-group">
-                            <label class="form-label">"Title"</label>
+                            <label class="form-label">"Title" <span class="required-marker">"*"</span></label>
                             <input
                                 class="form-input"
                                 type="text"
                                 placeholder="Campaign title"
                                 prop:value=move || form_title.get()
-                                on:input=move |ev| set_form_title.set(event_target_value(&ev))
+                                on:input=move |ev| {
+                                    let v = event_target_value(&ev);
+                                    set_form_title.set(v.clone());
+                                    // Auto-fill slug from title on create, unless the user
+                                    // has manually edited the slug field.
+                                    if editing_id.get().is_none() && !slug_manually_edited.get() {
+                                        set_form_id.set(slugify(&v));
+                                    }
+                                }
                             />
                         </div>
                         <div class="form-group">
@@ -781,14 +880,34 @@ pub fn CampaignsPage(
                         </div>
                         <Show when=move || editing_id.get().is_none() fallback=|| view! { <div></div> }>
                             <div class="form-group">
-                                <label class="form-label">"Organization ID"</label>
-                                <input
-                                    class="form-input"
-                                    type="text"
-                                    placeholder="Organization ID"
+                                <label class="form-label">"Organization" <span class="required-marker">"*"</span></label>
+                                <select
+                                    class="form-select"
                                     prop:value=move || form_org_id.get()
-                                    on:input=move |ev| set_form_org_id.set(event_target_value(&ev))
-                                />
+                                    on:change=move |ev| set_form_org_id.set(event_target_value(&ev))
+                                >
+                                    <option value="">"— Select organization —"</option>
+                                    {move || {
+                                        // Mirror the Events-tab picker: sort by name,
+                                        // fall back to id when the name is blank.
+                                        let mut orgs = orgs_list.get();
+                                        orgs.sort_by(|a, b| a.name.cmp(&b.name));
+                                        orgs.into_iter().map(|o| {
+                                            let id = o.id.clone();
+                                            let label = if o.name.trim().is_empty() {
+                                                o.id.clone()
+                                            } else {
+                                                o.name.clone()
+                                            };
+                                            view! {
+                                                <option value=id>{label}</option>
+                                            }
+                                        }).collect::<Vec<_>>()
+                                    }}
+                                </select>
+                                <p class="hint-note-sm">
+                                    "Organization is set on create and cannot be changed after."
+                                </p>
                             </div>
                         </Show>
                         <div class="form-group">
@@ -800,15 +919,17 @@ pub fn CampaignsPage(
                             >
                                 <option value="none">"None"</option>
                                 <option value="nft_certificate">"NFT Certificate"</option>
-                                <option value="badge">"Badge"</option>
                             </select>
                         </div>
                         <div class="form-group">
-                            <label class="form-label">"Completion Criteria (JSON)"</label>
+                            <label class="form-label">"Completion Criteria (descriptive only)"</label>
+                            <p class="hint-note-sm">
+                                "Descriptive only — the enforced rule is: attend all required events. Use this field for notes only."
+                            </p>
                             <textarea
                                 class="form-input"
                                 rows="3"
-                                placeholder=r#"{"type": "all_events"}"#
+                                placeholder="e.g. Complete all 3 events in the series"
                                 prop:value=move || form_criteria.get()
                                 on:input=move |ev| set_form_criteria.set(event_target_value(&ev))
                             />
@@ -816,6 +937,7 @@ pub fn CampaignsPage(
                         <Show when=move || form_reward_type.get() == "nft_certificate" fallback=|| view! { <div></div> }>
                             <div class="form-section">
                                 <h4 class="form-section-title">"NFT Reward Configuration"</h4>
+                                <p class="hint-note-sm">"All fields below are optional — sensible defaults are applied on mint."</p>
                                 <div class="form-group">
                                     <label class="form-label">"NFT Name"</label>
                                     <input class="form-input" type="text"
@@ -823,6 +945,7 @@ pub fn CampaignsPage(
                                         prop:value=move || form_rc_name.get()
                                         on:input=move |ev| set_form_rc_name.set(event_target_value(&ev))
                                     />
+                                    <p class="hint-note-sm">"Leave blank to use '{Title} - Campaign Complete' on mint."</p>
                                 </div>
                                 <div class="form-group">
                                     <label class="form-label">"Symbol"</label>
@@ -831,6 +954,7 @@ pub fn CampaignsPage(
                                         prop:value=move || form_rc_symbol.get()
                                         on:input=move |ev| set_form_rc_symbol.set(event_target_value(&ev))
                                     />
+                                    <p class="hint-note-sm">"Leave blank to use 'CAMPAIGN' on mint."</p>
                                 </div>
                                 <div class="form-group">
                                     <label class="form-label">"Description"</label>
@@ -839,31 +963,41 @@ pub fn CampaignsPage(
                                         prop:value=move || form_rc_description.get()
                                         on:input=move |ev| set_form_rc_description.set(event_target_value(&ev))
                                     />
+                                    <p class="hint-note-sm">"Leave blank to use 'Completed the {Title} campaign' on mint."</p>
                                 </div>
-                                <div class="form-group">
-                                    <label class="form-label">"Image URL"</label>
-                                    <input class="form-input" type="url"
-                                        placeholder="https://arweave.net/... or IPFS URL"
-                                        prop:value=move || form_rc_image_url.get()
-                                        on:input=move |ev| set_form_rc_image_url.set(event_target_value(&ev))
-                                    />
-                                </div>
-                                <div class="form-group">
-                                    <label class="form-label">"Metadata URI"</label>
-                                    <input class="form-input" type="url"
-                                        placeholder="https://arweave.net/... (off-chain metadata JSON)"
-                                        prop:value=move || form_rc_metadata_uri.get()
-                                        on:input=move |ev| set_form_rc_metadata_uri.set(event_target_value(&ev))
-                                    />
-                                </div>
-                                <div class="form-group">
-                                    <label class="form-label">"Collection Mint"</label>
-                                    <input class="form-input" type="text"
-                                        placeholder="Solana collection mint address (optional)"
-                                        prop:value=move || form_rc_collection_mint.get()
-                                        on:input=move |ev| set_form_rc_collection_mint.set(event_target_value(&ev))
-                                    />
-                                </div>
+                                <details class="form-advanced">
+                                    <summary class="form-advanced-summary">"Advanced (optional)"</summary>
+                                    <p class="hint-note-sm">
+                                        "Optional fields for custom artwork, off-chain metadata, or on-chain collection grouping. Leave blank to use defaults."
+                                    </p>
+                                    <div class="form-group">
+                                        <label class="form-label">"Image URL"</label>
+                                        <input class="form-input" type="url"
+                                            placeholder="https://arweave.net/... or IPFS URL"
+                                            prop:value=move || form_rc_image_url.get()
+                                            on:input=move |ev| set_form_rc_image_url.set(event_target_value(&ev))
+                                        />
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="form-label">"Metadata URI"</label>
+                                        <input class="form-input" type="url"
+                                            placeholder="https://arweave.net/... (off-chain metadata JSON)"
+                                            prop:value=move || form_rc_metadata_uri.get()
+                                            on:input=move |ev| set_form_rc_metadata_uri.set(event_target_value(&ev))
+                                        />
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="form-label">"Collection Mint"</label>
+                                        <input class="form-input" type="text"
+                                            placeholder="Solana collection mint address (optional)"
+                                            prop:value=move || form_rc_collection_mint.get()
+                                            on:input=move |ev| set_form_rc_collection_mint.set(event_target_value(&ev))
+                                        />
+                                        <p class="hint-note-sm">
+                                            "Optional. Groups minted NFTs into an on-chain Solana collection and is used to tell campaign rewards apart from event NFTs. Leave blank if unsure."
+                                        </p>
+                                    </div>
+                                </details>
                             </div>
                         </Show>
                         <div class="form-actions">
@@ -891,6 +1025,32 @@ pub fn CampaignsPage(
                         "← Back"
                     </button>
                 </div>
+                // Draft-status warning banner (events linked but campaign not active)
+                {move || {
+                    let detail = campaign_detail.get();
+                    match detail {
+                        Some(d) if !d.events.is_empty() && d.campaign.status == "draft" => {
+                            let id_for_activate = d.campaign.id.clone();
+                            view! {
+                                <div class="campaign-status-banner campaign-status-banner-warning">
+                                    <div class="campaign-status-banner-text">
+                                        <strong>"Draft — not active"</strong>
+                                        "This campaign has events linked but isn't activated. Activate it so check-ins count toward progress and leaderboard scoring."
+                                    </div>
+                                    <button
+                                        class="btn btn-primary btn-sm"
+                                        on:click=move |_: web_sys::MouseEvent| {
+                                            handle_status_change(id_for_activate.clone(), "active".to_string());
+                                        }
+                                    >
+                                        "Activate now"
+                                    </button>
+                                </div>
+                            }.into_any()
+                        }
+                        _ => view! { <div></div> }.into_any(),
+                    }
+                }}
                 // Campaign info header
                 <div class="card">
                     <div class="card-body">
@@ -953,6 +1113,22 @@ pub fn CampaignsPage(
                 </div>
                 // --- Events Tab ---
                 <Show when=move || detail_tab.get() == DetailTab::Events fallback=|| view! { <div></div> }>
+                    // One-shot "add events to activate" nudge shown right after
+                    // a fresh (non-promote) create. Dismissable and auto-cleared
+                    // on any navigation away from this detail view.
+                    <Show when=move || draft_nudge.get() fallback=|| view! { <div></div> }>
+                        <div class="campaign-nudge">
+                            <strong>"Campaign created as draft."</strong>
+                            " Add events to activate it."
+                            <button
+                                class="btn btn-sm btn-secondary"
+                                style="margin-left: 0.75rem; padding: 0.15rem 0.5rem; font-size: 0.75rem;"
+                                on:click=move |_: web_sys::MouseEvent| set_draft_nudge.set(false)
+                            >
+                                "Dismiss"
+                            </button>
+                        </div>
+                    </Show>
                     <div class="card">
                         <div class="card-header">
                             <h3>"Campaign Events"</h3>
@@ -961,13 +1137,38 @@ pub fn CampaignsPage(
                             // Add event form
                             <div class="form-row">
                                 <div class="form-group form-group-sm">
-                                    <input
-                                        class="form-input"
-                                        type="text"
-                                        placeholder="Event ID"
+                                    <select
+                                        class="form-select"
                                         prop:value=move || add_event_id.get()
-                                        on:input=move |ev| set_add_event_id.set(event_target_value(&ev))
-                                    />
+                                        on:change=move |ev| set_add_event_id.set(event_target_value(&ev))
+                                    >
+                                        <option value="">"Select an event..."</option>
+                                        {move || {
+                                            // Exclude events already linked to this campaign so
+                                            // they can't be added twice.
+                                            let linked: std::collections::HashSet<String> = campaign_detail
+                                                .get()
+                                                .map(|d| d.events.iter().map(|e| e.event_id.clone()).collect())
+                                                .unwrap_or_default();
+                                            let mut available: Vec<api::EventMeta> = events_list
+                                                .get()
+                                                .into_iter()
+                                                .filter(|e| !linked.contains(&e.id))
+                                                .collect();
+                                            available.sort_by(|a, b| a.name.cmp(&b.name));
+                                            available.into_iter().map(|e| {
+                                                let id = e.id.clone();
+                                                let label = if e.name.trim().is_empty() {
+                                                    e.id.clone()
+                                                } else {
+                                                    e.name.clone()
+                                                };
+                                                view! {
+                                                    <option value=id>{label}</option>
+                                                }
+                                            }).collect::<Vec<_>>()
+                                        }}
+                                    </select>
                                 </div>
                                 <div class="form-group form-group-sm">
                                     <input
@@ -1088,6 +1289,7 @@ pub fn CampaignsPage(
                                         <tr class="table-header">
                                             <th>"Email"</th>
                                             <th>"Completed"</th>
+                                            <th>"Events"</th>
                                             <th>"Status"</th>
                                             <th>"Reward Claimed"</th>
                                         </tr>
@@ -1108,6 +1310,52 @@ pub fn CampaignsPage(
                                                                 p.events_completed,
                                                                 p.total_required,
                                                             )}
+                                                        </td>
+                                                        <td>
+                                                            {if p.events.is_empty() {
+                                                                view! {
+                                                                    <span class="hint-xs">"—"</span>
+                                                                }.into_any()
+                                                            } else {
+                                                                view! {
+                                                                    <div class="attendance-chips">
+                                                                        {p.events.iter().map(|ev| {
+                                                                            let cls = if ev.attended {
+                                                                                "attendance-chip attendance-chip-done"
+                                                                            } else {
+                                                                                "attendance-chip attendance-chip-pending"
+                                                                            };
+                                                                            let req_cls = if ev.is_required {
+                                                                                "attendance-chip-name attendance-chip-required"
+                                                                            } else {
+                                                                                "attendance-chip-name"
+                                                                            };
+                                                                            let icon = if ev.attended {
+                                                                                IconName::Check
+                                                                            } else {
+                                                                                IconName::Circle
+                                                                            };
+                                                                            let icon_cls = if ev.attended {
+                                                                                "icon-sm icon-success"
+                                                                            } else {
+                                                                                "icon-sm icon-muted"
+                                                                            };
+                                                                            let display_name = if ev.event_name.trim().is_empty() {
+                                                                                ev.event_id.clone()
+                                                                            } else {
+                                                                                ev.event_name.clone()
+                                                                            };
+                                                                            let title_text = display_name.clone();
+                                                                            view! {
+                                                                                <span class=cls title=title_text.clone()>
+                                                                                    <Icon icon=icon class=icon_cls />
+                                                                                    <span class=req_cls>{display_name.clone()}</span>
+                                                                                </span>
+                                                                            }
+                                                                        }).collect::<Vec<_>>()}
+                                                                    </div>
+                                                                }.into_any()
+                                                            }}
                                                         </td>
                                                         <td>
                                                             {if is_complete {

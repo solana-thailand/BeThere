@@ -3,7 +3,13 @@
 use worker::KvStore;
 
 use super::crypto::{find_program_address, pubkey_from_base58, pubkey_to_base58};
-use super::{ESCROW_PROGRAM_ID, EscrowError, PubkeyBytes};
+use super::{EscrowError, PubkeyBytes, escrow_program_id};
+
+// join_all fires the per-candidate getAccountInfo checks concurrently. Helius
+// devnet (free/dev tier) rejects the batched `getMultipleAccountsInfo` method
+// with {"code":-32603,"message":"Method not found"}, so we fall back to N
+// individual `getAccountInfo` calls run in parallel.
+use futures_util::future::join_all;
 
 // ---------------------------------------------------------------------------
 // Blockhash cache constants
@@ -148,7 +154,7 @@ pub async fn derive_escrow_address(
     event_id: u64,
 ) -> Result<String, EscrowError> {
     let organizer = pubkey_from_base58(organizer_pubkey)?;
-    let program_id = pubkey_from_base58(ESCROW_PROGRAM_ID)?;
+    let program_id = pubkey_from_base58(escrow_program_id())?;
 
     let (event_escrow, _) = find_program_address(
         &[b"escrow", organizer.as_slice(), &event_id.to_le_bytes()],
@@ -172,7 +178,7 @@ pub async fn verify_escrow_account_exists(
     event_id: u64,
 ) -> Result<(), EscrowError> {
     let organizer = pubkey_from_base58(organizer_pubkey)?;
-    let program_id = pubkey_from_base58(ESCROW_PROGRAM_ID)?;
+    let program_id = pubkey_from_base58(escrow_program_id())?;
 
     let (event_escrow, _) = find_program_address(
         &[b"escrow", organizer.as_slice(), &event_id.to_le_bytes()],
@@ -235,7 +241,7 @@ pub async fn verify_escrow_account_exists(
         )),
         Some(info) => {
             let owner = info.get("owner").and_then(|v| v.as_str()).unwrap_or("");
-            if owner != ESCROW_PROGRAM_ID {
+            if owner != escrow_program_id() {
                 return Err(EscrowError::AccountNotFound(format!(
                     "account exists but is not owned by escrow program (owner: {owner})"
                 )));
@@ -243,6 +249,155 @@ pub async fn verify_escrow_account_exists(
             Ok(())
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Forfeitable deposit filtering (defense against indexer lag)
+// ---------------------------------------------------------------------------
+
+/// Query a single account via `getAccountInfo` and return whether it exists
+/// on-chain and is owned by `expected_owner_b58`.
+///
+/// Mirrors the RPC pattern of `verify_escrow_account_exists` but returns a
+/// boolean instead of short-circuiting. Uses `getAccountInfo` (not the batched
+/// `getMultipleAccountsInfo`) because the configured Helius devnet RPC rejects
+/// the batched method with `{"code":-32603,"message":"Method not found"}`.
+async fn account_exists_owned_by_program(
+    rpc_url: &str,
+    account_b58: &str,
+    expected_owner_b58: &str,
+) -> Result<bool, EscrowError> {
+    let body = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": "bethere-account-owner-check",
+        "method": "getAccountInfo",
+        "params": [
+            account_b58,
+            { "encoding": "base64", "commitment": "confirmed" }
+        ]
+    });
+
+    let json_body = serde_json::to_string(&body)
+        .map_err(|e| EscrowError::RpcFailed(format!("serialize: {e}")))?;
+
+    let headers = worker::Headers::new();
+    headers
+        .set("Content-Type", "application/json")
+        .map_err(|e| EscrowError::RpcFailed(format!("headers: {e:?}")))?;
+
+    let mut init = worker::RequestInit::new();
+    init.with_method(worker::Method::Post)
+        .with_headers(headers)
+        .with_body(Some(wasm_bindgen::JsValue::from_str(&json_body)));
+
+    let request = worker::Request::new_with_init(rpc_url, &init)
+        .map_err(|e| EscrowError::RpcFailed(format!("request: {e:?}")))?;
+
+    let mut response = worker::Fetch::Request(request)
+        .send()
+        .await
+        .map_err(|e| EscrowError::RpcFailed(format!("fetch: {e:?}")))?;
+
+    let status = response.status_code();
+    if !(200..300).contains(&status) {
+        let text = response.text().await.unwrap_or_default();
+        return Err(EscrowError::RpcFailed(format!("HTTP {status}: {text}")));
+    }
+
+    let text = response
+        .text()
+        .await
+        .map_err(|e| EscrowError::RpcFailed(format!("read body: {e:?}")))?;
+
+    let json: serde_json::Value = serde_json::from_str(&text)
+        .map_err(|e| EscrowError::RpcFailed(format!("parse json: {e}")))?;
+
+    Ok(match json.get("result").and_then(|v| v.get("value")) {
+        None | Some(serde_json::Value::Null) => false,
+        Some(v) => v
+            .get("owner")
+            .and_then(|o| o.as_str())
+            .map(|o| o == expected_owner_b58)
+            .unwrap_or(false),
+    })
+}
+
+/// Verify each candidate attendee's `AttendeeDeposit` PDA still exists on-chain
+/// and is owned by the escrow program.
+///
+/// Returns the subset of wallets whose deposit PDAs are still open. Deposits
+/// that were already closed (e.g. refunded-and-closed via `refund_and_close`)
+/// are dropped, because claiming them would fail on-chain with `IllegalOwner`
+/// at the account-load phase (a closed PDA reverts to SystemProgram ownership,
+/// so Quasar's `Account<AttendeeDeposit>` owner check fails in ~195 CU before
+/// any instruction logic runs).
+///
+/// This is a defense against indexer lag: `claim_forfeited_tx_handler` computes
+/// candidates from the D1 on-chain event index, which may trail the chain if
+/// the Helius webhook / RPC poller is behind. Without this check, a stale index
+/// builds a doomed transaction that fails with a cryptic on-chain `IllegalOwner`
+/// instead of a clear, actionable message. With it, settled attendees are
+/// silently filtered out and only genuinely forfeitable deposits remain.
+///
+/// Uses N individual `getAccountInfo` calls (fired concurrently via `join_all`)
+/// rather than the batched `getMultipleAccountsInfo`, which the configured
+/// Helius devnet RPC rejects with "Method not found". The forfeited list is
+/// typically small (no-shows per event), so the per-call overhead is acceptable.
+pub async fn filter_forfeitable_deposits(
+    rpc_url: &str,
+    organizer_pubkey: &str,
+    event_id: u64,
+    attendee_wallets: &[String],
+) -> Result<Vec<String>, EscrowError> {
+    if attendee_wallets.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let program_id = pubkey_from_base58(escrow_program_id())?;
+    let organizer = pubkey_from_base58(organizer_pubkey)?;
+
+    let (event_escrow, _) = find_program_address(
+        &[b"escrow", organizer.as_slice(), &event_id.to_le_bytes()],
+        &program_id,
+    )
+    .await?;
+
+    // Derive each attendee's AttendeeDeposit PDA; remember the (wallet, pda_b58) pair.
+    // Derivation order matches EscrowCtx::attendee_deposit: ["deposit", event_escrow, attendee].
+    let mut pairs: Vec<(String, String)> = Vec::with_capacity(attendee_wallets.len());
+    for w in attendee_wallets {
+        let attendee = pubkey_from_base58(w)?;
+        let (deposit_pda, _) = find_program_address(
+            &[b"deposit", event_escrow.as_slice(), attendee.as_slice()],
+            &program_id,
+        )
+        .await?;
+        pairs.push((w.clone(), pubkey_to_base58(&deposit_pda)));
+    }
+
+    // Fire all getAccountInfo checks concurrently. Each future owns its
+    // (wallet, pda_b58) clone so the futures don't borrow `pairs`; only
+    // rpc_url and the program id are shared by reference and outlive the join.
+    let program_id_b58 = escrow_program_id();
+    let checks = pairs.iter().map(|(wallet, pda_b58)| {
+        let wallet = wallet.clone();
+        let pda_b58 = pda_b58.clone();
+        async move {
+            let live = account_exists_owned_by_program(rpc_url, &pda_b58, program_id_b58).await?;
+            Ok::<_, EscrowError>((wallet, live))
+        }
+    });
+    let results = join_all(checks).await;
+
+    let mut live: Vec<String> = Vec::with_capacity(pairs.len());
+    for r in results {
+        let (wallet, is_live) = r?;
+        if is_live {
+            live.push(wallet);
+        }
+    }
+
+    Ok(live)
 }
 
 // ---------------------------------------------------------------------------
@@ -263,7 +418,7 @@ pub async fn check_escrow_pda_available(
     event_id: u64,
 ) -> Result<String, EscrowError> {
     let organizer = pubkey_from_base58(organizer_pubkey)?;
-    let program_id = pubkey_from_base58(ESCROW_PROGRAM_ID)?;
+    let program_id = pubkey_from_base58(escrow_program_id())?;
 
     let (event_escrow, _) = find_program_address(
         &[b"escrow", organizer.as_slice(), &event_id.to_le_bytes()],
@@ -328,7 +483,7 @@ pub async fn check_escrow_pda_available(
         Some(info) => {
             // Account exists — check if it's owned by the escrow program
             let owner = info.get("owner").and_then(|v| v.as_str()).unwrap_or("");
-            if owner == ESCROW_PROGRAM_ID {
+            if owner == escrow_program_id() {
                 // True collision: escrow already initialized
                 Err(EscrowError::AccountNotFound(format!(
                     "escrow PDA {escrow_b58} already initialized on-chain for this organizer+event_id"

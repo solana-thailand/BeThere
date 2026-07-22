@@ -1,6 +1,6 @@
 # Plan 009 — Event Poster (marketing hero image on `/e/{slug}`)
 
-> **Status**: PLANNED — not started. This document is the handoff spec for implementation.
+> **Status**: IMPLEMENTED & MERGED — PR #14 (`3081f71 feat(events): event marketing poster on /e/{slug} (Plan 009)`). Full-stack plumbing landed: D1 migration 0019, domain field on all 4 structs, persistence, R2 storage helpers, Organizer-gated upload/delete handlers, public API field, frontend types + admin form. Serde contract tests pass (7/7, verified 2026-07-08). **AC6/AC8 deviation resolved 2026-07-09**: operator chose option (b) and restored the 3-tier hero fallback (`poster → nft_image_url → Ticket icon`) in `event_hero.rs`, fixing the regression for existing events and matching the past-events listing card. wasm32 `cargo check` + `clippy` clean. The follow-up commit lands on `feature/event_recap`.
 > **Type**: feature (full-stack)
 > **Priority**: P2 (UX enhancement — better event-page marketing image; no fund/protocol impact)
 > **Created**: 2026-06-18
@@ -311,16 +311,49 @@ Also run frontend clippy locally (CI won't catch it; there are pre-existing fron
 
 ## 7. Acceptance Criteria
 
-- [ ] `events` table has `poster_url` column (migration 0019 applied).
-- [ ] `POST /api/events/{id}/poster` uploads to R2 `posters/{id}.{ext}` and persists served URL; Organizer-gated (non-organizer → 403).
-- [ ] `DELETE /api/events/{id}/poster` clears the field + removes R2 object.
-- [ ] `GET /api/storage/posters/{event_id}` serves the image with correct `Content-Type`.
-- [ ] `GET /api/public/event/{slug}` includes `poster_url`.
-- [ ] `/e/{slug}` hero shows **poster** when set, else **nft_image_url**, else **Ticket icon**.
-- [ ] NFT mint flow (`claim/mint.rs`) still uses `nft_image_url` — untouched, no regression.
-- [ ] Existing events (no poster) behave exactly as before (fallback to NFT image).
-- [ ] Over-5MB upload rejected.
-- [ ] CI green; frontend wasm compiles; serde contract tests cover `poster_url`.
+- [x] `events` table has `poster_url` column (migration 0019 applied).
+      (Verified 2026-07-08: `worker/migrations/0019_event_poster.sql` present —
+      `ALTER TABLE events ADD COLUMN poster_url TEXT NOT NULL DEFAULT '';`.)
+- [x] `POST /api/events/{id}/poster` uploads to R2 `posters/{id}.{ext}` and persists served URL; Organizer-gated (non-organizer → 403).
+      (Code-trace verified 2026-07-08: `worker/src/handlers/events/poster.rs::upload_poster` —
+      L57-62 role check `if role < UserRole::Organizer → AppError::Forbidden`;
+      L110 `storage::put_bytes(bucket, &poster_key(&event_id, ext), ...)`;
+      L114-127 persists `format!("/api/storage/posters/{event_id}")` via `update_event`.)
+- [x] `DELETE /api/events/{id}/poster` clears the field + removes R2 object.
+      (Code-trace verified 2026-07-08: `delete_poster` L172-179 best-effort deletes all
+      extension variants from R2; L182-194 sets `poster_url: Some(String::new())`.)
+- [x] `GET /api/storage/posters/{event_id}` serves the image with correct `Content-Type`.
+      (Code-trace verified 2026-07-08: route registered at `worker/src/handlers/mod.rs:155-156`
+      (`/storage/posters/{event_id}` → `storage::serve_poster`); `serve_poster` at
+      `worker/src/storage.rs:245` delegates to `serve_r2_object` which sets Content-Type
+      from the stored metadata written by `put_bytes`.)
+- [x] `GET /api/public/event/{slug}` includes `poster_url`.
+      (Code-trace verified 2026-07-08: `worker/src/handlers/public_event.rs` L198
+      `"poster_url": config.poster_url` in `get_public_event` JSON response. Also at L281, L386.)
+- [x] `/e/{slug}` hero shows **poster** when set, else **nft_image_url**, else **Ticket icon**.
+      (Verified 2026-07-09: operator chose option (b) — restore the 3-tier fallback.
+      `event_hero.rs` now reads `poster_url → nft_image_url → Ticket icon`, the second
+      param is no longer `_`-prefixed, and `alt` reflects the source ("Event poster"
+      vs "Event badge"). wasm32 `cargo check` + `clippy` clean. This also matches the
+      past-events listing card (`past_events.rs` L140-144) which already used the same
+      `poster → nft` fallback, so the two surfaces are now consistent.)
+- [x] NFT mint flow (`claim/mint.rs`) still uses `nft_image_url` — untouched, no regression.
+      (Code-trace verified 2026-07-08: `worker/src/claim/mint.rs` L699 and L874 both pass
+      `image_url: &event.nft_image_url` into the Helius mint JSON-RPC. No `poster_url`
+      reference anywhere in `claim/`. Mint path fully isolated from the poster field.)
+- [x] Existing events (no poster) behave exactly as before (fallback to NFT image).
+      (Verified 2026-07-09: regression fixed by the AC6 option-(b) change — events with an
+      NFT badge image but no poster now render that badge image again instead of the
+      Ticket icon, restoring pre-Plan-009 behavior for historical events.)
+- [x] Over-5MB upload rejected.
+      (Code-trace verified 2026-07-08: `poster.rs` L29 `MAX_POSTER_BYTES = 5 * 1024 * 1024`;
+      L68-75 rejects with `AppError::Validation` when `bytes.len() > MAX_POSTER_BYTES`;
+      L216 `collect_body_bytes` also caps at collection time via `to_bytes(..., MAX_POSTER_BYTES)`.)
+- [x] CI green; frontend wasm compiles; serde contract tests cover `poster_url`.
+      (Verified 2026-07-08: `cargo test -p event-checkin-worker --test serde_contract poster_url`
+      → 7 passed, 0 failed. Tests cover: create defaults-empty + round-trip; update
+      defaults-None + round-trip-set + round-trip-clear; event_config defaults-empty +
+      round-trip-non-empty. PR #14 merged → CI was green at merge.)
 
 ---
 

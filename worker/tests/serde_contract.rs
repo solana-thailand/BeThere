@@ -412,3 +412,135 @@ fn update_event_request_default_impl_all_none() {
     assert_eq!(req.nft_image_url, None);
     assert_eq!(req.name, None);
 }
+
+// ================================================================================================
+// recap_published — Plan 008 Phase 2 (event public recap).
+//
+// `recap_published` is a denormalized boolean on `EventConfig` + `EventMeta`
+// mirroring `events.recap_published` (migration 0020). It defaults to `false`
+// when absent so existing payloads + pre-migration D1 rows keep working.
+// ================================================================================================
+
+#[test]
+fn event_config_recap_published_defaults_false_when_absent() {
+    // Minimal EventConfig payload without `recap_published` — must deserialize
+    // cleanly and default to `false`. Critical for backward compatibility with
+    // any KV-stored configs written before Plan 008 Phase 2 landed.
+    let json = r#"{"id":"x","name":"E","slug":"x","tagline":"","link":"","status":"draft","event_start_ms":0,"event_end_ms":0,"sheet_id":"","sheet_name":"","staff_sheet_name":"","created_at":"","updated_at":""}"#;
+    let cfg: EventConfig = serde_json::from_str(json).expect("minimal EventConfig should parse");
+    assert!(
+        !cfg.recap_published,
+        "recap_published must default to false when absent"
+    );
+}
+
+#[test]
+fn event_config_recap_published_round_trips_true() {
+    // When explicitly set to true, the flag must round-trip through serde.
+    // Unlike poster_url (skip_serializing_if empty), `recap_published: bool`
+    // always serializes — verify it appears in the output.
+    let json = r#"{"id":"x","name":"E","slug":"x","tagline":"","link":"","status":"draft","event_start_ms":0,"event_end_ms":0,"sheet_id":"","sheet_name":"","staff_sheet_name":"","created_at":"","updated_at":"","recap_published":true}"#;
+    let cfg: EventConfig =
+        serde_json::from_str(json).expect("EventConfig with recap_published should parse");
+    assert!(cfg.recap_published);
+    let reser = serde_json::to_string(&cfg).expect("serialize EventConfig");
+    assert!(
+        reser.contains("\"recap_published\":true"),
+        "recap_published:true must appear in serialized output, got: {reser}"
+    );
+}
+
+#[test]
+fn event_config_recap_published_round_trips_false_explicit() {
+    // Explicit `false` must round-trip too (distinguishes "set to false" from
+    // "absent" on the wire — both deserialize to false, but the serialized
+    // form should still carry the field for client visibility).
+    let json = r#"{"id":"x","name":"E","slug":"x","tagline":"","link":"","status":"draft","event_start_ms":0,"event_end_ms":0,"sheet_id":"","sheet_name":"","staff_sheet_name":"","created_at":"","updated_at":"","recap_published":false}"#;
+    let cfg: EventConfig =
+        serde_json::from_str(json).expect("EventConfig with recap_published=false should parse");
+    assert!(!cfg.recap_published);
+    let reser = serde_json::to_string(&cfg).expect("serialize EventConfig");
+    assert!(
+        reser.contains("\"recap_published\":false"),
+        "recap_published:false must appear in serialized output, got: {reser}"
+    );
+}
+
+// ================================================================================================
+// EventRecap — Plan 008 Phase 2 (recap content payload).
+//
+// `EventRecap` is returned by `GET /api/events/{id}/recap` (organizer) and
+// embedded into `GET /api/public/event/{slug}/recap`. These tests pin the
+// contract: defaults to empty/None when fields are absent, and round-trips
+// the published + draft states.
+// ================================================================================================
+
+#[test]
+fn event_recap_defaults_empty_when_fields_absent() {
+    use event_checkin_domain::models::event_summary::EventRecap;
+
+    // Only event_id is required; everything else should default.
+    let json = r#"{"event_id":"evt-1"}"#;
+    let recap: EventRecap = serde_json::from_str(json).expect("minimal EventRecap should parse");
+    assert_eq!(recap.event_id, "evt-1");
+    assert!(recap.recap_markdown.is_empty());
+    assert!(recap.recap_image_url.is_empty());
+    assert!(recap.recap_published_at.is_none());
+    assert!(recap.frozen_at.is_none());
+}
+
+#[test]
+fn event_recap_round_trips_published_state() {
+    use event_checkin_domain::models::event_summary::EventRecap;
+
+    // A fully-populated published recap. All five fields must round-trip.
+    // Avoid `\n` (raw strings don't process escapes — would inject a literal
+    // newline into the JSON and break parsing) and avoid `#` runs (would
+    // close the raw string early). Plain text exercises the same code path.
+    let json = r#"{"event_id":"evt-1","recap_markdown":"Great event with 50 devs.","recap_image_url":"https://cdn.example.com/hero.png","recap_published_at":"2026-07-01T12:00:00Z","frozen_at":"2026-06-30T23:59:59Z"}"#;
+    let recap: EventRecap = serde_json::from_str(json).expect("published EventRecap should parse");
+    assert_eq!(recap.event_id, "evt-1");
+    assert_eq!(recap.recap_markdown, "Great event with 50 devs.");
+    assert_eq!(recap.recap_image_url, "https://cdn.example.com/hero.png");
+    assert_eq!(
+        recap.recap_published_at.as_deref(),
+        Some("2026-07-01T12:00:00Z")
+    );
+    assert_eq!(recap.frozen_at.as_deref(), Some("2026-06-30T23:59:59Z"));
+
+    // Round-trip: skip_serializing_if only fires on None for the Option fields,
+    // so all five should appear in the serialized output.
+    let reser = serde_json::to_string(&recap).expect("serialize EventRecap");
+    assert!(
+        reser.contains("\"recap_published_at\":\"2026-07-01T12:00:00Z\""),
+        "recap_published_at must appear in serialized output, got: {reser}"
+    );
+    assert!(
+        reser.contains("\"frozen_at\":\"2026-06-30T23:59:59Z\""),
+        "frozen_at must appear in serialized output, got: {reser}"
+    );
+}
+
+#[test]
+fn event_recap_round_trips_draft_state() {
+    use event_checkin_domain::models::event_summary::EventRecap;
+
+    // A draft (unpublished) recap. `recap_published_at` is None, so it must
+    // be skipped on serialize (per `skip_serializing_if = "Option::is_none"`).
+    let json = r#"{"event_id":"evt-1","recap_markdown":"Draft text","recap_image_url":"","recap_published_at":null,"frozen_at":null}"#;
+    let recap: EventRecap = serde_json::from_str(json).expect("draft EventRecap should parse");
+    assert_eq!(recap.recap_markdown, "Draft text");
+    assert!(recap.recap_image_url.is_empty());
+    assert!(recap.recap_published_at.is_none());
+    assert!(recap.frozen_at.is_none());
+
+    let reser = serde_json::to_string(&recap).expect("serialize draft EventRecap");
+    assert!(
+        !reser.contains("recap_published_at"),
+        "draft recap must skip recap_published_at on serialize, got: {reser}"
+    );
+    assert!(
+        !reser.contains("frozen_at"),
+        "draft recap must skip frozen_at on serialize, got: {reser}"
+    );
+}

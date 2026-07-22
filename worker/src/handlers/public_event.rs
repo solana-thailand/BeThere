@@ -233,6 +233,168 @@ pub async fn get_public_event(
     })))
 }
 
+/// `GET /api/public/events/past`
+///
+/// Lists completed events with a published public recap (Plan 008 — Phase 2).
+/// Mirrors `list_public_events` but filters on `status == 'completed' AND
+/// recap_published == 1` and sorts by `event_end_ms DESC` (most recent first).
+///
+/// D1-first: the `recap_published` flag lives on the events row (denormalized
+/// from `event_summaries.recap_published_at` by `PUT /events/{id}/recap`). The
+/// KV fallback reads `EventConfig.recap_published`, which is mirrored onto KV
+/// whenever the recap endpoint persists the flag through `update_event`.
+#[worker::send]
+pub async fn list_past_events(
+    State(state): State<AppState>,
+) -> Result<ApiOk<Value>, crate::error::WorkerError> {
+    let past_events: Vec<Value> = if let Some(d1) = &state.d1 {
+        crate::db::events::list_past_events_raw(d1)
+            .await
+            .map_err(AppError::Internal)?
+    } else if let Some(kv) = &state.events_kv {
+        let index = crate::event_store::get_event_index(kv)
+            .await
+            .map_err(AppError::Internal)?;
+        index
+            .events
+            .into_iter()
+            .filter(|e| {
+                use event_checkin_domain::models::event::EventStatus;
+                e.status == EventStatus::Completed
+                    && e.recap_published
+                    && e.visibility == EventVisibility::Public
+            })
+            .map(|e| {
+                json!({
+                    "id": e.id,
+                    "name": e.name,
+                    "slug": e.slug,
+                    "status": e.status.as_str(),
+                    "event_start_ms": e.event_start_ms,
+                    "event_end_ms": e.event_end_ms,
+                    "time_tba": e.time_tba,
+                    "deposit_enabled": e.deposit_enabled,
+                    "event_format": e.event_format.as_str(),
+                    "tagline": e.tagline,
+                    "location": e.location,
+                    "nft_image_url": e.nft_image_url,
+                    "poster_url": e.poster_url,
+                    "created_at": e.created_at,
+                    "in_person_capacity": e.in_person_capacity,
+                    "online_capacity": e.online_capacity,
+                    "visibility": e.visibility.as_str(),
+                })
+            })
+            .collect()
+    } else {
+        return Err(AppError::Internal("no data store configured".into()).into());
+    };
+
+    tracing::info!(count = past_events.len(), "past events listed");
+
+    Ok(ApiOk::new(json!({
+        "events": past_events,
+    })))
+}
+
+/// `GET /api/public/event/{slug}/recap`
+///
+/// Returns the public recap for a completed event (Plan 008 — Phase 2 §3.2.2).
+/// Returns 404 (looks like "no recap") when:
+///   - event not found
+///   - event status is not `Completed` (Active events have no recap)
+///   - `recap_published != 1` (organizer hasn't published)
+///   - no frozen `event_summaries` row exists
+///
+/// Payload is sanitized: only the headline funnel (registered / deposited /
+/// checked_in) is included. Sensitive fields (refunded totals, no-show count,
+/// financials) are excluded — the public recap celebrates attendance, not
+/// accounting.
+#[worker::send]
+pub async fn get_public_recap(
+    State(state): State<AppState>,
+    Path(slug): Path<String>,
+) -> Result<ApiOk<Value>, crate::error::WorkerError> {
+    use event_checkin_domain::models::event::EventStatus;
+
+    // 1. Resolve event by slug (D1-first, KV fallback).
+    let config = crate::event_store::read::resolve_event_by_slug(
+        state.events_kv.as_ref(),
+        &slug,
+        state.d1.as_deref(),
+    )
+    .await
+    // 404 (not "unpublished") — slug doesn't resolve to any event.
+    .map_err(|_| AppError::NotFound(format!("event '{slug}' not found")))?;
+
+    // 2. Public recap requires the event to be Completed and published.
+    //    Any other state returns 404 (indistinguishable from "no recap").
+    let is_completed = config.status == EventStatus::Completed;
+    let is_published = config.recap_published && config.visibility == EventVisibility::Public;
+    if !is_completed || !is_published {
+        return Err(AppError::NotFound(format!("no public recap for event '{slug}'")).into());
+    }
+
+    // 3. Load the recap slice from event_summaries. Requires D1; if D1 is
+    //    unavailable we treat it as "no recap" rather than surfacing an error.
+    let Some(db) = state.d1.as_deref() else {
+        return Err(AppError::NotFound(format!("no public recap for event '{slug}'")).into());
+    };
+
+    let recap = crate::db::event_summaries::get_recap(db, &config.id)
+        .await
+        .map_err(AppError::Internal)?
+        .ok_or_else(|| AppError::NotFound(format!("no public recap for event '{slug}'")))?;
+
+    // 4. Also requires a published_at timestamp — denormalized flag could lag
+    //    the event_summaries row by one update if a publish failed mid-way.
+    let Some(published_at) = &recap.recap_published_at else {
+        return Err(AppError::NotFound(format!("no public recap for event '{slug}'")).into());
+    };
+
+    // 5. Pull the headline funnel counts. Reuse `compute_snapshot`-adjacent
+    //    primitives — we don't want the full EventSummary (financials/no-show
+    //    are sensitive), so we read the persisted row directly and project out
+    //    only the three headline numbers.
+    let funnel = match crate::db::event_summaries::get_summary(db, &config.id).await {
+        Ok(Some(s)) => json!({
+            "registered_count": s.funnel.registered_count,
+            "deposited_count": s.funnel.deposited_count,
+            "checked_in_count": s.funnel.checked_in_count,
+            "claimed_count": s.funnel.claimed_count,
+        }),
+        _ => json!({
+            "registered_count": 0,
+            "deposited_count": 0,
+            "checked_in_count": 0,
+            "claimed_count": 0,
+        }),
+    };
+
+    tracing::info!(slug = %slug, event_id = %config.id, "public recap served");
+
+    Ok(ApiOk::new(json!({
+        "event": {
+            "id": config.id,
+            "name": config.name,
+            "slug": config.slug,
+            "tagline": config.tagline,
+            "event_start_ms": config.event_start_ms,
+            "event_end_ms": config.event_end_ms,
+            "location": config.location,
+            "event_format": config.event_format.as_str(),
+            "poster_url": config.poster_url,
+            "nft_image_url": config.nft_image_url,
+            "post_event_registration_open": config.post_event_registration_open,
+        },
+        "recap_markdown": recap.recap_markdown,
+        "recap_image_url": recap.recap_image_url,
+        "recap_published_at": published_at,
+        "frozen_at": recap.frozen_at,
+        "funnel": funnel,
+    })))
+}
+
 /// Count attendees by track from sheet data.
 /// Returns (in_person_count, online_count).
 async fn count_attendees_by_track(

@@ -12,6 +12,7 @@ use super::nft_badge::NftClaimedBadge;
 use super::qr_section::QrSection;
 use super::video_section::VideoSection;
 use super::view_data::TicketViewData;
+use crate::api::DepositMethod;
 use crate::icons::{Icon, IconName};
 use crate::utils;
 
@@ -264,6 +265,41 @@ pub fn InPersonView(
                         } else {
                             view! { <div></div> }.into_any()
                         }
+                    } else {
+                        view! { <div></div> }.into_any()
+                    }}
+                    // Hold-as-credit opportunity (checked-in with verified THB deposit, not yet refunded).
+                    // THB-only counterpart to the USDC RolloverActionCard above.
+                    // Backend is idempotent: the source deposit is settled via `held_as_credit`,
+                    // which the server reports back and we forward as `already_held`. The card then
+                    // mounts in its AlreadyHeld confirmation (no CTA), so reload is safe and the
+                    // backend guard is the defense-in-depth backstop (Issue #061 §8 — resolved).
+                    {if dep.verified && !dep.refunded && is_checked_in && dep.method == DepositMethod::Thb {
+                        let hold_eid = event_id.clone();
+                        let hold_aid = api_id.clone();
+                        let hold_amount = deposit_amount_thb;
+                        let hold_already = dep.held_as_credit;
+                        view! {
+                            <HoldDepositCard
+                                event_id=hold_eid
+                                attendee_id=hold_aid
+                                deposit_amount_thb=hold_amount
+                                already_held=hold_already
+                            />
+                        }.into_any()
+                    } else {
+                        view! { <div></div> }.into_any()
+                    }}
+                    // Phase 3 exit path — "Request Return of Held Credit"
+                    // (Issue #061 §D3). Rendered only when the attendee has
+                    // actually held their deposit as credit, so the exit is
+                    // meaningful. The card fetches its own already-requested
+                    // state on mount (mirrors the held_as_credit UX pattern),
+                    // so no props are needed.
+                    {if dep.held_as_credit {
+                        view! {
+                            <RequestCreditRefundCard />
+                        }.into_any()
                     } else {
                         view! { <div></div> }.into_any()
                     }}

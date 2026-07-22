@@ -38,6 +38,10 @@ pub fn routes(state: AppState) -> Router<()> {
     // Public event list: 60s cache (changes infrequently)
     let public_events_list = Router::new()
         .route("/public/events", get(public_event::list_public_events))
+        // Past events feed (Plan 008 — Phase 2): completed events with a
+        // published recap. Same 60s cache — recaps are author-published and
+        // rarely change once live.
+        .route("/public/events/past", get(public_event::list_past_events))
         .layer(middleware::from_fn(
             crate::middleware::cache_public_60_layer,
         ));
@@ -45,6 +49,13 @@ pub fn routes(state: AppState) -> Router<()> {
     // Public event detail: 120s cache (individual events rarely change)
     let public_events_detail = Router::new()
         .route("/public/event/{slug}", get(public_event::get_public_event))
+        // Public recap for a completed event (Plan 008 — Phase 2). Shares the
+        // 120s cache — recaps are immutable once published; unpublishing is
+        // rare and a short stale window is acceptable.
+        .route(
+            "/public/event/{slug}/recap",
+            get(public_event::get_public_recap),
+        )
         // Event series (related events / prev-next). Shares the 120s cache —
         // series structure changes rarely and the payload is derived from
         // campaign_events + events, both already cached at this granularity.
@@ -157,6 +168,12 @@ pub fn routes(state: AppState) -> Router<()> {
         .route("/auth/me", get(auth::auth_me))
         // Self-registration (requires verified email from JWT)
         .route("/public/register", post(register::register_attendee))
+        // Post-event lead capture (Plan 008 — Phase 3): same JWT gate as normal
+        // registration. Visitor signs in with Google, submits a stripped form.
+        .route(
+            "/public/event/{slug}/register-post-event",
+            post(register::register_post_event),
+        )
         // Attendee's own registration lookup (requires verified email from JWT)
         .route("/my-registration/{slug}", get(register::my_registration))
         // All registrations for the signed-in user across all events
@@ -179,6 +196,19 @@ pub fn routes(state: AppState) -> Router<()> {
         .route(
             "/deposit/credit-balance",
             get(deposit::credit_balance_handler),
+        )
+        // Phase 3 exit path — attendee requests return of held rolling credit
+        // (Issue #061 §D3). Sets a visibility-only flag on the attendee's own
+        // contact row; organizer processes payout via existing refund tooling.
+        .route(
+            "/deposit/request-credit-refund",
+            post(deposit::request_credit_refund_handler),
+        )
+        // Read the attendee's own flag state — backs the ticket page's
+        // already-requested card state on reload (mirrors held_as_credit UX).
+        .route(
+            "/deposit/credit-refund-request",
+            get(deposit::credit_refund_request_status_handler),
         )
         // Roll deposit to next event (attendee-authed — attendee signs the TX)
         .route(
@@ -307,6 +337,20 @@ pub fn routes(state: AppState) -> Router<()> {
             "/events/{id}/poster",
             post(events::upload_poster).delete(events::delete_poster),
         )
+        // Public recap authoring (Plan 008 — Phase 2): organizer fetches +
+        // authors + publishes the public recap (gated on a frozen summary).
+        .route(
+            "/events/{id}/recap",
+            get(events::get_recap_handler).put(events::put_recap),
+        )
+        // PR pack generator (Plan 008 — Phase 4): deterministic marketing copy.
+        .route("/events/{id}/pr-pack", get(events::get_pr_pack))
+        // Post-event registration toggle (Plan 008 — Phase 3): organizer opens/closes
+        // lead capture + optional deadline for a completed event.
+        .route(
+            "/events/{id}/post-event-registration",
+            put(events::put_post_event_registration),
+        )
         .route("/events/{id}/delete", delete(events::hard_delete_event))
         .route("/events/{id}/audit", get(events::get_event_audit))
         // Registration form config (protected — organizer configures per-event form fields)
@@ -326,9 +370,40 @@ pub fn routes(state: AppState) -> Router<()> {
         )
         .route("/refund/queue", get(deposit::refund_queue_handler))
         .route("/refund/refunded", get(deposit::refunded_list_handler))
+        // Held-as-credit list (admin) — sibling of refunded list, filters on
+        // held_as_credit = true (Issue #061 Phase 2).
+        .route("/refund/held", get(deposit::held_list_handler))
         .route(
             "/refund/mark/{attendee_id}",
             post(deposit::mark_refund_handler),
+        )
+        // Admin marks a deposit as held-as-rolling-credit on behalf of an
+        // attendee (attendee confirmed verbally but didn't tap the button).
+        // Mirrors mark_refund_handler's shape + the attendee hold invariants.
+        .route(
+            "/refund/hold/{attendee_id}",
+            post(deposit::admin_hold_deposit_handler),
+        )
+        // Total deposit-credit liability across all contacts — the organizer's
+        // "Total credit held" header chip (Issue #061 Phase 2 option a2).
+        // One D1 SUM/COUNT; degrades to zeros if D1 is unavailable.
+        .route(
+            "/deposit/credit-liability",
+            get(deposit::credit_liability_handler),
+        )
+        // Phase 3 exit path — admin lists contacts with an open "credit refund
+        // requested" flag (Issue #061 §D3). Backs the badge on the Held-as-Credit
+        // tab. One D1 round-trip via the partial index from migration 0023.
+        .route(
+            "/deposit/credit-refund-requests",
+            get(deposit::credit_refund_requests_handler),
+        )
+        // Phase 3 exit path — admin clears the flag after processing the payout
+        // (Issue #061 §D3). Sets the flag to 0 + nulls the timestamp; a subsequent
+        // attendee request starts a fresh timestamp.
+        .route(
+            "/deposit/clear-credit-refund-request",
+            post(deposit::clear_credit_refund_request_handler),
         )
         .route(
             "/refund/manual/{attendee_id}",
@@ -370,6 +445,10 @@ pub fn routes(state: AppState) -> Router<()> {
         .route("/contacts/events", get(contacts::list_events_tab_handler))
         .route("/contacts/stats", get(contacts::contacts_stats_handler))
         .route("/contacts/audience", get(contacts::audience_handler))
+        .route(
+            "/contacts/{email}/history",
+            get(contacts::contact_history_handler),
+        )
         .route("/contacts/sync", post(contacts::sync_contacts_handler))
         // Organization management (protected — super admin CRUD)
         .route("/orgs", get(orgs::list_orgs).post(orgs::create_org))

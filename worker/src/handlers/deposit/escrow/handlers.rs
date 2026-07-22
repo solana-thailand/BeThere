@@ -711,14 +711,42 @@ pub async fn claim_forfeited_tx_handler(
         }
     }
 
-    let forfeited: Vec<String> = usdc_wallets
+    let indexer_candidates: Vec<String> = usdc_wallets
         .into_iter()
         .filter(|w| !excluded_wallets.contains(w))
         .collect();
 
+    // Defense against indexer lag: the D1 on-chain event index (populated by the
+    // Helius webhook / RPC poller) may trail the chain. An attendee who was just
+    // refunded-and-closed would still appear as a candidate here, but claiming
+    // their now-closed AttendeeDeposit PDA fails on-chain with `IllegalOwner`
+    // (closed PDAs revert to SystemProgram ownership, rejected by Quasar's
+    // `Account<AttendeeDeposit>` owner check in ~195 CU, before any instruction
+    // logic). Batch-verify each candidate's deposit PDA still exists and is owned
+    // by the escrow program; drop any that don't, so we never build a doomed TX.
+    let forfeited = crate::solana_escrow::filter_forfeitable_deposits(
+        &rpc_url,
+        organizer_pubkey,
+        on_chain_event_id,
+        &indexer_candidates,
+    )
+    .await
+    .map_err(|e| AppError::Internal(format!("forfeitable deposit verification failed: {e}")))?;
+
+    let dropped = indexer_candidates.len().saturating_sub(forfeited.len());
+    if dropped > 0 {
+        tracing::warn!(
+            event_id = %event.id,
+            candidates = indexer_candidates.len(),
+            dropped,
+            "Dropped {} candidate(s) whose AttendeeDeposit PDAs are no longer open (already refunded/closed) — likely indexer lag",
+            dropped
+        );
+    }
+
     if forfeited.is_empty() {
         return Err(AppError::Validation(
-            "no forfeited deposits to claim — all attendees checked in or refunded".to_string(),
+            "no forfeited deposits to claim — all attendees checked in, refunded, or already settled".to_string(),
         )
         .into());
     }

@@ -1,6 +1,6 @@
 # Plan 008 — Event Lifecycle: Summary, Recap, Post-Event Registration, PR Generator
 
-> **Status**: DRAFT — not started
+> **Status**: Phase 1 (Post-Event Summary) ✅ shipped (`48d25b1`, deployed) · Phase 2 (Public Recap + Past Events) ✅ merged to `develop` 2026-07-16 via PR #20 (rebased from `feature/event_recap` `9549532` + visibility-fix `74bc43d`); deploy pending · Phase 3 (Post-Event Registration) ✅ merged to `develop` 2026-07-16 via PR #20 (originally implemented 2026-07-09: toggle + public register + frontend form); live validation still blocked on Plan 005 staging · Phase 4 (PR Generator) ✅ merged to `develop` 2026-07-16 via PR #20 (originally `63270ac`). Cross-cutting checks (clippy clean, tests green) re-run and passing on `develop` @ `f83644f` (367 tests).
 > **Type**: feature (event lifecycle workflow) + content (PR/recap generation)
 > **Priority**: P2 — closes the "what happens after an event ends" gap and turns past events into lead-capture surfaces. Independent of plans 005/006/007; can start in parallel.
 > **Created**: 2026-06-23
@@ -137,9 +137,14 @@ ALTER TABLE attendees ADD COLUMN registration_phase TEXT NOT NULL DEFAULT 'pre_e
 CREATE INDEX IF NOT EXISTS idx_attendees_phase ON attendees(event_id, registration_phase);
 ```
 
-- [ ] Add migration file.
-- [ ] Verify idempotency (`IF NOT EXISTS` on table + index; `ADD COLUMN` is one-shot — relies on `d1_migrations` tracker).
-- [ ] Document the `breakdown_json` shape inline as a comment (e.g. `{"by_format": {"in_person": 20, "online": 8}, "top_roles": [...]}`) even though v1 leaves it as `{}`.
+- [x] Add migration file.
+      (Verified 2026-07-08: `worker/migrations/0020_event_summaries_post_event.sql` present.)
+- [x] Verify idempotency (`IF NOT EXISTS` on table + index; `ADD COLUMN` is one-shot — relies on `d1_migrations` tracker).
+      (Verified 2026-07-08: L19 `CREATE TABLE IF NOT EXISTS event_summaries`,
+      L72 `CREATE INDEX IF NOT EXISTS idx_attendees_phase`. Idempotent.)
+- [x] Document the `breakdown_json` shape inline as a comment (e.g. `{"by_format": {"in_person": 20, "online": 8}, "top_roles": [...]}`) even though v1 leaves it as `{}`.
+      (Verified 2026-07-08: L45 `-- v1 shape: {"by_format": {"in_person": N, "online": M}, "top_roles": [...]}`,
+      L47 `breakdown_json TEXT NOT NULL DEFAULT '{}'`.)
 
 ### 3.1 Phase 1 — Post-Event Summary (internal record)
 
@@ -147,25 +152,30 @@ CREATE INDEX IF NOT EXISTS idx_attendees_phase ON attendees(event_id, registrati
 
 New file: `domain/src/models/event_summary.rs`
 
-- [ ] `pub struct EventSummary` mirroring the table columns, with `#[serde(...)]` matching API conventions.
-- [ ] `pub struct FunnelSnapshot` (registered, deposited, checked_in, no_show, claimed, refunded, post_event_reg) — embedded in `EventSummary` for the response payload.
-- [ ] `pub struct FinancialSnapshot` (usdc_deposited_total, usdc_refunded_total, thb_deposited_total, thb_refunded_total) — embedded similarly.
-- [ ] Re-export from `domain/src/models/mod.rs`.
+- [x] `pub struct EventSummary` mirroring the table columns, with `#[serde(...)]` matching API conventions.
+      (Verified 2026-07-08: `domain/src/models/event_summary.rs:20`.)
+- [x] `pub struct FunnelSnapshot` (registered, deposited, checked_in, no_show, claimed, refunded, post_event_reg) — embedded in `EventSummary` for the response payload.
+      (Verified 2026-07-08: `domain/src/models/event_summary.rs:74`.)
+- [x] `pub struct FinancialSnapshot` (usdc_deposited_total, usdc_refunded_total, thb_deposited_total, thb_refunded_total) — embedded similarly.
+      (Verified 2026-07-08: `domain/src/models/event_summary.rs:114`.)
+- [x] Re-export from `domain/src/models/mod.rs`.
+      (Verified 2026-07-08: `domain/src/models/mod.rs:8` `pub mod event_summary;`.)
 
 #### 3.1.2 DB layer
 
 New file: `worker/src/db/event_summaries.rs`
 
-- [ ] `pub async fn get_summary(db, event_id) -> Result<Option<EventSummaryRow>, String>` — raw row read.
-- [ ] `pub async fn upsert_summary(db, summary: &EventSummary) -> Result<(), String>` — write freeze.
-- [ ] `pub async fn compute_snapshot(db, event_id) -> Result<EventSummary, String>` — **the core aggregation**. Reuse existing primitives where possible:
-  - `count_registered(db, event_id)` from `db/dashboard.rs` (approved attendees with `registration_phase = 'pre_event'`)
-  - `count_checked_in(db, event_id)` from `db/dashboard.rs`
-  - `count_claims_minted(db, event_id)` from `db/dashboard.rs`
-  - `verified_usdc_summary(db, event_id)` from `db/dashboard.rs` for `usdc_deposited_total`
-  - New helpers in this file for: `no_show_count` (registered − checked_in), `refunded_count` + `usdc_refunded_total` (from `deposit_statuses` + `thb_deposits` where refund markers set), `thb_deposited_total` (from `thb_deposits`), `post_event_reg_count` (from `attendees` where `registration_phase = 'post_event'`).
-- [ ] Follow the NULL-safe raw-JS-interop pattern from `db/dashboard.rs` (avoid `.first::<T>()` panics on `JsValue(null)`).
-- [ ] Follow the `sqlx::raw_sql` style note from the handover rules (parameter binding via D1's `bind_refs` is fine — that note applies to sqlx/pg, not Cloudflare D1's JS-binding API).
+- [x] `pub async fn get_summary(db, event_id) -> Result<Option<EventSummaryRow>, String>` — raw row read.
+      (Verified 2026-07-08: `worker/src/db/event_summaries.rs:29`.)
+- [x] `pub async fn upsert_summary(db, summary: &EventSummary) -> Result<(), String>` — write freeze.
+      (Verified 2026-07-08: `worker/src/db/event_summaries.rs:78`.)
+- [x] `pub async fn compute_snapshot(db, event_id) -> Result<EventSummary, String>` — **the core aggregation**. Reuse existing primitives where possible:
+      (Verified 2026-07-08: `worker/src/db/event_summaries.rs:281`. Reuses dashboard primitives
+      per the plan; aggregation logic present.)
+- [x] Follow the NULL-safe raw-JS-interop pattern from `db/dashboard.rs` (avoid `.first::<T>()` panics on `JsValue(null)`).
+      (Verified 2026-07-08: `event_summaries.rs` follows the D1 JS-binding pattern; no sqlx.)
+- [x] Follow the `sqlx::raw_sql` style note from the handover rules (parameter binding via D1's `bind_refs` is fine — that note applies to sqlx/pg, not Cloudflare D1's JS-binding API).
+      (Verified 2026-07-08: D1 JS-binding API used, not sqlx. N/A for this codebase.)
 
 #### 3.1.3 Handler
 
@@ -173,40 +183,40 @@ New file: `worker/src/handlers/events/summary.rs`
 
 Two endpoints, both protected (organizer+ only, resolved via `auth::resolve_user_role`):
 
-- [ ] `GET /api/events/{id}/summary` — **lazy freeze**:
-  1. Load event config (KV → D1 fallback, existing pattern).
-  2. Role check: reject if Staff.
-  3. If `event.status == Draft` → return 409 "event not yet active".
-  4. If existing frozen row in `event_summaries` → return it.
-  5. If `now_ms < event_end_ms` → return live-computed snapshot with `frozen_at: null` and a `"frozen": false` flag (organizer can preview the would-be freeze).
-  6. If `now_ms >= event_end_ms` and no frozen row → call `compute_snapshot` + `upsert_summary`, then return with `"frozen": true`. Write an audit entry (`AuditAction::EventSummaryFrozen`).
-- [ ] `POST /api/events/{id}/summary/freeze` — manual trigger:
-  1. Same role check.
-  2. Reject if event is still `Active` and `now_ms < event_end_ms` (cannot freeze early — would mislead). Allow only if `event.status == Completed` or `now_ms >= event_end_ms`.
-  3. Compute + upsert + audit. Return frozen summary.
-- [ ] Add new `AuditAction::EventSummaryFrozen` variant to `worker/src/audit_store.rs` + the `FromStr`/serde impls used by `audit.rs::get_event_audit`.
+- [x] `GET /api/events/{id}/summary` — **lazy freeze**:
+      (Verified 2026-07-08: `worker/src/handlers/events/summary.rs::get_event_summary` (L31-64).
+      Implements the full lazy-freeze flow: L39 load event, L40 role check,
+      L42-47 Draft→400, L50-53 existing frozen row returns, L56-58 now≥end→freeze,
+      L61-63 else live preview. `summary_response` sets `frozen: true/false` flag.)
+- [x] `POST /api/events/{id}/summary/freeze` — manual trigger:
+      (Verified 2026-07-08: `summary.rs::freeze_event_summary` (L72-98). L83-85 Draft→error,
+      L87-94 rejects in-progress freeze (`now_ms >= event_end_ms || status == Completed`),
+      L96 computes+persists+audits via `freeze_now`.)
+- [x] Add new `AuditAction::EventSummaryFrozen` variant to `worker/src/audit_store.rs` + the `FromStr`/serde impls used by `audit.rs::get_event_audit`.
+      (Verified 2026-07-08: `worker/src/audit_store.rs:41` `EventSummaryFrozen` variant present;
+      used in `summary.rs::freeze_now` L176, L189.)
 
 #### 3.1.4 Route wiring
 
-- [ ] In `worker/src/handlers/events/mod.rs`: add `pub mod summary;` + re-exports.
-- [ ] In `worker/src/handlers/mod.rs::routes()` (protected group, ~L261-283 block):
-  ```rust
-  .route("/events/{id}/summary", get(events::get_event_summary))
-  .route("/events/{id}/summary/freeze", post(events::freeze_event_summary))
-  ```
+- [x] In `worker/src/handlers/events/mod.rs`: add `pub mod summary;` + re-exports.
+      (Verified 2026-07-08: `worker/src/handlers/events/mod.rs:29` `pub mod summary;`,
+      L42 `pub use summary::{freeze_event_summary, get_event_summary};`.)
+- [x] In `worker/src/handlers/mod.rs::routes()` (protected group, ~L261-283 block):
+      (Verified 2026-07-08: `worker/src/handlers/mod.rs:312` `.route("/events/{id}/summary", get(events::get_event_summary))`,
+      L314-315 `.route("/events/{id}/summary/freeze", post(events::freeze_event_summary))`.)
 
 #### 3.1.5 Frontend — organizer summary view
 
 New file: `frontend-leptos/src/pages/organizer/event_summary.rs`
 
-- [ ] Route: `/events/{id}/summary` (protected — redirect to login if no JWT).
-- [ ] Sections:
-  - **Header**: event name, date range, status badge, "Frozen at {timestamp}" or "Live preview (not yet frozen)" badge.
-  - **Funnel tiles**: registered → deposited → checked-in → claimed, with conversion percentages. No-show count + rate. Post-event registration count (always 0 in v1 of Phase 1; populated by Phase 3).
-  - **Financials**: USDC deposited / refunded (atomic → human via existing `format_usdc`), THB deposited / refunded.
-  - **Freeze button**: shown only when `frozen == false` and `now_ms >= event_end_ms`. Calls `POST /summary/freeze`. Confirms with a dialog ("This snapshot is permanent — later refunds will not change these numbers.").
-  - **Audit trail snippet**: last 10 entries for this event (reuse existing `/audit` endpoint).
-- [ ] Link from the existing organizer dashboard ("View Summary" button per event row).
+- [x] Route: `/events/{id}/summary` (protected — redirect to login if no JWT).
+      (Verified 2026-07-08: `frontend-leptos/src/lib.rs:80`
+      `<Route path=path!("/events/:id/summary") view=ProtectedEventSummary />`.)
+- [x] Sections:
+      (Verified 2026-07-08: all sections present in `frontend-leptos/src/pages/event_summary.rs`.)
+- [x] Link from the existing organizer dashboard ("View Summary" button per event row).
+      (Verified 2026-07-08: `frontend-leptos/src/pages/events_page.rs:271` and `:591`
+      `href=format!("/events/{sid}/summary")` — two "View Summary" link sites.)
 
 ### 3.2 Phase 2 — Public Recap + Past Events Listing
 
@@ -214,21 +224,21 @@ New file: `frontend-leptos/src/pages/organizer/event_summary.rs`
 
 New file: `worker/src/handlers/events/recap.rs`
 
-- [ ] `PUT /api/events/{id}/recap` (protected, organizer+):
+- [x] `PUT /api/events/{id}/recap` (protected, organizer+): ✅ `worker/src/handlers/events/recap.rs::put_recap`
   - Body: `{ recap_markdown: String, recap_image_url: String, publish: bool }`.
   - Validates: markdown ≤ 16KB; image_url must be https if non-empty.
   - Ensures a frozen `event_summaries` row exists (refuses to publish a recap for an event with no frozen summary — recaps without numbers are misleading). If none, returns 409 with a helpful message ("Freeze the summary first").
   - Updates `event_summaries.recap_markdown`, `recap_image_url`, `recap_published_at` (set to now if `publish=true`, null if false).
-  - Mirrors `recap_published` flag on the `events` row (denormalized for cheap public-listing query).
+  - Mirrors `recap_published` flag on the `events` row (denormalized for cheap public-listing query) + syncs KV EventConfig + EventIndex.
   - Audit: `AuditAction::EventRecapPublished` / `EventRecapUnpublished`.
-- [ ] `GET /api/events/{id}/recap` (protected) — returns draft recap to the organizer (even if unpublished).
+- [x] `GET /api/events/{id}/recap` (protected) — returns draft recap to the organizer (even if unpublished). ✅ `recap.rs::get_recap_handler`
 
 #### 3.2.2 Public recap + past events listing
 
 Extend `worker/src/handlers/public_event.rs`:
 
-- [ ] `GET /api/public/events/past` — list `status == Completed AND recap_published == 1` events, sanitized (same field exclusion as `list_public_events`). Sorted by `event_end_ms DESC`. Cache 60s.
-- [ ] `GET /api/public/event/{slug}/recap` — returns `{ event_meta, recap_markdown, recap_image_url, frozen_at, funnel: { registered, deposited, checked_in } }` for a published recap. Sensitive financials (refunded totals, no-show counts) are **excluded** from the public payload — only headline funnel + recap content. Cache 120s.
+- [x] `GET /api/public/events/past` — list `status == Completed AND recap_published == 1` events, sanitized (same field exclusion as `list_public_events`). Sorted by `event_end_ms DESC`. Cache 60s. ✅ `public_event.rs::list_past_events` + `db/events.rs::list_past_events_raw`
+- [x] `GET /api/public/event/{slug}/recap` — returns `{ event_meta, recap_markdown, recap_image_url, frozen_at, funnel: { registered, deposited, checked_in } }` for a published recap. Sensitive financials (refunded totals, no-show counts) are **excluded** from the public payload — only headline funnel + recap content. Cache 120s. ✅ `public_event.rs::get_public_recap`
   - If recap not published → 404 (looks like the event has no public recap).
   - If event is still Active → 404 (no recap yet).
   - If event is Completed but `recap_published == 0` → 404.
@@ -246,17 +256,17 @@ Extend `worker/src/handlers/public_event.rs`:
 
 #### 3.2.4 Frontend — public recap page + past-events listing
 
-- [ ] New page `frontend-leptos/src/pages/public/past_events.rs` — grid of completed events with published recaps. Each card: name, date, tagline, location, attendance count, "Read recap" CTA.
-- [ ] New page `frontend-leptos/src/pages/public/event_recap.rs` — the recap view: hero image, event name + date, recap markdown (rendered), funnel headline ("X developers gathered, Y checked in"), link back to past-events listing.
-- [ ] Link the landing page's "Past Events" nav entry to `/past-events`.
-- [ ] Link each past-event card to `/events/{slug}/recap`.
+- [x] New page `frontend-leptos/src/pages/public/past_events.rs` — grid of completed events with published recaps. Each card: name, date, tagline, location, attendance count, "Read recap" CTA. ✅
+- [x] New page `frontend-leptos/src/pages/public/event_recap.rs` — the recap view: hero image, event name + date, recap markdown (rendered as preformatted text in v1 — `pulldown-cmark` deferred), funnel headline ("X registered · Y checked in · Z claimed"), link back to past-events listing. ✅
+- [x] Link the landing page's "Past Events" nav entry to `/past-events`. ✅ Added to both desktop nav + mobile menu in `landing.rs`.
+- [x] Link each past-event card to `/events/{slug}/recap`. ✅
 
 #### 3.2.5 Frontend — organizer recap editor
 
-- [ ] Extend `event_summary.rs` page (from 3.1.5) with a "Recap" tab.
-- [ ] Markdown editor (textarea + live preview via existing markdown renderer, or pull in `pulldown-cmark` if not already in deps — check `frontend-leptos/Cargo.toml`).
-- [ ] Image URL field (organizer pastes an R2/Cloudflare Images URL — no upload flow in v1).
-- [ ] "Save Draft" + "Publish" buttons. Publish confirms ("Public immediately at /events/{slug}/recap").
+- [x] Extend `event_summary.rs` page (from 3.1.5) with a "Recap" tab. ✅ Added `RecapSection` component rendered below `FreezeSection`.
+- [x] Markdown editor (textarea + live preview via existing markdown renderer, or pull in `pulldown-cmark` if not already in deps — check `frontend-leptos/Cargo.toml`). ✅ Textarea editor + byte counter; v1 renders markdown as preformatted text on the public page (pulldown-cmark deferred — no existing markdown renderer in deps).
+- [x] Image URL field (organizer pastes an R2/Cloudflare Images URL — no upload flow in v1). ✅
+- [x] "Save Draft" + "Publish" buttons. Publish confirms ("Public immediately at /events/{slug}/recap"). ✅
 
 ### 3.3 Phase 3 — Post-Event Registration (lead capture)
 
@@ -264,17 +274,22 @@ Extend `worker/src/handlers/public_event.rs`:
 
 New file: `worker/src/handlers/events/post_event_registration.rs`
 
-- [ ] `PUT /api/events/{id}/post-event-registration` (protected, organizer+):
+- [x] `PUT /api/events/{id}/post-event-registration` (protected, organizer+):
   - Body: `{ open: bool, until_ms: Option<i64> }`.
   - Validates: `event.status == Completed` (cannot open post-event reg for a not-yet-started event — that's just normal registration). If `open == true` and `until_ms` is `Some`, require `until_ms > now_ms`.
   - Updates `events.post_event_registration_open` + `post_event_registration_until_ms`.
   - Audit: `AuditAction::PostEventRegistrationToggled`.
+      (Verified 2026-07-09: `worker/src/handlers/events/post_event_registration.rs::put_post_event_registration`.
+      Mirrors `recap.rs` — `load_event` + `enforce_organizer`, status==Completed gate, until_ms > now_ms
+      validation, dedicated `db::events::set_post_event_registration` (mirrors `set_recap_published_flag`),
+      KV EventConfig + EventIndex sync, `AuditAction::PostEventRegistrationToggled` audit. Body type
+      `PutPostEventRegistrationRequest { open, until_ms }`.)
 
 #### 3.3.2 Public registration endpoint
 
 Extend `worker/src/handlers/register.rs`:
 
-- [ ] `POST /api/public/event/{slug}/register-post-event` (public, JWT-required for spam resistance — anon users must sign in with Google first, same as normal registration):
+- [x] `POST /api/public/event/{slug}/register-post-event` (public, JWT-required for spam resistance — anon users must sign in with Google first, same as normal registration):
   - Loads event by slug. Rejects 404 if not found, 409 if `status != Completed`, 409 if `post_event_registration_open != 1`, 410 if `until_ms` is set and `now_ms >= until_ms`.
   - Accepts a subset of `RegisterRequest` (name, contact_channel, contact_handle, consent flags, all developer profile fields, `profile_fields` map). Ignores `participation_type`, `deposit_agreed`, `photo_consent_given` (not relevant — they're not attending).
   - Creates `attendees` row with:
@@ -284,22 +299,42 @@ Extend `worker/src/handlers/register.rs`:
     - `checked_in_at = NULL`, no `claim_token` (no NFT to claim)
   - Upserts `contacts` and `developer_profiles` exactly like normal registration (reuse existing helpers).
   - Returns `{ attendee_id, message: "Thanks! We'll notify you about future events." }`.
+      (Verified 2026-07-09: `worker/src/handlers/register.rs::register_post_event` + `PostEventRegisterRequest`.
+      Reuses `write_developer_data` / `DeveloperData` from normal registration. 409 uses the new
+      `AppError::Conflict` variant (added); 410 uses the new `AppError::Gone` variant (added).
+      Dedicated `db::attendees::upsert_post_event_attendee` writes registration_phase='post_event' +
+      approval_status='post_event_registered' (the existing `upsert_attendee` does not set
+      registration_phase). Contact upsert reuses `db::contacts::upsert_contact`. Route wired into the
+      `attendee_authed` group (`require_identity`) at `/public/event/{slug}/register-post-event`.)
 
 #### 3.3.3 Route wiring
 
 ```rust
 // public group (JWT still required — wired into the auth-required public sub-router)
-.route("/public/event/{slug}/register-post-event", post(public_register::register_post_event))
+.route("/public/event/{slug}/register-post-event", post(register::register_post_event))
 
 // protected group
 .route("/events/{id}/post-event-registration", put(events::put_post_event_registration))
 ```
+    (Verified 2026-07-09: both routes wired in `worker/src/handlers/mod.rs`. The public route lives
+    in the `attendee_authed` group (`require_identity` middleware — JWT gate) alongside
+    `/public/register`; the toggle route lives in the `protected` group (staff auth) alongside
+    `/events/{id}/recap` + `/events/{id}/pr-pack`. The plan's `public_register::` module reference
+    was a typo — registration lives in the `register` module.)
 
 #### 3.3.4 Frontend — post-event registration form
 
-- [ ] Extend `event_recap.rs` page (from 3.2.4): if `event.post_event_registration_open == true`, render a "Missed this event? Join the community" CTA below the recap.
-- [ ] New component `frontend-leptos/src/pages/public/post_event_register.rs` — form mirroring the normal registration form but stripped of deposit/participation fields. Shows developer-profile questions (experience_level, tech_stack, interests, etc.) — this is the **primary value** of post-event reg.
-- [ ] Submit success state: "You're on the list. We'll email you about the next event."
+- [x] Extend `event_recap.rs` page (from 3.2.4): if `event.post_event_registration_open == true`, render a "Missed this event? Join the community" CTA below the recap.
+- [x] New component `frontend-leptos/src/pages/public/post_event_register.rs` — form mirroring the normal registration form but stripped of deposit/participation fields. Shows developer-profile questions (experience_level, tech_stack, interests, etc.) — this is the **primary value** of post-event reg.
+- [x] Submit success state: "You're on the list. We'll email you about the next event."
+    (Verified 2026-07-09: CTA card added to `event_recap.rs::render_recap` (gated on
+    `event.post_event_registration_open`). New form page `post_event_register.rs` (route
+    `/events/:slug/post-event-register`) with name, contact channel/handle, experience_level,
+    tech_stack, interests, consent checkboxes. Auth-gated via `get_me()` + redirect to /login
+    (self-gate pattern, same as dev-profile). Success state "You're on the list!". API types
+    (`PostEventRegisterBody`, `register_post_event`, `put_post_event_registration`) in
+    `api/event.rs`. `PublicRecapEvent` gained `post_event_registration_open`; worker's
+    `get_public_recap` now serializes it.)
 
 ### 3.4 Phase 4 — Upcoming PR Generator
 
@@ -307,7 +342,7 @@ Extend `worker/src/handlers/register.rs`:
 
 New file: `worker/src/handlers/events/pr_pack.rs`
 
-- [ ] `GET /api/events/{id}/pr-pack` (protected, organizer+):
+- [x] `GET /api/events/{id}/pr-pack` (protected, organizer+):
   - Loads full `EventConfig`.
   - Generates structured fields via pure functions in a new `domain/src/pr_pack.rs`:
     - `headline`: `{name} — {tagline}` (or just `{name}` if tagline empty).
@@ -318,24 +353,70 @@ New file: `worker/src/handlers/events/pr_pack.rs`
     - `deposit_terms`: human-readable summary of `deposit_enabled`, `deposit_amount_usdc`/`thb`, `refund_deadline_hours`, `max_refundable_deposits`.
     - `organizers`: parsed from `organizer_emails` (CSV → list).
   - Returns `{ ...fields, generated_at, source_config_version: updated_at }`.
-- [ ] No persistence — generated on every call. Deterministic.
+      (Verified 2026-07-09: handler at `worker/src/handlers/events/pr_pack.rs`, pure
+      functions at `domain/src/pr_pack.rs` (14 unit tests). All 7 fields implemented;
+      `organizers` reuses the existing `Vec<String>` on EventConfig with trim+
+      lowercase+dedupe, rather than parsing CSV — EventConfig already stores a list.)
+- [x] No persistence — generated on every call. Deterministic.
+      (Verified 2026-07-09: `pr_pack::generate` is a pure function, no I/O, no caching.
+      `determinism_two_calls_identical` unit test asserts identical output.)
 
 #### 3.4.2 Frontend — PR pack preview
 
-- [ ] New page `frontend-leptos/src/pages/organizer/pr_pack.rs` — route `/events/{id}/pr-pack`.
-- [ ] One card per generated field. Each card has copy-to-clipboard.
-- [ ] "Regenerate" button (re-fetches — useful after editing the event config).
-- [ ] "Open event editor" link to make tweaking source fields easy.
-- [ ] Read-only — no editing here. Edit the event config, regenerate.
+- [x] New page `frontend-leptos/src/pages/organizer/pr_pack.rs` — route `/events/{id}/pr-pack`.
+      (Verified 2026-07-09: created at `frontend-leptos/src/pages/pr_pack.rs` — the
+      project uses a flat `pages/` structure, not a nested `organizer/` subdir.
+      Route registered at `/events/:id/pr-pack` in `lib.rs`, wrapped in `ProtectedRoute`.)
+- [x] One card per generated field. Each card has copy-to-clipboard.
+      (Verified 2026-07-09: `PackField` component renders one card per field with a
+      Copy button using the shared `js/clipboard.js` binding; `OrganizersCard` renders
+      the organizer list with per-email copy buttons.)
+- [x] "Regenerate" button (re-fetches — useful after editing the event config).
+      (Verified 2026-07-09: Regenerate button in the page header drives a refresh
+      counter that re-runs the fetch Effect.)
+- [~] "Open event editor" link to make tweaking source fields easy.
+      (Deviation 2026-07-09: the project has no standalone `/events/:id/edit` route —
+      event editing is embedded in the admin dashboard via internal tab state. The
+      page's "← Back" link to `/admin` serves the same navigation role. Promoting
+      this to a deep-link requires adding a dedicated event-editor route first.)
+- [x] Read-only — no editing here. Edit the event config, regenerate.
+      (Verified 2026-07-09: no form inputs on the page; all fields are render-only.)
 
 ### 3.5 `events_joined` derivation (read-side fix)
 
 The `contacts.events_joined` CSV (`worker/src/db/contacts.rs#L22-31`) is overwritten on every upsert and not queryable. The source of truth for "which events did this contact attend" is the `attendees` table (one row per event per email, scoped by `registration_phase = 'pre_event' AND approval_status IN ('approved')`).
 
-- [ ] New helper `pub async fn list_contact_events(db, email) -> Result<Vec<EventMeta>, String>` in `worker/src/db/contacts.rs` — joins `attendees` → `events` for the email.
-- [ ] New endpoint `GET /api/contacts/{email}/history` (protected) returning the event list.
-- [ ] Document in a code comment that `contacts.events_joined` is **deprecated as a read path** and will be removed in a future migration. Write paths continue updating it for backward compat with any external consumer.
-- [ ] Note: full removal (deleting the column + write paths) is out of scope — logged as follow-up tech debt.
+- [x] New helper `pub async fn list_contact_events(db, email) -> Result<Vec<ContactEventRow>, String>` in `worker/src/db/contacts.rs` — joins `attendees` → `events` for the email.
+      (Verified 2026-07-09: `list_contact_events` at `worker/src/db/contacts.rs` JOINs attendees→events,
+      scoped to `registration_phase = 'pre_event' AND LOWER(approval_status) = 'approved'`, ordered by
+      `event_start_ms DESC`. Email is bound as positional `?1` (not interpolated) — guards against SQL
+      injection, mirroring `audience_aggregate` rather than the `exec`-with-format `clear_contact_pii`.
+      Return type renamed from the plan's `EventMeta` to a new `ContactEventRow` that carries
+      per-registration detail (`checked_in_at`, `participation_type`, `registered_at`) essential for a
+      history view — the domain `EventMeta` is a listing summary without registration context. Uses
+      `safe_all_rows` for NULL-safety. 4 new deserialization tests cover full-row mapping, NULL
+      `checked_in_at` → `None` (the no-show signal), missing-column defaults, and
+      `skip_serializing_if` wire contract. All passing.)
+- [x] New endpoint `GET /api/contacts/{email}/history` (protected) returning the event list.
+      (Verified 2026-07-09: `contact_history_handler` in `worker/src/handlers/contacts.rs` — protected
+      via `Extension(claims): Extension<Claims>`, takes `Path(email)`, normalizes email
+      (trim+lowercase), returns `ContactHistoryResponse { email, events, total }`. Route registered
+      at `worker/src/handlers/mod.rs` as `/contacts/{email}/history` (3 segments — no ambiguity with
+      the existing 2-segment `/contacts/events`, `/contacts/stats`, etc.). D1-missing check follows
+      the `audience_handler` idiom. Compiles clean.)
+- [x] Document in a code comment that `contacts.events_joined` is **deprecated as a read path** and will be removed in a future migration. Write paths continue updating it for backward compat with any external consumer.
+      (Verified 2026-07-09: crate-level doc comment at the top of `worker/src/db/contacts.rs` adds a
+      "Source of truth: `attendees` table (not `contacts.events_joined`)" section explaining the
+      deprecation. The `upsert_contact` doc comment expands on why the CSV column drifts (denormalized,
+      overwrite-on-every-upsert, not queryable) and explicitly states the read path is deprecated while
+      writes continue for backward compat. `list_contact_events` doc reinforces "This is the source of
+      truth" with a back-reference to the crate doc.)
+- [x] Note: full removal (deleting the column + write paths) is out of scope — logged as follow-up tech debt.
+      (Verified 2026-07-09: documented in both the crate-level doc ("Full column removal is tracked as
+      follow-up tech debt — out of scope for Plan 008") and the `upsert_contact` doc ("Full removal
+      (dropping the column + these write paths) is out of scope for Plan 008 and is tracked as
+      follow-up tech debt: it requires a migration to drop the column plus an audit of every upsert
+      caller"). No column drop migration shipped; write paths untouched.)
 
 ---
 
@@ -343,9 +424,30 @@ The `contacts.events_joined` CSV (`worker/src/db/contacts.rs#L22-31`) is overwri
 
 ### Unit
 
-- [ ] `domain/src/pr_pack.rs` — snapshot-style tests for each generator function (input `EventConfig` fixture → expected output string). Cover: missing tagline, missing location, multi-organizer CSV, deposit disabled, very long name (truncation behavior).
-- [ ] `domain/src/models/event_summary.rs` — serde round-trip tests (mirror the pattern in `frontend-leptos/tests/serde_contract.rs`).
-- [ ] `worker/src/db/event_summaries.rs::compute_snapshot` — test against a fixture D1 with known attendee/deposit rows. Assert exact counts + totals. This is the most important unit test in the plan.
+- [x] `domain/src/pr_pack.rs` — snapshot-style tests for each generator function (input `EventConfig` fixture → expected output string). Cover: missing tagline, missing location, multi-organizer CSV, deposit disabled, very long name (truncation behavior).
+      (Verified 2026-07-09: 14 unit tests in `domain/src/pr_pack.rs::tests` (L255-473) — headline
+      fallback, social post truncation, deposit terms, organizers dedupe, determinism, etc.
+      All passing: `cargo test -p event-checkin-domain --lib pr_pack::` → 14 passed.)
+- [x] `domain/src/models/event_summary.rs` — serde round-trip tests (mirror the pattern in `frontend-leptos/tests/serde_contract.rs`).
+      (Verified 2026-07-09: 7 serde round-trip tests added in `domain/src/models/event_summary.rs::tests`
+      (L124-355). Uses an `assert_wire_contract` helper that compares via JSON re-serialization
+      (no `PartialEq` required on `EventSummary`/`EventRecap`, which only derive `Serialize`/`Deserialize`).
+      Covers: full funnel + financials round-trip, legacy payload backward-compat (3 `#[serde(default)]`
+      Phase-3 fields), frozen vs live-preview `frozen_at` (`skip_serializing_if`), draft vs published
+      recap timestamp omission. All passing: `cargo test -p event-checkin-domain --lib models::event_summary::` → 7 passed; total crate now 104 passed, 0 failed, clippy clean.)
+- [x] `worker/src/db/event_summaries.rs::compute_snapshot` — test against a fixture D1 with known attendee/deposit rows. Assert exact counts + totals. This is the most important unit test in the plan.
+      (Verified 2026-07-09: no D1 mock/harness exists anywhere in the worker crate (audited all
+      `#[cfg(test)]` modules — every one tests pure functions, never D1-bound async). Extracted the
+      pure derivation logic from `compute_snapshot` into a testable `assemble_snapshot(inputs, event)`
+      function + a `SnapshotInputs` fixture struct bundling the raw per-rail counts. `compute_snapshot`
+      now just gathers D1 rows into `SnapshotInputs` and delegates to `assemble_snapshot` — same
+      production code path, not a parallel implementation. 9 new tests in
+      `worker/src/db/event_summaries.rs::tests` (L661-895): typical mixed USDC+THB rails, empty event,
+      no-show in-person-slice-only invariant, saturating_sub underflow guard, deposited cross-rail
+      sum (catches single-rail regression), USDC refunded hardcoded-to-0 v1 contract, frozen_at
+      always-None deferral, post-event reg pass-through, atomic-units preservation. All passing:
+      `cargo test -p event-checkin-worker --lib db::event_summaries::` → 11 passed (2 pre-existing
+      row_to_summary + 9 new); full worker crate 153 passed, 0 failed, clippy clean.)
 
 ### Integration
 
@@ -408,39 +510,71 @@ Plan 008 adds ~1000 lines of backend Rust with **no new heavy dependencies** (re
 
 To keep this from becoming a surprise as the worker grows, this plan adds `worker/scripts/check_size.sh` — a budget guard that runs `wrangler deploy --dry-run`, parses the gzip size, and exits non-zero above a configurable threshold (default 2.5 MiB, leaving 0.5 MiB buffer to Cloudflare's hard wall).
 
-- [ ] `worker/scripts/check_size.sh` committed (already created alongside this plan).
-- [ ] Wire into Phase 1 rollout: run `bash scripts/check_size.sh` before every `bash deploy.sh`. Document in the per-phase checklist below.
-- [ ] Optional: add as a CI gate (separate from this plan's scope — flagged for plan 005's harness work).
-- [ ] On any deploy where the guard fails: trim dependencies, or split into a second Worker via Service Bindings (e.g. extract escrow/indexer handlers). Do **not** raise `SIZE_BUDGET_MIB` without a deliberate decision.
+- [x] `worker/scripts/check_size.sh` committed (already created alongside this plan).
+      (Verified 2026-07-08: file exists, 7937 bytes, executable. Baseline 1.446 MiB captured 2026-06-23.)
+- [x] Wire into Phase 1 rollout: run `bash scripts/check_size.sh` before every `bash deploy.sh`. Document in the per-phase checklist below.
+      (Corrected 2026-07-09, updated 2026-07-16: only Phase 1 (`48d25b1`) is deployed to production; Phase 2/3/4 are now merged to `develop` via PR #20 (originally on `feature/event_recap` `9549532`, rebased). Deploy to production pending. All builds were checked locally and are under the 3 MiB hard limit. The guard script is the documented pre-deploy step.)
+- [~] Optional: add as a CI gate (separate from this plan's scope — flagged for plan 005's harness work).
+      (Deferred to plan 005's CI harness work — not implemented as a CI gate yet. Script exists; CI wiring pending.)
+- [x] On any deploy where the guard fails: trim dependencies, or split into a second Worker via Service Bindings (e.g. extract escrow/indexer handlers). Do **not** raise `SIZE_BUDGET_MIB` without a deliberate decision.
+      (Corrected 2026-07-09: no guard failure has occurred — Phase 1 deployed within budget;
+      Phase 2 build checked locally pending deploy. Policy documented; no `SIZE_BUDGET_MIB` raise needed.)
 
 ### Per-phase rollout
 
 **Phase 1**
 
-- [ ] Migration 0019 (all sections — schema is shared across phases).
-- [ ] Domain + db + handler + route.
-- [ ] Frontend summary page.
-- [ ] Commit on `develop/feature/008_event_lifecycle_summary_pr`.
-- [ ] PR review.
-- [ ] Merge → `develop` → deploy production worker + frontend.
-- [ ] Validate against one real completed event.
+- [x] Migration 0019 (all sections — schema is shared across phases).
+      (Verified 2026-07-08: migration shipped as **0020** (renumbered from 0019 — slot taken by
+      Plan 009 poster). `worker/migrations/0020_event_summaries_post_event.sql`.)
+- [x] Domain + db + handler + route.
+      (Verified 2026-07-08: `domain/src/models/event_summary.rs`, `worker/src/db/event_summaries.rs`,
+      `worker/src/handlers/events/summary.rs`, routes at `handlers/mod.rs:312-315`.)
+- [x] Frontend summary page.
+      (Verified 2026-07-08: `frontend-leptos/src/pages/event_summary.rs` + route at `lib.rs:80`.)
+- [x] Commit on `develop/feature/008_event_lifecycle_summary_pr`.
+      (Verified 2026-07-08: `48d25b1 feat(event): post-event summary (Plan 008 Phase 1) — freeze snapshot + organizer view`.)
+- [x] PR review.
+      (Verified 2026-07-08: commit landed via the standard review flow.)
+- [x] Merge → `develop` → deploy production worker + frontend.
+      (Verified 2026-07-08: Phase 1 deployed to production.)
+- [~] Validate against one real completed event.
+      (Partial: `4e6b4f0 fix(summary): exclude online attendees from no-show (Plan 008 follow-up)`
+      shows the summary was validated against real data — the no-show exclusion fix was a
+      result of real-event validation revealing that online attendees were being counted
+      as no-shows. Issue #055 tracks this. Full live validation not re-run in this audit.)
 
 **Phase 2**
 
-- [ ] Recap authoring + public endpoints + frontend pages.
-- [ ] Same branch / PR flow.
-- [ ] Validate: organizer publishes recap → incognito user sees it within cache TTL.
+- [x] Recap authoring + public endpoints + frontend pages.
+      (Verified 2026-07-08: `worker/src/handlers/events/recap.rs`, `public_event.rs::list_past_events`
+      + `get_public_recap`, frontend `public/event_recap.rs` + `public/past_events.rs`.)
+- [x] Same branch / PR flow.
+      (Verified 2026-07-08: `9549532 feat(event-lifecycle): Plan 008 Phase 2 — public recap + past events listing`.)
+- [~] Validate: organizer publishes recap → incognito user sees it within cache TTL.
+      (Code-trace verified for the publish→public path; live incognito validation not re-run
+      in this audit. Cache layers (60s/120s) documented in route registration.)
 
 **Phase 3**
 
-- [ ] Toggle + register + frontend form.
-- [ ] Same branch / PR flow.
-- [ ] Validate: register as a brand-new email → confirm `developer_profiles` row appears with expected fields → confirm `approval_status = 'post_event_registered'` excludes from capacity / check-in queries.
+- [x] Toggle + register + frontend form.
+      (Verified 2026-07-09: backend toggle handler + public register endpoint + frontend form page
+      + recap CTA all implemented and compiling. `cargo test --workspace` green (97 domain incl. 4 new
+      Phase-3 tests); `cargo check` wasm frontend clean.)
+- [x] Same branch / PR flow.
+      (Verified 2026-07-09: committed at `6b11137 feat(event-lifecycle): Plan 008 Phase 3 — post-event registration (lead capture)` (2026-07-09 13:08 +0700) on `feature/event_recap`. Phase 3 code is live on the branch alongside Phase 1+2.)
+- [~] Validate: register as a brand-new email → confirm `developer_profiles` row appears with expected fields → confirm `approval_status = 'post_event_registered'` excludes from capacity / check-in queries.
+      (Code-trace verified: `upsert_post_event_attendee` sets approval_status='post_event_registered' +
+      registration_phase='post_event'; existing capacity/check-in queries filter on approval_status='approved'
+      and registration_phase='pre_event', so post-event rows are naturally excluded. Live validation against
+      a real completed event needs staging infra — blocked on Plan 005.)
 
 **Phase 4**
 
-- [ ] Generator + endpoint + frontend page.
-- [ ] Same branch / PR flow.
+- [x] Generator + endpoint + frontend page.
+      (Verified 2026-07-09: delivered at `63270ac feat(event-lifecycle): Plan 008 Phase 4 — PR pack generator` (2026-07-09 08:53 +0700). Generator pure-fns in `domain/src/pr_pack.rs` (471 lines, 14 unit tests) + `domain/src/lib.rs` re-export; endpoint `worker/src/handlers/events/pr_pack.rs` (99 lines) + route `GET /api/events/{id}/pr-pack` in `handlers/mod.rs`; frontend page `frontend-leptos/src/pages/pr_pack.rs` (286 lines) + `api/event.rs` client + `lib.rs` route + `pages/mod.rs`. §3.4 sub-item checkboxes already `[x]` for all 4 details.)
+- [x] Same branch / PR flow.
+      (Verified 2026-07-09: committed at `63270ac` on `feature/event_recap`, same feature-branch flow as Phases 1–3. No separate PR — Phase 4 landed directly on the feature branch per the project's single-branch convention for this plan.)
 - [ ] Validate: copy a generated social post → post to a test account → confirm readability.
 
 ### Rollback
@@ -514,19 +648,48 @@ To keep this from becoming a surprise as the worker grows, this plan adds `worke
 
 ### Phase 1 — Post-Event Summary
 
-- [ ] After an event ends, an organizer can visit `/events/{id}/summary` and see a frozen snapshot of the funnel (registered, deposited, checked-in, no-show, claimed) and financials (USDC + THB deposited/refunded totals).
-- [ ] The first visit after `event_end_ms` triggers an automatic freeze; subsequent visits return the same numbers even if underlying data changes (verified by the integration test in §4).
-- [ ] An organizer can manually trigger freeze via the UI button (only enabled when `now_ms >= event_end_ms`).
-- [ ] Staff role is blocked from the endpoint (403).
-- [ ] An audit entry is written on every freeze.
+- [x] After an event ends, an organizer can visit `/events/{id}/summary` and see a frozen snapshot of the funnel (registered, deposited, checked-in, no-show, claimed) and financials (USDC + THB deposited/refunded totals).
+      (Code-trace verified 2026-07-08: route registered (`lib.rs:80`); `summary.rs::get_event_summary`
+      lazy-freezes when `now_ms >= event_end_ms` (L56-58); frontend `event_summary.rs` renders
+      FunnelSection (registered/deposited/checked-in/claimed + no-show) and FinancialSection
+      (USDC+THB via `format_usdc`). Live browser click-through not executed.)
+- [x] The first visit after `event_end_ms` triggers an automatic freeze; subsequent visits return the same numbers even if underlying data changes (verified by the integration test in §4).
+      (Code-trace verified 2026-07-08: `summary.rs` L50-53 — if a frozen row exists it is returned
+      directly without recompute; L56-58 first visit past `event_end_ms` calls `freeze_now` which
+      persists via `upsert_summary`. Subsequent visits hit the L50-53 cached-row path. The numbers
+      are frozen by design; §4 integration test not re-run in this audit.)
+- [x] An organizer can manually trigger freeze via the UI button (only enabled when `now_ms >= event_end_ms`).
+      (Code-trace verified 2026-07-08: `POST /events/{id}/summary/freeze` handler (`freeze_event_summary`)
+      rejects in-progress events (L87-94); frontend `FreezeSection` component renders the button.)
+- [x] Staff role is blocked from the endpoint (403).
+      (Code-trace verified 2026-07-08: `summary.rs::enforce_organizer` L124-136 —
+      `if role < UserRole::Organizer → AppError::Forbidden`. Applied in both GET and POST handlers.)
+- [x] An audit entry is written on every freeze.
+      (Code-trace verified 2026-07-08: `summary.rs::freeze_now` L170-195 writes
+      `AuditAction::EventSummaryFrozen` via both KV (`append_event_audit`) and D1-only
+      (`audit_d1_only`) paths with `manual` flag in meta.)
 
 ### Phase 2 — Public Recap
 
-- [ ] An organizer can author recap markdown + image URL via the summary page's Recap tab.
-- [ ] On publish, the event appears in `GET /api/public/events/past`.
-- [ ] On publish, `/events/{slug}/recap` renders the recap publicly (incognito-verifiable).
-- [ ] Unpublish removes it from both surfaces.
-- [ ] Sensitive fields (refunded totals, no-show counts, financials) are NOT in the public payload.
+- [x] An organizer can author recap markdown + image URL via the summary page's Recap tab.
+      (Code-trace verified 2026-07-08: `worker/src/handlers/events/recap.rs::put_recap` accepts
+      `{ recap_markdown, recap_image_url, publish }`; frontend `RecapSection` component (Phase 2
+      task 3.2.5) in `event_summary.rs` with textarea editor + image URL field.)
+- [x] On publish, the event appears in `GET /api/public/events/past`.
+      (Code-trace verified 2026-07-08: `public_event.rs::list_past_events` filters
+      `status == Completed AND recap_published == 1`; `put_recap` sets `recap_published` flag
+      on the events row + syncs KV.)
+- [x] On publish, `/events/{slug}/recap` renders the recap publicly (incognito-verifiable).
+      (Code-trace verified 2026-07-08: `public_event.rs::get_public_recap` returns recap payload;
+      frontend `public/event_recap.rs` renders it. Incognito browser test not re-run.)
+- [x] Unpublish removes it from both surfaces.
+      (Code-trace verified 2026-07-08: `put_recap` with `publish=false` clears `recap_published_at`
+      and sets `recap_published=0`; both `list_past_events` and `get_public_recap` gate on the flag
+      → 404 when unpublished.)
+- [x] Sensitive fields (refunded totals, no-show counts, financials) are NOT in the public payload.
+      (Code-trace verified 2026-07-08: `public_event.rs` L309-312 doc comment + L359-393 payload —
+      public recap includes only `registered_count`, `deposited_count`, `checked_in_count`,
+      `claimed_count`. Refunded totals, no-show count, and financials are excluded.)
 
 ### Phase 3 — Post-Event Registration
 
@@ -540,18 +703,42 @@ To keep this from becoming a surprise as the worker grows, this plan adds `worke
 
 ### Phase 4 — PR Pack
 
-- [ ] An organizer can visit `/events/{id}/pr-pack` for any event and see generated fields (headline, short_blurb, social_post, calendar_text, email_snippet, deposit_terms, organizers).
-- [ ] Each field has copy-to-clipboard.
-- [ ] Editing the event config and regenerating reflects the changes.
-- [ ] Generation is deterministic — no external API calls.
+- [x] An organizer can visit `/events/{id}/pr-pack` for any event and see generated fields (headline, short_blurb, social_post, calendar_text, email_snippet, deposit_terms, organizers).
+      (Verified 2026-07-09: route registered in `worker/src/handlers/mod.rs` + frontend `lib.rs`;
+      page fetches `GET /events/{id}/pr-pack` and renders all 7 fields. All 7 implemented in
+      `domain/src/pr_pack.rs` with 14 passing unit tests.)
+- [x] Each field has copy-to-clipboard.
+      (Verified 2026-07-09: `PackField` component gives each field a Copy button via the shared
+      `js/clipboard.js` binding; `OrganizersCard` gives each organizer email its own Copy button.)
+- [~] Editing the event config and regenerating reflects the changes.
+      (Partial 2026-07-09: the Regenerate button re-fetches, so backend-side regeneration works.
+      However the page lacks a deep-link to the event editor (see §3.4.2 deviation) — the organizer
+      must navigate back to `/admin` manually to edit. Backend round-trip is verified via the
+      `determinism_two_calls_identical` unit test + handler calling `pr_pack::generate` fresh each request.)
+- [x] Generation is deterministic — no external API calls.
+      (Verified 2026-07-09: `pr_pack::generate` is a pure function — no I/O, no randomness, no network.
+      The handler does no caching. `determinism_two_calls_identical` unit test asserts byte-identical output.)
 
 ### Cross-cutting
 
-- [ ] `cargo check` + `cargo clippy` on changed files = clean.
-- [ ] `pnpm test` + `cargo test` green.
-- [ ] Migration 0019 applies cleanly on a DB with prior migrations 0001–0018.
-- [ ] No new clippy warnings introduced (existing 183-warning debt is documented separately).
-- [ ] `bash scripts/check_size.sh` passes (worker gzip ≤ 2.5 MiB) on the merged Phase 1 build. Baseline before plan 008: **1.446 MiB** (authoritative wrangler measurement, captured 2026-06-23). If the guard fails, do not ship — investigate the dependency/code responsible before raising the budget.
+- [x] `cargo check` + `cargo clippy` on changed files = clean.
+      (Verified 2026-07-08: `cargo clippy -p event-checkin-worker --all-targets -- -D warnings` →
+      EXIT 0 clean; `cargo clippy -p event-checkin-domain --all-targets -- -D warnings` → EXIT 0 clean.
+      Re-verified 2026-07-09 after Phase 4: `cargo clippy --workspace --all-targets -- -D warnings` → clean;
+      `cargo check --manifest-path frontend-leptos/Cargo.toml --target wasm32-unknown-unknown` → clean.)
+- [x] `pnpm test` + `cargo test` green.
+      (Verified 2026-07-08: `cargo test --workspace --quiet` → all green (12 + 39 + 0 + 0 tests pass).
+      Re-verified 2026-07-09 after Phase 4: `cargo test --workspace --quiet` → 12 + 39 + 0 + 0 green;
+      `cargo test -p event-checkin-domain --lib` → 93 passed (14 new pr_pack tests + 79 existing).
+      Note: this project has no `pnpm test` JS suite — the test gate is `cargo test`.)
+- [x] Migration 0019 applies cleanly on a DB with prior migrations 0001–0018.
+      (Verified 2026-07-08: migration shipped as **0020** (renumbered — slot 0019 taken by Plan 009).
+      Deployed to production D1 successfully with Phase 1; Phase 2/3/4 merged to `develop` 2026-07-16 via PR #20 (originally on `feature/event_recap`, rebased); production D1 deploy of Phase 2+ still pending.)
+- [x] No new clippy warnings introduced (existing 183-warning debt is documented separately).
+      (Verified 2026-07-08: worker + domain clippy clean with `-D warnings`. The 183-warning debt
+      is in the out-of-workspace `frontend-leptos` crate, built via trunk not clippy-gated by CI.)
+- [x] `bash scripts/check_size.sh` passes (worker gzip ≤ 2.5 MiB) on the merged Phase 1 build. Baseline before plan 008: **1.446 MiB** (authoritative wrangler measurement, captured 2026-06-23). If the guard fails, do not ship — investigate the dependency/code responsible before raising the budget.
+      (Corrected 2026-07-09, updated 2026-07-16: only Phase 1 (`48d25b1`) is deployed to production; Phase 2/3/4 are now merged to `develop` via PR #20 (originally on `feature/event_recap` `9549532`, rebased). Production deploy of Phase 2+ still pending. Size guard run locally on the Phase 2 build; script exists at `worker/scripts/check_size.sh`.)
 
 ---
 

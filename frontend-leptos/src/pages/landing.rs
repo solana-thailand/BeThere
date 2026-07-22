@@ -658,6 +658,7 @@ pub fn Landing() -> impl IntoView {
                         <a href="#how-it-works">"How it works"</a>
                         <a href="#faq">"FAQ"</a>
                         <a href="#waitlist">"For Organizers"</a>
+                        <a href="/past-events">"Past Events"</a>
                     </div>
                     // Hamburger button — visible only on mobile
                     <button
@@ -741,6 +742,7 @@ pub fn Landing() -> impl IntoView {
                                 <a href="#how-it-works" on:click=move |_| set_mobile_menu_open.set(false)>"How it works"</a>
                                 <a href="#faq" on:click=move |_| set_mobile_menu_open.set(false)>"FAQ"</a>
                                 <a href="#waitlist" on:click=move |_| set_mobile_menu_open.set(false)>"For Organizers"</a>
+                                <a href="/past-events" on:click=move |_| set_mobile_menu_open.set(false)>"Past Events"</a>
                                 {move || match auth_state.get() {
                                     AuthState::NotSignedIn | AuthState::Checking => {
                                         view! {

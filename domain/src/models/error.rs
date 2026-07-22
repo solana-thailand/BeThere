@@ -15,6 +15,10 @@ pub enum AppError {
     Forbidden(String),
     /// Input validation failed (400)
     Validation(String),
+    /// Request conflicts with the current resource state (409)
+    Conflict(String),
+    /// Resource existed but is no longer available (410)
+    Gone(String),
     /// External service error (502)
     External {
         service: String,
@@ -34,6 +38,8 @@ impl fmt::Display for AppError {
             Self::Unauthorized(msg) => write!(f, "unauthorized: {msg}"),
             Self::Forbidden(msg) => write!(f, "forbidden: {msg}"),
             Self::Validation(msg) => write!(f, "validation error: {msg}"),
+            Self::Conflict(msg) => write!(f, "conflict: {msg}"),
+            Self::Gone(msg) => write!(f, "gone: {msg}"),
             Self::External {
                 service,
                 status,
@@ -72,6 +78,8 @@ impl AppError {
             Self::Unauthorized(_) => 401,
             Self::Forbidden(_) => 403,
             Self::Validation(_) => 400,
+            Self::Conflict(_) => 409,
+            Self::Gone(_) => 410,
             Self::External { .. } => 502,
             Self::RateLimited(_) => 429,
             Self::Internal(_) => 500,

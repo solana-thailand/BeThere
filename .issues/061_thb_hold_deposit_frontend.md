@@ -1,0 +1,257 @@
+# Issue #061: THB Hold-Deposit Frontend (continues #032)
+
+> Wire the existing THB hold-deposit / rolling-credit backend to attendee + admin UI.
+> Continuation of Issue #032 (Rolling Deposit Credit) — backend already shipped, frontend missing.
+
+---
+
+## 1. Summary
+
+Allow attendees with a **THB** (PromptPay cash) deposit to **hold** their deposit as rolling credit
+instead of claiming a refund. The held credit auto-covers their next event registration.
+Status visible on both attendee (ticket page) and admin (contacts) sides.
+
+**This is a frontend-integration task.** The backend is fully built and deployed on `develop`.
+No Solana program changes, no mainnet cluster implications, no worker handler changes.
+
+---
+
+## 2. Why now
+
+- THB cash friction is the #1 reason repeat-attendee retention is awkward today.
+- Decoupled from the Solana mainnet cutover (THB is off-chain).
+- Low risk: wires existing validated endpoints to UI.
+- Backend already enforces ownership (`VULN-012`) + requires verified deposit.
+
+---
+
+## 3. Current backend state (already shipped — do NOT rebuild)
+
+| Piece | File | Status |
+|---|---|---|
+| `DepositMethod::CreditThb` / `CreditUsdc` enum variants | `domain/src/models/deposit.rs` | ✅ shipped + tested |
+| Contacts columns K–M (`deposit_credit_thb/usdc/since`) | `worker/src/sheets/contacts.rs` + `worker/src/db/contacts.rs` | ✅ shipped (Sheets + D1) |
+| `POST /api/deposit/hold` — `hold_deposit_handler` | `worker/src/handlers/deposit/thb/handlers/hold_credit.rs` | ✅ shipped (validates ownership, requires verified deposit, increments credit) |
+| `GET /api/deposit/credit-balance` — `credit_balance_handler` | same file | ✅ shipped (returns `{credit_thb, credit_usdc}`) |
+| `increment_credit` + `get_credit_balance` helpers | `worker/src/sheets/contacts.rs` | ✅ shipped |
+| Registration credit check (auto-skips deposit if covered) | `worker/src/handlers/register.rs:319` | ✅ shipped |
+| `RolloverActionCard` (USDC on-chain rollover — the template) | `frontend-leptos/src/pages/ticket/action_cards.rs:267-537` | ✅ shipped |
+
+### Backend wire shapes (for the frontend types)
+
+`POST /api/deposit/hold` body / response:
+```json
+// request
+{ "event_id": "...", "attendee_id": "..." }
+// response
+{ "credit_thb": 500, "credit_usdc": 0, "message": "..." }
+```
+
+`GET /api/deposit/credit-balance` response:
+```json
+{ "credit_thb": 500, "credit_usdc": 0 }
+```
+
+---
+
+## 4. Design decisions (resolved — do not re-litigate)
+
+### D1 — Button placement (attendee ticket page)
+After check-in, the deposit action area shows:
+- **Primary (safe default):** the existing refund flow (USDC on-chain) / manual refund (THB)
+- **Secondary:** "Hold Deposit for Next Event" → opens a **confirm step** (not a modal) explaining
+  the commitment: *"We'll keep your {amount} THB and auto-apply it to your next event registration."*
+
+Hold gets a confirm step because cash stays with the organizer. Refund stays the no-friction default.
+
+### D2 — Admin view scope
+**Credit column on the existing contacts table + a summary header chip.** No separate ledger page.
+- Column: `credit_thb` + `credit_usdc` per contact (data already in columns K–M)
+- **Header chip:** "Total credit held: X THB across N attendees" — the organizer's cash liability number
+- Defer the full transaction-history ledger until real usage data exists.
+
+### D3 — Refund-from-credit (exit path)
+**Lightweight "Request Refund of Held Credit" action, NOT payout automation.**
+- Attendee clicks "Request Return" on the ticket page → sets a flag on the contact
+- Shows in admin as a "credit refund requested" badge
+- Organizer processes actual payout through the existing THB refund queue tooling
+- Why: attendees need an exit or "hold forever" feels like a trap (Issue #032 trust risk), but
+  automated payout = cash-on-hand liability + queue complexity not needed for v1.
+
+### D4 — Method routing
+- **THB deposit** → `HoldDepositCard` (off-chain credit, this issue)
+- **USDC deposit** → existing `RolloverActionCard` (on-chain atomic transfer, Issue #032 Option B)
+- The two are mutually exclusive based on `deposit.method`.
+
+---
+
+## 5. Implementation tasks
+
+### Phase 1 — Attendee side (core) ✅ DONE (commits `3a05a37`, `41f0501`, `3c785f4`, `b5ee048`)
+
+**Backend wire shapes already match — just add frontend types + calls.**
+
+- [x] `frontend-leptos/src/api/deposit.rs` — add:
+  - `HoldDepositRequest { event_id, attendee_id }`
+  - `HoldDepositResponse { credit_thb: u64, credit_usdc: u64, message: String }`
+  - `CreditBalanceResponse { credit_thb: u64, credit_usdc: u64 }`
+  - `hold_deposit(body)` → `api_post_json("/deposit/hold", body)`
+  - `get_credit_balance()` → `api_get("/deposit/credit-balance")`
+- [x] `frontend-leptos/src/pages/ticket/action_cards.rs` — add `HoldDepositCard` component:
+  - State machine: `Ready` → `Confirm` → `Holding` → `Confirmed` → `Error` → `AlreadyHeld`
+  - Props: `event_id`, `attendee_id`, `deposit_amount_thb`, `already_held`
+  - On confirm: `api::hold_deposit(...)`; on success show new balance + success state
+  - Model after `RolloverActionCard` but **simpler** (no wallet flow, no Solana TX)
+- [x] `frontend-leptos/src/pages/ticket/in_person_view.rs` — insert `<HoldDepositCard />` in the
+      deposit-action branch when: `dep.verified && !dep.refunded && is_checked_in && method == Thb`
+      (passes `already_held=dep.held_as_credit` so reload mounts in `AlreadyHeld`)
+- [ ] (Optional polish) Credit chip on ticket page that fetches `get_credit_balance()` on mount
+      when `is_checked_in` — shows "Deposit Credit: 500 THB" if balance > 0.
+
+**Backend hardening landed alongside Phase 1 (commit `b5ee048`):** the double-credit gap in
+`hold_deposit_handler` is resolved via a distinct `held_as_credit` flag on `ThbDeposit`
+(migration `0022`) + settle-before-increment ordering + USDC rejection. See §8 item 0 (resolved).
+
+### Phase 2 — Admin side (status visibility) — PARTIAL (Held tab + admin hold shipped; credit columns remain)
+
+- [x] **Admin "Held as Credit" sub-tab** — `GET /api/refund/held` + 4th tab in `admin_deposit.rs`,
+      filters on `held_as_credit = true`, mirrors the Refunded tab (commits this session).
+- [x] **Admin "Hold as Credit" action** in the Refund Queue row — `POST /api/refund/hold/{attendee_id}`
+      lets an organizer mark a verified THB deposit as held on behalf of an attendee who confirmed
+      verbally but didn't tap their own button. Credits the **attendee's** contact row (not the
+      admin's); preserves all attendee-handler invariants (settle-before-increment, idempotency
+      guards, THB-only by construction). Closes the "I talked to an attendee, how do I record it?"
+      operational gap that motivated this session.
+- [ ] Admin attendee/contacts view — add `credit_thb` / `credit_usdc` columns (literal option (a);
+      requires a contact-credit join on `list_attendees` — performance design decision pending)
+- [x] **Liability header chip** — `GET /api/deposit/credit-liability` (admin) returns
+      `{total_thb, total_usdc, contact_count}` from one D1 `SUM`/`COUNT` round-trip over
+      `contacts`; the chip renders at the top of `AdminDeposits` when any balance is non-zero
+      ("Total credit held: X THB [+ Y USDC] across N contacts"). Cross-event (global), degrades
+      to hidden when D1 is unreachable. Phase 2 option (a2).
+- [x] Badge for "credit refund requested" attendees (delivered via Phase 3 — warning badge
+      on Held tab + per-row "Credit Refund Requested" sub-list with "✓ Clear" action, commit
+      `1a5dbb6`)
+
+**Scoping note (discovered while wiring Phase 1):** the admin page currently renders a
+per-event **attendee list** (`AttendeeListItem`), not a cross-event contacts table — contacts
+are surfaced via the `GET /api/contacts/audience` CSV export. Credit lives on the **contact**
+(`deposit_credit_thb/usdc/since`, D1 col K–M), not the per-event attendee row. So "credit
+columns" requires either (a) enriching `AttendeeListItem` with a credit join, or (b) building a
+new in-app contacts table. Decision needed before implementing — do not assume the existing
+attendee table is the home for credit data.
+
+### Phase 3 — Exit path (lightweight) ✅ DONE (commits `6a82bed`, `18c7241`, `8888050`, `1a5dbb6`)
+
+- [x] **Backend: `credit_refund_requested` flag on contact** — migration `0023`
+  adds `credit_refund_requested` (INTEGER NOT NULL DEFAULT 0) +
+  `credit_refund_requested_at` (TEXT) to `contacts` (cross-event, like the
+  `deposit_credit_*` cols K–M) + partial index
+  `idx_contacts_credit_refund_requested`. 4 endpoints in
+  `worker/src/handlers/deposit/thb/handlers/hold_refund_request.rs`:
+  - `POST /api/deposit/request-credit-refund` (attendee, JWT-gated, dual-write
+    D1 + Sheets). Idempotent — re-request re-stamps timestamp.
+  - `GET /api/deposit/credit-refund-request` (attendee own-state read for
+    reload-safe card mount).
+  - `GET /api/deposit/credit-refund-requests` (admin, cross-event listing).
+  - `POST /api/deposit/clear-credit-refund-request` (admin, clears flag after
+    payout). Email in body (path-encoding safety).
+  D1 helpers (`set`/`get`/`clear`/`credit_refund_requests` aggregate) in
+  `db/contacts.rs`. Sheets column N added (`COL_CREDIT_REFUND_REQUESTED`),
+  range A:M → A:N, `set_credit_refund_requested` write helper.
+- [x] **Attendee: "Request Return" button on ticket page** —
+  `RequestCreditRefundCard` (`action_cards.rs`). State machine:
+  Loading → Ready/AlreadyRequested → Confirm → Requesting → Requested/Error.
+  Fetches own flag on mount so reload mounts in AlreadyRequested (mirrors the
+  `held_as_credit` UX pattern). Confirm step makes clear the request is a
+  visibility signal, NOT an automatic payout. Wired into `in_person_view.rs`
+  gated on `dep.held_as_credit == true` (exit meaningful only when there is
+  held credit).
+- [x] **Admin: badge + clear action** — warning badge on the Held-as-Credit tab
+  button (separate from the success held-count badge). "Credit Refund
+  Requested" sub-list at the top of the Held tab (actionable first): per-row
+  card with attendee name, held-credit balance, request timestamp, and a
+  "✓ Clear" button. Per-row pending state on the clear POST. Loaded in the
+  same refresh cycle as the per-event lists.
+- [x] **Sheets clear-sync gap closed (post-ship follow-up)** —
+  `clear_credit_refund_request_handler` initially cleared only the D1 flag,
+  leaving Sheets column N stale after a clear (asymmetry vs.
+  `set_credit_refund_requested`, which dual-writes). Resolved by adding
+  `sheets::contacts::clear_credit_refund_requested` (mirror of the set helper,
+  best-effort with a silent no-op on missing contact row — matches the D1
+  clear's 0-rows-affected semantics). Wired into the handler with the same
+  best-effort contract as the D1 clear (logged, not fatal). Branch
+  `fix/061_credit_refund_clear_sheets_sync`.
+
+---
+
+## 6. Explicitly deferred (scope guardrails)
+
+- Full credit ledger / transaction-history page
+- Automated payout from credit (manual via existing tools for v1)
+- Currency conversion for THB↔USDC mismatch (keep balances separate — already the design)
+- Multi-organizer credit isolation (Issue #029 — single-org for now)
+- On-chain vault per attendee (Issue #032 Option C — future, 3+ organizers)
+
+---
+
+## 7. Placement reference (verified against `develop`)
+
+The deposit action-card state machine lives in `frontend-leptos/src/pages/ticket/in_person_view.rs`
+around L236-L290. Current branch order:
+
+1. `deposit_info` exists:
+   - if `verified` → `DepositVerifiedCard`
+   - else → `DepositPendingCard`
+   - if USDC + `rollover_target_event` + checked-in → `RolloverActionCard`
+   - if `refunded` → `RefundCard`
+2. else if deposit_enabled + deadline_expired + reclaim available → `ReclaimActionCard`
+3. ...
+
+**Insert `HoldDepositCard`** in branch 1, alongside the rollover/refund logic, gated on:
+`dep.verified && !dep.refunded && is_checked_in && dep.method == DepositMethod::Thb`.
+
+---
+
+## 8. Risks / open questions
+
+0. ~~**Backend double-credit gap** — `hold_deposit_handler` incremented credit without settling the
+   source deposit, allowing re-calls to double-increment.~~ **RESOLVED** — added a distinct
+   `held_as_credit` flag to `ThbDeposit` (migration `0022`), the handler now settles the deposit
+   *before* incrementing credit and guards against re-hold (`refunded || held_as_credit`); the
+   USDC arm is rejected (defense-in-depth — USDC uses the atomic on-chain rollover). Frontend
+   surfaces `held_as_credit` so the card mounts in `AlreadyHeld` on reload.
+1. **Organizer liability** — for THB, holding means organizer keeps physical cash until the
+   attendee spends it on a future event. Fine for own events; needs a cap/timeout if multi-organizer
+   ever happens (Issue #029).
+2. **No exit path until Phase 3** — without D3, "hold forever" feels like a trap. Phase 3 should
+   land in the same release window as Phase 1/2 even if minimal.
+3. **USDC `RolloverActionCard` only checks `rollover_target_event` presence** — if backend ever
+   returns a target for THB attendees, the USDC card would wrongly render. Confirm backend
+   only sets `rollover_target_event` for USDC deposits.
+
+---
+
+## 9. Branch / commit plan
+
+```
+develop/feature/061_thb_hold_frontend  (gitflow, branches off develop)
+  ├── commit 1: feat(api): add hold_deposit + credit_balance types/calls
+  ├── commit 2: feat(ticket): HoldDepositCard component
+  ├── commit 3: feat(ticket): wire HoldDepositCard into in_person_view
+  ├── commit 4: feat(admin): credit columns + liability header
+  └── commit 5: feat(credit): "Request Return" flag flow (Phase 3)
+```
+
+Each commit: `cargo check --target wasm32-unknown-unknown` clean. After Phase 1: `bash build.sh`
++ verify on `:8787` (Cmd+Shift+R) before push.
+
+---
+
+## 10. References
+
+- **Issue #032** — Rolling Deposit Credit (the parent design + backend implementation)
+- **Handover #077** — Rollover Deposit E2E (USDC on-chain implementation, the template)
+- **`worker/src/handlers/deposit/thb/handlers/hold_credit.rs`** — the live backend endpoint
+- **`frontend-leptos/src/pages/ticket/action_cards.rs:267-537`** — `RolloverActionCard` template
+- **`frontend-leptos/src/pages/ticket/in_person_view.rs:236-290`** — placement target

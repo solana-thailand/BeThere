@@ -112,6 +112,15 @@ pub struct CampaignEventItem {
 }
 
 #[derive(Serialize)]
+pub struct DeveloperEventAttendance {
+    pub event_id: String,
+    pub event_name: String,
+    pub sequence_order: i64,
+    pub is_required: bool,
+    pub attended: bool,
+}
+
+#[derive(Serialize)]
 pub struct DeveloperProgressItem {
     pub campaign_id: String,
     pub developer_email: String,
@@ -120,6 +129,11 @@ pub struct DeveloperProgressItem {
     pub is_complete: bool,
     pub completed_at: Option<String>,
     pub reward_claimed_at: Option<String>,
+    /// Per-event check-in breakdown. Populated only by the per-campaign
+    /// progress endpoint (`GET /api/campaigns/{id}/progress`). Empty for
+    /// `my-progress` (the attendee dashboard only needs the summary counts).
+    #[serde(default)]
+    pub events: Vec<DeveloperEventAttendance>,
 }
 
 #[derive(Serialize)]
@@ -465,16 +479,44 @@ pub async fn list_campaign_progress(
         .await
         .map_err(|e| AppError::Internal(format!("failed to list campaign progress: {e}")))?;
 
+    // Per-event attendance breakdown, grouped by developer email. The query
+    // orders rows by (developer_email, sequence_order) so the per-developer
+    // vectors are already in sequence order.
+    let attendance = crate::db::campaigns::list_campaign_attendance(d1, &id)
+        .await
+        .map_err(|e| AppError::Internal(format!("failed to list campaign attendance: {e}")))?;
+
+    let mut attendance_by_email: std::collections::HashMap<String, Vec<DeveloperEventAttendance>> =
+        std::collections::HashMap::new();
+    for row in attendance {
+        attendance_by_email
+            .entry(row.developer_email.clone())
+            .or_default()
+            .push(DeveloperEventAttendance {
+                event_id: row.event_id,
+                event_name: row.event_name.unwrap_or_default(),
+                sequence_order: row.sequence_order,
+                is_required: row.is_required == 1,
+                attended: row.attended == 1,
+            });
+    }
+
     let items: Vec<DeveloperProgressItem> = progress
         .into_iter()
-        .map(|p| DeveloperProgressItem {
-            campaign_id: p.campaign_id,
-            developer_email: p.developer_email,
-            events_completed: p.events_completed,
-            total_required: p.total_required,
-            is_complete: p.is_complete == 1,
-            completed_at: p.completed_at,
-            reward_claimed_at: p.reward_claimed_at,
+        .map(|p| {
+            let events = attendance_by_email
+                .remove(&p.developer_email)
+                .unwrap_or_default();
+            DeveloperProgressItem {
+                campaign_id: p.campaign_id,
+                developer_email: p.developer_email,
+                events_completed: p.events_completed,
+                total_required: p.total_required,
+                is_complete: p.is_complete == 1,
+                completed_at: p.completed_at,
+                reward_claimed_at: p.reward_claimed_at,
+                events,
+            }
         })
         .collect();
 
@@ -539,6 +581,7 @@ pub async fn my_campaign_progress(
             is_complete: p.is_complete == 1,
             completed_at: p.completed_at,
             reward_claimed_at: p.reward_claimed_at,
+            events: Vec::new(),
         })
         .collect();
 

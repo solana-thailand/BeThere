@@ -46,6 +46,20 @@ pub(crate) struct DeveloperCampaignProgressRow {
     pub reward_claimed_at: Option<String>,
 }
 
+/// One row per (developer, campaign-event) returned by the campaign
+/// attendance breakdown query. `attended` is 1 when the developer has a
+/// checked-in attendee record for that event, 0 otherwise.
+#[allow(dead_code)]
+#[derive(Debug, Clone, serde::Deserialize)]
+pub(crate) struct DeveloperEventAttendanceRow {
+    pub developer_email: String,
+    pub event_id: String,
+    pub event_name: Option<String>,
+    pub sequence_order: i64,
+    pub is_required: i64,
+    pub attended: i64,
+}
+
 // ---------------------------------------------------------------------------
 // Dashboard stats types
 // ---------------------------------------------------------------------------
@@ -360,6 +374,43 @@ pub(crate) async fn list_campaign_progress(
     result
         .results::<DeveloperCampaignProgressRow>()
         .map_err(|e| format!("D1 list_campaign_progress results: {e:?}"))
+}
+
+/// Per-event attendance breakdown for every developer enrolled in a campaign.
+///
+/// Joins `developer_campaign_progress` → `campaign_events` → `events` (for the
+/// name) → `attendees` (for the check-in status). Returns one row per
+/// (developer, campaign-event) pair so the caller can group by developer.
+pub(crate) async fn list_campaign_attendance(
+    db: &D1Database,
+    campaign_id: &str,
+) -> Result<Vec<DeveloperEventAttendanceRow>, String> {
+    let sql = format!(
+        "SELECT \
+         dcp.developer_email AS developer_email, \
+         ce.event_id AS event_id, \
+         e.name AS event_name, \
+         ce.sequence_order AS sequence_order, \
+         ce.is_required AS is_required, \
+         MAX(CASE WHEN a.checked_in_at IS NOT NULL THEN 1 ELSE 0 END) AS attended \
+         FROM developer_campaign_progress dcp \
+         JOIN campaign_events ce ON ce.campaign_id = dcp.campaign_id \
+         LEFT JOIN events e ON e.id = ce.event_id \
+         LEFT JOIN attendees a ON a.event_id = ce.event_id \
+         AND a.email = dcp.developer_email \
+         AND a.checked_in_at IS NOT NULL \
+         WHERE dcp.campaign_id = '{campaign_id}' \
+         GROUP BY dcp.developer_email, ce.event_id, e.name, ce.sequence_order, ce.is_required \
+         ORDER BY dcp.developer_email ASC, ce.sequence_order ASC"
+    );
+    let result = db
+        .prepare(&sql)
+        .all()
+        .await
+        .map_err(|e| format!("D1 list_campaign_attendance: {e:?}"))?;
+    result
+        .results::<DeveloperEventAttendanceRow>()
+        .map_err(|e| format!("D1 list_campaign_attendance results: {e:?}"))
 }
 
 #[allow(dead_code)]

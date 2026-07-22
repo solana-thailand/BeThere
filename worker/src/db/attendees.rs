@@ -67,6 +67,57 @@ pub(crate) async fn upsert_attendee(
     Ok(())
 }
 
+/// Insert a post-event registration attendee row (Plan 008 — Phase 3).
+///
+/// Mirrors `upsert_attendee` but sets `registration_phase = 'post_event'` and
+/// `approval_status = 'post_event_registered'`. No claim token, no check-in —
+/// post-event registrants are leads, not attendees. They're naturally excluded
+/// from capacity / check-in queries that filter on `approval_status = 'approved'`
+/// or `registration_phase = 'pre_event'`.
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn upsert_post_event_attendee(
+    db: &D1Database,
+    id: &str,
+    event_id: &str,
+    email: &str,
+    name: &str,
+    participation_type: &str,
+    contact_channel: &str,
+    contact_handle: &str,
+    consent_marketing: Option<bool>,
+) -> Result<(), String> {
+    let cm = consent_marketing.unwrap_or(false);
+    let stmt = db.prepare(
+        "INSERT INTO attendees (id, event_id, email, name, approval_status, participation_type, \
+         contact_channel, contact_handle, consent_marketing, consent_marketing_at, registration_phase, created_at, updated_at) \
+         VALUES (?1, ?2, ?3, ?4, 'post_event_registered', ?5, ?6, ?7, ?8, datetime('now'), 'post_event', datetime('now'), datetime('now')) \
+         ON CONFLICT (id) DO UPDATE SET \
+         name = excluded.name, \
+         participation_type = excluded.participation_type, \
+         contact_channel = excluded.contact_channel, \
+         contact_handle = excluded.contact_handle, \
+         consent_marketing = excluded.consent_marketing, \
+         consent_marketing_at = excluded.consent_marketing_at, \
+         updated_at = datetime('now')",
+    );
+    stmt.bind_refs(&[
+        D1Type::Text(id),
+        D1Type::Text(event_id),
+        D1Type::Text(email),
+        D1Type::Text(name),
+        D1Type::Text(participation_type),
+        D1Type::Text(contact_channel),
+        D1Type::Text(contact_handle),
+        D1Type::Integer(if cm { 1 } else { 0 }),
+    ])
+    .map_err(|e| format!("D1 upsert_post_event_attendee bind: {e:?}"))?
+    .run()
+    .await
+    .map_err(|e| format!("D1 upsert_post_event_attendee run: {e:?}"))?;
+
+    Ok(())
+}
+
 /// Write check-in data to D1 (dual-write alongside Sheets).
 pub(crate) async fn check_in_attendee(
     db: &D1Database,

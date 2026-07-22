@@ -243,6 +243,19 @@ pub struct EventMeta {
     /// Empty = fall back to `nft_image_url` on the public event page.
     #[serde(default)]
     pub poster_url: String,
+    /// Denormalized flag mirroring `events.recap_published` (Plan 008 — Phase 2).
+    /// Canonical source is `event_summaries.recap_published_at`; duplicated so
+    /// the past-events listing filter works without joining. Set by
+    /// `PUT /api/events/{id}/recap`.
+    #[serde(default)]
+    pub recap_published: bool,
+    /// Whether post-event registration (lead capture) is open (Plan 008 — Phase 3).
+    /// The public recap page renders a "join the community" CTA when true.
+    #[serde(default)]
+    pub post_event_registration_open: bool,
+    /// Optional deadline (Unix epoch ms) for post-event registration.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub post_event_registration_until_ms: Option<i64>,
 
     // ── Capacity settings ─────────────────────────────────────────────
     /// Maximum number of in-person attendees. None = unlimited.
@@ -332,6 +345,22 @@ pub struct EventConfig {
     /// cNFT mint metadata and must not be overloaded with a marketing image.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub poster_url: String,
+    /// Denormalized flag mirroring `events.recap_published` (migration 0020).
+    /// Canonical source is `event_summaries.recap_published_at`; this flag is
+    /// duplicated onto the events row so `GET /api/public/events/past` can
+    /// filter without joining. Set by `PUT /api/events/{id}/recap` (Plan 008 §3.2).
+    #[serde(default)]
+    pub recap_published: bool,
+    /// Whether post-event registration (lead capture) is open (Plan 008 — Phase 3).
+    /// Organizer-toggled via `PUT /api/events/{id}/post-event-registration`. When
+    /// true, the public recap page shows a "join the community" CTA that posts to
+    /// `POST /api/public/event/{slug}/register-post-event`.
+    #[serde(default)]
+    pub post_event_registration_open: bool,
+    /// Optional deadline (Unix epoch ms) after which post-event registration
+    /// closes (HTTP 410). `None` = no deadline (open indefinitely until toggled).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub post_event_registration_until_ms: Option<i64>,
     /// NFT name template (e.g. "BeThere - {event_name}").
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub nft_name_template: String,
@@ -499,6 +528,9 @@ impl EventConfig {
             video_url: self.video_url.clone(),
             nft_image_url: self.nft_image_url.clone(),
             poster_url: self.poster_url.clone(),
+            recap_published: self.recap_published,
+            post_event_registration_open: self.post_event_registration_open,
+            post_event_registration_until_ms: self.post_event_registration_until_ms,
             in_person_capacity: self.in_person_capacity,
             online_capacity: self.online_capacity,
             visibility: self.visibility.clone(),
@@ -636,6 +668,9 @@ impl EventConfig {
             nft_metadata_uri: nft_metadata_uri.to_string(),
             nft_image_url: nft_image_url.to_string(),
             poster_url: String::new(),
+            recap_published: false,
+            post_event_registration_open: false,
+            post_event_registration_until_ms: None,
             nft_name_template: String::new(),
             nft_symbol: nft_symbol.to_string(),
             nft_description_template: String::new(),
@@ -1176,6 +1211,9 @@ mod tests {
             nft_metadata_uri: String::new(),
             nft_image_url: String::new(),
             poster_url: String::new(),
+            recap_published: false,
+            post_event_registration_open: false,
+            post_event_registration_until_ms: None,
             nft_name_template: String::new(),
             nft_symbol: String::new(),
             nft_description_template: String::new(),
@@ -1381,5 +1419,70 @@ mod tests {
         let reg_ms = 1_000_000_000_000_i64;
         let within_ms = reg_ms + (12_i64 * 3_600_000); // +12h
         assert!(!event.deposit_deadline_passed(reg_ms, within_ms));
+    }
+
+    // ── post-event registration fields (Plan 008 — Phase 3) ──────────
+
+    #[test]
+    fn test_post_event_registration_defaults_closed() {
+        // New events default to closed lead capture, no deadline.
+        let event = make_event();
+        assert!(!event.post_event_registration_open);
+        assert_eq!(event.post_event_registration_until_ms, None);
+    }
+
+    #[test]
+    fn test_post_event_registration_propagates_to_meta() {
+        // The flag + deadline must survive EventConfig → EventMeta so the
+        // public recap page (which reads EventMeta via the API) can render the
+        // CTA when the organizer opens lead capture.
+        let mut event = make_event();
+        event.post_event_registration_open = true;
+        event.post_event_registration_until_ms = Some(1_700_000_000_000);
+        let meta = event.to_meta();
+        assert!(meta.post_event_registration_open);
+        assert_eq!(
+            meta.post_event_registration_until_ms,
+            Some(1_700_000_000_000)
+        );
+    }
+
+    #[test]
+    fn test_post_event_registration_serde_round_trip() {
+        // KV stores EventConfig as JSON; the fields must round-trip losslessly
+        // (open flag + deadline), including the "no deadline" None case.
+        let mut event = make_event();
+        event.post_event_registration_open = true;
+        event.post_event_registration_until_ms = Some(1_700_000_000_000);
+
+        let json = serde_json::to_string(&event).expect("serialize");
+        let back: EventConfig = serde_json::from_str(&json).expect("deserialize");
+        assert!(back.post_event_registration_open);
+        assert_eq!(
+            back.post_event_registration_until_ms,
+            Some(1_700_000_000_000)
+        );
+
+        // None deadline survives + is skipped in serialization (no null key).
+        event.post_event_registration_until_ms = None;
+        let json_none = serde_json::to_string(&event).expect("serialize none");
+        assert!(!json_none.contains("post_event_registration_until_ms"));
+        let back_none: EventConfig = serde_json::from_str(&json_none).expect("deserialize none");
+        assert_eq!(back_none.post_event_registration_until_ms, None);
+    }
+
+    #[test]
+    fn test_post_event_registration_absent_in_json_defaults_closed() {
+        // Older KV entries (pre-Phase-3) lack these fields entirely — serde's
+        // #[serde(default)] must deserialize them as closed / no-deadline so a
+        // reseed or read doesn't panic or leak a false "open" state.
+        let legacy = make_event();
+        let mut value = serde_json::to_value(&legacy).expect("serialize");
+        let obj = value.as_object_mut().expect("object");
+        obj.remove("post_event_registration_open");
+        obj.remove("post_event_registration_until_ms");
+        let back: EventConfig = serde_json::from_value(value).expect("deserialize stripped");
+        assert!(!back.post_event_registration_open);
+        assert_eq!(back.post_event_registration_until_ms, None);
     }
 }

@@ -3,6 +3,28 @@ main = "build/worker/shim.mjs"
 compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
 
+# Module aliasing — bypass global Yarn Plug'n'Play (PnP) interference.
+# On machines with a global ~/.pnp.cjs (from another project), wrangler's esbuild
+# auto-detects it and the PnP manifest forbids resolving @cloudflare/unenv-preset
+# (the nodejs_compat polyfill injected into the worker bundle), breaking both
+# `wrangler dev` and `wrangler deploy`. These aliases point esbuild directly at the
+# installed files, bypassing node resolution (and thus PnP) entirely.
+#
+# The polyfill graph is two layers deep and terminates at leaf modules:
+#   L1: @cloudflare/unenv-preset/node/{console,process}  (hoisted to top-level node_modules)
+#   L2: unenv/node/{console, internal/process/hrtime, internal/process/process}  (leaf files, zero imports)
+# `unenv` is a peer dep of unenv-preset and is NOT hoisted, so its aliases point into the
+# pnpm store at the lockfile-pinned version (unenv@2.0.0-rc.24). Paths follow each package's
+# published exports contract (`./* -> ./dist/runtime/*.mjs`).
+# Harmless no-op in clean environments (resolves to the same files PnP-free resolution finds).
+# Ref: https://developers.cloudflare.com/workers/wrangler/configuration/#bundling-issues
+[alias]
+"@cloudflare/unenv-preset/node/console" = "./node_modules/@cloudflare/unenv-preset/dist/runtime/node/console.mjs"
+"@cloudflare/unenv-preset/node/process" = "./node_modules/@cloudflare/unenv-preset/dist/runtime/node/process.mjs"
+"unenv/node/console" = "./node_modules/.pnpm/unenv@2.0.0-rc.24/node_modules/unenv/dist/runtime/node/console.mjs"
+"unenv/node/internal/process/hrtime" = "./node_modules/.pnpm/unenv@2.0.0-rc.24/node_modules/unenv/dist/runtime/node/internal/process/hrtime.mjs"
+"unenv/node/internal/process/process" = "./node_modules/.pnpm/unenv@2.0.0-rc.24/node_modules/unenv/dist/runtime/node/internal/process/process.mjs"
+
 # Static assets — serve the Leptos WASM frontend
 # SPA mode: non-API routes fall back to index.html
 [assets]
@@ -145,3 +167,72 @@ bucket_name = "bethere-assets"
 # [[migrations]]
 # tag = "v1"
 # new_sqlite_classes = ["EventDurableObject"]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Staging environment (Plan 005 §3.1).
+# Fully isolated from production: separate D1/KV/R2 + staging-only event vars
+# + DEV_MODE so SIWS (006) and mobile (007) dev never touches prod data.
+# Deploy with:  bash worker/deploy.sh staging
+#
+# Inheritance (wrangler semantics): a named env INHERITS top-level scalar
+# config (compatibility_date/flags, assets, build, placement, triggers) but
+# `vars` and bindings (kv/d1/r2) are NON-INHERITABLE and must be redeclared.
+# Below we set the staging name, redeclare the full var set + three bindings
+# (with staging resource ids), and override DEV_MODE + the staging URLs.
+#
+# ── ONE-TIME PROVISIONING (provisioned 2026-07-10 — ids pasted below) ────────
+#   npx wrangler d1 create bethere-db-staging
+#   npx wrangler kv namespace create EVENTS_STAGING
+#   npx wrangler r2 bucket create bethere-assets-staging
+#   npx wrangler d1 migrations apply bethere-db-staging --remote --env staging
+# NOTE: d1 migrations apply needs --env staging (it resolves via the [env.staging]
+# binding); d1 execute resolves by name and works without it.
+# ─────────────────────────────────────────────────────────────────────────────
+[env.staging]
+name = "bethere-staging"
+
+[env.staging.vars]
+# IMPORTANT (wrangler semantics): `vars` and bindings are NON-INHERITABLE — a
+# named env does NOT merge top-level [vars]. Staging must redeclare every var
+# it needs (Cloudflare docs: "Non-inheritable keys … must be specified per
+# environment"). Below mirrors production and overrides the env-specific ones.
+SERVER_URL = "https://bethere-staging.solana-thailand.workers.dev"
+CLAIM_BASE_URL = "https://bethere-staging.solana-thailand.workers.dev/claim"
+GOOGLE_SHEET_NAME = "Attendees"
+GOOGLE_STAFF_SHEET_NAME = "staff"
+PLATFORM_SHEET_ID = "1oF54ia6mquO_kB869aQxmz3RD8nDcTRWfXIX0VmndxM"
+# DEV_MODE=1 permits test shortcuts on staging ONLY (production stays 0).
+DEV_MODE = "1"
+DEV_EMAIL = "ratchapon.poc@gmail.com"
+SUPER_ADMIN_EMAILS = "ratchapon.poc@gmail.com,hackathon@colosseum.org"
+# Test event (seed via worker/scripts/seed-staging.sh). Short horizons so the
+# flow-harness can exercise both refund paths without waiting hours.
+EVENT_NAME = "Flow Harness Test Event (staging)"
+EVENT_TAGLINE = "Staging — do not promote"
+EVENT_LINK = ""
+# 0 = defer to the per-event values stored in D1 by seed-staging.sh.
+EVENT_START_MS = "0"
+EVENT_END_MS = "0"
+
+# Separate D1 — overrides the production [[d1_databases]] binding via the same `binding` name.
+[[env.staging.d1_databases]]
+binding = "DB"
+database_name = "bethere-db-staging"
+database_id = "951fce4e-b874-4ab0-ae70-39a27dbf1d8c"   # provisioned 2026-07-10 (APAC)
+migrations_dir = "migrations"
+
+# Separate KV namespace.
+[[env.staging.kv_namespaces]]
+binding = "EVENTS"
+id = "dd1d541c936242ecb1533ba6ac6a9851"            # provisioned 2026-07-10
+preview_id = "dd1d541c936242ecb1533ba6ac6a9851"   # staging shares the main namespace (no separate preview ns)
+
+# Separate R2 bucket.
+[[env.staging.r2_buckets]]
+binding = "ASSETS_BUCKET"
+bucket_name = "bethere-assets-staging"
+
+# NOTE: DO bindings (EVENT_DO) remain commented out for staging too — the PUT API
+# fallback in deploy.sh rejects durable_object bindings (10021). When the CF
+# versions API recovers and DOs are re-enabled in production, mirror the binding
+# here. The worker already handles event_do=None gracefully.

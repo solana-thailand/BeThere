@@ -153,6 +153,11 @@ pub fn EventSummary() -> impl IntoView {
                                 set_toast=set_toast
                                 set_refresh_counter=set_refresh_counter
                             />
+                            <RecapSection
+                                event_id=resp.event_id.clone()
+                                summary_frozen=resp.frozen
+                                set_toast=set_toast
+                            />
                         }
                             .into_any()
                     }}
@@ -403,6 +408,301 @@ fn FreezeSection(
         </section>
     }
         .into_any()
+}
+
+// ---------------------------------------------------------------------------
+// Public Recap section (Plan 008 — Phase 2)
+// ---------------------------------------------------------------------------
+
+/// Organizer recap authoring section.
+///
+/// Renders a markdown editor + image URL field + preview, plus "Save Draft"
+/// and "Publish" buttons. Disabled (with an explanatory banner) when no frozen
+/// summary exists — the backend refuses to publish a recap without a freeze,
+/// because "recaps without numbers are misleading" (Plan 008 §3.2.1).
+///
+/// On mount, fetches `GET /events/{id}/recap` to seed the editor. Save/Publish
+/// call `PUT /events/{id}/recap` and refresh the local state from the response.
+#[component]
+fn RecapSection(
+    event_id: String,
+    summary_frozen: bool,
+    set_toast: WriteSignal<Option<components::ToastMessage>>,
+) -> impl IntoView {
+    let (recap_data, set_recap_data) = signal(Option::<api::EventRecapData>::None);
+    let (load_state, set_load_state) = signal(SummaryLoadState::Loading);
+    let (markdown, set_markdown) = signal(String::new());
+    let (image_url, set_image_url) = signal(String::new());
+    let (busy, set_busy) = signal(false);
+    // Bumping `refresh` re-runs the fetch (used after a successful publish to
+    // pick up the canonical server state, mirroring the page-level pattern).
+    let (refresh, set_refresh) = signal(0u32);
+
+    // Wrap `event_id` in a signal so the two click handlers below can read an
+    // owned copy via `.get()` without capturing the String itself by `move`.
+    // This is required because the view macro's children must be `Fn`
+    // (re-callable); a `move` closure that captures an owned `String` makes
+    // the outer view closure `FnOnce` and fails to compile. `ReadSignal` is
+    // `Copy`, so each click handler captures the signal by value and the view
+    // stays `Fn`. The Effect below also reads from this signal for the same
+    // reason. Mirrors the inline-click-handler pattern in `FreezeSection`.
+    let (event_id_sig, _) = signal(event_id);
+
+    Effect::new(move |_| {
+        let _ = refresh.get();
+        let id = event_id_sig.get();
+        if id.is_empty() {
+            return;
+        }
+        set_load_state.set(SummaryLoadState::Loading);
+        leptos::task::spawn_local(async move {
+            match api::get_event_recap(&id).await {
+                Ok(payload) => {
+                    set_markdown.set(payload.recap.recap_markdown.clone());
+                    set_image_url.set(payload.recap.recap_image_url.clone());
+                    set_recap_data.set(Some(payload));
+                    set_load_state.set(SummaryLoadState::Loaded);
+                }
+                Err(e) => {
+                    log::error!("[event-recap] load failed: {e}");
+                    set_load_state.set(SummaryLoadState::Failed(format!("{e}")));
+                }
+            }
+        });
+    });
+
+    let is_published = move || {
+        recap_data
+            .get()
+            .and_then(|d| d.recap.recap_published_at)
+            .is_some()
+    };
+
+    let can_edit = move || summary_frozen && !busy.get();
+    let can_publish = move || can_edit() && !markdown.get().trim().is_empty();
+
+    view! {
+        <section class="card" style="margin-top:1rem;width:100%;">
+            <div class="flex-row-gap events-flex-wrap-center" style="margin-bottom:1rem;">
+                <span class="card-title">"Public Recap"</span>
+                <Show when=move || is_published() fallback=|| view! { <span></span> }>
+                    <span class="badge badge-success-xs">"Published"</span>
+                </Show>
+                <Show
+                    when=move || !is_published() && summary_frozen
+                    fallback=|| view! { <span></span> }
+                >
+                    <span class="badge badge-warning-xs">"Draft"</span>
+                </Show>
+            </div>
+
+            // Freeze gate — recap authoring requires a frozen summary.
+            <Show when=move || !summary_frozen fallback=|| view! { <div></div> }>
+                <div class="hint-info" style="margin-bottom:1rem;">
+                    "Freeze the summary above before authoring the public recap. Recaps without numbers are misleading."
+                </div>
+            </Show>
+
+            // Initial loading state (before any data is in hand).
+            <Show
+                when=move || {
+                    matches!(load_state.get(), SummaryLoadState::Loading) && recap_data.get().is_none()
+                }
+                fallback=|| view! { <div></div> }
+            >
+                <div class="page-loading">
+                    <span class="spinner spinner-sm"></span>
+                    "Loading recap..."
+                </div>
+            </Show>
+
+            // Editor — visible once we have any data OR the summary is already
+            // frozen (so the organizer can start drafting on a fresh row).
+            <Show
+                when=move || recap_data.get().is_some() || summary_frozen
+                fallback=|| view! { <div></div> }
+            >
+                <div class="form-group" style="margin-bottom:1rem;">
+                    <label class="form-label">"Recap content (Markdown)"</label>
+                    <textarea
+                        class="form-input"
+                        rows=12
+                        placeholder="## Great event! We had 50 developers join us..."
+                        prop:value=move || markdown.get()
+                        on:input=move |ev| set_markdown.set(event_target_value(&ev))
+                        disabled=move || !can_edit()
+                        style="font-family:monospace;width:100%;"
+                    ></textarea>
+                    <div class="hint-info">
+                        {move || format!("{} / 16384 bytes", markdown.get().len())}
+                    </div>
+                </div>
+
+                <div class="form-group" style="margin-bottom:1rem;">
+                    <label class="form-label">"Hero image URL (https:// only, optional)"</label>
+                    <input
+                        type="url"
+                        class="form-input"
+                        placeholder="https://cdn.example.com/hero.png"
+                        prop:value=move || image_url.get()
+                        on:input=move |ev| set_image_url.set(event_target_value(&ev))
+                        disabled=move || !can_edit()
+                    />
+                </div>
+
+                // Live image preview.
+                <Show when=move || !image_url.get().is_empty() fallback=|| view! { <div></div> }>
+                    <div class="form-group" style="margin-bottom:1rem;">
+                        <label class="form-label">"Image preview"</label>
+                        <img
+                            src=move || image_url.get()
+                            alt="Recap hero preview"
+                            style="max-width:100%;max-height:240px;border-radius:8px;"
+                        />
+                    </div>
+                </Show>
+
+                // Action buttons.
+                <div class="flex-row-gap">
+                    <button
+                        class="btn btn-outline"
+                        disabled=move || !can_edit()
+                        on:click=move |_| {
+                            if !summary_frozen {
+                                components::show_toast(
+                                    &set_toast,
+                                    "Freeze the summary before authoring a recap",
+                                    components::ToastType::Error,
+                                );
+                                return;
+                            }
+                            spawn_recap_save(
+                                event_id_sig.get(),
+                                markdown.get(),
+                                image_url.get(),
+                                false,
+                                set_markdown,
+                                set_image_url,
+                                set_recap_data,
+                                set_busy,
+                                set_refresh,
+                                set_toast,
+                            );
+                        }
+                    >
+                        {move || if busy.get() { "Saving..." } else { "Save Draft" }}
+                    </button>
+                    <button
+                        class="btn btn-primary"
+                        disabled=move || !can_publish()
+                        on:click=move |_| {
+                            if !summary_frozen {
+                                components::show_toast(
+                                    &set_toast,
+                                    "Freeze the summary before authoring a recap",
+                                    components::ToastType::Error,
+                                );
+                                return;
+                            }
+                            if markdown.get().trim().is_empty() {
+                                components::show_toast(
+                                    &set_toast,
+                                    "Cannot publish an empty recap",
+                                    components::ToastType::Error,
+                                );
+                                return;
+                            }
+                            let confirm_msg = "Publish this recap now? It will be visible immediately at /events/{slug}/recap.";
+                            if !web_sys::window().unwrap().confirm_with_message(confirm_msg).unwrap_or(false) {
+                                return;
+                            }
+                            spawn_recap_save(
+                                event_id_sig.get(),
+                                markdown.get(),
+                                image_url.get(),
+                                true,
+                                set_markdown,
+                                set_image_url,
+                                set_recap_data,
+                                set_busy,
+                                set_refresh,
+                                set_toast,
+                            );
+                        }
+                    >
+                        {move || if busy.get() { "Publishing..." } else { "Publish" }}
+                    </button>
+                </div>
+
+                // Published-at timestamp.
+                <Show when=move || is_published() fallback=|| view! { <div></div> }>
+                    <div class="hint-info" style="margin-top:1rem;">
+                        {move || format!(
+                            "Published at {}",
+                            recap_data
+                                .get()
+                                .and_then(|d| d.recap.recap_published_at)
+                                .map(|s| format_iso(&s))
+                                .unwrap_or_default()
+                        )}
+                    </div>
+                </Show>
+            </Show>
+        </section>
+    }
+}
+
+/// Spawn the recap PUT request as a background task.
+///
+/// Free function (no captures) so each button's click handler can clone the
+/// needed values and call this — avoids the `FnOnce` issue of a shared closure
+/// that moves owned data. Mirrors the inline-click-handler pattern in
+/// `FreezeSection`.
+//
+// `too_many_arguments` is intentional: grouping these into a context struct
+// would add a one-shot type that exists only to be unpacked immediately. The
+// 10 params split naturally into 3 inputs (event_id, markdown, image_url,
+// publish) + 6 signal setters the closure mutates + 1 toast signal. Each is
+// `Copy` (`WriteSignal` is `Copy`) so there's no ownership/aliasing hazard.
+#[allow(clippy::too_many_arguments)]
+fn spawn_recap_save(
+    event_id: String,
+    markdown: String,
+    image_url: String,
+    publish: bool,
+    set_markdown: WriteSignal<String>,
+    set_image_url: WriteSignal<String>,
+    set_recap_data: WriteSignal<Option<api::EventRecapData>>,
+    set_busy: WriteSignal<bool>,
+    set_refresh: WriteSignal<u32>,
+    set_toast: WriteSignal<Option<components::ToastMessage>>,
+) {
+    set_busy.set(true);
+    leptos::task::spawn_local(async move {
+        match api::put_event_recap(&event_id, &markdown, &image_url, publish).await {
+            Ok(payload) => {
+                set_markdown.set(payload.recap.recap_markdown.clone());
+                set_image_url.set(payload.recap.recap_image_url.clone());
+                set_recap_data.set(Some(payload));
+                let msg = if publish {
+                    "Recap published — live on /past-events"
+                } else {
+                    "Draft saved"
+                };
+                components::show_toast(&set_toast, msg, components::ToastType::Success);
+                set_refresh.update(|n| *n += 1);
+            }
+            Err(e) => {
+                log::error!("[event-recap] save failed: {e}");
+                components::show_toast(
+                    &set_toast,
+                    &format!("Failed to save recap: {e}"),
+                    components::ToastType::Error,
+                );
+            }
+        }
+        set_busy.set(false);
+    });
 }
 
 // ---------------------------------------------------------------------------

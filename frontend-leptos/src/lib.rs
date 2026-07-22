@@ -18,7 +18,8 @@ use crate::pages::{
     admin::Admin, adventure::page::Adventure, claim::Claim, dashboard_live::DashboardLive,
     data_privacy::DataPrivacy, deposit::Deposit, dev_dashboard::DevDashboard,
     dev_profile::DevProfile, event_summary::EventSummary, landing::Landing, login::Login,
-    privacy::Privacy, public_event::PublicEvent, scanner::Scanner, ticket::page::Ticket,
+    pr_pack::PrPack, privacy::Privacy, public_event::PublicEvent, scanner::Scanner,
+    ticket::page::Ticket, EventRecap, PastEvents, PostEventRegister,
 };
 
 /// Main application component.
@@ -63,6 +64,15 @@ pub fn App() -> impl IntoView {
                     <Route path=path!("/deposit/:attendee_id") view=Deposit />
                     <Route path=path!("/ticket/:attendee_id") view=Ticket />
                     <Route path=path!("/e/:slug") view=PublicEvent />
+                    // Public past-events feed + recap pages (Plan 008 — Phase 2).
+                    // `/past-events` lists completed events with a published recap;
+                    // `/events/:slug/recap` renders one published recap.
+                    <Route path=path!("/past-events") view=PastEvents />
+                    <Route path=path!("/events/:slug/recap") view=EventRecap />
+                    // Post-event lead-capture form (Plan 008 — Phase 3).
+                    // JWT-gated inside the component (redirects to /login if no
+                    // session) — same self-gate pattern as the dev-profile page.
+                    <Route path=path!("/events/:slug/post-event-register") view=PostEventRegister />
                     <Route path=path!("/privacy") view=Privacy />
                     <Route path=path!("/data-privacy") view=DataPrivacy />
                     <Route path=path!("/adventure") view=Adventure />
@@ -72,6 +82,7 @@ pub fn App() -> impl IntoView {
                     <Route path=path!("/admin") view=ProtectedAdmin />
                     <Route path=path!("/dashboard/live") view=ProtectedLiveDashboard />
                     <Route path=path!("/events/:id/summary") view=ProtectedEventSummary />
+                    <Route path=path!("/events/:id/pr-pack") view=ProtectedPrPack />
                 </Routes>
             </main>
         </Router>
@@ -131,6 +142,20 @@ fn ProtectedEventSummary() -> impl IntoView {
     view! {
         <ProtectedRoute>
             <EventSummary />
+        </ProtectedRoute>
+    }
+}
+
+/// Protected wrapper for the PR Pack page (Plan 008 Phase 4).
+///
+/// Organizer-only view of generated marketing copy. The backend enforces the
+/// role gate too, so this wrapper just prevents a Staff user from loading the
+/// page UI before the API rejects them.
+#[component]
+fn ProtectedPrPack() -> impl IntoView {
+    view! {
+        <ProtectedRoute>
+            <PrPack />
         </ProtectedRoute>
     }
 }

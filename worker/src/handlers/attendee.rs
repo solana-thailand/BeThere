@@ -371,6 +371,10 @@ pub async fn get_public_ticket(
             "currency": d.currency,
             "refunded": thb_deposit.as_ref().is_some_and(|t| t.refunded),
             "refund_proof_url": thb_deposit.as_ref().and_then(|t| t.refund_proof_url.clone()),
+            // Whether the attendee converted this deposit to rolling credit
+            // (distinct from `refunded`). Drives the frontend HoldDepositCard's
+            // already-held state and prevents re-showing the CTA on reload.
+            "held_as_credit": thb_deposit.as_ref().is_some_and(|t| t.held_as_credit),
         })
     });
 

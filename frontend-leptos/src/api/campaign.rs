@@ -68,6 +68,23 @@ pub struct CampaignEventItem {
     pub is_required: bool,
 }
 
+/// Per-event check-in status for a developer within a campaign. Populated only
+/// by the per-campaign progress endpoint (`GET /api/campaigns/{id}/progress`);
+/// empty for `my-progress`.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct DeveloperEventAttendance {
+    #[serde(default)]
+    pub event_id: String,
+    #[serde(default)]
+    pub event_name: String,
+    #[serde(default)]
+    pub sequence_order: i64,
+    #[serde(default)]
+    pub is_required: bool,
+    #[serde(default)]
+    pub attended: bool,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct DeveloperProgressItem {
     #[serde(default)]
@@ -84,6 +101,8 @@ pub struct DeveloperProgressItem {
     pub completed_at: Option<String>,
     #[serde(default)]
     pub reward_claimed_at: Option<String>,
+    #[serde(default)]
+    pub events: Vec<DeveloperEventAttendance>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -388,4 +407,44 @@ pub async fn claim_campaign_reward(
         wallet_address: wallet_address.to_string(),
     };
     api_post_json(&path, &req).await
+}
+
+// ===== Organization Types (for campaign-form org picker) =====
+//
+// Mirrors the read fields of backend `OrganizationConfig`
+// (`worker/src/handlers/orgs.rs` → `OrgListResponse`). Kept minimal: the
+// campaign-create dropdown only needs id + display name.
+
+/// Minimal org info needed to populate the campaign-create org dropdown.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct OrgOption {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct OrgListResponse {
+    #[serde(default)]
+    pub orgs: Vec<OrgOption>,
+}
+
+/// GET /api/orgs — list organizations (admin read; any authenticated admin).
+pub async fn list_orgs() -> Result<Vec<OrgOption>, ApiError> {
+    let response = api_get("/orgs").await?;
+    if !response.ok() {
+        return Err(ApiError {
+            message: "Failed to list organizations".to_string(),
+            status: response.status(),
+        });
+    }
+
+    let result: super::types::ApiResponse<OrgListResponse> =
+        response_json(&response).await.map_err(|e| ApiError {
+            message: format!("Failed to parse organizations: {e}"),
+            status: 0,
+        })?;
+
+    Ok(result.data.map(|d| d.orgs).unwrap_or_default())
 }

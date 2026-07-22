@@ -24,6 +24,10 @@
 #   - HELIUS_API_KEY in worker/.dev.vars
 #   - solana CLI installed + configured for devnet
 #   - Devnet USDC in test wallet (use https://faucet.circle.com/)
+#   - Python 3 with PyNaCl (sign_and_submit.py uses nacl.signing for Ed25519).
+#       Install:  python3 -m venv .venv && .venv/bin/pip install pynacl
+#       Then run this script with the venv on PATH:
+#       PATH=".venv/bin:$PATH" bash scripts/e2e/test_escrow_devnet.sh
 #
 # Usage:
 #   bash scripts/e2e/test_escrow_devnet.sh
@@ -373,7 +377,7 @@ else
         SUBMIT_OUTPUT=$(sign_and_submit_tx "$TX_B64" "$ORG_KEYPAIR_JSON")
         info "Submit output: $SUBMIT_OUTPUT"
 
-        if echo "$SUBMIT_OUTPUT" | grep -q "SIGNATURE="; then
+        if echo "$SUBMIT_OUTPUT" | grep -q "STATUS=CONFIRMED"; then
             INIT_SIG=$(echo "$SUBMIT_OUTPUT" | grep "SIGNATURE=" | cut -d= -f2)
             pass "Init escrow TX submitted!"
             info "Signature: $INIT_SIG"
@@ -584,7 +588,7 @@ if [ "$DEP_INIT_SUCCESS" = "true" ]; then
         DEP_SUBMIT=$(sign_and_submit_tx "$DEP_TX_B64" "$ATT_KEYPAIR_JSON")
         info "Deposit submit: $DEP_SUBMIT"
 
-        if echo "$DEP_SUBMIT" | grep -q "SIGNATURE="; then
+        if echo "$DEP_SUBMIT" | grep -q "STATUS=CONFIRMED"; then
             DEP_SIG=$(echo "$DEP_SUBMIT" | grep "SIGNATURE=" | cut -d= -f2)
             pass "Deposit TX submitted!"
             info "Signature: $DEP_SIG"
@@ -692,7 +696,7 @@ else
     MARK_CI_RESPONSE=$(curl -s -X POST "$BASE_URL/api/escrow/mark-checked-in" \
         -H "Authorization: Bearer dev-token" \
         -H "Content-Type: application/json" \
-        -d "{\"event_id\": \"$EVENT_ID\", \"attendee_wallet\": \"$ATTENDEE_WALLET\"}")
+        -d "{\"event_id\": \"$EVENT_ID\", \"attendee_id\": \"$TEST_ATTENDEE_ID\", \"attendee_wallet\": \"$ATTENDEE_WALLET\"}")
 
     MARK_CI_SUCCESS=$(echo "$MARK_CI_RESPONSE" | python3 -c "import sys,json; print(str(json.load(sys.stdin).get('success','')).lower())" 2>/dev/null || echo "false")
 
@@ -708,7 +712,7 @@ else
         MARK_CI_SUBMIT=$(sign_and_submit_tx "$MARK_CI_TX" "$ORG_KEYPAIR_JSON")
         info "Mark checked-in submit: $MARK_CI_SUBMIT"
 
-        if echo "$MARK_CI_SUBMIT" | grep -q "SIGNATURE="; then
+        if echo "$MARK_CI_SUBMIT" | grep -q "STATUS=CONFIRMED"; then
             MARK_CI_SIG=$(echo "$MARK_CI_SUBMIT" | grep "SIGNATURE=" | cut -d= -f2)
             pass "mark_checked_in TX submitted!"
             info "Signature: $MARK_CI_SIG"
@@ -791,7 +795,7 @@ if [ "$REFUND_SUCCESS" = "yes" ]; then
         REFUND_SUBMIT=$(sign_and_submit_tx "$REFUND_TX_B64" "$ATT_KEYPAIR_JSON")
         info "Refund submit: $REFUND_SUBMIT"
 
-        if echo "$REFUND_SUBMIT" | grep -q "SIGNATURE="; then
+        if echo "$REFUND_SUBMIT" | grep -q "STATUS=CONFIRMED"; then
             REFUND_SIG=$(echo "$REFUND_SUBMIT" | grep "SIGNATURE=" | cut -d= -f2)
             pass "Refund TX submitted!"
             info "Signature: $REFUND_SIG"
@@ -833,7 +837,7 @@ else
             REFUND_SUBMIT=$(sign_and_submit_tx "$REFUND_TX_B64" "$ATT_KEYPAIR_JSON")
             info "Refund submit: $REFUND_SUBMIT"
 
-            if echo "$REFUND_SUBMIT" | grep -q "SIGNATURE="; then
+            if echo "$REFUND_SUBMIT" | grep -q "STATUS=CONFIRMED"; then
                 REFUND_SIG=$(echo "$REFUND_SUBMIT" | grep "SIGNATURE=" | cut -d= -f2)
                 pass "Refund TX submitted!"
                 info "Signature: $REFUND_SIG"
@@ -946,7 +950,7 @@ else
         DEACTIVATE_SUBMIT=$(sign_and_submit_tx "$DEACTIVATE_TX" "$ORG_KEYPAIR_JSON")
         info "Deactivate submit: $DEACTIVATE_SUBMIT"
 
-        if echo "$DEACTIVATE_SUBMIT" | grep -q "SIGNATURE="; then
+        if echo "$DEACTIVATE_SUBMIT" | grep -q "STATUS=CONFIRMED"; then
             DEACTIVATE_SIG=$(echo "$DEACTIVATE_SUBMIT" | grep "SIGNATURE=" | cut -d= -f2)
             pass "deactivate_event TX submitted!"
             info "Signature: $DEACTIVATE_SIG"
@@ -1003,7 +1007,7 @@ else
         CLAIM_SUBMIT=$(sign_and_submit_tx "$CLAIM_TX" "$ORG_KEYPAIR_JSON")
         info "Claim forfeited submit: $CLAIM_SUBMIT"
 
-        if echo "$CLAIM_SUBMIT" | grep -q "SIGNATURE="; then
+        if echo "$CLAIM_SUBMIT" | grep -q "STATUS=CONFIRMED"; then
             CLAIM_SIG=$(echo "$CLAIM_SUBMIT" | grep "SIGNATURE=" | cut -d= -f2)
             pass "claim_forfeited TX submitted!"
             info "Signature: $CLAIM_SIG"
@@ -1020,7 +1024,17 @@ else
         fi
     else
         ERR=$(echo "$CLAIM_RESPONSE" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('error', d.get('message', str(d)[:200])))" 2>/dev/null || echo "unknown")
-        warn "claim_forfeited TX build failed: $ERR"
+        # "no forfeited deposits" is the expected, correct outcome in this flow:
+        # the single attendee was refunded-and-closed in Step 9, so the hardened
+        # claim handler (filter_forfeitable_deposits) correctly drops them — their
+        # AttendeeDeposit PDA no longer exists — and reports nothing to claim.
+        # This is the honest result, NOT a failure. A genuine error fails loudly.
+        if echo "$ERR" | grep -qi "no forfeited\|nothing to claim"; then
+            pass "claim_forfeited: no forfeited deposits (expected — attendee refunded/closed; handler correctly filtered)"
+        else
+            fail "claim_forfeited TX build failed"
+            echo "   $ERR" | head -c 500
+        fi
     fi
 fi
 
@@ -1053,7 +1067,7 @@ else
         CLOSE_SUBMIT=$(sign_and_submit_tx "$CLOSE_TX" "$ORG_KEYPAIR_JSON")
         info "Close event submit: $CLOSE_SUBMIT"
 
-        if echo "$CLOSE_SUBMIT" | grep -q "SIGNATURE="; then
+        if echo "$CLOSE_SUBMIT" | grep -q "STATUS=CONFIRMED"; then
             CLOSE_SIG=$(echo "$CLOSE_SUBMIT" | grep "SIGNATURE=" | cut -d= -f2)
             pass "close_event TX submitted!"
             info "Signature: $CLOSE_SIG"

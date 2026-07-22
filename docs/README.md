@@ -44,6 +44,7 @@
 |---|---|
 | [Gradual Deploy Runbook](gradual_deploy_runbook.md) | Step-by-step deployment guide |
 | [Events Management](events_management.md) | How events are managed in the system |
+| [Campaigns Guide](campaigns_guide.md) | Multi-event series setup, attendee rewards, and UX gaps |
 | [Business Flows — Event Page](business_flows_event_page.md) | UX and business flows for the event page |
 
 ---

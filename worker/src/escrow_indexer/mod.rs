@@ -3,8 +3,9 @@
 //! Bridges the gap between on-chain CPI events emitted by the bethere-escrow
 //! program and the off-chain audit trail stored in KV.
 //!
-//! The escrow program (`C6HDeZES9aPpNwe3UvS9ecmfcRhH1XeJb8PGJmLG3z3T`) emits
-//! 8 event types via `emit!()`:
+//! The escrow program emits 8 event types via `emit!()`. The program ID is
+//! cluster-aware (see `escrow_program_id()`); the devnet default is
+//! `C6HDeZES9aPpNwe3UvS9ecmfcRhH1XeJb8PGJmLG3z3T`.
 //!
 //! | Discriminator | Event             | Instruction      |
 //! |---------------|-------------------|------------------|
@@ -37,12 +38,13 @@ pub mod webhook;
 use serde::{Deserialize, Serialize};
 use worker::KvStore;
 
+// Cluster-aware escrow program ID — single source of truth lives in `solana_escrow`.
+// Re-imported here so submodules can resolve it via `super::escrow_program_id()`.
+use crate::solana_escrow::escrow_program_id;
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
-
-/// Bethere-escrow program ID (devnet and mainnet).
-pub const ESCROW_PROGRAM_ID: &str = "C6HDeZES9aPpNwe3UvS9ecmfcRhH1XeJb8PGJmLG3z3T";
 
 /// Max signatures to fetch per polling cycle.
 const POLL_BATCH_SIZE: usize = 25;
@@ -419,7 +421,7 @@ mod tests {
             transaction_error: None,
             account_data: vec![],
             instruction_data: vec![HeliusInstruction {
-                program_id: ESCROW_PROGRAM_ID.to_string(),
+                program_id: escrow_program_id().to_string(),
                 data: data_b58,
                 accounts: vec!["attendee_pubkey".to_string(), "escrow_pda".to_string()],
                 inner_instructions: vec![],
@@ -455,7 +457,7 @@ mod tests {
             transaction_error: None,
             account_data: vec![],
             instruction_data: vec![HeliusInstruction {
-                program_id: ESCROW_PROGRAM_ID.to_string(),
+                program_id: escrow_program_id().to_string(),
                 data: data_b58,
                 accounts: vec![
                     "attendee_pubkey".to_string(),    // [0] attendee

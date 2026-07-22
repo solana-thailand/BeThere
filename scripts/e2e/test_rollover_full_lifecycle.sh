@@ -305,7 +305,7 @@ else
         SOURCE_ON_CHAIN_ID=$(echo "$SRC_INIT" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['on_chain_event_id'])" 2>/dev/null || echo "0")
 
         SRC_SUBMIT=$(sign_and_submit_tx "$SRC_TX_B64" "$ORG_KEYPAIR_JSON")
-        if echo "$SRC_SUBMIT" | grep -q "SIGNATURE="; then
+        if echo "$SRC_SUBMIT" | grep -q "STATUS=CONFIRMED"; then
             SRC_SIG=$(echo "$SRC_SUBMIT" | grep "SIGNATURE=" | cut -d= -f2)
             pass "Source escrow initialized: $SRC_SIG"
             sleep 5
@@ -349,7 +349,7 @@ else
         TARGET_ON_CHAIN_ID=$(echo "$TGT_INIT" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['on_chain_event_id'])" 2>/dev/null || echo "0")
 
         TGT_SUBMIT=$(sign_and_submit_tx "$TGT_TX_B64" "$ORG_KEYPAIR_JSON")
-        if echo "$TGT_SUBMIT" | grep -q "SIGNATURE="; then
+        if echo "$TGT_SUBMIT" | grep -q "STATUS=CONFIRMED"; then
             TGT_SIG=$(echo "$TGT_SUBMIT" | grep "SIGNATURE=" | cut -d= -f2)
             pass "Target escrow initialized: $TGT_SIG"
             sleep 5
@@ -394,7 +394,7 @@ if [ "$DEP_A_SUCCESS" = "true" ]; then
 
     if [ -n "$DEP_A_TX" ]; then
         DEP_A_SUBMIT=$(sign_and_submit_tx "$DEP_A_TX" "$ATT_A_KEYPAIR_JSON")
-        if echo "$DEP_A_SUBMIT" | grep -q "SIGNATURE="; then
+        if echo "$DEP_A_SUBMIT" | grep -q "STATUS=CONFIRMED"; then
             DEP_A_SIG=$(echo "$DEP_A_SUBMIT" | grep "SIGNATURE=" | cut -d= -f2)
             pass "Attendee A deposited: $DEP_A_SIG"
             info "View: https://solscan.io/tx/$DEP_A_SIG?cluster=devnet"
@@ -437,7 +437,7 @@ if [ "$DEP_B_SUCCESS" = "true" ]; then
 
     if [ -n "$DEP_B_TX" ]; then
         DEP_B_SUBMIT=$(sign_and_submit_tx "$DEP_B_TX" "$ATT_B_KEYPAIR_JSON")
-        if echo "$DEP_B_SUBMIT" | grep -q "SIGNATURE="; then
+        if echo "$DEP_B_SUBMIT" | grep -q "STATUS=CONFIRMED"; then
             DEP_B_SIG=$(echo "$DEP_B_SUBMIT" | grep "SIGNATURE=" | cut -d= -f2)
             pass "Attendee B deposited: $DEP_B_SIG"
             info "View: https://solscan.io/tx/$DEP_B_SIG?cluster=devnet"
@@ -488,7 +488,7 @@ for PAIR in "$ATTENDEE_A_ID|A" "$ATTENDEE_B_ID|B"; do
         MARK_CI_TX=$(echo "$MARK_CI" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['transaction'])" 2>/dev/null || echo "")
         MARK_CI_SUBMIT=$(sign_and_submit_tx "$MARK_CI_TX" "$ORG_KEYPAIR_JSON")
 
-        if echo "$MARK_CI_SUBMIT" | grep -q "SIGNATURE="; then
+        if echo "$MARK_CI_SUBMIT" | grep -q "STATUS=CONFIRMED"; then
             MARK_CI_SIG=$(echo "$MARK_CI_SUBMIT" | grep "SIGNATURE=" | cut -d= -f2)
             pass "Attendee $ATT_LABEL checked in: $MARK_CI_SIG"
             sleep 5
@@ -529,7 +529,7 @@ if [ "$ROLLOVER_SUCCESS" = "true" ]; then
     info "Message: $ROLLOVER_MSG"
 
     ROLLOVER_SUBMIT=$(sign_and_submit_tx "$ROLLOVER_TX_B64" "$ATT_A_KEYPAIR_JSON")
-    if echo "$ROLLOVER_SUBMIT" | grep -q "SIGNATURE="; then
+    if echo "$ROLLOVER_SUBMIT" | grep -q "STATUS=CONFIRMED"; then
         ROLLOVER_SIG=$(echo "$ROLLOVER_SUBMIT" | grep "SIGNATURE=" | cut -d= -f2)
         pass "Attendee A rolled over: $ROLLOVER_SIG"
         info "View: https://solscan.io/tx/$ROLLOVER_SIG?cluster=devnet"
@@ -582,7 +582,7 @@ if [ "$REFUND_A_SUCCESS" = "true" ]; then
     REFUND_A_TX=$(echo "$REFUND_A_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['transaction'])" 2>/dev/null || echo "")
     REFUND_A_SUBMIT=$(sign_and_submit_tx "$REFUND_A_TX" "$ATT_A_KEYPAIR_JSON")
 
-    if echo "$REFUND_A_SUBMIT" | grep -q "SIGNATURE="; then
+    if echo "$REFUND_A_SUBMIT" | grep -q "STATUS=CONFIRMED"; then
         REFUND_A_SIG=$(echo "$REFUND_A_SUBMIT" | grep "SIGNATURE=" | cut -d= -f2)
         pass "Attendee A refunded from target: $REFUND_A_SIG"
         info "View: https://solscan.io/tx/$REFUND_A_SIG?cluster=devnet"
@@ -623,7 +623,7 @@ if [ "$SRC_DEACT_SUCCESS" = "true" ]; then
     SRC_DEACT_TX=$(echo "$SRC_DEACT" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['transaction'])" 2>/dev/null || echo "")
     SRC_DEACT_SUBMIT=$(sign_and_submit_tx "$SRC_DEACT_TX" "$ORG_KEYPAIR_JSON")
 
-    if echo "$SRC_DEACT_SUBMIT" | grep -q "SIGNATURE="; then
+    if echo "$SRC_DEACT_SUBMIT" | grep -q "STATUS=CONFIRMED"; then
         SRC_DEACT_SIG=$(echo "$SRC_DEACT_SUBMIT" | grep "SIGNATURE=" | cut -d= -f2)
         pass "Source event deactivated: $SRC_DEACT_SIG"
         sleep 5
@@ -648,7 +648,7 @@ if [ "$CLAIM_SRC_SUCCESS" = "true" ]; then
     CLAIM_SRC_TX=$(echo "$CLAIM_SRC" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['transaction'])" 2>/dev/null || echo "")
     CLAIM_SRC_SUBMIT=$(sign_and_submit_tx "$CLAIM_SRC_TX" "$ORG_KEYPAIR_JSON")
 
-    if echo "$CLAIM_SRC_SUBMIT" | grep -q "SIGNATURE="; then
+    if echo "$CLAIM_SRC_SUBMIT" | grep -q "STATUS=CONFIRMED"; then
         CLAIM_SRC_SIG=$(echo "$CLAIM_SRC_SUBMIT" | grep "SIGNATURE=" | cut -d= -f2)
         pass "Source forfeited claimed: $CLAIM_SRC_SIG"
         info "View: https://solscan.io/tx/$CLAIM_SRC_SIG?cluster=devnet"
@@ -685,7 +685,7 @@ if [ "$TGT_DEACT_SUCCESS" = "true" ]; then
     TGT_DEACT_TX=$(echo "$TGT_DEACT" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['transaction'])" 2>/dev/null || echo "")
     TGT_DEACT_SUBMIT=$(sign_and_submit_tx "$TGT_DEACT_TX" "$ORG_KEYPAIR_JSON")
 
-    if echo "$TGT_DEACT_SUBMIT" | grep -q "SIGNATURE="; then
+    if echo "$TGT_DEACT_SUBMIT" | grep -q "STATUS=CONFIRMED"; then
         TGT_DEACT_SIG=$(echo "$TGT_DEACT_SUBMIT" | grep "SIGNATURE=" | cut -d= -f2)
         pass "Target event deactivated: $TGT_DEACT_SIG"
         sleep 5
@@ -709,7 +709,7 @@ if [ "$CLAIM_TGT_SUCCESS" = "true" ]; then
     CLAIM_TGT_TX=$(echo "$CLAIM_TGT" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['transaction'])" 2>/dev/null || echo "")
     CLAIM_TGT_SUBMIT=$(sign_and_submit_tx "$CLAIM_TGT_TX" "$ORG_KEYPAIR_JSON")
 
-    if echo "$CLAIM_TGT_SUBMIT" | grep -q "SIGNATURE="; then
+    if echo "$CLAIM_TGT_SUBMIT" | grep -q "STATUS=CONFIRMED"; then
         CLAIM_TGT_SIG=$(echo "$CLAIM_TGT_SUBMIT" | grep "SIGNATURE=" | cut -d= -f2)
         info "Target claim forfeited submitted: $CLAIM_TGT_SIG (may be no-op if vault empty)"
         sleep 5
@@ -736,7 +736,7 @@ if [ "$SRC_CLOSE_SUCCESS" = "true" ]; then
     SRC_CLOSE_TX=$(echo "$SRC_CLOSE" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['transaction'])" 2>/dev/null || echo "")
     SRC_CLOSE_SUBMIT=$(sign_and_submit_tx "$SRC_CLOSE_TX" "$ORG_KEYPAIR_JSON")
 
-    if echo "$SRC_CLOSE_SUBMIT" | grep -q "SIGNATURE="; then
+    if echo "$SRC_CLOSE_SUBMIT" | grep -q "STATUS=CONFIRMED"; then
         SRC_CLOSE_SIG=$(echo "$SRC_CLOSE_SUBMIT" | grep "SIGNATURE=" | cut -d= -f2)
         pass "Source event closed: $SRC_CLOSE_SIG"
         sleep 5
@@ -767,7 +767,7 @@ if [ "$TGT_CLOSE_SUCCESS" = "true" ]; then
     TGT_CLOSE_TX=$(echo "$TGT_CLOSE" | python3 -c "import sys,json; print(json.load(sys.stdin)['data']['transaction'])" 2>/dev/null || echo "")
     TGT_CLOSE_SUBMIT=$(sign_and_submit_tx "$TGT_CLOSE_TX" "$ORG_KEYPAIR_JSON")
 
-    if echo "$TGT_CLOSE_SUBMIT" | grep -q "SIGNATURE="; then
+    if echo "$TGT_CLOSE_SUBMIT" | grep -q "STATUS=CONFIRMED"; then
         TGT_CLOSE_SIG=$(echo "$TGT_CLOSE_SUBMIT" | grep "SIGNATURE=" | cut -d= -f2)
         pass "Target event closed: $TGT_CLOSE_SIG"
         sleep 5
