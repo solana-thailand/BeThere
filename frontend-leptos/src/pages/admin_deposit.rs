@@ -1,14 +1,16 @@
 //! Admin deposit and refund management — embedded in the admin dashboard.
 //!
-//! Two sub-tabs:
+//! Three sub-tabs:
 //! - **Deposits**: Shows THB payment slips pending admin verification.
 //! - **Refund Queue**: Shows verified deposits awaiting refund processing.
+//!   Includes a "Hold as Credit" action for attendees who confirmed hold verbally.
+//! - **Held as Credit**: Shows deposits held as rolling credit for the next event.
 
 use std::collections::HashMap;
 
 use leptos::prelude::*;
 
-use crate::api::{self, MarkRefundRequest, ThbDepositInfo, VerifySlipRequest};
+use crate::api::{self, AdminHoldRequest, MarkRefundRequest, ThbDepositInfo, VerifySlipRequest};
 use crate::components::{self, ToastType};
 use crate::icons::{Icon, IconName};
 use crate::utils;
@@ -22,6 +24,7 @@ enum AdminDepositTab {
     Deposits,
     RefundQueue,
     Refunded,
+    Held,
 }
 
 // ---------------------------------------------------------------------------
@@ -40,6 +43,7 @@ pub fn AdminDeposits(
     let (slips, set_slips) = signal(Vec::<ThbDepositInfo>::new());
     let (refunds, set_refunds) = signal(Vec::<ThbDepositInfo>::new());
     let (refunded_list, set_refunded_list) = signal(Vec::<ThbDepositInfo>::new());
+    let (held_list, set_held_list) = signal(Vec::<ThbDepositInfo>::new());
 
     // UI state
     let (loading, set_loading) = signal(true);
@@ -69,6 +73,7 @@ pub fn AdminDeposits(
 
         let set_slips = set_slips;
         let set_refunds = set_refunds;
+        let set_held_list = set_held_list;
         let set_loading = set_loading;
         let set_toast = set_toast;
 
@@ -76,6 +81,7 @@ pub fn AdminDeposits(
             let slips_result = api::get_pending_slips(eid.as_deref()).await;
             let refunds_result = api::get_refund_queue(eid.as_deref()).await;
             let refunded_result = api::get_refunded_list(eid.as_deref()).await;
+            let held_result = api::get_held_list(eid.as_deref()).await;
 
             match slips_result {
                 Ok(data) => set_slips.set(data.slips),
@@ -105,6 +111,13 @@ pub fn AdminDeposits(
                 Ok(data) => set_refunded_list.set(data.refunded),
                 Err(e) => {
                     log::warn!("[admin-deposit] failed to load refunded list: {e}");
+                }
+            }
+
+            match held_result {
+                Ok(data) => set_held_list.set(data.held),
+                Err(e) => {
+                    log::warn!("[admin-deposit] failed to load held list: {e}");
                 }
             }
 
@@ -248,10 +261,44 @@ pub fn AdminDeposits(
         });
     };
 
+    // Mark a deposit as held-as-rolling-credit on behalf of the attendee
+    // (attendee confirmed verbally / over chat but didn't tap the button
+    // themselves). Mirrors handle_mark_refund's shape; the backend preserves
+    // all financial invariants (settle-before-increment, idempotency guards).
+    let handle_admin_hold = move |item: ThbDepositInfo| {
+        let attendee_id = item.attendee_id.clone();
+        let event_id = item.event_id.clone();
+        let key = format!("hold-{attendee_id}");
+        set_action_pending.set(Some(key));
+
+        leptos::task::spawn_local(async move {
+            let body = AdminHoldRequest { event_id };
+            match api::admin_hold_deposit(&attendee_id, &body).await {
+                Ok(_) => {
+                    components::show_toast(
+                        &set_toast,
+                        "Deposit held as rolling credit",
+                        ToastType::Success,
+                    );
+                    refresh_data();
+                }
+                Err(e) => {
+                    components::show_toast(
+                        &set_toast,
+                        &format!("Failed to hold deposit: {e}"),
+                        ToastType::Error,
+                    );
+                }
+            }
+            set_action_pending.set(None);
+        });
+    };
+
     // Computed: pending count for display
     let pending_count = Memo::new(move |_| slips.get().len());
     let refund_count = Memo::new(move |_| refunds.get().len());
     let refunded_count = Memo::new(move |_| refunded_list.get().len());
+    let held_count = Memo::new(move |_| held_list.get().len());
 
     let has_event = move || active_event_id.get().is_some();
 
@@ -301,6 +348,18 @@ pub fn AdminDeposits(
                     <Show when=move || refunded_count.get() != 0 fallback=|| view! { <span></span> }>
                         <span class="badge badge-success">
                             {move || refunded_count.get()}
+                        </span>
+                    </Show>
+                </button>
+                <button
+                    class="tab"
+                    class:active=move || active_tab.get() == AdminDepositTab::Held
+                    on:click=move |_| set_active_tab.set(AdminDepositTab::Held)
+                >
+                    <Icon icon=IconName::MoneyWings class="icon-sm"/>" Held as Credit"
+                    <Show when=move || held_count.get() != 0 fallback=|| view! { <span></span> }>
+                        <span class="badge badge-success">
+                            {move || held_count.get()}
                         </span>
                     </Show>
                 </button>
@@ -439,6 +498,9 @@ pub fn AdminDeposits(
                             let refund_key = format!("refund-{item_id}");
                             let refund_disabled = current_action.as_ref().map_or(false, |k| k == &refund_key);
                             let refund_loading = current_action.as_ref().map_or(false, |k| k == &refund_key);
+                            let hold_key = format!("hold-{item_id}");
+                            let hold_disabled = current_action.as_ref().map_or(false, |k| k == &hold_key);
+                            let hold_loading = hold_disabled;
 
                             let amount = format!("{} THB", item.amount_thb);
                             let verified_by = item.verified_by.as_deref().unwrap_or("Unknown");
@@ -452,6 +514,7 @@ pub fn AdminDeposits(
                             let display_account_name = item.account_name.clone();
 
                             let item_for_refund = item.clone();
+                            let item_for_hold = item.clone();
                             let item_id_for_click = item_id.clone();
                             let item_id_for_style = item_id.clone();
                             // Dedicated clones for the input's reactive closures.
@@ -558,6 +621,19 @@ pub fn AdminDeposits(
                                                         "Cancel"
                                                     </button>
                                                 </div>
+                                            </div>
+                                            // Hold-as-credit action — use when the attendee
+                                            // confirmed hold verbally but didn't tap their own
+                                            // button. Credits the attendee's contact row.
+                                            <div class="admin-dep-hold-row">
+                                                <button
+                                                    class="btn btn-secondary btn-sm"
+                                                    disabled=hold_disabled
+                                                    title="Hold this deposit as rolling credit for the attendee's next event (use when the attendee confirmed hold verbally)"
+                                                    on:click=move |_| handle_admin_hold(item_for_hold.clone())
+                                                >
+                                                    {if hold_loading { "Holding..." } else { "↻ Hold as Credit" }}
+                                                </button>
                                             </div>
                                         </div>
                                     </div>
@@ -672,6 +748,81 @@ pub fn AdminDeposits(
                                         </div>
                                         <div>
                                             <span class="badge badge-success">"✓ Refunded"</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                        }).collect_view()
+                    }}
+                </Show>
+
+                // ── Held as Credit Tab ──
+                <Show
+                    when=move || active_tab.get() == AdminDepositTab::Held
+                    fallback=|| view! { <div></div> }
+                >
+                    <div class="admin-section-header">
+                        <h3><Icon icon=IconName::MoneyWings class="icon-sm icon-success"/>{format!(" {} deposit{} held as credit", held_count.get(), if held_count.get() != 1 { "s" } else { "" })}</h3>
+                        <p class="admin-dep-flow-hint">
+                            "These attendees' deposits are kept as rolling credit for their next event registration. They are excluded from the refund queue. Use the " <strong>"Hold as Credit"</strong> " action in the Refund Queue when an attendee confirms hold verbally."
+                        </p>
+                    </div>
+
+                    <Show
+                        when=move || held_count.get() == 0
+                        fallback=|| view! { <div></div> }
+                    >
+                        <div class="admin-empty-state">
+                            "No deposits held as credit"
+                        </div>
+                    </Show>
+
+                    {move || {
+                        let items: Vec<_> = held_list.get().iter().map(|item| {
+                            let amount = format!("{} THB", item.amount_thb);
+                            let verified_by = item.verified_by.as_deref().unwrap_or("Unknown").to_string();
+                            let held_at = item.held_as_credit_at.as_deref().map(utils::format_timestamp).unwrap_or_else(|| "N/A".to_string());
+                            let display_name = item.attendee_name.as_deref().unwrap_or(&item.attendee_id).to_string();
+                            let slip_url = item.slip_url.clone();
+                            let has_slip_url = slip_url.is_some();
+
+                            (amount, verified_by, held_at, display_name, slip_url, has_slip_url)
+                        }).collect();
+
+                        items.into_iter().map(|(amount, verified_by, held_at, display_name, slip_url, has_slip_url)| {
+                            view! {
+                                <div class="card">
+                                    <div class="flex-row-wrap">
+                                        <div>
+                                            <div class="admin-attendee-name">
+                                                {format!("Attendee: {}", utils::escape_html(&display_name))}
+                                            </div>
+                                            <div class="admin-amount-line">
+                                                {amount}
+                                            </div>
+                                            <div class="panel-hint">
+                                                {format!("Verified by: {}", utils::escape_html(&verified_by))}
+                                            </div>
+                                            <div class="panel-hint">
+                                                {format!("Held at: {held_at}")}
+                                            </div>
+
+                                            // Slip image link
+                                            <Show when=move || has_slip_url fallback=|| view! { <span></span> }>
+                                                <div class="admin-dep-slip-link-row">
+                                                    <a
+                                                        href=slip_url.clone().unwrap_or_default()
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        class="link-accent"
+                                                    >
+                                                        "View Slip"
+                                                    </a>
+                                                </div>
+                                            </Show>
+                                        </div>
+                                        <div>
+                                            <span class="badge badge-success">"✓ Held as Credit"</span>
                                         </div>
                                     </div>
                                 </div>

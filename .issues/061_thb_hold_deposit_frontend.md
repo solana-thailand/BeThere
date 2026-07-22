@@ -112,9 +112,18 @@ Hold gets a confirm step because cash stays with the organizer. Refund stays the
 `hold_deposit_handler` is resolved via a distinct `held_as_credit` flag on `ThbDeposit`
 (migration `0022`) + settle-before-increment ordering + USDC rejection. See §8 item 0 (resolved).
 
-### Phase 2 — Admin side (status visibility) — REMAINING (scoping note)
+### Phase 2 — Admin side (status visibility) — PARTIAL (Held tab + admin hold shipped; credit columns remain)
 
-- [ ] Admin contacts view — add `credit_thb` / `credit_usdc` columns (data already in D1/Sheets K–M)
+- [x] **Admin "Held as Credit" sub-tab** — `GET /api/refund/held` + 4th tab in `admin_deposit.rs`,
+      filters on `held_as_credit = true`, mirrors the Refunded tab (commits this session).
+- [x] **Admin "Hold as Credit" action** in the Refund Queue row — `POST /api/refund/hold/{attendee_id}`
+      lets an organizer mark a verified THB deposit as held on behalf of an attendee who confirmed
+      verbally but didn't tap their own button. Credits the **attendee's** contact row (not the
+      admin's); preserves all attendee-handler invariants (settle-before-increment, idempotency
+      guards, THB-only by construction). Closes the "I talked to an attendee, how do I record it?"
+      operational gap that motivated this session.
+- [ ] Admin attendee/contacts view — add `credit_thb` / `credit_usdc` columns (literal option (a);
+      requires a contact-credit join on `list_attendees` — performance design decision pending)
 - [ ] Liability header chip — "Total credit held: X THB across N attendees" (sum query)
 - [ ] Badge for "credit refund requested" attendees (Phase 3 dependency)
 

@@ -130,6 +130,13 @@ pub struct ThbDepositInfo {
     pub uploaded_at: String,
     pub refunded: bool,
     pub refunded_at: Option<String>,
+    /// Idempotency flag — deposit was held as rolling credit (sibling of
+    /// `refunded`). Mutually exclusive with `refunded`. Surfaced by the
+    /// `/refund/held` admin endpoint (Issue #061 Phase 2).
+    #[serde(default)]
+    pub held_as_credit: bool,
+    #[serde(default)]
+    pub held_as_credit_at: Option<String>,
     #[serde(default)]
     pub attendee_name: Option<String>,
     #[serde(default)]
@@ -507,6 +514,63 @@ pub async fn get_refunded_list(
         message: wrapper.error.unwrap_or("No data".to_string()),
         status: 0,
     })
+}
+
+/// Response for GET /api/refund/held — deposits held as rolling credit.
+/// Mirrors `RefundedListResponse` (sibling terminal state).
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+pub struct HeldListResponse {
+    #[serde(default)]
+    pub held: Vec<ThbDepositInfo>,
+}
+
+/// GET /api/refund/held?event_id=xxx — list THB deposits held as rolling credit.
+pub async fn get_held_list(event_id: Option<&str>) -> Result<HeldListResponse, ApiError> {
+    let path = match event_id {
+        Some(eid) if !eid.is_empty() => format!("/refund/held?event_id={eid}"),
+        _ => "/refund/held".to_string(),
+    };
+    let response = api_get(&path).await?;
+
+    if !response.ok() {
+        let body: ApiResponse<()> = response_json(&response).await.unwrap_or(ApiResponse {
+            success: false,
+            data: None,
+            error: Some("Failed to get held list".to_string()),
+            correlation_id: None,
+        });
+        return Err(ApiError {
+            message: body.error.unwrap_or_default(),
+            status: 0,
+        });
+    }
+
+    let wrapper: ApiResponse<HeldListResponse> =
+        response_json(&response).await.map_err(|e| ApiError {
+            message: format!("Failed to parse held list: {e}"),
+            status: 0,
+        })?;
+
+    wrapper.data.ok_or_else(|| ApiError {
+        message: wrapper.error.unwrap_or("No data".to_string()),
+        status: 0,
+    })
+}
+
+/// Request body for POST /api/refund/hold/{attendee_id} — admin marks a
+/// verified THB deposit as held-as-rolling-credit on behalf of an attendee.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct AdminHoldRequest {
+    pub event_id: String,
+}
+
+/// POST /api/refund/hold/{attendee_id} — admin hold deposit as rolling credit.
+pub async fn admin_hold_deposit(
+    attendee_id: &str,
+    body: &AdminHoldRequest,
+) -> Result<serde_json::Value, ApiError> {
+    let path = format!("/refund/hold/{attendee_id}");
+    api_post_json(&path, body).await
 }
 
 // ===== Escrow API =====
