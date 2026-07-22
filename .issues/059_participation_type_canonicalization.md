@@ -3,29 +3,30 @@
 > Spin-off from #058. The no-show bug is fixed and the **read side** is now
 > consolidated onto the `ParticipationType` enum (domain + worker, Tier A — done).
 > This issue covers the **write side + stored data**, which is riskier and must
-> not be done as a blind migration. **This is a design proposal, not implemented.**
+> not be done as a blind migration. Write-path unification (Step 3.2) shipped
+> 2026-06-27; backfill (Step 3.3) shipped 2026-07-22.
 
 ## Status
 - ✅ **Step 3.2 (write-path unification) DONE** — commit `7114c03`, deployed to
   `main` at `b432ac5` via Handover 121 (2026-06-27). No data change — D1 still
   holds legacy values until 3.3 backfill runs. But all NEW writes are now
   canonical; the mess stops growing.
-- 🟧 **Step 3.3 (backfill) — STAGED + LOCALLY VALIDATED, prod apply pending sign-off.**
-  Migration `worker/migrations/0024_attendees_participation_type_canonicalize.sql`
-  created (guarded, idempotent, mirrors §3.3 SQL exactly). Local dry-run passed:
-  seeded 9 rows across all prod variants → applied 0024 → got `in_person`×4,
-  `online`×3, `test`×1 (untouched), `walkin`×1 (untouched). Idempotency confirmed
-  (re-run on canonical data = no-op). Prod dry SELECT verifies 148 rows would
-  change (21 `""` + 16 `In-Person` → `in_person`; 111 `Online` → `online`),
-  293 already-canonical (idempotent), 1 `test` untouched, 0 `walkin` exist.
-  Prerequisites met: prod distribution confirms new writes are canonical
-  (online 53→207, in_person 66→86 since 3.2 deployed; legacy variants frozen).
-  Backup taken to `/tmp/bethere-backup-pre-0024.sql` (1.3M, 2790 INSERTs).
-  Awaiting explicit "go" per §5 (deliberate, sequenced release — not autonomous).
-- 🟡 **Step 3.4 (SQL predicate simplification) — still awaiting 3.3 completion.**
-  Optional cleanup; collapse the three `IN_PERSON_PREDICATE` LIKE patterns to
-  `participation_type = 'in_person'` once rows are canonical. Belongs in code
-  with tests, on its own commit — NOT in the 0024 migration.
+- ✅ **Step 3.3 (backfill) DONE** — PR #25 merged to `develop` (`d6074ed`),
+  migration `0024_attendees_participation_type_canonicalize.sql` applied to prod
+  `bethere-db` (2026-07-22). **148 rows canonicalized, 0 data loss** verified:
+  - Before: `online`×207, `Online`×111, `in_person`×86, `""`×21, `In-Person`×16, `test`×1 (total 442)
+  - After:  `online`×318, `in_person`×123, `test`×1 (total **442 — unchanged**)
+  - `walkin` rows: 0 (preservation clause was a harmless no-op).
+  - Backup at `/tmp/bethere-backup-pre-0024.sql` (1.3M, 2790 INSERTs).
+  - Pre-apply: local dry-run validated semantics (9-row seed across all variants
+    → `in_person`×4, `online`×3, `test`/`walkin` untouched) + idempotency.
+  - Post-apply: `wrangler d1 migrations list --remote` clean; `GROUP BY` shows
+    only canonical values + the preserved `test` sentinel.
+- 🟡 **Step 3.4 (SQL predicate simplification) — UNBLOCKED (3.3 done), optional cleanup.**
+  Collapse the three `IN_PERSON_PREDICATE` LIKE patterns in `db/dashboard.rs`,
+  `db/attendees.rs`, `contacts.rs` to `participation_type = 'in_person'` once
+  confident no new legacy rows appear (allow ~1 sync cycle to confirm). Belongs
+  in code with tests, on its own commit — NOT in the 0024 migration.
 
 ## 1. Root cause (why prod is messy)
 `attendees.participation_type` is written by **5+ independent paths using two
