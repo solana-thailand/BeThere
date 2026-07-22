@@ -124,17 +124,37 @@ financial code.
 - `bash build.sh` → clean (WASM 4.3M, JS 73K, CSS 310K emitted)
 - `diagnostics` tool → no errors or warnings project-wide
 
-### Not verified (honest gap)
-- **No live UI test was run.** The local worker on `:8787` caches assets at startup and would
-  need a restart (`kill` wrangler + `bash deploy.sh dev`) to serve the new WASM. Because
-  `deploy.sh dev` runs in `--remote` mode against **production D1**, clicking "Hold" writes real
-  credit. To exercise the new flow end-to-end, restart with `--local` for a sandbox, or test
-  against a throwaway attendee on the remote DB. The double-credit path itself is closed
-  regardless (the guard fires before any credit write).
+### Live verification (local sandbox — added after the initial commit)
+Ran the worker in `--local` mode (empty local SQLite D1 + empty local KV; no prod data touched):
+
+- **Migration applied cleanly:** `wrangler d1 migrations apply bethere-db --local` ran all 22
+  migrations; `0022_thb_deposits_held_as_credit` ✅. `PRAGMA table_info` confirms
+  `held_as_credit INTEGER NOT NULL DEFAULT 0` + `held_as_credit_at TEXT` landed correctly.
+- **D1 round-trip:** inserted a row with `held_as_credit=1`, read it back → correct; the
+  `row_to_thb_deposit` `get_bool`/`get_opt_str` paths deserialize the new columns. (Test row
+  deleted after.)
+- **Worker boots:** `deploy.sh dev --local` compiled the new WASM and reached
+  `Ready on http://localhost:8787` with no panic.
+- **Routes respond + auth gates:** `GET /api/deposit/credit-balance` and `POST /api/deposit/hold`
+  with no token → **HTTP 401 "missing authentication token"** (route wired, not 404; handler
+  loads, not a 500).
+- **Handler body executes:** minted a real HS256 JWT using `JWT_SECRET` from `.dev.vars`
+  (`Claims { email, sub, iat, exp }`) and POSTed it → **HTTP 404 "event 'nonexistent-evt' not
+  found"**, and the log shows my `hold_credit.rs:37` tracing line firing
+  (`hold deposit initiated attendee_id=… email=hold-test@example.com`). Confirms the rewritten
+  handler runs end-to-end through auth + the first guard; no panic, 19ms.
+
+### Still not verified (residual honest gap)
+- **The `held_as_credit` guard branch itself is not exercised against live data.** Reaching it
+  needs a real event config in KV + a Google-Sheets attendee + a D1 deposit row + a checked-in
+  state — the full Sheets+KV+D1+auth setup, which the empty `--local` sandbox does not provide
+  and which `--remote` would write real credit. The guard logic is simple (two boolean checks)
+  and the settle-first ordering argument covers the safety property, but it has not been
+  observed firing on the second `/hold` call. Manual browser verification against a throwaway
+  attendee (or a seeded `--local` harness) remains the open item.
 - **No new automated test for the idempotency guard was added.** The existing `worker/tests/`
-  suite has no `hold_credit` harness, and standing one up requires the full `AppState` + D1/KV
-  mock scaffold (out of scope for a safety fix). The guard is exercised by code review + the
-  settle-first ordering argument. A follow-up regression test is tracked in §5.
+  suite has no `hold_credit` harness (confirmed: the 4 test files are pure serialization/logic),
+  and standing one up requires the full `AppState` + D1/KV + Sheets mock scaffold. Tracked in §5.
 
 ---
 
