@@ -173,6 +173,15 @@ attendee table is the home for credit data.
   card with attendee name, held-credit balance, request timestamp, and a
   "✓ Clear" button. Per-row pending state on the clear POST. Loaded in the
   same refresh cycle as the per-event lists.
+- [x] **Sheets clear-sync gap closed (post-ship follow-up)** —
+  `clear_credit_refund_request_handler` initially cleared only the D1 flag,
+  leaving Sheets column N stale after a clear (asymmetry vs.
+  `set_credit_refund_requested`, which dual-writes). Resolved by adding
+  `sheets::contacts::clear_credit_refund_requested` (mirror of the set helper,
+  best-effort with a silent no-op on missing contact row — matches the D1
+  clear's 0-rows-affected semantics). Wired into the handler with the same
+  best-effort contract as the D1 clear (logged, not fatal). Branch
+  `fix/061_credit_refund_clear_sheets_sync`.
 
 ---
 

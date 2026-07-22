@@ -494,3 +494,62 @@ pub async fn set_credit_refund_requested(
 
     Ok(())
 }
+
+/// Clears the `credit_refund_requested` flag (column N) on a contact row in
+/// the human-readable Sheets master — the sibling of
+/// [`set_credit_refund_requested`] that was missing at Phase 3 ship (Issue #061
+/// §D3, closes the Sheets clear-sync gap).
+///
+/// Mirrors [`set_credit_refund_requested`] structure: find row → mutate in
+/// place → update row. The find path lowercases the email; `find_contact_row`
+/// already pads rows to `TOTAL_COLUMNS`, so the column-N index is always in
+/// bounds.
+///
+/// **Semantic difference from `set_credit_refund_requested`:** a missing
+/// contact row is a silent no-op (`Ok(())`) rather than an error. Clearing a
+/// non-existent contact is idempotent — there is nothing to clear. This
+/// mirrors the D1 `clear_credit_refund_requested`, whose `UPDATE ... WHERE
+/// email = ?` affects 0 rows silently when the contact doesn't exist.
+///
+/// Writes `""` (empty) rather than `"0"` so the column is restored to its
+/// default pre-Phase-3 state (matching rows last written before this column
+/// existed). The read side treats both empty and `"0"` as "no open request".
+pub async fn clear_credit_refund_requested(
+    state: &AppState,
+    sheet_id: &str,
+    sheet_name: &str,
+    kv: Option<&KvStore>,
+    email: &str,
+) -> Result<(), String> {
+    let access_token = get_cached_access_token(state, kv).await?;
+    let email_lower = email.to_lowercase();
+
+    // 1. Find existing row by email. A missing row is a silent no-op (the
+    //    D1 clear has the same semantics — 0 rows affected).
+    let Some((row_index, mut row_data)) =
+        find_contact_row(&email_lower, sheet_id, sheet_name, &access_token).await?
+    else {
+        tracing::debug!(
+            %email_lower,
+            "clear_credit_refund_requested: contact not in sheet — no-op"
+        );
+        return Ok(());
+    };
+
+    // 2. Clear column N back to empty (default state). find_contact_row pads
+    //    to TOTAL_COLUMNS so the index is in bounds even for rows last
+    //    written before this column existed.
+    row_data[COL_CREDIT_REFUND_REQUESTED] = String::new();
+
+    // 3. Update the row (writes all columns A:N; columns we did not touch are
+    //    re-written verbatim from the find step, so no data loss).
+    update_contact_row(row_index, &row_data, sheet_id, sheet_name, &access_token).await?;
+
+    tracing::info!(
+        %email_lower,
+        row_index,
+        "credit refund request cleared on contact (sheet)"
+    );
+
+    Ok(())
+}
