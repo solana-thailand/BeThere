@@ -10,7 +10,7 @@ use std::collections::HashMap;
 
 use leptos::prelude::*;
 
-use crate::api::{self, AdminHoldRequest, MarkRefundRequest, ThbDepositInfo, VerifySlipRequest};
+use crate::api::{self, AdminHoldRequest, CreditLiability, MarkRefundRequest, ThbDepositInfo, VerifySlipRequest};
 use crate::components::{self, ToastType};
 use crate::icons::{Icon, IconName};
 use crate::utils;
@@ -44,6 +44,10 @@ pub fn AdminDeposits(
     let (refunds, set_refunds) = signal(Vec::<ThbDepositInfo>::new());
     let (refunded_list, set_refunded_list) = signal(Vec::<ThbDepositInfo>::new());
     let (held_list, set_held_list) = signal(Vec::<ThbDepositInfo>::new());
+    // Cross-event credit liability — organizer's total cash held as rolling
+    // deposit credit across ALL contacts (backs the header chip). Global, not
+    // per-event; loaded alongside the per-event lists for one refresh cycle.
+    let (liability, set_liability) = signal(CreditLiability::default());
 
     // UI state
     let (loading, set_loading) = signal(true);
@@ -74,6 +78,7 @@ pub fn AdminDeposits(
         let set_slips = set_slips;
         let set_refunds = set_refunds;
         let set_held_list = set_held_list;
+        let set_liability = set_liability;
         let set_loading = set_loading;
         let set_toast = set_toast;
 
@@ -82,6 +87,7 @@ pub fn AdminDeposits(
             let refunds_result = api::get_refund_queue(eid.as_deref()).await;
             let refunded_result = api::get_refunded_list(eid.as_deref()).await;
             let held_result = api::get_held_list(eid.as_deref()).await;
+            let liability_result = api::get_credit_liability().await;
 
             match slips_result {
                 Ok(data) => set_slips.set(data.slips),
@@ -118,6 +124,15 @@ pub fn AdminDeposits(
                 Ok(data) => set_held_list.set(data.held),
                 Err(e) => {
                     log::warn!("[admin-deposit] failed to load held list: {e}");
+                }
+            }
+
+            // Liability is non-fatal — the deposits view must still render with
+            // a zero chip if D1 is unreachable (backend already degrades to 0).
+            match liability_result {
+                Ok(data) => set_liability.set(data),
+                Err(e) => {
+                    log::warn!("[admin-deposit] failed to load credit liability: {e}");
                 }
             }
 
@@ -313,6 +328,35 @@ pub fn AdminDeposits(
 
             // Event selected — show full content
             <Show when=move || has_event() fallback=|| view! { <div></div> }>
+            // Credit liability header chip — organizer's total cash held as
+            // rolling deposit credit across all contacts (Issue #061 Phase 2
+            // option a2). Cross-event (global); only renders when there's
+            // actual liability to surface (no clutter when balance is zero).
+            <Show when=move || { let l = liability.get(); l.total_thb > 0 || l.total_usdc > 0 } fallback=|| view! { <div></div> }>
+                <div
+                    class="admin-dep-liability-chip"
+                    title="Your total cash liability from rolling deposit credit — attendees who chose credit over refund. Auto-applies to their next event registration."
+                >
+                    <Icon icon=IconName::MoneyWings class="icon-sm"/>
+                    <span>
+                        {move || {
+                            let l = liability.get();
+                            let mut parts: Vec<String> = Vec::new();
+                            if l.total_thb > 0 {
+                                parts.push(format!("{} THB", l.total_thb));
+                            }
+                            if l.total_usdc > 0 {
+                                parts.push(format!("{} USDC", l.total_usdc));
+                            }
+                            format!(
+                                "Total credit held: {} across {} contacts",
+                                parts.join(" + "),
+                                l.contact_count
+                            )
+                        }}
+                    </span>
+                </div>
+            </Show>
             // Sub-tab navigation
             <div class="tabs">
                 <button

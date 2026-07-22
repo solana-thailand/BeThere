@@ -573,6 +573,48 @@ pub async fn admin_hold_deposit(
     api_post_json(&path, body).await
 }
 
+/// Response for GET /api/deposit/credit-liability — the organizer's total
+/// deposit-credit liability across all contacts (Issue #061 Phase 2 option a2).
+/// Backing data for the "Total credit held: X THB across N contacts" header chip.
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+pub struct CreditLiability {
+    #[serde(default)]
+    pub total_thb: i64,
+    #[serde(default)]
+    pub total_usdc: i64,
+    #[serde(default)]
+    pub contact_count: i64,
+}
+
+/// GET /api/deposit/credit-liability — total credit held across all contacts.
+pub async fn get_credit_liability() -> Result<CreditLiability, ApiError> {
+    let response = api_get("/deposit/credit-liability").await?;
+
+    if !response.ok() {
+        let body: ApiResponse<()> = response_json(&response).await.unwrap_or(ApiResponse {
+            success: false,
+            data: None,
+            error: Some("Failed to get credit liability".to_string()),
+            correlation_id: None,
+        });
+        return Err(ApiError {
+            message: body.error.unwrap_or_default(),
+            status: 0,
+        });
+    }
+
+    let wrapper: ApiResponse<CreditLiability> =
+        response_json(&response).await.map_err(|e| ApiError {
+            message: format!("Failed to parse credit liability: {e}"),
+            status: 0,
+        })?;
+
+    wrapper.data.ok_or_else(|| ApiError {
+        message: wrapper.error.unwrap_or("No data".to_string()),
+        status: 0,
+    })
+}
+
 // ===== Escrow API =====
 
 /// POST /api/escrow/refund — build refund TX

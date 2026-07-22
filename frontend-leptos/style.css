@@ -13555,6 +13555,17 @@ a.ticket-series-card:hover {
     padding-top: 0.5rem;
     border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
+.admin-dep-liability-chip {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    margin-bottom: 0.75rem;
+    border-radius: 0.5rem;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    font-size: 0.875rem;
+}
 .admin-refund-form-row {
     margin-top: 4px;
     flex-wrap: wrap;

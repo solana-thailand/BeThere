@@ -124,7 +124,11 @@ Hold gets a confirm step because cash stays with the organizer. Refund stays the
       operational gap that motivated this session.
 - [ ] Admin attendee/contacts view — add `credit_thb` / `credit_usdc` columns (literal option (a);
       requires a contact-credit join on `list_attendees` — performance design decision pending)
-- [ ] Liability header chip — "Total credit held: X THB across N attendees" (sum query)
+- [x] **Liability header chip** — `GET /api/deposit/credit-liability` (admin) returns
+      `{total_thb, total_usdc, contact_count}` from one D1 `SUM`/`COUNT` round-trip over
+      `contacts`; the chip renders at the top of `AdminDeposits` when any balance is non-zero
+      ("Total credit held: X THB [+ Y USDC] across N contacts"). Cross-event (global), degrades
+      to hidden when D1 is unreachable. Phase 2 option (a2).
 - [ ] Badge for "credit refund requested" attendees (Phase 3 dependency)
 
 **Scoping note (discovered while wiring Phase 1):** the admin page currently renders a
