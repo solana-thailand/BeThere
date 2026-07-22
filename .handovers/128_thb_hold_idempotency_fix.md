@@ -156,6 +156,26 @@ Ran the worker in `--local` mode (empty local SQLite D1 + empty local KV; no pro
   suite has no `hold_credit` harness (confirmed: the 4 test files are pure serialization/logic),
   and standing one up requires the full `AppState` + D1/KV + Sheets mock scaffold. Tracked in §5.
 
+### Staging is NOT a viable sandbox for the hold guard (investigated, ruled out)
+Inspected the `bethere-staging` env (`--remote --env staging`) to see if the guard could be
+exercised there without touching prod credit. It cannot — staging is not pre-seeded for this flow:
+
+| Step the handler needs | Source | Staging state |
+|---|---|---|
+| Event config (`deposit_enabled`, `deposit_amount_thb`) | **EVENTS KV** | ❌ **empty** (`[]`) |
+| Attendee (email match) | **Google Sheets** | ❌ none wired for the staging worker |
+| `DepositStatus` (method=thb, verified) | D1 `deposit_statuses` | ❌ 1 row, **USDC** only (`flow-test-event` / `flow-test-attendee-1`) |
+| `ThbDeposit` (verified, not refunded) | D1 `thb_deposits` | ❌ **0 rows** |
+| `contacts` row (for the credit increment) | D1 `contacts` | ❌ **0 rows** |
+
+The only staging attendee is `flow-test-attendee-1@staging.local` (`in_person`, checked-in) with a
+verified **USDC** deposit. The handler 404s on the **first** step (empty KV → "event not found")
+before reaching any of the new code. Seeding D1 alone would not help — it would also require
+injecting an event config into the staging `EVENTS` KV namespace **and** a Google Sheet attendee
+row for the staging worker's `sheet_id`. That is the full Sheets+KV+D1+auth setup, i.e. the rabbit
+hole flagged from the start. Conclusion: **staging is ruled out; the live guard check must happen
+post-deploy against a throwaway prod attendee, or via a deliberately-seeded harness (§5 test debt).**
+
 ---
 
 ## 4. Reflection / Struggles / Solved
