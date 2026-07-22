@@ -18,6 +18,7 @@
 //!   K: deposit_credit_thb | 500                  | Rolling deposit credit (THB)
 //!   L: deposit_credit_usdc| 15                   | Rolling deposit credit (USDC)
 //!   M: deposit_credit_since| 2026-05-22          | Date when credit was first held
+//!   N: credit_refund_req   | 1                    | Attendee requested return of held credit (Issue #061 Phase 3)
 
 use worker::KvStore;
 
@@ -43,8 +44,11 @@ const COL_LAST_EMAILED_AT: usize = 9;
 const COL_DEPOSIT_CREDIT_THB: usize = 10; // K
 const COL_DEPOSIT_CREDIT_USDC: usize = 11; // L
 const COL_DEPOSIT_CREDIT_SINCE: usize = 12; // M
+// N: credit_refund_requested — Issue #061 Phase 3 exit path. "1" = attendee
+// has requested return of their held credit; empty/"0" = no open request.
+const COL_CREDIT_REFUND_REQUESTED: usize = 13; // N
 
-const TOTAL_COLUMNS: usize = 13;
+const TOTAL_COLUMNS: usize = 14;
 
 // ---------------------------------------------------------------------------
 // Upsert contact
@@ -162,7 +166,7 @@ async fn find_contact_row(
     sheet_name: &str,
     access_token: &str,
 ) -> Result<Option<(usize, Vec<String>)>, String> {
-    let range = format!("{sheet_name}!A:M");
+    let range = format!("{sheet_name}!A:N");
     let url = format!(
         "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{}",
         urlencoding::encode(&range)
@@ -192,14 +196,14 @@ async fn update_contact_row(
     sheet_name: &str,
     access_token: &str,
 ) -> Result<(), String> {
-    let range = format!("{sheet_name}!A{row_index}:M{row_index}");
+    let range = format!("{sheet_name}!A{row_index}:N{row_index}");
     let url = format!(
         "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{}?valueInputOption=USER_ENTERED",
         urlencoding::encode(&range)
     );
 
     let body = ValueRange {
-        range: format!("{sheet_name}!A{row_index}:M{row_index}"),
+        range: format!("{sheet_name}!A{row_index}:N{row_index}"),
         values: vec![row_data.to_vec()],
     };
 
@@ -217,12 +221,12 @@ async fn append_contact_row(
     access_token: &str,
 ) -> Result<(), String> {
     let url = format!(
-        "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{}!A:M:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS",
+        "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{}!A:N:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS",
         urlencoding::encode(sheet_name)
     );
 
     let body = ValueRange {
-        range: format!("{sheet_name}!A:M"),
+        range: format!("{sheet_name}!A:N"),
         values: vec![row.to_vec()],
     };
 
@@ -301,7 +305,7 @@ pub async fn list_contacts(
 ) -> Result<Vec<Contact>, String> {
     let access_token = get_cached_access_token(state, kv).await?;
 
-    let range = format!("{sheet_name}!A:M");
+    let range = format!("{sheet_name}!A:N");
     let url = format!(
         "https://sheets.googleapis.com/v4/spreadsheets/{sheet_id}/values/{}",
         urlencoding::encode(&range)
@@ -442,4 +446,51 @@ pub async fn get_credit_balance(
         .unwrap_or(0);
 
     Ok((credit_thb, credit_usdc))
+}
+
+/// Set the `credit_refund_requested` flag on a contact (Issue #061 Phase 3
+/// exit path). Attendee-side "Request Return of Held Credit" action — writes
+/// "1" to column N so the organizer sees the request surface in the admin
+/// Held-as-Credit tab.
+///
+/// Idempotent: a re-request just re-writes "1" (no per-click counter for v1).
+/// The organizer clears the flag through the existing refund tooling after
+/// processing the payout (no automated state machine — Issue #061 §D3).
+///
+/// Mirrors [`increment_credit`] structure: find row → mutate in place → update
+/// row. The find path lowercases the email; `find_contact_row` already pads
+/// rows to `TOTAL_COLUMNS`, so the column-N index is always in bounds.
+pub async fn set_credit_refund_requested(
+    state: &AppState,
+    sheet_id: &str,
+    sheet_name: &str,
+    kv: Option<&KvStore>,
+    email: &str,
+) -> Result<(), String> {
+    let access_token = get_cached_access_token(state, kv).await?;
+    let email_lower = email.to_lowercase();
+
+    // 1. Find existing row by email
+    let (row_index, mut row_data) =
+        find_contact_row(&email_lower, sheet_id, sheet_name, &access_token)
+            .await?
+            .ok_or_else(|| format!("contact not found: {email_lower}"))?;
+
+    // 2. Set column N to "1" — find_contact_row pads to TOTAL_COLUMNS so the
+    //    index is in bounds even for rows last written before this column
+    //    existed (a pre-Phase-3 contact row will have an empty string at N,
+    //    which we now overwrite with "1").
+    row_data[COL_CREDIT_REFUND_REQUESTED] = "1".to_string();
+
+    // 3. Update the row (writes all columns A:N; columns we did not touch are
+    //    re-written verbatim from the find step, so no data loss).
+    update_contact_row(row_index, &row_data, sheet_id, sheet_name, &access_token).await?;
+
+    tracing::info!(
+        %email_lower,
+        row_index,
+        "credit refund requested on contact (sheet)"
+    );
+
+    Ok(())
 }

@@ -197,6 +197,19 @@ pub fn routes(state: AppState) -> Router<()> {
             "/deposit/credit-balance",
             get(deposit::credit_balance_handler),
         )
+        // Phase 3 exit path — attendee requests return of held rolling credit
+        // (Issue #061 §D3). Sets a visibility-only flag on the attendee's own
+        // contact row; organizer processes payout via existing refund tooling.
+        .route(
+            "/deposit/request-credit-refund",
+            post(deposit::request_credit_refund_handler),
+        )
+        // Read the attendee's own flag state — backs the ticket page's
+        // already-requested card state on reload (mirrors held_as_credit UX).
+        .route(
+            "/deposit/credit-refund-request",
+            get(deposit::credit_refund_request_status_handler),
+        )
         // Roll deposit to next event (attendee-authed — attendee signs the TX)
         .route(
             "/escrow/rollover-deposit",
@@ -377,6 +390,20 @@ pub fn routes(state: AppState) -> Router<()> {
         .route(
             "/deposit/credit-liability",
             get(deposit::credit_liability_handler),
+        )
+        // Phase 3 exit path — admin lists contacts with an open "credit refund
+        // requested" flag (Issue #061 §D3). Backs the badge on the Held-as-Credit
+        // tab. One D1 round-trip via the partial index from migration 0023.
+        .route(
+            "/deposit/credit-refund-requests",
+            get(deposit::credit_refund_requests_handler),
+        )
+        // Phase 3 exit path — admin clears the flag after processing the payout
+        // (Issue #061 §D3). Sets the flag to 0 + nulls the timestamp; a subsequent
+        // attendee request starts a fresh timestamp.
+        .route(
+            "/deposit/clear-credit-refund-request",
+            post(deposit::clear_credit_refund_request_handler),
         )
         .route(
             "/refund/manual/{attendee_id}",

@@ -323,6 +323,137 @@ pub async fn credit_liability(db: &D1Database) -> CreditLiability {
 }
 
 // ---------------------------------------------------------------------------
+// Credit refund-from-credit request flag (Issue #061 Phase 3 — exit path)
+// ---------------------------------------------------------------------------
+
+/// Set the `credit_refund_requested` flag on a contact (and stamp `now`).
+///
+/// Idempotent: a re-request from the attendee just refreshes the timestamp
+/// (surfaces "still waiting" to the organizer without a separate counter). The
+/// organizer clears the flag manually after processing the payout — there is
+/// no automated state machine for v1 (Issue #061 §D3). Lowercases the email
+/// because `contacts.email` is the lowercased primary key (matches
+/// [`update_deposit_credit`]).
+pub(crate) async fn set_credit_refund_requested(
+    db: &D1Database,
+    email: &str,
+) -> Result<(), String> {
+    let email_lower = email.to_lowercase();
+    let stmt = db.prepare(
+        "UPDATE contacts \
+         SET credit_refund_requested = 1, \
+         credit_refund_requested_at = datetime('now') \
+         WHERE email = ?1",
+    );
+    stmt.bind_refs(&[D1Type::Text(&email_lower)])
+        .map_err(|e| format!("D1 set_credit_refund_requested bind: {e:?}"))?
+        .run()
+        .await
+        .map_err(|e| format!("D1 set_credit_refund_requested run: {e:?}"))?;
+
+    Ok(())
+}
+
+/// Clear the `credit_refund_requested` flag on a contact (organizer-side
+/// action after processing the payout). Sets the flag to 0 and nulls the
+/// timestamp so a future request starts a fresh timestamp (Issue #061 §D3).
+pub(crate) async fn clear_credit_refund_requested(
+    db: &D1Database,
+    email: &str,
+) -> Result<(), String> {
+    let email_lower = email.to_lowercase();
+    let stmt = db.prepare(
+        "UPDATE contacts \
+         SET credit_refund_requested = 0, credit_refund_requested_at = NULL \
+         WHERE email = ?1",
+    );
+    stmt.bind_refs(&[D1Type::Text(&email_lower)])
+        .map_err(|e| format!("D1 clear_credit_refund_requested bind: {e:?}"))?
+        .run()
+        .await
+        .map_err(|e| format!("D1 clear_credit_refund_requested run: {e:?}"))?;
+
+    Ok(())
+}
+
+/// One row in the admin "credit refund requested" queue/listing.
+///
+/// Returned by [`credit_refund_requests`]. Mirrors the [`CreditLiability`]
+/// convention — a db-layer serializable struct tied to the `contacts` table.
+/// `credit_thb` / `credit_usdc` are the rolling balances (what the attendee is
+/// asking to get back); `requested_at` is the latest click timestamp (empty
+/// string when null, defensive — should never be empty if the flag is set
+/// because the write path always stamps `now`).
+#[derive(Debug, Default, Clone, serde::Deserialize, serde::Serialize)]
+pub struct CreditRefundRequest {
+    #[serde(default)]
+    pub email: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub credit_thb: i64,
+    #[serde(default)]
+    pub credit_usdc: i64,
+    #[serde(default)]
+    pub requested_at: String,
+}
+
+/// List all contacts with an open "credit refund requested" flag — backs the
+/// admin "credit refund requested" badge on the Held-as-Credit tab (Issue #061
+/// Phase 3).
+///
+/// One round-trip SELECT over `contacts` filtered by the partial index
+/// `idx_contacts_credit_refund_requested` (migration `0023`). Column aliases
+/// match the [`CreditRefundRequest`] field names so `serde_json::from_value`
+/// deserializes directly without remap. Returns an empty vec when D1 is
+/// unreachable — the admin view must still render.
+pub async fn credit_refund_requests(db: &D1Database) -> Vec<CreditRefundRequest> {
+    let sql = "\
+         SELECT \
+           email, \
+           COALESCE(name, '')                       AS name, \
+           COALESCE(deposit_credit_thb, 0)          AS credit_thb, \
+           COALESCE(deposit_credit_usdc, 0)         AS credit_usdc, \
+           COALESCE(credit_refund_requested_at, '') AS requested_at \
+         FROM contacts \
+         WHERE credit_refund_requested = 1 \
+         ORDER BY credit_refund_requested_at DESC";
+
+    let stmt = db.prepare(sql);
+    match safe_all_rows(&stmt).await {
+        // Defensive degrade on per-row parse failure (mirrors `credit_liability`):
+        // a malformed row should not crash the admin view; skip and continue.
+        Ok(rows) => rows
+            .into_iter()
+            .filter_map(|v| serde_json::from_value::<CreditRefundRequest>(v).ok())
+            .collect(),
+        // Non-fatal: the deposits view must still render without the queue.
+        // Logged upstream if needed; here we degrade to empty.
+        Err(_) => Vec::new(),
+    }
+}
+
+/// Read a single contact's `credit_refund_requested` flag — backs the
+/// attendee-side "already requested" state on the ticket page so a reload
+/// mounts the card in the requested-confirmation rather than the CTA (mirrors
+/// the `held_as_credit` UX pattern). Returns `false` when D1 is unreachable.
+pub async fn get_credit_refund_requested(db: &D1Database, email: &str) -> bool {
+    let email_lower = email.to_lowercase();
+    let stmt = db.prepare(
+        "SELECT credit_refund_requested \
+         FROM contacts \
+         WHERE email = ?1 AND credit_refund_requested = 1",
+    );
+    let Ok(stmt) = stmt.bind_refs(&[D1Type::Text(&email_lower)]) else {
+        return false;
+    };
+    match safe_all_rows(&stmt).await {
+        Ok(rows) => !rows.is_empty(),
+        Err(_) => false,
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Per-contact event history (Plan 008 §3.5 — read-side fix)
 // ---------------------------------------------------------------------------
 
