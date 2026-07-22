@@ -139,11 +139,38 @@ columns" requires either (a) enriching `AttendeeListItem` with a credit join, or
 new in-app contacts table. Decision needed before implementing — do not assume the existing
 attendee table is the home for credit data.
 
-### Phase 3 — Exit path (lightweight)
+### Phase 3 — Exit path (lightweight) ✅ DONE (commits `6a82bed`, `18c7241`, `8888050`, `1a5dbb6`)
 
-- [ ] Backend: `credit_refund_requested` flag on contact (one column or KV flag)
-- [ ] Attendee: "Request Return" button on ticket page (sets flag, no payout)
-- [ ] Admin: badge/queue for "credit refund requested" → processed via existing refund tooling
+- [x] **Backend: `credit_refund_requested` flag on contact** — migration `0023`
+  adds `credit_refund_requested` (INTEGER NOT NULL DEFAULT 0) +
+  `credit_refund_requested_at` (TEXT) to `contacts` (cross-event, like the
+  `deposit_credit_*` cols K–M) + partial index
+  `idx_contacts_credit_refund_requested`. 4 endpoints in
+  `worker/src/handlers/deposit/thb/handlers/hold_refund_request.rs`:
+  - `POST /api/deposit/request-credit-refund` (attendee, JWT-gated, dual-write
+    D1 + Sheets). Idempotent — re-request re-stamps timestamp.
+  - `GET /api/deposit/credit-refund-request` (attendee own-state read for
+    reload-safe card mount).
+  - `GET /api/deposit/credit-refund-requests` (admin, cross-event listing).
+  - `POST /api/deposit/clear-credit-refund-request` (admin, clears flag after
+    payout). Email in body (path-encoding safety).
+  D1 helpers (`set`/`get`/`clear`/`credit_refund_requests` aggregate) in
+  `db/contacts.rs`. Sheets column N added (`COL_CREDIT_REFUND_REQUESTED`),
+  range A:M → A:N, `set_credit_refund_requested` write helper.
+- [x] **Attendee: "Request Return" button on ticket page** —
+  `RequestCreditRefundCard` (`action_cards.rs`). State machine:
+  Loading → Ready/AlreadyRequested → Confirm → Requesting → Requested/Error.
+  Fetches own flag on mount so reload mounts in AlreadyRequested (mirrors the
+  `held_as_credit` UX pattern). Confirm step makes clear the request is a
+  visibility signal, NOT an automatic payout. Wired into `in_person_view.rs`
+  gated on `dep.held_as_credit == true` (exit meaningful only when there is
+  held credit).
+- [x] **Admin: badge + clear action** — warning badge on the Held-as-Credit tab
+  button (separate from the success held-count badge). "Credit Refund
+  Requested" sub-list at the top of the Held tab (actionable first): per-row
+  card with attendee name, held-credit balance, request timestamp, and a
+  "✓ Clear" button. Per-row pending state on the clear POST. Loaded in the
+  same refresh cycle as the per-event lists.
 
 ---
 
