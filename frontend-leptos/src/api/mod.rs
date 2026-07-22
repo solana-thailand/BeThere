@@ -429,8 +429,19 @@ pub(crate) async fn api_patch_json<T: serde::de::DeserializeOwned + Default>(
 
 /// GET /api/auth/url
 /// Returns the Google OAuth 2.0 authorization URL.
-pub async fn get_auth_url() -> Result<AuthUrlResponse, ApiError> {
-    let url = format!("{}/auth/url", api_base());
+///
+/// `redirect` is an optional path/URL that the worker will thread through the
+/// OAuth `state` param and use as the post-login redirect target. Pass it when
+/// the user is signing in from a deep link they should return to (e.g. the
+/// deposit page after a 401 on slip upload). When `None`, the worker falls
+/// back to role-based defaults (`/admin`, `/staff`, or `/`).
+pub async fn get_auth_url(redirect: Option<&str>) -> Result<AuthUrlResponse, ApiError> {
+    let url = match redirect {
+        Some(r) if !r.is_empty() => {
+            format!("{}/auth/url?redirect={}", api_base(), urlencoding::encode(r))
+        }
+        _ => format!("{}/auth/url", api_base()),
+    };
     let response = http_get(&url, &[]).await?;
 
     if !response.ok() {

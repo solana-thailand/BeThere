@@ -9,7 +9,7 @@
 //! entry point. It handles its own auth state checks.
 
 use leptos::prelude::*;
-use leptos_router::hooks::use_navigate;
+use leptos_router::hooks::{use_navigate, use_query_map};
 
 use crate::api;
 use crate::auth::get_url_error;
@@ -37,6 +37,13 @@ pub fn Login() -> impl IntoView {
     let (loading, set_loading) = signal(false);
     let (error_msg, set_error_msg) = signal(None::<String>);
 
+    // Read the `next` query param — the path the user should return to after
+    // sign-in. Set by deep-link entry points (e.g. the deposit page's
+    // "session expired" CTA) so the OAuth roundtrip returns them to the page
+    // they were trying to use, not the role-based default (/admin, /staff, /).
+    let query = use_query_map();
+    let next_param = query.get().get("next").map(|s| s.to_string());
+
     // On mount: check for URL errors, check if already authenticated via cookie
     Effect::new(move |_| {
         // Check for error in URL params (from OAuth callback failures)
@@ -47,21 +54,32 @@ pub fn Login() -> impl IntoView {
 
         // Check if already authenticated via cookie
         let nav = navigate.clone();
+        let next_for_redirect = next_param.clone();
         leptos::task::spawn_local(async move {
             match crate::api::get_me().await {
                 Ok(me) => {
-                    let target = match me.role.as_str() {
-                        "super_admin" | "organizer" => "/admin",
-                        "staff" => "/staff",
-                        _ => "/",
-                    };
+                    // Prefer explicit `next` param over role-based defaults.
+                    // Capture whether we have one before `filter` consumes the
+                    // Option — the attendee-redirect check below needs it too.
+                    let has_next = next_for_redirect
+                        .as_deref()
+                        .is_some_and(|n| !n.is_empty());
+                    let target = next_for_redirect
+                        .filter(|n| !n.is_empty())
+                        .unwrap_or_else(|| match me.role.as_str() {
+                            "super_admin" | "organizer" => "/admin".to_string(),
+                            "staff" => "/staff".to_string(),
+                            _ => "/".to_string(),
+                        });
                     log::info!(
                         "[login] already authenticated via cookie (role={}), redirecting to {target}",
                         me.role
                     );
 
-                    // For attendees, try to redirect to their latest registration
-                    if me.role == "attendee" {
+                    // For attendees, try to redirect to their latest registration.
+                    // Skip this if the user has an explicit `next` param —
+                    // respect the deep-link target over the heuristic.
+                    if me.role == "attendee" && !has_next {
                         if let Ok(resp) = crate::api::fetch::get("/api/my-registrations", &[]).await {
                             if resp.status() == 200 {
                                 if let Ok(data) = crate::api::fetch::response_json::<serde_json::Value>(&resp).await {
@@ -81,7 +99,7 @@ pub fn Login() -> impl IntoView {
                         }
                     }
 
-                    nav(target, Default::default());
+                    nav(&target, Default::default());
                 }
                 Err(_) => {
                     log::info!("[login] not authenticated, showing login form");
@@ -92,12 +110,15 @@ pub fn Login() -> impl IntoView {
 
     // Handle login button click.
     // Fetches the Google OAuth URL and redirects the browser.
+    // Passes the `next` param as the OAuth `state` so the worker's callback
+    // handler redirects back to it after successful authentication.
     let handle_login = move |_| {
         set_loading.set(true);
         set_error_msg.set(None);
 
+        let redirect = query.get().get("next").map(|s| s.to_string());
         leptos::task::spawn_local(async move {
-            match api::get_auth_url().await {
+            match api::get_auth_url(redirect.as_deref()).await {
                 Ok(data) => {
                     log::info!("[login] redirecting to Google OAuth");
                     let window = web_sys::window().expect("no window");

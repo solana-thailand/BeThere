@@ -404,6 +404,23 @@ pub fn thb_rejected_view(
 pub fn thb_auth_required_view(data: &DepositStatusResponse) -> AnyView {
     let amount_thb = data.deposit_amount_thb;
 
+    // Capture the current path + query string so we can return the user here
+    // after the OAuth roundtrip. Eager computation — no signals involved, so
+    // no need for a reactive closure. Falls back to `/` if the browser
+    // context is unavailable (e.g. SSR — not currently used but defensive).
+    let current_path = web_sys::window()
+        .and_then(|w| w.location().pathname().ok())
+        .unwrap_or_default();
+    let current_search = web_sys::window()
+        .and_then(|w| w.location().search().ok())
+        .unwrap_or_default();
+    let return_to = format!("{current_path}{current_search}");
+    let login_href = if return_to.is_empty() || return_to == "/" {
+        "/login".to_string()
+    } else {
+        format!("/login?next={}", urlencoding::encode(&return_to))
+    };
+
     view! {
         <div class="dep2-card">
             <div class="dep2-card-header">
@@ -432,7 +449,7 @@ pub fn thb_auth_required_view(data: &DepositStatusResponse) -> AnyView {
 
             <a
                 class="btn btn-primary btn-block u-mt-1rem"
-                href="/login"
+                href=login_href
             >
                 "Sign in to Continue"
             </a>
