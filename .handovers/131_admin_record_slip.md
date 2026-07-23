@@ -25,7 +25,7 @@ Three scoping decisions were made up-front with the user, all accepted:
 
 1. **`auto_verify` defaults to `true`.** The use case is "attendee sent me the slip via LINE, I trust it, record + verify in one step". Flipping the default would silently turn every admin submit into a two-step record-then-manually-verify flow.
 2. **Reject duplicates (no admin override).** Allowing overwrite would risk double-counting the deposit counter (`increment_deposit_counter_with_fallback`) and create financial audit drift. If a stale half-row exists, the admin must clear it through existing paths first.
-3. **Deposits-tab button + modal.** Matches where admins already are when triaging stuck deposits. Avoided the larger scope of a per-row deep-link from the Attendees list (deferred — the modal already accepts an optional `initial_attendee_id` prop).
+3. **Deposits-tab button + modal.** Matches where admins already are when triaging stuck deposits. The per-row deep-link from the Attendees list was initially deferred, then added in the same PR (commit `15478ea`) after the core flow was stable — see §2.
 
 ### Why an admin path is safe even though it bypasses VULN-012
 
@@ -95,16 +95,18 @@ Route wired next to `/deposit/thb/verify` on the protected router:
 
 ### Frontend (frontend-leptos) — 4 files
 
-#### `frontend-leptos/src/pages/admin_deposit_record_slip.rs` (new, 381 lines)
+#### `frontend-leptos/src/pages/admin_deposit_record_slip.rs` (new)
 
 `AdminRecordSlipModal` component. Separate file because `admin_deposit.rs` was already at 1046 lines (above the 1024-line rule).
 
-- Props: `show`, `set_show`, `event_id`, `set_toast`, `on_success`, optional `initial_attendee_id` (for future Attendees-list deep-link)
+- Props: `show`, `set_show`, `event_id`, `set_toast`, `on_success`, `pending_attendee_id` + setter (reactive deep-link trigger — when a parent sets it to `Some(id)`, the modal opens itself pre-filled and clears the signal)
 - Form fields: attendee_id, slip image picker (reuses `js_interop::read_file_as_data_url`), bank_account, bank_name, account_name, `auto_verify` checkbox (default on)
 - Client-side validation mirrors server checks (early return + toast on failure)
 - Calls `api::admin_upload_thb_slip(&body)`; on success, closes modal + fires `on_success` (parent refresh)
 - Slip preview reuses `LightboxImage` for tap-to-enlarge
 - No bank-name autocomplete dropdown (admins can type codes directly — skipping the dropdown avoids duplicating `THAI_BANKS` across modules)
+
+**Deep-link trigger design** (added in commit `15478ea`): the modal watches a `pending_attendee_id: ReadSignal<Option<String>>`. When a parent sets it to `Some(id)`, an Effect inside the modal sets `attendee_id=id`, opens itself via `set_show(true)`, and clears the signal back to `None`. Replaces the original one-shot `initial_attendee_id: Option<String>` prop (which only fired on mount). Pattern: parent owns the signal, modal only reads + clears it.
 
 #### `frontend-leptos/src/pages/admin_deposit.rs`
 
@@ -234,11 +236,11 @@ Decided **no** on all three. The admin path mirrors the attendee path's business
 
 ### Blocking — none
 
-The feature is functionally complete, all tests pass, PR is open.
+The feature is functionally complete (core handler + modal + Attendees-list deep-link), all tests pass, PR is open. PR #31 now contains 3 commits: core feature, handover doc, deep-link follow-up.
 
 ### Optional follow-ups (deferred, non-blocking)
 
-1. **Deep-link from Attendees list.** The modal already accepts `initial_attendee_id` — adding a per-row "Record slip" button on the Attendees page is a small UI-only follow-up. Currently the admin pastes the ID manually.
+1. ~~**Deep-link from Attendees list.**~~ **DONE in commit `15478ea`** (same PR). Added a per-attendee "Record Slip" button on the Attendees list (visible only when the current event has `deposit_enabled`). Clicking it switches to the Deposits section and opens the modal pre-filled with the attendee's ID. The modal was refactored to watch a reactive `pending_attendee_id` signal (replacing the one-shot `initial_attendee_id` option) so any trigger source can open it. New `current_deposit_enabled` Memo gates button visibility per event.
 
 2. **Release cut to `main`.** Once PR #31 merges, `develop` will be ~20 commits ahead of `main`. Optional release cut to bring `main` current.
 
