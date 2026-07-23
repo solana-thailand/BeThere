@@ -45,3 +45,34 @@ jobs:
 
       - name: cargo test (workspace)
         run: cargo test --workspace --locked
+
+  wasm-build:
+    name: worker wasm32 build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust (stable, wasm32 target)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache cargo registry + target
+        uses: Swatinem/rust-cache@v2
+
+      - name: Stub frontend dist for worker include_str!
+        # Same reason as build-test: worker/src/lib.rs include_str!s the SPA shell
+        # from the gitignored frontend-leptos/dist. The file only needs to exist.
+        run: |
+          mkdir -p frontend-leptos/dist
+          printf '<!DOCTYPE html><html><head><title>ci-stub</title></head><body></body></html>\n' \
+            > frontend-leptos/dist/index.html
+
+      - name: cargo build worker (wasm32-unknown-unknown)
+        # The worker ships to Cloudflare as wasm32. build-test only checks the
+        # native target, so code that compiles native but breaks on wasm32
+        # (platform-gated APIs, non-wasm deps) would otherwise slip through to
+        # `deploy.sh` and fail mid-build. --locked mirrors the deploy toolchain.
+        run: cargo build -p event-checkin-worker --target wasm32-unknown-unknown --locked --release

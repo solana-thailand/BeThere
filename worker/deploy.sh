@@ -98,6 +98,49 @@ restore_pnp() {
 
 trap restore_pnp EXIT INT TERM
 
+# ── wasm-bindgen version guard ───────────────────────────────────────────────
+# wasm-bindgen has TWO halves that must match EXACTLY (its bindgen schema is
+# unstable): the `wasm-bindgen` CRATE compiled into the .wasm during
+# `cargo build`, and the `wasm-bindgen` CLI that post-processes it (invoked by
+# wrangler's custom build in wrangler.toml). The crate is pinned by the tracked
+# root Cargo.lock (CI enforces via --locked), but the CLI is a global binary
+# installed separately with `cargo install` — no lockfile can pin it, so it
+# drifts independently. When it does, the wasm build runs for ~2 minutes and
+# then dies with a cryptic "schema version" error deep in wrangler output.
+#
+# This guard reads the crate version from Cargo.lock and compares it to the
+# installed CLI up front, failing fast with the exact remediation command.
+REPO_LOCK="$(cd "$(dirname "$0")/.." && pwd)/Cargo.lock"
+
+check_wasm_bindgen_version() {
+  # Non-fatal if we can't determine the expected version (don't block deploys
+  # on a parsing edge case) — the build itself still enforces the real match.
+  [ -f "$REPO_LOCK" ] || { echo "ℹ️  Cargo.lock not found ($REPO_LOCK) — skipping wasm-bindgen version guard."; return 0; }
+
+  local want have
+  want=$(awk '/^name = "wasm-bindgen"$/{f=1;next} f&&/^version = /{gsub(/[",]/,"");print $3;exit}' "$REPO_LOCK")
+  [ -n "$want" ] || { echo "ℹ️  Could not parse wasm-bindgen version from Cargo.lock — skipping guard."; return 0; }
+
+  if ! command -v wasm-bindgen >/dev/null 2>&1; then
+    echo "❌ wasm-bindgen CLI not installed (crate pins $want)."
+    echo "   Fix: cargo install -f wasm-bindgen-cli --version $want"
+    return 1
+  fi
+
+  have=$(wasm-bindgen --version 2>/dev/null | awk '{print $2}')
+  if [ "$have" != "$want" ]; then
+    echo "❌ wasm-bindgen CLI/crate version mismatch — the wasm build WILL fail:"
+    echo "   crate (Cargo.lock): $want"
+    echo "   CLI  (installed):   ${have:-unknown}"
+    echo "   They must match exactly (unstable bindgen schema)."
+    echo "   Fix: cargo install -f wasm-bindgen-cli --version $want"
+    return 1
+  fi
+
+  echo "✅ wasm-bindgen CLI matches crate ($want)"
+  return 0
+}
+
 # ── §3.5 Preflight gate (opt-in, production-only) ────────────────────────────
 # When BETHERE_PREFLIGHT_GATE=1, production deploys require a green flow-harness
 # run within the last hour (PREFLIGHT_MAX_AGE_SECONDS). --force bypasses the
@@ -160,6 +203,11 @@ run_preflight_gate() {
     return 1
   fi
 }
+
+# Guard the wasm-bindgen CLI/crate match before any build work (dev, staging,
+# and production all trigger the wasm build). Fail fast with the fix command
+# instead of a cryptic schema error minutes into the build.
+check_wasm_bindgen_version || { echo "Aborting: fix the wasm-bindgen CLI version above, then re-run."; exit 1; }
 
 # Run the gate before any deploy work (fail fast, before touching ~/.pnp.cjs).
 run_preflight_gate || { echo "Aborting production deploy."; exit 1; }
