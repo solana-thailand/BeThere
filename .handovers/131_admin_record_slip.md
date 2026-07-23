@@ -248,7 +248,7 @@ The feature is functionally complete (core handler + modal + Attendees-list deep
 
 4. **Test harness for handler integration.** The worker crate has no `MockState` pattern for KV/D1/Sheets/R2. Standing one up is a separate infra-epic; would unlock integration tests for this handler and many others.
 
-5. **"`extract_event_id_from_url()` robustness"** (carryover from handover 129/130) — still uses `.unwrap()` on `web_sys::window()` and `location().href()`. Defensive `?` replacement is non-blocking but worth doing.
+5. ~~**"`extract_event_id_from_url()` robustness"**~~ **DONE** (commit pending on this branch). Replaced `.unwrap()` on `web_sys::window()` and `location().href()` with `?` operator + `.ok()?`. Function still returns `Option<String>`, never panics (safe under SSR / sandboxed contexts without `window`). No call-site changes needed. Frontend tests still pass (92/92), clippy clean.
 
 ---
 

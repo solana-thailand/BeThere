@@ -366,10 +366,15 @@ pub fn truncate_pk(pk: &str) -> String {
 }
 
 /// Extract event_id from the current browser URL query params.
+///
+/// Returns `None` if the window, location, or href cannot be accessed
+/// (e.g. during SSR, in a sandbox without `window`, or on a malformed URL).
+/// Never panics.
 pub fn extract_event_id_from_url() -> Option<String> {
-    web_sys::Url::new(&web_sys::window().unwrap().location().href().unwrap())
-        .ok()
-        .and_then(|url| url.search_params().get("event_id"))
+    let window = web_sys::window()?;
+    let href = window.location().href().ok()?;
+    let url = web_sys::Url::new(&href).ok()?;
+    url.search_params().get("event_id")
 }
 
 /// Get the (method_icon, method_label) pair for a deposit method.
