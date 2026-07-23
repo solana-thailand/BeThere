@@ -9,6 +9,15 @@
 //! `auto_verify` toggle (defaults to `true` — admin recording a confirmed
 //! payment typically also verifies it in the same call).
 //!
+//! ## Deep-link trigger
+//!
+//! The modal watches a `pending_attendee_id` signal. When a parent sets it
+//! to `Some(id)` (e.g. the Attendees list "Record slip" button on an attendee
+//! row), this modal opens itself, pre-fills the attendee_id field, and the
+//! parent clears the signal back to `None`. This avoids prop-drilling the
+//! modal's own visibility state up to a grandparent and works from any source
+//! (button click, URL param, etc.).
+//!
 //! ## Styling note
 //!
 //! Inline styles are used for the overlay positioning because the codebase
@@ -50,11 +59,12 @@ pub fn AdminRecordSlipModal(
     /// Refresh callback — fired after a successful upload so the parent's
     /// pending list / refund queue updates immediately.
     on_success: impl Fn() + Clone + Send + Sync + 'static,
-    /// Optional initial attendee_id — supports deep-linking from the
-    /// Attendees list (e.g. `/admin?record_slip_for=abc123`). When provided,
-    /// pre-fills the field on first mount.
-    #[prop(optional)]
-    initial_attendee_id: Option<String>,
+    /// Deep-link trigger — when a parent sets this to `Some(id)`, the modal
+    /// opens itself and pre-fills the attendee_id field. The parent must
+    /// clear it back to `None` after the Effect fires (otherwise re-opening
+    /// would re-trigger). Pattern: parent owns the signal, modal only reads.
+    pending_attendee_id: ReadSignal<Option<String>>,
+    set_pending_attendee_id: WriteSignal<Option<String>>,
 ) -> impl IntoView {
     // ── Form state ──────────────────────────────────────────────────────
     let (attendee_id, set_attendee_id) = signal(String::new());
@@ -66,10 +76,18 @@ pub fn AdminRecordSlipModal(
     let (submitting, set_submitting) = signal(false);
     let file_input_ref: NodeRef<leptos::html::Input> = NodeRef::new();
 
-    // Pre-fill attendee_id from optional prop (one-shot, on mount).
-    if let Some(id) = initial_attendee_id {
-        set_attendee_id.set(id);
-    }
+    // Deep-link watcher: when a parent sets `pending_attendee_id` to Some(id),
+    // open the modal and pre-fill the attendee_id field, then clear the
+    // trigger signal so it can fire again later. Runs once per Some value.
+    // Consumes the value (clears back to None) so the parent doesn't have to
+    // track whether the modal saw it.
+    Effect::new(move |_| {
+        if let Some(id) = pending_attendee_id.get() {
+            set_attendee_id.set(id);
+            set_show.set(true);
+            set_pending_attendee_id.set(None);
+        }
+    });
 
     // Reset form whenever the modal closes (clean slate for next open).
     Effect::new(move |_| {

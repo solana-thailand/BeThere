@@ -41,6 +41,12 @@ enum AdminDepositTab {
 pub fn AdminDeposits(
     set_toast: WriteSignal<Option<components::ToastMessage>>,
     active_event_id: ReadSignal<Option<String>>,
+    /// Deep-link trigger for the Record-Slip modal — when an Attendees-list
+    /// row button sets this to `Some(id)`, the modal opens pre-filled.
+    /// Owned by the `Admin` parent (so the Attendees section can write it
+    /// even while `AdminDeposits` is unmounted); forwarded to the modal.
+    pending_attendee_id: ReadSignal<Option<String>>,
+    set_pending_attendee_id: WriteSignal<Option<String>>,
 ) -> impl IntoView {
     // Sub-tab state
     let (active_tab, set_active_tab) = signal(AdminDepositTab::Deposits);
@@ -409,6 +415,8 @@ pub fn AdminDeposits(
                 event_id=active_event_id
                 set_toast=set_toast
                 on_success=refresh_data
+                pending_attendee_id=pending_attendee_id
+                set_pending_attendee_id=set_pending_attendee_id
             />
             // Credit liability header chip — organizer's total cash held as
             // rolling deposit credit across all contacts (Issue #061 Phase 2
