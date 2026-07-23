@@ -364,6 +364,14 @@ pub fn routes(state: AppState) -> Router<()> {
             "/deposit/thb/verify",
             post(deposit::verify_thb_slip_handler),
         )
+        // Admin records a THB slip on behalf of an attendee who cannot upload
+        // themselves (JWT expired, browser bug, slip sent via LINE/email).
+        // Skips the VULN-012 email-match gate (admin-authed + audited instead).
+        // Sibling of `/deposit/thb/upload` + `/deposit/thb/verify`.
+        .route(
+            "/deposit/thb/admin-upload",
+            post(deposit::admin_upload_thb_slip_handler),
+        )
         .route(
             "/deposit/thb/pending",
             get(deposit::pending_thb_slips_handler),

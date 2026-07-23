@@ -7,6 +7,7 @@
 //!   POST /api/deposit/usdc                  — initiate USDC deposit (Solana Pay URL)
 //!   GET  /api/deposit/usdc/tx               — Solana Pay TX callback (wallet fetches TX)
 //!   POST /api/deposit/thb/upload            — record THB slip upload
+//!   POST /api/deposit/thb/admin-upload      — admin records slip on behalf of attendee
 //!   POST /api/deposit/thb/verify            — admin verifies/rejects slip
 //!   GET  /api/deposit/thb/pending           — list unverified slips (admin)
 //!   POST /api/refund/mark/{attendee_id}     — mark THB refund as done (admin)
@@ -26,12 +27,12 @@ pub use escrow::{
     usdc_refund_queue_handler,
 };
 pub use thb::{
-    admin_hold_deposit_handler, batch_thb_refund_handler, clear_credit_refund_request_handler,
-    credit_balance_handler, credit_liability_handler, credit_refund_request_status_handler,
-    credit_refund_requests_handler, held_list_handler, hold_deposit_handler,
-    mark_manual_refund_handler, mark_refund_handler, pending_thb_slips_handler,
-    refund_queue_handler, refunded_list_handler, request_credit_refund_handler,
-    upload_thb_slip_handler, verify_thb_slip_handler,
+    admin_hold_deposit_handler, admin_upload_thb_slip_handler, batch_thb_refund_handler,
+    clear_credit_refund_request_handler, credit_balance_handler, credit_liability_handler,
+    credit_refund_request_status_handler, credit_refund_requests_handler, held_list_handler,
+    hold_deposit_handler, mark_manual_refund_handler, mark_refund_handler,
+    pending_thb_slips_handler, refund_queue_handler, refunded_list_handler,
+    request_credit_refund_handler, upload_thb_slip_handler, verify_thb_slip_handler,
 };
 pub use usdc::{
     confirm_deposit_handler, deposit_usdc_handler, deposit_usdc_tx_handler,
