@@ -293,6 +293,15 @@ pub fn Admin() -> impl IntoView {
     let event_id_for_delete = active_event_id;
     let (events_loading, set_events_loading) = signal(false);
 
+    // Deep-link trigger for the Record-Slip-on-behalf modal — set by the
+    // Attendees list "Record slip" button (writes attendee_id + switches to
+    // Deposits section). Consumed by `AdminRecordSlipModal` via `AdminDeposits`
+    // — the modal opens itself, pre-fills the field, then clears the signal.
+    // Owned here (not inside AdminDeposits) so the Attendees section can
+    // write it even while AdminDeposits is unmounted.
+    let (pending_record_slip_attendee, set_pending_record_slip_attendee) =
+        signal(None::<String>);
+
     // Load events list on mount
     Effect::new(move |_| {
         set_events_loading.set(true);
@@ -329,6 +338,22 @@ pub fn Admin() -> impl IntoView {
                     .map(|e| e.event_format.clone())
             })
             .unwrap_or_default()
+    });
+
+    // Current event's deposit_enabled flag — gates the per-attendee "Record
+    // slip" action button in the Attendees list. False when no event is
+    // selected or the event has deposits disabled.
+    let current_deposit_enabled = Memo::new(move |_| {
+        active_event_id
+            .get()
+            .and_then(|id| {
+                events_list
+                    .get()
+                    .iter()
+                    .find(|e| e.id == id)
+                    .map(|e| e.deposit_enabled)
+            })
+            .unwrap_or(false)
     });
 
     // Current event's Google Sheet ID — drives the "View Sheet" sidebar link.
@@ -1444,6 +1469,10 @@ pub fn Admin() -> impl IntoView {
                                     // environment, which would break other closures.
                                     let switch_display_id = api_id.clone();
                                     let switch_click_id = api_id.clone();
+                                    // Clone for the deep-link "Record slip" button — fires
+                                    // the cross-section modal trigger. Same Fn-closure
+                                    // reasoning as the participation-toggle clones above.
+                                    let record_slip_id = api_id.clone();
                                     let badge_class = if is_checked_in { "badge badge-success" } else { "badge badge-warning" };
                                     let badge_text = if is_checked_in { "Checked In" } else { "Pending" };
                                     let participation = utils::get_participation_badge(&attendee.participation_type);
@@ -1594,6 +1623,31 @@ pub fn Admin() -> impl IntoView {
                                                         >
                                                             "Deposit"
                                                         </a>
+                                                    </Show>
+                                                    // Record slip on behalf of attendee — deep-links into
+                                                    // the Deposits section's Record-Slip modal. Use case:
+                                                    // attendee sent the slip via LINE/email and cannot upload
+                                                    // themselves (JWT expired, browser bug, etc.).
+                                                    // Gated on deposit_enabled for the current event.
+                                                    <Show
+                                                        when=move || current_deposit_enabled.get()
+                                                        fallback=|| view! { <span></span> }
+                                                    >
+                                                        <button
+                                                            class="btn btn-outline btn-xs btn-xs-override"
+                                                            title="Record a slip on behalf of this attendee (they sent it via LINE/email and cannot upload themselves). Opens the deposit modal pre-filled."
+                                                            on:click={
+                                                                let id = record_slip_id.clone();
+                                                                let set_pending = set_pending_record_slip_attendee;
+                                                                let set_section = set_active_section;
+                                                                move |_| {
+                                                                    set_pending.set(Some(id.clone()));
+                                                                    set_section.set(AdminSection::Deposits);
+                                                                }
+                                                            }
+                                                        >
+                                                            "Record Slip"
+                                                        </button>
                                                     </Show>
                                                     // Participation-type toggle — flip In-Person ⇄ Online.
                                                     // Use case: attendee chose deposit/in-person but confirmed
@@ -1779,7 +1833,12 @@ pub fn Admin() -> impl IntoView {
 
                 // Deposits section
                 <Show when=move || active_section.get() == AdminSection::Deposits fallback=|| view! { <div></div> }>
-                    <crate::pages::admin_deposit::AdminDeposits set_toast=set_toast active_event_id=active_event_id />
+                    <crate::pages::admin_deposit::AdminDeposits
+                        set_toast=set_toast
+                        active_event_id=active_event_id
+                        pending_attendee_id=pending_record_slip_attendee
+                        set_pending_attendee_id=set_pending_record_slip_attendee
+                    />
                 </Show>
 
                 // Escrow management section

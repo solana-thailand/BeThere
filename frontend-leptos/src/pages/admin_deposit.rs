@@ -18,6 +18,7 @@ use crate::api::{
 };
 use crate::components::{self, ToastType};
 use crate::icons::{Icon, IconName};
+use crate::pages::admin_deposit_record_slip::AdminRecordSlipModal;
 use crate::utils;
 
 // ---------------------------------------------------------------------------
@@ -40,6 +41,12 @@ enum AdminDepositTab {
 pub fn AdminDeposits(
     set_toast: WriteSignal<Option<components::ToastMessage>>,
     active_event_id: ReadSignal<Option<String>>,
+    /// Deep-link trigger for the Record-Slip modal — when an Attendees-list
+    /// row button sets this to `Some(id)`, the modal opens pre-filled.
+    /// Owned by the `Admin` parent (so the Attendees section can write it
+    /// even while `AdminDeposits` is unmounted); forwarded to the modal.
+    pending_attendee_id: ReadSignal<Option<String>>,
+    set_pending_attendee_id: WriteSignal<Option<String>>,
 ) -> impl IntoView {
     // Sub-tab state
     let (active_tab, set_active_tab) = signal(AdminDepositTab::Deposits);
@@ -63,6 +70,11 @@ pub fn AdminDeposits(
     // — disables the row's clear button while the POST is in flight and keys
     // per-row pending state. Idempotent clear, so a re-click is a safe retry.
     let (clear_pending_email, set_clear_pending_email) = signal(None::<String>);
+    // Record-slip-on-behalf modal visibility — opens when admin clicks the
+    // "Record Slip" button in the Deposits tab header. Backed by the new
+    // `POST /api/deposit/thb/admin-upload` endpoint (skips the VULN-012
+    // email-match gate; staff-authed + audited server-side).
+    let (show_record_slip_modal, set_show_record_slip_modal) = signal(false);
 
     // UI state
     let (loading, set_loading) = signal(true);
@@ -392,6 +404,20 @@ pub fn AdminDeposits(
 
             // Event selected — show full content
             <Show when=move || has_event() fallback=|| view! { <div></div> }>
+            // Record-slip-on-behalf modal — admin records a THB slip for an
+            // attendee who cannot upload themselves (JWT expired, browser bug,
+            // slip sent via LINE/email). Mounted at the top of the
+            // event-selected view; visibility is controlled by a signal.
+            // Position:fixed inside the modal makes DOM placement irrelevant.
+            <AdminRecordSlipModal
+                show=show_record_slip_modal
+                set_show=set_show_record_slip_modal
+                event_id=active_event_id
+                set_toast=set_toast
+                on_success=refresh_data
+                pending_attendee_id=pending_attendee_id
+                set_pending_attendee_id=set_pending_attendee_id
+            />
             // Credit liability header chip — organizer's total cash held as
             // rolling deposit credit across all contacts (Issue #061 Phase 2
             // option a2). Cross-event (global); only renders when there's
@@ -498,8 +524,16 @@ pub fn AdminDeposits(
                     when=move || active_tab.get() == AdminDepositTab::Deposits
                     fallback=|| view! { <div></div> }
                 >
-                    <div class="admin-section-header">
-                        <h3>{format!("{} pending slip{}", pending_count.get(), if pending_count.get() != 1 { "s" } else { "" })}</h3>
+                    <div class="admin-section-header" style="display:flex;justify-content:space-between;align-items:center;gap:0.5rem;flex-wrap:wrap;">
+                        <h3 style="margin:0;">{format!("{} pending slip{}", pending_count.get(), if pending_count.get() != 1 { "s" } else { "" })}</h3>
+                        <button
+                            class="btn btn-secondary btn-sm"
+                            title="Record a slip on behalf of an attendee who cannot upload themselves (slip sent via LINE/email, JWT expired, browser bug, etc.). Staff-authed + audited."
+                            on:click=move |_| set_show_record_slip_modal.set(true)
+                        >
+                            <Icon icon=IconName::Ticket class="icon-sm" />
+                            " Record Slip for Attendee"
+                        </button>
                     </div>
 
                     <Show

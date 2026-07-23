@@ -96,6 +96,11 @@ pub enum AuditAction {
     /// (e.g. deposit-pending attendee confirmed via out-of-band contact
     /// that they will attend online instead).
     ParticipationTypeChanged,
+    /// Admin recorded a THB payment slip on behalf of an attendee who could
+    /// not upload themselves (e.g. JWT expired and they sent the slip via
+    /// LINE/email). Skips the VULN-012 email-match gate (admin-authed +
+    /// audited instead). Sibling of `DepositSubmitted` / `DepositVerified`.
+    SlipRecordedByAdmin,
 
     // Privacy (PDPA)
     DataDeletionRequested,
