@@ -3,15 +3,45 @@
 > Spin-off from #058. The no-show bug is fixed and the **read side** is now
 > consolidated onto the `ParticipationType` enum (domain + worker, Tier A — done).
 > This issue covers the **write side + stored data**, which is riskier and must
-> not be done as a blind migration. **This is a design proposal, not implemented.**
+> not be done as a blind migration. Write-path unification (Step 3.2) shipped
+> 2026-06-27; backfill (Step 3.3) shipped 2026-07-22.
 
 ## Status
 - ✅ **Step 3.2 (write-path unification) DONE** — commit `7114c03`, deployed to
   `main` at `b432ac5` via Handover 121 (2026-06-27). No data change — D1 still
   holds legacy values until 3.3 backfill runs. But all NEW writes are now
   canonical; the mess stops growing.
-- 🟡 **Steps 3.3 (backfill) + 3.4 (SQL simplification) — still awaiting approval.**
-  No code, no prod change yet.
+- ✅ **Step 3.3 (backfill) DONE** — PR #25 merged to `develop` (`d6074ed`),
+  migration `0024_attendees_participation_type_canonicalize.sql` applied to prod
+  `bethere-db` (2026-07-22). **148 rows canonicalized, 0 data loss** verified:
+  - Before: `online`×207, `Online`×111, `in_person`×86, `""`×21, `In-Person`×16, `test`×1 (total 442)
+  - After:  `online`×318, `in_person`×123, `test`×1 (total **442 — unchanged**)
+  - `walkin` rows: 0 (preservation clause was a harmless no-op).
+  - Backup at `/tmp/bethere-backup-pre-0024.sql` (1.3M, 2790 INSERTs).
+  - Pre-apply: local dry-run validated semantics (9-row seed across all variants
+    → `in_person`×4, `online`×3, `test`/`walkin` untouched) + idempotency.
+  - Post-apply: `wrangler d1 migrations list --remote` clean; `GROUP BY` shows
+    only canonical values + the preserved `test` sentinel.
+- ✅ **Step 3.4 (SQL predicate simplification) DONE** — PR #26 merged to `develop`
+  (`4146261`, 2026-07-22). Three sites simplified (all mirror `Attendee::is_in_person`):
+  `dashboard::IN_PERSON_PREDICATE` (const), `attendees::count_in_person_attendees`
+  (inline dead_code), `contacts::audience_aggregate` (2 CASE WHEN blocks).
+  Predicate: `(participation_type = 'in_person' OR TRIM(participation_type) = '')`.
+  Dropped `IS NULL` (schema is `NOT NULL`) + the three `%in-person%`/`%in person%`/
+  `%in_person%` LIKEs (no legacy variants post-backfill; write paths unified).
+  Kept `OR TRIM(...) = ''` defensively to mirror `ParticipationType::parse("") == InPerson`
+  so SQL and Rust classifier can never disagree. Walk-in detection unaffected
+  (queries `= 'walkin'` literally, separate from these predicates). Gating condition
+  verified pre-merge: prod has 0 non-canonical values and 0 empty/null rows.
+  CI: domain tests 104 pass, worker tests 246 pass, clippy clean.
+- ✅ **Worker redeployed** — prod worker `bethere` redeployed at Version
+  `66622091-677b-4750-95f3-b17b914a5e8d` (2026-07-22, standard `wrangler deploy`).
+  The simplified predicates from PR #26 are now live on prod. Frontend assets
+  reused (no source changes since the 16:42 build, so `dist/` was current —
+  deploy reported "No updated asset files to upload"). Smoke-tested: health 200,
+  `/api/contacts/audience` (exercises the simplified `audience_aggregate`) 401
+  (live + auth-gated), all protected routes 401 (not 404). D1 distribution
+  unchanged (deploy doesn't touch data): 318 online, 123 in_person, 1 test.
 
 ## 1. Root cause (why prod is messy)
 `attendees.participation_type` is written by **5+ independent paths using two

@@ -2,6 +2,7 @@ mod hold_admin;
 mod hold_credit;
 mod hold_refund_request;
 mod refund;
+mod slip_admin_upload;
 mod slip_list;
 mod slip_upload;
 mod slip_verify;
@@ -13,6 +14,7 @@ pub use hold_refund_request::{
     credit_refund_requests_handler, request_credit_refund_handler,
 };
 pub use refund::{batch_thb_refund_handler, mark_manual_refund_handler, mark_refund_handler};
+pub use slip_admin_upload::admin_upload_thb_slip_handler;
 pub use slip_list::{pending_thb_slips_handler, refund_queue_handler, refunded_list_handler};
 pub use slip_upload::upload_thb_slip_handler;
 pub use slip_verify::verify_thb_slip_handler;

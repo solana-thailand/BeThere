@@ -3,7 +3,7 @@
 ## Status
 - **Summary no-show bug**: ✅ Fixed (commit `4e6b4f0`, migration 0021 applied to prod)
 - **Deployed to `main`**: ✅ `b432ac5` (2026-06-27, Handover 121) — fix + Tier A read-side consolidation now live
-- **`participation_type` data hygiene**: 🟡 Open (follow-up — see bottom)
+- **`participation_type` data hygiene**: ✅ Done (migration `0024` applied to prod 2026-07-22, see bottom)
 
 ## Summary
 The post-event summary (Plan 008 Phase 1) computed `no_show = registered − checked_in`
@@ -81,16 +81,24 @@ DB counts (SQL can't call the Rust fn, so this duplication is unavoidable but
 documented). This affects more than summaries: online capacity gating, hybrid track
 routing, and any feature keyed on participation type are all fragile.
 
-**Recommended fix (separate project):**
+**Recommended fix (separate project) — status:**
 1. ✅ **Done (`fa5b1c8`)** — Add a `ParticipationType` enum to the domain crate
    (canonical snake_case `in_person`/`online`/`other`) with `parse()` handling all
    known prod variants; `Attendee::is_in_person()` now delegates to it (behavior
    preserved; verified by `is_in_person` + new `participation_type` unit tests).
-2. ⬜ Normalize at the source: canonicalize when writing from the Google Sheet sync and
-   the registration path.
-3. ⬜ One-time D1 migration to backfill existing rows to canonical values.
-4. ⬜ Replace remaining substring-matching read sites with the typed enum (the SQL
-   `IN_PERSON_PREDICATE` stays, but can be simplified once rows are canonical).
+2. ✅ **Done (`7114c03`)** — Normalize at the source: write-path unification (Sheet
+   sync, registration, manual override) shipped to `main` at `b432ac5` via Handover
+   121 (2026-06-27). New writes are canonical; legacy variants frozen.
+3. ✅ **Done (`d6074ed`, PR #25, 2026-07-22)** — One-time D1 backfill
+   (`worker/migrations/0024_attendees_participation_type_canonicalize.sql`)
+   applied to prod `bethere-db`. 148 rows canonicalized, 0 data loss
+   (total 442 unchanged: `online` 207+111=318, `in_person` 86+16+21=123,
+   `test`×1 untouched, `walkin`×0 existed). Backup at
+   `/tmp/bethere-backup-pre-0024.sql`.
+4. 🟡 **Optional cleanup (#059 Step 3.4)** — Replace remaining substring-matching
+   read sites with the typed enum; the SQL `IN_PERSON_PREDICATE` can collapse to
+   `participation_type = 'in_person'` once confident no new legacy rows appear.
+   Belongs in code with tests, on its own commit.
 
 This is **not** blocking the summary fix — `IN_PERSON_PREDICATE` handles all known
 variants defensively — but it's a latent bug across the platform.

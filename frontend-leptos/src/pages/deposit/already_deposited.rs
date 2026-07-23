@@ -40,13 +40,53 @@ pub fn error_view(msg: &str) -> AnyView {
 }
 
 /// Not enabled view.
-pub fn not_enabled_view() -> AnyView {
+///
+/// Surfaces the **resolved** event name + slug so the organizer can immediately
+/// tell whether the wrong event was looked up. The most common cause of this
+/// view in production is the "no event_id in URL → first active event fallback"
+/// path: the URL falls through to whatever happens to be the newest active
+/// event, which may have deposits disabled even though the attendee's actual
+/// event has them enabled. Showing the resolved event name makes that mismatch
+/// self-diagnosable instead of looking like a backend bug.
+pub fn not_enabled_view(data: &DepositStatusResponse) -> AnyView {
+    let event_name = data.event_name.clone();
+    let event_slug = data.event_slug.clone();
+    let has_event_info = !event_name.is_empty();
     view! {
         <div class="dep2-card">
             <div class="dep2-card-header">
                 <span class="dep2-card-title">"Deposits Not Available"</span>
             </div>
             <p>"Deposits are not enabled for this event."</p>
+
+            // Diagnostic block — surface which event the backend actually
+            // resolved. Without this, "wrong event fallback" looks identical
+            // to "deposits genuinely disabled", forcing a curl to debug.
+            {if has_event_info {
+                view! {
+                    <div class="dep2-info-note">
+                        <p class="hint-note">
+                            {format!("Resolved event: {event_name}")}
+                        </p>
+                        {if !event_slug.is_empty() {
+                            view! {
+                                <p class="hint-note">
+                                    {format!("Slug: {event_slug}")}
+                                </p>
+                            }.into_any()
+                        } else {
+                            ().into_any()
+                        }}
+                        <p class="hint-note">
+                            "If this isn't the event you expected, check that the URL contains the correct \
+                             \"?event_id=...\" for your event, or hard-refresh to bypass any stale cache."
+                        </p>
+                    </div>
+                }.into_any()
+            } else {
+                ().into_any()
+            }}
+
             <a href="/" class="btn btn-primary">"Go Home"</a>
         </div>
     }

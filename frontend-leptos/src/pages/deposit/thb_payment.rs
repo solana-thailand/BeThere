@@ -387,3 +387,73 @@ pub fn thb_rejected_view(
     }
         .into_any()
 }
+
+// ---------------------------------------------------------------------------
+// THB upload blocked — session expired, sign-in required
+// ---------------------------------------------------------------------------
+
+/// THB upload was rejected with 401 because the attendee's JWT is missing or
+/// expired. The deposit page is public (loads deposit status without auth),
+/// but `/api/deposit/thb/upload` is gated by `require_identity`. Rather than
+/// leaving the user stuck with a generic "Failed to upload slip" toast and no
+/// path forward, render a clear "session expired" notice with a "Sign In"
+/// CTA that routes to `/login`.
+///
+/// After successful sign-in, the user returns to the deposit page (via the
+/// URL they came from) and can retry the upload.
+pub fn thb_auth_required_view(data: &DepositStatusResponse) -> AnyView {
+    let amount_thb = data.deposit_amount_thb;
+
+    // Capture the current path + query string so we can return the user here
+    // after the OAuth roundtrip. Eager computation — no signals involved, so
+    // no need for a reactive closure. Falls back to `/` if the browser
+    // context is unavailable (e.g. SSR — not currently used but defensive).
+    let current_path = web_sys::window()
+        .and_then(|w| w.location().pathname().ok())
+        .unwrap_or_default();
+    let current_search = web_sys::window()
+        .and_then(|w| w.location().search().ok())
+        .unwrap_or_default();
+    let return_to = format!("{current_path}{current_search}");
+    let login_href = if return_to.is_empty() || return_to == "/" {
+        "/login".to_string()
+    } else {
+        format!("/login?next={}", urlencoding::encode(&return_to))
+    };
+
+    view! {
+        <div class="dep2-card">
+            <div class="dep2-card-header">
+                <h2 class="dep2-card-title">"Sign in required"</h2>
+                {if amount_thb > 0 {
+                    view! {
+                        <span class="badge badge-warning">
+                            {format!("฿{amount_thb}")}
+                        </span>
+                    }.into_any()
+                } else {
+                    view! { <div></div> }.into_any()
+                }}
+            </div>
+
+            <div class="dep2-section">
+                <div class="dep2-deadline dep2-deadline--danger">
+                    <p class="dep2-deadline-text">
+                        "Your session has expired. Please sign in again to upload your payment slip."
+                    </p>
+                </div>
+                <p class="hint-desc u-mt-xs">
+                    "The deposit page can be viewed without signing in, but uploading a slip requires a verified session."
+                </p>
+            </div>
+
+            <a
+                class="btn btn-primary btn-block u-mt-1rem"
+                href=login_href
+            >
+                "Sign in to Continue"
+            </a>
+        </div>
+    }
+        .into_any()
+}

@@ -26,7 +26,15 @@
 // v3 (2026-06): also made navigation/API fetches use `cache: "no-store"` so the
 // SW never serves a browser-HTTP-cached (stale) index.html. See _headers for
 // the matching edge-cache fix (no-store on the shell).
-var CACHE_VERSION = "bethere-v3";
+//
+// v4 (2026-07): split API from navigation strategy. /api/* responses were
+// being cached in SHELL_CACHE by networkFirst — combined with today's
+// multi-deploy window this caused stale `deposit_enabled: false` to be
+// re-served on reload, forcing a hard refresh to recover. API responses are
+// now network-only (never cached, never served from cache on failure).
+// Bumping the version also evicts any pre-existing stale API entries from
+// SHELL_CACHE on activation.
+var CACHE_VERSION = "bethere-v4";
 var SHELL_CACHE = CACHE_VERSION + "-shell";
 var ASSET_CACHE = CACHE_VERSION + "-assets";
 
@@ -90,9 +98,15 @@ self.addEventListener("fetch", function (event) {
   // — let the browser handle them via normal HTTP cache).
   if (url.origin !== self.location.origin) return;
 
-  // /api/* — network-first (always need fresh data)
+  // /api/* — network-only. API responses are always dynamic (deposit status,
+  // attendee lists, auth state, etc.) and must NEVER be cached or re-served
+  // from cache. Caching them caused a real-world stale-data bug: a 200 with
+  // `deposit_enabled: false` from before a deploy was re-served on reload,
+  // forcing users to hard-refresh. The backend already emits
+  // `Cache-Control: no-store`, but that header does not stop the SW from
+  // caching — only network-only strategy prevents it.
   if (url.pathname.startsWith("/api/")) {
-    event.respondWith(networkFirst(req));
+    event.respondWith(networkOnly(req));
     return;
   }
 
@@ -122,6 +136,19 @@ self.addEventListener("fetch", function (event) {
   // Everything else (manifest, icons, fonts, etc.) — stale-while-revalidate
   event.respondWith(staleWhileRevalidate(SHELL_CACHE, req));
 });
+
+// Network-only strategy for /api/* requests.
+//
+// Distinct from networkFirst because:
+//   1. Never caches the response (API data is always dynamic and the backend
+//      already emits Cache-Control: no-store — caching here would risk
+//      re-serving pre-deploy state).
+//   2. Never falls back to cache on network failure (a stale API response
+//      is worse than no response — the calling code renders an error state,
+//      which is the correct behavior when the network is down).
+function networkOnly(req) {
+  return fetch(req, { cache: "no-store" });
+}
 
 function networkFirst(req) {
   // `cache: "no-store"` bypasses the browser HTTP cache entirely, forcing a

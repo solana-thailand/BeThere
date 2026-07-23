@@ -118,6 +118,42 @@ pub struct VerifySlipRequest {
     pub approved: bool,
 }
 
+/// Request body for `POST /api/deposit/thb/admin-upload`.
+///
+/// Mirrors `ThbSlipUploadRequest` plus an `auto_verify` flag (default `true` —
+/// admin recording a confirmed payment typically also verifies it in the same
+/// call). Used when an attendee cannot upload themselves (JWT expired, browser
+/// bug, slip sent via LINE/email). Staff-authed + audited server-side.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct AdminSlipUploadRequest {
+    pub event_id: String,
+    pub attendee_id: String,
+    pub slip_url: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bank_account: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bank_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub account_name: Option<String>,
+    /// When true (default), also marks the deposit as verified in the same call.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub auto_verify: bool,
+}
+
+impl Default for AdminSlipUploadRequest {
+    fn default() -> Self {
+        Self {
+            event_id: String::new(),
+            attendee_id: String::new(),
+            slip_url: String::new(),
+            bank_account: None,
+            bank_name: None,
+            account_name: None,
+            auto_verify: true,
+        }
+    }
+}
+
 #[derive(Debug, Clone, serde::Deserialize)]
 pub struct ThbDepositInfo {
     pub attendee_id: String,
@@ -374,6 +410,18 @@ pub async fn confirm_deposit(
 /// POST /api/deposit/thb/upload
 pub async fn upload_thb_slip(body: &ThbSlipUploadRequest) -> Result<serde_json::Value, ApiError> {
     api_post_json("/deposit/thb/upload", body).await
+}
+
+/// POST /api/deposit/thb/admin-upload (admin).
+///
+/// Records a THB slip on behalf of an attendee who cannot upload themselves.
+/// Staff-authed + audited server-side; skips the attendee email-match gate.
+/// When `auto_verify` is true (default), the deposit is also verified in the
+/// same call (QR generated, sheet mirrored, D1 dual-written).
+pub async fn admin_upload_thb_slip(
+    body: &AdminSlipUploadRequest,
+) -> Result<serde_json::Value, ApiError> {
+    api_post_json("/deposit/thb/admin-upload", body).await
 }
 
 /// POST /api/deposit/thb/verify (admin)

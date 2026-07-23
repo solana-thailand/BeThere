@@ -1,6 +1,7 @@
 pub mod admin;
 pub mod admin_cancel;
 pub mod admin_deposit;
+pub mod admin_deposit_record_slip;
 pub mod admin_escrow;
 pub mod admin_event_selector;
 pub mod adventure;

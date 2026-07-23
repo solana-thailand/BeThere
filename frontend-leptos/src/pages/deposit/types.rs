@@ -68,8 +68,12 @@ pub enum DepositPageState {
     Loading,
     /// API or param error.
     Error(String),
-    /// Deposits not enabled for this event.
-    NotEnabled,
+    /// Deposits not enabled for the resolved event.
+    /// Carries the full response so the view can surface the resolved
+    /// event name/slug — critical for diagnosing the "no event_id → wrong
+    /// active-event fallback" case where the page shows "Not Available"
+    /// despite the attendee's actual event having deposits enabled.
+    NotEnabled(DepositStatusResponse),
     /// Deposit already completed.
     AlreadyDeposited(DepositStatusResponse),
     /// Ready to choose payment method.
@@ -89,6 +93,14 @@ pub enum DepositPageState {
     ThbUploaded(String, String, String),
     /// THB slip was rejected by admin — user can re-upload.
     ThbRejected(DepositStatusResponse),
+    /// THB upload rejected because the attendee's JWT is missing/expired.
+    /// The deposit page is public (loads deposit status without auth), but
+    /// `/api/deposit/thb/upload` is gated by `require_identity`. When the
+    /// upload fails with 401, surface a clear "session expired, sign in"
+    /// CTA instead of a generic error toast — otherwise the user is stuck
+    /// able to view but unable to act, with no obvious path forward.
+    /// See issue: deposit upload 401 UX (Session expired).
+    ThbAuthRequired(DepositStatusResponse),
     /// Refund flow — choosing wallet to connect.
     RefundChooseWallet(DepositStatusResponse),
     /// Refund flow — wallet connected, ready to claim.
@@ -167,8 +179,9 @@ pub fn deposit_step(
         // No stepper for terminal / pre-flow states
         DepositPageState::Loading
         | DepositPageState::Error(_)
-        | DepositPageState::NotEnabled
-        | DepositPageState::AlreadyDeposited(_) => None,
+        | DepositPageState::NotEnabled(_)
+        | DepositPageState::AlreadyDeposited(_)
+        | DepositPageState::ThbAuthRequired(_) => None,
     }
 }
 
@@ -299,6 +312,7 @@ pub fn extract_event_context(state: &DepositPageState) -> Option<(String, String
         | DepositPageState::UsdcQrReady(d, _)
         | DepositPageState::ThbUploading(d)
         | DepositPageState::ThbRejected(d)
+        | DepositPageState::ThbAuthRequired(d)
         | DepositPageState::RefundChooseWallet(d)
         | DepositPageState::RefundWalletConnected(d, _, _)
         | DepositPageState::RefundSigning(d, _, _)
@@ -352,10 +366,15 @@ pub fn truncate_pk(pk: &str) -> String {
 }
 
 /// Extract event_id from the current browser URL query params.
+///
+/// Returns `None` if the window, location, or href cannot be accessed
+/// (e.g. during SSR, in a sandbox without `window`, or on a malformed URL).
+/// Never panics.
 pub fn extract_event_id_from_url() -> Option<String> {
-    web_sys::Url::new(&web_sys::window().unwrap().location().href().unwrap())
-        .ok()
-        .and_then(|url| url.search_params().get("event_id"))
+    let window = web_sys::window()?;
+    let href = window.location().href().ok()?;
+    let url = web_sys::Url::new(&href).ok()?;
+    url.search_params().get("event_id")
 }
 
 /// Get the (method_icon, method_label) pair for a deposit method.
