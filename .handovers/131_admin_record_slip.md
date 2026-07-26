@@ -242,9 +242,16 @@ The feature is functionally complete (core handler + modal + Attendees-list deep
 
 1. ~~**Deep-link from Attendees list.**~~ **DONE in commit `15478ea`** (same PR). Added a per-attendee "Record Slip" button on the Attendees list (visible only when the current event has `deposit_enabled`). Clicking it switches to the Deposits section and opens the modal pre-filled with the attendee's ID. The modal was refactored to watch a reactive `pending_attendee_id` signal (replacing the one-shot `initial_attendee_id` option) so any trigger source can open it. New `current_deposit_enabled` Memo gates button visibility per event.
 
-2. **Release cut to `main`.** Once PR #31 merges, `develop` will be ~20 commits ahead of `main`. Optional release cut to bring `main` current.
+2. ~~**Release cut to `main`.**~~ **DONE.** PR #31 merged to `develop` (`dbec2d0`), then release PR #32 merged `develop` → `main` (merge commit `459eb2f`, 23 commits). `develop` and `main` are now in sync. The release also carried PRs #26–#30 (participation_type canonicalization, SW `/api/*` cache fix, deposit 401 CTA, admin scroll-listener fix, OAuth `next` threading).
 
-3. **Production smoke test.** See step 3 above — needs the user to manually verify after deploy.
+3. **Production smoke test** — deploy **DONE**, browser verification still pending.
+   - **Deployed:** Worker `bethere` Version `e65bed23-374e-4f0c-8685-ad0943edba3e` (was `66622091`). Standard `wrangler deploy` path; PUT API fallback not needed.
+   - **No D1 migration ran** — `wrangler d1 migrations list bethere-db --remote` → "✅ No migrations to apply!" (`0024` was already applied in handover 130).
+   - **Toolchain fix required first:** the deploy failed on a wasm-bindgen schema mismatch — the local **CLI binary** had drifted to `0.2.126` while the **crate** is `0.2.118`. wasm-bindgen requires the two to match exactly (unstable bindgen schema). Fixed with `cargo install -f wasm-bindgen-cli --version 0.2.118`.
+     - Root cause is *not* an unpinned crate: root `Cargo.lock` **is** tracked and pins the crate at `0.2.118`, and CI already runs `--locked`, so the crate is reproducible on every machine. The drift source is the global `~/.cargo/bin/wasm-bindgen` binary, installed separately via `cargo install` — no lockfile can pin a machine-local tool.
+     - Prevention landed on branch `fix/wasm_bindgen_cli_drift_guard` (PR to `develop`): (a) a fast version guard at the top of `worker/deploy.sh` that compares the installed CLI against the crate version parsed from `Cargo.lock` and fails immediately with the exact `cargo install` command, instead of the cryptic schema error 2 minutes into the wasm build; (b) a new CI `worker wasm32 build` job — CI previously only checked the native target, so code that compiles native but breaks on `wasm32-unknown-unknown` could reach deploy undetected.
+   - **Automated smoke checks pass:** `/api/health` 200; `/api/deposit/thb/admin-upload`, `/api/deposit/thb/verify`, `/api/refund/held` all 401 (routes live + auth-gated); served `index.html` references the freshly built hash `6005e6b428229d8c`; JS 74,549 B and WASM 4,700,470 B served; `sw.js` is v4 with `/api/*` network-only. The initial 404 on `admin-upload` was transient edge-cache propagation (same as handover 129) — settled to 401 within seconds.
+   - **Still pending:** the 8-step browser walkthrough in §3 (admin records a slip end-to-end, QR appears on the attendee ticket, `slip_recorded_by_admin` shows in the audit feed). Needs a real admin session.
 
 4. **Test harness for handler integration.** The worker crate has no `MockState` pattern for KV/D1/Sheets/R2. Standing one up is a separate infra-epic; would unlock integration tests for this handler and many others.
 
