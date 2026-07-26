@@ -141,6 +141,54 @@ check_wasm_bindgen_version() {
   return 0
 }
 
+# ── Post-deploy content-type verification ───────────────────────────────────
+# A 2026-07-26 deploy shipped `/` and the JS bundle as `application/octet-stream`
+# (browsers downloaded a .dms file / blank page) yet returned HTTP 200 — the
+# status-only smoke test missed it. Root cause was a poisoned content-addressed
+# asset object on the CDN (see the BUILD_TAG note in frontend-leptos/src/lib.rs).
+# This check curls the just-deployed origin and FAILS the deploy if the HTML
+# shell or the hashed JS bundle is served as octet-stream, so it can never ship
+# silently again.
+verify_content_types() {
+  local base="https://${WORKER_NAME}.solana-thailand.workers.dev"
+  local index="${DIST_DIR}/index.html"
+  [ -f "$index" ] || { echo "ℹ️  no ${index} — skipping content-type verification."; return 0; }
+
+  local js
+  js=$(grep -o 'event-checkin-frontend-[a-z0-9]*\.js' "$index" | head -1)
+
+  echo "🔎 Verifying served Content-Type (edge propagation may lag a few seconds)..."
+  local bad=0 attempt ct
+  for path in "/" "/$js"; do
+    [ "$path" = "/" ] || [ -n "$js" ] || continue
+    # Retry a few times to ride out edge propagation right after deploy.
+    for attempt in 1 2 3 4 5; do
+      ct=$(curl -s -D - -o /dev/null "${base}${path}" | tr -d '\r' | grep -i '^content-type:' | sed 's/[Cc]ontent-[Tt]ype: *//')
+      echo "$ct" | grep -qi 'octet-stream' || break
+      sleep 4
+    done
+    if echo "$ct" | grep -qi 'octet-stream'; then
+      echo "   ❌ ${path} → ${ct}"
+      bad=1
+    else
+      echo "   ✅ ${path} → ${ct}"
+    fi
+  done
+
+  if [ "$bad" -ne 0 ]; then
+    echo ""
+    echo "❌ DEPLOY SERVED octet-stream — the site will download/blank instead of render." >&2
+    echo "   Likely a poisoned content-addressed asset object on the CDN." >&2
+    echo "   Remediation:" >&2
+    echo "     1. Roll back:  npx wrangler rollback <last-good-version-id>" >&2
+    echo "     2. Bump BUILD_TAG in frontend-leptos/src/lib.rs (forces a fresh JS-glue" >&2
+    echo "        content hash that was never poisoned), rebuild, and redeploy." >&2
+    return 1
+  fi
+  echo "✅ Content-Type verification passed."
+  return 0
+}
+
 # ── §3.5 Preflight gate (opt-in, production-only) ────────────────────────────
 # When BETHERE_PREFLIGHT_GATE=1, production deploys require a green flow-harness
 # run within the last hour (PREFLIGHT_MAX_AGE_SECONDS). --force bypasses the
@@ -238,8 +286,13 @@ else
   # The assets are already uploaded and cached by Cloudflare at this point.
   if CI=true npx wrangler deploy $WRANGLER_ENV_FLAG 2>&1; then
     echo "✅ Deployed via wrangler"
-    restore_pnp
-    exit 0
+    if verify_content_types; then
+      restore_pnp
+      exit 0
+    else
+      restore_pnp
+      exit 1
+    fi
   fi
 
   # Staging has no PUT API fallback (that path is production-hardcoded; see
@@ -522,6 +575,10 @@ print(json.dumps(m))
     else
       echo "   ⚠️  Frontend assets may not be served (got ${JS_SIZE} bytes, expected ~75000)"
       echo "   Try running this script again to re-upload assets."
+    fi
+    if ! verify_content_types; then
+      restore_pnp
+      exit 1
     fi
   else
     echo "❌ Deploy failed (HTTP ${HTTP_CODE})"

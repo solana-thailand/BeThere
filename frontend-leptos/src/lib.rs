@@ -14,6 +14,26 @@ use leptos_router::path;
 
 use crate::components::ProtectedRoute;
 use crate::icons::{Icon, IconName};
+
+/// Build marker exposed to JS and logged to the console once at app boot.
+///
+/// Deliberately declared as a wasm-bindgen `inline_js` import rather than a
+/// plain Rust const. Two purposes:
+/// 1. **Diagnostics** — confirms *which* frontend bundle is actually live in a
+///    given browser, invaluable when chasing stale-cache / CDN issues.
+/// 2. **Cache-bust that reaches the JS glue** — Cloudflare Workers Assets
+///    dedupes by *content* hash of each file. The wasm-bindgen JS glue
+///    (`event-checkin-frontend-<hash>.js`) changes ONLY when the bindgen
+///    interface (an import/export) changes — bumping a plain Rust const changes
+///    the WASM but leaves the glue byte-identical, so a poisoned glue object on
+///    the CDN keeps being served. Declaring the tag as an `inline_js` import
+///    adds a binding to the glue, so bumping `BUILD_TAG` below yields a NEW glue
+///    content hash that was never uploaded (and so never poisoned). See the
+///    2026-07-26 octet-stream incident.
+#[wasm_bindgen::prelude::wasm_bindgen(inline_js = "export function __bethere_build_tag() { return '2026-07-26-1'; }")]
+extern "C" {
+    fn __bethere_build_tag() -> String;
+}
 use crate::pages::{
     admin::Admin, adventure::page::Adventure, claim::Claim, dashboard_live::DashboardLive,
     data_privacy::DataPrivacy, deposit::Deposit, dev_dashboard::DevDashboard,
@@ -41,6 +61,10 @@ pub fn App() -> impl IntoView {
     // and are picked up by existing deposit/claim/escrow wallet detection.
     // See `.plans/011_solana_mobile_demo_day.md`.
     wallet::init_mobile_wallet_adapter();
+
+    // Log the live build tag to the console (side effect — never optimized out;
+    // the __bethere_build_tag import also forces a fresh JS-glue content hash).
+    leptos::logging::log!("[bethere] frontend build {}", __bethere_build_tag());
 
     view! {
         <Router>
