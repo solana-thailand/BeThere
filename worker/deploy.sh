@@ -98,6 +98,97 @@ restore_pnp() {
 
 trap restore_pnp EXIT INT TERM
 
+# ── wasm-bindgen version guard ───────────────────────────────────────────────
+# wasm-bindgen has TWO halves that must match EXACTLY (its bindgen schema is
+# unstable): the `wasm-bindgen` CRATE compiled into the .wasm during
+# `cargo build`, and the `wasm-bindgen` CLI that post-processes it (invoked by
+# wrangler's custom build in wrangler.toml). The crate is pinned by the tracked
+# root Cargo.lock (CI enforces via --locked), but the CLI is a global binary
+# installed separately with `cargo install` — no lockfile can pin it, so it
+# drifts independently. When it does, the wasm build runs for ~2 minutes and
+# then dies with a cryptic "schema version" error deep in wrangler output.
+#
+# This guard reads the crate version from Cargo.lock and compares it to the
+# installed CLI up front, failing fast with the exact remediation command.
+REPO_LOCK="$(cd "$(dirname "$0")/.." && pwd)/Cargo.lock"
+
+check_wasm_bindgen_version() {
+  # Non-fatal if we can't determine the expected version (don't block deploys
+  # on a parsing edge case) — the build itself still enforces the real match.
+  [ -f "$REPO_LOCK" ] || { echo "ℹ️  Cargo.lock not found ($REPO_LOCK) — skipping wasm-bindgen version guard."; return 0; }
+
+  local want have
+  want=$(awk '/^name = "wasm-bindgen"$/{f=1;next} f&&/^version = /{gsub(/[",]/,"");print $3;exit}' "$REPO_LOCK")
+  [ -n "$want" ] || { echo "ℹ️  Could not parse wasm-bindgen version from Cargo.lock — skipping guard."; return 0; }
+
+  if ! command -v wasm-bindgen >/dev/null 2>&1; then
+    echo "❌ wasm-bindgen CLI not installed (crate pins $want)."
+    echo "   Fix: cargo install -f wasm-bindgen-cli --version $want"
+    return 1
+  fi
+
+  have=$(wasm-bindgen --version 2>/dev/null | awk '{print $2}')
+  if [ "$have" != "$want" ]; then
+    echo "❌ wasm-bindgen CLI/crate version mismatch — the wasm build WILL fail:"
+    echo "   crate (Cargo.lock): $want"
+    echo "   CLI  (installed):   ${have:-unknown}"
+    echo "   They must match exactly (unstable bindgen schema)."
+    echo "   Fix: cargo install -f wasm-bindgen-cli --version $want"
+    return 1
+  fi
+
+  echo "✅ wasm-bindgen CLI matches crate ($want)"
+  return 0
+}
+
+# ── Post-deploy content-type verification ───────────────────────────────────
+# A 2026-07-26 deploy shipped `/` and the JS bundle as `application/octet-stream`
+# (browsers downloaded a .dms file / blank page) yet returned HTTP 200 — the
+# status-only smoke test missed it. Root cause was a poisoned content-addressed
+# asset object on the CDN (see the BUILD_TAG note in frontend-leptos/src/lib.rs).
+# This check curls the just-deployed origin and FAILS the deploy if the HTML
+# shell or the hashed JS bundle is served as octet-stream, so it can never ship
+# silently again.
+verify_content_types() {
+  local base="https://${WORKER_NAME}.solana-thailand.workers.dev"
+  local index="${DIST_DIR}/index.html"
+  [ -f "$index" ] || { echo "ℹ️  no ${index} — skipping content-type verification."; return 0; }
+
+  local js
+  js=$(grep -o 'event-checkin-frontend-[a-z0-9]*\.js' "$index" | head -1)
+
+  echo "🔎 Verifying served Content-Type (edge propagation may lag a few seconds)..."
+  local bad=0 attempt ct
+  for path in "/" "/$js"; do
+    [ "$path" = "/" ] || [ -n "$js" ] || continue
+    # Retry a few times to ride out edge propagation right after deploy.
+    for attempt in 1 2 3 4 5; do
+      ct=$(curl -s -D - -o /dev/null "${base}${path}" | tr -d '\r' | grep -i '^content-type:' | sed 's/[Cc]ontent-[Tt]ype: *//')
+      echo "$ct" | grep -qi 'octet-stream' || break
+      sleep 4
+    done
+    if echo "$ct" | grep -qi 'octet-stream'; then
+      echo "   ❌ ${path} → ${ct}"
+      bad=1
+    else
+      echo "   ✅ ${path} → ${ct}"
+    fi
+  done
+
+  if [ "$bad" -ne 0 ]; then
+    echo ""
+    echo "❌ DEPLOY SERVED octet-stream — the site will download/blank instead of render." >&2
+    echo "   Likely a poisoned content-addressed asset object on the CDN." >&2
+    echo "   Remediation:" >&2
+    echo "     1. Roll back:  npx wrangler rollback <last-good-version-id>" >&2
+    echo "     2. Bump BUILD_TAG in frontend-leptos/src/lib.rs (forces a fresh JS-glue" >&2
+    echo "        content hash that was never poisoned), rebuild, and redeploy." >&2
+    return 1
+  fi
+  echo "✅ Content-Type verification passed."
+  return 0
+}
+
 # ── §3.5 Preflight gate (opt-in, production-only) ────────────────────────────
 # When BETHERE_PREFLIGHT_GATE=1, production deploys require a green flow-harness
 # run within the last hour (PREFLIGHT_MAX_AGE_SECONDS). --force bypasses the
@@ -161,6 +252,11 @@ run_preflight_gate() {
   fi
 }
 
+# Guard the wasm-bindgen CLI/crate match before any build work (dev, staging,
+# and production all trigger the wasm build). Fail fast with the fix command
+# instead of a cryptic schema error minutes into the build.
+check_wasm_bindgen_version || { echo "Aborting: fix the wasm-bindgen CLI version above, then re-run."; exit 1; }
+
 # Run the gate before any deploy work (fail fast, before touching ~/.pnp.cjs).
 run_preflight_gate || { echo "Aborting production deploy."; exit 1; }
 
@@ -190,8 +286,13 @@ else
   # The assets are already uploaded and cached by Cloudflare at this point.
   if CI=true npx wrangler deploy $WRANGLER_ENV_FLAG 2>&1; then
     echo "✅ Deployed via wrangler"
-    restore_pnp
-    exit 0
+    if verify_content_types; then
+      restore_pnp
+      exit 0
+    else
+      restore_pnp
+      exit 1
+    fi
   fi
 
   # Staging has no PUT API fallback (that path is production-hardcoded; see
@@ -474,6 +575,10 @@ print(json.dumps(m))
     else
       echo "   ⚠️  Frontend assets may not be served (got ${JS_SIZE} bytes, expected ~75000)"
       echo "   Try running this script again to re-upload assets."
+    fi
+    if ! verify_content_types; then
+      restore_pnp
+      exit 1
     fi
   else
     echo "❌ Deploy failed (HTTP ${HTTP_CODE})"

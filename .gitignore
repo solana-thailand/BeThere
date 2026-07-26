@@ -77,3 +77,6 @@ scripts/.metrics.json
 .dev.vars*
 !.dev.vars.example
 target
+
+# Claude Code personal overrides (project settings.json stays tracked)
+.claude/settings.local.json
