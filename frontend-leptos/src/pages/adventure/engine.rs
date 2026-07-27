@@ -52,13 +52,12 @@ pub fn try_move(game: &GameState, direction: Direction) -> MoveResult {
             };
         }
         // Special case: if it's a locked gate, open its puzzle
-        if let Tile::Gate { puzzle_id } = target_tile {
-            if !game.solved_puzzles.contains(puzzle_id) {
+        if let Tile::Gate { puzzle_id } = target_tile
+            && !game.solved_puzzles.contains(puzzle_id) {
                 return MoveResult::HitGate {
                     puzzle_id: puzzle_id.clone(),
                 };
             }
-        }
         return MoveResult::Blocked;
     }
 
@@ -334,23 +333,21 @@ pub fn init_arrange_puzzle(piece_count: usize) -> Vec<usize> {
     let mut indices: Vec<usize> = (0..piece_count).collect();
     // Deterministic shuffle: reverse, then ensure it's not already sorted
     indices.reverse();
-    if is_sorted(&indices) {
-        if indices.len() > 1 {
+    if is_sorted(&indices)
+        && indices.len() > 1 {
             indices.swap(0, 1);
         }
-    }
     indices
 }
 
 /// Move an arrange piece from one position to another.
 pub fn move_arrange_piece(game: &mut GameState, from_idx: usize, to_idx: usize) {
-    if let Some(puzzle_state) = &mut game.active_puzzle {
-        if from_idx < puzzle_state.arrange_order.len() && to_idx < puzzle_state.arrange_order.len()
+    if let Some(puzzle_state) = &mut game.active_puzzle
+        && from_idx < puzzle_state.arrange_order.len() && to_idx < puzzle_state.arrange_order.len()
         {
             let item = puzzle_state.arrange_order.remove(from_idx);
             puzzle_state.arrange_order.insert(to_idx, item);
         }
-    }
 }
 
 /// Move arrange piece up one position.
@@ -362,11 +359,10 @@ pub fn arrange_piece_up(game: &mut GameState, idx: usize) {
 
 /// Move arrange piece down one position.
 pub fn arrange_piece_down(game: &mut GameState, idx: usize) {
-    if let Some(puzzle_state) = &game.active_puzzle {
-        if idx + 1 < puzzle_state.arrange_order.len() {
+    if let Some(puzzle_state) = &game.active_puzzle
+        && idx + 1 < puzzle_state.arrange_order.len() {
             move_arrange_piece(game, idx, idx + 1);
         }
-    }
 }
 
 /// Check if arrange order matches solution (indices in ascending order).

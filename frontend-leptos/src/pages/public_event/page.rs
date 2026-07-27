@@ -503,7 +503,7 @@ fn render_loaded_event(
         </div>
 
         // Share button
-        {share_button(&current_slug, &data.name, share_copied, set_share_copied.clone())}
+        {share_button(&current_slug, &data.name, share_copied, set_share_copied)}
 
         // Event Details Card
         {details_card(&data, countdown, event_completed)}
@@ -599,14 +599,12 @@ fn render_loaded_event(
                                                 );
                                                 match crate::api::fetch::get(&api_url, &[]).await {
                                                     Ok(resp) => {
-                                                        if let Ok(body) = crate::api::fetch::response_text(&resp).await {
-                                                            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&body) {
-                                                                if let Some(auth_url) = json.get("data").and_then(|d| d.get("auth_url")).and_then(|u| u.as_str()) {
+                                                        if let Ok(body) = crate::api::fetch::response_text(&resp).await
+                                                            && let Ok(json) = serde_json::from_str::<serde_json::Value>(&body)
+                                                                && let Some(auth_url) = json.get("data").and_then(|d| d.get("auth_url")).and_then(|u| u.as_str()) {
                                                                     navigateTo(auth_url);
                                                                     return;
                                                                 }
-                                                            }
-                                                        }
                                                     }
                                                     Err(e) => {
                                                         log::error!("[public_event] failed to get auth URL: {e}");

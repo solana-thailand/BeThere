@@ -131,11 +131,10 @@ pub fn user_friendly_message(error: &WalletError) -> String {
 
     if error.is_simulation_failure() {
         let base = "Transaction simulation failed.".to_string();
-        if let Some(logs) = &error.logs {
-            if logs.iter().any(|l| l.contains("insufficient")) {
+        if let Some(logs) = &error.logs
+            && logs.iter().any(|l| l.contains("insufficient")) {
                 return format!("{base} You may not have enough tokens for this transaction.");
             }
-        }
         return format!("{base} This may be temporary — please try again in a few seconds.");
     }
 
@@ -216,7 +215,7 @@ pub fn translate_api_error(error: &crate::api::ApiError) -> String {
         400 => format!("Invalid request: {msg}"),
         404 => "The requested resource was not found.".to_string(),
         500..=599 => "Server error. Please try again later.".to_string(),
-        _ => format!("{msg}"),
+        _ => msg.to_string(),
     }
 }
 

@@ -467,8 +467,8 @@ pub fn DevDashboard() -> impl IntoView {
     };
 
     let on_connect_wallet = move |wallet_name: String| {
-        let set_cw = set_connected_wallet.clone();
-        let load = load_nfts.clone();
+        let set_cw = set_connected_wallet;
+        let load = load_nfts;
         leptos::task::spawn_local(async move {
             match connect_wallet_js(&wallet_name).await {
                 crate::wallet_error::WalletResult::Success(pubkey) => {

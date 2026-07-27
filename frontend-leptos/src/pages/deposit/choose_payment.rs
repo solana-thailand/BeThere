@@ -140,7 +140,7 @@ pub fn choose_payment_view(
                                 // Fallback when no registration_date available
                                 let label = format_duration_label(_hours);
                                 view! {
-                                    "You have "{format!("{label}")}" to complete your deposit. After that, your in-person spot may be released."
+                                    "You have "{label.to_string()}" to complete your deposit. After that, your in-person spot may be released."
                                 }.into_any()
                             } else {
                                 view! {
@@ -304,7 +304,7 @@ pub fn choose_payment_view(
                         </button>
                         {super::thb_payment::thb_payment_form_view(
                             &data_clone,
-                            file_input_ref.clone(),
+                            file_input_ref,
                             slip_url_input,
                             set_slip_url_input,
                             slip_preview,

@@ -61,26 +61,26 @@ pub fn Adventure() -> impl IntoView {
     // Restore progress: API if token present, localStorage otherwise
     let restore_token = _claim_token();
     let restore_event_id = event_id_param();
-    let restore_levels = levels_signal.clone();
-    let restore_set_game = set_game.clone();
-    let restore_set_completed = set_completed_levels.clone();
-    let restore_set_required_level = set_required_level_from_api.clone();
-    let restore_set_adventure_passed = set_adventure_passed.clone();
-    let restore_set_event_slug = set_event_slug.clone();
-    let restore_completed_read = completed_levels.clone();
+    let restore_levels = levels_signal;
+    let restore_set_game = set_game;
+    let restore_set_completed = set_completed_levels;
+    let restore_set_required_level = set_required_level_from_api;
+    let restore_set_adventure_passed = set_adventure_passed;
+    let restore_set_event_slug = set_event_slug;
+    let restore_completed_read = completed_levels;
     Effect::new(move |_| {
         if let Some(ref token) = restore_token {
             // Restore from API (claim flow)
             let token = token.clone();
         let levels = restore_levels.get();
-        let set_g = restore_set_game.clone();
-        let set_completed = restore_set_completed.clone();
+        let set_g = restore_set_game;
+        let set_completed = restore_set_completed;
         let eid_for_status = restore_event_id.clone();
         leptos::task::spawn_local(async move {
             match api::get_adventure_status(&token, eid_for_status.as_deref()).await {
                 Ok(status_data) => {
-                    if let Some(progress) = status_data.progress {
-                        if !progress.levels_completed.is_empty() {
+                    if let Some(progress) = status_data.progress
+                        && !progress.levels_completed.is_empty() {
                             // Find which level indices are completed
                             let completed_indices: HashSet<usize> = levels.iter()
                                 .enumerate()
@@ -106,7 +106,6 @@ pub fn Adventure() -> impl IntoView {
                                 set_g.set(state);
                             }
                         }
-                    }
                 }
                 Err(e) => {
                         log::warn!("[adventure] failed to restore progress: {e}");
@@ -121,8 +120,8 @@ pub fn Adventure() -> impl IntoView {
                     .ok()
                     .flatten()
                     .and_then(|ls| ls.get(LS_COMPLETED_KEY).ok().flatten());
-                if let Some(json) = stored {
-                    if let Ok(indices) = serde_json::from_str::<HashSet<usize>>(&json) {
+                if let Some(json) = stored
+                    && let Ok(indices) = serde_json::from_str::<HashSet<usize>>(&json) {
                         log::info!("[adventure] restored {} completed levels from localStorage", indices.len());
                         let levels = restore_levels.get();
                         let next_idx = (0..levels.len()).find(|i| !indices.contains(i)).unwrap_or(0);
@@ -134,15 +133,14 @@ pub fn Adventure() -> impl IntoView {
                         }
                         restore_set_completed.set(indices);
                     }
-                }
 
                 // Fetch adventure config from API to determine required_level
                 if let Some(ref eid) = restore_event_id {
                     let eid = eid.clone();
-                    let set_rl = restore_set_required_level.clone();
-                    let set_ap = restore_set_adventure_passed.clone();
-                    let set_slug = restore_set_event_slug.clone();
-                    let completed_read = restore_completed_read.clone();
+                    let set_rl = restore_set_required_level;
+                    let set_ap = restore_set_adventure_passed;
+                    let set_slug = restore_set_event_slug;
+                    let completed_read = restore_completed_read;
                     leptos::task::spawn_local(async move {
                         match api::get_public_adventure_config(&eid).await {
                             Ok(config) => {
@@ -176,8 +174,8 @@ pub fn Adventure() -> impl IntoView {
         });
 
     // Timer — increments every second while level is active
-    let game_for_timer = game.clone();
-    let _timer = set_interval(
+    let game_for_timer = game;
+    set_interval(
         move || {
             let g = game_for_timer.get();
             if !g.showing_intro && !g.level_completed {
@@ -188,14 +186,14 @@ pub fn Adventure() -> impl IntoView {
     );
 
     // Reactive scroll — fires whenever player position changes
-    let scroll_game = game.clone();
-    let scroll_grid_ref = grid_container_ref.clone();
+    let scroll_game = game;
+    let scroll_grid_ref = grid_container_ref;
     Effect::new(move |_| {
         let g = scroll_game.get();
         // Trigger on player position change
         let _pos = g.player_pos;
         // Defer scroll to next frame so DOM has updated
-        let grid_ref = scroll_grid_ref.clone();
+        let grid_ref = scroll_grid_ref;
         request_animation_frame(move || {
             let Some(el) = grid_ref.get() else { return };
             let (col, row) = _pos;
@@ -223,14 +221,14 @@ pub fn Adventure() -> impl IntoView {
     // Auto-save on level completion
     let (save_status, set_save_status) = signal::<Option<String>>(None); // None=in progress, Some(msg)=done
     let claim_token_for_save = _claim_token();
-    let auto_save_game = game.clone();
-    let auto_save_levels = levels_signal.clone();
-    let auto_save_elapsed = elapsed_seconds.clone();
-    let auto_save_set_status = set_save_status.clone();
-    let auto_save_set_completed = set_completed_levels.clone();
-    let auto_save_set_adventure_passed = set_adventure_passed.clone();
-    let auto_save_completed_read = completed_levels.clone();
-    let auto_save_required_level = required_level_from_api.clone();
+    let auto_save_game = game;
+    let auto_save_levels = levels_signal;
+    let auto_save_elapsed = elapsed_seconds;
+    let auto_save_set_status = set_save_status;
+    let auto_save_set_completed = set_completed_levels;
+    let auto_save_set_adventure_passed = set_adventure_passed;
+    let auto_save_completed_read = completed_levels;
+    let auto_save_required_level = required_level_from_api;
     Effect::new(move |_| {
         let g = auto_save_game.get();
         if !g.level_completed {
@@ -281,15 +279,14 @@ pub fn Adventure() -> impl IntoView {
             // Save to localStorage (casual play)
             let mut completed = auto_save_completed_read.get();
             completed.insert(level_idx);
-            if let Ok(json) = serde_json::to_string(&completed) {
-                if let Some(ls) = gloo_utils::window().local_storage().ok().flatten() {
+            if let Ok(json) = serde_json::to_string(&completed)
+                && let Some(ls) = gloo_utils::window().local_storage().ok().flatten() {
                     if let Err(_) = ls.set(LS_COMPLETED_KEY, &json) {
                         log::warn!("[adventure] failed to save to localStorage");
                     } else {
                         log::info!("[adventure] saved {} completed levels to localStorage", completed.len());
                     }
                 }
-            }
 
             // Check if adventure is passed in casual mode
             // required_level is 0-based in config: n means levels 0..=n must be completed
@@ -306,16 +303,16 @@ pub fn Adventure() -> impl IntoView {
 
     // Trigger virtual check-in when adventure is passed in casual mode
     let quest_event_id = event_id_param();
-    let quest_adventure_passed = adventure_passed.clone();
-    let _quest_event_slug = event_slug.clone();
+    let quest_adventure_passed = adventure_passed;
+    let _quest_event_slug = event_slug;
     let (quest_checkin_done, set_quest_checkin_done) = signal(false);
     Effect::new(move |_| {
-        if quest_adventure_passed.get() && !quest_checkin_done.get() && has_token == false {
-            if let Some(ref eid) = quest_event_id {
+        if quest_adventure_passed.get() && !quest_checkin_done.get() && !has_token
+            && let Some(ref eid) = quest_event_id {
                 let eid = eid.clone();
-                let set_done = set_quest_checkin_done.clone();
-                let set_slug = set_event_slug.clone();
-                let set_ct = set_quest_claim_token.clone();
+                let set_done = set_quest_checkin_done;
+                let set_slug = set_event_slug;
+                let set_ct = set_quest_claim_token;
                 leptos::task::spawn_local(async move {
                     match api::quest_complete_checkin(&eid).await {
                         Ok(data) => {
@@ -323,12 +320,11 @@ pub fn Adventure() -> impl IntoView {
                             if !data.event_slug.is_empty() {
                                 set_slug.set(Some(data.event_slug));
                             }
-                            if let Some(ct) = data.claim_token {
-                                if !ct.is_empty() {
+                            if let Some(ct) = data.claim_token
+                                && !ct.is_empty() {
                                     log::info!("[adventure] got claim token from check-in");
                                     set_ct.set(Some(ct));
                                 }
-                            }
                             set_done.set(true);
                         }
                         Err(e) => {
@@ -338,7 +334,6 @@ pub fn Adventure() -> impl IntoView {
                     }
                 });
             }
-        }
     });
 
     // Dismiss intro on first interaction
@@ -367,9 +362,9 @@ pub fn Adventure() -> impl IntoView {
 
     // Auto-dismiss notification after 3s
     let auto_dismiss_notification = {
-        let set_notif = set_notification.clone();
+        let set_notif = set_notification;
         move || {
-            let set_notif = set_notif.clone();
+            let set_notif = set_notif;
             set_timeout(
                 move || set_notif.set(None),
                 std::time::Duration::from_secs(3),
@@ -526,10 +521,10 @@ pub fn Adventure() -> impl IntoView {
         }
     };
 
-    let swipe_dpad_move = dpad_move.clone();
+    let swipe_dpad_move = dpad_move;
     let touch_end_handler = move |ev: web_sys::TouchEvent| {
-        if let Some((sx, sy)) = touch_start.get() {
-            if let Some(touch) = ev.changed_touches().get(0) {
+        if let Some((sx, sy)) = touch_start.get()
+            && let Some(touch) = ev.changed_touches().get(0) {
                 let ex = touch.client_x() as f64;
                 let ey = touch.client_y() as f64;
                 let dx = ex - sx;
@@ -551,7 +546,6 @@ pub fn Adventure() -> impl IntoView {
                 };
                 swipe_dpad_move(dir);
             }
-        }
         set_touch_start.set(None);
     };
 
@@ -1181,11 +1175,10 @@ pub fn Adventure() -> impl IntoView {
                                                                 });
                                                                 if correct {
                                                                     let g = game.get();
-                                                                    if let Some(ps) = &g.active_puzzle {
-                                                                        if ps.matched_pairs.len() == pairs_count {
+                                                                    if let Some(ps) = &g.active_puzzle
+                                                                        && ps.matched_pairs.len() == pairs_count {
                                                                             set_notification.set(Some("All pairs matched!".to_string()));
                                                                         }
-                                                                    }
                                                                 } else {
                                                                     set_puzzle_feedback.set(Some(false));
                                                                 }

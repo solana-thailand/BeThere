@@ -54,8 +54,8 @@ pub fn registration_form(
     let form_fields = Arc::new(resolved_config.fields.clone());
 
     // Auto-fill from localStorage for returning users
-    if let Some(saved_json) = loadDevProfile() {
-        if let Ok(profile) = serde_json::from_str::<SavedDevProfile>(&saved_json) {
+    if let Some(saved_json) = loadDevProfile()
+        && let Ok(profile) = serde_json::from_str::<SavedDevProfile>(&saved_json) {
             if !profile.name.is_empty() && reg_name.get().is_empty() {
                 set_reg_name.set(profile.name.clone());
             }
@@ -79,7 +79,6 @@ pub fn registration_form(
                 profile.fields.len()
             );
         }
-    }
 
     view! {
         {move || {
@@ -416,7 +415,7 @@ pub fn registration_form(
 
                                                 if has_errors {
                                                     if let Some(id) = scroll_target {
-                                                        scroll_to_element(&id);
+                                                        scroll_to_element(id);
                                                     }
                                                     return;
                                                 }

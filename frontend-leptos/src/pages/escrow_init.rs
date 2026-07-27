@@ -1170,7 +1170,7 @@ pub fn EscrowInitPanel(
                 view! {
                     <div class="panel-error escrow-panel-mt">
                         <div class="panel-hint escrow-text-error">
-                            {format!("{msg}")}
+                            {msg.to_string()}
                         </div>
                         <button
                             class="btn btn-outline btn-sm u-mt-2xs"

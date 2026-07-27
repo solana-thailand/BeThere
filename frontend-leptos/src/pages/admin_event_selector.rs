@@ -129,7 +129,7 @@ pub fn AdminEventSelector(
                     || e.slug.to_ascii_lowercase().contains(&q)
             })
             .collect();
-        events.sort_by(|a, b| sort_key(a, now_ms).cmp(&sort_key(b, now_ms)));
+        events.sort_by_key(|a| sort_key(a, now_ms));
         events
     });
 
@@ -145,7 +145,7 @@ pub fn AdminEventSelector(
     // tick the open signal flips.
     Effect::new(move |_| {
         if open.get() {
-            let search_ref = search_ref.clone();
+            let search_ref = search_ref;
             leptos::task::spawn_local(async move {
                 gloo_timers::future::TimeoutFuture::new(20).await;
                 if let Some(input) = search_ref.get() {
@@ -173,8 +173,8 @@ pub fn AdminEventSelector(
     // excluded via `closest(".admin-evt-panel")` so users can still scroll
     // through the results without the dropdown dismissing.
     {
-        let open = open.clone();
-        let set_open = set_open.clone();
+        let open = open;
+        let set_open = set_open;
         let closure = Closure::<dyn Fn(Event)>::new(move |ev: Event| {
             // No-op when the dropdown is closed — avoids running closest() on
             // every page scroll that happens while the selector is collapsed.
@@ -182,13 +182,11 @@ pub fn AdminEventSelector(
                 return;
             }
             // Skip scrolls originating inside the dropdown panel itself.
-            if let Some(target) = ev.target() {
-                if let Some(el) = target.dyn_ref::<web_sys::Element>() {
-                    if el.closest(".admin-evt-panel").ok().flatten().is_some() {
+            if let Some(target) = ev.target()
+                && let Some(el) = target.dyn_ref::<web_sys::Element>()
+                    && el.closest(".admin-evt-panel").ok().flatten().is_some() {
                         return;
                     }
-                }
-            }
             set_open.set(false);
         });
         if let Some(window) = web_sys::window() {
@@ -318,11 +316,10 @@ pub fn AdminEventSelector(
                                 if key == "Escape" {
                                     set_open.set(false);
                                     set_query.set(String::new());
-                                } else if key == "Enter" {
-                                    if let Some(first) = visible_events.get().first() {
+                                } else if key == "Enter"
+                                    && let Some(first) = visible_events.get().first() {
                                         select_event(first.id.clone());
                                     }
-                                }
                             }
                         />
                     </div>

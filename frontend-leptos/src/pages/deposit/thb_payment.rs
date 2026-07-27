@@ -134,7 +134,7 @@ pub fn thb_payment_form_view(
                     node_ref=file_input_ref
                     class="file-input-styled"
                     on:change=move |_| {
-                        let file_ref = file_input_ref.clone();
+                        let file_ref = file_input_ref;
                         leptos::task::spawn_local(async move {
                             if let Some(el) = file_ref.get() {
                                 let js_val: wasm_bindgen::JsValue = el.into();

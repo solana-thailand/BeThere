@@ -79,25 +79,18 @@ pub fn Login() -> impl IntoView {
                     // For attendees, try to redirect to their latest registration.
                     // Skip this if the user has an explicit `next` param —
                     // respect the deep-link target over the heuristic.
-                    if me.role == "attendee" && !has_next {
-                        if let Ok(resp) = crate::api::fetch::get("/api/my-registrations", &[]).await {
-                            if resp.status() == 200 {
-                                if let Ok(data) = crate::api::fetch::response_json::<serde_json::Value>(&resp).await {
-                                    if let Some(regs) = data["data"].as_array() {
-                                        if let Some(latest) = regs.first() {
-                                            if let Some(url) = latest["next_step"]["url"].as_str() {
-                                                if !url.is_empty() {
+                    if me.role == "attendee" && !has_next
+                        && let Ok(resp) = crate::api::fetch::get("/api/my-registrations", &[]).await
+                            && resp.status() == 200
+                                && let Ok(data) = crate::api::fetch::response_json::<serde_json::Value>(&resp).await
+                                    && let Some(regs) = data["data"].as_array()
+                                        && let Some(latest) = regs.first()
+                                            && let Some(url) = latest["next_step"]["url"].as_str()
+                                                && !url.is_empty() {
                                                     log::info!("[login] redirecting attendee to latest registration: {url}");
                                                     nav(url, Default::default());
                                                     return;
                                                 }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
 
                     nav(&target, Default::default());
                 }

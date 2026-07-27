@@ -607,8 +607,8 @@ fn build_quiz_explanations(
         });
 
         // Insert session header when session changes
-        if let Some((ref sid, ref title)) = session_info {
-            if first_session || *sid != last_session_id {
+        if let Some((ref sid, ref title)) = session_info
+            && (first_session || *sid != last_session_id) {
                     let title_clone = title.clone();
                     items.push(view! {
                         <div class="claim-quiz-session">
@@ -618,7 +618,6 @@ fn build_quiz_explanations(
                 last_session_id = sid.clone();
                 first_session = false;
             }
-        }
 
         let q_text = q_lookup.get(&exp.question_id)
             .map(|q| q.text.clone())
@@ -689,9 +688,9 @@ fn build_quiz_action(
             let check_adventure_and_proceed = move || {
                 let claim_data_adv = claim_data_c.clone();
                 let token_adv = token.clone();
-                let set_wi_c = set_wi.clone();
+                let set_wi_c = set_wi;
                 let lw_c = lw.clone();
-                let ss_c = ss.clone();
+                let ss_c = ss;
                 leptos::task::spawn_local(async move {
                     match api::get_adventure_status(&token_adv, Some(&claim_data_adv.event_id)).await {
                         Ok(status_data) => {

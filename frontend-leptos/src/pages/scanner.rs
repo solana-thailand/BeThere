@@ -529,7 +529,7 @@ pub fn Scanner() -> impl IntoView {
             let set_exp = set_undo_expired;
             let state_check = check_in_state;
             let secs_reader = undo_timer_secs;
-            let _interval = leptos::task::spawn_local(async move {
+            leptos::task::spawn_local(async move {
                 loop {
                     gloo_timers::future::TimeoutFuture::new(1000).await;
                     // Stop if we're no longer in Success (e.g. user clicked Scan Next)

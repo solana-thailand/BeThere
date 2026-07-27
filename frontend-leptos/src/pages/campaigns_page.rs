@@ -617,10 +617,7 @@ pub fn CampaignsPage(
                         set_add_seq_order.set(0);
                         set_add_is_required.set(true);
                         // Reload detail
-                        match api::get_campaign(&id).await {
-                            Ok(d) => set_campaign_detail.set(Some(d)),
-                            Err(_) => {}
-                        }
+                        if let Ok(d) = api::get_campaign(&id).await { set_campaign_detail.set(Some(d)) }
                     }
                     Err(e) => {
                         components::show_toast(
@@ -663,10 +660,7 @@ pub fn CampaignsPage(
                             "Event removed",
                             ToastType::Success,
                         );
-                        match api::get_campaign(&id).await {
-                            Ok(d) => set_campaign_detail.set(Some(d)),
-                            Err(_) => {}
-                        }
+                        if let Ok(d) = api::get_campaign(&id).await { set_campaign_detail.set(Some(d)) }
                     }
                     Err(e) => {
                         components::show_toast(
