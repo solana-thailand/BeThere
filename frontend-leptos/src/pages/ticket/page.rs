@@ -62,7 +62,7 @@ struct TicketParams {
 #[derive(Clone)]
 enum TicketState {
     Loading,
-    Found(api::AttendeeData),
+    Found(Box<api::AttendeeData>),
     NotFound(String),
     Error(String),
 }
@@ -161,7 +161,7 @@ pub fn Ticket() -> impl IntoView {
                         data.event_name
                     );
                     let should_poll = polling_tier(&data).is_some();
-                    set_state.set(TicketState::Found(data));
+                    set_state.set(TicketState::Found(Box::new(data)));
                     set_polling_active.set(should_poll);
                 }
                 Err(e) => {
@@ -242,7 +242,7 @@ pub fn Ticket() -> impl IntoView {
                     match api::get_public_ticket(&aid, eid.as_deref()).await {
                         Ok(data) => {
                             let new_tier = polling_tier(&data);
-                            set_state.set(TicketState::Found(data));
+                            set_state.set(TicketState::Found(Box::new(data)));
                             match new_tier {
                                 None => {
                                     log::info!("[ticket] polling stopped — state resolved");
@@ -335,7 +335,7 @@ pub fn Ticket() -> impl IntoView {
             match api::get_public_ticket(&attendee_id, event_id.as_deref()).await {
                 Ok(data) => {
                     let still_needs = polling_tier(&data).is_some();
-                    set_state.set(TicketState::Found(data));
+                    set_state.set(TicketState::Found(Box::new(data)));
                     if still_needs {
                         // Restart polling on manual refresh
                         set_polling_expired.set(false);

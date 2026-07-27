@@ -281,7 +281,7 @@ pub fn Adventure() -> impl IntoView {
             completed.insert(level_idx);
             if let Ok(json) = serde_json::to_string(&completed)
                 && let Some(ls) = gloo_utils::window().local_storage().ok().flatten() {
-                    if let Err(_) = ls.set(LS_COMPLETED_KEY, &json) {
+                    if ls.set(LS_COMPLETED_KEY, &json).is_err() {
                         log::warn!("[adventure] failed to save to localStorage");
                     } else {
                         log::info!("[adventure] saved {} completed levels to localStorage", completed.len());
@@ -589,8 +589,8 @@ pub fn Adventure() -> impl IntoView {
                     <span>{move || {
                         let eid = event_id_param();
                         let req_lvl = required_level_from_api.get();
-                        if eid.is_some() && req_lvl.is_some() {
-                            let lvl = req_lvl.unwrap() + 1; // 0-based to 1-based for display
+                        if eid.is_some() && let Some(req_lvl) = req_lvl {
+                            let lvl = req_lvl + 1; // 0-based to 1-based for display
                             format!("Quest Mode — complete Level {lvl} to pass the quest! Progress saves to your browser.")
                         } else if eid.is_some() {
                             "Quest Mode — loading requirements...".to_string()

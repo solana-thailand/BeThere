@@ -58,7 +58,6 @@ pub fn DevProfile() -> impl IntoView {
     // The localStorage token may be missing/expired while the HttpOnly cookie is still
     // valid — using the API avoids a false redirect to /login → /admin for staff users.
     {
-        let set_state = set_state;
         leptos::task::spawn_local(async move {
             // Verify auth via cookie-based API call
             match crate::api::get_me().await {

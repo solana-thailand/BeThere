@@ -4,6 +4,7 @@ use leptos::prelude::*;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+#[allow(clippy::too_many_arguments)] // plain builder fn wiring many Leptos signals; splitting the signature is out of scope
 pub fn registration_form(
     slug_for_reg: String,
     locked_email: String,

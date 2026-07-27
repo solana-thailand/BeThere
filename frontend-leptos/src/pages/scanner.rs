@@ -1615,6 +1615,7 @@ fn AttendeeInfoCard(name: String, email: String) -> impl IntoView {
 // ===== State View Rendering =====
 
 /// Render the current check-in state as a view.
+#[allow(clippy::too_many_arguments)] // internal render helper; splitting the signature would obscure the reactive wiring
 fn render_check_in_state<E1, E2, E3, E4, E5>(
     state: CheckInState,
     on_check_in: impl Fn(web_sys::MouseEvent) + 'static,

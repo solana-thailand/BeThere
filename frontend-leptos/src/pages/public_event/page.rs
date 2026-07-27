@@ -385,6 +385,7 @@ pub fn PublicEvent() -> impl IntoView {
 // Render loaded event — orchestrates all sub-components
 // ---------------------------------------------------------------------------
 
+#[allow(clippy::too_many_arguments)] // plain render helper; signature refactor is out of scope
 fn render_loaded_event(
     data: PublicEventData,
     countdown: ReadSignal<String>,

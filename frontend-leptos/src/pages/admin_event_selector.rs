@@ -3,10 +3,11 @@
 //! Replaces the native `<select>` with a richer UI that:
 //! - Filters events by name/slug as you type
 //! - Sorts by smart priority so the most relevant event is on top:
-//!     0. Active + upcoming   (soonest start first — ASC by event_start_ms)
-//!     1. Active + past       (most recently started first — DESC)
-//!     2. Draft               (soonest start first — ASC)
-//!     3. Completed           (most recently completed first — DESC)
+//!   0. Active + upcoming   (soonest start first — ASC by event_start_ms)
+//!   1. Active + past       (most recently started first — DESC)
+//!   2. Draft               (soonest start first — ASC)
+//!   3. Completed           (most recently completed first — DESC)
+//!
 //!   Archived events are hidden entirely.
 //! - Shows a relative date hint per event ("in 3d", "2d ago", "today")
 //! - Closes on outside click (fixed-position backdrop), Escape, or any scroll
@@ -173,8 +174,6 @@ pub fn AdminEventSelector(
     // excluded via `closest(".admin-evt-panel")` so users can still scroll
     // through the results without the dropdown dismissing.
     {
-        let open = open;
-        let set_open = set_open;
         let closure = Closure::<dyn Fn(Event)>::new(move |ev: Event| {
             // No-op when the dropdown is closed — avoids running closest() on
             // every page scroll that happens while the selector is collapsed.

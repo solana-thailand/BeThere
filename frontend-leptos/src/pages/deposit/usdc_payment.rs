@@ -68,6 +68,7 @@ pub fn wallet_connected_view(
 }
 
 /// Awaiting confirmation — polling for TX.
+#[allow(clippy::too_many_arguments)] // Leptos view fn: signature mirrors caller wiring, refactor out of scope
 pub fn awaiting_confirmation_view(
     data: &DepositStatusResponse,
     _wallet_name: &str,
