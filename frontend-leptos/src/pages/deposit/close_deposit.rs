@@ -18,7 +18,6 @@ pub fn close_deposit_choose_wallet_view(
     let wallets = detected_wallets.to_vec();
     let data_for_back = data.clone();
 
-    let set_state = set_state;
     let handle_connect = handle_close_deposit_connect_wallet.clone();
 
     view! {
@@ -49,7 +48,7 @@ pub fn close_deposit_choose_wallet_view(
                                     }
                                 >
                                     <Icon icon=wallet_icon class="icon-md wallet-icon-white" />
-                                    <span>{format!("Connect {}", &w_clone)}</span>
+                                    <span>{format!("Connect {}", w_clone)}</span>
                                 </button>
                             }
                         }).collect::<Vec<_>>()}
@@ -84,7 +83,6 @@ pub fn close_deposit_wallet_connected_view(
     let _wallet_icon = wallet_icon_name(wallet_name);
     let pk_display = truncate_pk(public_key);
 
-    let set_state = set_state;
     let handle_close = handle_close_deposit.clone();
 
     view! {

@@ -55,7 +55,7 @@ async fn fetch_inner(
         opts.set_body(&JsValue::from_str(body_str));
     }
 
-    let request = Request::new_with_str_and_init(&url, &opts)
+    let request = Request::new_with_str_and_init(url, &opts)
         .map_err(|e| ApiError {
             message: format!("Failed to create request: {e:?}"),
             status: 0,
@@ -64,7 +64,7 @@ async fn fetch_inner(
     let req_headers = request.headers();
     for (key, value) in headers {
         req_headers
-            .set(*key, *value)
+            .set(key, value)
             .map_err(|e| ApiError {
                 message: format!("Failed to set header: {e:?}"),
                 status: 0,
@@ -209,7 +209,7 @@ pub(crate) async fn post_raw(
     let req_headers = request.headers();
     for (key, value) in headers {
         req_headers
-            .set(*key, *value)
+            .set(key, value)
             .map_err(|e| ApiError {
                 message: format!("Failed to set header: {e:?}"),
                 status: 0,

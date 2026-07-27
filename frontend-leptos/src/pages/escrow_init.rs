@@ -339,8 +339,6 @@ pub fn EscrowInitPanel(
                         {move || detected_wallets.get().iter().map(|wn| {
                             let wn_c = wn.clone();
                             let set_s = set_state;
-                            let set_t = set_t;
-                            let set_f = set_f;
                             let set_wn = set_wallet_name;
                             view! {
                                 <button
@@ -878,7 +876,6 @@ pub fn EscrowInitPanel(
                                     <div class="flex-wrap-row escrow-gap-sm">
                                         {dw.iter().map(|w| {
                                             let wname = w.clone();
-                                            let set_wn = set_wn;
                                             let set_t2 = set_t;
                                             view! {
                                                 <button
@@ -1170,7 +1167,7 @@ pub fn EscrowInitPanel(
                 view! {
                     <div class="panel-error escrow-panel-mt">
                         <div class="panel-hint escrow-text-error">
-                            {format!("{msg}")}
+                            {msg.to_string()}
                         </div>
                         <button
                             class="btn btn-outline btn-sm u-mt-2xs"

@@ -20,7 +20,6 @@ pub fn refund_choose_wallet_view(
     let usdc_fmt = format_usdc(data.deposit_amount_usdc);
     let is_refundable = data.status.as_ref().map(|s| s.refundable).unwrap_or(true);
 
-    let set_state = set_state;
     let handle_connect = handle_refund_connect_wallet.clone();
 
     view! {
@@ -62,7 +61,7 @@ pub fn refund_choose_wallet_view(
                                     }
                                 >
                                     <Icon icon=wallet_icon class="icon-md wallet-icon-white" />
-                                    <span>{format!("Connect {}", &w_clone)}</span>
+                                    <span>{format!("Connect {}", w_clone)}</span>
                                 </button>
                             }
                         }).collect::<Vec<_>>()}
@@ -99,7 +98,6 @@ pub fn refund_wallet_connected_view(
     let _wallet_icon = wallet_icon_name(wallet_name);
     let pk_display = truncate_pk(public_key);
 
-    let set_state = set_state;
     view! {
         <div class="dep2-card">
             <div class="dep2-card-header">

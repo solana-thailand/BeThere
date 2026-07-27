@@ -40,17 +40,13 @@ pub fn Deposit() -> impl IntoView {
                 .origin()
                 .unwrap_or_else(|_| "http://localhost:8787".to_string());
             let url = format!("{origin}/api/auth/me");
-            if let Ok(resp) = crate::api::fetch::get(&url, &[]).await {
-                if resp.status() == 200 {
-                    if let Ok(data) = crate::api::fetch::response_json::<serde_json::Value>(&resp).await {
-                        if let Some(email) = data["data"]["email"].as_str() {
-                            if !email.is_empty() {
+            if let Ok(resp) = crate::api::fetch::get(&url, &[]).await
+                && resp.status() == 200
+                    && let Ok(data) = crate::api::fetch::response_json::<serde_json::Value>(&resp).await
+                        && let Some(email) = data["data"]["email"].as_str()
+                            && !email.is_empty() {
                                 set_signed_in_email.set(Some(email.to_string()));
                             }
-                        }
-                    }
-                }
-            }
         });
     });
 
@@ -157,20 +153,20 @@ pub fn Deposit() -> impl IntoView {
 
     // --- Handler closures (extracted to handlers.rs) ---
     let handle_connect_wallet = handlers::make_connect_wallet(state, set_state, set_toast);
-    let handle_send_deposit = handlers::make_send_deposit(state, set_state, set_toast, params.clone());
+    let handle_send_deposit = handlers::make_send_deposit(state, set_state, set_toast, params);
     let handle_poll_confirmation = handlers::make_poll_confirmation(state, set_state, set_toast);
-    let handle_pay_usdc_qr = handlers::make_pay_usdc_qr(state, set_state, set_toast, wallet_input, params.clone());
+    let handle_pay_usdc_qr = handlers::make_pay_usdc_qr(state, set_state, set_toast, wallet_input, params);
     let handle_upload_slip = handlers::make_upload_slip(
         state, set_state, set_toast,
         slip_url_input, bank_account_input, bank_name_input, account_name_input,
-        file_input_ref.clone(), params.clone(),
+        file_input_ref, params,
     );
     let handle_copy_url = handlers::make_copy_url(set_toast, set_pay_url_copied);
-    let handle_qr_poll = handlers::make_qr_poll_confirmation(state, set_state, params.clone());
+    let handle_qr_poll = handlers::make_qr_poll_confirmation(state, set_state, params);
     let handle_refund_connect_wallet = handlers::make_refund_connect_wallet(state, set_state, set_toast);
-    let handle_claim_refund = handlers::make_claim_refund(state, set_state, set_toast, params.clone());
+    let handle_claim_refund = handlers::make_claim_refund(state, set_state, set_toast, params);
     let handle_close_deposit_connect_wallet = handlers::make_close_deposit_connect_wallet(state, set_state, set_toast);
-    let handle_close_deposit = handlers::make_close_deposit(state, set_state, set_toast, params.clone());
+    let handle_close_deposit = handlers::make_close_deposit(state, set_state, set_toast, params);
 
     let has_wallets = move || !detected_wallets.get().is_empty();
 
@@ -268,7 +264,7 @@ pub fn Deposit() -> impl IntoView {
                                 set_wallet_input,
                                 slip_url_input,
                                 set_slip_url_input,
-                                file_input_ref.clone(),
+                                file_input_ref,
                                 slip_preview,
                                 set_slip_preview,
                                 bank_account_input,
@@ -306,14 +302,14 @@ pub fn Deposit() -> impl IntoView {
                                 state,
                                 set_state,
                                 set_toast,
-                                params.clone(),
+                                params,
                                 handle_poll_confirmation.clone(),
                             )
                         }
 
                         // ===== Deposit Confirmed =====
                         DepositPageState::DepositConfirmed(data, tx_sig) => {
-                            usdc_payment::deposit_confirmed_view(&data, &tx_sig, params.clone())
+                            usdc_payment::deposit_confirmed_view(&data, &tx_sig, params)
                         }
 
                         // ===== USDC QR Ready =====

@@ -12,7 +12,7 @@ use std::cell::RefCell;
 thread_local! {
     // Cached cluster string fetched from `/api/health`.
     // None = not yet fetched; Some("devnet") or Some("mainnet-beta").
-    static CACHED_CLUSTER: RefCell<Option<String>> = RefCell::new(None);
+    static CACHED_CLUSTER: RefCell<Option<String>> = const { RefCell::new(None) };
 }
 
 /// Fetch the Solana cluster from `/api/health` and cache it.

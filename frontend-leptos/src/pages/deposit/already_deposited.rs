@@ -111,7 +111,7 @@ pub fn already_deposited_view(
         "badge badge-warning"
     };
     let usdc_fmt = format_usdc(data.deposit_amount_usdc);
-    let refund_info = compute_refund_info(&data);
+    let refund_info = compute_refund_info(data);
     // Refund window check: mirrors bethere-escrow refund instruction's
     // two-path model (checked-in → [event_end, ∞); no-show →
     // [event_end, refund_deadline)). The on-chain program is the source of

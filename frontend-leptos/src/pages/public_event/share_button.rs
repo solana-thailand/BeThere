@@ -10,7 +10,7 @@ pub fn share_button(
 ) -> AnyView {
     let share_slug = current_slug.to_string();
     let share_name = event_name.to_string();
-    let set_copied = set_share_copied.clone();
+    let set_copied = set_share_copied;
 
     view! {
         <div class="pe-share-row">
@@ -19,7 +19,7 @@ pub fn share_button(
                 on:click=move |_| {
                     let share_slug = share_slug.clone();
                     let share_name = share_name.clone();
-                    let set_c = set_copied.clone();
+                    let set_c = set_copied;
                     leptos::task::spawn_local(async move {
                         let window = web_sys::window().expect("no window");
                         let url = format!("{}/e/{share_slug}", window.location().origin().unwrap_or_default());

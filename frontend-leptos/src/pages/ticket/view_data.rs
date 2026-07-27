@@ -90,7 +90,7 @@ impl TicketViewData {
                 .attendee
                 .checked_in_at
                 .as_deref()
-                .map(|t| utils::format_timestamp(t))
+                .map(utils::format_timestamp)
                 .unwrap_or_default();
             let by = data
                 .attendee
