@@ -76,3 +76,34 @@ jobs:
         # (platform-gated APIs, non-wasm deps) would otherwise slip through to
         # `deploy.sh` and fail mid-build. --locked mirrors the deploy toolchain.
         run: cargo build -p event-checkin-worker --target wasm32-unknown-unknown --locked --release
+
+  frontend-check:
+    name: frontend wasm32 check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # `frontend-leptos` is EXCLUDED from the cargo workspace (see root Cargo.toml),
+    # so build-test never touches it — a frontend change that doesn't compile
+    # only surfaces at `deploy.sh` build time. This job compile-checks the
+    # frontend for its real ship target (wasm32), closing that gap.
+    # Scope note: compile-check only. The frontend's tests are #[wasm_bindgen_test]
+    # (run under wasm-pack, not `cargo test`), and it carries clippy lint debt
+    # (~208 under -D warnings) — enforcing those is deferred to a separate cleanup.
+    # No --locked: frontend-leptos/Cargo.lock is gitignored (deps resolve fresh).
+    defaults:
+      run:
+        working-directory: frontend-leptos
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust (stable, wasm32 target)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache cargo registry + target
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: frontend-leptos
+
+      - name: cargo check (frontend, wasm32)
+        run: cargo check --target wasm32-unknown-unknown
