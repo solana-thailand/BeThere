@@ -45,7 +45,8 @@ node_modules/
 frontend-leptos/target/
 frontend-leptos/dist/
 frontend-leptos/.cargo/
-frontend-leptos/Cargo.lock
+# frontend-leptos/Cargo.lock is tracked (deployed binary → pin deps, incl.
+# wasm-bindgen, so builds are reproducible and match the wasm-bindgen CLI).
 
 # Cloudflare Worker
 worker/build/
