@@ -191,7 +191,7 @@ pub fn AdminDeposits(
     let handle_clear_credit_refund_request = move |email: String| {
         let set_toast = set_toast;
         let set_clear_pending = set_clear_pending_email;
-        let refresh = refresh_data.clone();
+        let refresh = refresh_data;
         set_clear_pending.set(Some(email.clone()));
 
         leptos::task::spawn_local(async move {
@@ -551,10 +551,10 @@ pub fn AdminDeposits(
                             let slip_id = slip.attendee_id.clone();
                             let approve_key = format!("approve-{slip_id}");
                             let reject_key = format!("reject-{slip_id}");
-                            let approve_disabled = current_action.as_ref().map_or(false, |k| k == &approve_key || k == &reject_key);
+                            let approve_disabled = current_action.as_ref().is_some_and(|k| k == &approve_key || k == &reject_key);
                             let reject_disabled = approve_disabled;
-                            let approve_loading = current_action.as_ref().map_or(false, |k| k == &approve_key);
-                            let reject_loading = current_action.as_ref().map_or(false, |k| k == &reject_key);
+                            let approve_loading = current_action.as_ref() == Some(&approve_key);
+                            let reject_loading = current_action.as_ref() == Some(&reject_key);
 
                             let amount = format!("{} THB", slip.amount_thb);
                             let uploaded_ago = utils::time_ago(&slip.uploaded_at);
@@ -647,10 +647,10 @@ pub fn AdminDeposits(
                         refunds.get().iter().map(|item| {
                             let item_id = item.attendee_id.clone();
                             let refund_key = format!("refund-{item_id}");
-                            let refund_disabled = current_action.as_ref().map_or(false, |k| k == &refund_key);
-                            let refund_loading = current_action.as_ref().map_or(false, |k| k == &refund_key);
+                            let refund_disabled = current_action.as_ref() == Some(&refund_key);
+                            let refund_loading = current_action.as_ref() == Some(&refund_key);
                             let hold_key = format!("hold-{item_id}");
-                            let hold_disabled = current_action.as_ref().map_or(false, |k| k == &hold_key);
+                            let hold_disabled = current_action.as_ref() == Some(&hold_key);
                             let hold_loading = hold_disabled;
 
                             let amount = format!("{} THB", item.amount_thb);

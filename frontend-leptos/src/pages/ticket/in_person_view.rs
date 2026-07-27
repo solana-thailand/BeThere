@@ -73,9 +73,6 @@ pub fn InPersonView(
         rollover_target_event,
         community_links,
         calendar_subscribe_url,
-        event_start_ms: _,
-        event_end_ms: _,
-        event_name: _,
         ..
     } = view_data;
 
@@ -149,7 +146,7 @@ pub fn InPersonView(
                         <NftClaimedBadge
                             asset_id=aid
                             orb_link=orb
-                            on_copy=Box::new(|text| copy_to_clipboard_js(text))
+                            on_copy=Box::new(copy_to_clipboard_js)
                         />
                     }.into_any()
                 }
@@ -244,7 +241,7 @@ pub fn InPersonView(
                         }.into_any()
                     } else {
                         view! {
-                            <DepositPendingCard method=dep.method.clone() />
+                            <DepositPendingCard method=dep.method />
                         }.into_any()
                     }}
                     // Rollover opportunity (checked-in with verified USDC deposit and target event available)

@@ -87,11 +87,10 @@ fn parse_date_to_ms(date_str: &str) -> Option<i64> {
         return None;
     }
     // Try parsing as epoch ms first
-    if let Ok(ms) = date_str.parse::<i64>() {
-        if ms > 1_000_000_000_000 {
+    if let Ok(ms) = date_str.parse::<i64>()
+        && ms > 1_000_000_000_000 {
             return Some(ms);
         }
-    }
     // Parse as ISO datetime-local format (YYYY-MM-DDTHH:MM)
     let cleaned = date_str.replace('T', " ");
     let parsed = js_sys::Date::parse(&cleaned);
@@ -1275,7 +1274,7 @@ pub fn EventFormComponent(
                         <Show
                             when=move || {
                                 let v = form.get().nft_collection_mint.trim().to_string();
-                                !v.is_empty() && !v.chars().all(|c| c.is_ascii_alphanumeric() && (c.is_ascii_digit() || (c >= 'A' && c <= 'H') || (c >= 'J' && c <= 'N') || (c >= 'P' && c <= 'Z') || (c >= 'a' && c <= 'k') || (c >= 'm' && c <= 'z')))
+                                !v.is_empty() && !v.chars().all(|c| c.is_ascii_alphanumeric() && (c.is_ascii_digit() || ('A'..='H').contains(&c) || ('J'..='N').contains(&c) || ('P'..='Z').contains(&c) || ('a'..='k').contains(&c) || ('m'..='z').contains(&c)))
                             }
                             fallback=|| view! { <div></div> }
                         >
@@ -1290,7 +1289,7 @@ pub fn EventFormComponent(
                                 fallback=|| view! { <span></span> }
                             >
                                 <a
-                                    href=move || crate::utils::metaplex_explorer_url(&form.get().nft_collection_mint.trim(), &crate::utils::get_cluster())
+                                    href=move || crate::utils::metaplex_explorer_url(form.get().nft_collection_mint.trim(), &crate::utils::get_cluster())
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     class="event-form-link-sm"

@@ -156,11 +156,10 @@ pub fn FormBuilder(
     // Move field down
     let handle_move_down = move |idx: usize| {
         set_config.update(|c| {
-            if let Some(cfg) = c {
-                if idx + 1 < cfg.fields.len() {
+            if let Some(cfg) = c
+                && idx + 1 < cfg.fields.len() {
                     cfg.fields.swap(idx, idx + 1);
                 }
-            }
         });
     };
 
@@ -212,7 +211,7 @@ pub fn FormBuilder(
             ) && field
                 .options
                 .as_ref()
-                .map_or(true, |o| o.is_empty() || o.iter().any(|opt| opt.trim().is_empty()))
+                .is_none_or(|o| o.is_empty() || o.iter().any(|opt| opt.trim().is_empty()))
             {
                 components::show_toast(
                     &set_toast,
@@ -516,11 +515,10 @@ fn render_field_editor(
                         on:input=move |ev| {
                             let val = sanitize_key(&event_target_value(&ev));
                             set_config.update(|c| {
-                                if let Some(cfg) = c {
-                                    if let Some(f) = cfg.fields.iter_mut().find(|f| f.uid == field_uid) {
+                                if let Some(cfg) = c
+                                    && let Some(f) = cfg.fields.iter_mut().find(|f| f.uid == field_uid) {
                                         f.key = val;
                                     }
-                                }
                             });
                         }
                     />
@@ -540,11 +538,10 @@ fn render_field_editor(
                         on:input=move |ev| {
                             let val = event_target_value(&ev);
                             set_config.update(|c| {
-                                if let Some(cfg) = c {
-                                    if let Some(f) = cfg.fields.iter_mut().find(|f| f.uid == field_uid) {
+                                if let Some(cfg) = c
+                                    && let Some(f) = cfg.fields.iter_mut().find(|f| f.uid == field_uid) {
                                         f.label = val;
                                     }
-                                }
                             });
                         }
                     />
@@ -566,8 +563,8 @@ fn render_field_editor(
                                 _ => FormFieldTypeAdmin::Text,
                             };
                             set_config.update(|c| {
-                                if let Some(cfg) = c {
-                                    if let Some(f) = cfg.fields.iter_mut().find(|f| f.uid == field_uid) {
+                                if let Some(cfg) = c
+                                    && let Some(f) = cfg.fields.iter_mut().find(|f| f.uid == field_uid) {
                                         f.field_type = ft;
                                         // Clear options if switching to text/textarea
                                         if matches!(f.field_type, FormFieldTypeAdmin::Text | FormFieldTypeAdmin::Textarea) {
@@ -576,7 +573,6 @@ fn render_field_editor(
                                             f.options = Some(vec!["Option 1".to_string()]);
                                         }
                                     }
-                                }
                             });
                         }
                     >
@@ -610,11 +606,10 @@ fn render_field_editor(
                             on:change=move |ev| {
                                 let val = event_target_checked(&ev);
                                 set_config.update(|c| {
-                                    if let Some(cfg) = c {
-                                        if let Some(f) = cfg.fields.iter_mut().find(|f| f.uid == field_uid) {
+                                    if let Some(cfg) = c
+                                        && let Some(f) = cfg.fields.iter_mut().find(|f| f.uid == field_uid) {
                                             f.required = val;
                                         }
-                                    }
                                 });
                             }
                         />
@@ -632,11 +627,10 @@ fn render_field_editor(
                             on:change=move |ev| {
                                 let val = event_target_checked(&ev);
                                 set_config.update(|c| {
-                                    if let Some(cfg) = c {
-                                        if let Some(f) = cfg.fields.iter_mut().find(|f| f.uid == field_uid) {
+                                    if let Some(cfg) = c
+                                        && let Some(f) = cfg.fields.iter_mut().find(|f| f.uid == field_uid) {
                                             f.profile_field = val;
                                         }
-                                    }
                                 });
                             }
                         />
@@ -673,11 +667,10 @@ fn render_field_editor(
                                     .filter(|l| !l.is_empty())
                                     .collect();
                                 set_config.update(|c| {
-                                    if let Some(cfg) = c {
-                                        if let Some(f) = cfg.fields.iter_mut().find(|f| f.uid == opt_uid) {
+                                    if let Some(cfg) = c
+                                        && let Some(f) = cfg.fields.iter_mut().find(|f| f.uid == opt_uid) {
                                             f.options = if new_opts.is_empty() { None } else { Some(new_opts) };
                                         }
-                                    }
                                 });
                             }
                         ></textarea>

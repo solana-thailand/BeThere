@@ -88,7 +88,7 @@ pub fn OnchainEventsPanel(event_id: String) -> impl IntoView {
                             let label = e.instruction.label().to_string();
                             let time = format_block_time(e.block_time);
                             let sig_short = truncate_signature(&e.signature);
-                            let amount_str = e.amount.map(|a| format_usdc_amount(a)).unwrap_or_default();
+                            let amount_str = e.amount.map(format_usdc_amount).unwrap_or_default();
                             let attendee_short = e.attendee.as_ref().map(|a| truncate_address(a)).unwrap_or_default();
                             let solscan_url = crate::utils::solscan_tx_url(&e.signature, "devnet");
                             let dot_style = format!("background: {}", e.instruction.color());

@@ -207,7 +207,7 @@ fn EscrowStepCard(
                 }.into_any()
             } else if !is_confirm_step {
                 // Simple action — no confirm-danger pattern
-                let trigger = on_trigger.clone();
+                let trigger = on_trigger;
                 view! {
                     <div class="step-card-actions">
                         <span class="step-number">{step_symbol}</span>
@@ -222,9 +222,9 @@ fn EscrowStepCard(
             } else {
                 // Confirm-danger pattern (Step 3: Close Event)
                 // First click → show "⚠ Confirm Close?", second click → execute
-                let trigger = on_trigger.clone();
+                let trigger = on_trigger;
                 let set_cc = set_confirming.unwrap();
-                let set_cc_reset = set_cc.clone();
+                let set_cc_reset = set_cc;
                 let (btn_class, btn_label) = if confirming {
                     ("btn btn-confirm-danger".to_string(), "⚠ Confirm Close?".to_string())
                 } else {
@@ -239,7 +239,7 @@ fn EscrowStepCard(
                                 if !confirming {
                                     set_cc.set(true);
                                     // Auto-reset confirm after 5s
-                                    let reset = set_cc_reset.clone();
+                                    let reset = set_cc_reset;
                                     gloo_timers::callback::Timeout::new(5000, move || {
                                         reset.set(false);
                                     }).forget();
@@ -299,16 +299,16 @@ pub fn AdminEscrow(
     // Reset state when event changes — also pre-populate step progress
     // from server-side escrow_status so the UI reflects reality.
     {
-        let set_wn = set_wallet_name.clone();
-        let set_wp = set_wallet_pk.clone();
-        let set_ca = set_completed_actions.clone();
-        let set_sa = set_signing_action.clone();
-        let set_ar = set_action_results.clone();
-        let set_s1 = set_step1_done.clone();
-        let set_s2 = set_step2_done.clone();
-        let set_cc = set_confirm_close.clone();
-        let set_es = set_escrow_status.clone();
-        let set_esl = set_escrow_status_loaded.clone();
+        let set_wn = set_wallet_name;
+        let set_wp = set_wallet_pk;
+        let set_ca = set_completed_actions;
+        let set_sa = set_signing_action;
+        let set_ar = set_action_results;
+        let set_s1 = set_step1_done;
+        let set_s2 = set_step2_done;
+        let set_cc = set_confirm_close;
+        let set_es = set_escrow_status;
+        let set_esl = set_escrow_status_loaded;
         Effect::new(move |_| {
             let eid = active_event_id.get();
             set_wn.set(String::new());
@@ -326,11 +326,11 @@ pub fn AdminEscrow(
             // This handles the case where escrow was deactivated in a previous
             // session — the UI should show Step 1 as already done.
             if let Some(ref event_id) = eid {
-                let set_s1 = set_s1.clone();
-                let set_s2 = set_s2.clone();
-                let set_ca = set_ca.clone();
-                let set_es = set_es.clone();
-                let set_esl = set_esl.clone();
+                let set_s1 = set_s1;
+                let set_s2 = set_s2;
+                let set_ca = set_ca;
+                let set_es = set_es;
+                let set_esl = set_esl;
                 let event_id = event_id.clone();
                 leptos::task::spawn_local(async move {
                     match api::get_event_detail(&event_id).await {
@@ -402,9 +402,9 @@ pub fn AdminEscrow(
 
     // ── Wallet connect handler ──
     let handle_connect = move |wallet_name_str: String| {
-        let set_wn = set_wallet_name.clone();
-        let set_wp = set_wallet_pk.clone();
-        let set_t = set_toast.clone();
+        let set_wn = set_wallet_name;
+        let set_wp = set_wallet_pk;
+        let set_t = set_toast;
         leptos::task::spawn_local(async move {
             match connect_wallet_js(&wallet_name_str).await {
                 crate::wallet_error::WalletResult::Success(pk) => {
@@ -435,13 +435,13 @@ pub fn AdminEscrow(
         if eid.is_empty() || wn.is_empty() {
             return;
         }
-        let set_init = set_initializing.clone();
-        let set_es = set_escrow_status.clone();
-        let set_esl = set_escrow_status_loaded.clone();
-        let set_s1 = set_step1_done.clone();
-        let set_ca = set_completed_actions.clone();
-        let set_ar = set_action_results.clone();
-        let set_t = set_toast.clone();
+        let set_init = set_initializing;
+        let set_es = set_escrow_status;
+        let set_esl = set_escrow_status_loaded;
+        let set_s1 = set_step1_done;
+        let set_ca = set_completed_actions;
+        let set_ar = set_action_results;
+        let set_t = set_toast;
         set_init.set(true);
         leptos::task::spawn_local(async move {
             // 1. Build the init TX (vault ATA + create_event in one TX).
@@ -565,13 +565,13 @@ pub fn AdminEscrow(
 
         let wn = wallet_name.get();
         let eid = active_event_id.get().unwrap_or_default();
-        let set_sa = set_signing_action.clone();
-        let set_ar = set_action_results.clone();
-        let set_done = set_completed_actions.clone();
-        let set_s1 = set_step1_done.clone();
-        let set_s2 = set_step2_done.clone();
-        let set_t = set_toast.clone();
-        let set_trigger = set_action_to_execute.clone();
+        let set_sa = set_signing_action;
+        let set_ar = set_action_results;
+        let set_done = set_completed_actions;
+        let set_s1 = set_step1_done;
+        let set_s2 = set_step2_done;
+        let set_t = set_toast;
+        let set_trigger = set_action_to_execute;
 
         set_sa.set(Some(action));
 
@@ -837,7 +837,7 @@ pub fn AdminEscrow(
                                     signing=signing_action.get() == Some(action)
                                     ready=true
                                     confirming=false
-                                    on_trigger=set_action_to_execute.clone()
+                                    on_trigger=set_action_to_execute
                                     set_confirming=None
                                 />
                             }
@@ -855,7 +855,7 @@ pub fn AdminEscrow(
                                     signing=signing_action.get() == Some(action)
                                     ready
                                     confirming=false
-                                    on_trigger=set_action_to_execute.clone()
+                                    on_trigger=set_action_to_execute
                                     set_confirming=None
                                 />
                             }
@@ -874,8 +874,8 @@ pub fn AdminEscrow(
                                     signing=signing_action.get() == Some(action)
                                     ready
                                     confirming
-                                    on_trigger=set_action_to_execute.clone()
-                                    set_confirming=Some(set_confirm_close.clone())
+                                    on_trigger=set_action_to_execute
+                                    set_confirming=Some(set_confirm_close)
                                 />
                             }
                         }}

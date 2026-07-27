@@ -89,11 +89,10 @@ pub async fn get_attendees(
     let mut path = "/attendees".to_string();
     let mut params = Vec::new();
 
-    if let Some(id) = event_id {
-        if !id.is_empty() {
+    if let Some(id) = event_id
+        && !id.is_empty() {
             params.push(format!("event_id={id}"));
         }
-    }
     if let Some(c) = cursor {
         params.push(format!("cursor={c}"));
     }
@@ -244,11 +243,10 @@ pub async fn check_in(id: &str, event_id: Option<&str>, online: bool) -> Result<
 /// the caller should handle that gracefully.
 pub async fn undo_check_in(attendee_id: &str, event_id: Option<&str>) -> Result<(), ApiError> {
     let mut path = format!("/attendees/{attendee_id}/undo-checkin");
-    if let Some(eid) = event_id {
-        if !eid.is_empty() {
+    if let Some(eid) = event_id
+        && !eid.is_empty() {
             path = format!("{path}?event_id={eid}");
         }
-    }
 
     let response = api_post(&path).await?;
 

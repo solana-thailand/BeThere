@@ -133,14 +133,13 @@ pub fn QrSection(
                                     let name = name.clone();
                                     move |_| {
                                         let qr = qr_image.clone();
-                                        if let Some(ref data_url) = qr {
-                                            if !data_url.is_empty() {
+                                        if let Some(ref data_url) = qr
+                                            && !data_url.is_empty() {
                                                 download_data_url(
                                                     data_url,
                                                     &format!("{name}-qrcode.svg"),
                                                 );
                                             }
-                                        }
                                     }
                                 }
                             >

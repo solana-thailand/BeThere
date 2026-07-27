@@ -64,7 +64,6 @@ pub fn PostEventRegister() -> impl IntoView {
 
     // Auth gate on mount — same pattern as the dev profile editor.
     {
-        let set_state = set_state;
         let slug = slug_val.clone();
         leptos::task::spawn_local(async move {
             // Empty slug = bad link — surface an error rather than a form.

@@ -33,7 +33,7 @@ pub fn wallet_connected_view(
                 <span class="badge badge-info">{format!("{usdc_fmt} USDC")}</span>
             </div>
             <div class="dep2-amount-hero">
-                {format!("{usdc_fmt}")}
+                {usdc_fmt.to_string()}
                 <span class="dep2-amount-unit">" USDC"</span>
             </div>
             <div class="dep2-wallet-bar">
@@ -68,6 +68,7 @@ pub fn wallet_connected_view(
 }
 
 /// Awaiting confirmation — polling for TX.
+#[allow(clippy::too_many_arguments)] // Leptos view fn: signature mirrors caller wiring, refactor out of scope
 pub fn awaiting_confirmation_view(
     data: &DepositStatusResponse,
     _wallet_name: &str,
@@ -117,7 +118,7 @@ pub fn awaiting_confirmation_view(
                 <p class="hint-xs">"Usually 5-15 seconds. Don't close this page."</p>
             </div>
             <div class="tx-hash-box-top">
-                {format!("TX: {}", &sig_display)}
+                {format!("TX: {}", sig_display)}
             </div>
         </div>
     }
@@ -132,7 +133,7 @@ pub fn deposit_confirmed_view(
 ) -> AnyView {
     let sig_display = truncate_sig(tx_sig);
     let usdc_fmt = format_usdc(data.deposit_amount_usdc);
-    let refund_info = compute_refund_info(&data);
+    let refund_info = compute_refund_info(data);
 
     let ticket_attendee_id = match params.get() {
         Ok(p) => p.attendee_id.unwrap_or_default(),
@@ -150,7 +151,7 @@ pub fn deposit_confirmed_view(
                 <Icon icon=IconName::Check class="icon-lg" />
             </div>
             <div class="dep2-amount-hero">
-                {format!("{usdc_fmt}")}
+                {usdc_fmt.to_string()}
                 <span class="dep2-amount-unit">" USDC deposited"</span>
             </div>
             <p class="hint-desc">
@@ -159,7 +160,8 @@ pub fn deposit_confirmed_view(
             <div class="dep2-receipt">
                 {
                     let status = &data_clone.status;
-                    let status_row = match status {
+                    
+                    match status {
                         Some(s) if !s.refundable => view! {
                             <div class="dep2-receipt-row">
                                 <span class="dep2-receipt-label">"Status"</span>
@@ -181,8 +183,7 @@ pub fn deposit_confirmed_view(
                             </div>
                         }.into_any(),
                         _ => view! { <div></div> }.into_any(),
-                    };
-                    status_row
+                    }
                 }
                 <div class="dep2-receipt-row">
                     <span class="dep2-receipt-label">"TX"</span>

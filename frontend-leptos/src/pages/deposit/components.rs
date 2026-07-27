@@ -28,7 +28,7 @@ pub fn wallet_list_view(
                         }
                     >
                         <Icon icon=wallet_icon class="icon-md wallet-icon-white" />
-                        <span>{format!("Connect {}", &w_clone)}</span>
+                        <span>{format!("Connect {}", w_clone)}</span>
                     </button>
                 }
             }).collect::<Vec<_>>()}
@@ -84,7 +84,7 @@ pub fn tx_hash_box(sig_display: &str) -> AnyView {
     let sig = sig_display.to_string();
     view! {
         <div class="tx-hash-box">
-            {format!("TX: {}", &sig)}
+            {format!("TX: {}", sig)}
         </div>
     }
     .into_any()

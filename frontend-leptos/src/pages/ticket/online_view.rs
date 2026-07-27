@@ -239,7 +239,7 @@ pub fn OnlineView(
                 <NftClaimedBadge
                     asset_id=asset_id
                     orb_link=orb_link.clone().unwrap_or_default()
-                    on_copy=Box::new(|text| copy_to_clipboard_js(text))
+                    on_copy=Box::new(copy_to_clipboard_js)
                 />
             }.into_any()
         } else {

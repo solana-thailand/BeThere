@@ -1716,13 +1716,12 @@ pub fn Admin() -> impl IntoView {
                                                         title="Copy ticket link"
                                                         on:click={
                                                             let ticket_link = ticket_link.clone();
-                                                            let set_toast = set_toast;
                                                             move |_| {
                                                                 let full_url = format!("{}{}",
                                                                     web_sys::window()
                                                                         .and_then(|w| w.location().origin().ok())
                                                                         .unwrap_or_default(),
-                                                                    &ticket_link
+                                                                    ticket_link
                                                                 );
                                                                 let clipboard = web_sys::window()
                                                                     .unwrap()
@@ -1755,7 +1754,6 @@ pub fn Admin() -> impl IntoView {
                                                         title="Delete attendee"
                                                         on:click={
                                                             let delete_id = delete_id.clone();
-                                                            let set_toast = set_toast;
                                                             move |_| {
                                                                 let is_confirming = confirm_delete_id.get().as_deref() == Some(&delete_id);
                                                                 if is_confirming {

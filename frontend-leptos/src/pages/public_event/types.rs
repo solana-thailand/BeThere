@@ -355,6 +355,9 @@ pub struct PublicEventResponse {
 // Page state
 // ---------------------------------------------------------------------------
 
+// `Loaded` wraps the large `PublicEventData` struct; boxing would require
+// touching construction/match sites in page.rs (out of scope for this fix).
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug)]
 pub enum PublicEventState {
     Loading,

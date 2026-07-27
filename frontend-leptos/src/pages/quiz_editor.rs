@@ -1110,6 +1110,10 @@ pub fn QuizEditor(
 // Preview renderer
 // ---------------------------------------------------------------------------
 
+/// Questions grouped by session for preview rendering:
+/// `(session_title, [(global_question_index, question)])`.
+type SessionGroups<'a> = Vec<(Option<String>, Vec<(usize, &'a QuizQuestionAdmin)>)>;
+
 /// Render the quiz in preview mode (as attendees see it).
 fn render_preview(config: &QuizConfigAdmin) -> AnyView {
     let questions = config.questions.clone();
@@ -1128,7 +1132,7 @@ fn render_preview(config: &QuizConfigAdmin) -> AnyView {
         }
     }
 
-    let session_groups: Vec<(Option<String>, Vec<(usize, &QuizQuestionAdmin)>)> = session_order
+    let session_groups: SessionGroups = session_order
         .iter()
         .map(|(sid, stitle)| {
             let group_qs: Vec<(usize, &QuizQuestionAdmin)> = questions

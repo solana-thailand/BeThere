@@ -249,11 +249,10 @@ pub async fn poll_deposit_confirmation(
 ) -> PollOutcome {
     let mut attempts = 0u32;
     while attempts < config.max_attempts {
-        if let Some(check) = should_stop {
-            if check() {
+        if let Some(check) = should_stop
+            && check() {
                 return PollOutcome::Cancelled;
             }
-        }
         match api::confirm_deposit(event_id, attendee_id).await {
             Ok(ConfirmDepositResponse {
                 confirmed: true,
@@ -477,12 +476,12 @@ pub fn make_upload_slip(
         let deposit_data_slug = deposit_data.event_slug.clone();
         set_state.set(DepositPageState::ThbUploading(deposit_data));
 
-        let file_ref = file_input_ref.clone();
+        let file_ref = file_input_ref;
         let text_slip_url = slip_url_input.get();
         let bank_account_input_for_upload = bank_account_input.get();
         let bank_name_input_for_upload = bank_name_input.get();
         let account_name_input_for_upload = account_name_input.get();
-        let params = params.clone();
+        let params = params;
 
         leptos::task::spawn_local(async move {
             let slip_url = match file_ref.get() {
