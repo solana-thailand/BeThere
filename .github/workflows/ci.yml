@@ -88,7 +88,6 @@ jobs:
     # subsumes a plain `cargo check` and enforces the -D warnings policy.
     # The frontend's tests are #[wasm_bindgen_test] (run under wasm-pack, not
     # `cargo test`), so they are not run here.
-    # No --locked: frontend-leptos/Cargo.lock is gitignored (deps resolve fresh).
     defaults:
       run:
         working-directory: frontend-leptos
@@ -107,4 +106,4 @@ jobs:
           workspaces: frontend-leptos
 
       - name: cargo clippy (frontend, wasm32, -D warnings)
-        run: cargo clippy --target wasm32-unknown-unknown -- -D warnings
+        run: cargo clippy --locked --target wasm32-unknown-unknown -- -D warnings
