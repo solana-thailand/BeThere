@@ -118,7 +118,7 @@ pub fn awaiting_confirmation_view(
                 <p class="hint-xs">"Usually 5-15 seconds. Don't close this page."</p>
             </div>
             <div class="tx-hash-box-top">
-                {format!("TX: {}", &sig_display)}
+                {format!("TX: {}", sig_display)}
             </div>
         </div>
     }

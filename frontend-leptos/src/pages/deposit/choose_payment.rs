@@ -254,7 +254,7 @@ pub fn choose_payment_view(
                                                             }
                                                         >
                                                             <Icon icon=wallet_icon class="icon-md wallet-icon-white" />
-                                                            <span>{format!("Connect {}", &w_clone)}</span>
+                                                            <span>{format!("Connect {}", w_clone)}</span>
                                                         </button>
                                                     }
                                                 }).collect::<Vec<_>>()}

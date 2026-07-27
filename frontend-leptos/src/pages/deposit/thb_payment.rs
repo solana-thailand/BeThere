@@ -42,7 +42,7 @@ pub fn thb_payment_form_view(
 
     log::trace!(
         "[thb_payment] promptpay_id='{}' amount={} has_promptpay={}",
-        &promptpay_id, deposit_amount_thb, has_promptpay
+        promptpay_id, deposit_amount_thb, has_promptpay
     );
 
     let handle_upload_slip = handle_upload_slip.clone();

@@ -1013,7 +1013,7 @@ pub fn Adventure() -> impl IntoView {
                                 </div>
                             }.into_any()
                         }
-                        PuzzleDef::FillBlank { instruction, code_template, options, answer: _, .. } => {
+                        PuzzleDef::FillBlank { instruction, code_template, options, .. } => {
                             let inst = instruction.clone();
                             let tmpl = code_template.clone();
                             let opts: Vec<String> = options.clone();

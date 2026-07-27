@@ -73,9 +73,6 @@ pub fn InPersonView(
         rollover_target_event,
         community_links,
         calendar_subscribe_url,
-        event_start_ms: _,
-        event_end_ms: _,
-        event_name: _,
         ..
     } = view_data;
 

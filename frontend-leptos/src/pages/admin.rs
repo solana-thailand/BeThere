@@ -1721,7 +1721,7 @@ pub fn Admin() -> impl IntoView {
                                                                     web_sys::window()
                                                                         .and_then(|w| w.location().origin().ok())
                                                                         .unwrap_or_default(),
-                                                                    &ticket_link
+                                                                    ticket_link
                                                                 );
                                                                 let clipboard = web_sys::window()
                                                                     .unwrap()

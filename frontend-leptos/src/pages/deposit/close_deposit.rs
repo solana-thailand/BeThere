@@ -48,7 +48,7 @@ pub fn close_deposit_choose_wallet_view(
                                     }
                                 >
                                     <Icon icon=wallet_icon class="icon-md wallet-icon-white" />
-                                    <span>{format!("Connect {}", &w_clone)}</span>
+                                    <span>{format!("Connect {}", w_clone)}</span>
                                 </button>
                             }
                         }).collect::<Vec<_>>()}

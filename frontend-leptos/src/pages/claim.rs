@@ -1595,7 +1595,7 @@ pub fn Claim() -> impl IntoView {
                                                                                     }
                                                                                 >
                                                                                     <span><Icon icon=wallet_icon class="icon-sm" /></span>
-                                                                                    <span>{format!("Connect {}", &w_clone)}</span>
+                                                                                    <span>{format!("Connect {}", w_clone)}</span>
                                                                                 </button>
                                                                             }
                                                                         }).collect::<Vec<_>>()}
