@@ -340,9 +340,16 @@ import os, json, base64
 import blake3
 
 dist = '${DIST_DIR}'
+# _headers / _redirects are Cloudflare config files parsed by 'wrangler deploy',
+# NOT servable assets. The PUT fallback cannot parse them, so uploading them as
+# plain assets just exposes them as fetchable octet-stream blobs (see Issue #057).
+# Skip them entirely on this path.
+CONFIG_FILES = {'_headers', '_redirects'}
 manifest = {}
 for root, dirs, files in os.walk(dist):
     for f in files:
+        if f in CONFIG_FILES:
+            continue
         fp = os.path.join(root, f)
         rel = '/' + os.path.relpath(fp, dist)
         contents = open(fp, 'rb').read()
@@ -384,12 +391,39 @@ script = '${WORKER_NAME}'
 oauth = '${OAUTH_TOKEN}'
 dist = '${DIST_DIR}'
 
-# Build hash → base64-content lookup (matches the manifest hashing).
+import mimetypes
+# The upload endpoint stores/serves each object with the Content-Type declared on
+# its multipart part (the 2026-07-26 octet-stream incident proved the fallback's
+# hardcoded octet-stream part was served verbatim). Mirror wrangler's syncAssets:
+# type each part by extension, add charset=utf-8 to text/*, and for an unmapped
+# extension fall back to sniffing ('application/null' = wrangler's sentinel for
+# 'store no Content-Type') rather than a blind octet-stream — which would re-poison
+# the object as a forced download.
+MIME = {
+    'html': 'text/html; charset=utf-8', 'htm': 'text/html; charset=utf-8',
+    'js': 'text/javascript; charset=utf-8', 'mjs': 'text/javascript; charset=utf-8',
+    'css': 'text/css; charset=utf-8', 'txt': 'text/plain; charset=utf-8',
+    'wgsl': 'text/plain; charset=utf-8', 'xml': 'application/xml',
+    'wasm': 'application/wasm', 'json': 'application/json', 'map': 'application/json',
+    'webmanifest': 'application/manifest+json',
+    'svg': 'image/svg+xml', 'png': 'image/png', 'ico': 'image/x-icon',
+    'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'gif': 'image/gif', 'webp': 'image/webp',
+    'woff': 'font/woff', 'woff2': 'font/woff2', 'ttf': 'font/ttf', 'otf': 'font/otf',
+}
+def mime_for(path):
+    ext = os.path.splitext(path)[1].lstrip('.').lower()
+    if ext in MIME:
+        return MIME[ext]
+    return mimetypes.guess_type(path)[0] or 'application/null'
+
+# Build hash → base64-content and hash → MIME lookups (matches the manifest hashing).
 content_by_hash = {}
+mime_by_hash = {}
 for rel, info in manifest_body.items():
     fp = os.path.join(dist, rel.lstrip('/'))
     raw = open(fp, 'rb').read()
     content_by_hash[info['hash']] = base64.b64encode(raw).decode()
+    mime_by_hash[info['hash']] = mime_for(rel)
 
 # 1. Initialize upload session.
 init_req = Request(
@@ -419,10 +453,11 @@ for i, file_hash in enumerate(requested, 1):
     b64 = content_by_hash[file_hash]
     # Build multipart/form-data body by hand (field name = hash, value = b64).
     boundary = '----bethere' + os.urandom(8).hex()
+    part_ct = mime_by_hash.get(file_hash, 'application/null')
     body = (
         f'--{boundary}\r\n'
         f'Content-Disposition: form-data; name=\"{file_hash}\"; filename=\"{file_hash}\"\r\n'
-        f'Content-Type: application/octet-stream\r\n\r\n'
+        f'Content-Type: {part_ct}\r\n\r\n'
         f'{b64}\r\n'
         f'--{boundary}--\r\n'
     ).encode()
@@ -541,6 +576,13 @@ m = {
         },
         'asset_config': {
             'not_found_handling': 'single-page-application',
+            # LIMITATION (Issue #057): the raw PUT API has no field for _headers
+            # rules, so this fallback path CANNOT apply the frontend-leptos/_headers
+            # Cache-Control policy (no-store on the shell, immutable on hashed assets).
+            # Only `wrangler deploy` parses _headers. Under the fallback, static assets
+            # get Cloudflare's default `max-age=0, must-revalidate` — correct (always
+            # revalidates, never serves a stale shell) but not maximally cacheable.
+            # This is perf-only and applies solely when the fallback is used.
         }
     }
 }

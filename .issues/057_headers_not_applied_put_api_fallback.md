@@ -1,8 +1,35 @@
 # 057 — `_headers` rules not applied (PUT API fallback treats it as a plain asset)
 
-**Status:** Open (performance-only; correctness is resolved in #057-cache commit)
+**Status:** RESOLVED (2026-07-27)
 **Severity:** Low (performance) — NOT a correctness bug after the `spa_fallback` fix
 **Area:** `worker/deploy.sh`, Cloudflare Static Assets, caching
+
+## Resolution (2026-07-27)
+
+Two parts:
+
+1. **Primary path fixed itself (Option 1).** The Cloudflare `/versions` `10013` bug
+   recovered, so deploys now use standard `wrangler deploy`, which parses `_headers`
+   natively. Verified on prod (Version `7b7d0df0`): `/` and `/sw.js` → `no-store`,
+   hashed `*.js/.wasm/.css` → `public, max-age=31536000, immutable`, and `/_headers`
+   is NOT a fetchable asset. The original symptom is gone on the live deploy path.
+
+2. **PUT fallback hardened (defense-in-depth).** The manual fallback is still a latent
+   path if the versions bug returns. `worker/deploy.sh` now:
+   - **Skips `_headers`/`_redirects`** from the uploaded manifest (they were served as
+     octet-stream blobs before — the `GET /_headers` symptom).
+   - **Sets each asset's real Content-Type** on upload (per-extension MIME + `charset=utf-8`
+     on text/*, `application/null` sniff-fallback for unmapped types), mirroring wrangler's
+     `syncAssets`. This also closes the content-type *poison* vector behind the 2026-07-26
+     octet-stream incident (see handover 132).
+   - Backstopped by `verify_content_types()` (added earlier) which fails any deploy that
+     serves `/` or the JS bundle as octet-stream.
+   - **Known remaining limitation:** the raw PUT API has no field for `_headers` rules, so
+     a *fallback* deploy still gets Cloudflare's default `max-age=0, must-revalidate` on
+     static assets (correct — always revalidates, never stale — just not immutable-cached).
+     Perf-only, fallback-only; documented inline at the `asset_config` in deploy.sh.
+
+Reviewed adversarially (2 lenses: Python correctness + Cloudflare API contract) — both sound.
 
 ## Symptom
 
