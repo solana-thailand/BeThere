@@ -96,6 +96,8 @@ Four decisions settle most of the questionnaire:
 
 Buckets map to Q4/Q19. Every tool call = an HTTP call to an existing handler with the agent's scoped JWT (Q5). PII columns note redaction (Q11/Q12).
 
+> **Path prefix:** all routes below are shown without the global `/api` prefix for brevity. The worker mounts the entire router under `/api` (`.nest("/api", …)` in `worker/src/handlers/mod.rs`), so the real paths are `GET /api/events`, `POST /api/checkin/{id}`, etc.
+
 ### 3.1 Bucket R — Read-only (auto-execute)
 | Tool | Route | PII handling |
 |---|---|---|
@@ -132,7 +134,7 @@ Buckets map to Q4/Q19. Every tool call = an HTTP call to an existing handler wit
 | `batch_thb_refund` | `POST /refund/batch-thb` | bulk financial |
 | `verify_thb_slip` | `POST /deposit/thb/verify` | approves money |
 | `delete_attendee` | `DELETE /attendee/{id}` | destructive PII delete |
-| `archive_event` / `hard_delete_event` | `DELETE /events/{id}`, `/events/{id}/delete` | destructive |
+| `archive_event` / `hard_delete_event` | `DELETE /events/{id}`, `DELETE /events/{id}/delete` | destructive |
 
 ### 3.4 Bucket X — Out of scope for the agent (Q14, bulk PII, security controls)
 `/contacts*` (bulk contact PII), `/contacts/audience`, `/walkin/export` (CSV PII), `/auth/*`, `/privacy/*` (user-initiated only), staff allowlist, `/orgs` delete. Never exposed as tools.
@@ -158,6 +160,8 @@ Two independent layers; a call must pass both.
 2. **Semantic validity — argument validation + business rules.** Before execution: `event_id` exists in D1? attendee belongs to event? deposit in a refundable state? bucket policy + HITL satisfied? A hallucinated id fails here and returns a structured error — never a mutation. (Prototyped in `bethere_tool_dispatch.rs` — the `gate()` + backend `Status` checks.)
 
 The step from prototype to production is exactly: swap the toy 11-token grammar for the §3 tool schema, and swap the mock escrow backend for the scoped worker handlers.
+
+> **Prototype location (provenance).** The `katgpt-rs/examples/bethere_*.rs` files cited above live in a **separate prototype repo (`katgpt-rs`), not this BeThere monorepo** — consistent with §0's "prototyped separately." They are illustrative provenance for the constrained-decoding technique, not files a reader will find in this tree. Before P1, port the relevant grammar/dispatch logic into this repo (or vendor it) so the design is self-contained; until then treat these paths as external references.
 
 **Execution flow (Pattern B):**
 ```
