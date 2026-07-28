@@ -2,7 +2,9 @@
 /target
 
 # Lock files
-Cargo.lock
+# Cargo.lock is TRACKED — bethere-escrow is a deployed on-chain program, so its
+# dependency graph (esp. the pre-release quasar deps) must be pinned for a
+# reproducible/verifiable build.
 package-lock.json
 yarn.lock
 

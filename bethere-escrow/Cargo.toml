@@ -17,14 +17,18 @@ alloc = []
 client = []
 debug = []
 
+# Quasar is a pre-release framework (version 0.0.0) — pin exact git revs so the
+# deployed program bytecode is reproducible. Cargo.lock is also tracked (see
+# .gitignore) as the source of truth; these `rev` pins additionally stop
+# `cargo update` from silently floating quasar to HEAD. Bump deliberately.
 [dependencies]
-quasar-lang = { git = "https://github.com/blueshift-gg/quasar" }
-quasar-spl = { git = "https://github.com/blueshift-gg/quasar" }
+quasar-lang = { git = "https://github.com/blueshift-gg/quasar", rev = "3d6fb0d8574702f2e364d5ab6ee7a31ec21304e6" }
+quasar-spl = { git = "https://github.com/blueshift-gg/quasar", rev = "3d6fb0d8574702f2e364d5ab6ee7a31ec21304e6" }
 solana-instruction = { version = "3.2.0" }
 
 [dev-dependencies]
 bethere-escrow-client = { path = "target/client/rust/bethere-escrow-client" }
-quasar-svm = { git = "https://github.com/blueshift-gg/quasar-svm" }
+quasar-svm = { git = "https://github.com/blueshift-gg/quasar-svm", rev = "cf3c06a08a9009631d42d7942a574da1eac6104d" }
 spl-token-interface = { version = "2.0.0" }
 solana-program-pack = { version = "3.1.0" }
 wincode = { version = "0.4", features = ["derive"] }
