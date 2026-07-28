@@ -57,9 +57,11 @@
 
 - [x] Phase 1: Easy backend splits (event_do, sheets/write)
 - [x] Phase 2: Medium backend splits (events→8 files, thb/handlers→5 files)
-- [~] Phase 4: Hard backend — **`event_store/write.rs` ✅ done** (1430 → `write/` dir, 10 submodules
-  all <600 lines, re-export-only `mod.rs`; verbatim relocation, 254 worker tests pass, clippy clean);
-  `register.rs` (1678) still pending.
+- [~] Phase 4: Hard backend — **`event_store/write.rs` ✅** (1430 → `write/`, 10 submodules) and
+  **`handlers/register.rs` ✅** (1678 → `register/`, 8 submodules incl. relocated `#[cfg(test)]`;
+  `DeveloperData` widened to `pub(super)` as a cross-submodule necessity; `register.rs`→`signup.rs`
+  to avoid `module_inception`). Both verbatim, all 254 worker tests pass, clippy clean under `-D warnings`.
+  Remaining backend: `handlers/deposit/usdc/mod.rs` (1771), `db/attendees.rs` (1470), `handlers/attendee.rs` (1303).
 - [ ] Phase 3: Frontend splits (landing, quiz_editor)
 - [ ] Phase 5: Hard frontend (scanner, claim, event_form, admin)
 

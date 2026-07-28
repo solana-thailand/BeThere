@@ -71,6 +71,7 @@ const MONETARY_DIRS: &[&str] = &[
     "src/solana_escrow",
     "src/escrow_indexer",
     "src/handlers/deposit",
+    "src/handlers/register",
 ];
 
 /// Individual monetary source files that live outside the directory groups
@@ -80,7 +81,6 @@ const MONETARY_FILES: &[&str] = &[
     "src/handlers/claim.rs",
     "src/handlers/escrow_index.rs",
     "src/handlers/checkin.rs",
-    "src/handlers/register.rs",
     "src/handlers/walkin.rs",
     "src/handlers/wallet.rs",
 ];
