@@ -64,7 +64,12 @@
   Also **`handlers/attendee.rs` ✅** (1303 → `attendee/`, 7 submodules: list/read/delete/participation/admin
   + tests; `normalize_override`→`pub(super)`; `get_attendee`+`get_public_ticket` kept together as they share
   `get_cached_qr_image`). Verbatim, clippy clean under `-D warnings`, 254 tests pass.
-  Remaining backend: `handlers/deposit/usdc/mod.rs` (1771, on-chain — do last/carefully), `db/attendees.rs` (1470).
+  Also **`db/attendees.rs` ✅** (1470 → `attendees/`, 6 submodules: writes/deposit/reads/walkin/management;
+  all 58 external `attendees::` call sites preserved via `pub(crate) use` globs; `D1AttendeeRow` widened to
+  `pub(super)` for one cross-submodule reuse; no SQL/bind changes). Verbatim, clippy clean under `-D warnings`,
+  254 tests pass.
+  **Only backend file left: `handlers/deposit/usdc/mod.rs` (1771)** — a ~1040-line on-chain verification region;
+  money-critical, split last with extra care.
 - [ ] Phase 3: Frontend splits (landing, quiz_editor)
 - [ ] Phase 5: Hard frontend (scanner, claim, event_form, admin)
 
