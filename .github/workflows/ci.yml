@@ -112,6 +112,12 @@ jobs:
     name: escrow SVM tests (quasar)
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      # Override the workflow-level RUSTFLAGS: -D warnings. `quasar build` generates
+      # bethere-escrow-client with camelCase IDL field names (non_snake_case), which
+      # -D warnings would turn into hard errors. That is generated code we do not own,
+      # so build this job the way `quasar test` builds locally — without -D warnings.
+      RUSTFLAGS: ""
     # bethere-escrow is the on-chain Solana program (Quasar framework), a standalone
     # cargo project outside the worker workspace — the other jobs never touch it. This
     # job builds the SBF program and runs the host-level SVM test suite so the escrow's
