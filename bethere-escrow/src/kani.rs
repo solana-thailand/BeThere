@@ -18,8 +18,9 @@
 //! | `refund_overflow_safe` | checked_add on total_refunded never silently wraps |
 //! | `claim_forfeited_double_sub_safe` | double checked_sub never silently wraps |
 //! | `close_event_invariant` | accounting == settled AND vault_balance == 0 |
-//! | `refund_window_exclusive` | refund ONLY in [event_end, refund_deadline) |
-//! | `refund_deadline_blocks_post_deadline` | post-deadline refund always fails |
+//! | `refund_window_exclusive` | no-show refund ONLY in [event_end, refund_deadline); checked-in refund allowed any time after event_end |
+//! | `refund_deadline_blocks_post_deadline` | post-deadline NO-SHOW refund always fails (so claim_forfeited is safe) |
+//! | `refund_checked_in_bypasses_deadline` | checked-in attendee can refund after refund_deadline |
 //! | `vault_griefing_detected` | vault_balance != 0 blocks close |
 //! | `accounting_conservation` | total_deposited >= total_refunded + total_forfeited always holds for valid states |
 //! | `forfeited_is_non_negative` | forfeited = deposited - refunded - already_forfeited >= 0 for valid states |
@@ -69,14 +70,26 @@ fn validate_create_event(
 }
 
 /// Validates refund timing.
-/// Mirrors: `Refund::validate_and_update` — refund window is `[event_end, refund_deadline)`.
+/// Mirrors `Refund::validate_and_update` (instructions/refund.rs:73-85) EXACTLY:
+/// - `now < event_end` → RefundNotYetAllowed (always).
+/// - a NO-SHOW (`!checked_in`) at/after `refund_deadline` → RefundDeadlinePassed.
+/// - a CHECKED-IN attendee can refund ANY time after `event_end` (no deadline) —
+///   they showed up. The `!checked_in` gate is essential: the real handler exempts
+///   checked-in attendees (see instructions/refund.rs:81 and the SVM test
+///   `test_refund_checked_in_after_deadline_ok`). A model without it is STRICTER
+///   than the program and proves a false property.
 ///
-/// Returns `Ok(())` if within refund window, `Err` otherwise.
-fn validate_refund(event_end: i64, refund_deadline: i64, now: i64) -> Result<(), ValidationError> {
+/// Returns `Ok(())` if the refund is allowed, `Err` otherwise.
+fn validate_refund(
+    event_end: i64,
+    refund_deadline: i64,
+    now: i64,
+    checked_in: bool,
+) -> Result<(), ValidationError> {
     if now < event_end {
         return Err(ValidationError::RefundNotYetAllowed);
     }
-    if now >= refund_deadline {
+    if !checked_in && now >= refund_deadline {
         return Err(ValidationError::RefundDeadlinePassed);
     }
     Ok(())
@@ -329,35 +342,40 @@ fn close_event_invariant() {
     }
 }
 
-/// **Property**: Refund is ONLY allowed in the window `[event_end, refund_deadline)`.
+/// **Property**: Refund timing matches the handler for BOTH checked-in and no-show
+/// attendees (holds for all `checked_in`).
 ///
-/// Before `event_end` → rejected (RefundNotYetAllowed).
-/// At or after `refund_deadline` → rejected (RefundDeadlinePassed).
-/// In between → accepted.
+/// - Before `event_end` → rejected (RefundNotYetAllowed), regardless of `checked_in`.
+/// - NO-SHOW at/after `refund_deadline` → rejected (RefundDeadlinePassed).
+/// - No-show inside `[event_end, refund_deadline)`, OR checked-in any time after
+///   `event_end` → accepted.
 #[kani::proof]
 fn refund_window_exclusive() {
     let event_end: i64 = kani::any();
     let refund_deadline: i64 = kani::any();
     let now: i64 = kani::any();
+    let checked_in: bool = kani::any();
 
     // Valid event setup
     kani::assume(refund_deadline > event_end);
 
-    let result = validate_refund(event_end, refund_deadline, now);
+    let result = validate_refund(event_end, refund_deadline, now, checked_in);
 
     if now < event_end {
         assert_eq!(result, Err(ValidationError::RefundNotYetAllowed));
-    } else if now >= refund_deadline {
+    } else if !checked_in && now >= refund_deadline {
         assert_eq!(result, Err(ValidationError::RefundDeadlinePassed));
     } else {
         assert_eq!(result, Ok(()));
     }
 }
 
-/// **Property**: Refund deadline prevents race with claim_forfeited.
+/// **Property**: Refund deadline prevents race with claim_forfeited — for NO-SHOWS.
 ///
-/// After refund_deadline, refund ALWAYS fails. This means the organizer
-/// can safely call claim_forfeited knowing no more refunds will drain the vault.
+/// After refund_deadline, a NO-SHOW's refund ALWAYS fails, so the organizer can
+/// safely call claim_forfeited (which only ever applies to no-shows — checked-in
+/// deposits are never forfeitable). A checked-in attendee's post-deadline refund is
+/// irrelevant to this safety property because they can never be forfeited.
 #[kani::proof]
 fn refund_deadline_blocks_post_deadline() {
     let event_end: i64 = kani::any();
@@ -367,8 +385,29 @@ fn refund_deadline_blocks_post_deadline() {
     kani::assume(refund_deadline > event_end);
     kani::assume(now >= refund_deadline); // post-deadline
 
-    let result = validate_refund(event_end, refund_deadline, now);
+    // checked_in = false: the no-show case that claim_forfeited depends on.
+    let result = validate_refund(event_end, refund_deadline, now, false);
     assert_eq!(result, Err(ValidationError::RefundDeadlinePassed));
+}
+
+/// **Property**: A CHECKED-IN attendee can refund ANY time after `event_end`,
+/// including past `refund_deadline` — they showed up, so no deadline applies.
+///
+/// Pins the `!checked_in` gate in `Refund::validate_and_update` (refund.rs:81):
+/// without it, this property is false and the program would wrongly forfeit the
+/// deposits of attendees who actually attended.
+#[kani::proof]
+fn refund_checked_in_bypasses_deadline() {
+    let event_end: i64 = kani::any();
+    let refund_deadline: i64 = kani::any();
+    let now: i64 = kani::any();
+
+    kani::assume(refund_deadline > event_end);
+    kani::assume(now >= event_end); // event has ended
+
+    // checked_in = true: allowed regardless of the deadline.
+    let result = validate_refund(event_end, refund_deadline, now, true);
+    assert_eq!(result, Ok(()));
 }
 
 /// **Property**: Vault griefing is detected — vault_balance != 0 blocks close.
