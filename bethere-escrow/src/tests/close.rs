@@ -461,6 +461,106 @@ fn test_close_event_vault_not_empty() {
 }
 
 #[test]
+fn test_close_event_vault_griefing() {
+    // Dust-griefing case: accounting IS settled (total_deposited == total_refunded +
+    // total_forfeited), so the accounting check (close_event.rs:54) passes — but the
+    // vault token account still holds 1 unit of dust, so the vault-balance check
+    // (close_event.rs:61) rejects with VaultNotEmpty. This exercises a DIFFERENT branch
+    // than test_close_event_vault_not_empty (which trips the accounting check).
+    let mut svm = setup();
+
+    // Warp past refund_deadline as the close-flow lifecycle does.
+    svm.warp_to_timestamp(REFUND_DEADLINE + 1);
+
+    let token_program = quasar_svm::SPL_TOKEN_PROGRAM_ID;
+    let (escrow, escrow_bump) = find_event_escrow(&ORGANIZER, EVENT_ID);
+
+    let ix = with_signers(
+        CloseEventInstruction {
+            organizer: ORGANIZER,
+            event_escrow: escrow,
+            vault: VAULT,
+            token_program,
+            _event_id: EVENT_ID,
+        }
+        .into(),
+        &[0],
+    );
+
+    let result = svm.process_instruction(
+        &ix,
+        &[
+            signer(ORGANIZER),
+            event_escrow_account(
+                escrow,
+                ORGANIZER,
+                EVENT_ID,
+                USDC_MINT,
+                VAULT,
+                DEPOSIT_AMOUNT,
+                EVENT_END,
+                REFUND_DEADLINE,
+                DEPOSIT_AMOUNT, // total_deposited
+                DEPOSIT_AMOUNT, // total_refunded — accounting IS settled
+                0,              // total_forfeited
+                false,          // is_active = false
+                escrow_bump,
+            ),
+            // Vault holds 1 unit of dust despite settled accounting (external airdrop)
+            token_account(VAULT, USDC_MINT, escrow, 1),
+        ],
+    );
+
+    assert!(
+        result.is_err(),
+        "close_event should fail on non-empty vault (dust griefing)"
+    );
+    let err_code = result.raw_result.unwrap_err();
+    assert_eq!(
+        err_code,
+        quasar_svm::InstructionError::Custom(15),
+        "expected VaultNotEmpty (15) from the vault-balance check, got {err_code:?}"
+    );
+
+    // Positive control: the SAME settled-accounting fixture WITH the dust removed
+    // (vault balance 0) must SUCCEED. This proves the accounting check (close_event.rs:54)
+    // was passed and the rejection above is UNIQUELY the vault-balance branch (line 61) —
+    // not the accounting branch (which also returns Custom(15)). Without this control a
+    // future fixture change could silently pass the griefing assert via the line-54 path.
+    let mut svm_ok = setup();
+    svm_ok.warp_to_timestamp(REFUND_DEADLINE + 1);
+    let ok = svm_ok.process_instruction(
+        &ix,
+        &[
+            signer(ORGANIZER),
+            event_escrow_account(
+                escrow,
+                ORGANIZER,
+                EVENT_ID,
+                USDC_MINT,
+                VAULT,
+                DEPOSIT_AMOUNT,
+                EVENT_END,
+                REFUND_DEADLINE,
+                DEPOSIT_AMOUNT, // total_deposited
+                DEPOSIT_AMOUNT, // total_refunded — accounting settled (same as above)
+                0,              // total_forfeited
+                false,          // is_active
+                escrow_bump,
+            ),
+            token_account(VAULT, USDC_MINT, escrow, 0), // dust removed → empty vault
+        ],
+    );
+    assert!(
+        ok.is_ok(),
+        "same settled fixture with an EMPTY vault should close OK (proves the reject was \
+         uniquely the vault-balance branch): {:?}",
+        ok.raw_result
+    );
+    println!("  CLOSE_EVENT_VAULT_GRIEFING: rejected via vault-balance branch (accounting-settled control passes)");
+}
+
+#[test]
 fn test_deactivate_event() {
     let mut svm = setup();
 
