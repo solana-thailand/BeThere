@@ -107,3 +107,43 @@ jobs:
 
       - name: cargo clippy (frontend, wasm32, -D warnings)
         run: cargo clippy --locked --target wasm32-unknown-unknown -- -D warnings
+
+  escrow-tests:
+    name: escrow SVM tests (quasar)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # bethere-escrow is the on-chain Solana program (Quasar framework), a standalone
+    # cargo project outside the worker workspace — the other jobs never touch it. This
+    # job builds the SBF program and runs the host-level SVM test suite so the escrow's
+    # money-path verification is enforced on every change. Deps are pinned (Cargo.lock +
+    # quasar rev) for a reproducible build.
+    # NOTE: Kani formal proofs (cargo kani) are NOT run here — the Kani toolchain is a
+    # large download and slow; enforcing the proofs is a follow-up (likely a scheduled job).
+    defaults:
+      run:
+        working-directory: bethere-escrow
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry + target
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: bethere-escrow
+
+      - name: Install Solana (Agave) toolchain
+        # Provides cargo-build-sbf (the SBF compiler quasar build shells out to).
+        # Pinned to 3.1.10 to match the local dev toolchain.
+        run: |
+          sh -c "$(curl -sSfL https://release.anza.xyz/v3.1.10/install)"
+          echo "$HOME/.local/share/solana/install/active_release/bin" >> "$GITHUB_PATH"
+
+      - name: Install quasar CLI
+        # quasar build also generates the dev-dep client (target/client/), so cargo-build-sbf
+        # alone is insufficient — the quasar CLI is required. Pinned to the same rev as the deps.
+        run: cargo install --git https://github.com/blueshift-gg/quasar quasar-cli --rev 3d6fb0d8574702f2e364d5ab6ee7a31ec21304e6
+
+      - name: quasar test (build SBF program + run SVM suite)
+        run: quasar test
