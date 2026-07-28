@@ -57,6 +57,15 @@
 
 - [x] Phase 1: Easy backend splits (event_do, sheets/write)
 - [x] Phase 2: Medium backend splits (events→8 files, thb/handlers→5 files)
+- [~] Phase 4: Hard backend — **`event_store/write.rs` ✅ done** (1430 → `write/` dir, 10 submodules
+  all <600 lines, re-export-only `mod.rs`; verbatim relocation, 254 worker tests pass, clippy clean);
+  `register.rs` (1678) still pending.
 - [ ] Phase 3: Frontend splits (landing, quiz_editor)
-- [ ] Phase 4: Hard backend (register, event_store/write)
 - [ ] Phase 5: Hard frontend (scanner, claim, event_form, admin)
+
+> **Note (2026-07-28):** the file inventory above is stale — the tree now has ~21 files >1024 lines
+> (several new since this issue, e.g. `handlers/deposit/usdc/mod.rs`, `db/attendees.rs`,
+> `frontend/api/event.rs`, `campaigns_page.rs`, `adventure/*`). **Recommended order: backend before
+> frontend** — the worker has 254 tests so splits are safe to verify, whereas the frontend has ~0 native
+> tests (`#[wasm_bindgen_test]` only), making its refactors higher-risk. Next backend targets: `register.rs`,
+> `handlers/deposit/usdc/mod.rs`, `db/attendees.rs`.
