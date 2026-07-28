@@ -61,7 +61,10 @@
   **`handlers/register.rs` ✅** (1678 → `register/`, 8 submodules incl. relocated `#[cfg(test)]`;
   `DeveloperData` widened to `pub(super)` as a cross-submodule necessity; `register.rs`→`signup.rs`
   to avoid `module_inception`). Both verbatim, all 254 worker tests pass, clippy clean under `-D warnings`.
-  Remaining backend: `handlers/deposit/usdc/mod.rs` (1771), `db/attendees.rs` (1470), `handlers/attendee.rs` (1303).
+  Also **`handlers/attendee.rs` ✅** (1303 → `attendee/`, 7 submodules: list/read/delete/participation/admin
+  + tests; `normalize_override`→`pub(super)`; `get_attendee`+`get_public_ticket` kept together as they share
+  `get_cached_qr_image`). Verbatim, clippy clean under `-D warnings`, 254 tests pass.
+  Remaining backend: `handlers/deposit/usdc/mod.rs` (1771, on-chain — do last/carefully), `db/attendees.rs` (1470).
 - [ ] Phase 3: Frontend splits (landing, quiz_editor)
 - [ ] Phase 5: Hard frontend (scanner, claim, event_form, admin)
 
