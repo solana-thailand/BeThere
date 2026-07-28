@@ -140,8 +140,10 @@ jobs:
 
       - name: Install quasar CLI
         # quasar build also generates the dev-dep client (target/client/), so cargo-build-sbf
-        # alone is insufficient — the quasar CLI is required. Pinned to the same rev as the deps.
-        run: cargo install --git https://github.com/blueshift-gg/quasar quasar-cli --rev 3d6fb0d8574702f2e364d5ab6ee7a31ec21304e6
+        # alone is insufficient — the quasar CLI is required. Install the published crates.io
+        # release (0.0.0) — the same build the local dev toolchain uses; its config schema
+        # (defaults.framework) differs from the git-HEAD CLI's (defaults.rust_framework).
+        run: cargo install quasar-cli --version 0.0.0
 
       - name: Configure quasar (global defaults)
         # Fresh runners have no ~/.quasar/config.toml, so quasar test aborts with
