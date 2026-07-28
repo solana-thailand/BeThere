@@ -202,3 +202,71 @@ fn test_mark_checked_in_deposit_version_mismatch() {
         result.compute_units_consumed
     );
 }
+
+#[test]
+fn test_mark_checked_in_after_event_end() {
+    // Like test_mark_checked_in, but the clock is past event_end. Handler guard
+    // mark_checked_in.rs:39 clock.unix_timestamp > event_end @ EventEnded.
+    let mut svm = setup();
+
+    // DELTA vs test_mark_checked_in: warp clock past event_end.
+    svm.warp_to_timestamp(EVENT_END + 1);
+
+    let (escrow, escrow_bump) = find_event_escrow(&ORGANIZER, EVENT_ID);
+    let (deposit, deposit_bump) = find_attendee_deposit(&escrow, &ATTENDEE);
+
+    let ix = with_signers(
+        MarkCheckedInInstruction {
+            organizer: ORGANIZER,
+            event_escrow: escrow,
+            attendee_deposit: deposit,
+            _event_id: EVENT_ID,
+        }
+        .into(),
+        &[0],
+    );
+
+    let result = svm.process_instruction(
+        &ix,
+        &[
+            signer(ORGANIZER),
+            event_escrow_account(
+                escrow,
+                ORGANIZER,
+                EVENT_ID,
+                USDC_MINT,
+                VAULT,
+                DEPOSIT_AMOUNT,
+                EVENT_END,
+                REFUND_DEADLINE,
+                DEPOSIT_AMOUNT,
+                0,
+                0,
+                true,
+                escrow_bump,
+            ),
+            attendee_deposit_account(
+                deposit,
+                ATTENDEE,
+                escrow,
+                DEPOSIT_AMOUNT,
+                1_699_000_000,
+                false, // not checked in yet
+                false,
+                deposit_bump,
+            ),
+        ],
+    );
+
+    assert!(
+        result.is_err(),
+        "mark_checked_in should fail after event_end"
+    );
+    let err_code = result.raw_result.unwrap_err();
+    assert_eq!(
+        err_code,
+        quasar_svm::InstructionError::Custom(16),
+        "expected EventEnded (16), got {err_code:?}"
+    );
+    println!("  MARK_CHECKED_IN_AFTER_EVENT_END: correctly rejected");
+}

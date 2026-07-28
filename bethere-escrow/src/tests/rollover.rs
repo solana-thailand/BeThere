@@ -523,3 +523,210 @@ fn test_rollover_deposit_different_organizer() {
         "expected Unauthorized (9), got {err_code:?}"
     );
 }
+
+#[test]
+fn test_rollover_target_mint_mismatch() {
+    // Like the happy path, but the TARGET escrow's stored deposit_mint (WRONG_MINT)
+    // differs from the source's (USDC_MINT). Guard: rollover_deposit.rs:59
+    // target_escrow.deposit_mint() == source_escrow.deposit_mint() @ MintMismatch.
+    let mut svm = setup();
+
+    const WRONG_MINT: Pubkey = Pubkey::new_from_array([13; 32]);
+
+    let token_program = quasar_svm::SPL_TOKEN_PROGRAM_ID;
+    let system_program = quasar_svm::system_program::ID;
+
+    let (source_escrow, source_escrow_bump) = find_event_escrow(&ORGANIZER, EVENT_ID);
+    let (source_deposit, source_deposit_bump) = find_attendee_deposit(&source_escrow, &ATTENDEE);
+    let (target_escrow, target_escrow_bump) = find_event_escrow(&ORGANIZER, TARGET_EVENT_ID);
+    let (target_deposit, _) = find_attendee_deposit(&target_escrow, &ATTENDEE);
+
+    let ix = with_writable(
+        with_signers(
+            RolloverDepositInstruction {
+                attendee: ATTENDEE,
+                source_escrow,
+                source_deposit,
+                source_vault: VAULT,
+                target_escrow,
+                target_deposit,
+                target_vault: TARGET_VAULT,
+                deposit_mint: USDC_MINT,
+                rent: RENT,
+                token_program,
+                system_program,
+                _source_event_id: EVENT_ID,
+                _target_event_id: TARGET_EVENT_ID,
+            }
+            .into(),
+            &[0],
+        ),
+        &[5],
+    );
+
+    let result = svm.process_instruction(
+        &ix,
+        &[
+            signer(ATTENDEE),
+            event_escrow_account(
+                source_escrow,
+                ORGANIZER,
+                EVENT_ID,
+                USDC_MINT,
+                VAULT,
+                DEPOSIT_AMOUNT,
+                EVENT_END,
+                REFUND_DEADLINE,
+                DEPOSIT_AMOUNT,
+                0,
+                0,
+                false,
+                source_escrow_bump,
+            ),
+            attendee_deposit_account(
+                source_deposit,
+                ATTENDEE,
+                source_escrow,
+                DEPOSIT_AMOUNT,
+                1_699_000_000,
+                true,
+                false,
+                source_deposit_bump,
+            ),
+            token_account(VAULT, USDC_MINT, source_escrow, DEPOSIT_AMOUNT),
+            // Target escrow stores a DIFFERENT deposit_mint than source
+            event_escrow_account(
+                target_escrow,
+                ORGANIZER,
+                TARGET_EVENT_ID,
+                WRONG_MINT, // != source deposit_mint (USDC_MINT)
+                TARGET_VAULT,
+                DEPOSIT_AMOUNT,
+                EVENT_END + 86_400 * 30,
+                REFUND_DEADLINE + 86_400 * 30,
+                0,
+                0,
+                0,
+                true,
+                target_escrow_bump,
+            ),
+            empty(target_deposit),
+            token_account(TARGET_VAULT, USDC_MINT, target_escrow, 0),
+            mint_account(USDC_MINT),
+        ],
+    );
+
+    assert!(
+        result.is_err(),
+        "rollover should fail when target mint differs"
+    );
+    let err_code = result.raw_result.unwrap_err();
+    assert_eq!(
+        err_code,
+        quasar_svm::InstructionError::Custom(11),
+        "expected MintMismatch (11), got {err_code:?}"
+    );
+}
+
+#[test]
+fn test_rollover_target_incorrect_amount() {
+    // Like the happy path, but the TARGET escrow's deposit_amount differs from the
+    // source's. Guard: rollover_deposit.rs:60
+    // target_escrow.deposit_amount() == source_escrow.deposit_amount()
+    // @ IncorrectDepositAmount.
+    let mut svm = setup();
+
+    let token_program = quasar_svm::SPL_TOKEN_PROGRAM_ID;
+    let system_program = quasar_svm::system_program::ID;
+
+    let (source_escrow, source_escrow_bump) = find_event_escrow(&ORGANIZER, EVENT_ID);
+    let (source_deposit, source_deposit_bump) = find_attendee_deposit(&source_escrow, &ATTENDEE);
+    let (target_escrow, target_escrow_bump) = find_event_escrow(&ORGANIZER, TARGET_EVENT_ID);
+    let (target_deposit, _) = find_attendee_deposit(&target_escrow, &ATTENDEE);
+
+    let ix = with_writable(
+        with_signers(
+            RolloverDepositInstruction {
+                attendee: ATTENDEE,
+                source_escrow,
+                source_deposit,
+                source_vault: VAULT,
+                target_escrow,
+                target_deposit,
+                target_vault: TARGET_VAULT,
+                deposit_mint: USDC_MINT,
+                rent: RENT,
+                token_program,
+                system_program,
+                _source_event_id: EVENT_ID,
+                _target_event_id: TARGET_EVENT_ID,
+            }
+            .into(),
+            &[0],
+        ),
+        &[5],
+    );
+
+    let result = svm.process_instruction(
+        &ix,
+        &[
+            signer(ATTENDEE),
+            event_escrow_account(
+                source_escrow,
+                ORGANIZER,
+                EVENT_ID,
+                USDC_MINT,
+                VAULT,
+                DEPOSIT_AMOUNT,
+                EVENT_END,
+                REFUND_DEADLINE,
+                DEPOSIT_AMOUNT,
+                0,
+                0,
+                false,
+                source_escrow_bump,
+            ),
+            attendee_deposit_account(
+                source_deposit,
+                ATTENDEE,
+                source_escrow,
+                DEPOSIT_AMOUNT,
+                1_699_000_000,
+                true,
+                false,
+                source_deposit_bump,
+            ),
+            token_account(VAULT, USDC_MINT, source_escrow, DEPOSIT_AMOUNT),
+            // Target escrow requires a DIFFERENT deposit_amount than source
+            event_escrow_account(
+                target_escrow,
+                ORGANIZER,
+                TARGET_EVENT_ID,
+                USDC_MINT,
+                TARGET_VAULT,
+                DEPOSIT_AMOUNT + 1, // != source deposit_amount
+                EVENT_END + 86_400 * 30,
+                REFUND_DEADLINE + 86_400 * 30,
+                0,
+                0,
+                0,
+                true,
+                target_escrow_bump,
+            ),
+            empty(target_deposit),
+            token_account(TARGET_VAULT, USDC_MINT, target_escrow, 0),
+            mint_account(USDC_MINT),
+        ],
+    );
+
+    assert!(
+        result.is_err(),
+        "rollover should fail when target amount differs"
+    );
+    let err_code = result.raw_result.unwrap_err();
+    assert_eq!(
+        err_code,
+        quasar_svm::InstructionError::Custom(0),
+        "expected IncorrectDepositAmount (0), got {err_code:?}"
+    );
+}
