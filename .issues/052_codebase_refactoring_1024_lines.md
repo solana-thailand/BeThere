@@ -57,6 +57,25 @@
 
 - [x] Phase 1: Easy backend splits (event_do, sheets/write)
 - [x] Phase 2: Medium backend splits (events→8 files, thb/handlers→5 files)
+- [~] Phase 4: Hard backend — **`event_store/write.rs` ✅** (1430 → `write/`, 10 submodules) and
+  **`handlers/register.rs` ✅** (1678 → `register/`, 8 submodules incl. relocated `#[cfg(test)]`;
+  `DeveloperData` widened to `pub(super)` as a cross-submodule necessity; `register.rs`→`signup.rs`
+  to avoid `module_inception`). Both verbatim, all 254 worker tests pass, clippy clean under `-D warnings`.
+  Also **`handlers/attendee.rs` ✅** (1303 → `attendee/`, 7 submodules: list/read/delete/participation/admin
+  + tests; `normalize_override`→`pub(super)`; `get_attendee`+`get_public_ticket` kept together as they share
+  `get_cached_qr_image`). Verbatim, clippy clean under `-D warnings`, 254 tests pass.
+  Also **`db/attendees.rs` ✅** (1470 → `attendees/`, 6 submodules: writes/deposit/reads/walkin/management;
+  all 58 external `attendees::` call sites preserved via `pub(crate) use` globs; `D1AttendeeRow` widened to
+  `pub(super)` for one cross-submodule reuse; no SQL/bind changes). Verbatim, clippy clean under `-D warnings`,
+  254 tests pass.
+  **Only backend file left: `handlers/deposit/usdc/mod.rs` (1771)** — a ~1040-line on-chain verification region;
+  money-critical, split last with extra care.
 - [ ] Phase 3: Frontend splits (landing, quiz_editor)
-- [ ] Phase 4: Hard backend (register, event_store/write)
 - [ ] Phase 5: Hard frontend (scanner, claim, event_form, admin)
+
+> **Note (2026-07-28):** the file inventory above is stale — the tree now has ~21 files >1024 lines
+> (several new since this issue, e.g. `handlers/deposit/usdc/mod.rs`, `db/attendees.rs`,
+> `frontend/api/event.rs`, `campaigns_page.rs`, `adventure/*`). **Recommended order: backend before
+> frontend** — the worker has 254 tests so splits are safe to verify, whereas the frontend has ~0 native
+> tests (`#[wasm_bindgen_test]` only), making its refactors higher-risk. Next backend targets: `register.rs`,
+> `handlers/deposit/usdc/mod.rs`, `db/attendees.rs`.

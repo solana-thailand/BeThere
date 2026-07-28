@@ -269,7 +269,7 @@ fn illegal_transition_leaves_config_unchanged() {
 const WORKER_ROOT: &str = concat!(env!("CARGO_MANIFEST_DIR"));
 
 /// Relative path to the file containing both allowlist copies.
-const WRITE_RS_REL: &str = "src/event_store/write.rs";
+const WRITE_RS_REL: &str = "src/event_store/write/update.rs";
 
 /// Read `worker/src/event_store/write.rs` as a string.
 fn read_write_rs() -> String {
