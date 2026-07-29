@@ -129,6 +129,17 @@ These are the true long-poles. **None of them are validated by devnet**, and eac
 - [ ] **4.1 External security audit** — submit the prepared `docs/audit_submission.md` package (Audit Arena).
       This is the long pole; devnet validation does **not** substitute for it. Note the program is built on the
       pre-release **Quasar** framework (unaudited codegen) — flag that to the auditor.
+  - [ ] **4.1a Framework soundness is in audit scope.** Our program contains **no `unsafe`** — the entire
+        zero-copy unsafe-soundness burden lives in `quasar_lang`. Per the [zero-copy safety model]
+        (https://quasar-lang.com/docs/zero-copy/safety-model), Quasar **v0.1.0 is explicitly un-audited** and its
+        soundness rests on **Tree Borrows** aliasing semantics (an "accepted risk", validated only under
+        `-Zmiri-tree-borrows`, which cannot cover SBF syscalls/FFI). Because we **pin** the framework
+        (`Cargo.lock` + rev-pinned deps, PR #46), we inherit exactly that commit's soundness. The auditor must
+        therefore review **the pinned `quasar_lang` version**, not just our handlers — record the exact rev in the
+        submission. On our side the safety-model do's are met and re-checkable: non-zero discriminators
+        (`EventEscrow=1`/`AttendeeDeposit=2`), `close(dest=…)` zeroes discriminators (revival protection),
+        explicit `_padding` (stable layout), `require_distinct` (10 handlers, dup/aliasing guard),
+        `validate_version` (8 handlers).
 - [ ] **4.2 Upgrade-authority hardening** — move the upgrade authority to a **Squads multisig** (or publish an
       immutability timeline). A single EOA upgrade key on mainnet is a live rug vector for every event vault.
       Document custody + backup of the program-id and upgrade keys.
