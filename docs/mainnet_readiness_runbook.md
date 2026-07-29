@@ -39,10 +39,12 @@ The on-chain programdata was 99,104 bytes vs a local build of 89,856 bytes — t
 - [ ] **0.1 Build from pinned source:** `cd bethere-escrow && quasar build`
 - [ ] **0.2 Redeploy to devnet** (needs the program keypair + a funded devnet deployer):
       `quasar deploy --url devnet --program-keypair <program-keypair.json> -k <payer.json>`
-- [ ] **0.3 Prove `binary == source`:**
-      `solana program dump C6HDeZES9aPpNwe3UvS9ecmfcRhH1XeJb8PGJmLG3z3T /tmp/onchain.so --url devnet`
-      then compare against `target/deploy/bethere_escrow.so` (byte length + `sha256sum` — allow for the
-      trailing-zero padding solana adds, or compare the ELF sections). They must match.
+- [ ] **0.3 Prove `binary == source`:** `bash scripts/verify_devnet_binary.sh` (read-only, no keypair).
+      It dumps the deployed program and compares correctly — the first `len(local)` bytes must be byte-identical
+      **and** everything after must be zero padding. (A naive length/`sha256sum` compare *falsely fails*: `solana
+      program dump` returns the full allocated programdata zero-padded to `max_len`, which is why the on-chain
+      99,104 B ≠ local 89,856 B above is padding, not a mismatch.) Add `--build` to `quasar build` from pinned
+      source first. On success it prints the source sha256 to record in `docs/audit_submission.md`.
 - [ ] **0.4 Cluster-selection defect (worker):** `usdc_mint()` / `escrow_program_id()` read
       `std::env::var("SOLANA_CLUSTER")`, which is empty in the wasm Workers runtime → always devnet.
       Fix to read the `Env` binding + add `SOLANA_CLUSTER` to `wrangler.toml` and the `deploy.sh` PUT
