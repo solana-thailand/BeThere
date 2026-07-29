@@ -69,6 +69,10 @@ CLAIM_BASE_URL = "https://bethere.solana-thailand.workers.dev/claim"
 GOOGLE_SHEET_NAME = "Attendees"
 GOOGLE_STAFF_SHEET_NAME = "staff"
 PLATFORM_SHEET_ID = "1oF54ia6mquO_kB869aQxmz3RD8nDcTRWfXIX0VmndxM"
+# Solana cluster for escrow tx-building. "devnet" | "mainnet-beta". Read via the Env
+# binding by AppState (std::env is empty in the wasm Workers runtime). Flipping to
+# "mainnet-beta" requires ESCROW_PROGRAM_ID_MAINNET to be set (else it fails loudly).
+SOLANA_CLUSTER = "devnet"
 DEV_MODE = "0"
 DEV_EMAIL = "ratchapon.poc@gmail.com"
 SUPER_ADMIN_EMAILS = "ratchapon.poc@gmail.com,hackathon@colosseum.org"
@@ -198,6 +202,8 @@ name = "bethere-staging"
 # environment"). Below mirrors production and overrides the env-specific ones.
 SERVER_URL = "https://bethere-staging.solana-thailand.workers.dev"
 CLAIM_BASE_URL = "https://bethere-staging.solana-thailand.workers.dev/claim"
+# Staging targets devnet (vars are non-inheritable, so it must be redeclared here).
+SOLANA_CLUSTER = "devnet"
 GOOGLE_SHEET_NAME = "Attendees"
 GOOGLE_STAFF_SHEET_NAME = "staff"
 PLATFORM_SHEET_ID = "1oF54ia6mquO_kB869aQxmz3RD8nDcTRWfXIX0VmndxM"
