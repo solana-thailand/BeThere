@@ -31,6 +31,8 @@ pub use wire::{
     verify_escrow_account_exists,
 };
 
+use std::sync::OnceLock;
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
@@ -52,23 +54,109 @@ pub(crate) const USDC_MINT_DEVNET: &str = "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJg
 /// Mainnet USDC mint.
 pub(crate) const USDC_MINT_MAINNET: &str = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1m";
 
-/// Returns the USDC mint address based on the SOLANA_CLUSTER env var.
-/// Defaults to devnet if not set.
-pub(crate) fn usdc_mint() -> &'static str {
-    match std::env::var("SOLANA_CLUSTER").unwrap_or_default().as_str() {
+/// The target Solana cluster, seeded ONCE from the `SOLANA_CLUSTER` env var at worker
+/// init via [`set_cluster`].
+///
+/// IMPORTANT: `std::env::var` is EMPTY in the wasm Cloudflare Workers runtime — env vars
+/// arrive only via the `Env` binding. The old code read `std::env::var("SOLANA_CLUSTER")`
+/// here, which always returned `Err` → the worker silently selected devnet forever, and the
+/// documented "flip SOLANA_CLUSTER to cut over to mainnet" mechanism did not work. The cluster
+/// must therefore be pushed in from the Env binding. Defaults to devnet until seeded.
+static SOLANA_CLUSTER: OnceLock<String> = OnceLock::new();
+
+/// Low-level idempotent setter. The first value wins (cluster is fixed per deploy).
+pub(crate) fn set_cluster(cluster: &str) {
+    let _ = SOLANA_CLUSTER.set(cluster.to_string());
+}
+
+/// Seed the target cluster from the worker `Env` binding, once per isolate.
+///
+/// Cheap to call repeatedly — returns immediately once seeded, so it avoids the
+/// per-request `env.var()` JS-boundary crossing + allocation. Call it from EVERY entry
+/// point that can reach an escrow function (`AppState::from_env` for the fetch path AND
+/// the `scheduled` cron handler), so a future cron/alarm path can never read an
+/// un-seeded (default-devnet) cluster on a mainnet deploy — which would re-introduce the
+/// exact silent mainnet→devnet routing this indirection exists to prevent.
+pub(crate) fn seed_cluster_from_env(env: &worker::Env) {
+    if SOLANA_CLUSTER.get().is_some() {
+        return;
+    }
+    let cluster = env
+        .var("SOLANA_CLUSTER")
+        .map(|v| v.to_string())
+        .unwrap_or_else(|_| "devnet".to_string());
+    set_cluster(&cluster);
+}
+
+/// The target cluster, defaulting to `"devnet"` until [`set_cluster`] has run.
+fn cluster() -> &'static str {
+    SOLANA_CLUSTER.get().map(String::as_str).unwrap_or("devnet")
+}
+
+/// Pure cluster→mint mapping (unit-testable without the process-global cluster).
+fn usdc_mint_for(cluster: &str) -> &'static str {
+    match cluster {
         "mainnet-beta" => USDC_MINT_MAINNET,
         _ => USDC_MINT_DEVNET,
     }
 }
 
-/// Returns the escrow program ID based on the `SOLANA_CLUSTER` env var.
-/// Defaults to devnet if not set. Mirrors `usdc_mint()` so a cluster flip changes both the
-/// USDC mint AND the program ID atomically — without this, flipping the cluster would route
-/// mainnet USDC against a devnet-program PDA (unrecoverable funds).
-pub(crate) fn escrow_program_id() -> &'static str {
-    match std::env::var("SOLANA_CLUSTER").unwrap_or_default().as_str() {
+/// Pure cluster→program-id mapping (unit-testable without the process-global cluster).
+fn program_id_for(cluster: &str) -> &'static str {
+    match cluster {
         "mainnet-beta" => ESCROW_PROGRAM_ID_MAINNET,
         _ => ESCROW_PROGRAM_ID_DEVNET,
+    }
+}
+
+/// USDC mint for the target cluster.
+pub(crate) fn usdc_mint() -> &'static str {
+    usdc_mint_for(cluster())
+}
+
+/// Escrow program ID for the target cluster. Mirrors `usdc_mint()` so a cluster flip changes
+/// BOTH the mint and the program ID atomically — a mismatch (mainnet USDC against a devnet PDA)
+/// would mean unrecoverable funds. On `mainnet-beta` with `ESCROW_PROGRAM_ID_MAINNET` still
+/// empty, this returns `""` and fails loudly at base58 parsing rather than routing silently.
+pub(crate) fn escrow_program_id() -> &'static str {
+    program_id_for(cluster())
+}
+
+#[cfg(test)]
+mod cluster_selection_tests {
+    use super::*;
+
+    #[test]
+    fn mint_and_program_map_per_cluster() {
+        assert_eq!(usdc_mint_for("devnet"), USDC_MINT_DEVNET);
+        assert_eq!(usdc_mint_for("mainnet-beta"), USDC_MINT_MAINNET);
+        assert_eq!(program_id_for("devnet"), ESCROW_PROGRAM_ID_DEVNET);
+        assert_eq!(program_id_for("mainnet-beta"), ESCROW_PROGRAM_ID_MAINNET);
+    }
+
+    #[test]
+    fn unknown_or_empty_cluster_defaults_to_devnet() {
+        // Unset / typo'd SOLANA_CLUSTER falls back to devnet (the safe default) rather
+        // than routing to mainnet.
+        assert_eq!(usdc_mint_for(""), USDC_MINT_DEVNET);
+        assert_eq!(usdc_mint_for("testnet"), USDC_MINT_DEVNET);
+        assert_eq!(program_id_for(""), ESCROW_PROGRAM_ID_DEVNET);
+    }
+
+    #[test]
+    fn mint_and_program_flip_together() {
+        // The two must never disagree: mainnet mint with a devnet program (or vice versa)
+        // would send mainnet USDC to a devnet PDA — unrecoverable.
+        assert_ne!(usdc_mint_for("mainnet-beta"), usdc_mint_for("devnet"));
+        assert_ne!(program_id_for("mainnet-beta"), program_id_for("devnet"));
+    }
+
+    #[test]
+    fn default_cluster_is_devnet_until_seeded() {
+        // In the unit-test binary set_cluster() is never called, so the global stays unset.
+        assert_eq!(cluster(), "devnet");
+        assert_eq!(usdc_mint(), USDC_MINT_DEVNET);
+        assert_eq!(escrow_program_id(), ESCROW_PROGRAM_ID_DEVNET);
     }
 }
 
