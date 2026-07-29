@@ -243,6 +243,7 @@ mod checkin;
 mod close;
 mod create_event;
 mod deposit;
+mod differential;
 mod introspection;
 mod refund;
 mod rollover;

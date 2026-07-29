@@ -157,6 +157,10 @@ async fn scheduled(_event: worker::ScheduledEvent, env: Env, _ctx: worker::Sched
     console_error_panic_hook::set_once();
     tracing_wasm::set_as_global_default();
 
+    // Seed the escrow cluster in this isolate too — the cron path does not build AppState,
+    // so any escrow read from a future scheduled job would otherwise default to devnet.
+    solana_escrow::seed_cluster_from_env(&env);
+
     let events_kv = match env.kv("EVENTS").ok() {
         Some(kv) => kv,
         None => {

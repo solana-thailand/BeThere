@@ -539,6 +539,9 @@ plain_text_vars = {
     'GOOGLE_SHEET_NAME': 'Attendees',
     'GOOGLE_STAFF_SHEET_NAME': 'staff',
     'PLATFORM_SHEET_ID': '1oF54ia6mquO_kB869aQxmz3RD8nDcTRWfXIX0VmndxM',
+    # Solana cluster for escrow tx-building (mirror wrangler.toml [vars]). The PUT-API
+    # fallback must send this too, else the worker falls back to the "devnet" default.
+    'SOLANA_CLUSTER': 'devnet',
     'DEV_MODE': '0',
     'DEV_EMAIL': 'ratchapon.poc@gmail.com',
     'SUPER_ADMIN_EMAILS': 'ratchapon.poc@gmail.com,hackathon@colosseum.org',

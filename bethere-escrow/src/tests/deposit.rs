@@ -230,3 +230,141 @@ fn test_deposit_escrow_version_mismatch() {
         result.compute_units_consumed
     );
 }
+
+#[test]
+fn test_deposit_mint_mismatch() {
+    // Like test_deposit, but the deposit_mint account passed (WRONG_MINT) differs from
+    // the escrow's stored deposit_mint (USDC_MINT). Guard: deposit.rs:23 constraint
+    // deposit_mint.address() == event_escrow.deposit_mint() @ MintMismatch.
+    let mut svm = setup();
+
+    // A mint under a different pubkey than escrow.deposit_mint (USDC_MINT).
+    const WRONG_MINT: Pubkey = Pubkey::new_from_array([13; 32]);
+
+    let token_program = quasar_svm::SPL_TOKEN_PROGRAM_ID;
+    let system_program = quasar_svm::system_program::ID;
+    let (escrow, escrow_bump) = find_event_escrow(&ORGANIZER, EVENT_ID);
+    let (deposit, _deposit_bump) = find_attendee_deposit(&escrow, &ATTENDEE);
+
+    let ix = with_signers(
+        DepositInstruction {
+            attendee: ATTENDEE,
+            event_escrow: escrow,
+            deposit_mint: WRONG_MINT, // != escrow.deposit_mint (USDC_MINT)
+            attendee_deposit: deposit,
+            attendee_ta: ATTENDEE_TA,
+            vault: VAULT,
+            rent: RENT,
+            token_program,
+            system_program,
+            _event_id: EVENT_ID,
+        }
+        .into(),
+        &[0],
+    );
+
+    let result = svm.process_instruction(
+        &ix,
+        &[
+            signer(ATTENDEE),
+            event_escrow_account(
+                escrow,
+                ORGANIZER,
+                EVENT_ID,
+                USDC_MINT, // escrow.deposit_mint stays USDC_MINT
+                VAULT,
+                DEPOSIT_AMOUNT,
+                EVENT_END,
+                REFUND_DEADLINE,
+                0,
+                0,
+                0,
+                true,
+                escrow_bump,
+            ),
+            mint_account(WRONG_MINT), // mint account under the different pubkey
+            empty(deposit),
+            token_account(ATTENDEE_TA, WRONG_MINT, ATTENDEE, DEPOSIT_AMOUNT),
+            token_account(VAULT, USDC_MINT, escrow, 0),
+        ],
+    );
+
+    assert!(result.is_err(), "deposit should fail on mint mismatch");
+    let err_code = result.raw_result.unwrap_err();
+    assert_eq!(
+        err_code,
+        quasar_svm::InstructionError::Custom(11),
+        "expected MintMismatch (11), got {err_code:?}"
+    );
+    println!("  DEPOSIT_MINT_MISMATCH: correctly rejected");
+}
+
+#[test]
+fn test_deposit_vault_mismatch() {
+    // Like test_deposit, but the vault account passed (WRONG_VAULT) differs from the
+    // escrow's stored vault (VAULT). Guard: deposit.rs:36 constraint
+    // vault.address() == event_escrow.vault() @ VaultMismatch.
+    let mut svm = setup();
+
+    const WRONG_VAULT: Pubkey = Pubkey::new_from_array([14; 32]);
+
+    let token_program = quasar_svm::SPL_TOKEN_PROGRAM_ID;
+    let system_program = quasar_svm::system_program::ID;
+    let (escrow, escrow_bump) = find_event_escrow(&ORGANIZER, EVENT_ID);
+    let (deposit, _deposit_bump) = find_attendee_deposit(&escrow, &ATTENDEE);
+
+    let ix = with_writable(
+        with_signers(
+            DepositInstruction {
+                attendee: ATTENDEE,
+                event_escrow: escrow,
+                deposit_mint: USDC_MINT,
+                attendee_deposit: deposit,
+                attendee_ta: ATTENDEE_TA,
+                vault: WRONG_VAULT, // != escrow.vault (VAULT)
+                rent: RENT,
+                token_program,
+                system_program,
+                _event_id: EVENT_ID,
+            }
+            .into(),
+            &[0],
+        ),
+        &[4, 5], // attendee_ta, vault writable
+    );
+
+    let result = svm.process_instruction(
+        &ix,
+        &[
+            signer(ATTENDEE),
+            event_escrow_account(
+                escrow,
+                ORGANIZER,
+                EVENT_ID,
+                USDC_MINT,
+                VAULT, // escrow.vault stays VAULT
+                DEPOSIT_AMOUNT,
+                EVENT_END,
+                REFUND_DEADLINE,
+                0,
+                0,
+                0,
+                true,
+                escrow_bump,
+            ),
+            mint_account(USDC_MINT),
+            empty(deposit),
+            token_account(ATTENDEE_TA, USDC_MINT, ATTENDEE, DEPOSIT_AMOUNT),
+            token_account(WRONG_VAULT, USDC_MINT, escrow, 0), // vault under different pubkey
+        ],
+    );
+
+    assert!(result.is_err(), "deposit should fail on vault mismatch");
+    let err_code = result.raw_result.unwrap_err();
+    assert_eq!(
+        err_code,
+        quasar_svm::InstructionError::Custom(10),
+        "expected VaultMismatch (10), got {err_code:?}"
+    );
+    println!("  DEPOSIT_VAULT_MISMATCH: correctly rejected");
+}

@@ -304,6 +304,11 @@ impl AppState {
             });
         }
 
+        // Seed the escrow cluster selector from the Env binding. std::env is empty in the
+        // wasm Workers runtime, so solana_escrow can only learn the target cluster this way.
+        // Seeded once per isolate; defaults to devnet when SOLANA_CLUSTER is unset.
+        crate::solana_escrow::seed_cluster_from_env(env);
+
         Ok(Self {
             config,
             quiz_kv,
