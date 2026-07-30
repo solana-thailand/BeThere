@@ -979,6 +979,8 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "base64 0.22.1",
+ "bincode",
  "chrono",
  "clap",
  "event-checkin-domain",

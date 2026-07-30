@@ -62,11 +62,11 @@ struct Cli {
 ///
 /// Failure modes are deliberately split by exit code so the gate script and CI
 /// can distinguish them:
-///  - `0`  — every registered flow passed; `.last-green` was touched.
-///  - `1`  — one or more flows failed (or the run was empty). Production deploys
-///           must block until a subsequent run exits 0.
-///  - `2`  — misconfiguration (missing env, unparseable URL, missing keypair).
-///           No flow executed; `.last-green` was NOT touched.
+/// - `0`  — every registered flow passed; `.last-green` was touched.
+/// - `1`  — one or more flows failed (or the run was empty). Production deploys
+///   must block until a subsequent run exits 0.
+/// - `2`  — misconfiguration (missing env, unparseable URL, missing keypair).
+///   No flow executed; `.last-green` was NOT touched.
 fn main() -> ExitCode {
     // Initialise tracing/CLI logging conventionally. The harness emits per-flow
     // lines to stderr so CI logs are readable without piping through `jq`.

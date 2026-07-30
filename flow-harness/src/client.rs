@@ -25,6 +25,7 @@
 //!  - `{"error":{"code":N,"message":"..."}}`  (escrow-originated)
 //!  - `{"error":"..."}`                        (worker validation)
 //!  - `{"code":N,"message":"..."}`             (flat)
+//!
 //! Unknown shapes fall back to the raw body as the message with no code.
 
 use reqwest::header::{COOKIE, HeaderMap, HeaderValue};

@@ -264,15 +264,13 @@ fn is_eligible_status(status: &str) -> bool {
 
 /// Perform the actual NFT mint (claim transition).
 ///
-/// TODO(staging-live): once staging is provisioned and the wallet-signing path
-/// is wired, this should:
-///  1. Trigger the claim-mint flow on the worker (likely `POST /api/claim/mint`
-///     or similar — confirm the route with the worker handlers).
-///  2. Sign + submit the mint transaction via the configured RPC.
-///  3. Poll `GET /api/claim/{token}` until `claimed == true`.
-///  4. Assert the response reports `claimed=true` and a terminal status.
-/// Until then, returns a `Config` error so the run fails fast with a pointer
-/// to the missing precondition rather than blocking on a network call.
+/// Deliberately NOT wired (unlike the deposit/refund on-chain seams): the NFT
+/// mint is a separate program and the worker mint route is unconfirmed in the
+/// handlers (`POST /api/claim/mint` is a guess). Rather than sign+submit against
+/// an unverified endpoint, this fails fast. The claim flow defaults to
+/// `attempt_mint=false`, asserting only the pre-claim state, so a default run is
+/// unaffected. Wire this once the mint route + wallet-signing path are confirmed
+/// (the `chain::submit_tx` seam is ready to reuse).
 async fn perform_claim_mint(
     _ctx: &StagingContext,
     _client: &WorkerClient,
