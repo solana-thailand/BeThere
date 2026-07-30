@@ -283,29 +283,45 @@ impl RefundPreEventEndConfig {
     }
 }
 
-// ── Staging-live stub ────────────────────────────────────────────────────────
+// ── On-chain seam ─────────────────────────────────────────────────────────────
 
-/// Attempt the refund and assert the worker surfaces `RefundNotYetAllowed`.
-///
-/// TODO(staging-live): once staging is provisioned, this should:
-///  1. Call `client.request_refund(ctx, req)`.
-///  2. Match on the result:
-///     - `Err(Worker(e))` where `e.code == Some(RefundNotYetAllowed)` → pass.
-///     - `Ok(tx)` → simulate `tx` against the escrow program and assert the
-///       simulation revert code is 1.
-///     - Anything else → fail with a clear message.
-/// Until then, returns a `Config` error so the run fails fast with a pointer
-/// to the missing precondition rather than blocking on a network call.
+/// Attempt the refund before `event_end` and assert it is rejected with
+/// `RefundNotYetAllowed` — either server-side (worker returns the escrow code)
+/// or, if the worker built a tx anyway, on submitting it (the program reverts
+/// with `Custom(1)`, which `chain::submit_tx` maps back to the same code).
 async fn attempt_refund_and_assert_revert(
-    _client: &WorkerClient,
-    _ctx: &StagingContext,
-    _req: &RefundRequest,
+    client: &WorkerClient,
+    ctx: &StagingContext,
+    req: &RefundRequest,
 ) -> HarnessResult<()> {
-    Err(HarnessError::Config(format!(
-        "[{FLOW_NAME}] attempt_refund_and_assert_revert not yet wired (staging not live); \
-         the gate/outcome assertions above already cover the contract surface; wire this \
-         in the same PR that removes the staging TODO markers"
-    )))
+    let expected = expected_escrow_code();
+    let check = |code: Option<EscrowCode>, origin: &str| -> HarnessResult<()> {
+        if code == Some(expected) {
+            Ok(())
+        } else {
+            Err(HarnessError::AssertionFailed {
+                flow: FLOW_NAME,
+                reason: format!("expected {expected} {origin}, got {code:?}"),
+            })
+        }
+    };
+    match client.request_refund(ctx, req).await {
+        // Common path: the worker rejects server-side with the escrow code.
+        Err(HarnessError::Worker(e)) => check(e.code, "from worker"),
+        // Worker built the tx anyway → submitting it must revert on-chain with
+        // the same code (chain::submit_tx maps a Custom(N) revert to Worker).
+        Ok(tx) => match crate::chain::submit_tx(ctx, &tx.transaction).await {
+            Err(HarnessError::Worker(e)) => check(e.code, "on-chain"),
+            Ok(sig) => Err(HarnessError::AssertionFailed {
+                flow: FLOW_NAME,
+                reason: format!(
+                    "refund unexpectedly SUCCEEDED on-chain (sig {sig}); expected revert {expected}"
+                ),
+            }),
+            Err(other) => Err(other),
+        },
+        Err(other) => Err(other),
+    }
 }
 
 /// Convenience: the escrow code this flow expects to observe. Used by tests

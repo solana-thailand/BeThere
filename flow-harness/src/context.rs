@@ -51,6 +51,10 @@ use crate::error::{HarnessError, HarnessResult};
 /// Deployed escrow program id (`declare_id!` in `bethere-escrow/src/lib.rs`).
 pub const ESCROW_PROGRAM_ID: &str = "C6HDeZES9aPpNwe3UvS9ecmfcRhH1XeJb8PGJmLG3z3T";
 
+/// Default Solana JSON-RPC endpoint (public devnet). Override via
+/// `FLOW_HARNESS_RPC_URL` to point at a Helius/private devnet RPC.
+pub const DEFAULT_RPC_URL: &str = "https://api.devnet.solana.com";
+
 /// `EventEscrow` PDA seed prefix (state.rs: `#[seeds(b"escrow", ...)]`).
 pub const EVENT_ESCROW_SEED: &[u8] = b"escrow";
 
@@ -96,6 +100,11 @@ pub struct StagingContext {
     pub escrow_program_id: Pubkey,
     /// USDC mint used by the escrow vault. Devnet USDC mint by default.
     pub deposit_mint: Pubkey,
+    /// Solana JSON-RPC endpoint the harness submits signed transactions to and
+    /// reads on-chain accounts from. Defaults to public devnet
+    /// ([`DEFAULT_RPC_URL`]); override with `FLOW_HARNESS_RPC_URL` (e.g. a Helius
+    /// devnet URL) to avoid the public endpoint's rate limits.
+    pub rpc_url: Url,
 }
 
 impl StagingContext {
@@ -138,6 +147,11 @@ impl StagingContext {
         let escrow_program_id = read_pubkey_env("FLOW_HARNESS_ESCROW_PROGRAM_ID")
             .unwrap_or_else(|_| pubkey_from_str(ESCROW_PROGRAM_ID));
         let deposit_mint = read_pubkey_env("FLOW_HARNESS_DEPOSIT_MINT")?;
+        let rpc_url = {
+            let raw = std::env::var("FLOW_HARNESS_RPC_URL")
+                .unwrap_or_else(|_| DEFAULT_RPC_URL.to_string());
+            Url::parse(&raw).map_err(|e| HarnessError::Config(format!("FLOW_HARNESS_RPC_URL: {e}")))?
+        };
 
         Ok(Self {
             worker_url,
@@ -149,6 +163,7 @@ impl StagingContext {
             payer: Arc::new(payer),
             escrow_program_id,
             deposit_mint,
+            rpc_url,
         })
     }
 
@@ -174,6 +189,8 @@ impl StagingContext {
             // Caller-supplied via env in real runs; for tests we use zero-Pubkey
             // because no flow that consumes `deposit_mint` runs in unit mode.
             deposit_mint: Pubkey::default(),
+            // Devnet by default; unit tests never submit, so the value is inert.
+            rpc_url: Url::parse(DEFAULT_RPC_URL).expect("DEFAULT_RPC_URL is a valid URL"),
         })
     }
 

@@ -305,28 +305,35 @@ impl RefundPostEventEndCheckedInConfig {
     }
 }
 
-// ── Staging-live stub ────────────────────────────────────────────────────────
+// ── On-chain seam ─────────────────────────────────────────────────────────────
 
-/// Submit the refund and assert the program accepts it.
-///
-/// TODO(staging-live): once staging is provisioned, this should:
-///  1. Call `client.request_refund(ctx, req)` → `TxResponse`.
-///  2. Decode + sign + submit the TX via `FLOW_HARNESS_RPC_URL`.
-///  3. Poll `client.fetch_deposit_status` until the deposit is no longer
-///     `verified`, OR poll the RPC until the `AttendeeDeposit` PDA is closed.
-///  4. Assert the on-chain state changed (deposit drained / PDA closed).
-/// Until then, returns a `Config` error so the run fails fast with a pointer
-/// to the missing precondition rather than blocking on a network call.
+/// Submit the checked-in refund past `event_end` and assert it succeeds: the
+/// worker builds the paired refund+close tx, it lands on-chain, and the
+/// `AttendeeDeposit` PDA is closed as a result (the defining post-condition).
 async fn submit_refund_and_assert_success(
-    _client: &WorkerClient,
-    _ctx: &StagingContext,
-    _req: &RefundRequest,
+    client: &WorkerClient,
+    ctx: &StagingContext,
+    req: &RefundRequest,
 ) -> HarnessResult<()> {
-    Err(HarnessError::Config(format!(
-        "[{FLOW_NAME}] submit_refund_and_assert_success not yet wired (staging not live); \
-         the gate/outcome assertions above already cover the contract surface; wire this \
-         in the same PR that removes the staging TODO markers"
-    )))
+    // Positive path: the worker must build the paired refund+close tx …
+    let tx = client.request_refund(ctx, req).await?;
+    // … which must land on-chain (any Custom(N) revert surfaces as Worker).
+    let _sig = crate::chain::submit_tx(ctx, &tx.transaction).await?;
+
+    // The refund+close pair closes the AttendeeDeposit PDA, so it must no longer
+    // exist (or be zeroed) on-chain — the defining post-condition of success.
+    let (pda, _) = ctx.attendee_deposit_pda();
+    match crate::chain::fetch_account(ctx, &pda).await? {
+        None => Ok(()),
+        Some(a) if a.data.is_empty() => Ok(()),
+        Some(a) => Err(HarnessError::AssertionFailed {
+            flow: FLOW_NAME,
+            reason: format!(
+                "AttendeeDeposit PDA {pda} still present ({} bytes) after refund+close; expected closed",
+                a.data.len()
+            ),
+        }),
+    }
 }
 
 // ── Tests ────────────────────────────────────────────────────────────────────

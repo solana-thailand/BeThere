@@ -156,11 +156,9 @@ impl Flow for DepositFlow {
 
         // ── Step 1: Request the deposit transaction ─────────────────────────
         //
-        // TODO(staging-live): the call below issues an HTTP request to the
-        // staging worker. Until staging is provisioned (plan 005 §3.1), the
-        // request fails with `HarnessError::Transport`, which the runner
-        // records as a flow failure. The structure above and below the marker
-        // is the real flow body — only the network touch-point is deferred.
+        // Issues a live HTTP request to the worker; against an un-provisioned
+        // target it fails with `HarnessError::Transport` (recorded as a flow
+        // failure). Point the harness at a live staging worker to exercise it.
         let deposit_req = DepositUsdcRequest {
             attendee_id: self.config.attendee_id.clone(),
             event_id: self.config.event_id.clone(),
@@ -175,10 +173,9 @@ impl Flow for DepositFlow {
 
         // ── Step 2: Sign + submit the transaction ───────────────────────────
         //
-        // TODO(staging-live): decode `deposit_resp.transaction` (base64), sign
-        // with `ctx.payer`, submit via the configured RPC, and await
-        // confirmation. The signature is then available for the verification
-        // poll. Until this is wired, the flow stops here with a clear marker.
+        // Decodes the base64 tx, signs with `ctx.payer`, submits via the
+        // `FLOW_HARNESS_RPC_URL` cluster, and awaits confirmation (see
+        // `crate::chain::submit_tx`).
         let _signature = submit_deposit_transaction(ctx, &deposit_resp.transaction).await?;
 
         // ── Step 3: Poll for verification ───────────────────────────────────
@@ -227,14 +224,9 @@ impl Flow for DepositFlow {
 
         // ── Step 5: Assert the on-chain PDA exists with expected fields ─────
         //
-        // TODO(staging-live): fetch the `AttendeeDeposit` account at
-        // `ctx.attendee_deposit_pda()` via RPC and assert:
-        //   - account owner == ctx.escrow_program_id
-        //   - amount == ctx.deposit_amount (from the seeded event)
-        //   - checked_in == false (deposit does not check in)
-        //   - version == ESCROW_VERSION
-        // Until staging is live, this is a documented TODO; the flow's
-        // API-level assertions above already cover the contract surface.
+        // Fetches the `AttendeeDeposit` PDA via RPC and asserts owner == escrow
+        // program and a fresh (not checked-in / not refunded) deposit — see
+        // `assert_on_chain_pda_exists`. Defense-in-depth over the API assertions.
         assert_on_chain_pda_exists(ctx).await?;
 
         Ok(())
@@ -332,29 +324,54 @@ enum DepositWorkerVerdict {
 
 /// Submit the deposit transaction to the configured RPC.
 ///
-/// TODO(staging-live): decode the base64 transaction, sign with `ctx.payer`,
-/// submit via the Helius RPC URL from `FLOW_HARNESS_RPC_URL`, and return the
-/// confirmation signature.
+/// Decode the base64 transaction, sign with `ctx.payer`, submit via the RPC in
+/// `FLOW_HARNESS_RPC_URL`, and return the confirmation signature (base58).
 async fn submit_deposit_transaction(
-    _ctx: &StagingContext,
-    _transaction_base64: &str,
+    ctx: &StagingContext,
+    transaction_base64: &str,
 ) -> HarnessResult<String> {
-    Err(HarnessError::Config(format!(
-        "[{FLOW_NAME}] submit_deposit_transaction not yet wired (staging not live); \
-         set FLOW_HARNESS_RPC_URL and re-run once §3.1 is provisioned"
-    )))
+    let sig = crate::chain::submit_tx(ctx, transaction_base64).await?;
+    Ok(sig.to_string())
 }
 
-/// Fetch and validate the on-chain `AttendeeDeposit` PDA.
-///
-/// TODO(staging-live): call `ctx.attendee_deposit_pda()`, fetch the account
-/// via RPC, assert owner/amount/checked_in/version. Returns `Ok(())` only
-/// when every field matches the seeded expectation.
-async fn assert_on_chain_pda_exists(_ctx: &StagingContext) -> HarnessResult<()> {
-    // Intentionally a no-op until staging is live. The API-level assertions
-    // in the flow body already cover the contract surface; the on-chain
-    // assertion is defense-in-depth and will be wired in the same PR that
-    // removes the staging TODO markers.
+/// Fetch and validate the on-chain `AttendeeDeposit` PDA: it must exist, be
+/// owned by the escrow program, and (a fresh deposit) not be checked in.
+async fn assert_on_chain_pda_exists(ctx: &StagingContext) -> HarnessResult<()> {
+    let (pda, _) = ctx.attendee_deposit_pda();
+    let account = crate::chain::fetch_account(ctx, &pda)
+        .await?
+        .ok_or_else(|| HarnessError::AssertionFailed {
+            flow: FLOW_NAME,
+            reason: format!("AttendeeDeposit PDA {pda} not found on-chain after deposit verified"),
+        })?;
+
+    if account.owner != ctx.escrow_program_id {
+        return Err(HarnessError::AssertionFailed {
+            flow: FLOW_NAME,
+            reason: format!(
+                "AttendeeDeposit PDA {pda} owned by {}, expected escrow program {}",
+                account.owner, ctx.escrow_program_id
+            ),
+        });
+    }
+
+    let view = crate::chain::decode_attendee_deposit(&account.data).map_err(|e| {
+        HarnessError::AssertionFailed {
+            flow: FLOW_NAME,
+            reason: format!("decoding AttendeeDeposit {pda}: {e}"),
+        }
+    })?;
+
+    // A just-deposited attendee must not be checked in or refunded.
+    if view.checked_in || view.refunded {
+        return Err(HarnessError::AssertionFailed {
+            flow: FLOW_NAME,
+            reason: format!(
+                "fresh deposit has unexpected state: checked_in={}, refunded={}",
+                view.checked_in, view.refunded
+            ),
+        });
+    }
     Ok(())
 }
 

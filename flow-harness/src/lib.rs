@@ -30,6 +30,7 @@
 //!   runner orchestration, response parsing).
 
 pub mod assertions;
+pub mod chain;
 pub mod client;
 pub mod context;
 pub mod error;

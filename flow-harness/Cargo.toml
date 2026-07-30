@@ -76,6 +76,16 @@ solana-sdk = "2.2"
 spl-token = "7.0"
 spl-associated-token-account = "6.0"
 
+# Legacy-transaction (de)serialization. solana-sdk speaks bincode 1.x wire
+# format; the worker emits exactly that (see worker/src/solana_escrow/wire.rs),
+# so the harness decodes → signs → re-encodes with the same codec.
+bincode = "1"
+
+# Base64 for the worker's transaction envelope + Solana `getAccountInfo` data.
+# (domain's default features are disabled to avoid its base64; declared here so
+# the chain module has it unconditionally.)
+base64 = "0.22"
+
 [dev-dependencies]
 # TempDir for the runner's offline orchestration tests (write_summary,
 # .last-green sentinel mtime, exit-code semantics).
