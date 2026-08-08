@@ -38,6 +38,7 @@ BASE_URL="${BASE_URL:-http://localhost:8787}"
 DEPOSIT_AMOUNT_USDC="${DEPOSIT_AMOUNT_USDC:-1000000}"  # 1 USDC (6 decimals)
 ORGANIZER_WALLET="${ORGANIZER_WALLET:-}"
 ATTENDEE_WALLET="${ATTENDEE_WALLET:-}"
+ATTENDEE_KEYPAIR="${ATTENDEE_KEYPAIR:-}"
 RPC_URL="${RPC_URL:-https://api.devnet.solana.com}"
 
 # Event IDs — unique per run

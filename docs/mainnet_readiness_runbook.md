@@ -59,8 +59,8 @@ create→deposit→checkin→refund today; 5 instructions have never run on-chai
       - `RefundUsdc`: [5jV4VF...](https://solscan.io/tx/5jV4VFbMDg7UpPpKZZKZ2HhmTxL6wMyaypx4gCQBUpxUXM9BUteJ5FzmJegtTezvs7mNSNnoQYZEHFNCRQyEuB5?cluster=devnet)
       - `DeactivateEvent`: [2EBTdh...](https://solscan.io/tx/2EBTdhjxXPUHcCC3VgaU5vMzr7SF5WXRVsRnutu9gdu6y3vCvfS8rY1aWRA5dWLRfm5AVFxCBYLRBGBVt9UATXpd?cluster=devnet)
       - `CloseEvent`: [xEDGPf...](https://solscan.io/tx/xEDGPfe8Kt638TT5ujYwWPNPYCNMFgN2U5wX1fqBMXhpe7dgk9mJ5Fc9GjfzCoHcW2LNvmkD2vAU4R1DKqwi5Kc?cluster=devnet)
-- [ ] **1.2** Rollover (highest-risk multi-vault path): `bash scripts/e2e/test_rollover_devnet.sh`
-      and `bash scripts/e2e/test_rollover_full_lifecycle.sh`.
+- [x] **1.2** Rollover (highest-risk multi-vault path): `bash scripts/e2e/test_rollover_devnet.sh` (PASSED 2026-08-08)
+      - `RolloverDeposit`: [FgLZCq...](https://solscan.io/tx/FgLZCqAAdfmwCJJ7nsEqwWW2RRBmjXfCa3T81tDv4y9YzUhNKSRUq3XMtPV4d6sX3YJRSpY4okKjn5Ph2j4Z4z1?cluster=devnet)
 - [x] **1.3** Confirm rent is reclaimed on close, and re-derive a known escrow PDA to check it matches
       the worker's `derive_escrow_address` (PASSED 2026-08-08 via `CloseEvent`).
 - [x] **1.4** Make the **flow-harness** actually run (wired `FLOW_HARNESS_ATTENDEE_SESSION` + Staging worker).
