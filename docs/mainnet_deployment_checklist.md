@@ -12,20 +12,20 @@ This runbook guides the step-by-step launch of **BeThere Protocol** on Solana Ma
 | **USDC Mint Address** | `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v` | Native SPL USDC on Mainnet |
 | **Mainnet RPC URL** | `https://mainnet.helius-rpc.com/?api-key=<HELIUS_API_KEY>` | Production RPC endpoint |
 | **Worker Environment** | `production` | Cloudflare Workers `[env.production]` |
-| **Deployer Keypair** | `~/.config/solana/id.json` | Requires ~3.0 SOL for program storage rent |
+| **Deployer Keypair** | `~/.config/solana/id.json` | Requires ~0.7 SOL (~0.626 SOL exact rent for 88 KB SBF binary) |
 
 ---
 
 ## 2. Pre-Deployment Preparation
 
 ### 2.1 Verify Deployer Wallet SOL Balance
-Check that the deployer keypair has sufficient SOL on Mainnet-Beta (~3.0 SOL required for ~380 KB program bytecode rent exemption):
+Check that the deployer keypair has sufficient SOL on Mainnet-Beta (~0.7 SOL required for 88 KB `bethere_escrow.so` rent exemption):
 
 ```bash
 solana balance --url mainnet-beta
 ```
 
-*If balance is < 3.0 SOL, transfer SOL from your primary wallet to the deployer keypair address:*
+*If balance is < 0.7 SOL, transfer SOL from your primary wallet to the deployer keypair address:*
 ```bash
 solana address
 ```
