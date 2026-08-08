@@ -20,6 +20,7 @@
 | Pinned branch | `develop` |
 | Commit date | 2026-07-21 11:32:03 +0700 |
 | Deployed `.so` size | 89,856 bytes (`bethere-escrow/target/deploy/bethere_escrow.so`) |
+| Verified Devnet SHA256 | `26380992e22a4784e40857dec77b708bdc0c1899b65cef2ce562c57e11900d80` (Phase 0.3 verified) |
 | Build size (last Quasar record) | 89,856 bytes (`bethere-escrow/target/.quasar-last-size`) |
 | Source root | `bethere-escrow/src/` |
 | Existing internal audit | `docs/security_audit.md` (725 lines, SEC-001..SEC-015) |

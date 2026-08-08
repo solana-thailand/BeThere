@@ -94,13 +94,18 @@ fn main() -> ExitCode {
     eprintln!("   attendee_wallet={}", ctx.attendee_wallet);
 
     // ── Build the HTTP client ────────────────────────────────────────────────
-    let client = match WorkerClient::new(ctx.worker_url.clone()) {
+    let mut client = match WorkerClient::new(ctx.worker_url.clone()) {
         Ok(c) => c,
         Err(e) => {
             eprintln!("❌ flow-harness: failed to build HTTP client: {e}");
             return ExitCode::from(2);
         }
     };
+    if let Ok(cookie) = std::env::var("FLOW_HARNESS_ATTENDEE_SESSION") {
+        if !cookie.trim().is_empty() {
+            client = client.with_auth_cookie(cookie);
+        }
+    }
 
     // ── Register the default flow set ────────────────────────────────────────
     //
