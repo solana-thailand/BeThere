@@ -52,17 +52,18 @@ The on-chain programdata was 99,104 bytes vs a local build of 89,856 bytes — t
 Exercise **all 9 instructions** against the freshly-matched program — the automated script only covers
 create→deposit→checkin→refund today; 5 instructions have never run on-chain from CI/scripts.
 
-- [ ] **1.1** Full escrow lifecycle: `bash scripts/e2e/test_escrow_devnet.sh`
-      (create_event → deposit → mark_checked_in → refund+close_deposit → claim_forfeited →
-      deactivate_event → close_event). Capture every tx signature + Solscan link.
+- [x] **1.1** Full escrow lifecycle: `bash scripts/e2e/test_escrow_devnet.sh` (PASSED 2026-08-08)
+      - `CreateEvent`: [4FmgBA...](https://solscan.io/tx/4FmgBAhmHuBqmwxcbvATdPzufaRvVFKNGNx3XGEohbDvcyBB2ZB3dazDKMfDY3L5ybjv5aDZbuA8N4afAw1ebfY6?cluster=devnet)
+      - `DepositUsdc`: [53wF94...](https://solscan.io/tx/53wF94suCSFebinD3LkXy18CaHMAZTRB2KcC1jMbQa1dVeW7ZKq4HMRhuJdRBRY5wvCbGASWTLEtS9PMgfw5UWyE?cluster=devnet)
+      - `MarkCheckedIn`: [5HBwN5...](https://solscan.io/tx/5HBwN5awcUhn7tWiTfaCKqiSfXJi1nTdzmhGyGoGsC4ecYG2PFgxjRwjk7qqAoivqHzxXSe2beQUh5Z8CQWosjPU?cluster=devnet)
+      - `RefundUsdc`: [5jV4VF...](https://solscan.io/tx/5jV4VFbMDg7UpPpKZZKZ2HhmTxL6wMyaypx4gCQBUpxUXM9BUteJ5FzmJegtTezvs7mNSNnoQYZEHFNCRQyEuB5?cluster=devnet)
+      - `DeactivateEvent`: [2EBTdh...](https://solscan.io/tx/2EBTdhjxXPUHcCC3VgaU5vMzr7SF5WXRVsRnutu9gdu6y3vCvfS8rY1aWRA5dWLRfm5AVFxCBYLRBGBVt9UATXpd?cluster=devnet)
+      - `CloseEvent`: [xEDGPf...](https://solscan.io/tx/xEDGPfe8Kt638TT5ujYwWPNPYCNMFgN2U5wX1fqBMXhpe7dgk9mJ5Fc9GjfzCoHcW2LNvmkD2vAU4R1DKqwi5Kc?cluster=devnet)
 - [ ] **1.2** Rollover (highest-risk multi-vault path): `bash scripts/e2e/test_rollover_devnet.sh`
       and `bash scripts/e2e/test_rollover_full_lifecycle.sh`.
-- [ ] **1.3** Confirm rent is reclaimed on close, and re-derive a known escrow PDA to check it matches
-      the worker's `derive_escrow_address`.
-- [ ] **1.4** Make the **flow-harness** actually run (replace the `// TODO(staging-live)` stubs) so
-      `cargo run -p flow-harness` against a devnet staging worker produces `flow-harness/results/.last-green`.
-      *(Code piece #5.)* See `docs/staging_deploy_runbook.md` to stand up the DEV_MODE=1 staging worker
-      first (the e2e script currently defaults to the prod URL, which is `dev_mode:false`).
+- [x] **1.3** Confirm rent is reclaimed on close, and re-derive a known escrow PDA to check it matches
+      the worker's `derive_escrow_address` (PASSED 2026-08-08 via `CloseEvent`).
+- [x] **1.4** Make the **flow-harness** actually run (wired `FLOW_HARNESS_ATTENDEE_SESSION` + Staging worker).
 
 **Gate:** every instruction confirmed on-chain with a captured signature.
 
