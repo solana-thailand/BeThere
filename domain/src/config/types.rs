@@ -67,6 +67,9 @@ impl SolanaConfig {
     /// Pre-computed RPC URL with API key appended.
     /// Handles both `?key=val` and `?api-key=KEY` URL patterns.
     pub fn full_rpc_url(&self) -> String {
+        if self.api_key.is_empty() {
+            return self.rpc_url.clone();
+        }
         format!(
             "{}{}{}",
             self.rpc_url,

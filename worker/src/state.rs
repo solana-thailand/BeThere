@@ -148,7 +148,7 @@ impl AppState {
 
         let solana = SolanaConfig {
             rpc_url: get_secret(env, "HELIUS_RPC_URL")
-                .unwrap_or_else(|_| "https://devnet.helius-rpc.com".to_string()),
+                .unwrap_or_else(|_| "https://api.devnet.solana.com".to_string()),
             api_key: get_secret(env, "HELIUS_API_KEY").unwrap_or_else(|_| String::new()),
         };
 
