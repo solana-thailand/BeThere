@@ -41,8 +41,8 @@ done
 # So at seed time: a no-show can refund (now < deadline), a checked-in user can
 # always refund, and waiting >4h flips the no-show path closed for re-testing.
 NOW_MS=$(( $(date +%s) * 1000 ))
-EVENT_START_MS=$(( NOW_MS - 4 * 3600 * 1000 ))
-EVENT_END_MS=$(( NOW_MS - 2 * 3600 * 1000 ))
+EVENT_START_MS=$(( NOW_MS - 1 * 3600 * 1000 ))
+EVENT_END_MS=$(( NOW_MS + 4 * 3600 * 1000 ))
 REFUND_DEADLINE_HOURS=6
 
 EVENT_ID="flow-test-event"
@@ -58,7 +58,7 @@ ATTENDEE_NAME="Flow Test Attendee (checked-in)"
 
 run_sql () {
     # $1 = SQL string. Executes against staging D1.
-    npx wrangler d1 execute "$DB_NAME" $REMOTE_FLAG --command "$1" >/dev/null
+    npx wrangler d1 execute "$DB_NAME" --env staging $REMOTE_FLAG --command "$1" >/dev/null
 }
 
 echo "🌱 Seeding staging D1 ($DB_NAME, $REMOTE_FLAG)..."
@@ -111,7 +111,7 @@ run_sql "INSERT OR REPLACE INTO deposit_statuses (
 # ── Isolation sanity check ───────────────────────────────────────────────────
 echo ""
 echo "🔎 Isolation check — staging attendee count for ${EVENT_ID}:"
-npx wrangler d1 execute "$DB_NAME" $REMOTE_FLAG \
+npx wrangler d1 execute "$DB_NAME" --env staging $REMOTE_FLAG \
     --command "SELECT count(*) AS n FROM attendees WHERE event_id = '${EVENT_ID}';" \
     | sed -n '1,20p'
 
