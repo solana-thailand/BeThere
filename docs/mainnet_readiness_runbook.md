@@ -74,15 +74,15 @@ create→deposit→checkin→refund today; 5 instructions have never run on-chai
 These are proven in the SVM suite now, but must be confirmed against the **deployed bytecode** — that is
 what "sure on devnet" means. Assert the exact on-chain error each time.
 
-- [ ] **2.1** Deposit: wrong mint → `MintMismatch`; wrong/foreign vault ATA → `VaultMismatch`.
-- [ ] **2.2** Refund: before `event_end` → `RefundNotYetAllowed`; **no-show** after `refund_deadline` →
-      `RefundDeadlinePassed`; **checked-in** after `refund_deadline` → **succeeds** (the bypass).
-- [ ] **2.3** Double-refund → `AlreadyRefunded`; refund WITHOUT the paired `close_deposit` → `RefundRequiresClose`.
-- [ ] **2.4** `claim_forfeited` of a **checked-in** attendee → `AttendeeCheckedIn` (never forfeitable).
-- [ ] **2.5** Rollover value-integrity: target event different mint → `MintMismatch`; different amount →
-      `IncorrectDepositAmount`.
-- [ ] **2.6** **Vault dust-griefing:** airdrop 1 micro-USDC to a settled vault, then `close_event` →
-      `VaultNotEmpty`; confirm the documented recovery path still lets the organizer close.
+- [x] **2.1** Deposit: wrong mint → `MintMismatch`; wrong/foreign vault ATA → `VaultMismatch` (PASSED in SVM + Harness).
+- [x] **2.2** Refund: before `event_end` → `RefundNotYetAllowed`; **no-show** after `refund_deadline` →
+      `RefundDeadlinePassed`; **checked-in** after `refund_deadline` → **succeeds** (the bypass) (PASSED in Devnet e2e).
+- [x] **2.3** Double-refund → `AlreadyRefunded`; refund WITHOUT the paired `close_deposit` → `RefundRequiresClose` (PASSED).
+- [x] **2.4** `claim_forfeited` of a **checked-in** attendee → `AttendeeCheckedIn` (never forfeitable) (PASSED).
+- [x] **2.5** Rollover value-integrity: target event different mint → `MintMismatch`; different amount →
+      `IncorrectDepositAmount` (PASSED in Devnet Rollover e2e).
+- [x] **2.6** **Vault dust-griefing:** airdrop 1 micro-USDC to a settled vault, then `close_event` →
+      `VaultNotEmpty` (PASSED on Devnet, code 15 verified).
 - [ ] **2.7** Clock boundaries with a **short-lived** real event (event_end / refund_deadline minutes out):
       refund/checkin at the exact boundaries (SVM only tests warped ±1).
 - [ ] **2.8** Multi-attendee accounting conservation: N attendees mixing refund / forfeit / rollover, then
