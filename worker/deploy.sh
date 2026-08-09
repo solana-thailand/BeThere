@@ -278,6 +278,8 @@ else
     echo "🚀 Deploying to Cloudflare Workers (STAGING: ${WORKER_NAME})..."
   else
     echo "🚀 Deploying to Cloudflare Workers (production: ${WORKER_NAME})..."
+  fi
+
   echo "🏗️  Building Leptos WASM frontend via build.sh..."
   (cd "../frontend-leptos" && bash build.sh)
 
