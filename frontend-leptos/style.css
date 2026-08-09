@@ -15536,9 +15536,120 @@ a.ticket-series-card:hover {
     transition: all 0.2s ease !important;
 }
 
-.btn-solana-wallet:hover {
-    background: linear-gradient(135deg, rgba(153, 69, 255, 0.35) 0%, rgba(20, 241, 149, 0.28) 100%) !important;
-    border-color: rgba(20, 241, 149, 0.7) !important;
-    box-shadow: 0 6px 24px rgba(153, 69, 255, 0.4) !important;
-    transform: translateY(-1px) !important;
+/* ===== Ultra-Premium Deposit Commitment Card & Methods ===== */
+.pe-deposit-card {
+    background: rgba(19, 20, 28, 0.75) !important;
+    backdrop-filter: blur(16px) !important;
+    -webkit-backdrop-filter: blur(16px) !important;
+    border: 1px solid rgba(153, 69, 255, 0.25) !important;
+    border-radius: 20px !important;
+    padding: 24px !important;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+}
+
+.pe-deposit-methods-grid {
+    display: grid !important;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)) !important;
+    gap: 14px !important;
+    margin-top: 16px !important;
+    margin-bottom: 20px !important;
+}
+
+.pe-method-card {
+    background: rgba(255, 255, 255, 0.03) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    border-radius: 14px !important;
+    padding: 16px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: space-between !important;
+    gap: 10px !important;
+    transition: all 0.2s ease !important;
+}
+
+.pe-method-card:hover {
+    border-color: rgba(153, 69, 255, 0.4) !important;
+    background: rgba(153, 69, 255, 0.06) !important;
+}
+
+.pe-method-card--promptpay {
+    background: linear-gradient(135deg, rgba(0, 59, 114, 0.3) 0%, rgba(0, 114, 206, 0.12) 100%) !important;
+    border: 1px solid rgba(56, 189, 248, 0.35) !important;
+}
+
+.pe-method-card--solana {
+    background: linear-gradient(135deg, rgba(153, 69, 255, 0.15) 0%, rgba(20, 241, 149, 0.1) 100%) !important;
+    border: 1px solid rgba(153, 69, 255, 0.35) !important;
+}
+
+.pe-method-header {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+}
+
+.pe-method-badge {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 6px !important;
+    font-size: 0.75rem !important;
+    font-weight: 700 !important;
+    padding: 4px 10px !important;
+    border-radius: 20px !important;
+    letter-spacing: 0.02em !important;
+}
+
+.pe-method-badge--promptpay {
+    background: #003b72 !important;
+    color: #38bdf8 !important;
+    border: 1px solid rgba(56, 189, 248, 0.4) !important;
+}
+
+.pe-method-badge--solana {
+    background: rgba(153, 69, 255, 0.25) !important;
+    color: #14F195 !important;
+    border: 1px solid rgba(20, 241, 149, 0.4) !important;
+}
+
+.pe-method-amount-val {
+    font-size: 1.15rem !important;
+    font-weight: 800 !important;
+    color: #ffffff !important;
+}
+
+.pe-method-subtext {
+    font-size: 0.78rem !important;
+    color: #94a3b8 !important;
+    line-height: 1.4 !important;
+}
+
+.pe-journey-timeline {
+    display: grid !important;
+    grid-template-columns: repeat(4, 1fr) !important;
+    gap: 12px !important;
+    margin-top: 20px !important;
+    padding: 16px !important;
+    background: rgba(255, 255, 255, 0.02) !important;
+    border: 1px solid rgba(255, 255, 255, 0.06) !important;
+    border-radius: 16px !important;
+    text-align: center !important;
+}
+
+.pe-journey-step-num {
+    width: 32px !important;
+    height: 32px !important;
+    border-radius: 50% !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    margin: 0 auto 8px auto !important;
+    font-size: 0.85rem !important;
+    font-weight: 800 !important;
+}
+
+@media (max-width: 600px) {
+    .pe-journey-timeline {
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 16px !important;
+    }
 }
