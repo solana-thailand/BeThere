@@ -278,7 +278,8 @@ else
     echo "🚀 Deploying to Cloudflare Workers (STAGING: ${WORKER_NAME})..."
   else
     echo "🚀 Deploying to Cloudflare Workers (production: ${WORKER_NAME})..."
-  fi
+  echo "🏗️  Building Leptos WASM frontend via build.sh..."
+  (cd "../frontend-leptos" && bash build.sh)
 
   if [ -f "../frontend-leptos/_headers" ] && [ -d "${DIST_DIR}" ]; then
     cp -f "../frontend-leptos/_headers" "${DIST_DIR}/_headers"
