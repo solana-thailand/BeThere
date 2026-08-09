@@ -86,13 +86,16 @@ fn is_spa_route(path: &str) -> bool {
 /// Build a minimal 503 JSON response for when the worker cannot initialize
 /// state or process a request. Avoids opaque Cloudflare error 1101 by
 /// returning a structured error instead of propagating via `?` or panicking.
-fn service_unavailable() -> axum::http::Response<axum::body::Body> {
+fn service_unavailable(e: &str) -> axum::http::Response<axum::body::Body> {
+    let body = serde_json::json!({
+        "success": false,
+        "error": format!("service unavailable: {e}")
+    }).to_string();
+
     axum::http::Response::builder()
         .status(axum::http::StatusCode::SERVICE_UNAVAILABLE)
         .header("content-type", "application/json")
-        .body(axum::body::Body::from(
-            r#"{"success":false,"error":"service unavailable"}"#,
-        ))
+        .body(axum::body::Body::from(body))
         .expect("static 503 response is always valid")
 }
 
@@ -127,7 +130,7 @@ async fn fetch(
         Ok(s) => s.with_ctx(_ctx),
         Err(e) => {
             tracing::error!(error = %e, "AppState::from_env failed");
-            return Ok(service_unavailable());
+            return Ok(service_unavailable(&e));
         }
     };
 
