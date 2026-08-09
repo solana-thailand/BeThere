@@ -15783,3 +15783,105 @@ a.ticket-series-card:hover {
     color: #94a3b8;
 }
 
+/* ==========================================================================
+   Developer Passport Card (Landing Page)
+   ========================================================================== */
+
+.landing-dev-passport {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 22px;
+    background: linear-gradient(135deg, rgba(20, 241, 149, 0.06) 0%, rgba(153, 69, 255, 0.08) 100%);
+    border: 1px solid rgba(20, 241, 149, 0.25);
+    border-radius: 16px;
+    backdrop-filter: blur(12px);
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    gap: 16px;
+    margin-bottom: 8px;
+    transition: border-color 0.3s, box-shadow 0.3s;
+}
+
+.landing-dev-passport:hover {
+    border-color: rgba(20, 241, 149, 0.45);
+    box-shadow: 0 6px 30px rgba(20, 241, 149, 0.15);
+}
+
+.landing-passport-left {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.landing-passport-avatar {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    background: rgba(20, 241, 149, 0.15);
+    border: 1px solid rgba(20, 241, 149, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #14F195;
+}
+
+.landing-passport-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.landing-passport-title-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.landing-passport-name {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--text-heading);
+    letter-spacing: -0.01em;
+}
+
+.landing-passport-verified-badge {
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: rgba(20, 241, 149, 0.15);
+    color: #14F195;
+    border: 1px solid rgba(20, 241, 149, 0.4);
+}
+
+.landing-passport-sub {
+    font-size: 0.8rem;
+    color: #94a3b8;
+}
+
+.landing-passport-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.landing-passport-btn {
+    font-size: 0.82rem !important;
+    font-weight: 700 !important;
+    padding: 6px 16px !important;
+    border-radius: 10px !important;
+}
+
+@media (max-width: 640px) {
+    .landing-dev-passport {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+    }
+    .landing-passport-actions {
+        width: 100%;
+        justify-content: space-between;
+    }
+}
+
+

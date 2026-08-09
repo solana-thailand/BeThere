@@ -499,6 +499,50 @@ pub fn DevProfile() -> impl IntoView {
                                     }}
                                 </div>
                             </div>
+
+                            // Solana Wallet (On-Chain Identity)
+                            <div class="dev-profile-social-row">
+                                <div class="dev-profile-social-info">
+                                    <span class="dev-profile-social-icon"><Icon icon=IconName::Solana /></span>
+                                    <span class="dev-profile-label">"Solana Wallet"</span>
+                                    {if profile.wallet_address.is_some() {
+                                        view! {
+                                            <span class="dev-profile-verified-badge">"✓ On-Chain"</span>
+                                        }.into_any()
+                                    } else {
+                                        ().into_any()
+                                    }}
+                                </div>
+                                <div class="dev-profile-social-actions">
+                                    {if let Some(ref addr) = profile.wallet_address {
+                                        let addr_str = addr.clone();
+                                        let copy_addr = addr.clone();
+                                        let shortened = if addr_str.len() > 8 {
+                                            format!("{}...{}", &addr_str[..4], &addr_str[addr_str.len()-4..])
+                                        } else {
+                                            addr_str.clone()
+                                        };
+                                        let solscan_url = format!("https://solscan.io/account/{addr_str}?cluster=devnet");
+                                        view! {
+                                            <div style="display:flex;gap:6px;align-items:center;">
+                                                <a href=solscan_url target="_blank" rel="noopener noreferrer" class="dev-profile-social-link-btn">
+                                                    {shortened} " ↗"
+                                                </a>
+                                                <button type="button" class="dev-profile-social-link-btn" style="color:#94a3b8;border-color:rgba(255,255,255,0.15);"
+                                                        on:click=move |_| { let _ = copy_to_clipboard_js(&copy_addr); }>
+                                                    "Copy"
+                                                </button>
+                                            </div>
+                                        }.into_any()
+                                    } else {
+                                        view! {
+                                            <a href="/login" class="dev-profile-social-connect-btn" style="background: linear-gradient(135deg, #9945FF 0%, #14F195 100%);">
+                                                "Connect Wallet →"
+                                            </a>
+                                        }.into_any()
+                                    }}
+                                </div>
+                            </div>
                         </div>
 
                         // Interests

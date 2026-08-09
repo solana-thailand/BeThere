@@ -472,15 +472,29 @@ fn MyRegistrations() -> impl IntoView {
                 }.into_any()
             }
             (Some(refs), Some(user)) => {
+                let user_email = user.clone();
                 view! {
                     <section class="landing-reg-section">
-                        <div class="landing-reg-header">
-                            <h2 class="landing-reg-title">
-                                "Your Events"
-                            </h2>
-                            <div class="landing-reg-user" style="display: flex; align-items: center; gap: 10px;">
-                                <span class="landing-email-text">{format!("\u{1f464} {user}")}</span>
-                                <A href="/profile" attr:class="btn btn-outline btn-xs">"Edit Profile ⚙️"</A>
+                        // Developer Passport Card
+                        <div class="landing-dev-passport">
+                            <div class="landing-passport-left">
+                                <div class="landing-passport-avatar">
+                                    <Icon icon=IconName::Crab class="icon-lg" />
+                                </div>
+                                <div class="landing-passport-info">
+                                    <div class="landing-passport-title-row">
+                                        <span class="landing-passport-name">{user_email.clone()}</span>
+                                        <span class="landing-passport-verified-badge">"✓ Verified Passport"</span>
+                                    </div>
+                                    <div class="landing-passport-sub">
+                                        "Solana Thailand Developer Community Member"
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="landing-passport-actions">
+                                <A href="/profile" attr:class="btn btn-primary btn-sm landing-passport-btn">
+                                    "Edit Profile ⚙️"
+                                </A>
                                 <button
                                     class="btn btn-outline btn-xs"
                                     on:click=move |_| {
@@ -494,6 +508,12 @@ fn MyRegistrations() -> impl IntoView {
                                     "Sign out"
                                 </button>
                             </div>
+                        </div>
+
+                        <div class="landing-reg-header" style="margin-top: 24px;">
+                            <h2 class="landing-reg-title">
+                                "Your Events"
+                            </h2>
                         </div>
                         <div class="landing-reg-grid">
                             {refs.into_iter().map(|reg| {
