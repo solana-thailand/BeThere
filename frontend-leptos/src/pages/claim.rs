@@ -1772,6 +1772,8 @@ pub fn Claim() -> impl IntoView {
                                 } else {
                                     format!("/deposit/{api_id}?event_id={event_id}")
                                 }
+                            };
+
                             let solscan_url = if data.signature.is_empty() {
                                 format!("https://solscan.io/account/{}?cluster={}", data.asset_id, data.cluster)
                             } else {
