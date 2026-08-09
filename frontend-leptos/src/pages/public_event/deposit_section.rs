@@ -107,27 +107,27 @@ pub fn deposit_section(data: &PublicEventData) -> AnyView {
                     view! { <div></div> }.into_any()
                 }}
             </div>
-            // 4-step deposit journey infographic (bilingual TH/EN)
+            // 4-step deposit journey infographic (clean English)
             <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 18px; padding: 14px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; text-align: center;">
                 <div>
                     <div style="width: 28px; height: 28px; border-radius: 50%; background: rgba(153,69,255,0.2); border: 1px solid rgba(153,69,255,0.5); color: #fff; font-size: 0.8rem; font-weight: 700; display: flex; align-items: center; justify-content: center; margin: 0 auto 6px;">"1"</div>
                     <div style="font-size: 0.78rem; font-weight: 600; color: #fff;">"Reserve"</div>
-                    <div style="font-size: 0.7rem; color: #94a3b8;">"สำรองที่นั่ง"</div>
+                    <div style="font-size: 0.7rem; color: #94a3b8;">"Lock spot"</div>
                 </div>
                 <div>
                     <div style="width: 28px; height: 28px; border-radius: 50%; background: rgba(20,241,149,0.2); border: 1px solid rgba(20,241,149,0.5); color: #14F195; font-size: 0.8rem; font-weight: 700; display: flex; align-items: center; justify-content: center; margin: 0 auto 6px;">"2"</div>
                     <div style="font-size: 0.78rem; font-weight: 600; color: #fff;">"Show Up"</div>
-                    <div style="font-size: 0.7rem; color: #94a3b8;">"เข้าร่วมงาน"</div>
+                    <div style="font-size: 0.7rem; color: #94a3b8;">"At venue"</div>
                 </div>
                 <div>
                     <div style="width: 28px; height: 28px; border-radius: 50%; background: rgba(153,69,255,0.2); border: 1px solid rgba(153,69,255,0.5); color: #fff; font-size: 0.8rem; font-weight: 700; display: flex; align-items: center; justify-content: center; margin: 0 auto 6px;">"3"</div>
                     <div style="font-size: 0.78rem; font-weight: 600; color: #fff;">"Scan QR"</div>
-                    <div style="font-size: 0.7rem; color: #94a3b8;">"สแกนเช็คอิน"</div>
+                    <div style="font-size: 0.7rem; color: #94a3b8;">"Verify entry"</div>
                 </div>
                 <div>
                     <div style="width: 28px; height: 28px; border-radius: 50%; background: rgba(20,241,149,0.25); border: 1px solid #14F195; color: #14F195; font-size: 0.8rem; font-weight: 700; display: flex; align-items: center; justify-content: center; margin: 0 auto 6px;">"4"</div>
                     <div style="font-size: 0.78rem; font-weight: 600; color: #14F195;">"100% Refund"</div>
-                    <div style="font-size: 0.7rem; color: #94a3b8;">"รับมัดจำคืน"</div>
+                    <div style="font-size: 0.7rem; color: #94a3b8;">"Back to wallet"</div>
                 </div>
             </div>
             // Hybrid note
