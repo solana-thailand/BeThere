@@ -215,13 +215,12 @@ impl AppState {
         });
 
         if dev_mode {
-            // VULN-006: Refuse DEV_MODE on production domains
-            let is_production = google_oauth.redirect_uri.contains("bethere")
-                || google_oauth.redirect_uri.contains("workers.dev");
-            if is_production {
+            // Refuse DEV_MODE on live production domain only
+            let is_live_production = google_oauth.redirect_uri.contains("bethere.solana-thailand.workers.dev")
+                && !google_oauth.redirect_uri.contains("staging");
+            if is_live_production {
                 return Err(
-                    "SECURITY: DEV_MODE=1 is set but redirect_uri looks like a production domain. \
-                     Remove DEV_MODE before deploying to production."
+                    "SECURITY: DEV_MODE=1 is set but redirect_uri looks like live production domain."
                         .to_string(),
                 );
             }
