@@ -24,36 +24,10 @@ enum AuthState {
     NotSignedIn,
 }
 
-/// Fetches the Google OAuth URL with a redirect back to `/`, then navigates.
+/// Navigates to the unified login page (/login) for Google or Solana Wallet authentication.
 fn trigger_landing_oauth() {
-    leptos::task::spawn_local(async move {
-        let window = web_sys::window().expect("no window");
-        let origin = window
-            .location()
-            .origin()
-            .unwrap_or_else(|_| "http://localhost:8787".to_string());
-        let api_url = format!(
-            "{origin}/api/auth/url?redirect={}",
-            urlencoding::encode("/")
-        );
-        match crate::api::fetch::get(&api_url, &[]).await {
-            Ok(resp) => {
-                if let Ok(body) = crate::api::fetch::response_text(&resp).await
-                    && let Ok(json) = serde_json::from_str::<serde_json::Value>(&body)
-                        && let Some(auth_url) =
-                            json.get("data").and_then(|d| d.get("auth_url")).and_then(|u| u.as_str())
-                        {
-                            let _ = window.location().set_href(auth_url);
-                            return;
-                        }
-            }
-            Err(e) => {
-                log::error!("[landing] failed to get auth URL: {e}");
-            }
-        }
-        // Fallback: navigate to /login
-        let _ = window.location().set_href("/login");
-    });
+    let window = web_sys::window().expect("no window");
+    let _ = window.location().set_href("/login");
 }
 
 /// Sign out: clear cookie + reload.
