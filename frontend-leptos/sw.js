@@ -32,9 +32,9 @@
 // multi-deploy window this caused stale `deposit_enabled: false` to be
 // re-served on reload, forcing a hard refresh to recover. API responses are
 // now network-only (never cached, never served from cache on failure).
-// Bumping the version also evicts any pre-existing stale API entries from
-// SHELL_CACHE on activation.
-var CACHE_VERSION = "bethere-v4";
+// v5 (2026-08): use networkFirst for /snippets/* (e.g. solana_wallet.js)
+// so SRI hashes in index.html match JS snippets and never fail integrity checks.
+var CACHE_VERSION = "bethere-v5";
 var SHELL_CACHE = CACHE_VERSION + "-shell";
 var ASSET_CACHE = CACHE_VERSION + "-assets";
 
@@ -110,10 +110,17 @@ self.addEventListener("fetch", function (event) {
     return;
   }
 
+  // /snippets/* — JS snippets (e.g. solana_wallet.js) can have content changes
+  // across builds without changing pathname. Always fetch fresh from network
+  // to avoid SRI sha384 integrity mismatch errors.
+  if (url.pathname.startsWith("/snippets/")) {
+    event.respondWith(networkFirst(req));
+    return;
+  }
+
   // Hashed static assets — cache-first (URLs are immutable per build)
   if (
     url.pathname.startsWith("/event-checkin-frontend-") ||
-    url.pathname.startsWith("/snippets/") ||
     url.pathname.startsWith("/style-") ||
     url.pathname.endsWith(".wasm") ||
     url.pathname.endsWith(".css")
