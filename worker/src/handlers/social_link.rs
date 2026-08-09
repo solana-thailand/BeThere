@@ -427,95 +427,13 @@ async fn verify_telegram_hash_subtle(data: &TelegramVerifyRequest, bot_token: &s
 }
 
 /// Compute HMAC-SHA256 of `check_string` using SHA256(bot_token) as the key.
-/// Uses the Web Crypto API (SubtleCrypto) available in the Cloudflare Workers runtime.
 async fn compute_telegram_hmac(bot_token: &str, check_string: &str) -> Result<String, String> {
-    use js_sys::{Array, ArrayBuffer, Object, Reflect, Uint8Array};
-    use wasm_bindgen::JsValue;
-    use wasm_bindgen_futures::JsFuture;
+    // Step 1: secret_key = SHA-256(bot_token)
+    let secret_key = crate::crypto::sha256_digest(bot_token.as_bytes()).await?;
 
-    let crypto = web_sys::window()
-        .or_else(|| None)
-        .and_then(|_| None::<web_sys::Window>); // Workers don't have window
+    // Step 2: signature = HMAC-SHA256(secret_key, check_string)
+    let sig_bytes = crate::crypto::hmac_sha256(&secret_key, check_string.as_bytes()).await?;
 
-    // Get SubtleCrypto from the Workers global scope
-    let subtle = js_sys::eval("crypto.subtle")
-        .map_err(|e| format!("no crypto.subtle: {e:?}"))?;
-
-    // Step 1: Import bot_token bytes as raw key material for SHA-256 digest
-    let token_bytes = Uint8Array::from(bot_token.as_bytes());
-
-    // Step 2: digest SHA-256 of bot_token to get the HMAC key bytes
-    let digest_algo = JsValue::from_str("SHA-256");
-    let digest_promise = Reflect::apply(
-        &Reflect::get(&subtle, &JsValue::from_str("digest"))
-            .map_err(|e| format!("subtle.digest not found: {e:?}"))?,
-        &subtle,
-        &Array::of2(&digest_algo, &token_bytes),
-    )
-    .map_err(|e| format!("digest call failed: {e:?}"))?;
-
-    let digest_result = JsFuture::from(js_sys::Promise::from(digest_promise))
-        .await
-        .map_err(|e| format!("digest await failed: {e:?}"))?;
-
-    let key_bytes = Uint8Array::new(&digest_result);
-
-    // Step 3: Import the key bytes as HMAC-SHA256 key
-    let hmac_algo = {
-        let obj = Object::new();
-        Reflect::set(&obj, &JsValue::from_str("name"), &JsValue::from_str("HMAC"))
-            .map_err(|e| format!("set name failed: {e:?}"))?;
-        let hash_obj = Object::new();
-        Reflect::set(&hash_obj, &JsValue::from_str("name"), &JsValue::from_str("SHA-256"))
-            .map_err(|e| format!("set hash name failed: {e:?}"))?;
-        Reflect::set(&obj, &JsValue::from_str("hash"), &hash_obj)
-            .map_err(|e| format!("set hash failed: {e:?}"))?;
-        JsValue::from(obj)
-    };
-
-    let usages = Array::of1(&JsValue::from_str("sign"));
-    let import_promise = Reflect::apply(
-        &Reflect::get(&subtle, &JsValue::from_str("importKey"))
-            .map_err(|e| format!("importKey not found: {e:?}"))?,
-        &subtle,
-        &Array::of5(
-            &JsValue::from_str("raw"),
-            &key_bytes,
-            &hmac_algo,
-            &JsValue::from_bool(false),
-            &usages,
-        ),
-    )
-    .map_err(|e| format!("importKey call failed: {e:?}"))?;
-
-    let crypto_key = JsFuture::from(js_sys::Promise::from(import_promise))
-        .await
-        .map_err(|e| format!("importKey await failed: {e:?}"))?;
-
-    // Step 4: HMAC sign the check_string
-    let msg_bytes = Uint8Array::from(check_string.as_bytes());
-    let sign_algo = {
-        let obj = Object::new();
-        Reflect::set(&obj, &JsValue::from_str("name"), &JsValue::from_str("HMAC"))
-            .map_err(|e| format!("sign algo set failed: {e:?}"))?;
-        JsValue::from(obj)
-    };
-
-    let sign_promise = Reflect::apply(
-        &Reflect::get(&subtle, &JsValue::from_str("sign"))
-            .map_err(|e| format!("sign not found: {e:?}"))?,
-        &subtle,
-        &Array::of3(&sign_algo, &crypto_key, &msg_bytes),
-    )
-    .map_err(|e| format!("sign call failed: {e:?}"))?;
-
-    let sign_result = JsFuture::from(js_sys::Promise::from(sign_promise))
-        .await
-        .map_err(|e| format!("sign await failed: {e:?}"))?;
-
-    let sig_bytes = Uint8Array::new(&sign_result);
-    let sig_vec: Vec<u8> = sig_bytes.to_vec();
-
-    // Step 5: Hex-encode
-    Ok(sig_vec.iter().map(|b| format!("{b:02x}")).collect())
+    // Step 3: Hex-encode
+    Ok(sig_bytes.iter().map(|b| format!("{b:02x}")).collect())
 }

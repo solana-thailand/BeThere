@@ -15653,3 +15653,122 @@ a.ticket-series-card:hover {
         gap: 16px !important;
     }
 }
+
+/* ==========================================================================
+   Social Account Linking Styling (Developer Profile)
+   ========================================================================== */
+
+.dev-profile-social-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    gap: 12px;
+    transition: border-color 0.2s, background 0.2s;
+}
+
+.dev-profile-social-row:hover {
+    border-color: rgba(255, 255, 255, 0.16);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.dev-profile-social-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 140px;
+}
+
+.dev-profile-social-icon {
+    font-size: 1.15rem;
+}
+
+.dev-profile-verified-badge {
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: rgba(20, 241, 149, 0.15);
+    color: #14F195;
+    border: 1px solid rgba(20, 241, 149, 0.4);
+    letter-spacing: 0.02em;
+}
+
+.dev-profile-social-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-grow: 1;
+    justify-content: flex-end;
+}
+
+.dev-profile-social-connect-btn {
+    font-size: 0.82rem;
+    font-weight: 700;
+    padding: 6px 14px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #14F195 0%, #00c2ff 100%);
+    color: #0b0f19;
+    text-decoration: none;
+    transition: transform 0.15s, opacity 0.15s;
+    box-shadow: 0 2px 10px rgba(20, 241, 149, 0.2);
+}
+
+.dev-profile-social-connect-btn:hover {
+    transform: translateY(-1px);
+    opacity: 0.95;
+}
+
+.dev-profile-social-unlink-btn {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #ef4444;
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.25);
+    padding: 4px 10px;
+    border-radius: 6px;
+    text-decoration: none;
+    transition: background 0.2s;
+}
+
+.dev-profile-social-unlink-btn:hover {
+    background: rgba(239, 68, 68, 0.2);
+}
+
+.dev-profile-social-link-btn {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #38bdf8;
+    background: rgba(56, 189, 248, 0.1);
+    border: 1px solid rgba(56, 189, 248, 0.25);
+    padding: 4px 10px;
+    border-radius: 6px;
+    text-decoration: none;
+    transition: background 0.2s;
+}
+
+.dev-profile-social-link-btn:hover {
+    background: rgba(56, 189, 248, 0.2);
+}
+
+.dev-profile-social-input {
+    max-width: 200px;
+    font-size: 0.82rem;
+    padding: 4px 10px;
+    height: 32px;
+}
+
+.dev-profile-social-handle {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.dev-profile-telegram-widget {
+    font-size: 0.8rem;
+    color: #94a3b8;
+}
+
