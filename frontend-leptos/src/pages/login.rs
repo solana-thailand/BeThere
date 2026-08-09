@@ -65,17 +65,7 @@ pub fn Login() -> impl IntoView {
 
     // On mount: check for URL errors, check if already authenticated via cookie, detect wallets
     Effect::new(move |_| {
-        let mut wallets = get_detected_wallets_js();
-        if !wallets.iter().any(|w| w.eq_ignore_ascii_case("Phantom")) {
-            wallets.push("Phantom".to_string());
-        }
-        if !wallets.iter().any(|w| w.eq_ignore_ascii_case("Solflare")) {
-            wallets.push("Solflare".to_string());
-        }
-        if !wallets.iter().any(|w| w.eq_ignore_ascii_case("Backpack")) {
-            wallets.push("Backpack".to_string());
-        }
-        set_detected_wallets.set(wallets);
+        set_detected_wallets.set(get_detected_wallets_js());
 
         if let Some(err) = get_url_error() {
             log::warn!("[login] error from URL: {err}");
