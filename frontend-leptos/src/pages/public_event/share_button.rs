@@ -12,8 +12,14 @@ pub fn share_button(
     let share_name = event_name.to_string();
     let set_copied = set_share_copied;
 
+    let cal_name = event_name.to_string();
+    let google_cal_url = format!(
+        "https://calendar.google.com/calendar/render?action=TEMPLATE&text={}",
+        urlencoding::encode(&cal_name)
+    );
+
     view! {
-        <div class="pe-share-row">
+        <div class="pe-share-row" style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
             <button
                 class="btn btn-outline btn-sm"
                 on:click=move |_| {
@@ -34,6 +40,14 @@ pub fn share_button(
             >
                 <Icon icon=IconName::Link class="icon-sm" />" Share Event ↗"
             </button>
+            <a
+                href=google_cal_url
+                target="_blank"
+                rel="noopener noreferrer"
+                class="btn btn-outline btn-sm"
+            >
+                "📅 Add to Calendar ↗"
+            </a>
             {move || {
                 if share_copied.get() {
                     view! {
