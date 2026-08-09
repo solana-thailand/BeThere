@@ -72,6 +72,17 @@ pub fn Login() -> impl IntoView {
             set_error_msg.set(Some(err));
         }
 
+        // Window Escape key listener to close wallet modal
+        if let Some(win) = web_sys::window() {
+            let handle_keydown = Closure::<dyn Fn(web_sys::KeyboardEvent)>::new(move |evt: web_sys::KeyboardEvent| {
+                if evt.key() == "Escape" {
+                    set_show_wallet_modal.set(false);
+                }
+            });
+            let _ = win.add_event_listener_with_callback("keydown", handle_keydown.as_ref().unchecked_ref());
+            handle_keydown.forget();
+        }
+
         let nav = use_navigate();
         let next_for_redirect = next_param.clone();
         leptos::task::spawn_local(async move {

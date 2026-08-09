@@ -1816,16 +1816,33 @@ pub fn Claim() -> impl IntoView {
                                         </div>
                                     </div>
 
-                                    <div class="success-actions">
-                                        <a
-                                            href=orb_url
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            class="btn btn-primary btn-block"
-                                        >
-                                            "View NFT on Orb ↗"
-                                        </a>
-                                    </div>
+                                    let solscan_url = if data.signature.is_empty() {
+                                        format!("https://solscan.io/account/{}?cluster={}", data.asset_id, data.cluster)
+                                    } else {
+                                        format!("https://solscan.io/tx/{}?cluster={}", data.signature, data.cluster)
+                                    };
+
+                                    view! {
+                                        <div class="success-actions" style="display: flex; flex-direction: column; gap: 10px;">
+                                            <a
+                                                href=orb_url
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                class="btn btn-primary btn-block"
+                                            >
+                                                "View NFT on Orb ↗"
+                                            </a>
+                                            <a
+                                                href=solscan_url
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                class="btn btn-outline btn-block"
+                                                style="border-color: rgba(20, 241, 149, 0.4); color: #14F195; background: rgba(20, 241, 149, 0.06);"
+                                            >
+                                                "🔍 View Transaction on Solscan ↗"
+                                            </a>
+                                        </div>
+                                    }
 
                                     // 3. Share (compact row)
                                     <div class="claim-share-section">
