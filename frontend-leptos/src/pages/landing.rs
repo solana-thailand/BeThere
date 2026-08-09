@@ -478,8 +478,9 @@ fn MyRegistrations() -> impl IntoView {
                             <h2 class="landing-reg-title">
                                 "Your Events"
                             </h2>
-                            <div class="landing-reg-user">
+                            <div class="landing-reg-user" style="display: flex; align-items: center; gap: 10px;">
                                 <span class="landing-email-text">{format!("\u{1f464} {user}")}</span>
+                                <A href="/profile" attr:class="btn btn-outline btn-xs">"Edit Profile ⚙️"</A>
                                 <button
                                     class="btn btn-outline btn-xs"
                                     on:click=move |_| {
@@ -677,6 +678,9 @@ pub fn Landing() -> impl IntoView {
                                         <span class="landing-email-text hide-mobile">
                                             {email.clone()}
                                         </span>
+                                        <A href="/profile" attr:class="btn btn-outline btn-sm">
+                                            "👤 Profile"
+                                        </A>
                                         {if is_admin_role(&role) {
                                             view! {
                                                 <A href="/admin" attr:class="btn btn-outline btn-sm">
