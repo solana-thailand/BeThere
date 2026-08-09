@@ -267,8 +267,7 @@ pub fn Login() -> impl IntoView {
                         }
                     >
                         <button
-                            class="btn-google"
-                            style="background: linear-gradient(135deg, rgba(153, 69, 255, 0.2) 0%, rgba(20, 241, 149, 0.15) 100%); border: 1px solid rgba(153, 69, 255, 0.5); color: #fff; box-shadow: 0 4px 20px rgba(153, 69, 255, 0.25);"
+                            class="btn-google btn-solana-wallet"
                             on:click=move |_| set_show_wallet_modal.set(true)
                         >
                             <span inner_html=solana_icon()></span>
@@ -310,11 +309,11 @@ pub fn Login() -> impl IntoView {
                     fallback=|| view! { <div></div> }
                 >
                     <div
-                        style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; width: 100vw; height: 100vh; background: rgba(8, 9, 14, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); display: flex; align-items: center; justify-content: center; z-index: 99999; padding: 20px; box-sizing: border-box;"
+                        class="siws-modal-backdrop"
                         on:click=move |_| set_show_wallet_modal.set(false)
                     >
                         <div
-                            style="background: #13141c; border: 1px solid rgba(153, 69, 255, 0.35); border-radius: 20px; width: 100%; max-width: 400px; padding: 28px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7), 0 0 30px rgba(153, 69, 255, 0.15); box-sizing: border-box;"
+                            class="siws-modal-card"
                             on:click=move |e| e.stop_propagation()
                         >
                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
@@ -345,7 +344,7 @@ pub fn Login() -> impl IntoView {
                                         let connect_fn = connect_wallet_by_name;
                                         view! {
                                             <button
-                                                style="display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 14px 18px; background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 14px; color: #fff; font-size: 0.95rem; font-weight: 600; cursor: pointer; transition: all 0.2s ease;"
+                                                class="siws-wallet-option"
                                                 on:click=move |_| connect_fn(w_name.clone())
                                             >
                                                 <span style="display: flex; align-items: center; gap: 12px;">
