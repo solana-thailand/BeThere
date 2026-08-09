@@ -160,6 +160,7 @@ pub fn DevProfile() -> impl IntoView {
             "github_handle" => profile.github_handle = Some(value),
             "discord_handle" => profile.discord_handle = Some(value),
             "twitter_handle" => profile.twitter_handle = Some(value),
+            "telegram_handle" => profile.telegram_handle = Some(value),
             "primary_role" => profile.primary_role = if value.is_empty() { None } else { Some(value) },
             "learning_goals" => profile.learning_goals = value,
             "company_org" => profile.company_org = value,
@@ -243,8 +244,12 @@ pub fn DevProfile() -> impl IntoView {
                 let email = profile.email.clone();
                 let display_name = profile.display_name.clone();
                 let github = profile.github_handle.clone().unwrap_or_default();
+                let github_verified = profile.github_verified;
                 let discord = profile.discord_handle.clone().unwrap_or_default();
+                let discord_verified = profile.discord_verified;
                 let twitter = profile.twitter_handle.clone().unwrap_or_default();
+                let telegram = profile.telegram_handle.clone().unwrap_or_default();
+                let telegram_verified = profile.telegram_verified;
                 let role = profile.primary_role.clone().unwrap_or_default();
                 let company = profile.company_org.clone();
                 let city = profile.location_city.clone();
@@ -326,89 +331,166 @@ pub fn DevProfile() -> impl IntoView {
 
                         // Social handles section
                         <div class="dev-profile-section">
-                            <h3 class="dev-profile-section-title">"Social Links"</h3>
+                            <h3 class="dev-profile-section-title">"Social Links"
+                                <span style="font-size:0.7rem;font-weight:400;color:#94a3b8;margin-left:8px;">"— Connect accounts to verify them"</span>
+                            </h3>
 
-                            <div class="dev-profile-field">
-                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                                    <label class="dev-profile-label">"GitHub"</label>
-                                    {if !github.is_empty() {
-                                        let clean = github.trim_start_matches('@').trim_start_matches("https://github.com/").trim().to_string();
-                                        let url = format!("https://github.com/{clean}");
+                            // GitHub
+                            <div class="dev-profile-social-row">
+                                <div class="dev-profile-social-info">
+                                    <span class="dev-profile-social-icon">"🐙"</span>
+                                    <span class="dev-profile-label">"GitHub"</span>
+                                    {if github_verified {
                                         view! {
-                                            <a href=url target="_blank" rel="noopener noreferrer" style="font-size: 0.78rem; color: #14F195; text-decoration: none; font-weight: 600;">
-                                                "🐙 Open GitHub ↗"
-                                            </a>
+                                            <span class="dev-profile-verified-badge">"✓ Verified"</span>
                                         }.into_any()
                                     } else {
                                         ().into_any()
                                     }}
                                 </div>
-                                <input
-                                    class="dev-profile-input"
-                                    type="text"
-                                    placeholder="github_username"
-                                    prop:value=github.clone()
-                                    on:input=move |ev| {
-                                        update_field("github_handle", event_target_value(&ev));
-                                    }
-                                />
+                                {if github_verified {
+                                    let gh = github.clone();
+                                    let clean = gh.trim_start_matches('@').trim_start_matches("https://github.com/").trim().to_string();
+                                    let gh_url = format!("https://github.com/{clean}");
+                                    view! {
+                                        <div class="dev-profile-social-actions">
+                                            <a href=gh_url target="_blank" rel="noopener noreferrer" class="dev-profile-social-link-btn">
+                                                "@" {clean} " ↗"
+                                            </a>
+                                            <a href="/api/auth/social/unlink" class="dev-profile-social-unlink-btn"
+                                               on:click=move |ev| {
+                                                   ev.prevent_default();
+                                                   leptos::task::spawn_local(async move {
+                                                       let _ = api::social_unlink("github").await;
+                                                       web_sys::window().unwrap().location().reload().unwrap();
+                                                   });
+                                               }
+                                            >
+                                                "Unlink"
+                                            </a>
+                                        </div>
+                                    }.into_any()
+                                } else {
+                                    view! {
+                                        <div class="dev-profile-social-actions">
+                                            <a href="/api/auth/github" class="dev-profile-social-connect-btn">
+                                                "Connect GitHub →"
+                                            </a>
+                                        </div>
+                                    }.into_any()
+                                }}
                             </div>
 
-                            <div class="dev-profile-field">
-                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                                    <label class="dev-profile-label">"Twitter / X"</label>
-                                    {if !twitter.is_empty() {
-                                        let clean = twitter.trim_start_matches('@').trim_start_matches("https://x.com/").trim_start_matches("https://twitter.com/").trim().to_string();
-                                        let url = format!("https://x.com/{clean}");
+                            // Telegram
+                            <div class="dev-profile-social-row">
+                                <div class="dev-profile-social-info">
+                                    <span class="dev-profile-social-icon">"✈️"</span>
+                                    <span class="dev-profile-label">"Telegram"</span>
+                                    {if telegram_verified {
                                         view! {
-                                            <a href=url target="_blank" rel="noopener noreferrer" style="font-size: 0.78rem; color: #38bdf8; text-decoration: none; font-weight: 600;">
-                                                "𝕏 Open Profile ↗"
-                                            </a>
+                                            <span class="dev-profile-verified-badge">"✓ Verified"</span>
                                         }.into_any()
                                     } else {
                                         ().into_any()
                                     }}
                                 </div>
-                                <input
-                                    class="dev-profile-input"
-                                    type="text"
-                                    placeholder="twitter_handle"
-                                    prop:value=twitter.clone()
-                                    on:input=move |ev| {
-                                        update_field("twitter_handle", event_target_value(&ev));
-                                    }
-                                />
+                                {if telegram_verified {
+                                    let tg = telegram.clone();
+                                    let tg_url = format!("https://t.me/{}", tg.trim_start_matches('@'));
+                                    view! {
+                                        <div class="dev-profile-social-actions">
+                                            <a href=tg_url target="_blank" rel="noopener noreferrer" class="dev-profile-social-link-btn">
+                                                "@" {tg} " ↗"
+                                            </a>
+                                        </div>
+                                    }.into_any()
+                                } else {
+                                    view! {
+                                        <div class="dev-profile-social-actions">
+                                            // Telegram Login Widget — renders a button that opens Telegram auth
+                                            <div id="telegram-login-widget" class="dev-profile-telegram-widget">
+                                                "📱 Use Telegram Login below:"
+                                            </div>
+                                        </div>
+                                    }.into_any()
+                                }}
                             </div>
 
-                            <div class="dev-profile-field">
-                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                                    <label class="dev-profile-label">"Discord"</label>
-                                    {if !discord.is_empty() {
+                            // Discord
+                            <div class="dev-profile-social-row">
+                                <div class="dev-profile-social-info">
+                                    <span class="dev-profile-social-icon">"🎮"</span>
+                                    <span class="dev-profile-label">"Discord"</span>
+                                    {if discord_verified {
+                                        view! {
+                                            <span class="dev-profile-verified-badge">"✓ Verified"</span>
+                                        }.into_any()
+                                    } else {
+                                        ().into_any()
+                                    }}
+                                </div>
+                                <div class="dev-profile-social-actions">
+                                    {if discord_verified {
                                         let dc = discord.clone();
                                         view! {
-                                            <button
-                                                type="button"
-                                                style="font-size: 0.78rem; color: #9b8afb; background: none; border: none; cursor: pointer; font-weight: 600; padding: 0;"
-                                                on:click=move |_| {
-                                                    let _ = copy_to_clipboard_js(&dc);
-                                                }
-                                            >
-                                                "🎮 Copy Username"
-                                            </button>
+                                            <span class="dev-profile-social-handle">"@"{dc}</span>
                                         }.into_any()
                                     } else {
-                                        ().into_any()
+                                        view! {
+                                            <input
+                                                class="dev-profile-input dev-profile-social-input"
+                                                type="text"
+                                                placeholder="@username (manual)"
+                                                prop:value=discord.clone()
+                                                on:input=move |ev| {
+                                                    update_field("discord_handle", event_target_value(&ev));
+                                                }
+                                            />
+                                        }.into_any()
                                     }}
                                 </div>
-                                <input
-                                    class="dev-profile-input"
-                                    type="text"
-                                    placeholder="@username"
-                                    prop:value=discord.clone()
-                                    on:input=move |ev| {
-                                        update_field("discord_handle", event_target_value(&ev));
-                                    }
-                                />
+                            </div>
+
+                            // Twitter / X (manual — Twitter OAuth is expensive)
+                            <div class="dev-profile-social-row">
+                                <div class="dev-profile-social-info">
+                                    <span class="dev-profile-social-icon">"𝕏"</span>
+                                    <span class="dev-profile-label">"Twitter / X"</span>
+                                </div>
+                                <div class="dev-profile-social-actions">
+                                    {if !twitter.is_empty() {
+                                        let clean = twitter.trim_start_matches('@').trim_start_matches("https://x.com/").trim_start_matches("https://twitter.com/").trim().to_string();
+                                        let x_url = format!("https://x.com/{clean}");
+                                        view! {
+                                            <div style="display:flex;gap:8px;align-items:center;">
+                                                <input
+                                                    class="dev-profile-input dev-profile-social-input"
+                                                    type="text"
+                                                    placeholder="@handle"
+                                                    prop:value=twitter.clone()
+                                                    on:input=move |ev| {
+                                                        update_field("twitter_handle", event_target_value(&ev));
+                                                    }
+                                                />
+                                                <a href=x_url target="_blank" rel="noopener noreferrer" class="dev-profile-social-link-btn" style="white-space:nowrap;">
+                                                    "↗"
+                                                </a>
+                                            </div>
+                                        }.into_any()
+                                    } else {
+                                        view! {
+                                            <input
+                                                class="dev-profile-input dev-profile-social-input"
+                                                type="text"
+                                                placeholder="@handle"
+                                                prop:value=twitter.clone()
+                                                on:input=move |ev| {
+                                                    update_field("twitter_handle", event_target_value(&ev));
+                                                }
+                                            />
+                                        }.into_any()
+                                    }}
+                                </div>
                             </div>
                         </div>
 

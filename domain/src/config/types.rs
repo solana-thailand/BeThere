@@ -196,6 +196,15 @@ pub struct AppConfig {
     /// Email to use as the authenticated user in dev mode.
     /// Defaults to the first super_admin_email or "dev@localhost".
     pub dev_email: String,
+    // ---- Social OAuth linking ----
+    /// GitHub OAuth app client ID for social account linking.
+    pub github_client_id: String,
+    /// GitHub OAuth app client secret for social account linking.
+    pub github_client_secret: String,
+    /// GitHub OAuth callback URL (should point to /api/auth/github/callback).
+    pub github_redirect_uri: String,
+    /// Telegram bot token for verifying Login Widget HMAC signatures.
+    pub telegram_bot_token: String,
 }
 
 impl fmt::Debug for AppConfig {
@@ -213,6 +222,9 @@ impl fmt::Debug for AppConfig {
             .field("event_defaults", &self.event_defaults)
             .field("dev_mode", &self.dev_mode)
             .field("dev_email", &self.dev_email)
+            .field("github_client_id", &self.github_client_id)
+            .field("github_client_secret", &"***REDACTED***")
+            .field("telegram_bot_token", &"***REDACTED***")
             .finish()
     }
 }

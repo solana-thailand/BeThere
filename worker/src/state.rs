@@ -244,6 +244,12 @@ impl AppState {
             event_defaults,
             dev_mode,
             dev_email,
+            github_client_id: get_secret(env, "GITHUB_CLIENT_ID").unwrap_or_default(),
+            github_client_secret: get_secret(env, "GITHUB_CLIENT_SECRET").unwrap_or_default(),
+            github_redirect_uri: get_secret(env, "GITHUB_REDIRECT_URI")
+                .or_else(|_| get_var(env, "GITHUB_REDIRECT_URI"))
+                .unwrap_or_default(),
+            telegram_bot_token: get_secret(env, "TELEGRAM_BOT_TOKEN").unwrap_or_default(),
         })
     }
 

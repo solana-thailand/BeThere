@@ -21,6 +21,7 @@ pub mod public_event;
 pub mod qr;
 pub mod quiz;
 pub mod register;
+pub mod social_link;
 pub mod user_log;
 pub mod waitlist;
 pub mod walkin;
@@ -80,6 +81,8 @@ pub fn routes(state: AppState) -> Router<()> {
         .route("/auth/wallet/nonce", post(auth::wallet_nonce))
         .route("/auth/wallet/verify", post(auth::wallet_verify))
         .route("/auth/wallet/bind", post(auth::wallet_bind))
+        // Social account linking (public callback for GitHub, auth-guarded for others)
+        .route("/auth/github/callback", get(social_link::github_link_callback))
         .layer(middleware::from_fn(crate::middleware::cache_no_store_layer));
 
     // Public routes — no auth middleware required.
@@ -244,6 +247,10 @@ pub fn routes(state: AppState) -> Router<()> {
             "/my-profile",
             get(profile::get_my_profile).put(profile::update_my_profile),
         )
+        // Social account linking (auth-guarded — user must be logged in)
+        .route("/auth/github", get(social_link::github_link_start))
+        .route("/auth/telegram/verify", post(social_link::telegram_verify))
+        .route("/auth/social/unlink", post(social_link::social_unlink))
         // Campaign progress for current user (attendee-authed — my-progress must come before {id} routes)
         .route(
             "/campaigns/my-progress",

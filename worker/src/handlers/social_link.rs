@@ -1,0 +1,521 @@
+//! Social account linking handlers.
+//!
+//! Allows authenticated attendees to link verified social accounts to their
+//! developer profile. Supported platforms: GitHub (OAuth), Telegram (Login Widget).
+//!
+//! GitHub flow:
+//!   GET  /api/auth/github           — redirect to GitHub OAuth (auth-guarded)
+//!   GET  /api/auth/github/callback  — exchange code, save handle, redirect to /profile
+//!
+//! Telegram flow:
+//!   POST /api/auth/telegram/verify  — verify Login Widget HMAC, save handle (auth-guarded)
+//!
+//! Unlink:
+//!   POST /api/auth/social/unlink    — remove a verified social link (auth-guarded)
+
+use axum::{
+    Extension,
+    extract::{Query, State},
+    response::{IntoResponse, Redirect, Response},
+};
+use serde::{Deserialize, Serialize};
+use serde_json::json;
+
+use crate::error::{ApiOk, WorkerError};
+use crate::state::AppState;
+use event_checkin_domain::models::auth::Claims;
+use event_checkin_domain::models::error::AppError;
+
+// ---------------------------------------------------------------------------
+// GitHub OAuth — Link GitHub account
+// ---------------------------------------------------------------------------
+
+/// GET /api/auth/github
+/// Redirects authenticated user to GitHub OAuth authorization URL.
+#[worker::send]
+pub async fn github_link_start(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+) -> Response {
+    let client_id = &state.config.github_client_id;
+    if client_id.is_empty() {
+        return (
+            axum::http::StatusCode::SERVICE_UNAVAILABLE,
+            axum::Json(json!({"error": "GitHub OAuth not configured — set GITHUB_CLIENT_ID secret"})),
+        )
+            .into_response();
+    }
+
+    // Encode the user's email in the OAuth state param so we know who to update on callback
+    let encoded_email = urlencoding::encode(&claims.email).to_string();
+    let redirect_uri = urlencoding::encode(&state.config.github_redirect_uri).to_string();
+
+    let github_auth_url = format!(
+        "https://github.com/login/oauth/authorize\
+         ?client_id={client_id}\
+         &redirect_uri={redirect_uri}\
+         &scope=read:user\
+         &state={encoded_email}"
+    );
+
+    tracing::info!(email = %claims.email, "GitHub OAuth link started");
+    Redirect::to(&github_auth_url).into_response()
+}
+
+#[derive(Debug, Deserialize)]
+pub struct GithubCallbackQuery {
+    pub code: Option<String>,
+    pub state: Option<String>, // encoded email
+    pub error: Option<String>,
+}
+
+/// GitHub user info response from GET /user.
+#[derive(Deserialize)]
+struct GithubUserInfo {
+    login: String,
+}
+
+/// GET /api/auth/github/callback?code=...&state=<encoded_email>
+/// Exchanges the code for an access token, fetches the GitHub username,
+/// and saves it (with verified=1) to the developer profile.
+///
+/// Note: This endpoint is PUBLIC (no auth middleware) because GitHub redirects
+/// back here from an external domain. The email is recovered from the OAuth state param.
+#[worker::send]
+pub async fn github_link_callback(
+    State(state): State<AppState>,
+    Query(query): Query<GithubCallbackQuery>,
+) -> Response {
+    if let Some(ref err) = query.error {
+        tracing::warn!("GitHub OAuth callback error: {err}");
+        return Redirect::to("/profile?error=github_denied").into_response();
+    }
+
+    let code = match query.code {
+        Some(c) => c,
+        None => return Redirect::to("/profile?error=github_no_code").into_response(),
+    };
+
+    // Recover email from the state param
+    let email = match query.state {
+        Some(ref s) => urlencoding::decode(s)
+            .map(|c| c.into_owned())
+            .unwrap_or_default(),
+        None => return Redirect::to("/profile?error=github_no_state").into_response(),
+    };
+
+    if email.is_empty() {
+        return Redirect::to("/profile?error=github_invalid_state").into_response();
+    }
+
+    // Exchange code for access token using GitHub's token endpoint
+    // GitHub accepts JSON body and returns JSON with Accept: application/json
+    let token_url = "https://github.com/login/oauth/access_token";
+
+    #[derive(Serialize)]
+    struct GithubTokenBody {
+        client_id: String,
+        client_secret: String,
+        code: String,
+        redirect_uri: String,
+    }
+
+    #[derive(Deserialize)]
+    struct GithubTokenResponse {
+        access_token: Option<String>,
+        error: Option<String>,
+    }
+
+    let token_body = GithubTokenBody {
+        client_id: state.config.github_client_id.clone(),
+        client_secret: state.config.github_client_secret.clone(),
+        code: code.clone(),
+        redirect_uri: state.config.github_redirect_uri.clone(),
+    };
+
+    let github_token: GithubTokenResponse = match crate::http::post_json(token_url, &token_body, None).await {
+        Ok(t) => t,
+        Err(e) => {
+            tracing::error!("GitHub token exchange failed: {e}");
+            return Redirect::to("/profile?error=github_token_failed").into_response();
+        }
+    };
+
+    if let Some(ref err) = github_token.error {
+        tracing::warn!("GitHub token error: {err}");
+        return Redirect::to("/profile?error=github_token_error").into_response();
+    }
+
+    let access_token = match github_token.access_token {
+        Some(t) if !t.is_empty() => t,
+        _ => return Redirect::to("/profile?error=github_no_token").into_response(),
+    };
+
+    // Fetch GitHub user info — requires User-Agent header per GitHub API policy
+    let user_info: GithubUserInfo = match github_get_user(&access_token).await {
+        Ok(u) => u,
+        Err(e) => {
+            tracing::error!("GitHub user fetch failed: {e}");
+            return Redirect::to("/profile?error=github_user_failed").into_response();
+        }
+    };
+
+    // Save verified GitHub handle to developer profile
+    let d1 = match state.d1.as_ref() {
+        Some(d) => d,
+        None => return Redirect::to("/profile?error=db_unavailable").into_response(),
+    };
+
+    let handle = user_info.login.replace('\'', "''");
+    let email_escaped = email.replace('\'', "''");
+    let sql = format!(
+        "INSERT INTO developer_profiles \
+         (email, github_handle, github_verified, github_verified_at, \
+          first_seen_at, last_active_at, total_events, updated_at) \
+         VALUES ('{email_escaped}', '{handle}', 1, datetime('now'), \
+                 datetime('now'), datetime('now'), 0, datetime('now')) \
+         ON CONFLICT (email) DO UPDATE SET \
+          github_handle = '{handle}', \
+          github_verified = 1, \
+          github_verified_at = datetime('now'), \
+          updated_at = datetime('now')"
+    );
+
+    if let Err(e) = worker::D1Database::prepare(d1, &sql).run().await {
+        tracing::error!("GitHub handle save failed: {e:?}");
+        return Redirect::to("/profile?error=github_save_failed").into_response();
+    }
+
+    tracing::info!(email = %email, github = %user_info.login, "GitHub account linked successfully");
+    Redirect::to("/profile?linked=github").into_response()
+}
+
+/// GET https://api.github.com/user with Bearer token.
+///
+/// GitHub API requires `User-Agent` header; use `worker::Fetch` directly.
+async fn github_get_user(access_token: &str) -> Result<GithubUserInfo, String> {
+    use worker::{Fetch, Headers, Method, Request, RequestInit};
+
+    let headers = Headers::new();
+    headers
+        .set("Authorization", &format!("Bearer {access_token}"))
+        .map_err(|e| format!("header error: {e:?}"))?;
+    headers
+        .set("Accept", "application/vnd.github+json")
+        .map_err(|e| format!("header error: {e:?}"))?;
+    headers
+        .set("User-Agent", "BeThere-Protocol/1.0")
+        .map_err(|e| format!("header error: {e:?}"))?;
+
+    let mut init = RequestInit::new();
+    init.with_method(Method::Get).with_headers(headers);
+
+    let request = Request::new_with_init("https://api.github.com/user", &init)
+        .map_err(|e| format!("request error: {e:?}"))?;
+
+    let mut response = Fetch::Request(request)
+        .send()
+        .await
+        .map_err(|e| format!("fetch error: {e:?}"))?;
+
+    if response.status_code() != 200 {
+        return Err(format!("GitHub API returned status {}", response.status_code()));
+    }
+
+    response
+        .json()
+        .await
+        .map_err(|e| format!("parse error: {e:?}"))
+}
+
+// ---------------------------------------------------------------------------
+// Telegram Login Widget — Link Telegram account
+// ---------------------------------------------------------------------------
+
+/// Telegram Login Widget data sent from the browser.
+#[derive(Debug, Deserialize)]
+pub struct TelegramVerifyRequest {
+    pub id: i64,
+    pub first_name: String,
+    pub last_name: Option<String>,
+    pub username: Option<String>,
+    pub photo_url: Option<String>,
+    pub auth_date: i64,
+    pub hash: String,
+}
+
+/// POST /api/auth/telegram/verify
+/// Receives Telegram Login Widget data from the browser.
+/// Verifies the HMAC-SHA256 signature using the bot token, then saves
+/// the Telegram handle and ID to the developer profile.
+#[worker::send]
+pub async fn telegram_verify(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    axum::Json(body): axum::Json<TelegramVerifyRequest>,
+) -> Result<ApiOk<serde_json::Value>, WorkerError> {
+    let bot_token = &state.config.telegram_bot_token;
+    if bot_token.is_empty() {
+        return Err(WorkerError(AppError::Validation(
+            "Telegram not configured — set TELEGRAM_BOT_TOKEN secret".to_string(),
+        )));
+    }
+
+    // Verify HMAC-SHA256 signature per Telegram Login Widget spec using SubtleCrypto
+    let is_valid = verify_telegram_hash_subtle(&body, bot_token).await;
+    if !is_valid {
+        tracing::warn!(email = %claims.email, "Telegram HMAC verification failed");
+        return Err(WorkerError(AppError::Validation(
+            "Invalid Telegram signature".to_string(),
+        )));
+    }
+
+    // Replay attack prevention: auth_date must be within 24 hours
+    let now = (js_sys::Date::now() / 1000.0) as i64;
+    if now - body.auth_date > 86_400 {
+        return Err(WorkerError(AppError::Validation(
+            "Telegram auth_date too old — please re-authenticate".to_string(),
+        )));
+    }
+
+    let d1 = state
+        .d1
+        .as_ref()
+        .ok_or_else(|| WorkerError(AppError::Internal("D1 not available".to_string())))?;
+
+    let telegram_handle = body.username.clone().unwrap_or_else(|| body.first_name.clone());
+    let telegram_id = body.id.to_string();
+    let email_escaped = claims.email.replace('\'', "''");
+    let handle_escaped = telegram_handle.replace('\'', "''");
+    let id_escaped = telegram_id.replace('\'', "''");
+
+    let sql = format!(
+        "INSERT INTO developer_profiles \
+         (email, telegram_handle, telegram_id, telegram_verified, telegram_verified_at, \
+          first_seen_at, last_active_at, total_events, updated_at) \
+         VALUES ('{email_escaped}', '{handle_escaped}', '{id_escaped}', 1, datetime('now'), \
+                 datetime('now'), datetime('now'), 0, datetime('now')) \
+         ON CONFLICT (email) DO UPDATE SET \
+          telegram_handle = '{handle_escaped}', \
+          telegram_id = '{id_escaped}', \
+          telegram_verified = 1, \
+          telegram_verified_at = datetime('now'), \
+          updated_at = datetime('now')"
+    );
+
+    worker::D1Database::prepare(d1, &sql)
+        .run()
+        .await
+        .map_err(|e| WorkerError(AppError::Internal(format!("Telegram save failed: {e:?}"))))?;
+
+    tracing::info!(
+        email = %claims.email,
+        telegram_id = %body.id,
+        username = ?body.username,
+        "Telegram account linked successfully"
+    );
+
+    Ok(ApiOk::new(json!({
+        "status": "linked",
+        "telegram_handle": telegram_handle,
+        "telegram_id": body.id,
+    })))
+}
+
+// ---------------------------------------------------------------------------
+// Unlink
+// ---------------------------------------------------------------------------
+
+/// POST /api/auth/social/unlink
+/// Removes a verified social account link from the developer profile.
+#[derive(Debug, Deserialize)]
+pub struct UnlinkRequest {
+    pub platform: String, // "github" | "telegram" | "discord"
+}
+
+#[worker::send]
+pub async fn social_unlink(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    axum::Json(body): axum::Json<UnlinkRequest>,
+) -> Result<ApiOk<serde_json::Value>, WorkerError> {
+    let d1 = state
+        .d1
+        .as_ref()
+        .ok_or_else(|| WorkerError(AppError::Internal("D1 not available".to_string())))?;
+
+    let email_escaped = claims.email.replace('\'', "''");
+
+    let sql = match body.platform.as_str() {
+        "github" => format!(
+            "UPDATE developer_profiles SET \
+             github_handle = NULL, github_verified = 0, github_verified_at = NULL, \
+             updated_at = datetime('now') \
+             WHERE email = '{email_escaped}'"
+        ),
+        "telegram" => format!(
+            "UPDATE developer_profiles SET \
+             telegram_handle = NULL, telegram_id = NULL, telegram_verified = 0, \
+             telegram_verified_at = NULL, updated_at = datetime('now') \
+             WHERE email = '{email_escaped}'"
+        ),
+        "discord" => format!(
+            "UPDATE developer_profiles SET \
+             discord_handle = NULL, discord_verified = 0, discord_verified_at = NULL, \
+             updated_at = datetime('now') \
+             WHERE email = '{email_escaped}'"
+        ),
+        other => {
+            return Err(WorkerError(AppError::Validation(format!(
+                "Unknown platform: {other}"
+            ))))
+        }
+    };
+
+    worker::D1Database::prepare(d1, &sql)
+        .run()
+        .await
+        .map_err(|e| WorkerError(AppError::Internal(format!("Unlink failed: {e:?}"))))?;
+
+    tracing::info!(email = %claims.email, platform = %body.platform, "Social account unlinked");
+
+    Ok(ApiOk::new(json!({
+        "status": "unlinked",
+        "platform": body.platform,
+    })))
+}
+
+// ---------------------------------------------------------------------------
+// Helpers — Telegram HMAC verification via SubtleCrypto (Web Crypto API)
+// ---------------------------------------------------------------------------
+
+/// Verify the Telegram Login Widget HMAC-SHA256 signature using SubtleCrypto.
+///
+/// Per Telegram docs:
+/// 1. Build data-check-string: sorted `key=value` pairs (all fields except `hash`), joined by `\n`
+/// 2. Secret key = HMAC-SHA256("WebAppData", bot_token) — but for Login Widget it's SHA256(bot_token)
+/// 3. Verify: HMAC-SHA256(secret_key, data_check_string) == hash (hex-encoded)
+///
+/// Note: Uses WebCrypto SubtleCrypto because pure-Rust HMAC crates add WASM binary size.
+async fn verify_telegram_hash_subtle(data: &TelegramVerifyRequest, bot_token: &str) -> bool {
+    // Build sorted data-check-string
+    let mut pairs: Vec<String> = vec![
+        format!("auth_date={}", data.auth_date),
+        format!("first_name={}", data.first_name),
+        format!("id={}", data.id),
+    ];
+    if let Some(ref ln) = data.last_name {
+        pairs.push(format!("last_name={ln}"));
+    }
+    if let Some(ref ph) = data.photo_url {
+        pairs.push(format!("photo_url={ph}"));
+    }
+    if let Some(ref un) = data.username {
+        pairs.push(format!("username={un}"));
+    }
+    pairs.sort();
+    let check_string = pairs.join("\n");
+
+    // Use SubtleCrypto for HMAC: key = SHA256(bot_token), then HMAC-SHA256(key, check_string)
+    match compute_telegram_hmac(bot_token, &check_string).await {
+        Ok(computed_hex) => computed_hex == data.hash,
+        Err(e) => {
+            tracing::error!("Telegram HMAC computation failed: {e}");
+            false
+        }
+    }
+}
+
+/// Compute HMAC-SHA256 of `check_string` using SHA256(bot_token) as the key.
+/// Uses the Web Crypto API (SubtleCrypto) available in the Cloudflare Workers runtime.
+async fn compute_telegram_hmac(bot_token: &str, check_string: &str) -> Result<String, String> {
+    use js_sys::{Array, ArrayBuffer, Object, Reflect, Uint8Array};
+    use wasm_bindgen::JsValue;
+    use wasm_bindgen_futures::JsFuture;
+
+    let crypto = web_sys::window()
+        .or_else(|| None)
+        .and_then(|_| None::<web_sys::Window>); // Workers don't have window
+
+    // Get SubtleCrypto from the Workers global scope
+    let subtle = js_sys::eval("crypto.subtle")
+        .map_err(|e| format!("no crypto.subtle: {e:?}"))?;
+
+    // Step 1: Import bot_token bytes as raw key material for SHA-256 digest
+    let token_bytes = Uint8Array::from(bot_token.as_bytes());
+
+    // Step 2: digest SHA-256 of bot_token to get the HMAC key bytes
+    let digest_algo = JsValue::from_str("SHA-256");
+    let digest_promise = Reflect::apply(
+        &Reflect::get(&subtle, &JsValue::from_str("digest"))
+            .map_err(|e| format!("subtle.digest not found: {e:?}"))?,
+        &subtle,
+        &Array::of2(&digest_algo, &token_bytes),
+    )
+    .map_err(|e| format!("digest call failed: {e:?}"))?;
+
+    let digest_result = JsFuture::from(js_sys::Promise::from(digest_promise))
+        .await
+        .map_err(|e| format!("digest await failed: {e:?}"))?;
+
+    let key_bytes = Uint8Array::new(&digest_result);
+
+    // Step 3: Import the key bytes as HMAC-SHA256 key
+    let hmac_algo = {
+        let obj = Object::new();
+        Reflect::set(&obj, &JsValue::from_str("name"), &JsValue::from_str("HMAC"))
+            .map_err(|e| format!("set name failed: {e:?}"))?;
+        let hash_obj = Object::new();
+        Reflect::set(&hash_obj, &JsValue::from_str("name"), &JsValue::from_str("SHA-256"))
+            .map_err(|e| format!("set hash name failed: {e:?}"))?;
+        Reflect::set(&obj, &JsValue::from_str("hash"), &hash_obj)
+            .map_err(|e| format!("set hash failed: {e:?}"))?;
+        JsValue::from(obj)
+    };
+
+    let usages = Array::of1(&JsValue::from_str("sign"));
+    let import_promise = Reflect::apply(
+        &Reflect::get(&subtle, &JsValue::from_str("importKey"))
+            .map_err(|e| format!("importKey not found: {e:?}"))?,
+        &subtle,
+        &Array::of5(
+            &JsValue::from_str("raw"),
+            &key_bytes,
+            &hmac_algo,
+            &JsValue::from_bool(false),
+            &usages,
+        ),
+    )
+    .map_err(|e| format!("importKey call failed: {e:?}"))?;
+
+    let crypto_key = JsFuture::from(js_sys::Promise::from(import_promise))
+        .await
+        .map_err(|e| format!("importKey await failed: {e:?}"))?;
+
+    // Step 4: HMAC sign the check_string
+    let msg_bytes = Uint8Array::from(check_string.as_bytes());
+    let sign_algo = {
+        let obj = Object::new();
+        Reflect::set(&obj, &JsValue::from_str("name"), &JsValue::from_str("HMAC"))
+            .map_err(|e| format!("sign algo set failed: {e:?}"))?;
+        JsValue::from(obj)
+    };
+
+    let sign_promise = Reflect::apply(
+        &Reflect::get(&subtle, &JsValue::from_str("sign"))
+            .map_err(|e| format!("sign not found: {e:?}"))?,
+        &subtle,
+        &Array::of3(&sign_algo, &crypto_key, &msg_bytes),
+    )
+    .map_err(|e| format!("sign call failed: {e:?}"))?;
+
+    let sign_result = JsFuture::from(js_sys::Promise::from(sign_promise))
+        .await
+        .map_err(|e| format!("sign await failed: {e:?}"))?;
+
+    let sig_bytes = Uint8Array::new(&sign_result);
+    let sig_vec: Vec<u8> = sig_bytes.to_vec();
+
+    // Step 5: Hex-encode
+    Ok(sig_vec.iter().map(|b| format!("{b:02x}")).collect())
+}
