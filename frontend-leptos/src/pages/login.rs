@@ -23,6 +23,9 @@ extern "C" {
     #[wasm_bindgen(js_name = "getDetectedWallets")]
     fn get_detected_wallets_js() -> Vec<String>;
 
+    #[wasm_bindgen(js_name = "isWalletAvailable")]
+    fn is_wallet_available_js(wallet_name: &str) -> bool;
+
     #[wasm_bindgen(js_name = "connectWallet")]
     fn connect_wallet_js_raw(wallet_name: &str) -> js_sys::Promise;
 }
@@ -337,26 +340,51 @@ pub fn Login() -> impl IntoView {
 
                             <div style="display: flex; flex-direction: column; gap: 12px;">
                                 {move || {
-                                    let wallets = detected_wallets.get();
-                                    wallets.into_iter().map(|w| {
-                                        let w_name = w.clone();
-                                        let icon_name = crate::icons::wallet_icon_name(&w_name);
+                                    let installed_list = detected_wallets.get();
+                                    let supported = vec![
+                                        ("Phantom", "https://phantom.app/"),
+                                        ("Solflare", "https://solflare.com/"),
+                                        ("Backpack", "https://backpack.app/"),
+                                    ];
+
+                                    supported.into_iter().map(|(w_name, download_url)| {
+                                        let is_installed = installed_list.iter().any(|w| w.eq_ignore_ascii_case(w_name)) || is_wallet_available_js(w_name);
+                                        let name_str = w_name.to_string();
+                                        let icon_name = crate::icons::wallet_icon_name(w_name);
                                         let connect_fn = connect_wallet_by_name;
+
                                         view! {
-                                            <button
-                                                class="siws-wallet-option"
-                                                on:click=move |_| connect_fn(w_name.clone())
-                                            >
+                                            <div class="siws-wallet-option">
                                                 <span style="display: flex; align-items: center; gap: 12px;">
-                                                    <span style="display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; background: rgba(255,255,255,0.06); border-radius: 8px;">
+                                                    <span style="display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; background: rgba(255,255,255,0.06); border-radius: 10px;">
                                                         <Icon icon=icon_name class="icon-sm" />
                                                     </span>
-                                                    {w.clone()}
+                                                    {w_name}
                                                 </span>
-                                                <span style="font-size: 0.8rem; font-weight: 600; color: #14F195; background: rgba(20, 241, 149, 0.12); border: 1px solid rgba(20, 241, 149, 0.25); padding: 4px 12px; border-radius: 20px;">
-                                                    "Connect →"
-                                                </span>
-                                            </button>
+
+                                                {if is_installed {
+                                                    view! {
+                                                        <span
+                                                            class="siws-badge-installed"
+                                                            on:click=move |_| connect_fn(name_str.clone())
+                                                        >
+                                                            "Connect →"
+                                                        </span>
+                                                    }.into_any()
+                                                } else {
+                                                    view! {
+                                                        <a
+                                                            href=download_url
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            class="siws-badge-install"
+                                                            on:click=move |e| e.stop_propagation()
+                                                        >
+                                                            "Get Extension ↗"
+                                                        </a>
+                                                    }.into_any()
+                                                }}
+                                            </div>
                                         }
                                     }).collect::<Vec<_>>()
                                 }}
