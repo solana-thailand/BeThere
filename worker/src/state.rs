@@ -90,10 +90,25 @@ impl AppState {
     /// Reads 22+ env vars, creates 2 `HashSet`s, and performs string
     /// allocation. Expensive enough to justify caching.
     fn build_config(env: &Env) -> Result<AppConfig, String> {
+        let server_url = get_var(env, "SERVER_URL")
+            .unwrap_or_else(|_| "https://bethere.solana-thailand.workers.dev".to_string());
+
+        let claim_base_url =
+            get_var(env, "CLAIM_BASE_URL").unwrap_or_else(|_| format!("{server_url}/claim"));
+
+        let raw_redirect_uri = get_secret(env, "GOOGLE_REDIRECT_URI")
+            .unwrap_or_else(|_| format!("{server_url}/api/auth/callback"));
+
+        let redirect_uri = if raw_redirect_uri.contains("localhost") && server_url.contains("workers.dev") {
+            format!("{server_url}/api/auth/callback")
+        } else {
+            raw_redirect_uri
+        };
+
         let google_oauth = GoogleOAuthConfig {
             client_id: get_secret(env, "GOOGLE_CLIENT_ID")?,
             client_secret: get_secret(env, "GOOGLE_CLIENT_SECRET")?,
-            redirect_uri: get_secret(env, "GOOGLE_REDIRECT_URI")?,
+            redirect_uri,
         };
 
         let service_account = GoogleServiceAccountConfig {
@@ -131,12 +146,6 @@ impl AppState {
             .map(|s| s.trim().to_lowercase())
             .filter(|s| !s.is_empty())
             .collect();
-
-        let server_url = get_var(env, "SERVER_URL")
-            .unwrap_or_else(|_| "https://event-checkin.workers.dev".to_string());
-
-        let claim_base_url =
-            get_var(env, "CLAIM_BASE_URL").unwrap_or_else(|_| format!("{server_url}/claim"));
 
         let server = ServerConfig {
             // host/port unused on Workers — placeholder values
