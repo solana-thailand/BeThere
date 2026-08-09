@@ -318,7 +318,20 @@ pub fn DevProfile() -> impl IntoView {
                             <h3 class="dev-profile-section-title">"Social Links"</h3>
 
                             <div class="dev-profile-field">
-                                <label class="dev-profile-label">"GitHub"</label>
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                                    <label class="dev-profile-label">"GitHub"</label>
+                                    {if !github.is_empty() {
+                                        let clean = github.trim_start_matches('@').trim_start_matches("https://github.com/").trim().to_string();
+                                        let url = format!("https://github.com/{clean}");
+                                        view! {
+                                            <a href=url target="_blank" rel="noopener noreferrer" style="font-size: 0.78rem; color: #14F195; text-decoration: none; font-weight: 600;">
+                                                "🐙 Open GitHub ↗"
+                                            </a>
+                                        }.into_any()
+                                    } else {
+                                        ().into_any()
+                                    }}
+                                </div>
                                 <input
                                     class="dev-profile-input"
                                     type="text"
@@ -326,6 +339,32 @@ pub fn DevProfile() -> impl IntoView {
                                     prop:value=github.clone()
                                     on:input=move |ev| {
                                         update_field("github_handle", event_target_value(&ev));
+                                    }
+                                />
+                            </div>
+
+                            <div class="dev-profile-field">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                                    <label class="dev-profile-label">"Twitter / X"</label>
+                                    {if !twitter.is_empty() {
+                                        let clean = twitter.trim_start_matches('@').trim_start_matches("https://x.com/").trim_start_matches("https://twitter.com/").trim().to_string();
+                                        let url = format!("https://x.com/{clean}");
+                                        view! {
+                                            <a href=url target="_blank" rel="noopener noreferrer" style="font-size: 0.78rem; color: #38bdf8; text-decoration: none; font-weight: 600;">
+                                                "𝕏 Open Profile ↗"
+                                            </a>
+                                        }.into_any()
+                                    } else {
+                                        ().into_any()
+                                    }}
+                                </div>
+                                <input
+                                    class="dev-profile-input"
+                                    type="text"
+                                    placeholder="twitter_handle"
+                                    prop:value=twitter.clone()
+                                    on:input=move |ev| {
+                                        update_field("twitter_handle", event_target_value(&ev));
                                     }
                                 />
                             </div>
@@ -339,19 +378,6 @@ pub fn DevProfile() -> impl IntoView {
                                     prop:value=discord.clone()
                                     on:input=move |ev| {
                                         update_field("discord_handle", event_target_value(&ev));
-                                    }
-                                />
-                            </div>
-
-                            <div class="dev-profile-field">
-                                <label class="dev-profile-label">"Twitter / X"</label>
-                                <input
-                                    class="dev-profile-input"
-                                    type="text"
-                                    placeholder="twitter_handle"
-                                    prop:value=twitter.clone()
-                                    on:input=move |ev| {
-                                        update_field("twitter_handle", event_target_value(&ev));
                                     }
                                 />
                             </div>
