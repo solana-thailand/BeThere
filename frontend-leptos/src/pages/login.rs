@@ -8,6 +8,7 @@
 //! This page is NOT wrapped in `ProtectedRoute` since it's the public
 //! entry point. It handles its own auth state checks.
 
+use leptos::portal::Portal;
 use leptos::prelude::*;
 use leptos_router::hooks::{use_navigate, use_query_map};
 
@@ -302,67 +303,69 @@ pub fn Login() -> impl IntoView {
                 </div>
             </div>
 
-            // High-End Fixed Overlay Modal (Portal)
-            <Show
-                when=move || show_wallet_modal.get()
-                fallback=|| view! { <div></div> }
-            >
-                <div
-                    style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; width: 100vw; height: 100vh; background: rgba(8, 9, 14, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); display: flex; align-items: center; justify-content: center; z-index: 99999; padding: 20px; box-sizing: border-box;"
-                    on:click=move |_| set_show_wallet_modal.set(false)
+            // High-End Fixed Overlay Modal via Portal (mounts directly under body to escape container transform)
+            <Portal>
+                <Show
+                    when=move || show_wallet_modal.get()
+                    fallback=|| view! { <div></div> }
                 >
                     <div
-                        style="background: #13141c; border: 1px solid rgba(153, 69, 255, 0.35); border-radius: 20px; width: 100%; max-width: 400px; padding: 28px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7), 0 0 30px rgba(153, 69, 255, 0.15); box-sizing: border-box;"
-                        on:click=move |e| e.stop_propagation()
+                        style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; width: 100vw; height: 100vh; background: rgba(8, 9, 14, 0.85); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); display: flex; align-items: center; justify-content: center; z-index: 99999; padding: 20px; box-sizing: border-box;"
+                        on:click=move |_| set_show_wallet_modal.set(false)
                     >
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                            <div style="display: flex; align-items: center; gap: 10px;">
-                                <span inner_html=solana_icon()></span>
-                                <h3 style="margin: 0; font-size: 1.25rem; font-weight: 700; color: #fff; letter-spacing: -0.01em;">
-                                    "Connect Wallet"
-                                </h3>
+                        <div
+                            style="background: #13141c; border: 1px solid rgba(153, 69, 255, 0.35); border-radius: 20px; width: 100%; max-width: 400px; padding: 28px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7), 0 0 30px rgba(153, 69, 255, 0.15); box-sizing: border-box;"
+                            on:click=move |e| e.stop_propagation()
+                        >
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                                <div style="display: flex; align-items: center; gap: 10px;">
+                                    <span inner_html=solana_icon()></span>
+                                    <h3 style="margin: 0; font-size: 1.25rem; font-weight: 700; color: #fff; letter-spacing: -0.01em;">
+                                        "Connect Wallet"
+                                    </h3>
+                                </div>
+                                <button
+                                    style="background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); color: #94a3b8; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1rem; cursor: pointer; transition: all 0.15s;"
+                                    on:click=move |_| set_show_wallet_modal.set(false)
+                                >
+                                    "✕"
+                                </button>
                             </div>
-                            <button
-                                style="background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); color: #94a3b8; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1rem; cursor: pointer; transition: all 0.15s;"
-                                on:click=move |_| set_show_wallet_modal.set(false)
-                            >
-                                "✕"
-                            </button>
-                        </div>
 
-                        <p style="color: #94a3b8; font-size: 0.88rem; line-height: 1.5; margin-top: 0; margin-bottom: 24px;">
-                            "Select your Solana wallet to sign in securely with Sign-In With Solana (SIWS)."
-                        </p>
+                            <p style="color: #94a3b8; font-size: 0.88rem; line-height: 1.5; margin-top: 0; margin-bottom: 24px;">
+                                "Select your Solana wallet to sign in securely with Sign-In With Solana (SIWS)."
+                            </p>
 
-                        <div style="display: flex; flex-direction: column; gap: 12px;">
-                            {move || {
-                                let wallets = detected_wallets.get();
-                                wallets.into_iter().map(|w| {
-                                    let w_name = w.clone();
-                                    let icon_name = crate::icons::wallet_icon_name(&w_name);
-                                    let connect_fn = connect_wallet_by_name;
-                                    view! {
-                                        <button
-                                            style="display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 14px 18px; background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 14px; color: #fff; font-size: 0.95rem; font-weight: 600; cursor: pointer; transition: all 0.2s ease;"
-                                            on:click=move |_| connect_fn(w_name.clone())
-                                        >
-                                            <span style="display: flex; align-items: center; gap: 12px;">
-                                                <span style="display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; background: rgba(255,255,255,0.06); border-radius: 8px;">
-                                                    <Icon icon=icon_name class="icon-sm" />
+                            <div style="display: flex; flex-direction: column; gap: 12px;">
+                                {move || {
+                                    let wallets = detected_wallets.get();
+                                    wallets.into_iter().map(|w| {
+                                        let w_name = w.clone();
+                                        let icon_name = crate::icons::wallet_icon_name(&w_name);
+                                        let connect_fn = connect_wallet_by_name;
+                                        view! {
+                                            <button
+                                                style="display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 14px 18px; background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 14px; color: #fff; font-size: 0.95rem; font-weight: 600; cursor: pointer; transition: all 0.2s ease;"
+                                                on:click=move |_| connect_fn(w_name.clone())
+                                            >
+                                                <span style="display: flex; align-items: center; gap: 12px;">
+                                                    <span style="display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; background: rgba(255,255,255,0.06); border-radius: 8px;">
+                                                        <Icon icon=icon_name class="icon-sm" />
+                                                    </span>
+                                                    {w.clone()}
                                                 </span>
-                                                {w.clone()}
-                                            </span>
-                                            <span style="font-size: 0.8rem; font-weight: 600; color: #14F195; background: rgba(20, 241, 149, 0.12); border: 1px solid rgba(20, 241, 149, 0.25); padding: 4px 12px; border-radius: 20px;">
-                                                "Connect →"
-                                            </span>
-                                        </button>
-                                    }
-                                }).collect::<Vec<_>>()
-                            }}
+                                                <span style="font-size: 0.8rem; font-weight: 600; color: #14F195; background: rgba(20, 241, 149, 0.12); border: 1px solid rgba(20, 241, 149, 0.25); padding: 4px 12px; border-radius: 20px;">
+                                                    "Connect →"
+                                                </span>
+                                            </button>
+                                        }
+                                    }).collect::<Vec<_>>()
+                                }}
+                            </div>
                         </div>
                     </div>
-                </div>
-            </Show>
+                </Show>
+            </Portal>
         </div>
     }
 }
