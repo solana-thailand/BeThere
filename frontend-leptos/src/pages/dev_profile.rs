@@ -338,7 +338,7 @@ pub fn DevProfile() -> impl IntoView {
                             // GitHub
                             <div class="dev-profile-social-row">
                                 <div class="dev-profile-social-info">
-                                    <span class="dev-profile-social-icon">"🐙"</span>
+                                    <span class="dev-profile-social-icon"><Icon icon=IconName::GitHub /></span>
                                     <span class="dev-profile-label">"GitHub"</span>
                                     {if github_verified {
                                         view! {
@@ -391,7 +391,7 @@ pub fn DevProfile() -> impl IntoView {
                             // Telegram
                             <div class="dev-profile-social-row">
                                 <div class="dev-profile-social-info">
-                                    <span class="dev-profile-social-icon">"✈️"</span>
+                                    <span class="dev-profile-social-icon"><Icon icon=IconName::Telegram /></span>
                                     <span class="dev-profile-label">"Telegram"</span>
                                     {if telegram_verified {
                                         view! {
@@ -426,7 +426,7 @@ pub fn DevProfile() -> impl IntoView {
                             // Discord
                             <div class="dev-profile-social-row">
                                 <div class="dev-profile-social-info">
-                                    <span class="dev-profile-social-icon">"🎮"</span>
+                                    <span class="dev-profile-social-icon"><Icon icon=IconName::Discord /></span>
                                     <span class="dev-profile-label">"Discord"</span>
                                     {if discord_verified {
                                         view! {
@@ -461,7 +461,7 @@ pub fn DevProfile() -> impl IntoView {
                             // Twitter / X (manual — Twitter OAuth is expensive)
                             <div class="dev-profile-social-row">
                                 <div class="dev-profile-social-info">
-                                    <span class="dev-profile-social-icon">"𝕏"</span>
+                                    <span class="dev-profile-social-icon"><Icon icon=IconName::Twitter /></span>
                                     <span class="dev-profile-label">"Twitter / X"</span>
                                 </div>
                                 <div class="dev-profile-social-actions">

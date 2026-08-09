@@ -15683,7 +15683,18 @@ a.ticket-series-card:hover {
 }
 
 .dev-profile-social-icon {
-    font-size: 1.15rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    color: var(--text-heading);
+}
+
+.dev-profile-social-icon svg {
+    width: 18px;
+    height: 18px;
+    fill: currentColor;
 }
 
 .dev-profile-verified-badge {
