@@ -373,7 +373,14 @@ pub fn DevProfile() -> impl IntoView {
                                 } else {
                                     view! {
                                         <div class="dev-profile-social-actions">
-                                            <a href="/api/auth/github" class="dev-profile-social-connect-btn">
+                                            <a href="/api/auth/github" rel="external" class="dev-profile-social-connect-btn"
+                                                on:click=move |ev| {
+                                                    ev.prevent_default();
+                                                    if let Some(win) = web_sys::window() {
+                                                        let _ = win.location().set_href("/api/auth/github");
+                                                    }
+                                                }
+                                            >
                                                 "Connect GitHub →"
                                             </a>
                                         </div>
