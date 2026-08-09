@@ -578,46 +578,61 @@ fn render_loaded_event(
                         }
                         AuthState::NotSignedIn => {
                             let slug = slug_for_signin.clone();
+                            let slug_for_wallet = slug_for_signin.clone();
                             view! {
                                 <div class="pe-card">
                                     <h2 class="pe-section-title">
                                         <Icon icon=IconName::Ticket class="icon-md" />" Reserve Your Spot"
                                     </h2>
                                     <p class="pe-detail-secondary pe-mb-1">
-                                        "Sign in with Google to register for this event."
+                                        "Sign in with Google or your Solana Wallet to register for this event."
                                     </p>
-                                    <button
-                                        class="btn-google"
-                                        on:click=move |_| {
-                                            let slug = slug.clone();
-                                            leptos::task::spawn_local(async move {
-                                                let window = web_sys::window().expect("no window");
-                                                let origin = window.location().origin().unwrap_or_else(|_| "http://localhost:8787".to_string());
-                                                let redirect = format!("/e/{slug}");
-                                                let api_url = format!(
-                                                    "{origin}/api/auth/url?redirect={}",
-                                                    urlencoding::encode(&redirect)
-                                                );
-                                                match crate::api::fetch::get(&api_url, &[]).await {
-                                                    Ok(resp) => {
-                                                        if let Ok(body) = crate::api::fetch::response_text(&resp).await
-                                                            && let Ok(json) = serde_json::from_str::<serde_json::Value>(&body)
-                                                                && let Some(auth_url) = json.get("data").and_then(|d| d.get("auth_url")).and_then(|u| u.as_str()) {
-                                                                    navigateTo(auth_url);
-                                                                    return;
-                                                                }
+                                    <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 16px;">
+                                        <button
+                                            class="btn-google"
+                                            on:click=move |_| {
+                                                let slug = slug.clone();
+                                                leptos::task::spawn_local(async move {
+                                                    let window = web_sys::window().expect("no window");
+                                                    let origin = window.location().origin().unwrap_or_else(|_| "http://localhost:8787".to_string());
+                                                    let redirect = format!("/e/{slug}");
+                                                    let api_url = format!(
+                                                        "{origin}/api/auth/url?redirect={}",
+                                                        urlencoding::encode(&redirect)
+                                                    );
+                                                    match crate::api::fetch::get(&api_url, &[]).await {
+                                                        Ok(resp) => {
+                                                            if let Ok(body) = crate::api::fetch::response_text(&resp).await
+                                                                && let Ok(json) = serde_json::from_str::<serde_json::Value>(&body)
+                                                                    && let Some(auth_url) = json.get("data").and_then(|d| d.get("auth_url")).and_then(|u| u.as_str()) {
+                                                                        navigateTo(auth_url);
+                                                                        return;
+                                                                    }
+                                                        }
+                                                        Err(e) => {
+                                                            log::error!("[public_event] failed to get auth URL: {e}");
+                                                        }
                                                     }
-                                                    Err(e) => {
-                                                        log::error!("[public_event] failed to get auth URL: {e}");
-                                                    }
-                                                }
-                                                navigateTo("/login");
-                                            });
-                                        }
-                                    >
-                                        <span inner_html=google_icon()></span>
-                                        "Sign in with Google"
-                                    </button>
+                                                    navigateTo("/login");
+                                                });
+                                            }
+                                        >
+                                            <span inner_html=google_icon()></span>
+                                            "Sign in with Google"
+                                        </button>
+
+                                        <button
+                                            class="btn-google"
+                                            style="background: rgba(153, 69, 255, 0.12); border-color: rgba(153, 69, 255, 0.4); color: #fff;"
+                                            on:click=move |_| {
+                                                let target = format!("/login?next=/e/{}", slug_for_wallet);
+                                                navigateTo(&target);
+                                            }
+                                        >
+                                            <span style="font-size: 1.1rem; margin-right: 4px;">"💜"</span>
+                                            "Sign in with Solana Wallet"
+                                        </button>
+                                    </div>
                                 </div>
                             }.into_any()
                         }

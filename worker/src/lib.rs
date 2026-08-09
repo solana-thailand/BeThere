@@ -56,23 +56,19 @@ const INDEX_HTML: &str = include_str!("../../frontend-leptos/dist/index.html");
 /// fallback is Worker-generated for non-asset routes (`/claim/*`, `/staff`,
 /// `/admin`), so the header must be set here, not in `_headers`.
 static SPA_NO_STORE: std::sync::LazyLock<axum::http::HeaderValue> =
-    std::sync::LazyLock::new(|| axum::http::HeaderValue::from_static("no-store"));
+    std::sync::LazyLock::new(|| axum::http::HeaderValue::from_static("no-store, no-cache, must-revalidate, max-age=0"));
+
+static SPA_PRAGMA: std::sync::LazyLock<axum::http::HeaderValue> =
+    std::sync::LazyLock::new(|| axum::http::HeaderValue::from_static("no-cache"));
 
 /// SPA fallback handler — returns the embedded `index.html` for non-API routes
 /// with `Cache-Control: no-store` and the standard security headers.
-///
-/// The `[assets]` binding in wrangler.toml serves static files (JS, CSS, WASM)
-/// from the edge. For HTML navigation routes that don't match a static file,
-/// this fallback serves `index.html` so the Leptos client-side router can
-/// handle the path. Because this response is Worker-generated, the
-/// `security_headers_layer` middleware (which only wraps `api_routes`) and the
-/// `_headers` file (which only applies to Static Asset responses) do NOT run —
-/// headers must be attached here.
 #[worker::send]
 async fn spa_fallback() -> axum::http::Response<axum::body::Body> {
     let mut resp = axum::response::Html(INDEX_HTML).into_response();
     let headers = resp.headers_mut();
     headers.insert(axum::http::header::CACHE_CONTROL, SPA_NO_STORE.clone());
+    headers.insert(axum::http::header::PRAGMA, SPA_PRAGMA.clone());
     middleware::headers::add_security_headers(resp)
 }
 

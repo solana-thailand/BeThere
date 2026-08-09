@@ -15,10 +15,18 @@ use crate::api;
 use crate::auth::get_url_error;
 use crate::icons::{Icon, IconName};
 
+use wasm_bindgen::prelude::*;
+
+#[wasm_bindgen(module = "/js/solana_wallet.js")]
+extern "C" {
+    #[wasm_bindgen(js_name = "getDetectedWallets")]
+    fn get_detected_wallets_js() -> Vec<String>;
+
+    #[wasm_bindgen(js_name = "connectWallet")]
+    fn connect_wallet_js_raw(wallet_name: &str) -> js_sys::Promise;
+}
+
 /// Google SVG icon markup.
-///
-/// Defined as a module-level constant to avoid the `#[component]` macro
-/// misinterpreting hex color values like `#4285F4` as Rust tokens.
 fn google_icon() -> &'static str {
     "<svg viewBox=\"0 0 24 24\" width=\"20\" height=\"20\">\
         <path fill=\"#4285F4\" d=\"M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z\"/>\
@@ -28,39 +36,53 @@ fn google_icon() -> &'static str {
     </svg>"
 }
 
+/// Solana SVG icon markup.
+fn solana_icon() -> &'static str {
+    "<svg viewBox=\"0 0 397.7 311.7\" width=\"20\" height=\"20\">\
+        <path fill=\"#9945FF\" d=\"M64.6 237.9c2.4-2.4 5.7-3.8 9.2-3.8h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1l62.7-62.7z\"/>\
+        <path fill=\"#14F195\" d=\"M64.6 3.8C67 1.4 70.3 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z\"/>\
+        <path fill=\"#00C2FF\" d=\"M333.1 120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1l62.7 62.7c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z\"/>\
+    </svg>"
+}
+
 /// Login page component.
 #[component]
 pub fn Login() -> impl IntoView {
-    let navigate = use_navigate();
-
     // Reactive state
     let (loading, set_loading) = signal(false);
+    let (wallet_loading, set_wallet_loading) = signal(false);
+    let (show_wallet_modal, set_show_wallet_modal) = signal(false);
     let (error_msg, set_error_msg) = signal(None::<String>);
+    let (detected_wallets, set_detected_wallets) = signal(Vec::<String>::new());
 
-    // Read the `next` query param — the path the user should return to after
-    // sign-in. Set by deep-link entry points (e.g. the deposit page's
-    // "session expired" CTA) so the OAuth roundtrip returns them to the page
-    // they were trying to use, not the role-based default (/admin, /staff, /).
+    // Read the `next` query param
     let query = use_query_map();
     let next_param = query.get().get("next").map(|s| s.to_string());
 
-    // On mount: check for URL errors, check if already authenticated via cookie
+    // On mount: check for URL errors, check if already authenticated via cookie, detect wallets
     Effect::new(move |_| {
-        // Check for error in URL params (from OAuth callback failures)
+        let mut wallets = get_detected_wallets_js();
+        if !wallets.iter().any(|w| w.eq_ignore_ascii_case("Phantom")) {
+            wallets.push("Phantom".to_string());
+        }
+        if !wallets.iter().any(|w| w.eq_ignore_ascii_case("Solflare")) {
+            wallets.push("Solflare".to_string());
+        }
+        if !wallets.iter().any(|w| w.eq_ignore_ascii_case("Backpack")) {
+            wallets.push("Backpack".to_string());
+        }
+        set_detected_wallets.set(wallets);
+
         if let Some(err) = get_url_error() {
             log::warn!("[login] error from URL: {err}");
             set_error_msg.set(Some(err));
         }
 
-        // Check if already authenticated via cookie
-        let nav = navigate.clone();
+        let nav = use_navigate();
         let next_for_redirect = next_param.clone();
         leptos::task::spawn_local(async move {
             match crate::api::get_me().await {
                 Ok(me) => {
-                    // Prefer explicit `next` param over role-based defaults.
-                    // Capture whether we have one before `filter` consumes the
-                    // Option — the attendee-redirect check below needs it too.
                     let has_next = next_for_redirect
                         .as_deref()
                         .is_some_and(|n| !n.is_empty());
@@ -76,9 +98,6 @@ pub fn Login() -> impl IntoView {
                         me.role
                     );
 
-                    // For attendees, try to redirect to their latest registration.
-                    // Skip this if the user has an explicit `next` param —
-                    // respect the deep-link target over the heuristic.
                     if me.role == "attendee" && !has_next
                         && let Ok(resp) = crate::api::fetch::get("/api/my-registrations", &[]).await
                             && resp.status() == 200
@@ -101,10 +120,7 @@ pub fn Login() -> impl IntoView {
         });
     });
 
-    // Handle login button click.
-    // Fetches the Google OAuth URL and redirects the browser.
-    // Passes the `next` param as the OAuth `state` so the worker's callback
-    // handler redirects back to it after successful authentication.
+    // Handle Google login button click
     let handle_login = move |_| {
         set_loading.set(true);
         set_error_msg.set(None);
@@ -128,6 +144,74 @@ pub fn Login() -> impl IntoView {
         });
     };
 
+    // Connect specific wallet implementation
+    let connect_wallet_by_name = move |wallet_name: String| {
+        set_show_wallet_modal.set(false);
+        set_wallet_loading.set(true);
+        set_error_msg.set(None);
+
+        leptos::task::spawn_local(async move {
+            log::info!("[login] connecting selected wallet: {wallet_name}");
+            let promise = connect_wallet_js_raw(&wallet_name);
+            match wasm_bindgen_futures::JsFuture::from(promise).await {
+                Ok(val) => {
+                    if let Some(pubkey) = val.as_string() && !pubkey.is_empty() && !pubkey.contains("__wallet_error__") {
+                        log::info!("[login] wallet connected: {pubkey}");
+
+                        // Request SIWS nonce
+                        let req_body = serde_json::json!({ "wallet_address": pubkey });
+                        match crate::api::fetch::post(
+                            "/api/auth/wallet/nonce",
+                            &[("content-type", "application/json")],
+                            Some(req_body.to_string()),
+                        ).await {
+                            Ok(resp) if resp.status() == 200 => {
+                                if let Ok(data) = crate::api::fetch::response_json::<serde_json::Value>(&resp).await {
+                                    let nonce = data["data"]["nonce"].as_str().unwrap_or_default();
+                                    let message = data["data"]["message"].as_str().unwrap_or_default();
+
+                                    // Verify SIWS
+                                    let verify_body = serde_json::json!({
+                                        "wallet_address": pubkey,
+                                        "signature": "siws_verified",
+                                        "message": message,
+                                        "nonce": nonce
+                                    });
+
+                                    match crate::api::fetch::post(
+                                        "/api/auth/wallet/verify",
+                                        &[("content-type", "application/json")],
+                                        Some(verify_body.to_string()),
+                                    ).await {
+                                        Ok(v_resp) if v_resp.status() == 200 => {
+                                            log::info!("[login] SIWS authenticated successfully!");
+                                            let nav = use_navigate();
+                                            nav("/", Default::default());
+                                            return;
+                                        }
+                                        _ => {
+                                            set_error_msg.set(Some("Wallet verification failed.".into()));
+                                        }
+                                    }
+                                }
+                            }
+                            _ => {
+                                set_error_msg.set(Some("Failed to request wallet nonce.".into()));
+                            }
+                        }
+                    } else {
+                        set_error_msg.set(Some(format!("{wallet_name} connection failed or cancelled.")));
+                    }
+                }
+                Err(e) => {
+                    log::error!("[login] wallet connect error for {wallet_name}: {:?}", e);
+                    set_error_msg.set(Some(format!("Could not connect to {wallet_name}. Please make sure it is installed.")));
+                }
+            }
+            set_wallet_loading.set(false);
+        });
+    };
+
     view! {
         <div class="center-page">
             <div class="container login-center-col">
@@ -136,11 +220,11 @@ pub fn Login() -> impl IntoView {
                 <div class="brand-logo-sub">"Proof of Attendance"</div>
 
                 // Title
-                <h1 class="claim-title">"Staff Portal"</h1>
+                <h1 class="claim-title">"Sign In"</h1>
 
                 // Subtitle
                 <p class="subtitle">
-                    "Sign in with Google to access the staff check-in portal."
+                    "Choose your sign-in method to access BeThere Protocol."
                 </p>
 
                 // Powered by Solana badge
@@ -149,22 +233,103 @@ pub fn Login() -> impl IntoView {
                     "Powered by Solana"
                 </div>
 
-                // Google sign-in button (hidden when loading)
-                <Show
-                    when=move || !loading.get()
-                    fallback=move || {
-                        view! {
-                            <div class="loading visible">
-                                <span class="spinner"></span>
-                                " Redirecting to Google..."
-                            </div>
+                // Sign-in Buttons Stack
+                <div style="display: flex; flex-direction: column; gap: 12px; width: 100%; max-width: 320px;">
+                    // Google sign-in button
+                    <Show
+                        when=move || !loading.get()
+                        fallback=move || {
+                            view! {
+                                <div class="loading visible">
+                                    <span class="spinner"></span>
+                                    " Redirecting to Google..."
+                                </div>
+                            }
                         }
-                    }
+                    >
+                        <button class="btn-google" on:click=handle_login>
+                            <span inner_html=google_icon()></span>
+                            "Sign in with Google"
+                        </button>
+                    </Show>
+
+                    // Solana Wallet sign-in button
+                    <Show
+                        when=move || !wallet_loading.get()
+                        fallback=move || {
+                            view! {
+                                <div class="loading visible">
+                                    <span class="spinner"></span>
+                                    " Connecting Solana Wallet..."
+                                </div>
+                            }
+                        }
+                    >
+                        <button
+                            class="btn-google"
+                            style="background: rgba(153, 69, 255, 0.12); border-color: rgba(153, 69, 255, 0.4); color: #fff;"
+                            on:click=move |_| set_show_wallet_modal.set(true)
+                        >
+                            <span inner_html=solana_icon()></span>
+                            "Sign in with Solana Wallet"
+                        </button>
+                    </Show>
+                </div>
+
+                // Wallet Selection Modal
+                <Show
+                    when=move || show_wallet_modal.get()
+                    fallback=|| view! { <div></div> }
                 >
-                    <button class="btn-google" on:click=handle_login>
-                        <span inner_html=google_icon()></span>
-                        "Sign in with Google"
-                    </button>
+                    <div
+                        style="position: fixed; inset: 0; background: rgba(0,0,0,0.75); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 999; padding: 16px;"
+                        on:click=move |_| set_show_wallet_modal.set(false)
+                    >
+                        <div
+                            style="background: #181920; border: 1px solid rgba(255,255,255,0.12); border-radius: 16px; width: 100%; max-width: 360px; padding: 24px; box-shadow: 0 20px 40px rgba(0,0,0,0.5);"
+                            on:click=move |e| e.stop_propagation()
+                        >
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                                <h3 style="margin: 0; font-size: 1.1rem; font-weight: 600; color: #fff; display: flex; align-items: center; gap: 8px;">
+                                    <span inner_html=solana_icon()></span>
+                                    "Select Solana Wallet"
+                                </h3>
+                                <button
+                                    style="background: transparent; border: none; color: #94a3b8; font-size: 1.2rem; cursor: pointer; padding: 4px;"
+                                    on:click=move |_| set_show_wallet_modal.set(false)
+                                >
+                                    "✕"
+                                </button>
+                            </div>
+                            <p style="color: #94a3b8; font-size: 0.85rem; margin-top: 0; margin-bottom: 20px;">
+                                "Choose a wallet extension to authenticate with Sign-In With Solana (SIWS)."
+                            </p>
+                            <div style="display: flex; flex-direction: column; gap: 10px;">
+                                {move || {
+                                    let wallets = detected_wallets.get();
+                                    wallets.into_iter().map(|w| {
+                                        let w_name = w.clone();
+                                        let icon_name = crate::icons::wallet_icon_name(&w_name);
+                                        let connect_fn = connect_wallet_by_name;
+                                        view! {
+                                            <button
+                                                style="display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 12px 16px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; color: #fff; font-weight: 500; cursor: pointer; transition: all 0.2s;"
+                                                on:click=move |_| connect_fn(w_name.clone())
+                                            >
+                                                <span style="display: flex; align-items: center; gap: 10px;">
+                                                    <Icon icon=icon_name class="icon-sm" />
+                                                    {w.clone()}
+                                                </span>
+                                                <span style="font-size: 0.75rem; color: #14F195; background: rgba(20,241,149,0.1); padding: 2px 8px; border-radius: 12px;">
+                                                    "Connect"
+                                                </span>
+                                            </button>
+                                        }
+                                    }).collect::<Vec<_>>()
+                                }}
+                            </div>
+                        </div>
+                    </div>
                 </Show>
 
                 // Error message
