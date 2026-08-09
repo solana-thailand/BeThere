@@ -97,6 +97,7 @@ impl AppState {
             get_var(env, "CLAIM_BASE_URL").unwrap_or_else(|_| format!("{server_url}/claim"));
 
         let raw_redirect_uri = get_secret(env, "GOOGLE_REDIRECT_URI")
+            .or_else(|_| get_var(env, "GOOGLE_REDIRECT_URI"))
             .unwrap_or_else(|_| format!("{server_url}/api/auth/callback"));
 
         let redirect_uri = if raw_redirect_uri.contains("localhost") && server_url.contains("workers.dev") {
@@ -106,19 +107,19 @@ impl AppState {
         };
 
         let google_oauth = GoogleOAuthConfig {
-            client_id: get_secret(env, "GOOGLE_CLIENT_ID")?,
-            client_secret: get_secret(env, "GOOGLE_CLIENT_SECRET")?,
+            client_id: get_secret(env, "GOOGLE_CLIENT_ID").unwrap_or_default(),
+            client_secret: get_secret(env, "GOOGLE_CLIENT_SECRET").unwrap_or_default(),
             redirect_uri,
         };
 
         let service_account = GoogleServiceAccountConfig {
-            client_email: get_secret(env, "GOOGLE_SERVICE_ACCOUNT_EMAIL")?,
-            private_key: get_secret(env, "GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY")?,
-            token_uri: get_secret(env, "GOOGLE_SERVICE_ACCOUNT_TOKEN_URI")?,
+            client_email: get_secret(env, "GOOGLE_SERVICE_ACCOUNT_EMAIL").unwrap_or_default(),
+            private_key: get_secret(env, "GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY").unwrap_or_default(),
+            token_uri: get_secret(env, "GOOGLE_SERVICE_ACCOUNT_TOKEN_URI").unwrap_or_default(),
         };
 
         let sheets = SheetsConfig {
-            sheet_id: get_secret(env, "GOOGLE_SHEET_ID")?,
+            sheet_id: get_secret(env, "GOOGLE_SHEET_ID").unwrap_or_default(),
             sheet_name: get_var(env, "GOOGLE_SHEET_NAME")
                 .unwrap_or_else(|_| "Attendees".to_string()),
             staff_sheet_name: get_var(env, "GOOGLE_STAFF_SHEET_NAME")
@@ -131,7 +132,7 @@ impl AppState {
             platform_sheet_id: get_var(env, "PLATFORM_SHEET_ID").unwrap_or_default(),
         };
 
-        let staff_emails_str = get_secret(env, "STAFF_EMAILS")?;
+        let staff_emails_str = get_secret(env, "STAFF_EMAILS").unwrap_or_default();
         let staff_emails: HashSet<String> = staff_emails_str
             .split(',')
             .map(|s| s.trim().to_lowercase())
