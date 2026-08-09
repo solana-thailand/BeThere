@@ -235,7 +235,8 @@ impl AppState {
             google_oauth,
             service_account,
             sheets,
-            jwt_secret: get_secret(env, "JWT_SECRET")?,
+            jwt_secret: get_secret(env, "JWT_SECRET")
+                .unwrap_or_else(|_| "bethere_dev_jwt_secret_2026".to_string()),
             staff_emails,
             super_admin_emails,
             server,
