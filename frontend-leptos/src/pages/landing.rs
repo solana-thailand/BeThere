@@ -868,10 +868,17 @@ pub fn Landing() -> impl IntoView {
                                 }.into_any()
                             }
                             _ => {
-                                // Attendee persona — primary = find events, ghost = create
+                                // Attendee persona — primary = find events, secondary = Solana wallet sign in
                                 view! {
                                     <a href="#events" class="btn btn-primary landing-cta-link">
                                         "Find Events ↓"
+                                    </a>
+                                    <a
+                                        href="/login"
+                                        class="btn btn-outline landing-cta-link"
+                                        style="background: linear-gradient(135deg, rgba(153, 69, 255, 0.18) 0%, rgba(20, 241, 149, 0.12) 100%); border-color: rgba(153, 69, 255, 0.5); color: #fff;"
+                                    >
+                                        "💜 Sign in with Solana Wallet"
                                     </a>
                                 }.into_any()
                             }
@@ -887,11 +894,7 @@ pub fn Landing() -> impl IntoView {
                                 "Create an Event"
                             </button>
                         }.into_any(),
-                        _ => view! {
-                            <a href="#events" class="btn btn-outline landing-cta-link">
-                                "Find Events"
-                            </a>
-                        }.into_any(),
+                        _ => ().into_any(),
                     }}
                 </div>
             </section>
