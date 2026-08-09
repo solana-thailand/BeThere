@@ -703,3 +703,46 @@ mod tests {
         );
     }
 }
+
+/// Find linked email address by wallet_address from developer_profiles or attendees.
+pub async fn find_email_by_wallet(db: &D1Database, wallet_address: &str) -> Result<Option<String>, String> {
+    let sql = "SELECT email FROM developer_profiles WHERE LOWER(wallet_address) = LOWER(?1) LIMIT 1";
+    let stmt = db.prepare(sql);
+    let bound = stmt.bind_refs(&[D1Type::Text(wallet_address)]).map_err(|e| format!("D1 find_email_by_wallet bind: {e:?}"))?;
+    if let Ok(rows) = safe_all_rows(&bound).await
+        && let Some(row) = rows.first()
+        && let Some(email) = row.get("email").and_then(|v| v.as_str())
+    {
+        return Ok(Some(email.to_string()));
+    }
+
+    // Fallback: check attendees table
+    let sql2 = "SELECT email FROM attendees WHERE LOWER(wallet_address) = LOWER(?1) LIMIT 1";
+    let stmt2 = db.prepare(sql2);
+    let bound2 = stmt2.bind_refs(&[D1Type::Text(wallet_address)]).map_err(|e| format!("D1 find_email_by_wallet fallback bind: {e:?}"))?;
+    if let Ok(rows2) = safe_all_rows(&bound2).await
+        && let Some(row2) = rows2.first()
+        && let Some(email2) = row2.get("email").and_then(|v| v.as_str())
+    {
+        return Ok(Some(email2.to_string()));
+    }
+
+    Ok(None)
+}
+
+/// Link wallet address to an existing email in developer_profiles.
+pub async fn link_wallet_to_email(db: &D1Database, email: &str, wallet_address: &str) -> Result<(), String> {
+    let sql = "INSERT INTO developer_profiles (email, wallet_address, updated_at) \
+               VALUES (LOWER(?1), ?2, datetime('now')) \
+               ON CONFLICT (email) DO UPDATE SET \
+               wallet_address = excluded.wallet_address, \
+               updated_at = datetime('now')";
+    let stmt = db.prepare(sql);
+    stmt.bind_refs(&[D1Type::Text(email), D1Type::Text(wallet_address)])
+        .map_err(|e| format!("D1 link_wallet_to_email bind: {e:?}"))?
+        .run()
+        .await
+        .map_err(|e| format!("D1 link_wallet_to_email run: {e:?}"))?;
+    Ok(())
+}
+

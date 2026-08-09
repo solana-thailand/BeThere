@@ -77,6 +77,9 @@ pub fn routes(state: AppState) -> Router<()> {
         .route("/auth/url", get(auth::auth_url))
         .route("/auth/callback", get(auth::auth_callback))
         .route("/auth/logout", post(auth::auth_logout))
+        .route("/auth/wallet/nonce", post(auth::wallet_nonce))
+        .route("/auth/wallet/verify", post(auth::wallet_verify))
+        .route("/auth/wallet/bind", post(auth::wallet_bind))
         .layer(middleware::from_fn(crate::middleware::cache_no_store_layer));
 
     // Public routes — no auth middleware required.

@@ -108,3 +108,45 @@ impl ServiceAccountClaim {
         }
     }
 }
+
+/// Sign-In With Solana (SIWS) nonce request body.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WalletNonceRequest {
+    pub wallet_address: String,
+}
+
+/// Sign-In With Solana (SIWS) nonce response body.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WalletNonceResponse {
+    pub nonce: String,
+    pub message: String,
+    pub expires_at: u64,
+}
+
+/// Sign-In With Solana (SIWS) verification request body.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WalletVerifyRequest {
+    pub wallet_address: String,
+    pub signature: String,
+    pub message: String,
+    pub nonce: String,
+}
+
+/// Sign-In With Solana (SIWS) verification response body.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WalletVerifyResponse {
+    pub token: String,
+    pub wallet_address: String,
+    #[serde(default)]
+    pub linked_email: Option<String>,
+    pub authenticated: bool,
+}
+
+/// Account binding request: bind wallet address to authenticated Google account.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WalletBindRequest {
+    pub wallet_address: String,
+    pub signature: String,
+    pub message: String,
+}
+
