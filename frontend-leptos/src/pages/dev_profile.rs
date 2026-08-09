@@ -5,11 +5,22 @@
 
 use leptos::prelude::*;
 use leptos_meta::Title;
+use wasm_bindgen::prelude::*;
 
 use crate::api::{
     self, DeveloperProfile, UpdateProfileBody, INTEREST_OPTIONS, ROLE_OPTIONS,
 };
 use crate::icons::{Icon, IconName};
+
+// ---------------------------------------------------------------------------
+// JS Interop
+// ---------------------------------------------------------------------------
+
+#[wasm_bindgen(module = "/js/clipboard.js")]
+extern "C" {
+    #[wasm_bindgen(js_name = "copyToClipboard")]
+    fn copy_to_clipboard_js(text: &str) -> bool;
+}
 
 // ---------------------------------------------------------------------------
 // State
@@ -370,11 +381,29 @@ pub fn DevProfile() -> impl IntoView {
                             </div>
 
                             <div class="dev-profile-field">
-                                <label class="dev-profile-label">"Discord"</label>
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                                    <label class="dev-profile-label">"Discord"</label>
+                                    {if !discord.is_empty() {
+                                        let dc = discord.clone();
+                                        view! {
+                                            <button
+                                                type="button"
+                                                style="font-size: 0.78rem; color: #9b8afb; background: none; border: none; cursor: pointer; font-weight: 600; padding: 0;"
+                                                on:click=move |_| {
+                                                    let _ = copy_to_clipboard_js(&dc);
+                                                }
+                                            >
+                                                "🎮 Copy Username"
+                                            </button>
+                                        }.into_any()
+                                    } else {
+                                        ().into_any()
+                                    }}
+                                </div>
                                 <input
                                     class="dev-profile-input"
                                     type="text"
-                                    placeholder="discord_username"
+                                    placeholder="@username"
                                     prop:value=discord.clone()
                                     on:input=move |ev| {
                                         update_field("discord_handle", event_target_value(&ev));
