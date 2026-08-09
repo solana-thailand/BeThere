@@ -389,13 +389,9 @@ pub fn scroll_to_element(id: &str) {
 // Formatting helpers
 // ---------------------------------------------------------------------------
 
-pub fn format_usdc(amount_micro: f64) -> String {
-    let usdc = amount_micro / 1_000_000.0;
-    if usdc >= 1.0 {
-        format!("{usdc:.0} USDC")
-    } else {
-        format!("{usdc:.2} USDC")
-    }
+pub fn format_usdc(val: f64) -> String {
+    let usdc = if val > 1000.0 { val / 1_000_000.0 } else { val };
+    format!("{usdc:.2} USDC")
 }
 
 pub fn format_thb(amount: f64) -> String {
