@@ -404,7 +404,7 @@ pub async fn nfc_verify(
 
     let tx_sig = format!("5xNFC{}", uuid::Uuid::now_v7().to_string().replace('-', "")[..12].to_string());
 
-    Ok(ApiOk(NfcCheckinRes {
+    Ok(ApiOk::new(NfcCheckinRes {
         success: true,
         message: "NFC Solana check-in verified successfully on-chain".to_string(),
         tx_signature: Some(tx_sig),
