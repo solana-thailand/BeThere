@@ -412,12 +412,19 @@ pub fn DevProfile() -> impl IntoView {
                                         </div>
                                     }.into_any()
                                 } else {
+                                    let tg_val = telegram.clone();
                                     view! {
-                                        <div class="dev-profile-social-actions">
-                                            // Telegram Login Widget — renders a button that opens Telegram auth
-                                            <div id="telegram-login-widget" class="dev-profile-telegram-widget">
-                                                "📱 Use Telegram Login below:"
-                                            </div>
+                                        <div class="dev-profile-social-actions" style="display:flex;align-items:center;gap:8px;">
+                                            <input
+                                                type="text"
+                                                class="dev-profile-input"
+                                                style="max-width:160px;padding:4px 10px;font-size:0.82rem;"
+                                                placeholder="@username"
+                                                prop:value=tg_val
+                                                on:input=move |ev| {
+                                                    update_field("telegram_handle", event_target_value(&ev));
+                                                }
+                                            />
                                         </div>
                                     }.into_any()
                                 }}
