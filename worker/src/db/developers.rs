@@ -125,7 +125,9 @@ pub(crate) async fn get_developer_profile(
 ) -> Result<Option<DeveloperProfileRow>, String> {
     let stmt = db.prepare(
         "SELECT email, display_name, wallet_address, github_handle, discord_handle, \
-         twitter_handle, experience_level, primary_role, tech_stack, interests, \
+         twitter_handle, telegram_handle, telegram_id, github_verified, telegram_verified, \
+         discord_verified, github_verified_at, telegram_verified_at, discord_verified_at, \
+         experience_level, primary_role, tech_stack, interests, \
          learning_goals, expectations, company_org, location_city, consent_outreach, \
          first_seen_at, last_active_at, total_events, badges_earned \
          FROM developer_profiles WHERE email = ?1",
