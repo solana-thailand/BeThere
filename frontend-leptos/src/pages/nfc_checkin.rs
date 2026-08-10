@@ -1,13 +1,8 @@
-use leptos::*;
-use leptos_router::*;
+use leptos::prelude::*;
+use leptos_router::components::A;
+use leptos_router::hooks::use_query_map;
 use serde::{Deserialize, Serialize};
 use crate::icons::{Icon, IconName};
-
-#[derive(Params, PartialEq, Clone, Debug)]
-pub struct NfcParams {
-    pub event: Option<String>,
-    pub nonce: Option<String>,
-}
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct NfcCheckinResult {
@@ -19,17 +14,27 @@ pub struct NfcCheckinResult {
 /// NFC Tap-to-Checkin Page (`/checkin/nfc?event=XYZ&nonce=123`)
 #[component]
 pub fn NfcCheckin() -> impl IntoView {
-    let query = use_query::<NfcParams>();
-    let (status, set_status) = create_signal::<String>("ready".to_string());
-    let (error_msg, set_error_msg) = create_signal::<Option<String>>(None);
-    let (tx_sig, set_tx_sig) = create_signal::<Option<String>>(None);
+    let query_map = use_query_map();
+    let status = RwSignal::new("ready".to_string());
+    let error_msg = RwSignal::new(Option::<String>::None);
+    let tx_sig = RwSignal::new(Option::<String>::None);
 
-    let event_slug = move || query.with(|p| p.as_ref().ok().and_then(|params| params.event.clone()).unwrap_or_else(|| "solana-ai-meetup".to_string()));
-    let nonce_val = move || query.with(|p| p.as_ref().ok().and_then(|params| params.nonce.clone()).unwrap_or_else(|| "live-nonce".to_string()));
+    let event_slug = move || {
+        query_map
+            .get()
+            .get("event")
+            .unwrap_or_else(|| "solana-ai-meetup".to_string())
+    };
+    let nonce_val = move || {
+        query_map
+            .get()
+            .get("nonce")
+            .unwrap_or_else(|| "live-nonce".to_string())
+    };
 
     let on_sign_checkin = move |_| {
-        set_status.set("signing".to_string());
-        set_error_msg.set(None);
+        status.set("signing".to_string());
+        error_msg.set(None);
         let slug = event_slug();
         let nonce = nonce_val();
 
@@ -46,17 +51,17 @@ pub fn NfcCheckin() -> impl IntoView {
 
             match crate::api::fetch::post::<NfcCheckinResult, _>("/api/checkin/nfc/verify", &[], Some(&body)).await {
                 Ok(res) if res.success => {
-                    set_status.set("success".to_string());
-                    set_tx_sig.set(res.tx_signature);
+                    status.set("success".to_string());
+                    tx_sig.set(res.tx_signature);
                 }
                 Ok(res) => {
-                    set_status.set("error".to_string());
-                    set_error_msg.set(Some(res.message));
+                    status.set("error".to_string());
+                    error_msg.set(Some(res.message));
                 }
-                Err(e) => {
+                Err(_e) => {
                     // Fallback to client-side instant checkin verification demo
-                    set_status.set("success".to_string());
-                    set_tx_sig.set(Some(format!("5xNFC{}", js_sys::Date::now() as u64)));
+                    status.set("success".to_string());
+                    tx_sig.set(Some(format!("5xNFC{}", js_sys::Date::now() as u64)));
                 }
             }
         });
@@ -141,7 +146,7 @@ pub fn NfcCheckin() -> impl IntoView {
                             <p style="font-size: 0.9rem; color: #f87171; margin-bottom: 12px;">
                                 {move || error_msg.get().unwrap_or_else(|| "Check-in failed.".to_string())}
                             </p>
-                            <button type="button" class="btn btn-outline btn-xs" on:click=move |_| set_status.set("ready".to_string())>
+                            <button type="button" class="btn btn-outline btn-xs" on:click=move |_| status.set("ready".to_string())>
                                 "Try Again"
                             </button>
                         </div>
