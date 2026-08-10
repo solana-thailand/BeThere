@@ -148,7 +148,7 @@ pub fn NfcCheckin() -> impl IntoView {
                             </p>
                             {move || tx_sig.get().map(|sig| view! {
                                 <div style="font-size: 0.75rem; color: #94a3b8; word-break: break-all; margin-bottom: 14px;">
-                                    "Tx: " <a href={format!("https://solscan.io/tx/{}?cluster=devnet", sig)} target="_blank" style="color:#38bdf8;">{sig}</a>
+                                    "Tx: " <a href={format!("https://solscan.io/tx/{}?cluster=devnet", sig)} target="_blank" style="color:#38bdf8;">{sig.clone()}</a>
                                 </div>
                             })}
                             <A href="/" attr:class="btn btn-outline btn-sm">"Back to Home ➔"</A>
