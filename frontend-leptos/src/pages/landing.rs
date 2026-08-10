@@ -444,38 +444,13 @@ fn MyRegistrations() -> impl IntoView {
         let user_email = email.get();
 
         match (regs, user_email) {
-            (None, _) | (Some(_), None) => ().into_any(),
-            (Some(refs), Some(user)) if refs.is_empty() => {
-                view! {
-                    <section class="landing-reg-section">
-                        <div class="landing-reg-empty">
-                            <p class="landing-reg-empty-user">
-                                {format!("👤 {user}")}
-                            </p>
-                            <p class="landing-reg-empty-text">
-                                "You haven't registered for any events yet. Check out upcoming events above!"
-                            </p>
-                            <button
-                                class="btn btn-outline btn-xs landing-reg-signout-btn"
-                                on:click=move |_| {
-                                    leptos::task::spawn_local(async move {
-                                        let _ = crate::api::fetch::post("/api/auth/logout", &[], None).await;
-                                        let window = web_sys::window().expect("no window");
-                                        let _ = window.location().reload();
-                                    });
-                                }
-                            >
-                                "Sign out"
-                            </button>
-                        </div>
-                    </section>
-                }.into_any()
-            }
+            (None, _) | (_, None) => ().into_any(),
             (Some(refs), Some(user)) => {
                 let user_email = user.clone();
+                let has_regs = !refs.is_empty();
                 view! {
                     <section class="landing-reg-section">
-                        // Developer Passport Card
+                        // Developer Passport Card (Always shown for logged-in users)
                         <div class="landing-dev-passport">
                             <div class="landing-passport-left">
                                 <div class="landing-passport-avatar">
@@ -510,65 +485,73 @@ fn MyRegistrations() -> impl IntoView {
                             </div>
                         </div>
 
-                        <div class="landing-reg-header" style="margin-top: 24px;">
-                            <h2 class="landing-reg-title">
-                                "Your Events"
-                            </h2>
-                        </div>
-                        <div class="landing-reg-grid">
-                            {refs.into_iter().map(|reg| {
-                                let event_url = format!("/e/{}", reg.event_slug);
-                                let step_label = match reg.next_step.step_type.as_str() {
-                                    "claim" => "Claim Badge",
-                                    "deposit" => "Complete Deposit",
-                                    "quest" => "Start Quest",
-                                    "ticket" => "View Ticket",
-                                    _ => "View",
-                                };
-                                let date_str = if reg.event_start_ms > 0 {
-                                    let d = js_sys::Date::new_with_year_month_day(0, 0, 0);
-                                    d.set_time(reg.event_start_ms as f64);
-                                    d.to_locale_string("en-US", &js_sys::Object::new()).as_string().unwrap_or_default()
-                                } else {
-                                    "TBA".to_string()
-                                };
-                                let next_url = reg.next_step.url.clone();
-                                let status_color = match reg.status.as_str() {
-                                    "nft claimed" => "#4ade80",
-                                    "checked in" => "#4ade80",
-                                    "deposit confirmed" => "#22c55e",
-                                    "deposit pending" => "#facc15",
-                                    _ => "var(--text-secondary)",
-                                };
-                                view! {
-                                    <div class="landing-reg-card">
-                                        // Column 1: Event title & date
-                                        <div class="landing-reg-info">
-                                            <a href=event_url class="landing-reg-event-name">
-                                                {reg.event_name}
-                                            </a>
-                                            <p class="landing-reg-event-date">{date_str}</p>
-                                        </div>
-                                        // Column 2: User identity
-                                        <div class="landing-reg-identity">
-                                            <span class="landing-reg-identity-label">{user.clone()}</span>
-                                        </div>
-                                        // Column 3: Status badge
-                                        <div class="landing-reg-status-badge" style=format!(
-                                            "background:{}; color:#000;",
-                                            if status_color == "var(--text-secondary)" { "rgba(148,163,184,0.15)".to_string() } else { format!("{status_color}22") }
-                                        )>
-                                            <span class="landing-reg-status-dot" style=format!("background:{status_color};")></span>
-                                            {reg.status.clone()}
-                                        </div>
-                                        // Column 4: Action button
-                                        <a href=next_url class="btn btn-primary btn-sm landing-reg-action">
-                                            {step_label}" →"
-                                        </a>
-                                    </div>
-                                }
-                            }).collect::<Vec<_>>()}
-                        </div>
+                        {if has_regs {
+                            view! {
+                                <div class="landing-reg-header" style="margin-top: 24px;">
+                                    <h2 class="landing-reg-title">
+                                        "Your Events"
+                                    </h2>
+                                </div>
+                                <div class="landing-reg-grid">
+                                    {refs.into_iter().map(|reg| {
+                                        let event_url = format!("/e/{}", reg.event_slug);
+                                        let step_label = match reg.next_step.step_type.as_str() {
+                                            "claim" => "Claim Badge",
+                                            "deposit" => "Complete Deposit",
+                                            "quest" => "Start Quest",
+                                            "ticket" => "View Ticket",
+                                            _ => "View",
+                                        };
+                                        let date_str = if reg.event_start_ms > 0 {
+                                            let d = js_sys::Date::new_with_year_month_day(0, 0, 0);
+                                            d.set_time(reg.event_start_ms as f64);
+                                            d.to_locale_string("en-US", &js_sys::Object::new()).as_string().unwrap_or_default()
+                                        } else {
+                                            "TBA".to_string()
+                                        };
+                                        let next_url = reg.next_step.url.clone();
+                                        let status_color = match reg.status.as_str() {
+                                            "nft claimed" => "#4ade80",
+                                            "checked in" => "#4ade80",
+                                            "deposit confirmed" => "#22c55e",
+                                            "deposit pending" => "#facc15",
+                                            _ => "var(--text-secondary)",
+                                        };
+                                        view! {
+                                            <div class="landing-reg-card">
+                                                <div class="landing-reg-info">
+                                                    <a href=event_url class="landing-reg-event-name">
+                                                        {reg.event_name}
+                                                    </a>
+                                                    <p class="landing-reg-event-date">{date_str}</p>
+                                                </div>
+                                                <div class="landing-reg-identity">
+                                                    <span class="landing-reg-identity-label">{user.clone()}</span>
+                                                </div>
+                                                <div class="landing-reg-status-badge" style=format!(
+                                                    "background:{}; color:#000;",
+                                                    if status_color == "var(--text-secondary)" { "rgba(148,163,184,0.15)".to_string() } else { format!("{status_color}22") }
+                                                )>
+                                                    <span class="landing-reg-status-dot" style=format!("background:{status_color};")></span>
+                                                    {reg.status.clone()}
+                                                </div>
+                                                <a href=next_url class="btn btn-primary btn-sm landing-reg-action">
+                                                    {step_label}" →"
+                                                </a>
+                                            </div>
+                                        }
+                                    }).collect::<Vec<_>>()}
+                                </div>
+                            }.into_any()
+                        } else {
+                            view! {
+                                <div class="landing-reg-empty" style="margin-top: 16px;">
+                                    <p class="landing-reg-empty-text">
+                                        "You haven't registered for any events yet. Check out upcoming events below!"
+                                    </p>
+                                </div>
+                            }.into_any()
+                        }}
                     </section>
                 }.into_any()
             }

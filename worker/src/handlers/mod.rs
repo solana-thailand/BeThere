@@ -251,6 +251,7 @@ pub fn routes(state: AppState) -> Router<()> {
         .route("/auth/github", get(social_link::github_link_start))
         .route("/auth/telegram/verify", post(social_link::telegram_verify))
         .route("/auth/social/unlink", post(social_link::social_unlink))
+        .route("/checkin/nfc/verify", post(checkin::nfc_verify))
         // Campaign progress for current user (attendee-authed — my-progress must come before {id} routes)
         .route(
             "/campaigns/my-progress",
