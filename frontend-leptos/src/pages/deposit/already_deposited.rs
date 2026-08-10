@@ -98,6 +98,8 @@ pub fn already_deposited_view(
     data: &DepositStatusResponse,
     set_state: &WriteSignal<DepositPageState>,
 ) -> AnyView {
+    let info = data.status.as_ref().unwrap();
+    let (_method_icon, method_label) = deposit_method_display(&info.method);
     let is_credit = info.tx_signature.as_ref().is_some_and(|s| s.contains("CREDIT"))
         || info.wallet_address.as_ref().is_some_and(|w| w.contains("CREDIT"));
     let display_method_label = if is_credit {
