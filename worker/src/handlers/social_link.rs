@@ -46,9 +46,15 @@ pub async fn github_link_start(
             .into_response();
     }
 
+    let raw_redirect_uri = if !state.config.github_redirect_uri.is_empty() {
+        state.config.github_redirect_uri.clone()
+    } else {
+        format!("{}/api/auth/github/callback", state.config.server.server_url)
+    };
+
     // Encode the user's email in the OAuth state param so we know who to update on callback
     let encoded_email = urlencoding::encode(&claims.email).to_string();
-    let redirect_uri = urlencoding::encode(&state.config.github_redirect_uri).to_string();
+    let redirect_uri = urlencoding::encode(&raw_redirect_uri).to_string();
 
     let github_auth_url = format!(
         "https://github.com/login/oauth/authorize\
@@ -73,6 +79,73 @@ pub struct GithubCallbackQuery {
 #[derive(Deserialize)]
 struct GithubUserInfo {
     login: String,
+}
+
+/// Dedicated GitHub OAuth token exchange with explicit Accept: application/json and User-Agent headers.
+async fn exchange_github_code(
+    client_id: &str,
+    client_secret: &str,
+    code: &str,
+    redirect_uri: &str,
+) -> Result<String, String> {
+    let url = "https://github.com/login/oauth/access_token";
+    let token_body = serde_json::json!({
+        "client_id": client_id,
+        "client_secret": client_secret,
+        "code": code,
+        "redirect_uri": redirect_uri,
+    });
+    let json_body = serde_json::to_string(&token_body)
+        .map_err(|e| format!("failed to serialize GitHub token request: {e}"))?;
+
+    let headers = worker::Headers::new();
+    headers
+        .set("Content-Type", "application/json")
+        .map_err(|e| format!("failed to set content-type: {e:?}"))?;
+    headers
+        .set("Accept", "application/json")
+        .map_err(|e| format!("failed to set accept: {e:?}"))?;
+    headers
+        .set("User-Agent", "BeThere-App/1.0")
+        .map_err(|e| format!("failed to set user-agent: {e:?}"))?;
+
+    let mut init = worker::RequestInit::new();
+    init.with_method(worker::Method::Post)
+        .with_headers(headers)
+        .with_body(Some(wasm_bindgen::JsValue::from_str(&json_body)));
+
+    let request = worker::Request::new_with_init(url, &init)
+        .map_err(|e| format!("failed to create request to {url}: {e:?}"))?;
+
+    let mut response = worker::Fetch::Request(request)
+        .send()
+        .await
+        .map_err(|e| format!("POST {url} failed: {e:?}"))?;
+
+    let text = response
+        .text()
+        .await
+        .map_err(|e| format!("failed to read response text from {url}: {e:?}"))?;
+
+    #[derive(Deserialize)]
+    struct GithubTokenRes {
+        access_token: Option<String>,
+        error: Option<String>,
+        error_description: Option<String>,
+    }
+
+    let parsed: GithubTokenRes = serde_json::from_str(&text)
+        .map_err(|e| format!("failed to parse GitHub JSON response '{text}': {e}"))?;
+
+    if let Some(err) = parsed.error {
+        let desc = parsed.error_description.unwrap_or_default();
+        return Err(format!("GitHub OAuth returned error: {err} ({desc})"));
+    }
+
+    parsed
+        .access_token
+        .filter(|t| !t.is_empty())
+        .ok_or_else(|| format!("no access token in GitHub response '{text}'"))
 }
 
 /// GET /api/auth/github/callback?code=...&state=<encoded_email>
@@ -108,47 +181,26 @@ pub async fn github_link_callback(
         return Redirect::to("/profile?error=github_invalid_state").into_response();
     }
 
-    // Exchange code for access token using GitHub's token endpoint
-    // GitHub accepts JSON body and returns JSON with Accept: application/json
-    let token_url = "https://github.com/login/oauth/access_token";
-
-    #[derive(Serialize)]
-    struct GithubTokenBody {
-        client_id: String,
-        client_secret: String,
-        code: String,
-        redirect_uri: String,
-    }
-
-    #[derive(Deserialize)]
-    struct GithubTokenResponse {
-        access_token: Option<String>,
-        error: Option<String>,
-    }
-
-    let token_body = GithubTokenBody {
-        client_id: state.config.github_client_id.clone(),
-        client_secret: state.config.github_client_secret.clone(),
-        code: code.clone(),
-        redirect_uri: state.config.github_redirect_uri.clone(),
+    let raw_redirect_uri = if !state.config.github_redirect_uri.is_empty() {
+        state.config.github_redirect_uri.clone()
+    } else {
+        format!("{}/api/auth/github/callback", state.config.server.server_url)
     };
 
-    let github_token: GithubTokenResponse = match crate::http::post_json(token_url, &token_body, None).await {
-        Ok(t) => t,
+    // Exchange code for access token using dedicated token exchange
+    let access_token = match exchange_github_code(
+        &state.config.github_client_id,
+        &state.config.github_client_secret,
+        &code,
+        &raw_redirect_uri,
+    )
+    .await
+    {
+        Ok(token) => token,
         Err(e) => {
             tracing::error!("GitHub token exchange failed: {e}");
             return Redirect::to("/profile?error=github_token_failed").into_response();
         }
-    };
-
-    if let Some(ref err) = github_token.error {
-        tracing::warn!("GitHub token error: {err}");
-        return Redirect::to("/profile?error=github_token_error").into_response();
-    }
-
-    let access_token = match github_token.access_token {
-        Some(t) if !t.is_empty() => t,
-        _ => return Redirect::to("/profile?error=github_no_token").into_response(),
     };
 
     // Fetch GitHub user info — requires User-Agent header per GitHub API policy
