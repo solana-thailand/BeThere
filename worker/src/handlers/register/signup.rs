@@ -228,6 +228,9 @@ pub async fn register_attendee(
 
     // 5c. Check if attendee has rolling deposit credit that covers this event's deposit
     let mut credit_covered_method: Option<String> = None;
+    let mut credit_amount_applied: u64 = 0;
+    let mut resolved_contacts_sheet: Option<event_checkin_domain::models::org::ResolvedContactsSheet> = None;
+
     if config.deposit_enabled && !is_online_participation(&participation_type) {
         let resolved_contacts = if let Some(db) = state.d1.as_deref() {
             crate::org_store::resolve_contacts_sheet(db, &config, &state.config.sheets).await
@@ -252,12 +255,15 @@ pub async fn register_attendee(
             let required_usdc = config.deposit_amount_usdc;
             if required_thb > 0 && credit_thb >= required_thb {
                 credit_covered_method = Some("credit_thb".to_string());
+                credit_amount_applied = required_thb;
             } else if required_usdc > 0 && credit_usdc >= required_usdc {
                 credit_covered_method = Some("credit_usdc".to_string());
+                credit_amount_applied = required_usdc;
             }
         }
         if let Some(ref method) = credit_covered_method {
-            tracing::info!(%email, %slug, %method, "deposit covered by rolling credit");
+            tracing::info!(%email, %slug, %method, amount = credit_amount_applied, "deposit covered by rolling credit");
+            resolved_contacts_sheet = Some(resolved_contacts);
         }
     }
 
@@ -269,6 +275,42 @@ pub async fn register_attendee(
     let (first_name, last_name) = split_name(name);
 
     let now = chrono::Utc::now().to_rfc3339();
+
+    // Auto-apply deposit record & decrement rolling credit if deposit is covered by credit
+    if let Some(ref method) = credit_covered_method {
+        let thb_dep = event_checkin_domain::models::deposit::ThbDeposit {
+            event_id: event_id.clone(),
+            attendee_id: api_id.clone(),
+            amount_thb: credit_amount_applied,
+            slip_url: Some("ROLLING_CREDIT_AUTO_APPLIED".to_string()),
+            verified: true,
+            verified_at: Some(now.clone()),
+            verified_by: Some("SYSTEM_ROLLING_CREDIT".to_string()),
+            created_at: now.clone(),
+            held_as_credit: false,
+            held_as_credit_at: None,
+            refunded: false,
+            refunded_at: None,
+        };
+        if let Err(e) = crate::event_store::save_thb_deposit(kv, &thb_dep, state.d1.as_deref()).await {
+            tracing::warn!(%api_id, error = %e, "failed to save auto-applied credit deposit record");
+        }
+
+        if let Some(ref resolved) = resolved_contacts_sheet {
+            let currency = if method == "credit_thb" { "thb" } else { "usdc" };
+            if let Err(e) = crate::sheets::contacts::decrement_credit(
+                &state,
+                &resolved.sheet_id,
+                &resolved.contacts_sheet_name,
+                kv,
+                &email,
+                currency,
+                credit_amount_applied,
+            ).await {
+                tracing::warn!(%email, error = %e, "failed to decrement rolling credit balance");
+            }
+        }
+    }
 
     // 8. Resolve column mapping
     let mapping = match sheets::get_column_mapping(&state, &config.sheet_id, &config.sheet_name, kv)
