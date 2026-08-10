@@ -677,22 +677,29 @@ pub fn Landing() -> impl IntoView {
                                     }.into_any()
                                 }
                                 AuthState::SignedIn(email) => {
+                                    let clean_email = email.clone();
+                                    let short_email = if clean_email.len() > 18 {
+                                        format!("{}...", &clean_email[..15])
+                                    } else {
+                                        clean_email.clone()
+                                    };
+                                    let avatar_char = clean_email.chars().next().unwrap_or('?').to_uppercase().to_string();
                                     view! {
-                                        <span class="landing-email-text hide-mobile">
-                                            {email.clone()}
-                                        </span>
-                                        <A href="/profile" attr:class="btn btn-outline btn-sm">
-                                            "👤 Profile"
+                                        <A href="/profile" attr:class="landing-user-badge" attr:style="display:flex;align-items:center;gap:6px;background:rgba(20,241,149,0.1);border:1px solid rgba(20,241,149,0.3);padding:4px 10px;border-radius:999px;text-decoration:none;color:#fff;font-weight:600;font-size:0.82rem;transition:all 0.2s ease;">
+                                            <span class="landing-user-avatar" style="width:22px;height:22px;border-radius:50%;background:#14F195;color:#000;display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:0.72rem;">
+                                                {avatar_char}
+                                            </span>
+                                            <span class="landing-email-text hide-mobile" style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{short_email}</span>
                                         </A>
                                         {if is_admin_role(&role) {
                                             view! {
-                                                <A href="/admin" attr:class="btn btn-outline btn-sm">
+                                                <A href="/admin" attr:class="btn btn-outline btn-xs">
                                                     "Dashboard"
                                                 </A>
                                             }.into_any()
                                         } else if role == "staff" {
                                             view! {
-                                                <A href="/staff" attr:class="btn btn-outline btn-sm">
+                                                <A href="/staff" attr:class="btn btn-outline btn-xs">
                                                     "Scanner"
                                                 </A>
                                             }.into_any()
@@ -700,8 +707,10 @@ pub fn Landing() -> impl IntoView {
                                             ().into_any()
                                         }}
                                         <button
-                                            class="btn btn-outline btn-sm"
+                                            class="btn btn-outline btn-xs"
+                                            style="color:#94a3b8;border-color:rgba(255,255,255,0.15);"
                                             on:click=move |_| trigger_landing_signout()
+                                            title="Sign Out"
                                         >
                                             "Sign Out"
                                         </button>
