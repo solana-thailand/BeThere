@@ -108,19 +108,19 @@ pub fn NfcCheckin() -> impl IntoView {
 
                 // Header Badges
                 <div style="display: flex; justify-content: center; gap: 8px; margin-bottom: 20px; flex-wrap: wrap;">
-                    <span style="font-size: 0.75rem; font-weight: 700; background: rgba(20, 241, 149, 0.15); color: #14F195; border: 1px solid rgba(20, 241, 149, 0.4); padding: 4px 12px; border-radius: 999px;">
-                        "⚡ Solana NFC Check-In"
+                    <span style="font-size: 0.75rem; font-weight: 700; background: rgba(20, 241, 149, 0.15); color: #14F195; border: 1px solid rgba(20, 241, 149, 0.4); padding: 4px 12px; border-radius: 999px; display: inline-flex; align-items: center; gap: 4px;">
+                        <Icon icon=IconName::Flash class="icon-xs" /> "Solana NFC Check-In"
                     </span>
                     {move || if nfc_supported.get() {
                         view! {
-                            <span style="font-size: 0.75rem; font-weight: 700; background: rgba(34, 197, 94, 0.15); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.4); padding: 4px 12px; border-radius: 999px;">
-                                "📡 WebNFC Active"
+                            <span style="font-size: 0.75rem; font-weight: 700; background: rgba(34, 197, 94, 0.15); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.4); padding: 4px 12px; border-radius: 999px; display: inline-flex; align-items: center; gap: 4px;">
+                                <Icon icon=IconName::Refresh class="icon-xs" /> "WebNFC Active"
                             </span>
                         }.into_any()
                     } else {
                         view! {
-                            <span style="font-size: 0.75rem; font-weight: 700; background: rgba(153, 69, 255, 0.15); color: #9945FF; border: 1px solid rgba(153, 69, 255, 0.4); padding: 4px 12px; border-radius: 999px;">
-                                "📱 Tap NDEF / Web Wallet"
+                            <span style="font-size: 0.75rem; font-weight: 700; background: rgba(153, 69, 255, 0.15); color: #9945FF; border: 1px solid rgba(153, 69, 255, 0.4); padding: 4px 12px; border-radius: 999px; display: inline-flex; align-items: center; gap: 4px;">
+                                <Icon icon=IconName::Phone class="icon-xs" /> "Tap NDEF / Web Wallet"
                             </span>
                         }.into_any()
                     }}
@@ -148,10 +148,11 @@ pub fn NfcCheckin() -> impl IntoView {
                             <button
                                 type="button"
                                 class="btn btn-primary"
-                                style="width: 100%; padding: 14px; font-size: 1.05rem; font-weight: 700; border-radius: 14px; background: linear-gradient(135deg, #14F195 0%, #9945FF 100%); border: none; color: #000; cursor: pointer; box-shadow: 0 4px 20px rgba(20, 241, 149, 0.3);"
+                                style="width: 100%; padding: 14px; font-size: 1.05rem; font-weight: 700; border-radius: 14px; background: linear-gradient(135deg, #14F195 0%, #9945FF 100%); border: none; color: #000; cursor: pointer; box-shadow: 0 4px 20px rgba(20, 241, 149, 0.3); display: inline-flex; align-items: center; justify-content: center; gap: 8px;"
                                 on:click=on_sign_checkin
                             >
-                                "⚡ Sign Check-In Transaction →"
+                                <Icon icon=IconName::Flash class="icon-sm" />
+                                "Sign Check-In Transaction →"
                             </button>
                             <p style="font-size: 0.75rem; color: #64748b; margin-top: 12px;">
                                 "Nonce: " {nonce_val()}
@@ -170,7 +171,9 @@ pub fn NfcCheckin() -> impl IntoView {
 
                     "success" => view! {
                         <div style="padding: 16px; background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.3); border-radius: 16px;">
-                            <div style="font-size: 2.5rem; margin-bottom: 8px;">"🎉"</div>
+                            <div style="width: 52px; height: 52px; border-radius: 50%; background: rgba(34, 197, 94, 0.2); border: 1px solid #4ade80; display: flex; align-items: center; justify-content: center; margin: 0 auto 12px auto; color: #4ade80;">
+                                <Icon icon=IconName::Check class="icon-lg" />
+                            </div>
                             <h3 style="font-size: 1.2rem; font-weight: 700; color: #4ade80; margin-bottom: 6px;">
                                 "Check-In Verified!"
                             </h3>

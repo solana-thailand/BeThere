@@ -468,7 +468,8 @@ fn MyRegistrations() -> impl IntoView {
                             </div>
                             <div class="landing-passport-actions">
                                 <A href="/profile" attr:class="btn btn-primary btn-sm landing-passport-btn">
-                                    "Edit Profile ⚙️"
+                                    <Icon icon=IconName::Settings class="icon-sm" />
+                                    " Edit Profile"
                                 </A>
                                 <button
                                     class="btn btn-outline btn-xs"
@@ -733,7 +734,10 @@ pub fn Landing() -> impl IntoView {
                                 <a href="#faq" on:click=move |_| set_mobile_menu_open.set(false)>"FAQ"</a>
                                 <a href="#waitlist" on:click=move |_| set_mobile_menu_open.set(false)>"For Organizers"</a>
                                 <a href="/past-events" on:click=move |_| set_mobile_menu_open.set(false)>"Past Events"</a>
-                                <A href="/profile" on:click=move |_| set_mobile_menu_open.set(false)>"👤 Developer Profile"</A>
+                                <A href="/profile" on:click=move |_| set_mobile_menu_open.set(false) attr:style="display:flex;align-items:center;gap:8px;">
+                                    <Icon icon=IconName::User class="icon-sm" />
+                                    "Developer Profile"
+                                </A>
                                 {move || match auth_state.get() {
                                     AuthState::NotSignedIn | AuthState::Checking => {
                                         view! {
@@ -753,11 +757,17 @@ pub fn Landing() -> impl IntoView {
                                         view! {
                                             {if is_admin_role(&role) {
                                                 view! {
-                                                    <A href="/admin" on:click=move |_| set_mobile_menu_open.set(false)>"📊 Dashboard"</A>
+                                                    <A href="/admin" on:click=move |_| set_mobile_menu_open.set(false) attr:style="display:flex;align-items:center;gap:8px;">
+                                                        <Icon icon=IconName::Chart class="icon-sm" />
+                                                        "Dashboard"
+                                                    </A>
                                                 }.into_any()
                                             } else if role == "staff" {
                                                 view! {
-                                                    <A href="/staff" on:click=move |_| set_mobile_menu_open.set(false)>"📷 Scanner"</A>
+                                                    <A href="/staff" on:click=move |_| set_mobile_menu_open.set(false) attr:style="display:flex;align-items:center;gap:8px;">
+                                                        <Icon icon=IconName::Camera class="icon-sm" />
+                                                        "Scanner"
+                                                    </A>
                                                 }.into_any()
                                             } else {
                                                 ().into_any()
