@@ -92,7 +92,7 @@ pub fn NfcCheckin() -> impl IntoView {
                 // Animated NFC Target Ring
                 <div class="nfc-pulse-ring" style="width: 120px; height: 120px; margin: 0 auto 32px auto; border-radius: 50%; background: radial-gradient(circle, rgba(20, 241, 149, 0.2) 0%, rgba(153, 69, 255, 0.05) 70%); border: 2px dashed #14F195; display: flex; align-items: center; justify-content: center; animation: pulse 2s infinite;">
                     <div style="width: 80px; height: 80px; border-radius: 50%; background: linear-gradient(135deg, #14F195 0%, #9945FF 100%); display: flex; align-items: center; justify-content: center; box-shadow: 0 0 25px rgba(20, 241, 149, 0.5);">
-                        <Icon icon=IconName::Solana class="icon-lg" style="color: #000; width: 36px; height: 36px;" />
+                        <Icon icon=IconName::Solana class="icon-lg" />
                     </div>
                 </div>
 
