@@ -49,7 +49,7 @@ pub async fn github_link_start(
     let raw_redirect_uri = if !state.config.github_redirect_uri.is_empty() {
         state.config.github_redirect_uri.clone()
     } else {
-        format!("{}/api/auth/github/callback", state.config.server.server_url)
+        format!("{}/api/auth/github/callback", state.config.server.url)
     };
 
     // Encode the user's email in the OAuth state param so we know who to update on callback
@@ -184,7 +184,7 @@ pub async fn github_link_callback(
     let raw_redirect_uri = if !state.config.github_redirect_uri.is_empty() {
         state.config.github_redirect_uri.clone()
     } else {
-        format!("{}/api/auth/github/callback", state.config.server.server_url)
+        format!("{}/api/auth/github/callback", state.config.server.url)
     };
 
     // Exchange code for access token using dedicated token exchange
