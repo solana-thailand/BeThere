@@ -38,6 +38,27 @@ pub fn NfcCheckin() -> impl IntoView {
             .unwrap_or_else(|| "live-nonce".to_string())
     };
 
+    let nfc_supported = RwSignal::new(false);
+
+    Effect::new(move |_| {
+        if let Some(win) = web_sys::window() {
+            let supported = js_sys::Reflect::has(&win, &"NDEFReader".into()).unwrap_or(false);
+            nfc_supported.set(supported);
+            if supported {
+                let _ = js_sys::eval(r#"
+                    if ('NDEFReader' in window) {
+                        try {
+                            const ndef = new NDEFReader();
+                            ndef.scan().then(() => {
+                                console.log("NDEFReader scanning started successfully");
+                            }).catch(e => console.log("WebNFC info:", e));
+                        } catch(e) {}
+                    }
+                "#);
+            }
+        }
+    });
+
     let on_sign_checkin = move |_| {
         status.set("signing".to_string());
         error_msg.set(None);
@@ -86,13 +107,23 @@ pub fn NfcCheckin() -> impl IntoView {
             <div class="nfc-card" style="max-width: 440px; width: 100%; background: rgba(15, 23, 42, 0.85); border: 1px solid rgba(20, 241, 149, 0.3); border-radius: 24px; padding: 32px 24px; text-align: center; backdrop-filter: blur(16px); box-shadow: 0 10px 40px rgba(20, 241, 149, 0.15);">
 
                 // Header Badges
-                <div style="display: flex; justify-content: center; gap: 8px; margin-bottom: 20px;">
+                <div style="display: flex; justify-content: center; gap: 8px; margin-bottom: 20px; flex-wrap: wrap;">
                     <span style="font-size: 0.75rem; font-weight: 700; background: rgba(20, 241, 149, 0.15); color: #14F195; border: 1px solid rgba(20, 241, 149, 0.4); padding: 4px 12px; border-radius: 999px;">
                         "⚡ Solana NFC Check-In"
                     </span>
-                    <span style="font-size: 0.75rem; font-weight: 700; background: rgba(153, 69, 255, 0.15); color: #9945FF; border: 1px solid rgba(153, 69, 255, 0.4); padding: 4px 12px; border-radius: 999px;">
-                        "Tap-to-Sign"
-                    </span>
+                    {move || if nfc_supported.get() {
+                        view! {
+                            <span style="font-size: 0.75rem; font-weight: 700; background: rgba(34, 197, 94, 0.15); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.4); padding: 4px 12px; border-radius: 999px;">
+                                "📡 WebNFC Active"
+                            </span>
+                        }.into_any()
+                    } else {
+                        view! {
+                            <span style="font-size: 0.75rem; font-weight: 700; background: rgba(153, 69, 255, 0.15); color: #9945FF; border: 1px solid rgba(153, 69, 255, 0.4); padding: 4px 12px; border-radius: 999px;">
+                                "📱 Tap NDEF / Web Wallet"
+                            </span>
+                        }.into_any()
+                    }}
                 </div>
 
                 // Event Title
