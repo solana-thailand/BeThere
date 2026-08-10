@@ -38,7 +38,7 @@ static CONTENT_SECURITY_POLICY: LazyLock<HeaderValue> = LazyLock::new(|| {
     HeaderValue::from_static(
         "default-src 'self'; \
          script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://unpkg.com https://cdn.jsdelivr.net https://static.cloudflareinsights.com; \
-         style-src 'self' https://fonts.googleapis.com; \
+         style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; \
          img-src 'self' data: blob: https:; \
          media-src 'self' blob:; \
          object-src 'none'; \
