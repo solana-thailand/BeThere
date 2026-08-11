@@ -47,6 +47,16 @@ pub async fn mark_refund_handler(
         return Err(AppError::Validation("already refunded".to_string()).into());
     }
 
+    // MONEY-SAFETY: a deposit already converted to rolling credit incremented the
+    // attendee's contacts balance — cash-refunding it too would pay them twice.
+    // Mirror the guard in hold_credit.rs (which blocks the reverse direction).
+    if thb_deposit.held_as_credit {
+        return Err(AppError::Validation(
+            "deposit already held as rolling credit — cannot also cash-refund".to_string(),
+        )
+        .into());
+    }
+
     if !thb_deposit.verified {
         return Err(
             AppError::Validation("deposit not verified yet — cannot refund".to_string()).into(),
@@ -239,6 +249,12 @@ pub async fn batch_thb_refund_handler(
 
     for mut dep in deposits {
         if dep.refunded {
+            skipped += 1;
+            continue;
+        }
+        // MONEY-SAFETY: never cash-refund a deposit already held as rolling
+        // credit — the attendee already received that value as credit.
+        if dep.held_as_credit {
             skipped += 1;
             continue;
         }
