@@ -84,6 +84,9 @@ pub fn routes(state: AppState) -> Router<()> {
         .route("/auth/github/callback", get(social_link::github_link_callback))
         // Public Telegram widget config (is it enabled + which bot username)
         .route("/auth/telegram/config", get(social_link::telegram_config))
+        // Public Telegram redirect-flow callback — identity via signed state,
+        // not a cookie (survives the cross-site redirect back from Telegram).
+        .route("/auth/telegram/callback", get(social_link::telegram_callback))
         .layer(middleware::from_fn(crate::middleware::cache_no_store_layer));
 
     // Public routes — no auth middleware required.
@@ -253,9 +256,8 @@ pub fn routes(state: AppState) -> Router<()> {
         // Social account linking (auth-guarded — user must be logged in)
         .route("/auth/github", get(social_link::github_link_start))
         .route("/auth/telegram/verify", post(social_link::telegram_verify))
-        // Telegram Login Widget redirect-flow callback (data-auth-url); auth-guarded
-        // so the session cookie identifies whose profile to link.
-        .route("/auth/telegram/callback", get(social_link::telegram_callback))
+        // Signed state for the Telegram widget's data-auth-url (auth-guarded).
+        .route("/auth/telegram/state", get(social_link::telegram_state))
         .route("/auth/social/unlink", post(social_link::social_unlink))
         .route("/checkin/nfc/verify", post(checkin::nfc_verify))
         // Campaign progress for current user (attendee-authed — my-progress must come before {id} routes)

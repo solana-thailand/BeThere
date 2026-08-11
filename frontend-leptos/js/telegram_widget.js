@@ -19,9 +19,13 @@
  * @param {string} containerId - id of the element to render the button into
  * @param {string} botUsername - bot username without '@'
  */
-export function mountTelegramWidget(containerId, botUsername) {
+export function mountTelegramWidget(containerId, botUsername, state) {
   if (!botUsername) {
     console.warn("[telegram_widget] no bot username configured");
+    return;
+  }
+  if (!state) {
+    console.warn("[telegram_widget] no signed state — cannot mount");
     return;
   }
   // The container is rendered by the WASM view; it may not exist the instant
@@ -41,19 +45,23 @@ export function mountTelegramWidget(containerId, botUsername) {
       return;
     }
     console.log("[telegram_widget] mounting widget for bot:", botUsername);
-    doMount(container, botUsername);
+    doMount(container, botUsername, state);
   };
   attempt();
 }
 
-function doMount(container, botUsername) {
+function doMount(container, botUsername, state) {
   container.dataset.tgMounted = "1";
 
   // Use the REDIRECT flow (data-auth-url), not data-onauth. The onauth callback
   // is parsed by the widget via eval(), which our CSP forbids (no unsafe-eval).
   // With data-auth-url, Telegram redirects the top window back to our callback
-  // endpoint with the signed params — no eval needed.
-  const authUrl = window.location.origin + "/api/auth/telegram/callback";
+  // with the signed params. We embed our own signed `state` in the URL so the
+  // callback identifies the user without a cookie (survives the cross-site hop).
+  const authUrl =
+    window.location.origin +
+    "/api/auth/telegram/callback?state=" +
+    encodeURIComponent(state);
 
   const s = document.createElement("script");
   s.async = true;

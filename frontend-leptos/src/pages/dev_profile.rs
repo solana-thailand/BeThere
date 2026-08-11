@@ -25,7 +25,7 @@ extern "C" {
 #[wasm_bindgen(module = "/js/telegram_widget.js")]
 extern "C" {
     #[wasm_bindgen(js_name = "mountTelegramWidget")]
-    fn mount_telegram_widget(container_id: &str, bot_username: &str);
+    fn mount_telegram_widget(container_id: &str, bot_username: &str, state: &str);
 }
 
 // ---------------------------------------------------------------------------
@@ -70,34 +70,53 @@ pub fn DevProfile() -> impl IntoView {
     let (state, set_state) = signal(ProfileState::LoadingAuth);
     let (dirty, set_dirty) = signal(false);
 
-    // Telegram Login Widget config (fetched from /api/auth/telegram/config).
-    // Empty username = not configured → fall back to the manual handle input.
+    // Telegram Login Widget config + signed state (from /api/auth/telegram/*).
+    // The widget renders only when configured AND we have a signed state token
+    // (which carries our identity through Telegram's cookie-less redirect).
     let (tg_bot_username, set_tg_bot_username) = signal(String::new());
+    let (tg_state, set_tg_state) = signal(String::new());
     leptos::task::spawn_local(async move {
-        match crate::api::fetch::get("/api/auth/telegram/config", &[]).await {
-            Ok(resp) => {
-                let status = resp.status();
-                match crate::api::fetch::response_text(&resp).await {
-                    Ok(text) => {
-                        log::info!("[telegram] config HTTP {status}: {text}");
-                        if let Ok(v) = serde_json::from_str::<serde_json::Value>(&text)
-                            && v.get("configured").and_then(|c| c.as_bool()).unwrap_or(false)
-                        {
-                            let name = v
-                                .get("bot_username")
-                                .and_then(|u| u.as_str())
-                                .unwrap_or("")
-                                .to_string();
-                            log::info!("[telegram] widget enabled for bot: {name}");
-                            set_tg_bot_username.set(name);
-                        } else {
-                            log::info!("[telegram] widget not configured — using manual input");
-                        }
-                    }
-                    Err(e) => log::warn!("[telegram] config read failed: {}", e.message),
+        // 1) Is the widget configured?
+        let configured_name = match crate::api::fetch::get("/api/auth/telegram/config", &[]).await {
+            Ok(resp) => match crate::api::fetch::response_text(&resp).await {
+                Ok(text) => {
+                    log::info!("[telegram] config: {text}");
+                    serde_json::from_str::<serde_json::Value>(&text)
+                        .ok()
+                        .filter(|v| v.get("configured").and_then(|c| c.as_bool()).unwrap_or(false))
+                        .and_then(|v| v.get("bot_username").and_then(|u| u.as_str()).map(String::from))
+                }
+                Err(e) => {
+                    log::warn!("[telegram] config read failed: {}", e.message);
+                    None
+                }
+            },
+            Err(e) => {
+                log::warn!("[telegram] config fetch failed: {}", e.message);
+                None
+            }
+        };
+
+        let Some(name) = configured_name else {
+            log::info!("[telegram] widget not configured — using manual input");
+            return;
+        };
+
+        // 2) Get a signed state token for this session (identity for the callback).
+        match crate::api::fetch::get("/api/auth/telegram/state", &[]).await {
+            Ok(resp) if resp.status() == 200 => {
+                if let Ok(v) = crate::api::fetch::response_json::<serde_json::Value>(&resp).await
+                    && let Some(s) = v.get("state").and_then(|s| s.as_str())
+                {
+                    log::info!("[telegram] widget enabled for bot: {name}");
+                    set_tg_state.set(s.to_string());
+                    set_tg_bot_username.set(name);
+                } else {
+                    log::warn!("[telegram] state response missing token");
                 }
             }
-            Err(e) => log::warn!("[telegram] config fetch failed: {}", e.message),
+            Ok(resp) => log::warn!("[telegram] state fetch HTTP {}", resp.status()),
+            Err(e) => log::warn!("[telegram] state fetch failed: {}", e.message),
         }
     });
 
@@ -562,8 +581,9 @@ pub fn DevProfile() -> impl IntoView {
                                     // the JS glue POSTs to /verify and reloads.
                                     Effect::new(move |_| {
                                         let user = tg_bot_username.get();
-                                        if !user.is_empty() {
-                                            mount_telegram_widget("bt-telegram-login", &user);
+                                        let st = tg_state.get();
+                                        if !user.is_empty() && !st.is_empty() {
+                                            mount_telegram_widget("bt-telegram-login", &user, &st);
                                         }
                                     });
                                     view! {

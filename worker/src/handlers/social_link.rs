@@ -82,26 +82,32 @@ pub async fn github_link_start(
     Redirect::to(&github_auth_url).into_response()
 }
 
-/// How long a GitHub OAuth state param stays valid.
+/// How long a social-link state param stays valid.
 const GITHUB_STATE_TTL_SECS: i64 = 600;
 
-/// Build a signed state param: `{email}|{expires_unix}|{hmac_hex}`.
-///
-/// The HMAC (keyed with the JWT secret) covers email + expiry, so the callback
-/// can trust the email without a session cookie being present.
-async fn sign_github_state(email: &str, expires: i64, secret: &str) -> Result<String, String> {
+/// Build a signed state param `{email}|{expires_unix}|{hmac_hex}`, domain-
+/// separated by `tag`. The HMAC (keyed with the JWT secret) covers email +
+/// expiry, so a callback can trust the email WITHOUT a session cookie — which
+/// matters for third-party redirect flows (GitHub OAuth, Telegram widget)
+/// where SameSite cookies may not survive the cross-site hop.
+async fn sign_link_state(
+    tag: &str,
+    email: &str,
+    expires: i64,
+    secret: &str,
+) -> Result<String, String> {
     let payload = format!("{email}|{expires}");
     let sig = crate::crypto::hmac_sha256(
         secret.as_bytes(),
-        format!("github-link|{payload}").as_bytes(),
+        format!("{tag}|{payload}").as_bytes(),
     )
     .await?;
     let sig_hex: String = sig.iter().map(|b| format!("{b:02x}")).collect();
     Ok(format!("{payload}|{sig_hex}"))
 }
 
-/// Verify a signed state param and return the embedded email.
-async fn verify_github_state(state: &str, secret: &str) -> Result<String, &'static str> {
+/// Verify a signed state param for `tag` and return the embedded email.
+async fn verify_link_state(tag: &str, state: &str, secret: &str) -> Result<String, &'static str> {
     // rsplitn: sig and expiry cannot contain '|', the email theoretically could
     let mut parts = state.rsplitn(3, '|');
     let _sig_hex = parts.next().ok_or("malformed")?;
@@ -114,7 +120,7 @@ async fn verify_github_state(state: &str, secret: &str) -> Result<String, &'stat
         return Err("expired");
     }
 
-    let expected = sign_github_state(email, expires, secret)
+    let expected = sign_link_state(tag, email, expires, secret)
         .await
         .map_err(|_| "hmac_failed")?;
     // Constant-time-ish comparison: compare full signed strings byte-wise
@@ -128,6 +134,14 @@ async fn verify_github_state(state: &str, secret: &str) -> Result<String, &'stat
         return Err("bad_signature");
     }
     Ok(email.to_string())
+}
+
+async fn sign_github_state(email: &str, expires: i64, secret: &str) -> Result<String, String> {
+    sign_link_state("github-link", email, expires, secret).await
+}
+
+async fn verify_github_state(state: &str, secret: &str) -> Result<String, &'static str> {
+    verify_link_state("github-link", state, secret).await
 }
 
 #[derive(Debug, Deserialize)]
@@ -389,6 +403,33 @@ pub async fn telegram_config(State(state): State<AppState>) -> Response {
         .into_response()
 }
 
+/// GET /api/auth/telegram/state
+/// Auth-guarded. Returns a signed state token binding the current user's email,
+/// which the frontend embeds in the widget's `data-auth-url`. The redirect
+/// callback recovers the email from this token, so it needs no session cookie.
+#[worker::send]
+pub async fn telegram_state(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+) -> Response {
+    let expires = (js_sys::Date::now() / 1000.0) as i64 + GITHUB_STATE_TTL_SECS;
+    match sign_link_state("telegram-link", &claims.email, expires, &state.config.jwt_secret).await {
+        Ok(signed) => (
+            axum::http::StatusCode::OK,
+            axum::Json(json!({ "state": signed })),
+        )
+            .into_response(),
+        Err(e) => {
+            tracing::error!("telegram state signing failed: {e}");
+            (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                axum::Json(json!({"error": "failed to sign state"})),
+            )
+                .into_response()
+        }
+    }
+}
+
 /// POST /api/auth/telegram/verify
 /// Receives Telegram Login Widget data from the browser.
 /// Verifies the HMAC-SHA256 signature using the bot token, then saves
@@ -498,9 +539,12 @@ async fn save_telegram_link(
         .map_err(|e| format!("Telegram save failed: {e:?}"))
 }
 
-/// Query params Telegram sends to the Login Widget `data-auth-url` callback.
+/// Query params Telegram appends to the Login Widget `data-auth-url` callback,
+/// plus our own signed `state` (carried through by Telegram since it preserves
+/// existing query params on the auth URL).
 #[derive(Debug, Deserialize)]
 pub struct TelegramCallbackQuery {
+    pub state: Option<String>, // our signed email token
     pub id: Option<i64>,
     pub first_name: Option<String>,
     pub last_name: Option<String>,
@@ -511,20 +555,28 @@ pub struct TelegramCallbackQuery {
 }
 
 /// GET /api/auth/telegram/callback
-/// Redirect-flow endpoint for the Telegram Login Widget (`data-auth-url`).
+/// PUBLIC redirect-flow endpoint for the Telegram Login Widget (`data-auth-url`).
 /// Used instead of the JS `data-onauth` callback because that path requires
-/// `eval()`, which our CSP forbids. Auth-guarded: the session cookie identifies
-/// whose profile to link (top-level GET navigation → SameSite=Lax cookie sent).
+/// `eval()`, which our CSP forbids. Identity comes from our signed `state`
+/// param (not a cookie), so it survives the cross-site redirect even when the
+/// browser drops SameSite cookies on the hop back.
 #[worker::send]
 pub async fn telegram_callback(
     State(state): State<AppState>,
-    Extension(claims): Extension<Claims>,
     Query(q): Query<TelegramCallbackQuery>,
 ) -> Response {
     let bot_token = &state.config.telegram_bot_token;
     if bot_token.is_empty() {
         return Redirect::to("/profile?error=telegram_unconfigured").into_response();
     }
+
+    // Recover the linking user's email from our signed state.
+    let raw_state = q.state.clone().unwrap_or_default();
+    let email = match verify_link_state("telegram-link", &raw_state, &state.config.jwt_secret).await {
+        Ok(email) => email,
+        Err("expired") => return Redirect::to("/profile?error=telegram_expired").into_response(),
+        Err(_) => return Redirect::to("/profile?error=telegram_invalid").into_response(),
+    };
 
     let (id, first_name, auth_date, hash) =
         match (q.id, q.first_name.clone(), q.auth_date, q.hash.clone()) {
@@ -543,7 +595,7 @@ pub async fn telegram_callback(
     };
 
     if !verify_telegram_hash_subtle(&data, bot_token).await {
-        tracing::warn!(email = %claims.email, "Telegram callback HMAC verification failed");
+        tracing::warn!(email = %email, "Telegram callback HMAC verification failed");
         return Redirect::to("/profile?error=telegram_bad_signature").into_response();
     }
 
@@ -558,12 +610,12 @@ pub async fn telegram_callback(
     };
 
     let handle = data.username.clone().unwrap_or_else(|| data.first_name.clone());
-    if let Err(e) = save_telegram_link(d1, &claims.email, &handle, &data.id.to_string()).await {
+    if let Err(e) = save_telegram_link(d1, &email, &handle, &data.id.to_string()).await {
         tracing::error!("Telegram callback save failed: {e}");
         return Redirect::to("/profile?error=telegram_save_failed").into_response();
     }
 
-    tracing::info!(email = %claims.email, telegram_id = %data.id, "Telegram linked via redirect callback");
+    tracing::info!(email = %email, telegram_id = %data.id, "Telegram linked via redirect callback");
     Redirect::to("/profile?linked=telegram").into_response()
 }
 
