@@ -82,6 +82,8 @@ pub fn routes(state: AppState) -> Router<()> {
         .route("/auth/wallet/verify", post(auth::wallet_verify))
         // Social account linking (public callback for GitHub, auth-guarded for others)
         .route("/auth/github/callback", get(social_link::github_link_callback))
+        // Public Telegram widget config (is it enabled + which bot username)
+        .route("/auth/telegram/config", get(social_link::telegram_config))
         .layer(middleware::from_fn(crate::middleware::cache_no_store_layer));
 
     // Public routes — no auth middleware required.

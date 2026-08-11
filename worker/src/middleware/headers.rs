@@ -37,12 +37,12 @@ static REFERRER_POLICY: LazyLock<HeaderValue> =
 static CONTENT_SECURITY_POLICY: LazyLock<HeaderValue> = LazyLock::new(|| {
     HeaderValue::from_static(
         "default-src 'self'; \
-         script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://unpkg.com https://cdn.jsdelivr.net https://static.cloudflareinsights.com; \
+         script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://unpkg.com https://cdn.jsdelivr.net https://static.cloudflareinsights.com https://telegram.org; \
          style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; \
          img-src 'self' data: blob: https:; \
          media-src 'self' blob:; \
          object-src 'none'; \
-         frame-src https://www.youtube.com https://www.youtube-nocookie.com; \
+         frame-src https://www.youtube.com https://www.youtube-nocookie.com https://oauth.telegram.org; \
          connect-src 'self' https: wss:; \
          font-src 'self' https://fonts.gstatic.com; \
          frame-ancestors 'none'; \

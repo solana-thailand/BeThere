@@ -250,6 +250,9 @@ impl AppState {
                 .or_else(|_| get_var(env, "GITHUB_REDIRECT_URI"))
                 .unwrap_or_default(),
             telegram_bot_token: get_secret(env, "TELEGRAM_BOT_TOKEN").unwrap_or_default(),
+            telegram_bot_username: get_secret(env, "TELEGRAM_BOT_USERNAME")
+                .or_else(|_| get_var(env, "TELEGRAM_BOT_USERNAME"))
+                .unwrap_or_default(),
         })
     }
 

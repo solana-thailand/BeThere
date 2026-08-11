@@ -370,6 +370,25 @@ pub struct TelegramVerifyRequest {
     pub hash: String,
 }
 
+/// GET /api/auth/telegram/config
+/// Public. Tells the frontend whether the Telegram Login Widget can be shown
+/// and which bot to render it for. Never exposes the bot token.
+#[worker::send]
+pub async fn telegram_config(State(state): State<AppState>) -> Response {
+    let username = state.config.telegram_bot_username.trim();
+    // Require BOTH the username (for the widget) and the token (for verification)
+    // before advertising the widget as usable.
+    let configured = !username.is_empty() && !state.config.telegram_bot_token.is_empty();
+    (
+        axum::http::StatusCode::OK,
+        axum::Json(json!({
+            "configured": configured,
+            "bot_username": if configured { username } else { "" },
+        })),
+    )
+        .into_response()
+}
+
 /// POST /api/auth/telegram/verify
 /// Receives Telegram Login Widget data from the browser.
 /// Verifies the HMAC-SHA256 signature using the bot token, then saves

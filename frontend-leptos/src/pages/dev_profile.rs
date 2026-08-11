@@ -22,6 +22,12 @@ extern "C" {
     fn copy_to_clipboard_js(text: &str) -> bool;
 }
 
+#[wasm_bindgen(module = "/js/telegram_widget.js")]
+extern "C" {
+    #[wasm_bindgen(js_name = "mountTelegramWidget")]
+    fn mount_telegram_widget(container_id: &str, bot_username: &str);
+}
+
 // ---------------------------------------------------------------------------
 // State
 // ---------------------------------------------------------------------------
@@ -63,6 +69,20 @@ impl ProfileState {
 pub fn DevProfile() -> impl IntoView {
     let (state, set_state) = signal(ProfileState::LoadingAuth);
     let (dirty, set_dirty) = signal(false);
+
+    // Telegram Login Widget config (fetched from /api/auth/telegram/config).
+    // Empty username = not configured → fall back to the manual handle input.
+    let (tg_bot_username, set_tg_bot_username) = signal(String::new());
+    leptos::task::spawn_local(async move {
+        if let Ok(resp) = crate::api::fetch::get("/api/auth/telegram/config", &[]).await
+            && resp.status() == 200
+            && let Ok(v) = crate::api::fetch::response_json::<serde_json::Value>(&resp).await
+            && v.get("configured").and_then(|c| c.as_bool()).unwrap_or(false)
+        {
+            let name = v.get("bot_username").and_then(|u| u.as_str()).unwrap_or("");
+            set_tg_bot_username.set(name.to_string());
+        }
+    });
 
     // Social-link result banner, fed by ?linked= / ?error= from the OAuth
     // callback redirect. (is_success, message)
@@ -509,7 +529,23 @@ pub fn DevProfile() -> impl IntoView {
                                             </a>
                                         </div>
                                     }.into_any()
+                                } else if !tg_bot_username.get().is_empty() {
+                                    // Telegram configured → render the official Login Widget.
+                                    // An Effect mounts it once the container exists; on success
+                                    // the JS glue POSTs to /verify and reloads.
+                                    Effect::new(move |_| {
+                                        let user = tg_bot_username.get();
+                                        if !user.is_empty() {
+                                            mount_telegram_widget("bt-telegram-login", &user);
+                                        }
+                                    });
+                                    view! {
+                                        <div class="dev-profile-social-actions">
+                                            <div id="bt-telegram-login"></div>
+                                        </div>
+                                    }.into_any()
                                 } else {
+                                    // Not configured → manual (unverified) handle input.
                                     let tg_val = telegram.clone();
                                     view! {
                                         <div class="dev-profile-social-actions" style="display:flex;align-items:center;gap:8px;">

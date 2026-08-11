@@ -205,6 +205,9 @@ pub struct AppConfig {
     pub github_redirect_uri: String,
     /// Telegram bot token for verifying Login Widget HMAC signatures.
     pub telegram_bot_token: String,
+    /// Telegram bot username (without `@`) for rendering the Login Widget.
+    /// Public value; empty disables the widget (falls back to manual handle input).
+    pub telegram_bot_username: String,
 }
 
 impl fmt::Debug for AppConfig {
@@ -225,6 +228,7 @@ impl fmt::Debug for AppConfig {
             .field("github_client_id", &self.github_client_id)
             .field("github_client_secret", &"***REDACTED***")
             .field("telegram_bot_token", &"***REDACTED***")
+            .field("telegram_bot_username", &self.telegram_bot_username)
             .finish()
     }
 }
