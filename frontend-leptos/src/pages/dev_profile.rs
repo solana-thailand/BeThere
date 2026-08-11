@@ -420,6 +420,19 @@ pub fn DevProfile() -> impl IntoView {
                                 <span style="font-size:0.7rem;font-weight:400;color:#94a3b8;margin-left:8px;">"— Connect accounts to verify them"</span>
                             </h3>
 
+                            // Accounts & sign-in explainer — shown when signed in via a
+                            // wallet-only session, the moment this is most confusing.
+                            {if is_wallet_identity {
+                                view! {
+                                    <div style="background:rgba(153,69,255,0.08);border:1px solid rgba(153,69,255,0.25);border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:0.8rem;line-height:1.45;color:#cbd5e1;">
+                                        <strong style="color:#fff;">"Accounts & sign-in: "</strong>
+                                        "You can sign in with Google or a Solana wallet — they become the same account once linked. If you already registered with Google, sign in with Google and press \"Connect Wallet\" to merge this wallet into that account."
+                                    </div>
+                                }.into_any()
+                            } else {
+                                ().into_any()
+                            }}
+
                             // GitHub
                             <div class="dev-profile-social-row">
                                 <div class="dev-profile-social-info">
@@ -625,6 +638,15 @@ pub fn DevProfile() -> impl IntoView {
                                                     "Copy"
                                                 </button>
                                             </div>
+                                        }.into_any()
+                                    } else if is_wallet_identity {
+                                        // Wallet-only session: binding here would just self-link
+                                        // to the synthetic wallet identity. Point them to the
+                                        // real merge path instead of offering a pointless bind.
+                                        view! {
+                                            <span class="dev-profile-hint" style="max-width:240px;text-align:right;line-height:1.4;">
+                                                "You're signed in with this wallet. To attach it to your main account, sign in with Google, then use Connect Wallet here."
+                                            </span>
                                         }.into_any()
                                     } else {
                                         view! {

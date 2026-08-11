@@ -101,6 +101,12 @@ pub struct RegisterData {
     pub email: String,
     pub claim_token: String,
     pub next_step: NextStep,
+    /// Plan 017: wallet↔email convergence outcome for wallet-only sessions.
+    /// `Some(true)` = wallet bound to this new email; `Some(false)` = email
+    /// already had an account so the wallet was NOT bound (link via profile);
+    /// `None` = not a wallet session.
+    #[serde(default)]
+    pub wallet_linked: Option<bool>,
 }
 
 /// Registration form state.

@@ -130,12 +130,20 @@ pub fn registration_form(
                         saveDevProfile(&json);
                     }
 
-                    let redirect_url = next_url.clone();
-                    leptos::task::spawn_local(async move {
-                        gloo_timers::future::TimeoutFuture::new(800).await;
-                        navigateTo(&redirect_url);
-                    });
+                    // Plan 017: if the wallet couldn't be linked (email already had an
+                    // account), pause on this screen with guidance instead of the fast
+                    // auto-redirect, so the user learns how to merge the two.
+                    let wallet_not_linked = matches!(data.wallet_linked, Some(false));
 
+                    let redirect_url = next_url.clone();
+                    if !wallet_not_linked {
+                        leptos::task::spawn_local(async move {
+                            gloo_timers::future::TimeoutFuture::new(800).await;
+                            navigateTo(&redirect_url);
+                        });
+                    }
+
+                    let continue_url = next_url.clone();
                     view! {
                         <div class="pe-card">
                             <div class="pe-text-center">
@@ -148,7 +156,19 @@ pub fn registration_form(
                                 <p class="pe-detail-secondary pe-mb-1">
                                     {format!("Welcome, {}!", data.name)}
                                 </p>
-                                <p class="pe-detail-secondary">"Redirecting..."</p>
+                                {if wallet_not_linked {
+                                    view! {
+                                        <div style="background:rgba(153,69,255,0.08);border:1px solid rgba(153,69,255,0.25);border-radius:8px;padding:10px 12px;margin:12px 0;font-size:0.82rem;line-height:1.45;color:#cbd5e1;text-align:left;">
+                                            <strong style="color:#fff;">"Heads up: "</strong>
+                                            "this email already has an account, so your wallet wasn't linked to it. To sign in with your wallet next time, open your Profile (signed in with Google), then press \"Connect Wallet\"."
+                                        </div>
+                                        <button class="pe-submit-btn" on:click=move |_| navigateTo(&continue_url)>
+                                            "Continue →"
+                                        </button>
+                                    }.into_any()
+                                } else {
+                                    view! { <p class="pe-detail-secondary">"Redirecting..."</p> }.into_any()
+                                }}
                             </div>
                         </div>
                     }.into_any()
