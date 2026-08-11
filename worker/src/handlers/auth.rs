@@ -261,10 +261,18 @@ pub async fn wallet_nonce(
         req.wallet_address, nonce, expires_at
     );
 
-    // Save nonce in KV with 5-minute TTL if KV is available
+    // Persist the exact challenge message in KV with a 5-minute TTL. The verify
+    // step reads it back and checks the wallet's signature against *this* server
+    // copy — never a client-supplied message — so the challenge can't be forged.
+    // Fail closed: if KV is unavailable the challenge can't be stored and
+    // wallet_verify will (correctly) refuse to authenticate.
     if let Some(ref kv) = state.events_kv {
-        let kv_key = format!("siws_nonce_{}", req.wallet_address);
-        let _ = kv.put(&kv_key, &nonce).unwrap().expiration_ttl(300).execute().await;
+        let kv_key = format!("siws_msg_{}", req.wallet_address);
+        if let Ok(put) = kv.put(&kv_key, &message) {
+            let _ = put.expiration_ttl(300).execute().await;
+        }
+    } else {
+        tracing::error!("SIWS nonce cannot be stored — EVENTS KV binding missing");
     }
 
     Ok(ApiOk::new(event_checkin_domain::models::auth::WalletNonceResponse {
@@ -284,6 +292,43 @@ pub async fn wallet_verify(
     if let Err(e) = crate::solana::validate_wallet_address(&req.wallet_address) {
         return Err(event_checkin_domain::models::error::AppError::Validation(e).into());
     }
+
+    // Fetch the server-issued challenge message from KV. Fail closed if the KV
+    // binding is missing, the challenge expired, or one was never issued.
+    let kv = state.events_kv.as_ref().ok_or_else(|| {
+        event_checkin_domain::models::error::AppError::Internal(
+            "wallet sign-in unavailable (nonce store not configured)".into(),
+        )
+    })?;
+    let kv_key = format!("siws_msg_{}", req.wallet_address);
+    let stored_message = kv
+        .get(&kv_key)
+        .text()
+        .await
+        .map_err(|e| {
+            event_checkin_domain::models::error::AppError::Internal(format!(
+                "failed to read SIWS challenge: {e:?}"
+            ))
+        })?
+        .ok_or_else(|| {
+            event_checkin_domain::models::error::AppError::Validation(
+                "sign-in challenge expired or not found — please retry".into(),
+            )
+        })?;
+
+    // Verify the wallet's signature over the server's stored challenge message.
+    if let Err(e) =
+        crate::solana::verify_siws_signature(&req.wallet_address, &stored_message, &req.signature)
+    {
+        tracing::warn!(wallet = %req.wallet_address, "SIWS signature verification failed: {e}");
+        return Err(event_checkin_domain::models::error::AppError::Validation(
+            "wallet signature verification failed".into(),
+        )
+        .into());
+    }
+
+    // Single-use: delete the challenge so the signature can't be replayed.
+    let _ = kv.delete(&kv_key).await;
 
     // Lookup linked email from D1 contacts/attendees if available
     let linked_email = if let Some(ref d1) = state.d1 {

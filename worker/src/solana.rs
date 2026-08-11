@@ -401,9 +401,78 @@ pub fn validate_wallet_address(address: &str) -> Result<(), String> {
     Ok(())
 }
 
+// ---------------------------------------------------------------------------
+// Sign-In With Solana (SIWS) signature verification
+// ---------------------------------------------------------------------------
+
+/// Verify that `signature_b58` is a valid ed25519 signature over `message`
+/// produced by the secret key for `wallet_address` (the base58 public key).
+///
+/// `signature_b58` is base58-encoded 64 signature bytes (as returned by the
+/// wallet's `signMessage`). Returns `Ok(())` on a valid signature.
+pub fn verify_siws_signature(
+    wallet_address: &str,
+    message: &str,
+    signature_b58: &str,
+) -> Result<(), String> {
+    use ed25519_dalek::{Signature, VerifyingKey};
+
+    let pubkey_bytes = crate::solana_escrow::crypto::base58_decode(wallet_address)
+        .map_err(|e| format!("invalid wallet public key: {e:?}"))?;
+    let pubkey_arr: [u8; 32] = pubkey_bytes
+        .as_slice()
+        .try_into()
+        .map_err(|_| format!("wallet public key must be 32 bytes, got {}", pubkey_bytes.len()))?;
+    let verifying_key = VerifyingKey::from_bytes(&pubkey_arr)
+        .map_err(|e| format!("wallet public key is not a valid ed25519 point: {e}"))?;
+
+    let sig_bytes = crate::solana_escrow::crypto::base58_decode(signature_b58)
+        .map_err(|e| format!("invalid signature encoding: {e:?}"))?;
+    let sig_arr: [u8; 64] = sig_bytes
+        .as_slice()
+        .try_into()
+        .map_err(|_| format!("signature must be 64 bytes, got {}", sig_bytes.len()))?;
+    let signature = Signature::from_bytes(&sig_arr);
+
+    verifying_key
+        .verify_strict(message.as_bytes(), &signature)
+        .map_err(|_| "signature does not match wallet and message".to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // Ed25519 vector generated offline (Node crypto) over the exact SIWS
+    // challenge message below, signed by the key whose public key is PUB_B58.
+    const SIWS_PUB_B58: &str = "FAe4sisG95oZ42w7buUn5qEE4TAnfTTFPiguZUHmhiF";
+    const SIWS_MSG: &str =
+        "BeThere Protocol Sign-In With Solana\nWallet: TEST\nNonce: deadbeef\nExpires: 1786400000";
+    const SIWS_SIG_B58: &str =
+        "5tYugeHRvrBvCMhC2NMdzxJxd43gkzXjcpkieC2FPrda8g2Tfb76G6cDxaiRNdMGxGiQfRCtiRon2uguwa8D73Lc";
+    const SIWS_BADSIG_B58: &str =
+        "5tYugeHRvrBvCMhC2NMdzxJxd43gkzXjcpkieC2FPrda8g2Tfb76G6cDxaiRNdMGxGiQfRCtiRon2uguwa8D73Lb";
+
+    #[test]
+    fn test_siws_valid_signature_accepts() {
+        assert!(verify_siws_signature(SIWS_PUB_B58, SIWS_MSG, SIWS_SIG_B58).is_ok());
+    }
+
+    #[test]
+    fn test_siws_tampered_signature_rejects() {
+        assert!(verify_siws_signature(SIWS_PUB_B58, SIWS_MSG, SIWS_BADSIG_B58).is_err());
+    }
+
+    #[test]
+    fn test_siws_wrong_message_rejects() {
+        assert!(verify_siws_signature(SIWS_PUB_B58, "different message", SIWS_SIG_B58).is_err());
+    }
+
+    #[test]
+    fn test_siws_placeholder_signature_rejects() {
+        // The old bypass sent this literal string as the "signature".
+        assert!(verify_siws_signature(SIWS_PUB_B58, SIWS_MSG, "siws_verified").is_err());
+    }
 
     #[test]
     fn test_validate_wallet_address_valid() {

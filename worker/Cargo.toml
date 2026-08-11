@@ -26,6 +26,10 @@ serde_json = "1"
 # Ed25519 curve check for PDA derivation (fiat backend, no std needed)
 curve25519-dalek = { version = "4.1", default-features = false }
 
+# Ed25519 signature verification for Sign-In With Solana (SIWS).
+# default-features off to drop std/rand/zeroize — we only verify, never sign.
+ed25519-dalek = { version = "2", default-features = false }
+
 # Encoding — WASM-compatible
 base64 = "0.22"
 

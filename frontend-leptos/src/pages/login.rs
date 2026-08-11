@@ -28,6 +28,9 @@ extern "C" {
 
     #[wasm_bindgen(js_name = "connectWallet")]
     fn connect_wallet_js_raw(wallet_name: &str) -> js_sys::Promise;
+
+    #[wasm_bindgen(js_name = "signMessage")]
+    fn sign_message_js(wallet_name: &str, message: &str) -> js_sys::Promise;
 }
 
 /// Google SVG icon markup.
@@ -172,13 +175,28 @@ pub fn Login() -> impl IntoView {
                         ).await {
                             Ok(resp) if resp.status() == 200 => {
                                 if let Ok(data) = crate::api::fetch::response_json::<serde_json::Value>(&resp).await {
-                                    let nonce = data["data"]["nonce"].as_str().unwrap_or_default();
-                                    let message = data["data"]["message"].as_str().unwrap_or_default();
+                                    let nonce = data["data"]["nonce"].as_str().unwrap_or_default().to_string();
+                                    let message = data["data"]["message"].as_str().unwrap_or_default().to_string();
+
+                                    // Ask the wallet to sign the server-issued challenge message.
+                                    let sig_promise = sign_message_js(&wallet_name, &message);
+                                    let signature = match wasm_bindgen_futures::JsFuture::from(sig_promise).await {
+                                        Ok(val) => val.as_string().unwrap_or_default(),
+                                        Err(e) => {
+                                            log::error!("[login] signMessage failed: {:?}", e);
+                                            String::new()
+                                        }
+                                    };
+                                    if signature.is_empty() || signature.contains("__wallet_error__") {
+                                        set_error_msg.set(Some("Message signing was cancelled or failed.".into()));
+                                        set_wallet_loading.set(false);
+                                        return;
+                                    }
 
                                     // Verify SIWS
                                     let verify_body = serde_json::json!({
                                         "wallet_address": pubkey,
-                                        "signature": "siws_verified",
+                                        "signature": signature,
                                         "message": message,
                                         "nonce": nonce
                                     });
