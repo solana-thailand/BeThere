@@ -66,6 +66,9 @@ SHIM
 [vars]
 SERVER_URL = "https://bethere.solana-thailand.workers.dev"
 CLAIM_BASE_URL = "https://bethere.solana-thailand.workers.dev/claim"
+# Telegram Login Widget bot username (public). The widget stays OFF until the
+# TELEGRAM_BOT_TOKEN secret is also set — see /api/auth/telegram/config.
+TELEGRAM_BOT_USERNAME = "BeThereProtocolBot"
 GOOGLE_SHEET_NAME = "Attendees"
 GOOGLE_STAFF_SHEET_NAME = "staff"
 PLATFORM_SHEET_ID = "1oF54ia6mquO_kB869aQxmz3RD8nDcTRWfXIX0VmndxM"
