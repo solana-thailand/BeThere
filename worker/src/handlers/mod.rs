@@ -80,7 +80,6 @@ pub fn routes(state: AppState) -> Router<()> {
         .route("/auth/logout", post(auth::auth_logout))
         .route("/auth/wallet/nonce", post(auth::wallet_nonce))
         .route("/auth/wallet/verify", post(auth::wallet_verify))
-        .route("/auth/wallet/bind", post(auth::wallet_bind))
         // Social account linking (public callback for GitHub, auth-guarded for others)
         .route("/auth/github/callback", get(social_link::github_link_callback))
         .layer(middleware::from_fn(crate::middleware::cache_no_store_layer));
@@ -172,6 +171,8 @@ pub fn routes(state: AppState) -> Router<()> {
         // Auth route that requires session (reads Claims from middleware)
         // Works for both staff and non-staff — only requires valid JWT.
         .route("/auth/me", get(auth::auth_me))
+        // Bind a wallet to the signed-in account (reads Claims from middleware).
+        .route("/auth/wallet/bind", post(auth::wallet_bind))
         // Self-registration (requires verified email from JWT)
         .route("/public/register", post(register::register_attendee))
         // Post-event lead capture (Plan 008 — Phase 3): same JWT gate as normal
