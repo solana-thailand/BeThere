@@ -280,38 +280,45 @@ pub fn WalletSignInButton(
                                     let icon_name = crate::icons::wallet_icon_name(w_name);
                                     let connect_fn = connect_wallet_by_name;
 
-                                    view! {
-                                        <div class="siws-wallet-option">
-                                            <span style="display: flex; align-items: center; gap: 12px;">
-                                                <span style="display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; background: rgba(255,255,255,0.06); border-radius: 10px;">
-                                                    <Icon icon=icon_name class="icon-sm" />
-                                                </span>
-                                                {w_name}
+                                    // The whole row is the click target when the wallet is
+                                    // installed (the row already looks clickable via CSS); the
+                                    // green badge is now just a visual affordance. Not-installed
+                                    // rows aren't connect targets — they carry a "Get Extension" link.
+                                    let label = view! {
+                                        <span style="display: flex; align-items: center; gap: 12px;">
+                                            <span style="display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; background: rgba(255,255,255,0.06); border-radius: 10px;">
+                                                <Icon icon=icon_name class="icon-sm" />
                                             </span>
-
-                                            {if is_installed {
-                                                view! {
-                                                    <span
-                                                        class="siws-badge-installed"
-                                                        on:click=move |_| connect_fn(name_str.clone())
-                                                    >
-                                                        "Connect →"
-                                                    </span>
-                                                }.into_any()
-                                            } else {
-                                                view! {
-                                                    <a
-                                                        href=download_url
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                        class="siws-badge-install"
-                                                        on:click=move |e| e.stop_propagation()
-                                                    >
-                                                        "Get Extension ↗"
-                                                    </a>
-                                                }.into_any()
-                                            }}
-                                        </div>
+                                            {w_name}
+                                        </span>
+                                    };
+                                    if is_installed {
+                                        view! {
+                                            <div
+                                                class="siws-wallet-option"
+                                                role="button"
+                                                tabindex="0"
+                                                on:click=move |_| connect_fn(name_str.clone())
+                                            >
+                                                {label}
+                                                <span class="siws-badge-installed">"Connect →"</span>
+                                            </div>
+                                        }.into_any()
+                                    } else {
+                                        view! {
+                                            <div class="siws-wallet-option" style="cursor: default;">
+                                                {label}
+                                                <a
+                                                    href=download_url
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    class="siws-badge-install"
+                                                    on:click=move |e| e.stop_propagation()
+                                                >
+                                                    "Get Extension ↗"
+                                                </a>
+                                            </div>
+                                        }.into_any()
                                     }
                                 }).collect::<Vec<_>>()
                             }}
