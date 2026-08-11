@@ -74,13 +74,30 @@ pub fn DevProfile() -> impl IntoView {
     // Empty username = not configured → fall back to the manual handle input.
     let (tg_bot_username, set_tg_bot_username) = signal(String::new());
     leptos::task::spawn_local(async move {
-        if let Ok(resp) = crate::api::fetch::get("/api/auth/telegram/config", &[]).await
-            && resp.status() == 200
-            && let Ok(v) = crate::api::fetch::response_json::<serde_json::Value>(&resp).await
-            && v.get("configured").and_then(|c| c.as_bool()).unwrap_or(false)
-        {
-            let name = v.get("bot_username").and_then(|u| u.as_str()).unwrap_or("");
-            set_tg_bot_username.set(name.to_string());
+        match crate::api::fetch::get("/api/auth/telegram/config", &[]).await {
+            Ok(resp) => {
+                let status = resp.status();
+                match crate::api::fetch::response_text(&resp).await {
+                    Ok(text) => {
+                        log::info!("[telegram] config HTTP {status}: {text}");
+                        if let Ok(v) = serde_json::from_str::<serde_json::Value>(&text)
+                            && v.get("configured").and_then(|c| c.as_bool()).unwrap_or(false)
+                        {
+                            let name = v
+                                .get("bot_username")
+                                .and_then(|u| u.as_str())
+                                .unwrap_or("")
+                                .to_string();
+                            log::info!("[telegram] widget enabled for bot: {name}");
+                            set_tg_bot_username.set(name);
+                        } else {
+                            log::info!("[telegram] widget not configured — using manual input");
+                        }
+                    }
+                    Err(e) => log::warn!("[telegram] config read failed: {}", e.message),
+                }
+            }
+            Err(e) => log::warn!("[telegram] config fetch failed: {}", e.message),
         }
     });
 

@@ -20,18 +20,33 @@
  * @param {string} botUsername - bot username without '@'
  */
 export function mountTelegramWidget(containerId, botUsername) {
-  const container = document.getElementById(containerId);
-  if (!container) {
-    console.warn("[telegram_widget] container not found:", containerId);
-    return;
-  }
-  if (container.dataset.tgMounted === "1") {
-    return;
-  }
   if (!botUsername) {
     console.warn("[telegram_widget] no bot username configured");
     return;
   }
+  // The container is rendered by the WASM view; it may not exist the instant
+  // this is called, so retry briefly.
+  let attempts = 0;
+  const attempt = () => {
+    const container = document.getElementById(containerId);
+    if (!container) {
+      if (attempts++ < 25) {
+        setTimeout(attempt, 100);
+      } else {
+        console.warn("[telegram_widget] container not found after retries:", containerId);
+      }
+      return;
+    }
+    if (container.dataset.tgMounted === "1") {
+      return;
+    }
+    console.log("[telegram_widget] mounting widget for bot:", botUsername);
+    doMount(container, botUsername);
+  };
+  attempt();
+}
+
+function doMount(container, botUsername) {
   container.dataset.tgMounted = "1";
 
   // Global callback the widget invokes with the signed user object.
