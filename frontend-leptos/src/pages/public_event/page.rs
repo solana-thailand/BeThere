@@ -728,6 +728,12 @@ fn render_loaded_event(
                                     // credit will cover this event's deposit (THB path).
                                     let credit_amt = credit_thb.get();
                                     let show_credit = has_deposit && credit_amt > 0;
+                                    // Wallet-only sessions can't spend credit until the
+                                    // wallet is bound / they use Google (credit is tied to
+                                    // a proven email). Explain that instead of silently
+                                    // showing nothing on a deposit event.
+                                    let show_wallet_credit_hint =
+                                        has_deposit && wallet_only.get() && credit_amt == 0;
                                     let form = registration_form(
                                         slug_for_reg.clone(),
                                         email_val,
@@ -763,6 +769,14 @@ fn render_loaded_event(
                                                     </p>
                                                     <p class="pe-detail-secondary" style="margin:4px 0 0;">
                                                         "It's applied automatically when you register if it covers this event's deposit — you may not need to pay again."
+                                                    </p>
+                                                </div>
+                                            }.into_any()
+                                        } else if show_wallet_credit_hint {
+                                            view! {
+                                                <div class="pe-card" style="background:rgba(153,69,255,0.06);border:1px solid rgba(153,69,255,0.22);">
+                                                    <p class="pe-detail-secondary" style="margin:0;font-size:0.82rem;line-height:1.45;">
+                                                        "Have deposit credit from a previous event? Credit is tied to your email — sign in with Google, or connect this wallet from your Profile, to apply it."
                                                     </p>
                                                 </div>
                                             }.into_any()
