@@ -578,7 +578,6 @@ fn render_loaded_event(
                         }
                         AuthState::NotSignedIn => {
                             let slug = slug_for_signin.clone();
-                            let slug_for_wallet = slug_for_signin.clone();
                             view! {
                                 <div class="pe-card">
                                     <h2 class="pe-section-title">
@@ -621,17 +620,16 @@ fn render_loaded_event(
                                             "Sign in with Google"
                                         </button>
 
-                                        <button
-                                            class="btn-google"
-                                            style="background: rgba(153, 69, 255, 0.12); border-color: rgba(153, 69, 255, 0.4); color: #fff;"
-                                            on:click=move |_| {
-                                                let target = format!("/login?next=/e/{}", slug_for_wallet);
-                                                navigateTo(&target);
-                                            }
-                                        >
-                                            <span style="font-size: 1.1rem; margin-right: 4px;">"💜"</span>
-                                            "Sign in with Solana Wallet"
-                                        </button>
+                                        <crate::wallet_signin::WalletSignInButton
+                                            on_success=Callback::new(move |_| {
+                                                // Session cookie is set; reload so the page's
+                                                // mount auth-check picks it up and shows the
+                                                // registration form in place.
+                                                if let Some(win) = web_sys::window() {
+                                                    let _ = win.location().reload();
+                                                }
+                                            })
+                                        />
                                     </div>
                                 </div>
                             }.into_any()

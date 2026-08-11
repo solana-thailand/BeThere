@@ -6,6 +6,7 @@ pub mod pages;
 pub mod utils;
 pub mod wallet;
 pub mod wallet_error;
+pub mod wallet_signin;
 
 use leptos::prelude::*;
 use leptos_meta::Title;
