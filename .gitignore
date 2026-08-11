@@ -81,3 +81,9 @@ target
 
 # Claude Code personal overrides (project settings.json stays tracked)
 .claude/settings.local.json
+
+# Accidental build/gen artifacts (untracked 2026-08-12)
+/output/
+rustc-ice-*.txt
+# Bare Solana program-id-named binaries accidentally dropped at repo root
+/C6HDeZES9aPpNwe3UvS9ecmfcRhH1XeJb8PGJmLG3z3T
