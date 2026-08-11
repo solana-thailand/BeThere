@@ -382,6 +382,7 @@ pub async fn undo_check_in(
 #[derive(Debug, serde::Deserialize)]
 pub struct NfcCheckinReq {
     pub event_slug: String,
+    #[allow(dead_code)] // accepted from the client payload; unused until NFC is implemented
     pub nonce: String,
     #[allow(dead_code)] // accepted from the client payload but not used yet
     pub timestamp: Option<f64>,
@@ -395,19 +396,24 @@ pub struct NfcCheckinRes {
 }
 
 /// POST /api/checkin/nfc/verify
-/// Verifies Solana NFC Memo / Mobile Wallet Adapter tap check-in transaction.
+///
+/// NOT IMPLEMENTED. NFC tap check-in has no real verification or persistence
+/// yet — the previous body fabricated a fake success + `5xNFC…` tx signature
+/// and recorded nothing on-chain or in D1/Sheets. Returning an honest error
+/// prevents attendees from being shown a false "checked in on-chain" result.
+/// Re-enable with real tx-signature verification + a server-issued single-use
+/// nonce + D1 persistence + staff/terminal binding before presenting NFC as a
+/// working check-in path.
 #[worker::send]
 pub async fn nfc_verify(
     State(_state): State<AppState>,
     axum::Json(payload): axum::Json<NfcCheckinReq>,
 ) -> Result<ApiOk<NfcCheckinRes>, crate::error::WorkerError> {
-    tracing::info!(event = %payload.event_slug, nonce = %payload.nonce, "nfc checkin verification");
-
-    let tx_sig = format!("5xNFC{}", &uuid::Uuid::now_v7().to_string().replace('-', "")[..12]);
-
-    Ok(ApiOk::new(NfcCheckinRes {
-        success: true,
-        message: "NFC Solana check-in verified successfully on-chain".to_string(),
-        tx_signature: Some(tx_sig),
-    }))
+    tracing::warn!(event = %payload.event_slug, "nfc checkin attempted — feature not implemented");
+    Err(crate::error::WorkerError(
+        event_checkin_domain::models::error::AppError::Validation(
+            "NFC tap check-in isn't available yet — please use QR check-in at the desk."
+                .to_string(),
+        ),
+    ))
 }

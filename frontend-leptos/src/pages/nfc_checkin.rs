@@ -66,35 +66,36 @@ pub fn NfcCheckin() -> impl IntoView {
         let nonce = nonce_val();
 
         leptos::task::spawn_local(async move {
-            // Simulated / Solana MWA Deep Link Transaction Signing Call
-            gloo_timers::future::TimeoutFuture::new(1200).await;
-
             let body_str = serde_json::json!({
                 "event_slug": slug,
                 "nonce": nonce,
                 "timestamp": js_sys::Date::now()
             }).to_string();
 
+            // NFC tap check-in is not implemented server-side yet. Only report
+            // success on a genuine verified server response — never fabricate a
+            // signature or a "confirmed on-chain" state on error.
             match crate::api::fetch::post(
                 "/api/checkin/nfc/verify",
                 &[("Content-Type", "application/json")],
                 Some(body_str),
             ).await {
-                Ok(resp) => {
+                Ok(resp) if resp.status() == 200 => {
                     if let Ok(wrapper) = crate::api::fetch::response_json::<ApiWrapper<NfcCheckinResult>>(&resp).await
                         && let Some(res) = wrapper.data
-                            && res.success {
-                                status.set("success".to_string());
-                                tx_sig.set(res.tx_signature);
-                                return;
-                            }
-                    status.set("success".to_string());
-                    tx_sig.set(Some(format!("5xNFC{}", js_sys::Date::now() as u64)));
+                        && res.success
+                        && res.tx_signature.is_some()
+                    {
+                        status.set("success".to_string());
+                        tx_sig.set(res.tx_signature);
+                    } else {
+                        status.set("error".to_string());
+                        error_msg.set(Some("NFC check-in isn't available yet. Please use QR check-in at the desk.".to_string()));
+                    }
                 }
-                Err(_e) => {
-                    // Fallback to client-side instant checkin verification demo
-                    status.set("success".to_string());
-                    tx_sig.set(Some(format!("5xNFC{}", js_sys::Date::now() as u64)));
+                _ => {
+                    status.set("error".to_string());
+                    error_msg.set(Some("NFC check-in isn't available yet. Please use QR check-in at the desk.".to_string()));
                 }
             }
         });
