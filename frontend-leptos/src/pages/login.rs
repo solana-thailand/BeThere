@@ -36,14 +36,19 @@ pub fn Login() -> impl IntoView {
     let query = use_query_map();
     let next_param = query.get().get("next").map(|s| s.to_string());
 
-    // On successful wallet sign-in, navigate to `next` (or home).
+    // On successful wallet sign-in, hard-navigate to `next` (or home).
+    // Use window.location rather than the SPA router: this callback fires from
+    // inside the WalletSignInButton's async task, and an SPA navigate() disposes
+    // this component's reactive owner mid-callback → wasm "unreachable" panic.
     let wallet_next = next_param.clone();
     let on_wallet_success = Callback::new(move |_addr: String| {
         let target = wallet_next
             .clone()
             .filter(|n| !n.is_empty())
             .unwrap_or_else(|| "/".to_string());
-        use_navigate()(&target, Default::default());
+        if let Some(win) = web_sys::window() {
+            let _ = win.location().set_href(&target);
+        }
     });
 
     // On mount: check for URL errors, check if already authenticated via cookie
