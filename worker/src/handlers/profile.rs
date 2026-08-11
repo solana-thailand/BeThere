@@ -144,6 +144,16 @@ pub async fn get_my_profile(
         }
     };
 
+    // Derive events-joined from actual registrations (COUNT DISTINCT event_id),
+    // not the stored `total_events` counter which historically over-counted
+    // (incremented once per profile field written at registration).
+    let events_joined = crate::db::developers::count_events_joined(d1, &claims.email)
+        .await
+        .unwrap_or_else(|e| {
+            tracing::warn!(email = %claims.email, error = %e, "count_events_joined failed; falling back to stored total_events");
+            profile.total_events.unwrap_or(0)
+        });
+
     Ok(ApiOk::new(MyProfileResponse {
         email: profile.email,
         display_name: profile.display_name.unwrap_or_default(),
@@ -167,7 +177,7 @@ pub async fn get_my_profile(
         company_org: profile.company_org.unwrap_or_default(),
         location_city: profile.location_city.unwrap_or_default(),
         consent_outreach: profile.consent_outreach.unwrap_or(0) != 0,
-        total_events: profile.total_events.unwrap_or(0),
+        total_events: events_joined,
     }))
 }
 

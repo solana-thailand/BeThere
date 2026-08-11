@@ -75,15 +75,19 @@ pub(crate) async fn upsert_developer_field(
     field_name: &str,
     field_value: &str,
 ) -> Result<(), String> {
-    // Build dynamic UPDATE SET clause for the specific field
+    // Build dynamic UPDATE SET clause for the specific field.
+    //
+    // NOTE: this is called once PER FIELD during registration, so it must NOT
+    // touch `total_events` — doing so inflated the count by (#fields) per event.
+    // The profile's events-joined stat is derived on read via
+    // `count_events_joined` (COUNT DISTINCT event_id in attendees) instead.
     let sql = format!(
         "INSERT INTO developer_profiles (email, {field_name}, first_seen_at, last_active_at, \
          total_events, updated_at) \
-         VALUES (?1, ?2, datetime('now'), datetime('now'), 1, datetime('now')) \
+         VALUES (?1, ?2, datetime('now'), datetime('now'), 0, datetime('now')) \
          ON CONFLICT (email) DO UPDATE SET \
          {field_name} = excluded.{field_name}, \
          last_active_at = datetime('now'), \
-         total_events = total_events + 1, \
          updated_at = datetime('now')"
     );
 
@@ -111,6 +115,38 @@ pub(crate) async fn upsert_developer_fields(
         upsert_developer_field(db, email, field_name, field_value).await?;
     }
     Ok(())
+}
+
+/// Count the distinct events an email has registered for (the authoritative
+/// "events joined" stat). Replaces the drift-prone per-field `total_events`
+/// counter with a derived `COUNT(DISTINCT event_id)` over the attendees table.
+pub(crate) async fn count_events_joined(db: &D1Database, email: &str) -> Result<i64, String> {
+    let stmt = db.prepare(
+        "SELECT COUNT(DISTINCT event_id) AS c FROM attendees WHERE LOWER(email) = LOWER(?1)",
+    );
+    let bound = stmt
+        .bind_refs(&[D1Type::Text(email)])
+        .map_err(|e| format!("D1 count_events_joined bind: {e:?}"))?;
+
+    let raw = wasm_bindgen_futures::JsFuture::from(
+        bound
+            .inner()
+            .first(None)
+            .map_err(|e| format!("D1 count_events_joined first(): {e:?}"))?,
+    )
+    .await
+    .map_err(|e| format!("D1 count_events_joined await: {e:?}"))?;
+
+    if raw.is_null() || raw.is_undefined() {
+        return Ok(0);
+    }
+    let json = js_sys::JSON::stringify(&raw)
+        .ok()
+        .and_then(|s| s.as_string())
+        .unwrap_or_default();
+    let v: serde_json::Value =
+        serde_json::from_str(&json).map_err(|e| format!("count_events_joined parse: {e}"))?;
+    Ok(v.get("c").and_then(|c| c.as_i64()).unwrap_or(0))
 }
 
 /// Get a developer profile by email.

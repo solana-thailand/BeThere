@@ -822,14 +822,14 @@ pub fn DevProfile() -> impl IntoView {
                             />
                         </div>
 
-                        // Events attended
+                        // Events joined (distinct events registered — derived server-side)
                         {if events > 0 {
                             view! {
                                 <div class="dev-profile-section">
                                     <h3 class="dev-profile-section-title">"Your Activity"</h3>
                                     <div class="dev-profile-stat-card">
                                         <span class="dev-profile-stat-number">{format!("{events}")}</span>
-                                        <span class="dev-profile-stat-label">{if events == 1 { "Event Attended" } else { "Events Attended" }}</span>
+                                        <span class="dev-profile-stat-label">{if events == 1 { "Event Joined" } else { "Events Joined" }}</span>
                                     </div>
                                 </div>
                             }.into_any()
@@ -838,7 +838,7 @@ pub fn DevProfile() -> impl IntoView {
                                 <div class="dev-profile-section">
                                     <h3 class="dev-profile-section-title">"Your Activity"</h3>
                                     <p class="dev-profile-hint">
-                                        "You haven't attended any events yet. Join an event to see your stats here!"
+                                        "You haven't joined any events yet. Register for an event to see your stats here!"
                                     </p>
                                 </div>
                             }.into_any()
