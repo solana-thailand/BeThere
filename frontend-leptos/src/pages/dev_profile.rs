@@ -64,6 +64,57 @@ pub fn DevProfile() -> impl IntoView {
     let (state, set_state) = signal(ProfileState::LoadingAuth);
     let (dirty, set_dirty) = signal(false);
 
+    // Social-link result banner, fed by ?linked= / ?error= from the OAuth
+    // callback redirect. (is_success, message)
+    let (link_banner, set_link_banner) = signal(None::<(bool, String)>);
+    if let Some(win) = web_sys::window()
+        && let Ok(href) = win.location().href()
+        && let Ok(url) = web_sys::Url::new(&href)
+    {
+        let params = url.search_params();
+        let banner = if let Some(linked) = params.get("linked") {
+            let msg = match linked.as_str() {
+                "github" => "GitHub account linked and verified!".to_string(),
+                other => format!("{other} account linked!"),
+            };
+            Some((true, msg))
+        } else {
+            params.get("error").map(|err| {
+                let msg = match err.as_str() {
+                    "github_denied" => "GitHub authorization was cancelled.".to_string(),
+                    "github_state_expired" => {
+                        "GitHub link expired — please try again.".to_string()
+                    }
+                    "github_no_code" | "github_no_state" | "github_invalid_state" => {
+                        "GitHub link failed (invalid response). Please try again.".to_string()
+                    }
+                    "github_token_failed" => {
+                        "GitHub link failed during sign-in. Please try again.".to_string()
+                    }
+                    "github_user_failed" => {
+                        "Could not fetch your GitHub username. Please try again.".to_string()
+                    }
+                    "github_save_failed" | "db_unavailable" => {
+                        "Could not save your GitHub handle. Please try again.".to_string()
+                    }
+                    other => format!("Account linking failed ({other}). Please try again."),
+                };
+                (false, msg)
+            })
+        };
+        if banner.is_some() {
+            set_link_banner.set(banner);
+            // Strip the query string so a refresh doesn't re-show the banner
+            if let Ok(history) = win.history() {
+                let _ = history.replace_state_with_url(
+                    &wasm_bindgen::JsValue::NULL,
+                    "",
+                    Some(&url.pathname()),
+                );
+            }
+        }
+    }
+
     // Auth check + profile fetch on mount
     // Use API-based auth check (GET /api/auth/me) instead of localStorage-only check.
     // The localStorage token may be missing/expired while the HttpOnly cookie is still
@@ -199,6 +250,26 @@ pub fn DevProfile() -> impl IntoView {
                     "Tell us about yourself — your interests and skills help us improve events."
                 </p>
             </div>
+
+            {move || {
+                link_banner.get().map(|(ok, msg)| {
+                    let style = if ok {
+                        ""
+                    } else {
+                        "background:rgba(239,68,68,0.1);border-color:rgba(239,68,68,0.3);color:#ef4444;"
+                    };
+                    view! {
+                        <div class="dev-profile-saved-banner" style=style>
+                            {if ok {
+                                view! { <Icon icon=IconName::Check class="icon-sm icon-success" /> }.into_any()
+                            } else {
+                                view! { <Icon icon=IconName::Warning class="icon-sm icon-warning" /> }.into_any()
+                            }}
+                            " " {msg}
+                        </div>
+                    }
+                })
+            }}
 
             {move || {
                 let current = state.get();

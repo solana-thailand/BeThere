@@ -18,7 +18,7 @@ use axum::{
     extract::{Query, State},
     response::{IntoResponse, Redirect, Response},
 };
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::json;
 
 use crate::error::{ApiOk, WorkerError};
@@ -52,8 +52,22 @@ pub async fn github_link_start(
         format!("{}/api/auth/github/callback", state.config.server.url)
     };
 
-    // Encode the user's email in the OAuth state param so we know who to update on callback
-    let encoded_email = urlencoding::encode(&claims.email).to_string();
+    // Encode the user's email in a signed OAuth state param so we know who to
+    // update on callback — the HMAC stops third parties from linking their
+    // GitHub account to an arbitrary victim email.
+    let expires = (js_sys::Date::now() / 1000.0) as i64 + GITHUB_STATE_TTL_SECS;
+    let signed_state = match sign_github_state(&claims.email, expires, &state.config.jwt_secret).await {
+        Ok(s) => s,
+        Err(e) => {
+            tracing::error!("GitHub state signing failed: {e}");
+            return (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                axum::Json(json!({"error": "failed to sign OAuth state"})),
+            )
+                .into_response();
+        }
+    };
+    let encoded_state = urlencoding::encode(&signed_state).to_string();
     let redirect_uri = urlencoding::encode(&raw_redirect_uri).to_string();
 
     let github_auth_url = format!(
@@ -61,17 +75,65 @@ pub async fn github_link_start(
          ?client_id={client_id}\
          &redirect_uri={redirect_uri}\
          &scope=read:user\
-         &state={encoded_email}"
+         &state={encoded_state}"
     );
 
     tracing::info!(email = %claims.email, "GitHub OAuth link started");
     Redirect::to(&github_auth_url).into_response()
 }
 
+/// How long a GitHub OAuth state param stays valid.
+const GITHUB_STATE_TTL_SECS: i64 = 600;
+
+/// Build a signed state param: `{email}|{expires_unix}|{hmac_hex}`.
+///
+/// The HMAC (keyed with the JWT secret) covers email + expiry, so the callback
+/// can trust the email without a session cookie being present.
+async fn sign_github_state(email: &str, expires: i64, secret: &str) -> Result<String, String> {
+    let payload = format!("{email}|{expires}");
+    let sig = crate::crypto::hmac_sha256(
+        secret.as_bytes(),
+        format!("github-link|{payload}").as_bytes(),
+    )
+    .await?;
+    let sig_hex: String = sig.iter().map(|b| format!("{b:02x}")).collect();
+    Ok(format!("{payload}|{sig_hex}"))
+}
+
+/// Verify a signed state param and return the embedded email.
+async fn verify_github_state(state: &str, secret: &str) -> Result<String, &'static str> {
+    // rsplitn: sig and expiry cannot contain '|', the email theoretically could
+    let mut parts = state.rsplitn(3, '|');
+    let _sig_hex = parts.next().ok_or("malformed")?;
+    let expires_str = parts.next().ok_or("malformed")?;
+    let email = parts.next().ok_or("malformed")?;
+
+    let expires: i64 = expires_str.parse().map_err(|_| "malformed")?;
+    let now = (js_sys::Date::now() / 1000.0) as i64;
+    if now > expires {
+        return Err("expired");
+    }
+
+    let expected = sign_github_state(email, expires, secret)
+        .await
+        .map_err(|_| "hmac_failed")?;
+    // Constant-time-ish comparison: compare full signed strings byte-wise
+    let matches = expected.len() == state.len()
+        && expected
+            .bytes()
+            .zip(state.bytes())
+            .fold(0u8, |acc, (a, b)| acc | (a ^ b))
+            == 0;
+    if !matches {
+        return Err("bad_signature");
+    }
+    Ok(email.to_string())
+}
+
 #[derive(Debug, Deserialize)]
 pub struct GithubCallbackQuery {
     pub code: Option<String>,
-    pub state: Option<String>, // encoded email
+    pub state: Option<String>, // signed: email|expires|hmac
     pub error: Option<String>,
 }
 
@@ -169,12 +231,24 @@ pub async fn github_link_callback(
         None => return Redirect::to("/profile?error=github_no_code").into_response(),
     };
 
-    // Recover email from the state param
-    let email = match query.state {
+    // Recover and verify the signed state param
+    let raw_state = match query.state {
         Some(ref s) => urlencoding::decode(s)
             .map(|c| c.into_owned())
             .unwrap_or_default(),
         None => return Redirect::to("/profile?error=github_no_state").into_response(),
+    };
+
+    let email = match verify_github_state(&raw_state, &state.config.jwt_secret).await {
+        Ok(email) => email,
+        Err("expired") => {
+            tracing::warn!("GitHub OAuth state expired");
+            return Redirect::to("/profile?error=github_state_expired").into_response();
+        }
+        Err(reason) => {
+            tracing::warn!("GitHub OAuth state rejected: {reason}");
+            return Redirect::to("/profile?error=github_invalid_state").into_response();
+        }
     };
 
     if email.is_empty() {

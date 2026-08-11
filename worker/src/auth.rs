@@ -623,6 +623,10 @@ mod tests {
                 platform_sheet_id: String::new(),
             },
             jwt_secret: "test-jwt-secret".to_string(),
+            github_client_id: String::new(),
+            github_client_secret: String::new(),
+            github_redirect_uri: String::new(),
+            telegram_bot_token: String::new(),
             staff_emails: [
                 "admin@example.com".to_string(),
                 "staff@example.com".to_string(),

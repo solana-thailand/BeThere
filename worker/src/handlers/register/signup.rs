@@ -297,10 +297,10 @@ pub async fn register_attendee(
             account_name: None,
             refund_proof_url: None,
         };
-        if let Some(kv_store) = kv {
-            if let Err(e) = crate::event_store::save_thb_deposit(kv_store, &thb_dep, state.d1.as_deref()).await {
-                tracing::warn!(%api_id, error = %e, "failed to save auto-applied credit deposit record");
-            }
+        if let Some(kv_store) = kv
+            && let Err(e) = crate::event_store::save_thb_deposit(kv_store, &thb_dep, state.d1.as_deref()).await
+        {
+            tracing::warn!(%api_id, error = %e, "failed to save auto-applied credit deposit record");
         }
 
         if let Some(ref resolved) = resolved_contacts_sheet {

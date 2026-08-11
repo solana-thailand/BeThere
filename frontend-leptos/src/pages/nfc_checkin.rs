@@ -81,15 +81,13 @@ pub fn NfcCheckin() -> impl IntoView {
                 Some(body_str),
             ).await {
                 Ok(resp) => {
-                    if let Ok(wrapper) = crate::api::fetch::response_json::<ApiWrapper<NfcCheckinResult>>(&resp).await {
-                        if let Some(res) = wrapper.data {
-                            if res.success {
+                    if let Ok(wrapper) = crate::api::fetch::response_json::<ApiWrapper<NfcCheckinResult>>(&resp).await
+                        && let Some(res) = wrapper.data
+                            && res.success {
                                 status.set("success".to_string());
                                 tx_sig.set(res.tx_signature);
                                 return;
                             }
-                        }
-                    }
                     status.set("success".to_string());
                     tx_sig.set(Some(format!("5xNFC{}", js_sys::Date::now() as u64)));
                 }

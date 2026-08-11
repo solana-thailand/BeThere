@@ -383,6 +383,7 @@ pub async fn undo_check_in(
 pub struct NfcCheckinReq {
     pub event_slug: String,
     pub nonce: String,
+    #[allow(dead_code)] // accepted from the client payload but not used yet
     pub timestamp: Option<f64>,
 }
 
@@ -402,7 +403,7 @@ pub async fn nfc_verify(
 ) -> Result<ApiOk<NfcCheckinRes>, crate::error::WorkerError> {
     tracing::info!(event = %payload.event_slug, nonce = %payload.nonce, "nfc checkin verification");
 
-    let tx_sig = format!("5xNFC{}", uuid::Uuid::now_v7().to_string().replace('-', "")[..12].to_string());
+    let tx_sig = format!("5xNFC{}", &uuid::Uuid::now_v7().to_string().replace('-', "")[..12]);
 
     Ok(ApiOk::new(NfcCheckinRes {
         success: true,
