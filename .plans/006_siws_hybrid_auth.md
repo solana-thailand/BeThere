@@ -1,6 +1,8 @@
 # Plan 006 — Sign-in with Solana (Hybrid Auth)
 
-> **Status**: scoped — not started. Blocked on plan 005 (staging worker + flow harness) landing first, because every worker change in this plan is gated by the harness.
+> **Status**: ✅ SHIPPED 2026-08-11 (prod). Real SIWS ed25519 verification (KV nonce, single-use, fail-closed) in `wallet_verify`; wallet→email binding via `wallet_bind` (ownership-verified); inline wallet sign-in on login + slug pages via the shared `WalletSignInButton`. Identity convergence (wallet↔email at reservation) is [Plan 017](017_wallet_identity_convergence.md). The original "not started" status below is historical.
+>
+> **Status (historical)**: scoped — not started. Blocked on plan 005 (staging worker + flow harness) landing first, because every worker change in this plan is gated by the harness.
 > **Type**: feature (auth) — additive, no breaking changes to Google auth path
 > **Priority**: P1 (unblocks plan 007 mobile; required for Web3-native identity)
 > **Decision**: 1c — hybrid. SIWS becomes the *primary* auth path going forward; Google auth kept as legacy fallback for existing records. No attendee migration required.

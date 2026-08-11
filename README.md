@@ -179,9 +179,23 @@ The frontend is served from `frontend-leptos/dist/` via Workers Assets with SPA 
 | GET | `/api/auth/url` | No | Google OAuth URL (optional `?redirect=` param) |
 | GET | `/api/auth/callback` | No | OAuth callback, sets HttpOnly cookie, redirects based on role |
 | POST | `/api/auth/logout` | No | Clear session cookie |
-| GET | `/api/auth/me` | Cookie | Current user info + role (`super_admin`/`organizer`/`staff`/`attendee`) |
+| GET | `/api/auth/me` | Cookie | Current user info + role + `wallet_only`/`wallet_address` (Plan 017) |
 | GET | `/api/my-registration/{slug}` | Cookie | Get signed-in user's registration for a specific event |
 | GET | `/api/my-registrations` | Cookie | List all registrations for the signed-in user |
+
+#### Sign-In With Solana + social linking (Plans 006 / 017)
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/api/auth/wallet/nonce` | No | Issue a SIWS challenge; stores the exact message in KV (5-min TTL) |
+| POST | `/api/auth/wallet/verify` | No | Verify the wallet's ed25519 signature over the stored challenge, issue session |
+| POST | `/api/auth/wallet/bind` | Cookie | Bind a wallet to the signed-in account (ownership-verified via SIWS) |
+| GET | `/api/auth/github` | Cookie | Start GitHub OAuth link (HMAC-signed `state` carrying email) |
+| GET | `/api/auth/github/callback` | No | GitHub callback; verifies signed state, saves verified handle |
+| GET | `/api/auth/telegram/config` | No | Whether the Telegram widget is enabled + bot username (never the token) |
+| GET | `/api/auth/telegram/state` | Cookie | Signed state token embedded in the widget's `data-auth-url` |
+| GET | `/api/auth/telegram/callback` | No | Telegram redirect flow; verifies signed state + widget HMAC, saves handle |
+| POST | `/api/auth/social/unlink` | Cookie | Remove a verified social link (github/telegram/discord) |
 
 ### Public Event & Registration
 
