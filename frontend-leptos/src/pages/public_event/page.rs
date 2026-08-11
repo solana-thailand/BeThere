@@ -25,6 +25,10 @@ pub fn PublicEvent() -> impl IntoView {
     // Auth state
     let (auth_state, set_auth_state) = signal(AuthState::Checking);
     let (reg_lookup, set_reg_lookup) = signal(RegistrationLookup::Pending);
+    // Wallet-only session info (Plan 017): drives the friendly address label and
+    // the "enter your email" input on the reservation form.
+    let (wallet_only, set_wallet_only) = signal(false);
+    let (wallet_addr, set_wallet_addr) = signal(None::<String>);
 
     // Get slug from params
     let slug_val = match params.get() {
@@ -160,6 +164,14 @@ pub fn PublicEvent() -> impl IntoView {
                                 .to_string();
                             if !email.is_empty() {
                                 log::info!("[public_event] user signed in: {email}");
+                                set_wallet_only.set(
+                                    api_resp.get("data").and_then(|d| d.get("wallet_only"))
+                                        .and_then(|v| v.as_bool()).unwrap_or(false),
+                                );
+                                set_wallet_addr.set(
+                                    api_resp.get("data").and_then(|d| d.get("wallet_address"))
+                                        .and_then(|v| v.as_str()).map(|s| s.to_string()),
+                                );
                                 set_auth_state.set(AuthState::SignedIn(email));
                             } else {
                                 set_auth_state.set(AuthState::NotSignedIn);
@@ -364,6 +376,8 @@ pub fn PublicEvent() -> impl IntoView {
                                 slug_for_event.clone(),
                                 share_copied,
                                 set_share_copied,
+                                wallet_only,
+                                wallet_addr,
                             )
                         }
                     }
@@ -395,6 +409,8 @@ fn render_loaded_event(
     current_slug: String,
     share_copied: ReadSignal<bool>,
     set_share_copied: WriteSignal<bool>,
+    wallet_only: ReadSignal<bool>,
+    wallet_addr: ReadSignal<Option<String>>,
 ) -> AnyView {
     let has_nft_image = !data.nft_image_url.is_empty();
     let has_description = !data.description.is_empty();
@@ -535,7 +551,14 @@ fn render_loaded_event(
         {move || {
             match &auth_state.get() {
                 AuthState::SignedIn(email) => {
-                    let email_disp = email.clone();
+                    // Wallet-only sessions show a friendly address, not `wallet:<addr>`.
+                    let email_disp = if wallet_only.get() {
+                        wallet_addr.get()
+                            .map(|a| crate::api::short_wallet(&a))
+                            .unwrap_or_else(|| "Wallet".to_string())
+                    } else {
+                        email.clone()
+                    };
                     view! {
                         <div class="pe-auth-bar">
                             <span class="pe-detail-secondary">
@@ -653,6 +676,7 @@ fn render_loaded_event(
                                     registration_form(
                                         slug_for_reg.clone(),
                                         email_val,
+                                        wallet_only.get(),
                                         is_hybrid,
                                         require_contact,
                                         has_deposit,
@@ -681,6 +705,7 @@ fn render_loaded_event(
                                     registration_form(
                                         slug_for_reg.clone(),
                                         email_val,
+                                        wallet_only.get(),
                                         is_hybrid,
                                         require_contact,
                                         has_deposit,

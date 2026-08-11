@@ -117,6 +117,7 @@ pub enum RegState {
 #[derive(Clone, Debug, Default)]
 pub struct FieldErrors {
     pub name: Option<String>,
+    pub email: Option<String>,
     pub contact_channel: Option<String>,
     pub contact_handle: Option<String>,
     pub deposit_agreed: Option<String>,

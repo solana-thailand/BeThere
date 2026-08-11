@@ -206,10 +206,22 @@ pub async fn auth_me(
         }
     };
 
+    // Plan 017: a wallet-only session has a synthetic `wallet:<address>` email.
+    // Expose that so the frontend can render a friendly address label and prompt
+    // for a real email at reservation, instead of showing `wallet:<address>`.
+    let wallet_only = claims.email.starts_with("wallet:");
+    let wallet_address = if wallet_only {
+        Some(claims.sub.clone())
+    } else {
+        None
+    };
+
     ApiOk::new(json!({
         "email": claims.email,
         "sub": claims.sub,
         "role": role,
+        "wallet_only": wallet_only,
+        "wallet_address": wallet_address,
     }))
 }
 

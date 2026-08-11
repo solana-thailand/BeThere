@@ -4,8 +4,9 @@
 > **Type**: feature (auth/identity) — additive; no breaking change to Google or existing wallet-bind paths.
 > **Priority**: P1 — wallet-first users currently create orphaned `wallet:<address>` identities.
 > **Depends on**: SIWS verify + wallet-bind (shipped 2026-08-11, commits `ab1988c`, `d0aec11`, `5d4286e3`). Continuation of [Plan 006](006_siws_hybrid_auth.md).
-> **Decision**: Converge at reservation — wallet login is standalone, but reserving a spot requires an email and merges wallet→email into one identity.
+> **Decision**: Converge at reservation — wallet login is standalone, but reserving a spot requires an email and merges wallet→email into one identity. **Reservation and binding are decoupled** (see §5); no OTP in v1.
 > **Created**: 2026-08-11
+> **Resolved**: 2026-08-11 — decisions in §5/§7 below.
 
 ---
 
@@ -77,16 +78,21 @@ Edge within C: the email the user types **already exists** (their own Google acc
 
 ---
 
-## 5. Edge cases
+## 5. Edge cases — RESOLVED: decouple reservation from binding
 
-1. **Typed email already belongs to a Google account (theirs).** Desired: merge — bind wallet to that email, reservation joins their existing identity. Risk: someone binds a wallet to an email they don't control. Mitigation options (pick in impl):
-   - (a) Only allow binding to an email that has no verified Google login yet (first-writer-wins), OR
-   - (b) require email verification (OTP) before binding to a pre-existing email. **Recommend (b) for pre-existing emails, (a)-style silent bind only when the email is brand new.**
-2. **Typed email belongs to someone else.** Same mitigation as #1 — never silently attach a wallet to a stranger's established account.
-3. **Wallet already bound to a *different* email**, user types a new one. Reject with a clear message ("this wallet is already linked to a****@…"), offer unlink on profile.
-4. **Two wallets, one email.** Allowed? Current schema: `developer_profiles.wallet_address` is single-valued, so one wallet per email. Binding a second wallet overwrites. Decide: keep single (simplest) — document it.
-5. **User abandons the reservation after typing email but before submit.** No bind happens (bind is on successful submit only). Safe.
-6. **Logout/again.** After convergence, wallet login → resolves to email → all good. Before convergence, a wallet-only session that never reserved stays `wallet:<address>` (harmless, no data filed).
+**Core rule:** *filing a reservation under an email* (RSVP contact info, zero risk) is separate from *binding wallet→email* (grants future login-as-that-email, high risk). At reservation the user has proven wallet control (signed in) but NOT email control (just typed it), so we only bind when it's safe.
+
+- **Reservation** is always filed under the typed email.
+- **Bind wallet→email happens only when the email is brand-new** — no existing `contacts` / `attendees` / `developer_profiles` row. Fresh email ⇒ safe to attach the proven wallet.
+- **Email already exists** ⇒ file the reservation but **skip the bind**; return a flag so the UI says "This email already has an account — sign in and link your wallet from your profile" (routes to the shipped, ownership-verified profile bind flow).
+
+Concrete cases:
+1. **Typed email is their own existing Google account** → reservation filed under it; no auto-bind; prompt to link via profile. (They log in with Google there, proving ownership, then bind.)
+2. **Typed email belongs to someone else (existing)** → same: no auto-bind. Stranger's account never gets a silent wallet attached.
+3. **Wallet already bound to a *different* email**, user types a new one → reject at login-resolution time already (login resolves the wallet to its bound email via `find_email_by_wallet`), so this can't reach reservation as wallet-only. If it somehow does, reject the bind with "this wallet is already linked".
+4. **Two wallets, one email** → `developer_profiles.wallet_address` is single-valued: one wallet per email; re-binding overwrites. Keep single for v1.
+5. **Abandon before submit** → no bind (bind only on successful reservation). Safe.
+6. **Residual: brand-new-email squatting** — an attacker could bind their wallet to an email they don't own but that no one has registered yet; if the real owner later signs in with Google, the pre-bound wallet is attached. Low severity for an event app (no financial control — deposits are separate on-chain signatures). Accepted for v1. Clean upgrade if ever needed: OTP-verify the email before binding. **Not built now** (no transactional-email infra configured).
 
 ---
 
@@ -99,8 +105,8 @@ Edge within C: the email the user types **already exists** (their own Google acc
 
 ---
 
-## 7. Open questions for review
+## 7. Decisions (resolved 2026-08-11)
 
-1. Edge-case #1/#2 mitigation: OK to require **OTP email verification** when a wallet-only user reserves with a **pre-existing** email, and silent-bind only for brand-new emails? (Adds an email-send dependency.)
-2. Friendly wallet label format: `0xAB…dead` (4+4) or ENS-style/none?
-3. Should Google users' reservations also auto-persist a **connected** wallet (scenario A), or leave wallet purely opt-in via the profile bind button?
+1. **No OTP.** Decouple reservation from binding (§5): auto-bind only to brand-new emails; existing emails reserve without binding and are prompted to link via profile. Avoids email-send infra; residual squatting risk accepted for v1.
+2. **Label format:** Solana base58, first-4…last-4, **no `0x` prefix** — e.g. `7Xk9…Qm3p`. Copy button yields the full address. (The doc's earlier `0x…` was an Ethereum-ism; corrected.)
+3. **Google users:** wallet stays **opt-in** via the profile "Connect Wallet" button (already shipped, ownership-verified). Reservation persists a wallet on the attendee row **only for wallet sessions** (`claims.sub` = the address); Google sessions carry no wallet, so nothing to persist.

@@ -312,7 +312,16 @@ pub fn DevProfile() -> impl IntoView {
                 };
                 let is_saving = current.is_saving();
                 let is_dirty = dirty.get();
-                let email = profile.email.clone();
+                // Wallet-only identities have a synthetic `wallet:<address>` email —
+                // show a friendly address and label the row accordingly (Plan 017).
+                let raw_email = profile.email.clone();
+                let is_wallet_identity = raw_email.starts_with("wallet:");
+                let (email_label, email) = if is_wallet_identity {
+                    let addr = raw_email.trim_start_matches("wallet:");
+                    ("Wallet Identity", crate::api::short_wallet(addr))
+                } else {
+                    ("Email", raw_email.clone())
+                };
                 let display_name = profile.display_name.clone();
                 let github = profile.github_handle.clone().unwrap_or_default();
                 let github_verified = profile.github_verified;
@@ -333,10 +342,15 @@ pub fn DevProfile() -> impl IntoView {
                 view! {
                     <div class="dev-profile-form">
 
-                        // Email (read-only)
+                        // Email / wallet identity (read-only)
                         <div class="dev-profile-field">
-                            <label class="dev-profile-label">"Email"</label>
+                            <label class="dev-profile-label">{email_label}</label>
                             <div class="dev-profile-readonly">{email}</div>
+                            {if is_wallet_identity {
+                                view! { <span class="dev-profile-hint">"Reserve a spot with your email to link it to this wallet."</span> }.into_any()
+                            } else {
+                                ().into_any()
+                            }}
                         </div>
 
                         // Display Name

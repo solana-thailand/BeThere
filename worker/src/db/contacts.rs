@@ -704,6 +704,26 @@ mod tests {
     }
 }
 
+/// Whether an email already has any account footprint (contact, developer
+/// profile, or attendee record). Used to decide whether it's safe to
+/// auto-bind a wallet to a typed email at registration (Plan 017): we only
+/// bind to brand-new emails — an existing email must be linked via the
+/// ownership-verified profile flow instead.
+pub async fn email_has_account(db: &D1Database, email: &str) -> Result<bool, String> {
+    let sql = "SELECT 1 AS x FROM contacts WHERE LOWER(email) = LOWER(?1) \
+               UNION SELECT 1 FROM developer_profiles WHERE LOWER(email) = LOWER(?1) \
+               UNION SELECT 1 FROM attendees WHERE LOWER(email) = LOWER(?1) \
+               LIMIT 1";
+    let stmt = db.prepare(sql);
+    let bound = stmt
+        .bind_refs(&[D1Type::Text(email)])
+        .map_err(|e| format!("D1 email_has_account bind: {e:?}"))?;
+    let rows = safe_all_rows(&bound)
+        .await
+        .map_err(|e| format!("D1 email_has_account: {e:?}"))?;
+    Ok(!rows.is_empty())
+}
+
 /// Find linked email address by wallet_address from developer_profiles or attendees.
 pub async fn find_email_by_wallet(db: &D1Database, wallet_address: &str) -> Result<Option<String>, String> {
     let sql = "SELECT email FROM developer_profiles WHERE LOWER(wallet_address) = LOWER(?1) LIMIT 1";

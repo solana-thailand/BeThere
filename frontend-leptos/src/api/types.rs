@@ -150,6 +150,24 @@ pub struct MeResponse {
     /// Role: "super_admin" (full access), "organizer" (event management), or "staff" (scanner only).
     #[serde(default)]
     pub role: String,
+    /// True when this is a wallet-only session (synthetic `wallet:<address>`
+    /// identity, no linked email yet — Plan 017).
+    #[serde(default)]
+    pub wallet_only: bool,
+    /// The connected wallet address, present for wallet-only sessions.
+    #[serde(default)]
+    pub wallet_address: Option<String>,
+}
+
+/// Shorten a Solana (base58) address for display, e.g. `7Xk9…Qm3p`.
+/// Returns the input unchanged if it's too short to shorten.
+pub fn short_wallet(addr: &str) -> String {
+    let a = addr.trim();
+    if a.len() <= 10 {
+        a.to_string()
+    } else {
+        format!("{}…{}", &a[..4], &a[a.len() - 4..])
+    }
 }
 
 // ===== Attendee response types =====

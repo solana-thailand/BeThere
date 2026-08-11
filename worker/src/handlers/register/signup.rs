@@ -37,9 +37,47 @@ pub async fn register_attendee(
         return Err(AppError::Validation("name is required (max 100 chars)".to_string()).into());
     }
 
-    // Email comes from JWT, not request body — ensures verified identity
-    let email = claims.email.trim().to_lowercase();
-    tracing::info!("registration email from JWT: {email}");
+    // Identity resolution (Plan 017 — wallet↔email convergence).
+    // Google sessions: email comes from the verified JWT. Wallet-only sessions
+    // have a synthetic `wallet:<address>` identity and MUST supply a real email
+    // in the body to reserve — the reservation is filed under that email, and
+    // (only if the email is brand-new) the proven wallet is bound to it.
+    let jwt_email = claims.email.trim().to_lowercase();
+    let is_wallet_session = jwt_email.starts_with("wallet:");
+    let email = if is_wallet_session {
+        let typed = body.email.trim().to_lowercase();
+        if !is_plausible_email(&typed) {
+            return Err(AppError::Validation(
+                "please enter a valid email to reserve your spot".to_string(),
+            )
+            .into());
+        }
+        typed
+    } else {
+        jwt_email.clone()
+    };
+    // Wallet address for wallet sessions (JWT `sub` = the base58 address).
+    let session_wallet = if is_wallet_session {
+        Some(claims.sub.trim().to_string())
+    } else {
+        None
+    };
+    tracing::info!(%email, is_wallet_session, "registration identity resolved");
+
+    // For wallet sessions, decide up-front whether this email is brand-new.
+    // Must be evaluated BEFORE we upsert the contact/attendee below (which would
+    // otherwise make every email look "existing"). On DB error, fail safe by
+    // treating the email as existing so we never auto-bind on uncertain state.
+    let email_is_new = if is_wallet_session {
+        match state.d1.as_deref() {
+            Some(db) => !crate::db::contacts::email_has_account(db, &email)
+                .await
+                .unwrap_or(true),
+            None => false,
+        }
+    } else {
+        false
+    };
 
     let slug = body.slug.trim();
     if slug.is_empty() {
@@ -220,6 +258,8 @@ pub async fn register_attendee(
             email: existing.email.clone(),
             claim_token,
             next_step,
+            // Already registered ⇒ email exists ⇒ never auto-bind here.
+            wallet_linked: if is_wallet_session { Some(false) } else { None },
         }));
     }
 
@@ -586,13 +626,53 @@ pub async fn register_attendee(
         "attendee self-registered"
     );
 
+    // Plan 017: converge wallet→email. Bind the proven wallet only when the
+    // email was brand-new; an existing email must be linked via the profile
+    // flow (ownership-verified) instead of a typed-email bind here.
+    let wallet_linked = if is_wallet_session {
+        if email_is_new
+            && let (Some(db), Some(w)) = (state.d1.as_deref(), session_wallet.as_ref())
+        {
+            match crate::db::contacts::link_wallet_to_email(db, &email, w).await {
+                Ok(()) => {
+                    tracing::info!(%email, "wallet bound to new email at registration");
+                    Some(true)
+                }
+                Err(e) => {
+                    tracing::warn!(%email, error = %e, "wallet bind at registration failed");
+                    Some(false)
+                }
+            }
+        } else {
+            tracing::info!(%email, "email already has an account — wallet not auto-bound");
+            Some(false)
+        }
+    } else {
+        None
+    };
+
     Ok(ApiOk::new(RegisterResponse {
         attendee_id: api_id,
         name: name.to_string(),
         email,
         claim_token,
         next_step,
+        wallet_linked,
     }))
+}
+
+/// Minimal sanity check for a typed email (wallet-session reservations).
+/// Not RFC-complete — just rejects obviously-invalid input: one `@`, a dot in
+/// the domain, no spaces, reasonable length.
+fn is_plausible_email(email: &str) -> bool {
+    let e = email.trim();
+    if e.len() < 3 || e.len() > 254 || e.contains(char::is_whitespace) {
+        return false;
+    }
+    let Some((local, domain)) = e.split_once('@') else {
+        return false;
+    };
+    !local.is_empty() && domain.contains('.') && !domain.starts_with('.') && !domain.ends_with('.')
 }
 
 /// Resolve participation type based on event format and user selection.
@@ -624,5 +704,28 @@ fn split_name(name: &str) -> (String, String) {
         [] => (String::new(), String::new()),
         [only] => (only.to_string(), String::new()),
         [first, rest @ ..] => (first.to_string(), rest.join(" ")),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_plausible_email;
+
+    #[test]
+    fn accepts_normal_emails() {
+        assert!(is_plausible_email("a@b.co"));
+        assert!(is_plausible_email("dev.user+tag@example.com"));
+    }
+
+    #[test]
+    fn rejects_malformed_emails() {
+        assert!(!is_plausible_email(""));
+        assert!(!is_plausible_email("no-at-sign"));
+        assert!(!is_plausible_email("@example.com"));
+        assert!(!is_plausible_email("user@nodot"));
+        assert!(!is_plausible_email("user@.com"));
+        assert!(!is_plausible_email("user@example."));
+        assert!(!is_plausible_email("has space@example.com"));
+        assert!(!is_plausible_email("wallet:So1111111111111111111111111111111111111111"));
     }
 }
