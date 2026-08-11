@@ -334,6 +334,48 @@ pub async fn register_attendee(
 
     let now = chrono::Utc::now().to_rfc3339();
 
+    // 7b. Persist the attendee to D1 (the source of truth) BEFORE spending any
+    // credit or returning success. Fatal by design: if this write fails the
+    // reservation isn't durable, so we must not (a) tell the attendee they're
+    // registered, nor (b) consume their rolling credit for a reservation that
+    // vanished. They get a retryable error instead of a silent lost registration.
+    // (When D1 isn't configured — tests/local — we skip and rely on Sheets.)
+    if let Some(ref d1) = state.d1
+        && let Err(e) = crate::db::attendees::upsert_attendee(
+            d1,
+            &api_id,
+            &event_id,
+            &email,
+            name,
+            "approved", // self-registered attendees are auto-approved
+            &participation_type,
+            contact_channel.unwrap_or(""),
+            contact_handle.unwrap_or(""),
+            body.consent_marketing,
+            Some(&claim_token),
+        )
+        .await
+    {
+        // A UNIQUE(event_id, lower(email)) violation means a concurrent or prior
+        // registration for the same person won the race (the Sheets-based dedup
+        // above can lag). D1 is authoritative, so treat it as already-registered
+        // rather than a hard failure — and importantly, no credit is spent (that
+        // happens below, only if we get past this).
+        if e.to_ascii_uppercase().contains("UNIQUE") {
+            tracing::info!(%email, %event_id, "duplicate registration blocked by unique index");
+            return Err(AppError::Validation(
+                "You're already registered for this event — check your email or 'My Registrations'."
+                    .to_string(),
+            )
+            .into());
+        }
+        tracing::error!(%api_id, %email, %event_id, error = %e, "D1 attendee write failed — failing registration (source of truth)");
+        return Err(AppError::Internal(
+            "could not save your registration — please try again".to_string(),
+        )
+        .into());
+    }
+
     // Auto-apply rolling credit — fail-closed and correctly ordered.
     //
     // Consume the credit FIRST; only mark the deposit covered if that succeeded.
@@ -417,25 +459,12 @@ pub async fn register_attendee(
 
     // 9. Write to D1 first (source of truth), then detach all Sheets writes
 
-    // 9a. Dual-write to D1 — attendee row (non-fatal, Phase 2a)
+    // 9a. Dual-write to D1 — contact row (non-fatal). The attendee row is
+    // already written fatally at step 7b above (before credit spend), so it is
+    // NOT re-written here.
     if let Some(ref d1) = state.d1 {
-        // Parallelize attendee + contact upserts (independent D1 writes)
-        let attendee_fut = crate::db::attendees::upsert_attendee(
-            d1,
-            &api_id,
-            &event_id,
-            &email,
-            name,
-            "approved", // self-registered attendees are auto-approved (consistent with Sheets)
-            &participation_type,
-            contact_channel.unwrap_or(""),
-            contact_handle.unwrap_or(""),
-            body.consent_marketing,
-            Some(&claim_token),
-        );
-
         let events_joined = event_id.clone();
-        let contact_fut = crate::db::contacts::upsert_contact(
+        if let Err(e) = crate::db::contacts::upsert_contact(
             d1,
             &email,
             name,
@@ -443,20 +472,9 @@ pub async fn register_attendee(
             1, // event_count will be updated on subsequent registrations
             contact_channel.unwrap_or(""),
             contact_handle.unwrap_or(""),
-        );
-
-        let (attendee_result, contact_result) = futures_util::join!(attendee_fut, contact_fut);
-
-        if let Err(e) = attendee_result {
-            tracing::warn!(
-                %api_id,
-                %email,
-                error = %e,
-                "D1 attendee upsert failed (non-fatal)"
-            );
-        }
-
-        if let Err(e) = contact_result {
+        )
+        .await
+        {
             tracing::warn!(
                 %email,
                 error = %e,
