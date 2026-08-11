@@ -112,6 +112,7 @@ pub fn DevProfile() -> impl IntoView {
         let banner = if let Some(linked) = params.get("linked") {
             let msg = match linked.as_str() {
                 "github" => "GitHub account linked and verified!".to_string(),
+                "telegram" => "Telegram account linked and verified!".to_string(),
                 other => format!("{other} account linked!"),
             };
             Some((true, msg))
@@ -133,6 +134,15 @@ pub fn DevProfile() -> impl IntoView {
                     }
                     "github_save_failed" | "db_unavailable" => {
                         "Could not save your GitHub handle. Please try again.".to_string()
+                    }
+                    "telegram_bad_signature" | "telegram_invalid" => {
+                        "Telegram verification failed. Please try again.".to_string()
+                    }
+                    "telegram_expired" => {
+                        "Telegram login expired — please try again.".to_string()
+                    }
+                    "telegram_save_failed" | "telegram_unconfigured" => {
+                        "Could not save your Telegram link. Please try again.".to_string()
                     }
                     other => format!("Account linking failed ({other}). Please try again."),
                 };

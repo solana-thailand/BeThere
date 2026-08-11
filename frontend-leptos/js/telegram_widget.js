@@ -49,31 +49,11 @@ export function mountTelegramWidget(containerId, botUsername) {
 function doMount(container, botUsername) {
   container.dataset.tgMounted = "1";
 
-  // Global callback the widget invokes with the signed user object.
-  window.onBeThereTelegramAuth = async function (user) {
-    try {
-      const resp = await fetch("/api/auth/telegram/verify", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify(user),
-      });
-      if (resp.ok) {
-        window.location.reload();
-      } else {
-        let msg = "Telegram verification failed. Please try again.";
-        try {
-          const body = await resp.json();
-          if (body && body.error) msg = body.error;
-        } catch (_) {}
-        console.error("[telegram_widget] verify failed:", resp.status);
-        window.alert(msg);
-      }
-    } catch (e) {
-      console.error("[telegram_widget] verify error:", e);
-      window.alert("Could not reach the server to verify Telegram. Please try again.");
-    }
-  };
+  // Use the REDIRECT flow (data-auth-url), not data-onauth. The onauth callback
+  // is parsed by the widget via eval(), which our CSP forbids (no unsafe-eval).
+  // With data-auth-url, Telegram redirects the top window back to our callback
+  // endpoint with the signed params — no eval needed.
+  const authUrl = window.location.origin + "/api/auth/telegram/callback";
 
   const s = document.createElement("script");
   s.async = true;
@@ -81,7 +61,7 @@ function doMount(container, botUsername) {
   s.setAttribute("data-telegram-login", botUsername);
   s.setAttribute("data-size", "large");
   s.setAttribute("data-radius", "10");
-  s.setAttribute("data-onauth", "onBeThereTelegramAuth(user)");
+  s.setAttribute("data-auth-url", authUrl);
   s.setAttribute("data-request-access", "write");
   container.appendChild(s);
 }

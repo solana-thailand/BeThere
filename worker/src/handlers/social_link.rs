@@ -467,6 +467,106 @@ pub async fn telegram_verify(
     })))
 }
 
+/// Save a verified Telegram link to the developer profile (shared by the POST
+/// verify path and the GET redirect-callback path).
+async fn save_telegram_link(
+    d1: &worker::D1Database,
+    email: &str,
+    handle: &str,
+    telegram_id: &str,
+) -> Result<(), String> {
+    let email_escaped = email.replace('\'', "''");
+    let handle_escaped = handle.replace('\'', "''");
+    let id_escaped = telegram_id.replace('\'', "''");
+    let sql = format!(
+        "INSERT INTO developer_profiles \
+         (email, telegram_handle, telegram_id, telegram_verified, telegram_verified_at, \
+          first_seen_at, last_active_at, total_events, updated_at) \
+         VALUES ('{email_escaped}', '{handle_escaped}', '{id_escaped}', 1, datetime('now'), \
+                 datetime('now'), datetime('now'), 0, datetime('now')) \
+         ON CONFLICT (email) DO UPDATE SET \
+          telegram_handle = '{handle_escaped}', \
+          telegram_id = '{id_escaped}', \
+          telegram_verified = 1, \
+          telegram_verified_at = datetime('now'), \
+          updated_at = datetime('now')"
+    );
+    worker::D1Database::prepare(d1, &sql)
+        .run()
+        .await
+        .map(|_| ())
+        .map_err(|e| format!("Telegram save failed: {e:?}"))
+}
+
+/// Query params Telegram sends to the Login Widget `data-auth-url` callback.
+#[derive(Debug, Deserialize)]
+pub struct TelegramCallbackQuery {
+    pub id: Option<i64>,
+    pub first_name: Option<String>,
+    pub last_name: Option<String>,
+    pub username: Option<String>,
+    pub photo_url: Option<String>,
+    pub auth_date: Option<i64>,
+    pub hash: Option<String>,
+}
+
+/// GET /api/auth/telegram/callback
+/// Redirect-flow endpoint for the Telegram Login Widget (`data-auth-url`).
+/// Used instead of the JS `data-onauth` callback because that path requires
+/// `eval()`, which our CSP forbids. Auth-guarded: the session cookie identifies
+/// whose profile to link (top-level GET navigation → SameSite=Lax cookie sent).
+#[worker::send]
+pub async fn telegram_callback(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Query(q): Query<TelegramCallbackQuery>,
+) -> Response {
+    let bot_token = &state.config.telegram_bot_token;
+    if bot_token.is_empty() {
+        return Redirect::to("/profile?error=telegram_unconfigured").into_response();
+    }
+
+    let (id, first_name, auth_date, hash) =
+        match (q.id, q.first_name.clone(), q.auth_date, q.hash.clone()) {
+            (Some(i), Some(f), Some(a), Some(h)) => (i, f, a, h),
+            _ => return Redirect::to("/profile?error=telegram_invalid").into_response(),
+        };
+
+    let data = TelegramVerifyRequest {
+        id,
+        first_name,
+        last_name: q.last_name.clone(),
+        username: q.username.clone(),
+        photo_url: q.photo_url.clone(),
+        auth_date,
+        hash,
+    };
+
+    if !verify_telegram_hash_subtle(&data, bot_token).await {
+        tracing::warn!(email = %claims.email, "Telegram callback HMAC verification failed");
+        return Redirect::to("/profile?error=telegram_bad_signature").into_response();
+    }
+
+    let now = (js_sys::Date::now() / 1000.0) as i64;
+    if now - data.auth_date > 86_400 {
+        return Redirect::to("/profile?error=telegram_expired").into_response();
+    }
+
+    let d1 = match state.d1.as_ref() {
+        Some(d) => d,
+        None => return Redirect::to("/profile?error=db_unavailable").into_response(),
+    };
+
+    let handle = data.username.clone().unwrap_or_else(|| data.first_name.clone());
+    if let Err(e) = save_telegram_link(d1, &claims.email, &handle, &data.id.to_string()).await {
+        tracing::error!("Telegram callback save failed: {e}");
+        return Redirect::to("/profile?error=telegram_save_failed").into_response();
+    }
+
+    tracing::info!(email = %claims.email, telegram_id = %data.id, "Telegram linked via redirect callback");
+    Redirect::to("/profile?linked=telegram").into_response()
+}
+
 // ---------------------------------------------------------------------------
 // Unlink
 // ---------------------------------------------------------------------------
