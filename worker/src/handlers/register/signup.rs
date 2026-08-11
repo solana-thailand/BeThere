@@ -79,6 +79,24 @@ pub async fn register_attendee(
         false
     };
 
+    // SECURITY: rolling deposit credit is stored value tied to an email. Only
+    // spend it when the caller has PROVEN ownership of that email — a Google-
+    // verified session, or a wallet session whose wallet is already bound to
+    // this email. A wallet session that merely *types* an email (Plan 017) has
+    // not proven ownership, so it must NOT be able to drain that email's credit
+    // (which would also hand the attacker a deposit-funded spot). Such sessions
+    // fall through to the normal payment path.
+    let credit_identity_ok = if !is_wallet_session {
+        true
+    } else if let (Some(db), Some(wallet)) = (state.d1.as_deref(), session_wallet.as_deref()) {
+        matches!(
+            crate::db::contacts::find_email_by_wallet(db, wallet).await,
+            Ok(Some(bound_email)) if bound_email.eq_ignore_ascii_case(&email)
+        )
+    } else {
+        false
+    };
+
     let slug = body.slug.trim();
     if slug.is_empty() {
         return Err(AppError::Validation("event slug is required".to_string()).into());
@@ -271,7 +289,7 @@ pub async fn register_attendee(
     let mut credit_amount_applied: u64 = 0;
     let mut resolved_contacts_sheet: Option<event_checkin_domain::models::org::ResolvedContactsSheet> = None;
 
-    if config.deposit_enabled && !is_online_participation(&participation_type) {
+    if config.deposit_enabled && !is_online_participation(&participation_type) && credit_identity_ok {
         let resolved_contacts = if let Some(db) = state.d1.as_deref() {
             crate::org_store::resolve_contacts_sheet(db, &config, &state.config.sheets).await
         } else {
