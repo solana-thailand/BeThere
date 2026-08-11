@@ -614,9 +614,20 @@ pub fn DevProfile() -> impl IntoView {
                                         }.into_any()
                                     } else {
                                         view! {
-                                            <a href="/login" class="dev-profile-social-connect-btn" style="background: linear-gradient(135deg, #9945FF 0%, #14F195 100%);">
-                                                "Connect Wallet →"
-                                            </a>
+                                            <crate::wallet_signin::WalletSignInButton
+                                                flow=crate::wallet_signin::WalletFlow::Bind
+                                                class="dev-profile-social-connect-btn"
+                                                style="background: linear-gradient(135deg, #9945FF 0%, #14F195 100%);"
+                                                label="Connect Wallet →"
+                                                on_success=Callback::new(move |addr: String| {
+                                                    // Attach the bound wallet to the in-memory
+                                                    // profile without a reload (preserves edits).
+                                                    if let Some(mut p) = state.get_untracked().profile().cloned() {
+                                                        p.wallet_address = Some(addr);
+                                                        set_state.set(ProfileState::Editing(p));
+                                                    }
+                                                })
+                                            />
                                         }.into_any()
                                     }}
                                 </div>

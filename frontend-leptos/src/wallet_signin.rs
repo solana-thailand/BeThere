@@ -39,17 +39,48 @@ fn solana_icon() -> &'static str {
     </svg>"
 }
 
-/// Reusable Solana wallet sign-in button.
+/// Which SIWS flow the button performs.
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
+pub enum WalletFlow {
+    /// Sign in — issues a session cookie via `/api/auth/wallet/verify`.
+    #[default]
+    Login,
+    /// Bind — attaches the wallet to the already-authenticated account via
+    /// `/api/auth/wallet/bind`. Does not change the current session.
+    Bind,
+}
+
+/// Reusable Solana wallet button (sign-in or bind).
 ///
-/// Renders the purple "Sign in with Solana Wallet" button; clicking it opens a
-/// wallet-picker modal. Selecting an installed wallet runs the full SIWS flow
-/// and, on success, invokes `on_success`.
+/// Renders a button; clicking it opens a wallet-picker modal. Selecting an
+/// installed wallet runs the SIWS handshake (connect → nonce → signMessage →
+/// verify/bind) and, on success, invokes `on_success` with the wallet address.
 #[component]
 pub fn WalletSignInButton(
-    /// Fired after a successful SIWS verification (session cookie is set).
+    /// Fired with the connected wallet address after success.
     #[prop(into)]
-    on_success: Callback<()>,
+    on_success: Callback<String>,
+    /// Login (default) issues a session; Bind attaches to the current account.
+    #[prop(optional)]
+    flow: WalletFlow,
+    /// Trigger button CSS class (default: the login-style purple button).
+    #[prop(optional, into)]
+    class: Option<String>,
+    /// Inline style applied to the trigger button.
+    #[prop(optional, into)]
+    style: Option<String>,
+    /// Trigger button label (default: "Sign in with Solana Wallet").
+    #[prop(optional, into)]
+    label: Option<String>,
 ) -> impl IntoView {
+    let btn_class = class.unwrap_or_else(|| "btn-google btn-solana-wallet".to_string());
+    let btn_style = style.unwrap_or_default();
+    let btn_label = label.unwrap_or_else(|| "Sign in with Solana Wallet".to_string());
+    let show_icon = btn_class.contains("btn-solana-wallet");
+    let endpoint = match flow {
+        WalletFlow::Login => "/api/auth/wallet/verify",
+        WalletFlow::Bind => "/api/auth/wallet/bind",
+    };
     let (show_modal, set_show_modal) = signal(false);
     let (loading, set_loading) = signal(false);
     let (error_msg, set_error_msg) = signal(None::<String>);
@@ -128,15 +159,15 @@ pub fn WalletSignInButton(
                                     });
 
                                     match crate::api::fetch::post(
-                                        "/api/auth/wallet/verify",
+                                        endpoint,
                                         &[("content-type", "application/json")],
                                         Some(verify_body.to_string()),
                                     )
                                     .await
                                     {
                                         Ok(v_resp) if v_resp.status() == 200 => {
-                                            log::info!("[wallet_signin] SIWS authenticated");
-                                            on_success.run(());
+                                            log::info!("[wallet_signin] SIWS {endpoint} ok");
+                                            on_success.run(pubkey);
                                             return;
                                         }
                                         _ => {
@@ -179,14 +210,15 @@ pub fn WalletSignInButton(
             }
         >
             <button
-                class="btn-google btn-solana-wallet"
+                class=btn_class.clone()
+                style=btn_style.clone()
                 on:click=move |_| {
                     set_detected_wallets.set(get_detected_wallets_js());
                     set_show_modal.set(true);
                 }
             >
-                <span inner_html=solana_icon()></span>
-                "Sign in with Solana Wallet"
+                {show_icon.then(|| view! { <span inner_html=solana_icon()></span> })}
+                {btn_label.clone()}
             </button>
         </Show>
 

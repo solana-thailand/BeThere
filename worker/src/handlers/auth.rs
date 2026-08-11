@@ -384,6 +384,41 @@ pub async fn wallet_bind(
         event_checkin_domain::models::error::AppError::Internal("D1 database not configured".into())
     })?;
 
+    // Prove wallet ownership before binding: verify the SIWS signature over the
+    // server-issued challenge (same nonce mechanism as wallet_verify). Without
+    // this, a logged-in user could claim any address and earn the on-chain badge.
+    let kv = state.events_kv.as_ref().ok_or_else(|| {
+        event_checkin_domain::models::error::AppError::Internal(
+            "wallet binding unavailable (nonce store not configured)".into(),
+        )
+    })?;
+    let kv_key = format!("siws_msg_{}", req.wallet_address);
+    let stored_message = kv
+        .get(&kv_key)
+        .text()
+        .await
+        .map_err(|e| {
+            event_checkin_domain::models::error::AppError::Internal(format!(
+                "failed to read SIWS challenge: {e:?}"
+            ))
+        })?
+        .ok_or_else(|| {
+            event_checkin_domain::models::error::AppError::Validation(
+                "wallet challenge expired or not found — please retry".into(),
+            )
+        })?;
+
+    if let Err(e) =
+        crate::solana::verify_siws_signature(&req.wallet_address, &stored_message, &req.signature)
+    {
+        tracing::warn!(email = %claims.email, wallet = %req.wallet_address, "wallet bind signature verification failed: {e}");
+        return Err(event_checkin_domain::models::error::AppError::Validation(
+            "wallet signature verification failed".into(),
+        )
+        .into());
+    }
+    let _ = kv.delete(&kv_key).await; // single-use
+
     // Link wallet_address to claims.email in contacts table
     crate::db::contacts::link_wallet_to_email(d1, &claims.email, &req.wallet_address)
         .await
