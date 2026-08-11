@@ -29,6 +29,9 @@ pub fn PublicEvent() -> impl IntoView {
     // the "enter your email" input on the reservation form.
     let (wallet_only, set_wallet_only) = signal(false);
     let (wallet_addr, set_wallet_addr) = signal(None::<String>);
+    // Rolling deposit credit (THB whole baht) for the signed-in attendee — shown
+    // on the reserve card so returning attendees know their credit will apply.
+    let (credit_thb, set_credit_thb) = signal(0u64);
 
     // Get slug from params
     let slug_val = match params.get() {
@@ -271,6 +274,23 @@ pub fn PublicEvent() -> impl IntoView {
         }
     });
 
+    // Fetch rolling deposit credit once signed in (best-effort, reassurance only).
+    Effect::new(move |_| {
+        if matches!(auth_state.get(), AuthState::SignedIn(_)) {
+            leptos::task::spawn_local(async move {
+                if let Ok(resp) = crate::api::fetch::get("/api/deposit/credit-balance", &[]).await
+                    && resp.status() == 200
+                    && let Ok(v) =
+                        crate::api::fetch::response_json::<serde_json::Value>(&resp).await
+                {
+                    let data = v.get("data").unwrap_or(&v);
+                    let t = data.get("credit_thb").and_then(|x| x.as_u64()).unwrap_or(0);
+                    set_credit_thb.set(t);
+                }
+            });
+        }
+    });
+
     // Dynamic title
     let title_text = move || {
         let name = event_name.get();
@@ -378,6 +398,7 @@ pub fn PublicEvent() -> impl IntoView {
                                 set_share_copied,
                                 wallet_only,
                                 wallet_addr,
+                                credit_thb,
                             )
                         }
                     }
@@ -411,6 +432,7 @@ fn render_loaded_event(
     set_share_copied: WriteSignal<bool>,
     wallet_only: ReadSignal<bool>,
     wallet_addr: ReadSignal<Option<String>>,
+    credit_thb: ReadSignal<u64>,
 ) -> AnyView {
     let has_nft_image = !data.nft_image_url.is_empty();
     let has_description = !data.description.is_empty();
@@ -702,7 +724,11 @@ fn render_loaded_event(
                                 }
                                 RegistrationLookup::NotRegistered => {
                                     let email_val = email.clone();
-                                    registration_form(
+                                    // Reassure returning attendees that their rolling
+                                    // credit will cover this event's deposit (THB path).
+                                    let credit_amt = credit_thb.get();
+                                    let show_credit = has_deposit && credit_amt > 0;
+                                    let form = registration_form(
                                         slug_for_reg.clone(),
                                         email_val,
                                         wallet_only.get(),
@@ -727,7 +753,24 @@ fn render_loaded_event(
                                         dev_profile_enabled,
                                         form_config.as_ref(),
                                         dynamic_field_values, set_dynamic_field_values,
-                                    )
+                                    );
+                                    view! {
+                                        {if show_credit {
+                                            view! {
+                                                <div class="pe-card" style="background:rgba(20,241,149,0.08);border:1px solid rgba(20,241,149,0.3);">
+                                                    <p class="pe-detail-secondary" style="margin:0;color:#14F195;font-weight:600;">
+                                                        {format!("💳 You have ฿{credit_amt} deposit credit from a previous event.")}
+                                                    </p>
+                                                    <p class="pe-detail-secondary" style="margin:4px 0 0;">
+                                                        "It's applied automatically when you register if it covers this event's deposit — you may not need to pay again."
+                                                    </p>
+                                                </div>
+                                            }.into_any()
+                                        } else {
+                                            ().into_any()
+                                        }}
+                                        {form}
+                                    }.into_any()
                                 }
                             }
                         }

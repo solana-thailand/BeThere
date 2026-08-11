@@ -316,46 +316,73 @@ pub async fn register_attendee(
 
     let now = chrono::Utc::now().to_rfc3339();
 
-    // Auto-apply deposit record & decrement rolling credit if deposit is covered by credit
-    if let Some(ref method) = credit_covered_method {
-        let thb_dep = event_checkin_domain::models::deposit::ThbDeposit {
-            event_id: event_id.clone(),
-            attendee_id: api_id.clone(),
-            amount_thb: credit_amount_applied,
-            slip_url: Some("ROLLING_CREDIT_AUTO_APPLIED".to_string()),
-            verified: true,
-            verified_at: Some(now.clone()),
-            verified_by: Some("SYSTEM_ROLLING_CREDIT".to_string()),
-            uploaded_at: now.clone(),
-            refunded: false,
-            refunded_at: None,
-            held_as_credit: false,
-            held_as_credit_at: None,
-            attendee_name: Some(name.to_string()),
-            bank_account: None,
-            bank_name: None,
-            account_name: None,
-            refund_proof_url: None,
-        };
-        if let Some(kv_store) = kv
-            && let Err(e) = crate::event_store::save_thb_deposit(kv_store, &thb_dep, state.d1.as_deref()).await
-        {
-            tracing::warn!(%api_id, error = %e, "failed to save auto-applied credit deposit record");
-        }
-
-        if let Some(ref resolved) = resolved_contacts_sheet {
-            let currency = if method == "credit_thb" { "thb" } else { "usdc" };
-            if let Err(e) = crate::sheets::contacts::decrement_credit(
-                &state,
-                &resolved.sheet_id,
-                &resolved.contacts_sheet_name,
-                kv,
-                &email,
-                currency,
-                credit_amount_applied,
-            ).await {
-                tracing::warn!(%email, error = %e, "failed to decrement rolling credit balance");
+    // Auto-apply rolling credit — fail-closed and correctly ordered.
+    //
+    // Consume the credit FIRST; only mark the deposit covered if that succeeded.
+    // If we can't decrement (e.g. Sheets write error / no contacts sheet), we do
+    // NOT grant a free deposit — `credit_covered_method` is cleared so the
+    // attendee falls back to the normal payment path and keeps their credit.
+    // The reverse order (mark covered, then decrement) risks double-spending
+    // credit whenever the decrement fails — real money leaking on every retry.
+    if let Some(method) = credit_covered_method.clone() {
+        let currency = if method == "credit_thb" { "thb" } else { "usdc" };
+        let decremented = match resolved_contacts_sheet {
+            Some(ref resolved) => {
+                match crate::sheets::contacts::decrement_credit(
+                    &state,
+                    &resolved.sheet_id,
+                    &resolved.contacts_sheet_name,
+                    kv,
+                    &email,
+                    currency,
+                    credit_amount_applied,
+                )
+                .await
+                {
+                    Ok(()) => true,
+                    Err(e) => {
+                        tracing::error!(%email, error = %e, "rolling credit decrement failed — NOT applying credit; attendee pays normally");
+                        false
+                    }
+                }
             }
+            None => {
+                tracing::error!(%email, "no resolved contacts sheet for credit decrement — NOT applying credit");
+                false
+            }
+        };
+
+        if decremented {
+            // Credit consumed — record the covered, verified deposit.
+            let thb_dep = event_checkin_domain::models::deposit::ThbDeposit {
+                event_id: event_id.clone(),
+                attendee_id: api_id.clone(),
+                amount_thb: credit_amount_applied,
+                slip_url: Some("ROLLING_CREDIT_AUTO_APPLIED".to_string()),
+                verified: true,
+                verified_at: Some(now.clone()),
+                verified_by: Some("SYSTEM_ROLLING_CREDIT".to_string()),
+                uploaded_at: now.clone(),
+                refunded: false,
+                refunded_at: None,
+                held_as_credit: false,
+                held_as_credit_at: None,
+                attendee_name: Some(name.to_string()),
+                bank_account: None,
+                bank_name: None,
+                account_name: None,
+                refund_proof_url: None,
+            };
+            if let Some(kv_store) = kv
+                && let Err(e) = crate::event_store::save_thb_deposit(kv_store, &thb_dep, state.d1.as_deref()).await
+            {
+                // Credit already consumed but the deposit record didn't persist.
+                // Non-fatal to the reservation; log loudly for reconciliation.
+                tracing::error!(%api_id, %email, error = %e, "credit consumed but deposit record save failed — needs reconciliation");
+            }
+        } else {
+            // Fail closed: revert to the normal payment path (credit untouched).
+            credit_covered_method = None;
         }
     }
 
