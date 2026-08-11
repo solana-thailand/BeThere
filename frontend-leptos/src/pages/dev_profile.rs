@@ -80,7 +80,6 @@ pub fn DevProfile() -> impl IntoView {
         let configured_name = match crate::api::fetch::get("/api/auth/telegram/config", &[]).await {
             Ok(resp) => match crate::api::fetch::response_text(&resp).await {
                 Ok(text) => {
-                    log::info!("[telegram] config: {text}");
                     serde_json::from_str::<serde_json::Value>(&text)
                         .ok()
                         .filter(|v| v.get("configured").and_then(|c| c.as_bool()).unwrap_or(false))
@@ -98,8 +97,7 @@ pub fn DevProfile() -> impl IntoView {
         };
 
         let Some(name) = configured_name else {
-            log::info!("[telegram] widget not configured — using manual input");
-            return;
+            return; // not configured — manual input fallback
         };
 
         // 2) Get a signed state token for this session (identity for the callback).
@@ -108,7 +106,6 @@ pub fn DevProfile() -> impl IntoView {
                 if let Ok(v) = crate::api::fetch::response_json::<serde_json::Value>(&resp).await
                     && let Some(s) = v.get("state").and_then(|s| s.as_str())
                 {
-                    log::info!("[telegram] widget enabled for bot: {name}");
                     set_tg_state.set(s.to_string());
                     set_tg_bot_username.set(name);
                 } else {
