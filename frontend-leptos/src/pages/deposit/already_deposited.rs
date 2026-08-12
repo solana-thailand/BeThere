@@ -100,7 +100,14 @@ pub fn already_deposited_view(
 ) -> AnyView {
     let info = data.status.as_ref().unwrap();
     let (_method_icon, method_label) = deposit_method_display(&info.method);
-    let is_credit = info.tx_signature.as_ref().is_some_and(|s| s.contains("CREDIT"))
+    // Rolling credit is reliably signalled by the method enum (auto-applied credit
+    // is stored as credit_thb/credit_usdc). The string checks are a legacy
+    // fallback; on their own they missed auto-applied credit (the markers live in
+    // slip_url/verified_by, which aren't exposed here).
+    let is_credit = matches!(
+        info.method,
+        DepositMethod::CreditThb | DepositMethod::CreditUsdc
+    ) || info.tx_signature.as_ref().is_some_and(|s| s.contains("CREDIT"))
         || info.wallet_address.as_ref().is_some_and(|w| w.contains("CREDIT"));
     let display_method_label = if is_credit {
         "Rolling Credit (Previous Event)".to_string()

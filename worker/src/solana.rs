@@ -150,10 +150,14 @@ pub async fn mint_compressed_nft(
             .ok_or_else(|| format!("crossmint mint response missing id: {post_json}"))?
             .to_string();
         // Persist the pending marker BEFORE polling so a timeout/crash can resume.
+        // 24h TTL (not 1h): a slow on-chain confirmation that lands after our poll
+        // budget must still be resumable by a later retry, or a fresh mint would
+        // fire and the wallet would receive a duplicate badge. See
+        // docs/SECURITY-FINDINGS-2026-08-13.md #5.
         if let Some((kv, key)) = pending_kv
             && let Ok(builder) = kv.put(key, &id)
         {
-            let _ = builder.expiration_ttl(3600).execute().await;
+            let _ = builder.expiration_ttl(86_400).execute().await;
         }
         tracing::info!(nft_id = %id, "crossmint mint submitted; polling for confirmation");
         id

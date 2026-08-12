@@ -118,7 +118,18 @@ pub fn Deposit() -> impl IntoView {
                             }
                         }
                     } else {
-                        set_state.set(DepositPageState::ChoosePayment(data));
+                        // No deposit on file. If the event has already ended there's
+                        // nothing to pay or refund — show a terminal message instead
+                        // of the payment wizard (which would invite paying a deposit
+                        // after the fact). Otherwise it's a normal pre-event deposit.
+                        let now_ms = js_sys::Date::now() as i64;
+                        if data.event_end_ms > 0 && now_ms > data.event_end_ms {
+                            set_state.set(DepositPageState::Error(
+                                "This event has ended and no deposit is on file for you — there's nothing to pay or refund.".to_string(),
+                            ));
+                        } else {
+                            set_state.set(DepositPageState::ChoosePayment(data));
+                        }
                     }
                 }
                 Err(e) => {
