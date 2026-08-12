@@ -157,8 +157,14 @@ impl AppState {
         };
 
         let solana = SolanaConfig {
+            // Base RPC host (non-sensitive) — the api-key is appended separately
+            // from HELIUS_API_KEY. MUST be a Helius endpoint: cNFT minting uses
+            // Helius' `mintCompressedNft`, which the public `api.*.solana.com`
+            // endpoints do NOT implement. Read from secret first, then plain var
+            // (wrangler.toml) so the cluster host can live in version control.
             rpc_url: get_secret(env, "HELIUS_RPC_URL")
-                .unwrap_or_else(|_| "https://api.devnet.solana.com".to_string()),
+                .or_else(|_| get_var(env, "HELIUS_RPC_URL"))
+                .unwrap_or_else(|_| "https://devnet.helius-rpc.com".to_string()),
             api_key: get_secret(env, "HELIUS_API_KEY").unwrap_or_else(|_| String::new()),
         };
 

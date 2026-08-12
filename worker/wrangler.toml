@@ -69,6 +69,12 @@ CLAIM_BASE_URL = "https://bethere.solana-thailand.workers.dev/claim"
 # Telegram Login Widget bot username (public). The widget stays OFF until the
 # TELEGRAM_BOT_TOKEN secret is also set — see /api/auth/telegram/config.
 TELEGRAM_BOT_USERNAME = "BeThereProtocolBot"
+# Helius RPC host for cNFT minting (mintCompressedNft). Non-sensitive base host;
+# HELIUS_API_KEY (secret) is appended as ?api-key=. Flip to
+# https://mainnet.helius-rpc.com to mint real mainnet badges (cluster is derived
+# from this host). cNFT minting stays OFF per-event until an event has an
+# nft_image_url set.
+HELIUS_RPC_URL = "https://devnet.helius-rpc.com"
 GOOGLE_SHEET_NAME = "Attendees"
 GOOGLE_STAFF_SHEET_NAME = "staff"
 PLATFORM_SHEET_ID = "1oF54ia6mquO_kB869aQxmz3RD8nDcTRWfXIX0VmndxM"

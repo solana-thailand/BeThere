@@ -858,19 +858,19 @@ pub fn Landing() -> impl IntoView {
                     <Icon icon=IconName::Solana />
                 </div>
 
-                // Platform Live Stats Counter Card Grid
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; width: 100%; max-width: 720px; margin: 28px auto 0 auto;">
-                    <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(153, 69, 255, 0.3); border-radius: 14px; padding: 14px; text-align: center; backdrop-filter: blur(12px);">
-                        <div style="font-size: 1.25rem; font-weight: 800; color: #14F195;">"100%"</div>
-                        <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 2px;">"Refund Guarantee"</div>
+                // Platform stats — paper ticket stubs on the night ground
+                <div class="landing-stat-stubs">
+                    <div class="landing-stat-stub">
+                        <div class="landing-stat-stub-value stub-green">"100%"</div>
+                        <div class="landing-stat-stub-label">"Refund Guarantee"</div>
                     </div>
-                    <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 14px; padding: 14px; text-align: center; backdrop-filter: blur(12px);">
-                        <div style="font-size: 1.25rem; font-weight: 800; color: #38bdf8;">"Instant"</div>
-                        <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 2px;">"PromptPay & Solana Payouts"</div>
+                    <div class="landing-stat-stub">
+                        <div class="landing-stat-stub-value stub-poppy">"Instant"</div>
+                        <div class="landing-stat-stub-label">"PromptPay & Solana Payouts"</div>
                     </div>
-                    <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(153, 69, 255, 0.3); border-radius: 14px; padding: 14px; text-align: center; backdrop-filter: blur(12px);">
-                        <div style="font-size: 1.25rem; font-weight: 800; color: #a855f7;">"< 1s"</div>
-                        <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 2px;">"Smart Contract Check-In"</div>
+                    <div class="landing-stat-stub">
+                        <div class="landing-stat-stub-value">"< 1s"</div>
+                        <div class="landing-stat-stub-label">"Smart Contract Check-In"</div>
                     </div>
                 </div>
 

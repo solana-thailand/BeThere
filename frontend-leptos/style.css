@@ -6,51 +6,55 @@
 }
 
 :root {
-    --bg-primary: #13131b;
-    --bg-secondary: #1a1a24;
-    --bg-tertiary: #242430;
-    --bg-card: #1e1e2a;
-    --bg-hover: #2a2a38;
-    --text-primary: #e0e0e0;
-    --text-secondary: #999;
-    --text-muted: #666;
-    --accent: #6366f1;
-    --accent-hover: #818cf8;
-    --accent-bg: rgba(99, 102, 241, 0.08);
-    --accent-border: rgba(99, 102, 241, 0.25);
-    --success: #22c55e;
-    --success-bright: #4ade80;
-    --success-bg: rgba(34, 197, 94, 0.12);
-    --success-border: rgba(34, 197, 94, 0.3);
+    --bg-primary: #12152a;
+    --bg-secondary: #171b33;
+    --bg-tertiary: #1f2547;
+    --bg-card: #1a1f3b;
+    --bg-hover: #232a52;
+    --text-primary: #e9e4d3;
+    --text-secondary: #9ba0b4;
+    --text-muted: #7a7f96;
+    --accent: #ff5c39;
+    --accent-hover: #ff7b5c;
+    --accent-bg: rgba(255, 92, 57, 0.08);
+    --accent-border: rgba(255, 92, 57, 0.25);
+    --success: #2fbf71;
+    --success-bright: #4fd68a;
+    --success-bg: rgba(47, 191, 113, 0.12);
+    --success-border: rgba(47, 191, 113, 0.3);
     --warning: #f59e0b;
     --warning-bg: rgba(245, 158, 11, 0.12);
     --warning-border: rgba(245, 158, 11, 0.3);
-    --danger: #ef4444;
-    --danger-bright: #f87171;
-    --danger-bg: rgba(239, 68, 68, 0.12);
-    --danger-border: rgba(239, 68, 68, 0.3);
+    --danger: #e5484d;
+    --danger-bright: #f0666b;
+    --danger-bg: rgba(229, 72, 77, 0.12);
+    --danger-border: rgba(229, 72, 77, 0.3);
     --info: #3b82f6;
     --info-bright: #60a5fa;
     --info-bg: rgba(59, 130, 246, 0.12);
     --info-border: rgba(59, 130, 246, 0.3);
-    --success-hover: #16a34a;
-    --success-btn: #15803d;
-    --success-btn-hover: #166534;
-    --danger-hover: #dc2626;
-    --danger-btn: #b91c1c;
-    --danger-btn-hover: #991b1b;
+    --success-hover: #26a35f;
+    --success-btn: #1f7a4d;
+    --success-btn-hover: #196541;
+    --danger-hover: #c93a3f;
+    --danger-btn: #a82e32;
+    --danger-btn-hover: #8f2529;
     --text-primary-inverse: #1a1a1a;
     --bg-google-hover: #f5f5f5;
     --solana: #9945ff;
-    --border: #2a2a2a;
+    --border: #2a3052;
     --radius: 10px;
     --radius-sm: 6px;
     --shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-    --text-heading: #fff;
-    --bg-void: #000;
-    --border-hover: #333;
-    --accent-purple: #a78bfa;
-    --accent-light: #a5b4fc;
+    --text-heading: #f4f0e4;
+    --bg-void: #0b0d1c;
+    --border-hover: #343b63;
+    /* Night Edition paper tokens — tickets, badges, stamped receipts */
+    --paper: #ede7d6;
+    --paper-ink: #1e2447;
+    --paper-dim: #ddd7c2;
+    --accent-purple: #ffab4d;
+    --accent-light: #ffa184;
     --warning-bright: #eab308;
     --warning-dark: #d97706;
     --code-bg: #0d1117;
@@ -85,7 +89,12 @@ body {
         "Helvetica Neue",
         Arial,
         sans-serif;
-    background: linear-gradient(170deg, #13131b 0%, #14141e 40%, #111118 100%);
+    background:
+        radial-gradient(rgba(233, 228, 211, 0.035) 1px, transparent 1px),
+        linear-gradient(170deg, #12152a 0%, #131834 40%, #101326 100%);
+    background-size:
+        5px 5px,
+        auto;
     color: var(--text-primary);
     min-height: 100vh;
     line-height: 1.5;
@@ -122,7 +131,7 @@ body {
     height: 500px;
     background: radial-gradient(
         ellipse at center,
-        rgba(99, 102, 241, 0.04) 0%,
+        rgba(255, 92, 57, 0.04) 0%,
         transparent 70%
     );
     pointer-events: none;
@@ -158,7 +167,7 @@ body {
     height: 600px;
     background: radial-gradient(
         circle,
-        rgba(99, 102, 241, 0.06) 0%,
+        rgba(255, 92, 57, 0.06) 0%,
         transparent 70%
     );
     pointer-events: none;
@@ -177,7 +186,7 @@ body {
    teal / violet), a slow colorful aurora sweep, and a twinkling starfield.
    All purely decorative — layered behind content (z-index: 0) and animated
    with transform/opacity for GPU-friendly compositing.
-   Palette: indigo #6366f1, magenta #ec4899, teal #06b6d4, violet #8b5cf6,
+   Palette: indigo #ff5c39, magenta #ec4899, teal #06b6d4, violet #8b5cf6,
    solana #9945ff. */
 .pe-bg-anim {
     overflow: hidden;
@@ -191,6 +200,10 @@ body {
     z-index: 0;
     overflow: hidden;
     pointer-events: none;
+    /* Refinement pass: dial the whole decorative nebula WAY back so content
+       breathes (impeccable-style restraint). A single uniform dim keeps a hint
+       of colored ambience without the busy "look at me" animation. */
+    opacity: 0.28;
 }
 
 /* Nebula mesh base: a large multi-stop radial gradient that slowly breathes
@@ -201,7 +214,7 @@ body {
     background:
         radial-gradient(
             circle at 25% 30%,
-            rgba(99, 102, 241, 0.28) 0%,
+            rgba(255, 92, 57, 0.28) 0%,
             transparent 45%
         ),
         radial-gradient(
@@ -241,7 +254,7 @@ body {
     left: -10%;
     background: radial-gradient(
         circle,
-        rgba(99, 102, 241, 0.7),
+        rgba(255, 92, 57, 0.7),
         transparent 70%
     );
     animation: pe-orb-float-1 18s ease-in-out infinite;
@@ -292,15 +305,16 @@ body {
     inset: -25%;
     background: conic-gradient(
         from 0deg,
-        rgba(99, 102, 241, 0) 0deg,
-        rgba(99, 102, 241, 0.1) 60deg,
+        rgba(255, 92, 57, 0) 0deg,
+        rgba(255, 92, 57, 0.1) 60deg,
         rgba(236, 72, 153, 0.12) 140deg,
         rgba(6, 182, 212, 0.1) 220deg,
         rgba(139, 92, 246, 0.1) 300deg,
-        rgba(99, 102, 241, 0) 360deg
+        rgba(255, 92, 57, 0) 360deg
     );
     filter: blur(50px);
-    opacity: 0.7;
+    /* Refinement: calmer aurora sweep (0.7 -> 0.3) so it's ambient, not a show. */
+    opacity: 0.3;
     animation: pe-aurora-spin 42s linear infinite;
     will-change: transform;
 }
@@ -343,6 +357,9 @@ body {
         );
     background-repeat: repeat;
     background-size: 220px 220px;
+    /* Refinement: drop the twinkling starfield entirely — it read as the most
+       "gimmicky" layer. Kept in the DOM but hidden so it's trivially reversible. */
+    display: none;
     opacity: 0.5;
     animation: pe-twinkle 5s ease-in-out infinite alternate;
     will-change: opacity;
@@ -572,7 +589,7 @@ h3 {
     font-size: 1.5rem;
     font-weight: 800;
     letter-spacing: 0.08em;
-    background: linear-gradient(135deg, #818cf8 0%, #6366f1 40%, #a78bfa 100%);
+    background: linear-gradient(135deg, #ff7b5c 0%, #ff5c39 40%, #ffab4d 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -666,14 +683,14 @@ h3 {
 }
 
 .btn-primary {
-    background: linear-gradient(135deg, #6366f1 0%, #818cf8 100%);
+    background: linear-gradient(135deg, #ff5c39 0%, #ff7b5c 100%);
     color: var(--text-heading);
-    box-shadow: 0 2px 12px rgba(99, 102, 241, 0.25);
+    box-shadow: 0 2px 12px rgba(255, 92, 57, 0.25);
 }
 
 .btn-primary:hover {
-    background: linear-gradient(135deg, #818cf8 0%, #a5b4fc 100%);
-    box-shadow: 0 4px 20px rgba(99, 102, 241, 0.35);
+    background: linear-gradient(135deg, #ff7b5c 0%, #ffa184 100%);
+    box-shadow: 0 4px 20px rgba(255, 92, 57, 0.35);
 }
 
 .btn-success {
@@ -886,7 +903,7 @@ h3 {
     font-size: 1.15rem;
     font-weight: 800;
     letter-spacing: 0.06em;
-    background: linear-gradient(135deg, #818cf8 0%, #6366f1 40%, #a78bfa 100%);
+    background: linear-gradient(135deg, #ff7b5c 0%, #ff5c39 40%, #ffab4d 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -943,7 +960,7 @@ h3 {
     width: 30px;
     height: 30px;
     border-radius: 50%;
-    background: linear-gradient(135deg, #6366f1 0%, #818cf8 100%);
+    background: linear-gradient(135deg, #ff5c39 0%, #ff7b5c 100%);
     color: var(--text-heading);
     font-size: 0.75rem;
     font-weight: 700;
@@ -1203,7 +1220,7 @@ nav a.active {
 .scanner-frame {
     width: 65%;
     aspect-ratio: 1;
-    border: 3px solid rgba(99, 102, 241, 0.8);
+    border: 3px solid rgba(255, 92, 57, 0.8);
     border-radius: var(--radius);
     box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.4);
 }
@@ -1583,10 +1600,10 @@ nav a.active {
 .claim-welcome-card {
     background: linear-gradient(
         135deg,
-        rgba(99, 102, 241, 0.08) 0%,
+        rgba(255, 92, 57, 0.08) 0%,
         rgba(30, 30, 30, 0.95) 100%
     );
-    border: 1px solid rgba(99, 102, 241, 0.2);
+    border: 1px solid rgba(255, 92, 57, 0.2);
     border-radius: var(--radius);
     padding: 1.25rem;
     margin-bottom: 1rem;
@@ -1612,10 +1629,10 @@ nav a.active {
     gap: 1rem;
     background: linear-gradient(
         135deg,
-        rgba(99, 102, 241, 0.06) 0%,
+        rgba(255, 92, 57, 0.06) 0%,
         rgba(30, 30, 30, 0.95) 100%
     );
-    border: 1px solid rgba(99, 102, 241, 0.2);
+    border: 1px solid rgba(255, 92, 57, 0.2);
     border-radius: var(--radius);
     padding: 1rem 1.25rem;
     margin-bottom: 1rem;
@@ -1630,9 +1647,9 @@ nav a.active {
     border-radius: var(--radius);
     background: linear-gradient(
         135deg,
-        rgba(99, 102, 241, 0.4),
+        rgba(255, 92, 57, 0.4),
         transparent,
-        rgba(129, 140, 248, 0.3)
+        rgba(255, 123, 92, 0.3)
     );
     z-index: -1;
     mask:
@@ -1754,7 +1771,7 @@ nav a.active {
 
 .claim-wallet-input:focus {
     border-color: var(--accent);
-    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+    box-shadow: 0 0 0 3px rgba(255, 92, 57, 0.15);
 }
 
 .claim-wallet-input::placeholder {
@@ -1770,8 +1787,8 @@ nav a.active {
     gap: 0.35rem;
     font-size: 0.7rem;
     color: var(--accent);
-    background: rgba(99, 102, 241, 0.1);
-    border: 1px solid rgba(99, 102, 241, 0.25);
+    background: rgba(255, 92, 57, 0.1);
+    border: 1px solid rgba(255, 92, 57, 0.25);
     border-radius: 9999px;
     padding: 0.3rem 0.65rem;
     margin-bottom: 0.5rem;
@@ -1807,8 +1824,8 @@ nav a.active {
     flex-shrink: 0;
     min-height: 44px;
     padding: 0.65rem 1rem;
-    background: rgba(99, 102, 241, 0.15);
-    border: 1px solid rgba(99, 102, 241, 0.3);
+    background: rgba(255, 92, 57, 0.15);
+    border: 1px solid rgba(255, 92, 57, 0.3);
     border-radius: var(--radius-sm);
     color: var(--text-heading);
     font-size: 0.85rem;
@@ -1819,8 +1836,8 @@ nav a.active {
 }
 
 .claim-paste-btn:hover {
-    background: rgba(99, 102, 241, 0.25);
-    border-color: rgba(99, 102, 241, 0.5);
+    background: rgba(255, 92, 57, 0.25);
+    border-color: rgba(255, 92, 57, 0.5);
 }
 
 .claim-paste-btn:active {
@@ -1829,7 +1846,7 @@ nav a.active {
 
 /* ===== Claim Page: Claim Button ===== */
 .claim-btn-mint {
-    background: linear-gradient(135deg, #6366f1 0%, #818cf8 100%);
+    background: linear-gradient(135deg, #ff5c39 0%, #ff7b5c 100%);
     color: var(--text-heading);
     border: none;
     border-radius: var(--radius-sm);
@@ -1839,13 +1856,13 @@ nav a.active {
     cursor: pointer;
     width: 100%;
     transition: all 0.2s;
-    box-shadow: 0 2px 16px rgba(99, 102, 241, 0.3);
+    box-shadow: 0 2px 16px rgba(255, 92, 57, 0.3);
     margin-top: 0.5rem;
 }
 
 .claim-btn-mint:hover:not(:disabled) {
-    background: linear-gradient(135deg, #818cf8 0%, #a5b4fc 100%);
-    box-shadow: 0 4px 24px rgba(99, 102, 241, 0.4);
+    background: linear-gradient(135deg, #ff7b5c 0%, #ffa184 100%);
+    box-shadow: 0 4px 24px rgba(255, 92, 57, 0.4);
     transform: translateY(-1px);
 }
 
@@ -2112,7 +2129,7 @@ nav a.active {
         135deg,
         rgba(34, 197, 94, 0.3),
         transparent,
-        rgba(99, 102, 241, 0.2)
+        rgba(255, 92, 57, 0.2)
     );
     z-index: -1;
     mask:
@@ -2408,8 +2425,8 @@ nav a.active {
 }
 
 .attendee-item.selected {
-    background: rgba(99, 102, 241, 0.06);
-    border-color: rgba(99, 102, 241, 0.3);
+    background: rgba(255, 92, 57, 0.06);
+    border-color: rgba(255, 92, 57, 0.3);
 }
 
 /* Bulk action bar */
@@ -2419,8 +2436,8 @@ nav a.active {
     align-items: center;
     gap: 0.75rem;
     padding: 0.75rem 1rem;
-    background: rgba(99, 102, 241, 0.08);
-    border: 1px solid rgba(99, 102, 241, 0.25);
+    background: rgba(255, 92, 57, 0.08);
+    border: 1px solid rgba(255, 92, 57, 0.25);
     border-radius: var(--radius);
     margin-bottom: 0.75rem;
     font-size: 0.85rem;
@@ -2947,7 +2964,7 @@ nav a.active {
     width: 48px;
     height: 48px;
     border-radius: 50%;
-    background: rgba(99, 102, 241, 0.1);
+    background: rgba(255, 92, 57, 0.1);
 }
 .claim-quiz-icon svg {
     width: 26px;
@@ -3022,11 +3039,11 @@ nav a.active {
 }
 .claim-quiz-opt:hover {
     border-color: var(--primary);
-    background: rgba(99, 102, 241, 0.04);
+    background: rgba(255, 92, 57, 0.04);
 }
 .claim-quiz-opt-selected {
     border-color: var(--primary);
-    background: rgba(99, 102, 241, 0.08);
+    background: rgba(255, 92, 57, 0.08);
     color: var(--primary);
     font-weight: 500;
 }
@@ -3268,8 +3285,8 @@ nav a.active {
     display: inline-flex;
     align-items: center;
     gap: 0.5rem;
-    background: rgba(99, 102, 241, 0.1);
-    border: 1px solid rgba(99, 102, 241, 0.25);
+    background: rgba(255, 92, 57, 0.1);
+    border: 1px solid rgba(255, 92, 57, 0.25);
     border-radius: 9999px;
     padding: 0.4rem 1rem;
     margin: 0.75rem 0;
@@ -3334,7 +3351,7 @@ nav a.active {
 .claim-step-circle.current {
     background: var(--accent);
     color: var(--text-heading);
-    box-shadow: 0 0 12px rgba(99, 102, 241, 0.4);
+    box-shadow: 0 0 12px rgba(255, 92, 57, 0.4);
     animation: claim-step-pulse 2s infinite;
 }
 
@@ -3390,10 +3407,10 @@ nav a.active {
 @keyframes claim-step-pulse {
     0%,
     100% {
-        box-shadow: 0 0 12px rgba(99, 102, 241, 0.4);
+        box-shadow: 0 0 12px rgba(255, 92, 57, 0.4);
     }
     50% {
-        box-shadow: 0 0 20px rgba(99, 102, 241, 0.6);
+        box-shadow: 0 0 20px rgba(255, 92, 57, 0.6);
     }
 }
 
@@ -4033,8 +4050,8 @@ nav a.active {
 }
 
 .landing-svg-icon.icon-proof {
-    background: rgba(167, 139, 250, 0.1);
-    border: 1px solid rgba(167, 139, 250, 0.25);
+    background: rgba(255, 171, 77, 0.1);
+    border: 1px solid rgba(255, 171, 77, 0.25);
 }
 
 .landing-svg-icon.icon-proof svg {
@@ -4052,7 +4069,7 @@ nav a.active {
 
 .landing-footer-brand .accent {
     font-weight: 700;
-    background: linear-gradient(135deg, #818cf8, #6366f1);
+    background: linear-gradient(135deg, #ff7b5c, #ff5c39);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -4448,7 +4465,7 @@ nav a.active {
 }
 
 .admin-sidebar-item.active {
-    background: rgba(99, 102, 241, 0.08);
+    background: rgba(255, 92, 57, 0.08);
     color: var(--accent);
     border-left-color: var(--accent);
     font-weight: 600;
@@ -4590,7 +4607,7 @@ nav a.active {
 }
 
 .admin-sidebar-home:hover {
-    background: rgba(99, 102, 241, 0.08);
+    background: rgba(255, 92, 57, 0.08);
     color: var(--accent);
 }
 
@@ -5360,7 +5377,7 @@ nav a.active {
     font-size: 0.85rem;
     font-weight: 700;
     color: var(--accent);
-    background: rgba(99, 102, 241, 0.12);
+    background: rgba(255, 92, 57, 0.12);
     padding: 0.15rem 0.5rem;
     border-radius: var(--radius-sm);
 }
@@ -5776,7 +5793,7 @@ nav a.active {
 .adventure-title {
     font-size: 1.2rem;
     font-weight: 800;
-    background: linear-gradient(135deg, #818cf8, #6366f1, #a78bfa);
+    background: linear-gradient(135deg, #ff7b5c, #ff5c39, #ffab4d);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -5827,9 +5844,9 @@ nav a.active {
     font-size: 0.75rem;
     font-weight: 700;
     font-family: "SF Mono", "Fira Code", monospace;
-    background: rgba(99, 102, 241, 0.15);
+    background: rgba(255, 92, 57, 0.15);
     color: var(--accent-purple);
-    border: 1px solid rgba(99, 102, 241, 0.3);
+    border: 1px solid rgba(255, 92, 57, 0.3);
     border-radius: 4px;
     animation: keyBadgePop 0.3s ease;
 }
@@ -5943,7 +5960,7 @@ nav a.active {
     font-size: calc(var(--tile-size) * 0.65);
     z-index: 10;
     color: var(--text-primary, inherit);
-    filter: drop-shadow(0 0 6px rgba(99, 102, 241, 0.6));
+    filter: drop-shadow(0 0 6px rgba(255, 92, 57, 0.6));
     animation: playerFloat 2s ease-in-out infinite;
 }
 
@@ -5964,22 +5981,22 @@ nav a.active {
 }
 
 .tile-key {
-    background: rgba(99, 102, 241, 0.12);
+    background: rgba(255, 92, 57, 0.12);
     color: var(--accent-purple);
     font-family: "SF Mono", "Fira Code", monospace;
     font-size: calc(var(--tile-size) * 0.32);
     font-weight: 700;
-    border: 1px dashed rgba(99, 102, 241, 0.3);
+    border: 1px dashed rgba(255, 92, 57, 0.3);
     animation: keyPulse 2s ease-in-out infinite;
 }
 
 @keyframes keyPulse {
     0%,
     100% {
-        box-shadow: 0 0 0 0 rgba(99, 102, 241, 0);
+        box-shadow: 0 0 0 0 rgba(255, 92, 57, 0);
     }
     50% {
-        box-shadow: 0 0 8px 2px rgba(99, 102, 241, 0.3);
+        box-shadow: 0 0 8px 2px rgba(255, 92, 57, 0.3);
     }
 }
 
@@ -6211,7 +6228,7 @@ nav a.active {
 
 .adventure-puzzle-card {
     background: var(--bg-card);
-    border: 1px solid rgba(99, 102, 241, 0.3);
+    border: 1px solid rgba(255, 92, 57, 0.3);
     border-radius: var(--radius);
     padding: 1.5rem;
     max-width: 480px;
@@ -6290,7 +6307,7 @@ nav a.active {
 }
 
 .puzzle-opt-selected {
-    background: rgba(99, 102, 241, 0.15);
+    background: rgba(255, 92, 57, 0.15);
     border-color: var(--accent);
     color: var(--accent-purple);
 }
@@ -6338,7 +6355,7 @@ nav a.active {
 
 .pair-right {
     color: var(--accent-purple);
-    background: rgba(99, 102, 241, 0.1);
+    background: rgba(255, 92, 57, 0.1);
     padding: 0.25rem 0.5rem;
     border-radius: 3px;
 }
@@ -6736,12 +6753,12 @@ nav a.active {
 
 .level-select-item:hover {
     border-color: var(--accent);
-    background: rgba(99, 102, 241, 0.05);
+    background: rgba(255, 92, 57, 0.05);
 }
 
 .level-select-active {
     border-color: var(--accent);
-    background: rgba(99, 102, 241, 0.1);
+    background: rgba(255, 92, 57, 0.1);
 }
 
 .level-select-num {
@@ -6811,7 +6828,7 @@ nav a.active {
     gap: 0.4rem;
     margin: 1rem 0;
     padding: 0.75rem;
-    background: rgba(99, 102, 241, 0.05);
+    background: rgba(255, 92, 57, 0.05);
     border-radius: var(--radius-sm);
 }
 
@@ -6992,7 +7009,7 @@ nav a.active {
 
 .match-item-selected {
     border-color: var(--accent);
-    background: rgba(99, 102, 241, 0.15);
+    background: rgba(255, 92, 57, 0.15);
     color: var(--accent-purple);
 }
 
@@ -7054,8 +7071,8 @@ nav a.active {
 .claim-counter {
     margin-top: 1rem;
     padding: 0.75rem 1rem;
-    background: rgba(99, 102, 241, 0.06);
-    border: 1px solid rgba(99, 102, 241, 0.15);
+    background: rgba(255, 92, 57, 0.06);
+    border: 1px solid rgba(255, 92, 57, 0.15);
     border-radius: var(--radius-sm);
     display: flex;
     align-items: center;
@@ -7187,8 +7204,8 @@ nav a.active {
 .claim-cnft-hint {
     margin-top: 1rem;
     padding: 0.75rem 1rem;
-    background: rgba(99, 102, 241, 0.08);
-    border: 1px solid rgba(99, 102, 241, 0.2);
+    background: rgba(255, 92, 57, 0.08);
+    border: 1px solid rgba(255, 92, 57, 0.2);
     border-radius: 0.5rem;
     text-align: left;
 }
@@ -7414,7 +7431,7 @@ nav a.active {
 
 .form-input:focus {
     border-color: var(--accent);
-    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
+    box-shadow: 0 0 0 2px rgba(255, 92, 57, 0.15);
 }
 
 .form-input::placeholder {
@@ -7588,7 +7605,7 @@ nav a.active {
 
 .events-search-input:focus {
     border-color: var(--accent);
-    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
+    box-shadow: 0 0 0 2px rgba(255, 92, 57, 0.15);
 }
 
 .events-search-input::placeholder {
@@ -7688,7 +7705,7 @@ nav a.active {
 }
 
 .escrow-solscan-link:hover {
-    background: rgba(99, 102, 241, 0.1);
+    background: rgba(255, 92, 57, 0.1);
 }
 
 /* ===== Escrow Result Banners ===== */
@@ -7729,7 +7746,7 @@ nav a.active {
 }
 
 .escrow-result-link a:hover {
-    background: rgba(99, 102, 241, 0.1);
+    background: rgba(255, 92, 57, 0.1);
 }
 
 /* ===== Phase 9e: UI Polish & Visual Refresh ===== */
@@ -8566,7 +8583,7 @@ nav a.active {
 .dep-input:focus {
     outline: none;
     border-color: var(--accent);
-    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+    box-shadow: 0 0 0 2px rgba(255, 92, 57, 0.2);
 }
 
 /* ---------- Payment Method Layout ---------- */
@@ -9182,7 +9199,7 @@ nav a.active {
     padding: 0.75rem 1rem;
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
-    background: rgba(99, 102, 241, 0.04);
+    background: rgba(255, 92, 57, 0.04);
 }
 
 .sheet-guide-heading {
@@ -9207,7 +9224,7 @@ nav a.active {
 .sheet-guide-link {
     color: var(--accent);
     text-decoration: underline;
-    text-decoration-color: rgba(99, 102, 241, 0.3);
+    text-decoration-color: rgba(255, 92, 57, 0.3);
     text-underline-offset: 2px;
     font-weight: 500;
 }
@@ -9230,7 +9247,7 @@ nav a.active {
 
 .sheet-guide-highlight {
     color: var(--accent);
-    background: rgba(99, 102, 241, 0.12);
+    background: rgba(255, 92, 57, 0.12);
     padding: 0.1rem 0.3rem;
     border-radius: 3px;
     font-weight: 600;
@@ -9336,7 +9353,7 @@ nav a.active {
 .ticket-hero--online {
     background: linear-gradient(
         180deg,
-        rgba(99, 102, 241, 0.12) 0%,
+        rgba(255, 92, 57, 0.12) 0%,
         transparent 100%
     );
 }
@@ -9471,7 +9488,7 @@ nav a.active {
 
 .ticket-ticker-step--active {
     color: var(--accent);
-    background: rgba(99, 102, 241, 0.08);
+    background: rgba(255, 92, 57, 0.08);
     opacity: 1;
     animation: ticker-pulse 1.8s ease-in-out infinite;
 }
@@ -9556,7 +9573,7 @@ nav a.active {
     border-left-color: var(--accent);
     background: linear-gradient(
         135deg,
-        rgba(99, 102, 241, 0.08) 0%,
+        rgba(255, 92, 57, 0.08) 0%,
         var(--bg-card) 100%
     );
 }
@@ -10605,7 +10622,7 @@ a.ticket-series-card:hover {
     border-bottom: none;
 }
 .bank-dropdown-item:hover {
-    background: rgba(99, 102, 241, 0.15);
+    background: rgba(255, 92, 57, 0.15);
 }
 .bank-dropdown-name {
     color: var(--text-secondary);
@@ -10690,8 +10707,8 @@ a.ticket-series-card:hover {
 .quiz-preview-session-header {
     margin: 1rem 0 0.5rem;
     padding: 0.5rem 0.75rem;
-    background: rgba(99, 102, 241, 0.08);
-    border-left: 3px solid var(--accent, #6366f1);
+    background: rgba(255, 92, 57, 0.08);
+    border-left: 3px solid var(--accent, #ff5c39);
     border-radius: var(--radius, 8px);
 }
 
@@ -10699,15 +10716,15 @@ a.ticket-series-card:hover {
     margin: 0;
     font-size: 0.95rem;
     font-weight: 600;
-    color: var(--accent, #6366f1);
+    color: var(--accent, #ff5c39);
 }
 
 /* Claim page session header */
 .claim-quiz-session {
     margin: 1.25rem 0 0.5rem;
     padding: 0.5rem 0.75rem;
-    background: rgba(99, 102, 241, 0.08);
-    border-left: 3px solid var(--accent, #6366f1);
+    background: rgba(255, 92, 57, 0.08);
+    border-left: 3px solid var(--accent, #ff5c39);
     border-radius: var(--radius, 8px);
 }
 
@@ -10715,7 +10732,7 @@ a.ticket-series-card:hover {
     margin: 0;
     font-size: 0.9rem;
     font-weight: 600;
-    color: var(--accent, #6366f1);
+    color: var(--accent, #ff5c39);
 }
 
 /* ===== iOS Auto-Zoom Prevention ===== */
@@ -10737,18 +10754,22 @@ a.ticket-series-card:hover {
 .pe-card {
     width: 100%;
     background: var(--bg-card);
+    /* Refinement: flat, editorial edge (1px hairline) instead of a drop shadow,
+       with more internal padding and inter-card spacing so content breathes. */
+    border: 1px solid rgba(255, 255, 255, 0.06);
     border-radius: var(--radius);
-    padding: 1.25rem;
-    margin-bottom: 1rem;
-    box-shadow: var(--shadow);
+    padding: 1.5rem;
+    margin-bottom: 1.25rem;
+    box-shadow: none;
 }
 
 /* Section title */
 .pe-section-title {
-    font-size: 1.1rem;
+    font-size: 1.05rem;
     font-weight: 600;
     color: #fff;
-    margin-bottom: 0.75rem;
+    letter-spacing: -0.01em;
+    margin-bottom: 1rem;
 }
 
 /* Hero */
@@ -10803,11 +10824,13 @@ a.ticket-series-card:hover {
 }
 
 .pe-name {
-    font-size: 1.6rem;
+    font-size: 1.7rem;
     font-weight: 700;
     color: #fff;
-    margin-bottom: 0.4rem;
-    line-height: 1.25;
+    /* Tighter tracking reads as more editorial/intentional at display sizes. */
+    letter-spacing: -0.02em;
+    margin-bottom: 0.5rem;
+    line-height: 1.2;
 }
 
 .pe-tagline {
@@ -11008,14 +11031,17 @@ a.ticket-series-card:hover {
 
 .pe-input {
     width: 100%;
-    padding: 0.6rem 0.8rem;
+    padding: 0.7rem 0.85rem;
     background: var(--bg-secondary);
     border: 1px solid var(--border);
     border-radius: var(--radius);
     color: var(--text-primary);
     font-size: 0.9rem;
     outline: none;
-    transition: border-color 0.2s ease;
+    transition: border-color 0.15s ease;
+}
+.pe-input:focus {
+    border-color: var(--accent);
 }
 
 .pe-input--error {
@@ -11134,7 +11160,7 @@ a.ticket-series-card:hover {
 
 .pe-submit-btn {
     width: 100%;
-    padding: 0.75rem;
+    padding: 0.85rem;
     background: var(--accent);
     color: #fff;
     border: none;
@@ -11142,7 +11168,15 @@ a.ticket-series-card:hover {
     font-weight: 600;
     font-size: 0.95rem;
     cursor: pointer;
-    transition: opacity 0.2s;
+    transition:
+        background 0.15s ease,
+        transform 0.1s ease;
+}
+.pe-submit-btn:hover {
+    background: var(--accent-hover);
+}
+.pe-submit-btn:active {
+    transform: translateY(1px);
 }
 
 .pe-success-box {
@@ -11421,7 +11455,7 @@ a.ticket-series-card:hover {
 /* ── Landing Brand Gradient ──────────────────────────────────────── */
 
 .landing-brand-gradient {
-    background: linear-gradient(135deg, #818cf8 0%, #6366f1 40%, #a78bfa 100%);
+    background: linear-gradient(135deg, #ff7b5c 0%, #ff5c39 40%, #ffab4d 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -11523,15 +11557,19 @@ a.ticket-series-card:hover {
 }
 
 .landing-hero-h1 {
-    font-size: clamp(1.75rem, 5vw, 2.75rem);
-    font-weight: 800;
-    line-height: 1.15;
-    margin-bottom: 1rem;
+    font-size: clamp(1.9rem, 5.2vw, 3rem);
+    /* Refinement: 700 (not 800) + tight tracking reads editorial, not shouty. */
+    font-weight: 700;
+    letter-spacing: -0.025em;
+    line-height: 1.12;
+    margin-bottom: 1.25rem;
     color: #fff;
 }
 
 .landing-hero-gradient {
-    background: linear-gradient(135deg, #818cf8, #6366f1, #a78bfa);
+    /* Calmer two-tone indigo instead of a tri-colour rainbow — restrained but
+       still on-brand. */
+    background: linear-gradient(135deg, #ffa184, #ff7b5c);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -11684,8 +11722,8 @@ a.ticket-series-card:hover {
 }
 
 .landing-timeline-dot--indigo {
-    background: rgba(99, 102, 241, 0.15);
-    border: 1.5px solid rgba(99, 102, 241, 0.4);
+    background: rgba(255, 92, 57, 0.15);
+    border: 1.5px solid rgba(255, 92, 57, 0.4);
 }
 
 .landing-timeline-dot--green {
@@ -12025,7 +12063,7 @@ a.ticket-series-card:hover {
     overflow: hidden;
 }
 .landing-mock-bar--accent {
-    background: rgba(99, 102, 241, 0.1);
+    background: rgba(255, 92, 57, 0.1);
 }
 .landing-mock-bar--success {
     background: rgba(34, 197, 94, 0.1);
@@ -12673,13 +12711,13 @@ a.ticket-series-card:hover {
 .landing-social-pill-solana {
     text-decoration: none;
     color: var(--text-secondary);
-    border-color: rgba(99, 102, 241, 0.3);
+    border-color: rgba(255, 92, 57, 0.3);
 }
 
 .landing-social-pill-cta {
     text-decoration: none;
     color: var(--accent);
-    border-color: rgba(99, 102, 241, 0.4);
+    border-color: rgba(255, 92, 57, 0.4);
     cursor: pointer;
 }
 
@@ -13687,7 +13725,7 @@ a.ticket-series-card:hover {
     font-size: 2rem;
     font-weight: 800;
     letter-spacing: -0.02em;
-    background: linear-gradient(135deg, #e0e0e0 0%, #fff 100%);
+    background: linear-gradient(135deg, #e9e4d3 0%, #fff 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -13735,14 +13773,14 @@ a.ticket-series-card:hover {
 }
 .dep2-method-card:hover {
     border-color: var(--accent);
-    box-shadow: 0 0 20px rgba(99, 102, 241, 0.15);
+    box-shadow: 0 0 20px rgba(255, 92, 57, 0.15);
     transform: translateY(-2px);
 }
 .dep2-method-card--recommended {
     border-color: var(--accent);
     background: linear-gradient(
         180deg,
-        rgba(99, 102, 241, 0.06) 0%,
+        rgba(255, 92, 57, 0.06) 0%,
         var(--bg-card) 100%
     );
 }
@@ -14185,7 +14223,7 @@ a.ticket-series-card:hover {
 }
 
 .form-builder-field-card:hover {
-    border-color: var(--accent-hover, #818cf8);
+    border-color: var(--accent-hover, #ff7b5c);
 }
 
 .form-builder-field-header {
@@ -14279,9 +14317,9 @@ a.ticket-series-card:hover {
 }
 
 .form-builder-add-btn:hover {
-    border-color: var(--accent, #6366f1);
-    color: var(--accent, #6366f1);
-    background: var(--bg-hover, rgba(99, 102, 241, 0.08));
+    border-color: var(--accent, #ff5c39);
+    color: var(--accent, #ff5c39);
+    background: var(--bg-hover, rgba(255, 92, 57, 0.08));
 }
 
 .form-builder-preview {
@@ -14321,7 +14359,7 @@ a.ticket-series-card:hover {
     background: var(--bg-secondary, #1a1a2e);
     border: 1px solid var(--border, #444);
     border-radius: var(--radius-sm, 4px);
-    color: var(--accent, #6366f1);
+    color: var(--accent, #ff5c39);
 }
 
 .admin-confirm-bar {
@@ -15922,3 +15960,50 @@ a.ticket-series-card:hover {
 }
 
 
+
+/* ============================================================
+   Night Edition — landing stat stubs (paper tickets on night)
+   ============================================================ */
+.landing-stat-stubs {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px;
+    width: 100%;
+    max-width: 720px;
+    margin: 28px auto 0;
+}
+
+.landing-stat-stub {
+    background: var(--paper);
+    color: var(--paper-ink);
+    border-radius: 6px;
+    padding: 14px 16px 12px;
+    text-align: center;
+    box-shadow: 3px 3px 0 rgba(11, 13, 28, 0.6);
+}
+
+.landing-stat-stub-value {
+    font-family: "SF Mono", "Fira Code", monospace;
+    font-variant-numeric: tabular-nums;
+    font-size: 1.25rem;
+    font-weight: 800;
+}
+
+.landing-stat-stub-value.stub-green {
+    color: var(--success-btn);
+}
+
+.landing-stat-stub-value.stub-poppy {
+    color: #d43f20;
+}
+
+.landing-stat-stub-label {
+    font-family: "SF Mono", "Fira Code", monospace;
+    font-size: 0.62rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #4c5178;
+    border-top: 1px dashed var(--paper-dim);
+    padding-top: 6px;
+    margin-top: 6px;
+}
