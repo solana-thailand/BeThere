@@ -35,10 +35,12 @@ pub struct ClaimLookup {
     /// Per-event pre-registered wallet (Sheet column P). When set, the claim is
     /// LOCKED to this address (often the on-chain depositor).
     pub locked_wallet: Option<String>,
-    /// The attendee's profile-bound wallet (developer_profiles.wallet_address),
-    /// surfaced only when there is no per-event lock. A convenience pre-fill the
-    /// attendee MAY override — not a hard lock.
-    pub suggested_wallet: Option<String>,
+    /// Masked display (e.g. `7Xk9…Qm3p`) of the attendee's profile-bound wallet
+    /// (developer_profiles.wallet_address), surfaced only when there is no
+    /// per-event lock. The full address is NEVER sent to the client — the mint
+    /// resolves it server-side by email. Presence signals "one-tap linked-wallet
+    /// claim is available"; the attendee may still opt to use a different wallet.
+    pub linked_wallet_display: Option<String>,
     pub event: ApiEventConfig,
     pub quiz_status: QuizStatus,
     pub total_checked_in: usize,
@@ -189,7 +191,7 @@ pub async fn lookup_claim(
             claimed_at: walkin.claimed_at.clone(),
             nft_available,
             locked_wallet: walkin.wallet_address.clone(),
-            suggested_wallet: None, // walk-ins have no developer profile
+            linked_wallet_display: None, // walk-ins have no developer profile
             event: ApiEventConfig {
                 event_name: event.name.clone(),
                 event_tagline: event.tagline.clone(),
@@ -338,10 +340,12 @@ pub async fn lookup_claim(
         (None, None, None, None)
     };
 
-    // When there's no per-event lock, suggest the attendee's profile-bound wallet
-    // (verified via the SIWS bind flow) as an EDITABLE pre-fill on the claim page,
-    // so someone who linked a wallet in their profile doesn't have to reconnect.
-    let suggested_wallet = if locked_wallet.is_none() {
+    // When there's no per-event lock, signal that the attendee has a verified
+    // profile-bound wallet (via the SIWS bind flow) so the claim page can offer a
+    // one-tap "mint to my linked wallet" path. We expose ONLY a masked display —
+    // the full address stays server-side and the mint resolves it by email, so a
+    // leaked claim link can neither read the wallet nor redirect the badge.
+    let linked_wallet_display = if locked_wallet.is_none() {
         match state.d1.as_deref() {
             Some(db) => crate::db::developers::get_developer_profile(db, &attendee.email)
                 .await
@@ -349,7 +353,8 @@ pub async fn lookup_claim(
                 .flatten()
                 .and_then(|p| p.wallet_address)
                 .map(|w| w.trim().to_string())
-                .filter(|w| !w.is_empty()),
+                .filter(|w| !w.is_empty())
+                .map(|w| mask_wallet(&w)),
             None => None,
         }
     } else {
@@ -364,7 +369,7 @@ pub async fn lookup_claim(
         claimed_at,
         nft_available,
         locked_wallet,
-        suggested_wallet,
+        linked_wallet_display,
         event: api_event,
         quiz_status,
         total_checked_in,
@@ -427,10 +432,11 @@ async fn verify_online_quest_completion(
 pub async fn execute_claim(
     state: &AppState,
     token: &str,
-    wallet_address: &str,
+    requested_wallet: Option<&str>,
+    use_linked: bool,
     event_id: Option<&str>,
 ) -> Result<ClaimResult, AppError> {
-    tracing::info!(claim_token = %token, "claim mint request");
+    tracing::info!(claim_token = %token, use_linked, "claim mint request");
 
     // 1. Resolve event context. Same coalesce as lookup_claim: the public POST
     //    `/claim/{token}` carries no event_id, so recover the attendee's real
@@ -459,7 +465,7 @@ pub async fn execute_claim(
         });
     }
     if let Some(walkin) = walkin {
-        return execute_walkin_claim(state, &event, token, wallet_address, walkin).await;
+        return execute_walkin_claim(state, &event, token, requested_wallet, walkin).await;
     }
 
     // 3. Pre-registered path: look up attendee by claim token from Google Sheet, D1 fallback
@@ -677,26 +683,71 @@ pub async fn execute_claim(
         return Err(AppError::Validation("NFT has already been claimed".into()));
     }
 
-    // 7. Wallet match guard: if attendee pre-registered a Solana address (column P),
-    // the claiming wallet must match exactly. Prevents claim theft via leaked URLs.
-    if let Some(ref registered) = attendee.solana_address {
-        let registered = registered.trim();
-        if !registered.is_empty() {
-            let claiming = wallet_address.trim();
-            if registered != claiming {
-                tracing::warn!(
-                    claim_token = %token,
-                    registered = %mask_wallet(registered),
-                    claiming = %mask_wallet(claiming),
-                    "wallet mismatch"
-                );
-                return Err(AppError::Validation(format!(
-                    "This claim is locked to a pre-registered wallet ({})",
-                    mask_wallet(registered)
-                )));
+    // 7. Resolve the recipient wallet SERVER-SIDE. The client never dictates the
+    //    mint destination for the locked or linked cases — it can only supply an
+    //    explicit override wallet, which is the sole case a client address is used.
+    //    Precedence: pre-registered (column P, authoritative) > verified linked
+    //    profile wallet > explicit override.
+    let requested = requested_wallet.map(str::trim).filter(|w| !w.is_empty());
+    let recipient: String = if let Some(registered) = attendee
+        .solana_address
+        .as_deref()
+        .map(str::trim)
+        .filter(|w| !w.is_empty())
+    {
+        // Pre-registered: the claim is locked to this wallet. Reject a mismatched
+        // explicit request (prevents claim theft via leaked URLs).
+        if let Some(req) = requested
+            && !req.eq_ignore_ascii_case(registered)
+        {
+            tracing::warn!(
+                claim_token = %token,
+                registered = %mask_wallet(registered),
+                claiming = %mask_wallet(req),
+                "wallet mismatch"
+            );
+            return Err(AppError::Validation(format!(
+                "This claim is locked to a pre-registered wallet ({})",
+                mask_wallet(registered)
+            )));
+        }
+        registered.to_string()
+    } else if use_linked {
+        // Mint to the attendee's verified profile wallet — looked up server-side
+        // by email, never sent by (or trusted from) the client.
+        let linked = match state.d1.as_deref() {
+            Some(db) => crate::db::developers::get_developer_profile(db, &attendee.email)
+                .await
+                .ok()
+                .flatten()
+                .and_then(|p| p.wallet_address)
+                .map(|w| w.trim().to_string())
+                .filter(|w| !w.is_empty()),
+            None => None,
+        };
+        match linked {
+            Some(w) => w,
+            None => {
+                return Err(AppError::Validation(
+                    "no linked wallet on your profile — connect a wallet to claim".into(),
+                ));
             }
         }
+    } else {
+        // Explicit override — the only path where a client-supplied wallet is used.
+        match requested {
+            Some(w) => w.to_string(),
+            None => {
+                return Err(AppError::Validation("a wallet address is required".into()));
+            }
+        }
+    };
+
+    if let Err(e) = crate::solana::validate_wallet_address(&recipient) {
+        tracing::warn!(claim_token = %token, error = %e, "resolved recipient wallet invalid");
+        return Err(AppError::Validation(e));
     }
+    let wallet_address: &str = &recipient;
 
     // 8. Claim dedup lock — prevent concurrent double-claim
     let lock_kv: Option<&KvStore> = resolve_kv(state);
@@ -860,11 +911,23 @@ async fn execute_walkin_claim(
     state: &AppState,
     event: &event_checkin_domain::models::event::EventConfig,
     token: &str,
-    wallet_address: &str,
+    requested_wallet: Option<&str>,
     walkin: WalkinAttendee,
 ) -> Result<ClaimResult, AppError> {
     let display_name = walkin.name.clone();
     let kv = resolve_kv(state);
+
+    // Walk-ins have no developer profile, so there's no linked wallet to mint to:
+    // an explicit wallet address is required and validated server-side.
+    let recipient = match requested_wallet.map(str::trim).filter(|w| !w.is_empty()) {
+        Some(w) => w.to_string(),
+        None => return Err(AppError::Validation("a wallet address is required".into())),
+    };
+    if let Err(e) = crate::solana::validate_wallet_address(&recipient) {
+        tracing::warn!(claim_token = %token, error = %e, "walk-in recipient wallet invalid");
+        return Err(AppError::Validation(e));
+    }
+    let wallet_address: &str = &recipient;
 
     // Note: walk-ins are always in-person — no online claim timing gate needed
 

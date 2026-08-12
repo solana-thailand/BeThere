@@ -55,11 +55,12 @@ pub struct ClaimLookupData {
     /// When present, the claim is locked to this wallet — any other address is rejected.
     #[serde(default)]
     pub locked_wallet: Option<String>,
-    /// The attendee's profile-bound wallet, present only when there is no
-    /// per-event lock. An editable pre-fill (not enforced) so a linked wallet
-    /// doesn't have to be reconnected at claim time.
+    /// Masked display (e.g. `7Xk9…Qm3p`) of the attendee's verified profile-bound
+    /// wallet, present only when there is no per-event lock. The full address is
+    /// never sent here; presence enables the one-tap "mint to my linked wallet"
+    /// path, where the backend resolves the real address by email.
     #[serde(default)]
-    pub suggested_wallet: Option<String>,
+    pub linked_wallet_display: Option<String>,
     /// Dynamic event metadata (name, tagline, link, timestamps).
     #[serde(default)]
     pub event: EventConfig,
@@ -414,9 +415,19 @@ pub async fn get_quiz_status(token: &str) -> Result<QuizStatusData, ApiError> {
 ///
 /// Public endpoint — no authentication required.
 /// The attendee must be checked in and not already claimed.
-pub async fn post_claim(token: &str, wallet_address: &str) -> Result<ClaimMintData, ApiError> {
+/// `use_linked_wallet` mints to the attendee's verified profile wallet, resolved
+/// server-side by email (the client sends no address). Otherwise `wallet_address`
+/// is the explicit override recipient.
+pub async fn post_claim(
+    token: &str,
+    wallet_address: Option<&str>,
+    use_linked_wallet: bool,
+) -> Result<ClaimMintData, ApiError> {
     let url = format!("{}/claim/{token}", api_base());
-    let body = serde_json::json!({ "wallet_address": wallet_address });
+    let body = serde_json::json!({
+        "wallet_address": wallet_address,
+        "use_linked_wallet": use_linked_wallet,
+    });
     let body_str = serde_json::to_string(&body).unwrap_or_default();
     let hdrs = [("Content-Type", "application/json")];
 

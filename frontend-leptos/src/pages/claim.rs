@@ -1060,9 +1060,11 @@ pub fn Claim() -> impl IntoView {
     // Wallet adapter state — detected wallets and connected wallet info
     let (detected_wallets, set_detected_wallets) = signal(Vec::<String>::new());
     let (connected_wallet, set_connected_wallet) = signal(None::<(String, String)>); // (wallet_name, public_key)
-    // When a profile-linked wallet is pre-filled, the claim defaults to it and
-    // hides the connect options until the user opts to change wallet.
+    // When the attendee has a verified linked wallet, the claim defaults to a
+    // one-tap "mint to my linked wallet" path (resolved server-side) and hides the
+    // connect options until the user opts to use a different wallet.
     let (change_wallet, set_change_wallet) = signal(false);
+    let (has_linked_wallet, set_has_linked_wallet) = signal(false);
 
     // Detect installed wallets on mount (poll with delay for late injection)
     {
@@ -1122,17 +1124,18 @@ pub fn Claim() -> impl IntoView {
                     set_deposit_amount_usdc.set(data.deposit_amount_usdc);
                     set_deposit_amount_thb.set(data.deposit_amount_thb);
 
-                    // Pre-fill the wallet field up-front — BEFORE any state branch — so
-                    // it survives every path to Ready (quiz-gated, adventure-gated, or
-                    // direct). Locked per-event address wins; else the profile wallet.
-                    if let Some(w) = data
-                        .locked_wallet
-                        .clone()
-                        .filter(|w| !w.is_empty())
-                        .or_else(|| data.suggested_wallet.clone().filter(|w| !w.is_empty()))
-                    {
+                    // Pre-fill the wallet field with the locked per-event address (the
+                    // full pre-registered wallet is public and server-enforced). A
+                    // linked profile wallet is NOT pre-filled here — its full address
+                    // never reaches the client; the one-tap path mints to it server-side.
+                    if let Some(w) = data.locked_wallet.clone().filter(|w| !w.is_empty()) {
                         set_wallet_input.set(w);
                     }
+                    set_has_linked_wallet.set(
+                        data.linked_wallet_display
+                            .as_deref()
+                            .is_some_and(|w| !w.is_empty()),
+                    );
 
                     if data.claimed {
                         set_state.set(ClaimState::AlreadyClaimed(data));
@@ -1210,19 +1213,24 @@ pub fn Claim() -> impl IntoView {
 
     // Handle "Claim NFT" button click
     let handle_claim = move |_| {
+        // The one-tap linked path mints to the attendee's verified profile wallet,
+        // resolved server-side by email — no client address is sent. Any other case
+        // (a per-event lock, a connected wallet, or "use a different wallet") sends
+        // the explicit address in the input.
+        let use_linked =
+            has_linked_wallet.get() && !change_wallet.get() && connected_wallet.get().is_none();
         let wallet = wallet_input.get().trim().to_string();
         let token = match params.get() {
             Ok(p) => p.token.unwrap_or_default(),
             Err(_) => return,
         };
 
-        // Basic client-side validation
-        if wallet.is_empty() {
-            return;
-        }
-        let wallet_len = wallet.len();
-        if !(32..=44).contains(&wallet_len) {
-            return;
+        // Basic client-side validation for the explicit-wallet path only.
+        if !use_linked {
+            let wallet_len = wallet.len();
+            if wallet.is_empty() || !(32..=44).contains(&wallet_len) {
+                return;
+            }
         }
 
         // Transition to minting state
@@ -1235,7 +1243,8 @@ pub fn Claim() -> impl IntoView {
         let current_data_clone = current_data.clone();
         leptos::task::spawn_local(async move {
             let start = js_sys::Date::now();
-            let result = api::post_claim(&token, &wallet).await;
+            let arg = if use_linked { None } else { Some(wallet.as_str()) };
+            let result = api::post_claim(&token, arg, use_linked).await;
             // Ensure spinner displays for at least 1.5s for smooth UX
             let elapsed = js_sys::Date::now() - start;
             if elapsed < 1500.0 {
@@ -1475,11 +1484,11 @@ pub fn Claim() -> impl IntoView {
                         ClaimState::Ready(data) => {
                             let checked_in_display = checked_in_label(&data.checked_in_at, &data.participation_type);
                             let locked_wallet = data.locked_wallet.clone();
-                            let suggested_wallet = data
-                                .suggested_wallet
+                            let linked_wallet_display = data
+                                .linked_wallet_display
                                 .clone()
                                 .filter(|w| !w.is_empty());
-                            let has_suggested_wallet = suggested_wallet.is_some();
+                            let has_suggested_wallet = linked_wallet_display.is_some();
                             view! {
                                 <div class="claim-state-full">
                                     // Attendee welcome
@@ -1524,13 +1533,11 @@ pub fn Claim() -> impl IntoView {
                                             {
                                                 // Profile-linked wallet — the primary one-tap path.
                                                 // The connect/paste options are tucked behind
-                                                // "Use a different wallet".
-                                                let w = suggested_wallet.clone().unwrap_or_default();
-                                                let truncated = if w.len() > 12 {
-                                                    format!("{}...{}", &w[..4], &w[w.len() - 4..])
-                                                } else {
-                                                    w.clone()
-                                                };
+                                                // "Use a different wallet". The address is already
+                                                // masked server-side (full address never sent here).
+                                                let truncated = linked_wallet_display
+                                                    .clone()
+                                                    .unwrap_or_default();
                                                 view! {
                                                     <div class="wallet-connected-bar">
                                                         <span class="wallet-icon-lg">
@@ -1690,7 +1697,7 @@ pub fn Claim() -> impl IntoView {
                                                                 {
                                                                     match &locked_wallet {
                                                                         Some(w) if !w.is_empty() => "Use the pre-filled wallet address to claim.",
-                                                                        _ if has_suggested_wallet => "Your linked wallet is pre-filled — change it below if you'd like the badge somewhere else.",
+                                                                        _ if has_suggested_wallet => "Connect or enter the wallet you'd like the badge sent to instead of your linked one.",
                                                                         _ => "Tap Paste or type your Phantom, Solflare, or Backpack address.",
                                                                     }
                                                                 }
@@ -1707,6 +1714,14 @@ pub fn Claim() -> impl IntoView {
                                         class="claim-btn-mint"
                                         on:click=handle_claim
                                         disabled=move || {
+                                            // The one-tap linked path needs no input — the wallet is
+                                            // resolved server-side. Only gate the explicit-wallet path.
+                                            let use_linked = has_linked_wallet.get()
+                                                && !change_wallet.get()
+                                                && connected_wallet.get().is_none();
+                                            if use_linked {
+                                                return false;
+                                            }
                                             let w = wallet_input.get();
                                             let w_trimmed = w.trim();
                                             w_trimmed.is_empty() || !(32..=44).contains(&w_trimmed.len())
