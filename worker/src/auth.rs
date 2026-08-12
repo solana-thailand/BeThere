@@ -652,6 +652,9 @@ mod tests {
             solana: SolanaConfig {
                 rpc_url: "https://devnet.helius-rpc.com".to_string(),
                 api_key: "test-helius-key".to_string(),
+                crossmint_host: "staging.crossmint.com".to_string(),
+                crossmint_api_key: "test-crossmint-key".to_string(),
+                crossmint_collection_id: "test-collection".to_string(),
             },
             nft: NftConfig {
                 collection_mint: "test-collection-mint".to_string(),
