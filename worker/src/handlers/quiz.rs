@@ -88,8 +88,13 @@ pub async fn submit_quiz(
         "quiz submit requested"
     );
 
-    // Resolve event (uses events_kv if available, falls back to global config)
-    let event = resolve_event(&state, query.event_id.as_deref()).await?;
+    // Resolve the attendee's real event from the claim token — the SAME
+    // authoritative resolution the claim gate uses — so quiz progress is written
+    // under the event_id the claim later reads. Trusting the query param /
+    // active-event fallback here would store progress under the wrong event and
+    // the claim gate would never find it ("must complete the quiz").
+    let resolved = crate::claim::coalesce_event_id(&state, &token, query.event_id.as_deref()).await;
+    let event = resolve_event(&state, resolved.as_deref()).await?;
 
     let eid = event.id.as_str();
     let d1 = state.d1.as_deref();
@@ -209,8 +214,10 @@ pub async fn get_quiz_status(
 ) -> Result<ApiOk<serde_json::Value>, WorkerError> {
     tracing::info!(claim_token = %token, "quiz status requested");
 
-    // Resolve event (uses events_kv if available, falls back to global config)
-    let event = resolve_event(&state, query.event_id.as_deref()).await?;
+    // Resolve the attendee's real event from the claim token (same as submit and
+    // the claim gate) so status reflects the progress the claim will read.
+    let resolved = crate::claim::coalesce_event_id(&state, &token, query.event_id.as_deref()).await;
+    let event = resolve_event(&state, resolved.as_deref()).await?;
 
     let eid = event.id.as_str();
     let d1 = state.d1.as_deref();

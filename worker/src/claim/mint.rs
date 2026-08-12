@@ -114,7 +114,12 @@ async fn resolve_event_id_from_token(state: &AppState, token: &str) -> Option<St
 ///
 /// If the caller passed a non-empty event_id, it wins (explicit context).
 /// Otherwise we try to recover the attendee's real event_id from D1.
-async fn coalesce_event_id(
+///
+/// Exposed so the token-bearing quiz endpoints resolve the SAME authoritative
+/// event_id the claim gate uses — otherwise quiz progress can be written under
+/// the active-event fallback and the claim gate (which coalesces from the token)
+/// never finds it.
+pub(crate) async fn coalesce_event_id(
     state: &AppState,
     token: &str,
     event_id: Option<&str>,
