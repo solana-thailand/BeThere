@@ -133,6 +133,20 @@ pub fn already_deposited_view(
     let data_clone_for_event_link = data.clone();
     let info_clone = data.status.clone();
 
+    // Non-USDC (THB / rolling credit) refund guidance — computed here (not inside
+    // the view) to avoid borrowing `info`. THB refund/credit actions live on the
+    // TICKET page, so point there; never mislabel a ฿ deposit as USDC.
+    let nonusdc_amount_display = if info.currency == "THB" {
+        format!("฿{}", info.amount)
+    } else {
+        format!("{} {}", format_usdc(info.amount), info.currency)
+    };
+    let nonusdc_ticket_href = if info.event_id.is_empty() {
+        format!("/ticket/{}", info.attendee_id)
+    } else {
+        format!("/ticket/{}?event_id={}", info.attendee_id, info.event_id)
+    };
+
     let set_state = *set_state;
 
     view! {
@@ -268,12 +282,25 @@ pub fn already_deposited_view(
                         </p>
                     </div>
                 }.into_any()
-            } else {
+            } else if is_credit {
                 view! {
                     <div class="dep2-info-note">
                         <p class="hint-note">
-                            {format!("Your {usdc_fmt} USDC deposit is secured. Refund will be available after the event.")}
+                            {format!("This {nonusdc_amount_display} is rolling credit from a previous event, applied to your spot here.")}
                         </p>
+                    </div>
+                }.into_any()
+            } else {
+                // Verified THB deposit. Refund and hold-as-credit actions live on
+                // the ticket page — surface the choice honestly (no "USDC" label).
+                view! {
+                    <div class="dep2-info-note">
+                        <p class="hint-note">
+                            {format!("Your {nonusdc_amount_display} deposit is secured. After the event you can keep it as credit toward your next event, or request a refund — manage it from your ticket.")}
+                        </p>
+                        <a href=nonusdc_ticket_href class="btn btn-outline btn-block">
+                            "Go to your ticket →"
+                        </a>
                     </div>
                 }.into_any()
             }}

@@ -1829,17 +1829,6 @@ pub fn Claim() -> impl IntoView {
                                 }
                             );
 
-                            // Deposit link for refund (if applicable)
-                            let deposit_link = {
-                                let api_id = deposit_api_id.get();
-                                let event_id = deposit_event_id.get();
-                                if event_id.is_empty() {
-                                    format!("/deposit/{api_id}")
-                                } else {
-                                    format!("/deposit/{api_id}?event_id={event_id}")
-                                }
-                            };
-
                             let solscan_url = if data.signature.is_empty() {
                                 format!("https://solscan.io/account/{}?cluster={}", data.asset_id, data.cluster)
                             } else {
@@ -1952,25 +1941,10 @@ pub fn Claim() -> impl IntoView {
                                     </div>
                                     </div>
 
-                                    // 4. Deposit refund link (if applicable)
-                                    {move || {
-                                        if deposit_enabled.get() && !deposit_api_id.get().is_empty() {
-                                            view! {
-                                                <div class="success-actions claim-success-actions-spaced">
-                                                                                                    <a
-                                                                                                        href=&deposit_link
-                                                                                                        class="btn btn-outline btn-block"
-                                                                                                    >
-                                                                                                        "Deposit & Refund Details →"
-                                                                                                    </a>
-                                                                                                </div>
-                                            }.into_any()
-                                        } else {
-                                            view! { <div></div> }.into_any()
-                                        }
-                                    }}
-
-                                    // 5. Back to Ticket link
+                                    // 4. Ticket link — the ticket page is the hub for
+                                    // deposit & refund status (per-method actions live there;
+                                    // the deposit page is only for PAYING a deposit, so linking
+                                    // there post-claim dead-ended non-depositors on a pay form).
                                     {
                                         let api_id = deposit_api_id.get();
                                         let event_id = deposit_event_id.get();
@@ -1979,15 +1953,20 @@ pub fn Claim() -> impl IntoView {
                                         } else {
                                             format!("/ticket/{api_id}?event_id={event_id}")
                                         };
+                                        let label = if deposit_enabled.get() {
+                                            "View ticket & deposit / refund →"
+                                        } else {
+                                            "← Back to Ticket"
+                                        };
                                         view! {
                                             <div class="success-actions claim-success-actions-spaced">
-                                                                                            <a
-                                                                                                href=ticket_href
-                                                                                                class="btn btn-outline btn-block"
-                                                                                            >
-                                                                                                "← Back to Ticket"
-                                                                                            </a>
-                                                                                        </div>
+                                                <a
+                                                    href=ticket_href
+                                                    class="btn btn-outline btn-block"
+                                                >
+                                                    {label}
+                                                </a>
+                                            </div>
                                         }.into_any()
                                     }
                                 </div>
