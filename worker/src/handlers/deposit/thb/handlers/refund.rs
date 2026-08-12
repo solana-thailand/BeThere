@@ -79,10 +79,34 @@ pub async fn mark_refund_handler(
     .await;
 
     let now = Utc::now().to_rfc3339();
+
+    // ATOMIC: single conditional D1 UPDATE (CAS) flips refunded 0→1 only if the
+    // deposit is verified, not already refunded, and NOT held as credit. Mutually
+    // exclusive with the hold CAS on the same row, so a refund and a hold-as-credit
+    // can never both settle (no double-payout even under concurrency).
+    let settled = match d1 {
+        Some(db) => crate::db::thb_deposits::try_settle_refund(
+            db,
+            &event.id,
+            &attendee_id,
+            &now,
+            &refund_proof_url,
+        )
+        .await
+        .map_err(AppError::Internal)?,
+        None => true, // no D1 (tests/local) — non-atomic fallback
+    };
+    if !settled {
+        return Err(AppError::Validation(
+            "deposit already settled (refunded or held as credit)".to_string(),
+        )
+        .into());
+    }
+
+    // Mirror the settled state into KV (D1 already flipped by the CAS above).
     thb_deposit.refunded = true;
     thb_deposit.refunded_at = Some(now.clone());
     thb_deposit.refund_proof_url = Some(refund_proof_url.clone());
-
     event_store::save_thb_deposit(kv, &thb_deposit, d1)
         .await
         .map_err(AppError::Internal)?;
@@ -262,6 +286,27 @@ pub async fn batch_thb_refund_handler(
             skipped += 1;
             continue;
         }
+        // ATOMIC per-deposit settlement (CAS): flips refunded 0→1 only if still
+        // verified/unrefunded/unheld. If another request (e.g. a concurrent hold
+        // or single refund) already settled this row, the CAS matches 0 rows and
+        // we skip it — no double-payout even if a batch races other actions.
+        let settled = match d1 {
+            Some(db) => crate::db::thb_deposits::try_settle_refund(
+                db,
+                &event.id,
+                &dep.attendee_id,
+                &now,
+                dep.refund_proof_url.as_deref().unwrap_or(""),
+            )
+            .await
+            .map_err(AppError::Internal)?,
+            None => true, // no D1 (tests/local) — non-atomic fallback
+        };
+        if !settled {
+            skipped += 1;
+            continue;
+        }
+        // Mirror into KV (D1 already flipped by the CAS above).
         dep.refunded = true;
         dep.refunded_at = Some(now.clone());
         event_store::save_thb_deposit(kv, &dep, d1)

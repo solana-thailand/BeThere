@@ -214,8 +214,27 @@ pub async fn admin_hold_deposit_handler(
     //    money is created and the deposit is marked held — an admin can
     //    reconcile manually. The reverse order would permit infinite credit via
     //    retry. Mirrors mark_refund_handler + attendee hold_deposit_handler.
+    //
+    //    ATOMIC: single conditional D1 UPDATE (CAS) so an admin hold racing with
+    //    the attendee's own hold (or another admin) can't double-increment credit.
     let held_amount = thb_deposit.amount_thb;
     let now = Utc::now().to_rfc3339();
+
+    let settled = match d1 {
+        Some(db) => {
+            crate::db::thb_deposits::try_settle_hold_credit(db, &event.id, &attendee_id, &now)
+                .await
+                .map_err(AppError::Internal)?
+        }
+        None => true, // no D1 (tests/local) — non-atomic fallback
+    };
+    if !settled {
+        return Err(AppError::Validation(
+            "deposit already settled (held as credit or refunded)".to_string(),
+        )
+        .into());
+    }
+
     thb_deposit.held_as_credit = true;
     thb_deposit.held_as_credit_at = Some(now);
     event_store::save_thb_deposit(kv, &thb_deposit, d1)

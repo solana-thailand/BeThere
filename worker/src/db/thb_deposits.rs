@@ -151,6 +151,84 @@ pub async fn update_thb_deposit(db: &D1Database, deposit: &ThbDeposit) -> Result
     Ok(())
 }
 
+/// Atomically claim the "hold as credit" settlement for a verified THB deposit.
+///
+/// Flips `held_as_credit` 0→1 in a single conditional UPDATE that only matches
+/// when the deposit is verified, not already held, and not refunded. Returns
+/// `Ok(true)` iff THIS call performed the flip — the caller may then increment
+/// rolling credit exactly once. `Ok(false)` means it was already settled (a
+/// concurrent or prior hold/refund won), so the caller must NOT grant credit.
+/// This closes the check-then-write race where two concurrent `/hold` requests
+/// both pass the in-memory guard and double-increment credit.
+pub async fn try_settle_hold_credit(
+    db: &D1Database,
+    event_id: &str,
+    attendee_id: &str,
+    held_at: &str,
+) -> Result<bool, String> {
+    let stmt = db.prepare(
+        "UPDATE thb_deposits SET held_as_credit = 1, held_as_credit_at = ?1 \
+         WHERE event_id = ?2 AND attendee_id = ?3 \
+           AND verified = 1 AND held_as_credit = 0 AND refunded = 0",
+    );
+    let result = stmt
+        .bind_refs(&[
+            D1Type::Text(held_at),
+            D1Type::Text(event_id),
+            D1Type::Text(attendee_id),
+        ])
+        .map_err(|e| format!("D1 try_settle_hold_credit bind: {e:?}"))?
+        .run()
+        .await
+        .map_err(|e| format!("D1 try_settle_hold_credit run: {e:?}"))?;
+    let changes = result
+        .meta()
+        .ok()
+        .flatten()
+        .and_then(|m| m.changes)
+        .unwrap_or(0);
+    Ok(changes > 0)
+}
+
+/// Atomically claim the "refund" settlement for a verified THB deposit.
+///
+/// Flips `refunded` 0→1 only when the deposit is verified, not already refunded,
+/// and NOT held as credit (so a deposit converted to credit can never also be
+/// cash-refunded — and vice versa, since the hold CAS requires `refunded = 0`).
+/// Returns `Ok(true)` iff THIS call performed the flip. Mutually exclusive with
+/// `try_settle_hold_credit` on the same row, so hold and refund can't both win.
+pub async fn try_settle_refund(
+    db: &D1Database,
+    event_id: &str,
+    attendee_id: &str,
+    refunded_at: &str,
+    refund_proof_url: &str,
+) -> Result<bool, String> {
+    let stmt = db.prepare(
+        "UPDATE thb_deposits SET refunded = 1, refunded_at = ?1, refund_proof_url = ?2 \
+         WHERE event_id = ?3 AND attendee_id = ?4 \
+           AND verified = 1 AND refunded = 0 AND held_as_credit = 0",
+    );
+    let result = stmt
+        .bind_refs(&[
+            D1Type::Text(refunded_at),
+            D1Type::Text(refund_proof_url),
+            D1Type::Text(event_id),
+            D1Type::Text(attendee_id),
+        ])
+        .map_err(|e| format!("D1 try_settle_refund bind: {e:?}"))?
+        .run()
+        .await
+        .map_err(|e| format!("D1 try_settle_refund run: {e:?}"))?;
+    let changes = result
+        .meta()
+        .ok()
+        .flatten()
+        .and_then(|m| m.changes)
+        .unwrap_or(0);
+    Ok(changes > 0)
+}
+
 /// Delete all THB deposits for an event (cleanup).
 pub async fn delete_thb_deposits_for_event(db: &D1Database, event_id: &str) -> Result<(), String> {
     let stmt = db.prepare("DELETE FROM thb_deposits WHERE event_id = ?1");

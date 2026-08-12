@@ -551,11 +551,17 @@ pub async fn resolve_user_role(
 ///
 /// Access hierarchy:
 /// - **SuperAdmin** → always allowed (global admin)
-/// - **Organizer** in event config → allowed
-/// - **Organizer** in Google Sheet staff tab → allowed (fallback)
-/// - **Staff** in event config → allowed (scanner only)
-/// - **Staff** in Google Sheet staff tab → allowed (scanner only, fallback)
-/// - Any other authenticated staff → denied (not assigned to this event)
+/// - **Organizer/Staff** in event config → allowed (per-event assignment)
+/// - **Admin/Organizer** in the global Google Sheet staff tab → allowed (platform
+///   operator fallback)
+/// - Any other authenticated user → denied (not assigned to this event)
+///
+/// NOTE (multi-org): the global-sheet **`staff`** role is intentionally NOT a
+/// cross-event grant. A lowest-privilege scanner listed globally must be
+/// assigned to the specific event (event config) to check attendees in there —
+/// otherwise a scanner for one organizer's event could check in / undo / drive
+/// mints on an unrelated organizer's event. Global admin/organizer remain
+/// platform-level operators. (Was: global `staff` granted every event.)
 pub async fn check_event_access(
     email: &str,
     state: &AppState,
@@ -576,9 +582,11 @@ pub async fn check_event_access(
         return Ok(());
     }
 
-    // 3. Google Sheet role (fallback — sheet is source of truth)
+    // 3. Global Google Sheet role — platform-operator fallback ONLY. `staff` is
+    //    deliberately excluded so scanners can't cross events; they need a
+    //    per-event assignment (step 2).
     if let Some(role) = get_staff_role(email, state).await.as_deref()
-        && matches!(role, "admin" | "organizer" | "staff")
+        && matches!(role, "admin" | "organizer")
     {
         return Ok(());
     }
