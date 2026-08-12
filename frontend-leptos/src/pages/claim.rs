@@ -1060,6 +1060,9 @@ pub fn Claim() -> impl IntoView {
     // Wallet adapter state — detected wallets and connected wallet info
     let (detected_wallets, set_detected_wallets) = signal(Vec::<String>::new());
     let (connected_wallet, set_connected_wallet) = signal(None::<(String, String)>); // (wallet_name, public_key)
+    // When a profile-linked wallet is pre-filled, the claim defaults to it and
+    // hides the connect options until the user opts to change wallet.
+    let (change_wallet, set_change_wallet) = signal(false);
 
     // Detect installed wallets on mount (poll with delay for late injection)
     {
@@ -1472,10 +1475,11 @@ pub fn Claim() -> impl IntoView {
                         ClaimState::Ready(data) => {
                             let checked_in_display = checked_in_label(&data.checked_in_at, &data.participation_type);
                             let locked_wallet = data.locked_wallet.clone();
-                            let has_suggested_wallet = data
+                            let suggested_wallet = data
                                 .suggested_wallet
-                                .as_ref()
-                                .is_some_and(|w| !w.is_empty());
+                                .clone()
+                                .filter(|w| !w.is_empty());
+                            let has_suggested_wallet = suggested_wallet.is_some();
                             view! {
                                 <div class="claim-state-full">
                                     // Attendee welcome
@@ -1513,6 +1517,41 @@ pub fn Claim() -> impl IntoView {
                                                         </svg>
                                                         <span class="locked-wallet-addr">{truncated}</span>
                                                     </div>
+                                                }.into_any()
+                                            } else if has_suggested_wallet
+                                                && connected_wallet.get().is_none()
+                                                && !change_wallet.get()
+                                            {
+                                                // Profile-linked wallet — the primary one-tap path.
+                                                // The connect/paste options are tucked behind
+                                                // "Use a different wallet".
+                                                let w = suggested_wallet.clone().unwrap_or_default();
+                                                let truncated = if w.len() > 12 {
+                                                    format!("{}...{}", &w[..4], &w[w.len() - 4..])
+                                                } else {
+                                                    w.clone()
+                                                };
+                                                view! {
+                                                    <div class="wallet-connected-bar">
+                                                        <span class="wallet-icon-lg">
+                                                            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                                                                <rect x="2" y="4" width="12" height="9" rx="1.5"></rect>
+                                                                <path d="M11 8.5h.01"></path>
+                                                            </svg>
+                                                        </span>
+                                                        <div class="wallet-info-left">
+                                                            <div class="wallet-label">"Your linked wallet"</div>
+                                                            <div class="wallet-address-bold">{truncated}</div>
+                                                        </div>
+                                                        <span class="badge badge-success u-ml-auto"><Icon icon=IconName::Check class="icon-sm icon-success" />" Linked"</span>
+                                                    </div>
+                                                    <button
+                                                        class="btn btn-outline btn-sm claim-disconnect-btn"
+                                                        on:click=move |_| set_change_wallet.set(true)
+                                                        type="button"
+                                                    >
+                                                        "Use a different wallet"
+                                                    </button>
                                                 }.into_any()
                                             } else {
                                                 let cw = connected_wallet.get();
