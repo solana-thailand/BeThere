@@ -1485,4 +1485,61 @@ mod tests {
         assert!(!back.post_event_registration_open);
         assert_eq!(back.post_event_registration_until_ms, None);
     }
+
+    // ── NFT name / description template resolution ──────────────────────
+    // Guards the badge title/description drift: a template WITHOUT the
+    // {event_name} placeholder is a fixed literal and does NOT follow the event
+    // name — the exact behavior that put a "#3" title on a "#4" event.
+
+    #[test]
+    fn nft_name_empty_template_uses_bethere_prefix() {
+        let mut e = make_event();
+        e.name = "Rustacean Day".to_string();
+        e.nft_name_template = String::new();
+        assert_eq!(e.nft_name(), "BeThere - Rustacean Day");
+    }
+
+    #[test]
+    fn nft_name_placeholder_template_follows_event_name() {
+        let mut e = make_event();
+        e.name = "Rust Day".to_string();
+        e.nft_name_template = "{event_name} Badge".to_string();
+        assert_eq!(e.nft_name(), "Rust Day Badge");
+    }
+
+    #[test]
+    fn nft_name_fixed_literal_ignores_event_name() {
+        // Fixed literal (no placeholder) — stays put regardless of the name.
+        let mut e = make_event();
+        e.name = "Solana x AI Builders #4 (Bangkok)".to_string();
+        e.nft_name_template = "Solana x AI Builders #3".to_string();
+        assert_eq!(e.nft_name(), "Solana x AI Builders #3");
+    }
+
+    #[test]
+    fn nft_name_truncates_to_32_chars() {
+        let mut e = make_event();
+        e.name = "A Very Long Event Name That Exceeds The Metaplex Limit".to_string();
+        e.nft_name_template = String::new();
+        let n = e.nft_name();
+        assert!(n.len() <= 32, "name '{n}' is {} chars", n.len());
+        assert!(n.starts_with("BeThere - "));
+        assert!(n.ends_with("..."));
+    }
+
+    #[test]
+    fn nft_description_empty_template_default() {
+        let mut e = make_event();
+        e.name = "Rust Day".to_string();
+        e.nft_description_template = String::new();
+        assert_eq!(e.nft_description(), "Proof of attendance at Rust Day");
+    }
+
+    #[test]
+    fn nft_description_placeholder_substituted() {
+        let mut e = make_event();
+        e.name = "Rust Day".to_string();
+        e.nft_description_template = "You attended {event_name}!".to_string();
+        assert_eq!(e.nft_description(), "You attended Rust Day!");
+    }
 }
