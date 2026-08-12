@@ -172,8 +172,18 @@ pub async fn submit_quiz(
     let result = quiz::submit_quiz(d1, kv, eid, &config, &token, &body.answers)
         .await
         .map_err(|e| {
-            tracing::error!(claim_token = %token, error = ?e, "quiz submit failed");
-            AppError::Internal(e.to_string())
+            let msg = e.to_string();
+            // "No attempts remaining" is a normal user condition, not a server
+            // fault — surface it as a clean 4xx with a friendly message instead
+            // of a scary HTTP 500 "internal error".
+            if msg.contains("no attempts remaining") {
+                AppError::Validation(
+                    "You've used all your quiz attempts for this event. Ask an organizer to reset them.".to_string(),
+                )
+            } else {
+                tracing::error!(claim_token = %token, error = ?e, "quiz submit failed");
+                AppError::Internal(msg)
+            }
         })?;
 
     tracing::info!(
