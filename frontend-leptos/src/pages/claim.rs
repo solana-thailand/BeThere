@@ -1119,6 +1119,18 @@ pub fn Claim() -> impl IntoView {
                     set_deposit_amount_usdc.set(data.deposit_amount_usdc);
                     set_deposit_amount_thb.set(data.deposit_amount_thb);
 
+                    // Pre-fill the wallet field up-front — BEFORE any state branch — so
+                    // it survives every path to Ready (quiz-gated, adventure-gated, or
+                    // direct). Locked per-event address wins; else the profile wallet.
+                    if let Some(w) = data
+                        .locked_wallet
+                        .clone()
+                        .filter(|w| !w.is_empty())
+                        .or_else(|| data.suggested_wallet.clone().filter(|w| !w.is_empty()))
+                    {
+                        set_wallet_input.set(w);
+                    }
+
                     if data.claimed {
                         set_state.set(ClaimState::AlreadyClaimed(data));
                     } else if !data.nft_available {
@@ -1151,17 +1163,7 @@ pub fn Claim() -> impl IntoView {
                             }
                         });
                     } else {
-                        // Pre-fill the wallet field: a locked per-event address takes
-                        // priority; otherwise suggest the profile-linked wallet (editable).
-                        if let Some(ref wallet) = data.locked_wallet
-                            && !wallet.is_empty()
-                        {
-                            set_wallet_input.set(wallet.clone());
-                        } else if let Some(ref wallet) = data.suggested_wallet
-                            && !wallet.is_empty()
-                        {
-                            set_wallet_input.set(wallet.clone());
-                        }
+                        // (wallet pre-fill already applied above, before branching)
                         // Check adventure status — if required and not passed, show adventure gate
                         let claim_data_for_adventure = data.clone();
                         let token_for_adventure = token.clone();
