@@ -120,9 +120,15 @@ pub async fn check_in(
         );
     }
 
-    // Generate claim token (UUID v7) for NFT/refund claim link.
-    // Frontend constructs the full claim URL using window.location.origin + /claim/{token}.
-    let claim_token = Uuid::now_v7().to_string();
+    // Claim token (UUID v7) for the NFT/refund claim link. Reuse the existing one
+    // on a re-check-in so a duplicate scan never invalidates a claim URL already
+    // shown to the attendee — a fresh token is only minted on first check-in (or
+    // after undo cleared it). D1 also preserves the token defensively; reusing it
+    // here keeps the Sheets copy consistent in the common case.
+    let claim_token = match attendee.claim_token.as_deref() {
+        Some(t) if !t.is_empty() => t.to_string(),
+        _ => Uuid::now_v7().to_string(),
+    };
 
     // Resolve column mapping for this event's sheet
     let mapping = match sheets::get_column_mapping(&state, &event.sheet_id, &event.sheet_name, kv)

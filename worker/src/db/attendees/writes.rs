@@ -116,10 +116,18 @@ pub(crate) async fn check_in_attendee(
     checked_in_by: &str,
     claim_token: &str,
 ) -> Result<(), String> {
+    // Idempotent claim token: once an attendee has a token it is NEVER rotated by
+    // a (re-)check-in — a duplicate scan must not invalidate a claim URL already
+    // shown to / saved by the attendee. A fresh token is only set when none exists
+    // (first check-in, or after `undo_check_in` cleared it). The claim lookup reads
+    // this D1 column, so preserving it here keeps saved claim links working.
     let stmt = db.prepare(
         "UPDATE attendees \
          SET checked_in_at = ?1, checked_in_by = ?2, \
-         claim_token = CASE WHEN ?3 = '' THEN claim_token ELSE ?3 END, \
+         claim_token = CASE \
+             WHEN claim_token IS NOT NULL AND claim_token <> '' THEN claim_token \
+             WHEN ?3 = '' THEN claim_token \
+             ELSE ?3 END, \
          updated_at = datetime('now') \
          WHERE id = ?4",
     );
