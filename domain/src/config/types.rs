@@ -54,13 +54,20 @@ pub struct SheetsConfig {
     pub platform_sheet_id: String,
 }
 
-/// Solana/Helius RPC configuration.
+/// Solana configuration: Helius for DAS reads, Crossmint for minting.
 #[derive(Clone)]
 pub struct SolanaConfig {
-    /// Helius RPC URL for Solana JSON-RPC calls.
+    /// Helius RPC URL for Solana JSON-RPC / DAS calls (reads only).
     pub rpc_url: String,
     /// Helius API key for RPC authentication.
     pub api_key: String,
+    /// Crossmint host: `staging.crossmint.com` (devnet) or `www.crossmint.com`
+    /// (mainnet). Selects the cluster for minting.
+    pub crossmint_host: String,
+    /// Crossmint server-side API key (`X-API-KEY`) for minting.
+    pub crossmint_api_key: String,
+    /// Crossmint collection id to mint into (created once per cluster).
+    pub crossmint_collection_id: String,
 }
 
 impl SolanaConfig {
@@ -88,6 +95,9 @@ impl fmt::Debug for SolanaConfig {
         f.debug_struct("SolanaConfig")
             .field("rpc_url", &self.rpc_url)
             .field("api_key", &"***REDACTED***")
+            .field("crossmint_host", &self.crossmint_host)
+            .field("crossmint_api_key", &"***REDACTED***")
+            .field("crossmint_collection_id", &self.crossmint_collection_id)
             .finish()
     }
 }

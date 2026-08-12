@@ -770,20 +770,18 @@ pub async fn execute_claim(
         return Err(AppError::RateLimited(e));
     }
 
-    // 9. Mint compressed NFT via Helius
+    // 9. Mint compressed NFT via Crossmint (custodial signer + tree + fees)
     let config = &state.config;
     let mint_req = MintRequest {
         wallet_address,
-        rpc_url: &config.solana.rpc_url,
-        api_key: &config.solana.api_key,
-        collection_mint: &event.nft_collection_mint,
-        metadata_uri: &event.nft_metadata_uri,
+        host: &config.solana.crossmint_host,
+        api_key: &config.solana.crossmint_api_key,
+        collection_id: &config.solana.crossmint_collection_id,
         image_url: &event.nft_image_url,
         nft_name: &event.nft_name(),
-        nft_symbol: &event.nft_symbol,
         nft_description: &event.nft_description(),
         nft_external_url: &event.link,
-        merkle_tree: &event.merkle_tree,
+        compressed: true,
     };
     let mint_result = match solana::mint_compressed_nft(&mint_req).await {
         Ok(result) => result,
@@ -801,7 +799,7 @@ pub async fn execute_claim(
                 .await;
             }
             return Err(AppError::External {
-                service: "helius".into(),
+                service: "crossmint".into(),
                 status: 502,
                 body: e.to_string(),
             });
@@ -957,20 +955,18 @@ async fn execute_walkin_claim(
         return Err(AppError::RateLimited(e));
     }
 
-    // Mint compressed NFT via Helius
+    // Mint compressed NFT via Crossmint (custodial signer + tree + fees)
     let config = &state.config;
     let mint_req = MintRequest {
         wallet_address,
-        rpc_url: &config.solana.rpc_url,
-        api_key: &config.solana.api_key,
-        collection_mint: &event.nft_collection_mint,
-        metadata_uri: &event.nft_metadata_uri,
+        host: &config.solana.crossmint_host,
+        api_key: &config.solana.crossmint_api_key,
+        collection_id: &config.solana.crossmint_collection_id,
         image_url: &event.nft_image_url,
         nft_name: &event.nft_name(),
-        nft_symbol: &event.nft_symbol,
         nft_description: &event.nft_description(),
         nft_external_url: &event.link,
-        merkle_tree: &event.merkle_tree,
+        compressed: true,
     };
 
     let mint_result = match crate::solana::mint_compressed_nft(&mint_req).await {

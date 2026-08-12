@@ -156,16 +156,35 @@ impl AppState {
             claim_base_url,
         };
 
+        // Base Helius RPC host (non-sensitive) — used for DAS reads only now.
+        // The api-key is appended separately from HELIUS_API_KEY. Read from secret
+        // first, then plain var (wrangler.toml) so the cluster host can live in
+        // version control.
+        let helius_rpc_url = get_secret(env, "HELIUS_RPC_URL")
+            .or_else(|_| get_var(env, "HELIUS_RPC_URL"))
+            .unwrap_or_else(|_| "https://devnet.helius-rpc.com".to_string());
+        // Crossmint host selects the mint cluster. Default from the Helius cluster
+        // so devnet↔mainnet flips with one existing knob; override via CROSSMINT_HOST.
+        let crossmint_host = get_secret(env, "CROSSMINT_HOST")
+            .or_else(|_| get_var(env, "CROSSMINT_HOST"))
+            .unwrap_or_else(|_| {
+                if helius_rpc_url.contains("mainnet") {
+                    "www.crossmint.com".to_string()
+                } else {
+                    "staging.crossmint.com".to_string()
+                }
+            });
         let solana = SolanaConfig {
-            // Base RPC host (non-sensitive) — the api-key is appended separately
-            // from HELIUS_API_KEY. MUST be a Helius endpoint: cNFT minting uses
-            // Helius' `mintCompressedNft`, which the public `api.*.solana.com`
-            // endpoints do NOT implement. Read from secret first, then plain var
-            // (wrangler.toml) so the cluster host can live in version control.
-            rpc_url: get_secret(env, "HELIUS_RPC_URL")
-                .or_else(|_| get_var(env, "HELIUS_RPC_URL"))
-                .unwrap_or_else(|_| "https://devnet.helius-rpc.com".to_string()),
+            rpc_url: helius_rpc_url,
             api_key: get_secret(env, "HELIUS_API_KEY").unwrap_or_else(|_| String::new()),
+            crossmint_host,
+            // Secret (never in version control).
+            crossmint_api_key: get_secret(env, "CROSSMINT_API_KEY")
+                .unwrap_or_else(|_| String::new()),
+            // Non-sensitive collection id — secret first, then wrangler var.
+            crossmint_collection_id: get_secret(env, "CROSSMINT_COLLECTION_ID")
+                .or_else(|_| get_var(env, "CROSSMINT_COLLECTION_ID"))
+                .unwrap_or_else(|_| String::new()),
         };
 
         let nft = NftConfig {

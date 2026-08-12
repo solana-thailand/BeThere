@@ -641,12 +641,6 @@ pub async fn claim_campaign_reward(
         .unwrap_or(&default_name)
         .to_string();
 
-    let reward_symbol = reward_config
-        .get("symbol")
-        .and_then(|v| v.as_str())
-        .unwrap_or("CAMPAIGN")
-        .to_string();
-
     let default_desc = format!("Completed the {} campaign", campaign.title);
     let reward_description = reward_config
         .get("description")
@@ -660,32 +654,20 @@ pub async fn claim_campaign_reward(
         .unwrap_or("")
         .to_string();
 
-    let reward_metadata_uri = reward_config
-        .get("metadata_uri")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
-
-    let reward_collection_mint = reward_config
-        .get("collection_mint")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
-
-    // Mint campaign cNFT via Helius
+    // Mint campaign cNFT via Crossmint (custodial signer + tree + fees). Campaign
+    // rewards mint into the same Crossmint collection as event badges.
     let config = &state.config;
+    let campaign_external_url = format!("/campaigns/{id}");
     let mint_req = crate::solana::MintRequest {
         wallet_address: &body.wallet_address,
-        rpc_url: &config.solana.rpc_url,
-        api_key: &config.solana.api_key,
-        collection_mint: &reward_collection_mint,
-        metadata_uri: &reward_metadata_uri,
+        host: &config.solana.crossmint_host,
+        api_key: &config.solana.crossmint_api_key,
+        collection_id: &config.solana.crossmint_collection_id,
         image_url: &reward_image_url,
         nft_name: &reward_name,
-        nft_symbol: &reward_symbol,
         nft_description: &reward_description,
-        nft_external_url: &format!("/campaigns/{id}"),
-        merkle_tree: "",
+        nft_external_url: &campaign_external_url,
+        compressed: true,
     };
 
     let mint_result = match crate::solana::mint_compressed_nft(&mint_req).await {
@@ -693,7 +675,7 @@ pub async fn claim_campaign_reward(
         Err(e) => {
             tracing::error!(campaign_id = %id, error = %e, "campaign reward mint failed");
             return Err(AppError::External {
-                service: "helius".into(),
+                service: "crossmint".into(),
                 status: 502,
                 body: e,
             }
