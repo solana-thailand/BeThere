@@ -305,6 +305,11 @@ pub struct ClaimLookupResponse {
     /// When present, the claim is locked to this wallet — any other address is rejected.
     /// `None` means no pre-registered wallet; any valid address may claim.
     pub locked_wallet: Option<String>,
+    /// The attendee's profile-bound wallet, surfaced only when there is no
+    /// per-event lock. An EDITABLE convenience pre-fill (not enforced) so a user
+    /// who linked a wallet in their profile needn't reconnect at claim time.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub suggested_wallet: Option<String>,
     /// Dynamic event metadata (name, tagline, link, timestamps).
     pub event: EventConfig,
     /// Quiz requirement status for this attendee's claim.

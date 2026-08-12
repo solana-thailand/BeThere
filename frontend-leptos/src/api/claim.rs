@@ -55,6 +55,11 @@ pub struct ClaimLookupData {
     /// When present, the claim is locked to this wallet — any other address is rejected.
     #[serde(default)]
     pub locked_wallet: Option<String>,
+    /// The attendee's profile-bound wallet, present only when there is no
+    /// per-event lock. An editable pre-fill (not enforced) so a linked wallet
+    /// doesn't have to be reconnected at claim time.
+    #[serde(default)]
+    pub suggested_wallet: Option<String>,
     /// Dynamic event metadata (name, tagline, link, timestamps).
     #[serde(default)]
     pub event: EventConfig,

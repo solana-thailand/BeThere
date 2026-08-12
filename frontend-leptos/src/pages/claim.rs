@@ -1151,8 +1151,13 @@ pub fn Claim() -> impl IntoView {
                             }
                         });
                     } else {
-                        // Pre-fill wallet if locked to a pre-registered address
+                        // Pre-fill the wallet field: a locked per-event address takes
+                        // priority; otherwise suggest the profile-linked wallet (editable).
                         if let Some(ref wallet) = data.locked_wallet
+                            && !wallet.is_empty()
+                        {
+                            set_wallet_input.set(wallet.clone());
+                        } else if let Some(ref wallet) = data.suggested_wallet
                             && !wallet.is_empty()
                         {
                             set_wallet_input.set(wallet.clone());
@@ -1465,6 +1470,10 @@ pub fn Claim() -> impl IntoView {
                         ClaimState::Ready(data) => {
                             let checked_in_display = checked_in_label(&data.checked_in_at, &data.participation_type);
                             let locked_wallet = data.locked_wallet.clone();
+                            let has_suggested_wallet = data
+                                .suggested_wallet
+                                .as_ref()
+                                .is_some_and(|w| !w.is_empty());
                             view! {
                                 <div class="claim-state-full">
                                     // Attendee welcome
@@ -1640,6 +1649,7 @@ pub fn Claim() -> impl IntoView {
                                                                 {
                                                                     match &locked_wallet {
                                                                         Some(w) if !w.is_empty() => "Use the pre-filled wallet address to claim.",
+                                                                        _ if has_suggested_wallet => "Your linked wallet is pre-filled — change it below if you'd like the badge somewhere else.",
                                                                         _ => "Tap Paste or type your Phantom, Solflare, or Backpack address.",
                                                                     }
                                                                 }

@@ -32,7 +32,13 @@ pub struct ClaimLookup {
     pub claimed: bool,
     pub claimed_at: Option<String>,
     pub nft_available: bool,
+    /// Per-event pre-registered wallet (Sheet column P). When set, the claim is
+    /// LOCKED to this address (often the on-chain depositor).
     pub locked_wallet: Option<String>,
+    /// The attendee's profile-bound wallet (developer_profiles.wallet_address),
+    /// surfaced only when there is no per-event lock. A convenience pre-fill the
+    /// attendee MAY override — not a hard lock.
+    pub suggested_wallet: Option<String>,
     pub event: ApiEventConfig,
     pub quiz_status: QuizStatus,
     pub total_checked_in: usize,
@@ -183,6 +189,7 @@ pub async fn lookup_claim(
             claimed_at: walkin.claimed_at.clone(),
             nft_available,
             locked_wallet: walkin.wallet_address.clone(),
+            suggested_wallet: None, // walk-ins have no developer profile
             event: ApiEventConfig {
                 event_name: event.name.clone(),
                 event_tagline: event.tagline.clone(),
@@ -331,6 +338,24 @@ pub async fn lookup_claim(
         (None, None, None, None)
     };
 
+    // When there's no per-event lock, suggest the attendee's profile-bound wallet
+    // (verified via the SIWS bind flow) as an EDITABLE pre-fill on the claim page,
+    // so someone who linked a wallet in their profile doesn't have to reconnect.
+    let suggested_wallet = if locked_wallet.is_none() {
+        match state.d1.as_deref() {
+            Some(db) => crate::db::developers::get_developer_profile(db, &attendee.email)
+                .await
+                .ok()
+                .flatten()
+                .and_then(|p| p.wallet_address)
+                .map(|w| w.trim().to_string())
+                .filter(|w| !w.is_empty()),
+            None => None,
+        }
+    } else {
+        None
+    };
+
     Ok(ClaimLookup {
         name: display_name,
         checked_in_at,
@@ -339,6 +364,7 @@ pub async fn lookup_claim(
         claimed_at,
         nft_available,
         locked_wallet,
+        suggested_wallet,
         event: api_event,
         quiz_status,
         total_checked_in,

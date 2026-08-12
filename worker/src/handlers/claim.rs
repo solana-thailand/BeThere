@@ -46,6 +46,7 @@ pub async fn get_claim(
         claimed_at: lookup.claimed_at,
         nft_available: lookup.nft_available,
         locked_wallet: lookup.locked_wallet,
+        suggested_wallet: lookup.suggested_wallet,
         event: lookup.event,
         quiz_status: lookup.quiz_status,
         total_checked_in: lookup.total_checked_in,
