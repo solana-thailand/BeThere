@@ -124,6 +124,24 @@ pub async fn duplicate_event(
         body.new_sheet_id.trim().to_string()
     };
 
+    // The NFT name template carries over ONLY when it adapts to the new event
+    // (contains the {event_name} placeholder). A hardcoded literal — e.g. a fixed
+    // "Solana x AI Builders #3" title — would otherwise silently show the SOURCE
+    // event's number on the duplicate, which is exactly the drift that produced
+    // wrong badge titles. Reset such literals to empty so the admin sets a fresh
+    // title (the create form shows a live preview); non-drifting placeholder
+    // templates and the empty default pass through unchanged.
+    let new_name_template = if source.nft_name_template.contains("{event_name}") {
+        source.nft_name_template.clone()
+    } else {
+        if !source.nft_name_template.trim().is_empty() {
+            warnings.push(
+                "NFT name template was reset — the source used a fixed title; set a new one so the badge shows this event's name.".to_string(),
+            );
+        }
+        String::new()
+    };
+
     // Escrow fields intentionally zeroed — create_event forces escrow_status=None
     // regardless, but we zero them too so the request is self-documenting and
     // survives any future loosening of create_event's escrow stripping.
@@ -143,7 +161,7 @@ pub async fn duplicate_event(
         nft_metadata_uri: source.nft_metadata_uri.clone(),
         nft_image_url: source.nft_image_url.clone(),
         poster_url: source.poster_url.clone(),
-        nft_name_template: source.nft_name_template.clone(),
+        nft_name_template: new_name_template,
         nft_symbol: source.nft_symbol.clone(),
         nft_description_template: source.nft_description_template.clone(),
         merkle_tree: source.merkle_tree.clone(),
