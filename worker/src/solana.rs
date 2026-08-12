@@ -610,4 +610,64 @@ mod tests {
         let addr = "11111111111111111111111111111111";
         assert!(validate_wallet_address(addr).is_ok());
     }
+
+    // ── Crossmint response parsing ──────────────────────────────────────
+    // These lock the mint response mapping, which could not be verified against
+    // a live Crossmint account when written (fields parsed defensively).
+    use serde_json::json;
+
+    #[test]
+    fn test_crossmint_status_reads_onchain_first() {
+        let v = json!({ "onChain": { "status": "Success" }, "status": "pending" });
+        assert_eq!(crossmint_status(&v).as_deref(), Some("success")); // lowercased
+    }
+
+    #[test]
+    fn test_crossmint_status_falls_back_to_top_level() {
+        let v = json!({ "status": "PENDING" });
+        assert_eq!(crossmint_status(&v).as_deref(), Some("pending"));
+    }
+
+    #[test]
+    fn test_crossmint_status_absent_is_none() {
+        assert_eq!(crossmint_status(&json!({ "id": "x" })), None);
+    }
+
+    #[test]
+    fn test_parse_success_none_when_pending() {
+        // Even with an assetId present, a non-success status must not resolve.
+        let v = json!({ "onChain": { "status": "pending", "assetId": "AID", "txId": "SIG" } });
+        assert!(parse_crossmint_success(&v).is_none());
+    }
+
+    #[test]
+    fn test_parse_success_extracts_asset_and_signature() {
+        let v = json!({ "onChain": { "status": "success", "assetId": "AID123", "txId": "SIG456" } });
+        let r = parse_crossmint_success(&v).expect("should parse");
+        assert_eq!(r.asset_id, "AID123");
+        assert_eq!(r.signature, "SIG456");
+    }
+
+    #[test]
+    fn test_parse_success_asset_id_fallbacks() {
+        // mintHash is a valid asset-id source when assetId is absent.
+        let v = json!({ "onChain": { "status": "success", "mintHash": "MINT789" } });
+        let r = parse_crossmint_success(&v).expect("mintHash fallback");
+        assert_eq!(r.asset_id, "MINT789");
+        assert_eq!(r.signature, ""); // signature optional
+    }
+
+    #[test]
+    fn test_parse_success_none_when_success_but_no_asset_id() {
+        // Success with no recognizable asset-id field must NOT be treated as done
+        // (the caller surfaces the raw body so the mapping can be fixed).
+        let v = json!({ "onChain": { "status": "success", "txId": "SIG" } });
+        assert!(parse_crossmint_success(&v).is_none());
+    }
+
+    #[test]
+    fn test_parse_success_failed_status_is_none() {
+        let v = json!({ "onChain": { "status": "failed", "assetId": "AID" } });
+        assert!(parse_crossmint_success(&v).is_none());
+    }
 }
