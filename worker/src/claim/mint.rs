@@ -130,6 +130,19 @@ pub(crate) async fn coalesce_event_id(
     resolve_event_id_from_token(state, token).await
 }
 
+/// Rewrite a badge image URL to a Crossmint-safe raster form.
+///
+/// Crossmint (and other minters) reject SVG image URLs. Our badge SVGs are
+/// served with PNG twins at the same path (`/api/badge-hd.svg` →
+/// `/api/badge-hd.png`), so swapping the extension yields a supported image.
+/// Non-SVG URLs pass through unchanged.
+fn crossmint_image_url(url: &str) -> String {
+    match url.strip_suffix(".svg") {
+        Some(stem) => format!("{stem}.png"),
+        None => url.to_string(),
+    }
+}
+
 /// Build an Orb Markets explorer URL for the claimed NFT.
 fn orb_nft_url(asset_id: &str, cluster: &str) -> String {
     let cluster_param = if cluster == "mainnet-beta" {
@@ -772,12 +785,13 @@ pub async fn execute_claim(
 
     // 9. Mint compressed NFT via Crossmint (custodial signer + tree + fees)
     let config = &state.config;
+    let mint_image = crossmint_image_url(&event.nft_image_url);
     let mint_req = MintRequest {
         wallet_address,
         host: &config.solana.crossmint_host,
         api_key: &config.solana.crossmint_api_key,
         collection_id: &config.solana.crossmint_collection_id,
-        image_url: &event.nft_image_url,
+        image_url: &mint_image,
         nft_name: &event.nft_name(),
         nft_description: &event.nft_description(),
         nft_external_url: &event.link,
@@ -957,12 +971,13 @@ async fn execute_walkin_claim(
 
     // Mint compressed NFT via Crossmint (custodial signer + tree + fees)
     let config = &state.config;
+    let mint_image = crossmint_image_url(&event.nft_image_url);
     let mint_req = MintRequest {
         wallet_address,
         host: &config.solana.crossmint_host,
         api_key: &config.solana.crossmint_api_key,
         collection_id: &config.solana.crossmint_collection_id,
-        image_url: &event.nft_image_url,
+        image_url: &mint_image,
         nft_name: &event.nft_name(),
         nft_description: &event.nft_description(),
         nft_external_url: &event.link,

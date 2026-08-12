@@ -107,6 +107,9 @@ pub fn routes(state: AppState) -> Router<()> {
         .route("/metadata/{event_id}", get(metadata::get_metadata))
         .route("/badge.svg", get(metadata::get_badge_svg))
         .route("/badge-hd.svg", get(metadata::get_badge_hd_svg))
+        // Raster twins (Crossmint and other minters reject SVG image URLs).
+        .route("/badge-hd.png", get(metadata::get_badge_hd_png))
+        .route("/badge.png", get(metadata::get_badge_hd_png))
         // Wire-protocol smoke endpoint (Plan 014 Phase 1.3) — public, no auth.
         // Returns a fixed LevelScore sample as JSON (default) or binary
         // (?fmt=bin). Safe to remove after the GOAT-gate (Task 1.7) clears.
