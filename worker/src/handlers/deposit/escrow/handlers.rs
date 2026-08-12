@@ -697,23 +697,52 @@ pub async fn claim_forfeited_tx_handler(
     }
 
     let onchain_events = crate::escrow_indexer::get_onchain_events(db, &body.event_id, 200).await;
-    let mut excluded_wallets: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+    // Exclusions come in two shapes that MUST be matched differently:
+    //  - `Refund` events carry the attendee WALLET (accounts[0]).
+    //  - `MarkCheckedIn` events carry the attendee_deposit PDA (accounts[2]),
+    //    NOT a wallet.
+    // The previous code lumped both into one wallet set, so the checked-in PDAs
+    // never matched any wallet and checked-in attendees were never excluded —
+    // their still-refundable deposits were offered as forfeit candidates. Fix:
+    // derive each candidate wallet's deposit PDA and exclude it when that PDA
+    // appears in the checked-in set.
+    let mut refunded_wallets: std::collections::HashSet<String> =
+        std::collections::HashSet::new();
+    let mut checked_in_pdas: std::collections::HashSet<String> = std::collections::HashSet::new();
     for ev in &onchain_events {
         match ev.instruction {
-            crate::escrow_indexer::EscrowInstruction::MarkCheckedIn
-            | crate::escrow_indexer::EscrowInstruction::Refund => {
-                if let Some(ref attendee) = ev.attendee {
-                    excluded_wallets.insert(attendee.clone());
+            crate::escrow_indexer::EscrowInstruction::Refund => {
+                if let Some(ref wallet) = ev.attendee {
+                    refunded_wallets.insert(wallet.clone());
                 }
             }
-            crate::escrow_indexer::EscrowInstruction::ClaimForfeited => {}
+            crate::escrow_indexer::EscrowInstruction::MarkCheckedIn => {
+                if let Some(ref pda) = ev.attendee {
+                    checked_in_pdas.insert(pda.clone());
+                }
+            }
             _ => {}
         }
     }
 
+    // Map each candidate wallet → its deposit PDA, then exclude the checked-in ones.
+    let wallet_pda_pairs = crate::solana_escrow::derive_attendee_deposit_pdas(
+        organizer_pubkey,
+        on_chain_event_id,
+        &usdc_wallets,
+    )
+    .await
+    .map_err(|e| AppError::Internal(format!("deposit PDA derivation failed: {e}")))?;
+    let checked_in_wallets: std::collections::HashSet<String> = wallet_pda_pairs
+        .into_iter()
+        .filter(|(_, pda)| checked_in_pdas.contains(pda))
+        .map(|(wallet, _)| wallet)
+        .collect();
+
     let indexer_candidates: Vec<String> = usdc_wallets
         .into_iter()
-        .filter(|w| !excluded_wallets.contains(w))
+        .filter(|w| !refunded_wallets.contains(w) && !checked_in_wallets.contains(w))
         .collect();
 
     // Defense against indexer lag: the D1 on-chain event index (populated by the

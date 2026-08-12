@@ -27,8 +27,8 @@ pub use tx_builders::{
 };
 #[allow(unused_imports)]
 pub use wire::{
-    check_escrow_pda_available, derive_escrow_address, filter_forfeitable_deposits,
-    verify_escrow_account_exists,
+    check_escrow_pda_available, derive_attendee_deposit_pdas, derive_escrow_address,
+    filter_forfeitable_deposits, verify_escrow_account_exists,
 };
 
 use std::sync::OnceLock;
