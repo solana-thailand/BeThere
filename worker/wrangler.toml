@@ -81,7 +81,7 @@ HELIUS_RPC_URL = "https://devnet.helius-rpc.com"
 # (wrangler secret put CROSSMINT_API_KEY). CROSSMINT_COLLECTION_ID is the devnet
 # collection created once in the Crossmint console; empty = minting disabled.
 CROSSMINT_HOST = "staging.crossmint.com"
-CROSSMINT_COLLECTION_ID = ""
+CROSSMINT_COLLECTION_ID = "4130f03c-7246-4447-be09-2a6bc3196898"
 GOOGLE_SHEET_NAME = "Attendees"
 GOOGLE_STAFF_SHEET_NAME = "staff"
 PLATFORM_SHEET_ID = "1oF54ia6mquO_kB869aQxmz3RD8nDcTRWfXIX0VmndxM"
