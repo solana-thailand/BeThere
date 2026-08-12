@@ -44,6 +44,10 @@ pub struct MintRequest<'a> {
     pub nft_external_url: &'a str,
     /// Whether to mint compressed (cNFT). Solana only; Crossmint defaults true.
     pub compressed: bool,
+    /// Idempotency key (the claim token). When set alongside a KV store, a mint
+    /// that fired but hasn't confirmed is resumed instead of re-fired on retry,
+    /// preventing a duplicate mint after a poll timeout. Empty = no guard.
+    pub idempotency_key: &'a str,
 }
 
 // ---------------------------------------------------------------------------
@@ -69,8 +73,14 @@ pub struct MintResult {
 /// lock upstream so the attendee can retry) on misconfiguration, an API error,
 /// a failed mint, or if confirmation is still pending after the poll budget.
 ///
-/// See [`MintRequest`] for field documentation.
-pub async fn mint_compressed_nft(req: &MintRequest<'_>) -> Result<MintResult, String> {
+/// See [`MintRequest`] for field documentation. `kv`, when present with a
+/// non-empty `idempotency_key`, guards against double-mint: the created NFT id
+/// is persisted before polling, so a retry after a poll timeout resumes the
+/// same mint instead of firing a new one.
+pub async fn mint_compressed_nft(
+    req: &MintRequest<'_>,
+    kv: Option<&worker::KvStore>,
+) -> Result<MintResult, String> {
     if req.api_key.is_empty() {
         return Err("crossmint not configured: missing CROSSMINT_API_KEY".to_string());
     }
@@ -87,43 +97,74 @@ pub async fn mint_compressed_nft(req: &MintRequest<'_>) -> Result<MintResult, St
         req.collection_id
     );
 
-    // Metadata — only well-supported fields; add image/external_url when present.
-    let mut metadata = serde_json::json!({
-        "name": req.nft_name,
-        "description": req.nft_description,
-    });
-    if !req.image_url.is_empty() {
-        metadata["image"] = serde_json::Value::String(req.image_url.to_string());
-    }
-    if !req.nft_external_url.is_empty() {
-        metadata["external_url"] = serde_json::Value::String(req.nft_external_url.to_string());
-    }
+    // Idempotency: a pending-mint marker keyed by the claim token. Present only
+    // when both a KV store and a non-empty key are supplied.
+    let pending_key = (!req.idempotency_key.is_empty())
+        .then(|| format!("crossmint:pending:{}", req.idempotency_key));
+    let pending_kv = kv.zip(pending_key.as_ref());
 
-    let body = serde_json::json!({
-        "recipient": format!("solana:{}", req.wallet_address),
-        "metadata": metadata,
-        "compressed": req.compressed,
-    });
-    let json_body = serde_json::to_string(&body)
-        .map_err(|e| format!("failed to serialize mint request: {e}"))?;
+    // If a mint for this key already fired but never confirmed, resume polling it
+    // instead of firing a duplicate.
+    let resumed_nft_id = match pending_kv {
+        Some((kv, key)) => kv.get(key).text().await.ok().flatten(),
+        None => None,
+    };
 
-    // 1. Fire the mint.
-    let post_json = crossmint_request(&base, Method::Post, req.api_key, Some(&json_body)).await?;
+    let nft_id = if let Some(id) = resumed_nft_id {
+        tracing::info!(nft_id = %id, "crossmint: resuming in-flight mint (idempotent retry)");
+        id
+    } else {
+        // Metadata — only well-supported fields; add image/external_url when present.
+        let mut metadata = serde_json::json!({
+            "name": req.nft_name,
+            "description": req.nft_description,
+        });
+        if !req.image_url.is_empty() {
+            metadata["image"] = serde_json::Value::String(req.image_url.to_string());
+        }
+        if !req.nft_external_url.is_empty() {
+            metadata["external_url"] = serde_json::Value::String(req.nft_external_url.to_string());
+        }
 
-    // If Crossmint already confirmed synchronously (unlikely), short-circuit.
-    if let Some(result) = parse_crossmint_success(&post_json) {
-        tracing::info!(asset_id = %result.asset_id, "crossmint mint confirmed on submit");
-        return Ok(result);
-    }
+        let body = serde_json::json!({
+            "recipient": format!("solana:{}", req.wallet_address),
+            "metadata": metadata,
+            "compressed": req.compressed,
+        });
+        let json_body = serde_json::to_string(&body)
+            .map_err(|e| format!("failed to serialize mint request: {e}"))?;
 
-    let nft_id = post_json
-        .get("id")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| format!("crossmint mint response missing id: {post_json}"))?
-        .to_string();
-    tracing::info!(nft_id = %nft_id, "crossmint mint submitted; polling for confirmation");
+        // Fire the mint.
+        let post_json =
+            crossmint_request(&base, Method::Post, req.api_key, Some(&json_body)).await?;
 
-    // 2. Poll the NFT resource until it confirms on-chain.
+        // If Crossmint already confirmed synchronously (unlikely), short-circuit.
+        if let Some(result) = parse_crossmint_success(&post_json) {
+            tracing::info!(asset_id = %result.asset_id, "crossmint mint confirmed on submit");
+            return Ok(result);
+        }
+
+        let id = post_json
+            .get("id")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| format!("crossmint mint response missing id: {post_json}"))?
+            .to_string();
+        // Persist the pending marker BEFORE polling so a timeout/crash can resume.
+        if let Some((kv, key)) = pending_kv
+            && let Ok(builder) = kv.put(key, &id)
+        {
+            let _ = builder.expiration_ttl(3600).execute().await;
+        }
+        tracing::info!(nft_id = %id, "crossmint mint submitted; polling for confirmation");
+        id
+    };
+
+    // Poll the NFT resource until it confirms on-chain.
+    let clear_pending = || async {
+        if let Some((kv, key)) = pending_kv {
+            let _ = kv.delete(key).await;
+        }
+    };
     let poll_url = format!("{base}/{nft_id}");
     for attempt in 1..=CROSSMINT_MAX_POLLS {
         worker::Delay::from(std::time::Duration::from_millis(CROSSMINT_POLL_DELAY_MS)).await;
@@ -143,17 +184,22 @@ pub async fn mint_compressed_nft(req: &MintRequest<'_>) -> Result<MintResult, St
 
         match crossmint_status(&poll_json).as_deref() {
             Some("success") => {
-                return parse_crossmint_success(&poll_json).ok_or_else(|| {
+                let result = parse_crossmint_success(&poll_json).ok_or_else(|| {
                     format!("crossmint reported success but no asset id/signature: {poll_json}")
-                });
+                })?;
+                clear_pending().await;
+                return Ok(result);
             }
             Some("failed") | Some("rejected") | Some("error") => {
+                // Definitive failure — clear the marker so a retry mints fresh.
+                clear_pending().await;
                 return Err(format!("crossmint mint failed: {poll_json}"));
             }
             _ => { /* pending — keep polling */ }
         }
     }
 
+    // Timeout: leave the pending marker in place so the next attempt resumes.
     Err(format!(
         "crossmint mint still pending after {CROSSMINT_MAX_POLLS} polls (nft_id={nft_id})"
     ))

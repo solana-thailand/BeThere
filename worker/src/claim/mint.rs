@@ -796,8 +796,9 @@ pub async fn execute_claim(
         nft_description: &event.nft_description(),
         nft_external_url: &event.link,
         compressed: true,
+        idempotency_key: token,
     };
-    let mint_result = match solana::mint_compressed_nft(&mint_req).await {
+    let mint_result = match solana::mint_compressed_nft(&mint_req, lock_kv).await {
         Ok(result) => result,
         Err(ref e) => {
             tracing::error!(claim_token = %token, error = %e, "mint failed");
@@ -982,9 +983,10 @@ async fn execute_walkin_claim(
         nft_description: &event.nft_description(),
         nft_external_url: &event.link,
         compressed: true,
+        idempotency_key: token,
     };
 
-    let mint_result = match crate::solana::mint_compressed_nft(&mint_req).await {
+    let mint_result = match crate::solana::mint_compressed_nft(&mint_req, kv).await {
         Ok(result) => result,
         Err(ref e) => {
             tracing::error!(claim_token = %token, error = %e, "walk-in mint failed");

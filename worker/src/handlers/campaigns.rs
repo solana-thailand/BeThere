@@ -668,9 +668,10 @@ pub async fn claim_campaign_reward(
         nft_description: &reward_description,
         nft_external_url: &campaign_external_url,
         compressed: true,
+        idempotency_key: "",
     };
 
-    let mint_result = match crate::solana::mint_compressed_nft(&mint_req).await {
+    let mint_result = match crate::solana::mint_compressed_nft(&mint_req, None).await {
         Ok(result) => result,
         Err(e) => {
             tracing::error!(campaign_id = %id, error = %e, "campaign reward mint failed");
