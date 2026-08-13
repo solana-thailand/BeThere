@@ -165,6 +165,13 @@ model, but it's what makes the #1 token leak impactful.
 **Fix (optional):** when the attendee HAS a linked profile wallet, prefer the
 server-resolved linked wallet and treat an explicit override as a last resort.
 
+**Resolution — no code change (by design).** The exploit that made this matter was
+the token leak in #1, now fixed. The frontend already makes the linked wallet the
+primary one-tap path (server-resolved via `use_linked_wallet`), with the explicit
+override behind "use a different wallet" — removing the override entirely would
+delete a legitimate feature. So the bearer-token model stands as intended: whoever
+legitimately holds the claim token can direct the badge, which is the POA design.
+
 ---
 
 ## 8. MEDIUM — Wallet could bind to multiple emails; resolution was nondeterministic *(fixed this session)*
