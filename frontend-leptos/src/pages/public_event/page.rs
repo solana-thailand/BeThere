@@ -580,11 +580,13 @@ fn render_loaded_event(
             }.into_any()
         }}
 
-        // Share button
-        {share_button(&current_slug, &data.name, share_copied, set_share_copied)}
-
         // Event Details Card
         {details_card(&data, countdown, event_completed)}
+
+        // Share / Add-to-Calendar — secondary actions, placed AFTER the details
+        // (so they don't crowd the primary hero CTA, and "Add to Calendar" sits
+        // right next to the date/time it saves).
+        {share_button(&current_slug, &data.name, share_copied, set_share_copied)}
 
         // NFT Badge — the reward, shown above the deposit/reserve ask to motivate
         // ("here's what you'll earn") rather than buried after the form.
