@@ -223,6 +223,26 @@ pub async fn refund_and_close_tx_handler(
         .into());
     }
 
+    // SECURITY (#2): the checks above key off `attendee_id`, but the refund TX is
+    // built from `wallet_address` (which derives the on-chain deposit PDA). If
+    // those aren't cross-checked, an overflow-tier (non-refundable) depositor
+    // could pass someone else's refundable `attendee_id` together with their OWN
+    // wallet and reclaim a deposit meant to be forfeited. Require the deposit of
+    // record to belong to the wallet being refunded.
+    let recorded_wallet = status.wallet_address.as_deref().unwrap_or("").trim();
+    if recorded_wallet.is_empty()
+        || !recorded_wallet.eq_ignore_ascii_case(body.wallet_address.trim())
+    {
+        tracing::warn!(
+            attendee_id = %body.attendee_id,
+            "escrow refund blocked: wallet does not match the deposit of record (authz guard)"
+        );
+        return Err(AppError::Validation(
+            "this wallet does not match the deposit on record — a refund goes to the wallet that placed the deposit".to_string(),
+        )
+        .into());
+    }
+
     let organizer_pubkey = if event.organizer_wallet.is_empty() {
         return Err(
             AppError::Internal("event has no organizer wallet configured".to_string()).into(),
