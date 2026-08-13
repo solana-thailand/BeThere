@@ -92,10 +92,22 @@ but two concurrent registrations by the same verified email (two events, balance
 100, each needs 100) can both read `>= required` and both decrement → two
 credit-covered deposits from one balance.
 
-**Fix:** Move credit balances to D1 and settle with a conditional
-`UPDATE ... SET balance = balance - ? WHERE email = ? AND balance >= ?` (mirror
-`try_settle_hold_credit`), consuming only when `changes > 0`. Requires a small
-migration.
+**Fix (refined — NOT applied, needs a dedicated reviewed PR):** The D1 `contacts`
+table *already* carries `deposit_credit_thb`/`deposit_credit_usdc` (migration
+0002), so no new migration is needed — but the spend path in `signup.rs` reads and
+decrements the **Google Sheet**, not D1. The fix is to make **D1 authoritative for
+credit-spend**: add `try_decrement_credit` in `db/contacts.rs` doing a conditional
+`UPDATE contacts SET deposit_credit_thb = deposit_credit_thb - ?1
+WHERE lower(email) = ?2 AND deposit_credit_thb >= ?1` and consume only when
+`meta().changes > 0` (mirrors `try_settle_hold_credit`); spend via that CAS FIRST,
+then best-effort mirror the decrement to the Sheet for display.
+
+**Why this was flagged, not auto-applied:** credit is currently dual-stored
+(Sheet master + D1 mirror) and the two can diverge if any prior increment/decrement
+hit only one. Switching the spend gate to D1 without first reconciling the two
+stores risks rejecting a legit credit or honoring a stale one — a money bug. This
+needs a reconciliation step + review, so it's left as a scoped follow-up. Exploit
+is narrow (same verified email registering for two events *simultaneously*).
 
 ---
 
