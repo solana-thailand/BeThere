@@ -74,14 +74,14 @@ TELEGRAM_BOT_USERNAME = "BeThereProtocolBot"
 # https://mainnet.helius-rpc.com to mint real mainnet badges (cluster is derived
 # from this host). cNFT minting stays OFF per-event until an event has an
 # nft_image_url set.
-HELIUS_RPC_URL = "https://devnet.helius-rpc.com"
+HELIUS_RPC_URL = "https://mainnet.helius-rpc.com"
 # Crossmint hosted minting (replaces Helius' retired mintCompressedNft). Cluster
 # is selected by host: staging.crossmint.com = devnet, www.crossmint.com = mainnet.
 # Defaults from the HELIUS_RPC_URL cluster if unset. CROSSMINT_API_KEY is a SECRET
 # (wrangler secret put CROSSMINT_API_KEY). CROSSMINT_COLLECTION_ID is the devnet
 # collection created once in the Crossmint console; empty = minting disabled.
-CROSSMINT_HOST = "staging.crossmint.com"
-CROSSMINT_COLLECTION_ID = "4130f03c-7246-4447-be09-2a6bc3196898"
+CROSSMINT_HOST = "www.crossmint.com"
+CROSSMINT_COLLECTION_ID = "8749666f-7b6c-486d-8e85-dcbec3b7de91"
 GOOGLE_SHEET_NAME = "Attendees"
 GOOGLE_STAFF_SHEET_NAME = "staff"
 PLATFORM_SHEET_ID = "1oF54ia6mquO_kB869aQxmz3RD8nDcTRWfXIX0VmndxM"
