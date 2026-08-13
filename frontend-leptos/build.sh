@@ -43,6 +43,24 @@ PY
     ls -lh dist/
 }
 
+bump_sw_version() {
+    # The service worker caches assets under CACHE_VERSION and only re-activates
+    # (and purges stale caches) when its own bytes change. If the version isn't
+    # bumped per deploy, users keep the STALE cached frontend even after a deploy
+    # (they'd need a manual Cmd+Shift+R). Derive the version from a hash of the
+    # final index.html — which references every content-hashed asset (WASM/CSS/JS)
+    # — so any asset change invalidates the SW cache automatically.
+    if [[ ! -f dist/sw.js || ! -f dist/index.html ]]; then
+        echo "⚠️  dist/sw.js or dist/index.html missing — skipping SW version bump"
+        return
+    fi
+    local ver
+    ver="$(shasum -a 256 dist/index.html | cut -c1-16)"
+    sed -i.bak -E "s/var CACHE_VERSION = \"[^\"]*\";/var CACHE_VERSION = \"bethere-${ver}\";/" dist/sw.js
+    rm -f dist/sw.js.bak
+    echo "🔁 SW cache version → bethere-${ver} (auto-invalidates stale caches on deploy)"
+}
+
 build() {
     echo "🏗️  Building Leptos WASM frontend..."
     ~/.cargo/bin/trunk build --release
@@ -59,6 +77,7 @@ build() {
     fi
 
     cleanup_html
+    bump_sw_version
 }
 
 # --watch mode: auto-rebuild on file changes
