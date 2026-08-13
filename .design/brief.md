@@ -10,10 +10,10 @@
 ### Colors
 | Token | Value | Usage |
 |-------|-------|-------|
-| `--bg-primary` | `#13131b` | Page background (blue-tinted dark) |
-| `--bg-secondary` | `#1a1a24` | Cards, sections |
+| `--bg-primary` | `#12152a` | Page background (blue-tinted dark) |
+| `--bg-secondary` | `#171b33` | Cards, sections |
 | `--bg-tertiary` | `#242430` | Elevated surfaces |
-| `--bg-card` | `#1e1e2a` | Card backgrounds |
+| `--bg-card` | `#1a1f3b` | Card backgrounds |
 | `--bg-hover` | `#2a2a38` | Hover states |
 | `--text-primary` | `#e0e0e0` | Body text |
 | `--text-secondary` | `#999` | Descriptions |
