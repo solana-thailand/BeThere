@@ -946,6 +946,48 @@ pub(crate) async fn recover_and_verify_deposit(
         status.wallet_address = Some(signer.to_string());
     }
 
+    // F1 (audit): the signer cross-check proves the wallet signed *a* confirmed
+    // tx — NOT that it was a real deposit. Bind verification to the on-chain
+    // `AttendeeDeposit` PDA: require it to exist with amount == the event's deposit
+    // and refunded == false. Without this, a confirmed-but-unrelated tx by the
+    // right fee-payer (e.g. a self-transfer) could earn a free verified ticket.
+    // Fail CLOSED (defer, don't verify) on an RPC error; the read-path retries.
+    let deposit_wallet = status.wallet_address.as_deref().unwrap_or("").to_string();
+    if !event.organizer_wallet.is_empty() && !deposit_wallet.is_empty() {
+        let on_chain_event_id = if event.on_chain_event_id != 0 {
+            event.on_chain_event_id
+        } else {
+            crate::handlers::deposit::derive_on_chain_event_id(&event.id)
+        };
+        match crate::solana_escrow::verify_attendee_deposit_onchain(
+            &rpc_url,
+            &event.organizer_wallet,
+            on_chain_event_id,
+            &deposit_wallet,
+            event.deposit_amount_usdc,
+        )
+        .await
+        {
+            Ok(true) => { /* genuine on-chain deposit — proceed to verify */ }
+            Ok(false) => {
+                tracing::warn!(
+                    attendee_id = %attendee_id,
+                    event_id = %event.id,
+                    "deposit verify refused: no matching on-chain AttendeeDeposit PDA (amount/refunded) — F1 guard"
+                );
+                return status;
+            }
+            Err(e) => {
+                tracing::warn!(
+                    attendee_id = %attendee_id,
+                    error = %e,
+                    "deposit PDA read-back failed — deferring verification (fail-closed)"
+                );
+                return status;
+            }
+        }
+    }
+
     // Guard 2 (double-registration defence — plan 003): refuse to verify if
     // the wallet or the discovered tx_signature is already bound to a
     // *different* attendee_id. The on-chain `AttendeeDeposit` PDA is keyed by

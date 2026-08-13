@@ -322,6 +322,133 @@ async fn account_exists_owned_by_program(
     })
 }
 
+/// Decoded fields of an on-chain `AttendeeDeposit` (v1) that deposit verification
+/// cares about. See `bethere-escrow/src/state.rs` — 96-byte layout, discriminator 2.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct AttendeeDepositView {
+    pub amount: u64,
+    pub refunded: bool,
+}
+
+/// Decode `AttendeeDeposit` account data. `None` if the bytes are not a
+/// well-formed v1 record (wrong discriminator or too short). Pure — unit-tested.
+///
+/// Layout: disc(1) ver(1) attendee(32) event(32) amount(8) deposited_at(8)
+///         checked_in(1) refunded(1) bump(1) padding(11) = 96 bytes.
+///         → amount at [66..74] (u64 LE), refunded at [83].
+pub(crate) fn decode_attendee_deposit(data: &[u8]) -> Option<AttendeeDepositView> {
+    if data.len() < 84 || data[0] != 2 {
+        return None;
+    }
+    let amount = u64::from_le_bytes(data[66..74].try_into().ok()?);
+    let refunded = data[83] != 0;
+    Some(AttendeeDepositView { amount, refunded })
+}
+
+/// Fetch an account's `(owner_b58, data)` via `getAccountInfo` (base64).
+/// `Ok(None)` when the account does not exist.
+async fn fetch_account_data(
+    rpc_url: &str,
+    account_b58: &str,
+) -> Result<Option<(String, Vec<u8>)>, EscrowError> {
+    use base64::Engine as _;
+
+    let body = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": "bethere-account-read",
+        "method": "getAccountInfo",
+        "params": [account_b58, { "encoding": "base64", "commitment": "confirmed" }]
+    });
+    let json_body = serde_json::to_string(&body)
+        .map_err(|e| EscrowError::RpcFailed(format!("serialize: {e}")))?;
+    let headers = worker::Headers::new();
+    headers
+        .set("Content-Type", "application/json")
+        .map_err(|e| EscrowError::RpcFailed(format!("headers: {e:?}")))?;
+    let mut init = worker::RequestInit::new();
+    init.with_method(worker::Method::Post)
+        .with_headers(headers)
+        .with_body(Some(wasm_bindgen::JsValue::from_str(&json_body)));
+    let request = worker::Request::new_with_init(rpc_url, &init)
+        .map_err(|e| EscrowError::RpcFailed(format!("request: {e:?}")))?;
+    let mut response = worker::Fetch::Request(request)
+        .send()
+        .await
+        .map_err(|e| EscrowError::RpcFailed(format!("fetch: {e:?}")))?;
+    let status = response.status_code();
+    if !(200..300).contains(&status) {
+        let text = response.text().await.unwrap_or_default();
+        return Err(EscrowError::RpcFailed(format!("HTTP {status}: {text}")));
+    }
+    let text = response
+        .text()
+        .await
+        .map_err(|e| EscrowError::RpcFailed(format!("read body: {e:?}")))?;
+    let json: serde_json::Value = serde_json::from_str(&text)
+        .map_err(|e| EscrowError::RpcFailed(format!("parse json: {e}")))?;
+    let value = match json.get("result").and_then(|v| v.get("value")) {
+        None | Some(serde_json::Value::Null) => return Ok(None),
+        Some(v) => v,
+    };
+    let owner = value
+        .get("owner")
+        .and_then(|o| o.as_str())
+        .unwrap_or("")
+        .to_string();
+    let data_b64 = value
+        .get("data")
+        .and_then(|d| d.get(0))
+        .and_then(|s| s.as_str())
+        .unwrap_or("");
+    let data = base64::engine::general_purpose::STANDARD
+        .decode(data_b64)
+        .map_err(|e| EscrowError::RpcFailed(format!("base64: {e}")))?;
+    Ok(Some((owner, data)))
+}
+
+/// Read back an attendee's on-chain `AttendeeDeposit` PDA and confirm it is a
+/// genuine, unsettled deposit of `expected_amount` (audit finding F1). Returns
+/// `Ok(true)` ONLY when the PDA exists, is owned by the escrow program, decodes as
+/// an `AttendeeDeposit`, `amount == expected_amount`, and `refunded == false`.
+///
+/// Binds deposit *verification* to a real on-chain deposit — without this, a
+/// confirmed-but-unrelated tx by the right fee-payer (e.g. a self-transfer) could
+/// mark a deposit verified (a free ticket). Cannot steal funds; it's economic
+/// integrity. Callers should fail CLOSED on `Err` (transient RPC → retry later).
+pub async fn verify_attendee_deposit_onchain(
+    rpc_url: &str,
+    organizer_pubkey: &str,
+    event_id: u64,
+    attendee_wallet: &str,
+    expected_amount: u64,
+) -> Result<bool, EscrowError> {
+    let program_id = pubkey_from_base58(escrow_program_id())?;
+    let organizer = pubkey_from_base58(organizer_pubkey)?;
+    let (event_escrow, _) = find_program_address(
+        &[b"escrow", organizer.as_slice(), &event_id.to_le_bytes()],
+        &program_id,
+    )
+    .await?;
+    let attendee = pubkey_from_base58(attendee_wallet)?;
+    let (deposit_pda, _) = find_program_address(
+        &[b"deposit", event_escrow.as_slice(), attendee.as_slice()],
+        &program_id,
+    )
+    .await?;
+    let deposit_pda_b58 = pubkey_to_base58(&deposit_pda);
+
+    let Some((owner, data)) = fetch_account_data(rpc_url, &deposit_pda_b58).await? else {
+        return Ok(false); // no deposit account at the derived PDA
+    };
+    if owner.as_str() != escrow_program_id() {
+        return Ok(false);
+    }
+    Ok(match decode_attendee_deposit(&data) {
+        Some(v) => v.amount == expected_amount && !v.refunded,
+        None => false,
+    })
+}
+
 /// Verify each candidate attendee's `AttendeeDeposit` PDA still exists on-chain
 /// and is owned by the escrow program.
 ///
@@ -744,4 +871,48 @@ pub(crate) fn build_message_accounts(
         .collect();
 
     (message_accounts, program_id_index, ix_account_indices)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::decode_attendee_deposit;
+
+    /// Build a v1 AttendeeDeposit account body (96 bytes) matching
+    /// bethere-escrow/src/state.rs.
+    fn make_deposit(amount: u64, refunded: bool) -> Vec<u8> {
+        let mut d = vec![0u8; 96];
+        d[0] = 2; // discriminator = AttendeeDeposit
+        d[1] = 1; // version
+        // attendee [2..34], event [34..66] left zero
+        d[66..74].copy_from_slice(&amount.to_le_bytes());
+        // deposited_at [74..82], checked_in [82] left zero
+        d[83] = u8::from(refunded);
+        d
+    }
+
+    #[test]
+    fn decodes_amount_and_unrefunded() {
+        let v = decode_attendee_deposit(&make_deposit(15_000_000, false)).expect("decode");
+        assert_eq!(v.amount, 15_000_000);
+        assert!(!v.refunded);
+    }
+
+    #[test]
+    fn decodes_refunded_flag() {
+        let v = decode_attendee_deposit(&make_deposit(1, true)).expect("decode");
+        assert!(v.refunded);
+    }
+
+    #[test]
+    fn rejects_wrong_discriminator() {
+        let mut d = make_deposit(1, false);
+        d[0] = 1; // EventEscrow, not AttendeeDeposit
+        assert!(decode_attendee_deposit(&d).is_none());
+    }
+
+    #[test]
+    fn rejects_short_data() {
+        assert!(decode_attendee_deposit(&[2u8; 40]).is_none());
+        assert!(decode_attendee_deposit(&[]).is_none());
+    }
 }
