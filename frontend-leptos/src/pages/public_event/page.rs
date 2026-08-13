@@ -578,19 +578,6 @@ fn render_loaded_event(
         // Event Details Card
         {details_card(&data, countdown, event_completed)}
 
-        // About this Event
-        {if has_description {
-            let desc = description.clone();
-            view! {
-                <div class="pe-card">
-                    <h2 class="pe-section-title">"About this Event"</h2>
-                    <p class="pe-description">{desc}</p>
-                </div>
-            }.into_any()
-        } else {
-            ().into_any()
-        }}
-
         // Community Links
         {crate::pages::ticket::community_links::community_links_section(community_links.clone(), crate::pages::ticket::community_links::CommunityLinksVariant::PublicEvent)}
 
@@ -839,6 +826,20 @@ fn render_loaded_event(
                         {if is_online_only { "Earn this NFT badge when you complete the quest after the event." } else { "Earn a commemorative NFT badge when you attend." }}
                     </p>
                     <img src=url alt="NFT Badge" class="pe-nft-img" />
+                </div>
+            }.into_any()
+        } else {
+            ().into_any()
+        }}
+
+        // About this Event — moved below the action zone: it's reference content,
+        // not a gate to the primary CTA (which is above the fold + sticky on mobile).
+        {if has_description {
+            let desc = description.clone();
+            view! {
+                <div class="pe-card">
+                    <h2 class="pe-section-title">"About this Event"</h2>
+                    <p class="pe-description">{desc}</p>
                 </div>
             }.into_any()
         } else {
