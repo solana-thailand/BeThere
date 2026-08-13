@@ -142,14 +142,16 @@ claim-lock / `claimed_at` record rather than solely the KV marker.
 
 ---
 
-## 6. LOW — Raw SQL string interpolation for social handles
+## 6. LOW — Raw SQL string interpolation for social handles *(FIXED this session)*
 
-**File:** `worker/src/handlers/social_link.rs` (~L309-322, L474-534, L644-664).
-**CONFIRMED not exploitable**, but fragile. Values are escaped via
-`replace('\'', "''")` and executed as single-quoted SQLite literals — breakout
-isn't achievable, but it's one refactor away from a hole.
+**File:** `worker/src/handlers/social_link.rs`. Was: values escaped via
+`replace('\'', "''")` and interpolated into single-quoted SQLite literals — not
+exploitable, but fragile.
 
-**Fix:** Use parameterized `bind`/`?n` placeholders as elsewhere in `db/`.
+**Fixed:** all four sites (GitHub link, both Telegram saves, social unlink) now use
+parameterized `bind_refs`/`?n` placeholders — no attacker-controlled profile text
+touches SQL text. The duplicated Telegram INSERT was also collapsed onto the shared
+`save_telegram_link` helper.
 
 ---
 

@@ -306,22 +306,28 @@ pub async fn github_link_callback(
         None => return Redirect::to("/profile?error=db_unavailable").into_response(),
     };
 
-    let handle = user_info.login.replace('\'', "''");
-    let email_escaped = email.replace('\'', "''");
-    let sql = format!(
-        "INSERT INTO developer_profiles \
+    // Parameterized (?1 email, ?2 handle) — never interpolate attacker-controlled
+    // profile text into SQL. See docs/SECURITY-FINDINGS-2026-08-13.md #6.
+    let sql = "INSERT INTO developer_profiles \
          (email, github_handle, github_verified, github_verified_at, \
           first_seen_at, last_active_at, total_events, updated_at) \
-         VALUES ('{email_escaped}', '{handle}', 1, datetime('now'), \
+         VALUES (?1, ?2, 1, datetime('now'), \
                  datetime('now'), datetime('now'), 0, datetime('now')) \
          ON CONFLICT (email) DO UPDATE SET \
-          github_handle = '{handle}', \
+          github_handle = ?2, \
           github_verified = 1, \
           github_verified_at = datetime('now'), \
-          updated_at = datetime('now')"
-    );
-
-    if let Err(e) = worker::D1Database::prepare(d1, &sql).run().await {
+          updated_at = datetime('now')";
+    let stmt = match worker::D1Database::prepare(d1, sql)
+        .bind_refs(&[worker::D1Type::Text(&email), worker::D1Type::Text(&user_info.login)])
+    {
+        Ok(s) => s,
+        Err(e) => {
+            tracing::error!("GitHub handle save bind failed: {e:?}");
+            return Redirect::to("/profile?error=github_save_failed").into_response();
+        }
+    };
+    if let Err(e) = stmt.run().await {
         tracing::error!("GitHub handle save failed: {e:?}");
         return Redirect::to("/profile?error=github_save_failed").into_response();
     }
@@ -471,28 +477,12 @@ pub async fn telegram_verify(
 
     let telegram_handle = body.username.clone().unwrap_or_else(|| body.first_name.clone());
     let telegram_id = body.id.to_string();
-    let email_escaped = claims.email.replace('\'', "''");
-    let handle_escaped = telegram_handle.replace('\'', "''");
-    let id_escaped = telegram_id.replace('\'', "''");
 
-    let sql = format!(
-        "INSERT INTO developer_profiles \
-         (email, telegram_handle, telegram_id, telegram_verified, telegram_verified_at, \
-          first_seen_at, last_active_at, total_events, updated_at) \
-         VALUES ('{email_escaped}', '{handle_escaped}', '{id_escaped}', 1, datetime('now'), \
-                 datetime('now'), datetime('now'), 0, datetime('now')) \
-         ON CONFLICT (email) DO UPDATE SET \
-          telegram_handle = '{handle_escaped}', \
-          telegram_id = '{id_escaped}', \
-          telegram_verified = 1, \
-          telegram_verified_at = datetime('now'), \
-          updated_at = datetime('now')"
-    );
-
-    worker::D1Database::prepare(d1, &sql)
-        .run()
+    // Parameterized (?1 email, ?2 handle, ?3 id) — Telegram profile text is
+    // attacker-controlled. See docs/SECURITY-FINDINGS-2026-08-13.md #6.
+    save_telegram_link(d1, &claims.email, &telegram_handle, &telegram_id)
         .await
-        .map_err(|e| WorkerError(AppError::Internal(format!("Telegram save failed: {e:?}"))))?;
+        .map_err(|e| WorkerError(AppError::Internal(format!("Telegram save failed: {e}"))))?;
 
     tracing::info!(
         email = %claims.email,
@@ -516,23 +506,26 @@ async fn save_telegram_link(
     handle: &str,
     telegram_id: &str,
 ) -> Result<(), String> {
-    let email_escaped = email.replace('\'', "''");
-    let handle_escaped = handle.replace('\'', "''");
-    let id_escaped = telegram_id.replace('\'', "''");
-    let sql = format!(
-        "INSERT INTO developer_profiles \
+    // Parameterized (?1 email, ?2 handle, ?3 id) — never interpolate Telegram
+    // profile text into SQL. See docs/SECURITY-FINDINGS-2026-08-13.md #6.
+    let sql = "INSERT INTO developer_profiles \
          (email, telegram_handle, telegram_id, telegram_verified, telegram_verified_at, \
           first_seen_at, last_active_at, total_events, updated_at) \
-         VALUES ('{email_escaped}', '{handle_escaped}', '{id_escaped}', 1, datetime('now'), \
+         VALUES (?1, ?2, ?3, 1, datetime('now'), \
                  datetime('now'), datetime('now'), 0, datetime('now')) \
          ON CONFLICT (email) DO UPDATE SET \
-          telegram_handle = '{handle_escaped}', \
-          telegram_id = '{id_escaped}', \
+          telegram_handle = ?2, \
+          telegram_id = ?3, \
           telegram_verified = 1, \
           telegram_verified_at = datetime('now'), \
-          updated_at = datetime('now')"
-    );
-    worker::D1Database::prepare(d1, &sql)
+          updated_at = datetime('now')";
+    worker::D1Database::prepare(d1, sql)
+        .bind_refs(&[
+            worker::D1Type::Text(email),
+            worker::D1Type::Text(handle),
+            worker::D1Type::Text(telegram_id),
+        ])
+        .map_err(|e| format!("Telegram save bind: {e:?}"))?
         .run()
         .await
         .map(|_| ())
@@ -641,27 +634,21 @@ pub async fn social_unlink(
         .as_ref()
         .ok_or_else(|| WorkerError(AppError::Internal("D1 not available".to_string())))?;
 
-    let email_escaped = claims.email.replace('\'', "''");
-
-    let sql = match body.platform.as_str() {
-        "github" => format!(
-            "UPDATE developer_profiles SET \
+    // Platform selects a fixed statement (whitelisted); email is bound as ?1.
+    // See docs/SECURITY-FINDINGS-2026-08-13.md #6.
+    let sql: &str = match body.platform.as_str() {
+        "github" => "UPDATE developer_profiles SET \
              github_handle = NULL, github_verified = 0, github_verified_at = NULL, \
              updated_at = datetime('now') \
-             WHERE email = '{email_escaped}'"
-        ),
-        "telegram" => format!(
-            "UPDATE developer_profiles SET \
+             WHERE email = ?1",
+        "telegram" => "UPDATE developer_profiles SET \
              telegram_handle = NULL, telegram_id = NULL, telegram_verified = 0, \
              telegram_verified_at = NULL, updated_at = datetime('now') \
-             WHERE email = '{email_escaped}'"
-        ),
-        "discord" => format!(
-            "UPDATE developer_profiles SET \
+             WHERE email = ?1",
+        "discord" => "UPDATE developer_profiles SET \
              discord_handle = NULL, discord_verified = 0, discord_verified_at = NULL, \
              updated_at = datetime('now') \
-             WHERE email = '{email_escaped}'"
-        ),
+             WHERE email = ?1",
         other => {
             return Err(WorkerError(AppError::Validation(format!(
                 "Unknown platform: {other}"
@@ -669,7 +656,9 @@ pub async fn social_unlink(
         }
     };
 
-    worker::D1Database::prepare(d1, &sql)
+    worker::D1Database::prepare(d1, sql)
+        .bind_refs(&[worker::D1Type::Text(&claims.email)])
+        .map_err(|e| WorkerError(AppError::Internal(format!("Unlink bind: {e:?}"))))?
         .run()
         .await
         .map_err(|e| WorkerError(AppError::Internal(format!("Unlink failed: {e:?}"))))?;
