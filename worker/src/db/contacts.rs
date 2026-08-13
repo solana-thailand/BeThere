@@ -724,9 +724,39 @@ pub async fn email_has_account(db: &D1Database, email: &str) -> Result<bool, Str
     Ok(!rows.is_empty())
 }
 
+/// Find the email a wallet is INTENTIONALLY bound to (developer_profiles only).
+///
+/// Unlike [`find_email_by_wallet`], this does NOT fall back to the attendees
+/// table — a badge-mint recipient wallet is not an identity binding. This is the
+/// correct check for binding-exclusivity (does this wallet already belong to a
+/// different account?). Deterministic: most recent binding wins.
+pub async fn find_bound_email_by_wallet(
+    db: &D1Database,
+    wallet_address: &str,
+) -> Result<Option<String>, String> {
+    let sql = "SELECT email FROM developer_profiles WHERE LOWER(wallet_address) = LOWER(?1) \
+               ORDER BY updated_at DESC LIMIT 1";
+    let stmt = db.prepare(sql);
+    let bound = stmt
+        .bind_refs(&[D1Type::Text(wallet_address)])
+        .map_err(|e| format!("D1 find_bound_email_by_wallet bind: {e:?}"))?;
+    if let Ok(rows) = safe_all_rows(&bound).await
+        && let Some(row) = rows.first()
+        && let Some(email) = row.get("email").and_then(|v| v.as_str())
+    {
+        return Ok(Some(email.to_string()));
+    }
+    Ok(None)
+}
+
 /// Find linked email address by wallet_address from developer_profiles or attendees.
+///
+/// Deterministic on the developer_profiles side (most recent binding wins) so
+/// wallet-login and credit-ownership resolution are stable even if a wallet is
+/// (legacy) bound to more than one email.
 pub async fn find_email_by_wallet(db: &D1Database, wallet_address: &str) -> Result<Option<String>, String> {
-    let sql = "SELECT email FROM developer_profiles WHERE LOWER(wallet_address) = LOWER(?1) LIMIT 1";
+    let sql = "SELECT email FROM developer_profiles WHERE LOWER(wallet_address) = LOWER(?1) \
+               ORDER BY updated_at DESC LIMIT 1";
     let stmt = db.prepare(sql);
     let bound = stmt.bind_refs(&[D1Type::Text(wallet_address)]).map_err(|e| format!("D1 find_email_by_wallet bind: {e:?}"))?;
     if let Ok(rows) = safe_all_rows(&bound).await

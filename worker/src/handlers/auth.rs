@@ -431,6 +431,26 @@ pub async fn wallet_bind(
     }
     let _ = kv.delete(&kv_key).await; // single-use
 
+    // Exclusive binding: a wallet maps to at most ONE email. If this wallet is
+    // already linked to a DIFFERENT account, refuse — otherwise the wallet would
+    // resolve to multiple emails and wallet-login / credit-ownership checks become
+    // nondeterministic. Binding requires proving BOTH wallet (SIWS above) and
+    // email (session) ownership, so this is an identity-integrity guard, not a
+    // theft fix. Re-binding to the SAME email is idempotent and allowed.
+    if let Ok(Some(existing)) =
+        crate::db::contacts::find_bound_email_by_wallet(d1, &req.wallet_address).await
+        && !existing.eq_ignore_ascii_case(claims.email.trim())
+    {
+        tracing::warn!(
+            email = %claims.email, wallet = %req.wallet_address,
+            "wallet bind rejected: already linked to another account"
+        );
+        return Err(event_checkin_domain::models::error::AppError::Validation(
+            "This wallet is already linked to another account. Sign in with that account, or use a different wallet.".into(),
+        )
+        .into());
+    }
+
     // Link wallet_address to claims.email in contacts table
     crate::db::contacts::link_wallet_to_email(d1, &claims.email, &req.wallet_address)
         .await

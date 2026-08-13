@@ -150,6 +150,38 @@ server-resolved linked wallet and treat an explicit override as a last resort.
 
 ---
 
+## 8. MEDIUM — Wallet could bind to multiple emails; resolution was nondeterministic *(fixed this session)*
+
+**File:** `worker/src/db/contacts.rs` (`link_wallet_to_email`, `find_email_by_wallet`),
+`worker/src/handlers/auth.rs` (`wallet_bind`). **CONFIRMED.**
+
+**What:** `link_wallet_to_email` upserts on **email** (not wallet), and there's no
+uniqueness on `developer_profiles.wallet_address` — so two different emails could
+each bind the **same** wallet. `find_email_by_wallet` then did `LIMIT 1` with **no
+ORDER BY**, so wallet-login and `credit_identity_ok` resolved to an *arbitrary* one
+of the bound emails.
+
+**Not a theft vector:** binding requires proving BOTH wallet ownership (SIWS) and
+email ownership (session), so you can only bind wallets you own to emails you own —
+an attacker can neither bind their wallet to a victim's email nor bind a victim's
+wallet. But it's an identity-integrity bug: logging in with a shared wallet could
+land you in either account nondeterministically, and the credit gate could
+false-negative.
+
+**Fixed:** `wallet_bind` now refuses to bind a wallet already linked to a
+*different* account (exclusive binding; re-binding the same email is idempotent),
+via a new bindings-only `find_bound_email_by_wallet` (developer_profiles only — a
+badge-mint recipient wallet is not an identity binding). `find_email_by_wallet` now
+orders by `updated_at DESC` so any legacy multi-binding resolves deterministically
+(most recent wins).
+
+**Residual (flagged):** existing duplicate bindings in prod aren't retro-cleaned,
+and the Plan-017 auto-bind path (`signup.rs`, new-email wallet sessions) only runs
+for *unbound* wallets so it can't create new duplicates — but a one-off audit for
+pre-existing `developer_profiles` rows sharing a `wallet_address` is worth running.
+
+---
+
 ## Reviewed and found SAFE (no action)
 
 - **SIWS verify** — real ed25519 `verify_strict` over a server-stored, single-use
