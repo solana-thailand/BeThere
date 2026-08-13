@@ -49,7 +49,8 @@ pub async fn slack_alert_layer(State(state): State<AppState>, req: Request, next
 }
 
 /// POST a plain-text message to a Slack incoming webhook. Best-effort.
-async fn post_slack(webhook_url: &str, text: &str) -> Result<(), String> {
+/// `pub(crate)` so the admin `test-alert` endpoint can reuse it to verify wiring.
+pub(crate) async fn post_slack(webhook_url: &str, text: &str) -> Result<(), String> {
     use worker::{Fetch, Headers, Method, Request as WReq, RequestInit};
 
     let body = serde_json::json!({ "text": text }).to_string();

@@ -74,3 +74,31 @@ pub async fn repair_claim_tokens(
         "repaired": repaired,
     })))
 }
+
+/// POST /api/admin/test-alert
+/// Super-admin only. Sends a test message to the configured Slack webhook so
+/// alerting can be verified end-to-end without waiting for a real 5xx.
+#[worker::send]
+pub async fn test_alert(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+) -> Result<ApiOk<serde_json::Value>, crate::error::WorkerError> {
+    let role = crate::auth::resolve_user_role(&claims.email, &state, None).await;
+    if role != crate::auth::UserRole::SuperAdmin {
+        return Err(AppError::Forbidden("super admin only".into()).into());
+    }
+
+    let webhook = state.config.slack_webhook_url.clone();
+    if webhook.is_empty() {
+        return Ok(ApiOk::new(json!({
+            "sent": false,
+            "reason": "SLACK_WEBHOOK_URL is not set",
+        })));
+    }
+
+    let text = format!("✅ BeThere test alert — requested by {}", claims.email);
+    match crate::middleware::alert::post_slack(&webhook, &text).await {
+        Ok(()) => Ok(ApiOk::new(json!({ "sent": true }))),
+        Err(e) => Ok(ApiOk::new(json!({ "sent": false, "error": e }))),
+    }
+}

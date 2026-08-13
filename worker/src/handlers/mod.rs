@@ -300,6 +300,8 @@ pub fn routes(state: AppState) -> Router<()> {
         .route("/generate-qrs", post(qr::generate_qrs))
         // Flush server-side caches (attendee list + column mapping)
         .route("/admin/flush-cache", post(attendee::flush_cache))
+        // Send a test Slack alert (super-admin) — verify observability wiring
+        .route("/admin/test-alert", post(attendee::test_alert))
         // Repair empty claim_tokens in D1
         .route(
             "/admin/repair-claim-tokens",
