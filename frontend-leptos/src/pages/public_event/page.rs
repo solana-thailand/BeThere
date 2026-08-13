@@ -541,6 +541,37 @@ fn render_loaded_event(
             }}
         </div>
 
+        // Hero CTA — the primary action, reachable above the fold. Jumps to the
+        // reserve/action zone (the form itself is further down the page). Label
+        // adapts once we know the attendee's registration state.
+        {move || {
+            if !show_reg_form {
+                return ().into_any();
+            }
+            let label = match reg_lookup.get() {
+                RegistrationLookup::Registered(_) => "View Your Ticket →",
+                _ => "Reserve Your Spot →",
+            };
+            view! {
+                <a href="#reserve" class="btn btn-primary btn-block pe-hero-cta">{label}</a>
+            }.into_any()
+        }}
+
+        // Sticky mobile CTA — a persistent bottom action bar on phones (CSS hides
+        // it on desktop). Keeps the primary action one tap away while scrolling.
+        {move || {
+            if !show_reg_form {
+                return ().into_any();
+            }
+            let label = match reg_lookup.get() {
+                RegistrationLookup::Registered(_) => "View Your Ticket →",
+                _ => "Reserve Your Spot →",
+            };
+            view! {
+                <a href="#reserve" class="pe-sticky-cta">{label}</a>
+            }.into_any()
+        }}
+
         // Share button
         {share_button(&current_slug, &data.name, share_copied, set_share_copied)}
 
@@ -603,6 +634,9 @@ fn render_loaded_event(
                 _ => ().into_any(),
             }
         }}
+
+        // Anchor target for the hero / sticky CTAs (scrolls the action zone into view).
+        <div id="reserve" class="pe-anchor"></div>
 
         // Registration Section — auth-gated
         {if !show_reg_form {
@@ -827,5 +861,8 @@ fn render_loaded_event(
         } else {
             ().into_any()
         }}
+
+        // Bottom spacer so the sticky mobile CTA never hides the last section.
+        <div class="pe-sticky-spacer"></div>
     }.into_any()
 }

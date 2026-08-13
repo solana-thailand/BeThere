@@ -16007,3 +16007,46 @@ a.ticket-series-card:hover {
     padding-top: 6px;
     margin-top: 6px;
 }
+
+/* ── Public-event slug page: hero CTA + sticky mobile CTA (conversion) ── */
+.pe-hero-cta {
+    margin-top: 0.85rem;
+}
+/* Offset the scroll target so the section isn't flush against the top edge. */
+.pe-anchor {
+    scroll-margin-top: 1rem;
+}
+/* Sticky mobile CTA: hidden on desktop, fixed bottom bar on phones. */
+.pe-sticky-cta {
+    display: none;
+}
+.pe-sticky-spacer {
+    display: none;
+}
+@media (max-width: 640px) {
+    .pe-sticky-cta {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 60;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0.95rem 1rem;
+        padding-bottom: calc(0.95rem + env(safe-area-inset-bottom, 0px));
+        background: linear-gradient(135deg, #ff5c39 0%, #ff7b5c 100%);
+        color: var(--text-heading);
+        font-weight: 700;
+        font-size: 1.02rem;
+        text-decoration: none;
+        box-shadow: 0 -6px 20px rgba(0, 0, 0, 0.35);
+    }
+    .pe-sticky-cta:active {
+        background: linear-gradient(135deg, #ff7b5c 0%, #ffa184 100%);
+    }
+    .pe-sticky-spacer {
+        display: block;
+        height: 4.5rem;
+    }
+}
