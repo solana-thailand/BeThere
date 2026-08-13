@@ -200,6 +200,21 @@ pub async fn register_attendee(
     // showing an error. This handles the case where localStorage is cleared or the
     // attendee uses a different device.
     if let Some(existing) = attendees.iter().find(|a| a.email.to_lowercase() == email) {
+        // SECURITY (#1, IDOR): a wallet session that merely TYPED this email has
+        // NOT proven ownership (credit_identity_ok is false unless the wallet is
+        // bound to it). Returning the existing attendee's claim_token / api_id /
+        // name would let anyone with a throwaway wallet read a victim's claim and
+        // mint their badge. Block the read and direct them to authenticate.
+        if is_wallet_session && !credit_identity_ok {
+            tracing::warn!(
+                %email, %slug, wallet = ?session_wallet,
+                "blocked wallet-session duplicate-return for unproven email (IDOR guard)"
+            );
+            return Err(AppError::Validation(
+                "This email is already registered. Sign in with that email (Google) — or link this wallet to it from your profile — to access your ticket.".to_string(),
+            )
+            .into());
+        }
         tracing::info!(%email, %slug, "registration duplicate — returning existing attendee");
         let claim_token = existing.claim_token.clone().unwrap_or_default();
         // Fetch deposit status (D1-first, KV fallback)
@@ -279,6 +294,22 @@ pub async fn register_attendee(
             // Already registered ⇒ email exists ⇒ never auto-bind here.
             wallet_linked: if is_wallet_session { Some(false) } else { None },
         }));
+    }
+
+    // SECURITY (#3, identity spoofing): reaching here means the email is not yet
+    // registered for THIS event. A wallet session filing a NEW reservation under
+    // an email that already has an account it doesn't own would poison that
+    // identity (a token bound to the victim's email, a spot they never took).
+    // Brand-new emails (Plan 017 wallet→email bind) and proven owners are allowed.
+    if is_wallet_session && !credit_identity_ok && !email_is_new {
+        tracing::warn!(
+            %email, %slug, wallet = ?session_wallet,
+            "blocked wallet-session reservation under an existing unowned email (spoofing guard)"
+        );
+        return Err(AppError::Validation(
+            "This email already has an account. Sign in with that email (Google), or link this wallet to it from your profile, to register.".to_string(),
+        )
+        .into());
     }
 
     // 5b. Enforce capacity limits (only for new registrations)
