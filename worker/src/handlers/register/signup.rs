@@ -428,13 +428,24 @@ pub async fn register_attendee(
                 // spent) falls back to normal payment and keeps its credit.
                 let lock_key = format!("credit-spend:{email}");
                 let lock_db = state.d1.as_deref();
-                let acquired = match lock_db {
-                    Some(db) => crate::db::advisory_locks::try_acquire(db, &lock_key, 30)
-                        .await
-                        .unwrap_or(false),
-                    None => true, // no D1 → no lock available; preserve prior behavior
+                // Distinguish CONTENTION (someone else holds the lock → fall back to
+                // payment) from the lock infra being UNAVAILABLE (e.g. the
+                // advisory_locks table isn't migrated yet, or a transient D1 error →
+                // degrade to the pre-lock behavior and apply credit, which is no worse
+                // than before the lock existed). `held` tracks whether we must release.
+                let (proceed, held) = match lock_db {
+                    Some(db) => match crate::db::advisory_locks::try_acquire(db, &lock_key, 30).await
+                    {
+                        Ok(true) => (true, true),
+                        Ok(false) => (false, false),
+                        Err(e) => {
+                            tracing::warn!(%email, error = %e, "credit-spend lock unavailable — proceeding without serialization");
+                            (true, false)
+                        }
+                    },
+                    None => (true, false), // no D1 → no lock available; preserve prior behavior
                 };
-                if !acquired {
+                if !proceed {
                     tracing::warn!(%email, "credit-spend lock busy — falling back to payment (credit kept)");
                     false
                 } else {
@@ -478,7 +489,7 @@ pub async fn register_attendee(
                             }
                         }
                     };
-                    if let Some(db) = lock_db {
+                    if held && let Some(db) = lock_db {
                         let _ = crate::db::advisory_locks::release(db, &lock_key).await;
                     }
                     ok
