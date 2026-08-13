@@ -586,9 +586,6 @@ fn render_loaded_event(
         // Event Details Card
         {details_card(&data, countdown, event_completed)}
 
-        // Community Links
-        {crate::pages::ticket::community_links::community_links_section(community_links.clone(), crate::pages::ticket::community_links::CommunityLinksVariant::PublicEvent)}
-
         // Deposit Info Section
         {deposit_section(&data)}
 
@@ -853,6 +850,10 @@ fn render_loaded_event(
         } else {
             ().into_any()
         }}
+
+        // Join the Community — engagement/social content, kept at the bottom
+        // (below the action zone), not competing with the reserve CTA.
+        {crate::pages::ticket::community_links::community_links_section(community_links.clone(), crate::pages::ticket::community_links::CommunityLinksVariant::PublicEvent)}
 
         // External Link
         {if has_link {
