@@ -16050,3 +16050,50 @@ a.ticket-series-card:hover {
         height: 4.5rem;
     }
 }
+
+/* ── Public-event slug page: loading skeleton (perceived performance) ── */
+.pe-skeleton {
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+    width: 100%;
+}
+.pe-skel {
+    border-radius: 12px;
+    background: linear-gradient(
+        100deg,
+        var(--bg-card) 30%,
+        rgba(255, 255, 255, 0.06) 50%,
+        var(--bg-card) 70%
+    );
+    background-size: 200% 100%;
+    animation: pe-skel-shimmer 1.3s ease-in-out infinite;
+}
+.pe-skel-hero {
+    height: 180px;
+    border-radius: 16px;
+}
+.pe-skel-title {
+    height: 28px;
+    width: 70%;
+    margin-top: 0.4rem;
+}
+.pe-skel-sub {
+    height: 16px;
+    width: 45%;
+}
+.pe-skel-cta {
+    height: 46px;
+    border-radius: 10px;
+    margin-top: 0.3rem;
+}
+.pe-skel-card {
+    height: 96px;
+}
+@keyframes pe-skel-shimmer {
+    from { background-position: 200% 0; }
+    to   { background-position: -200% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .pe-skel { animation: none; }
+}

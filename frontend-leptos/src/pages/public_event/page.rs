@@ -344,10 +344,18 @@ pub fn PublicEvent() -> impl IntoView {
                     let s = state.get();
                     match s {
                         PublicEventState::Loading => {
+                            // Skeleton mirrors the real layout (hero → name → CTA →
+                            // cards) so the page reads as "loading content" rather
+                            // than a blank/spinner — better perceived speed on
+                            // venue wifi.
                             view! {
-                                <div class="pe-loading">
-                                    <div class="pe-icon-mb"><Icon icon=IconName::Ticket class="icon-2xl" /></div>
-                                    <p class="pe-detail-secondary">"Loading event..."</p>
+                                <div class="pe-skeleton" aria-busy="true" aria-label="Loading event">
+                                    <div class="pe-skel pe-skel-hero"></div>
+                                    <div class="pe-skel pe-skel-title"></div>
+                                    <div class="pe-skel pe-skel-sub"></div>
+                                    <div class="pe-skel pe-skel-cta"></div>
+                                    <div class="pe-skel pe-skel-card"></div>
+                                    <div class="pe-skel pe-skel-card"></div>
                                 </div>
                             }.into_any()
                         }
