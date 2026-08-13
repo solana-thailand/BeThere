@@ -131,9 +131,15 @@ async fn fetch(
     };
 
     // Build the API router with middleware stack.
-    let mut api_routes = handlers::routes(state)
+    let mut api_routes = handlers::routes(state.clone())
         .layer(axum::middleware::from_fn(middleware::rate_limit_layer))
         .layer(axum::middleware::from_fn(middleware::correlation_id_layer))
+        // Outside correlation so it can read the x-correlation-id it stamps on the
+        // response; fires a best-effort Slack alert on 5xx (no-op if unconfigured).
+        .layer(axum::middleware::from_fn_with_state(
+            state,
+            middleware::slack_alert_layer,
+        ))
         .layer(axum::middleware::from_fn(
             middleware::security_headers_layer,
         ));

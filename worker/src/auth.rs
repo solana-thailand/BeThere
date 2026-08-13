@@ -636,6 +636,7 @@ mod tests {
             github_redirect_uri: String::new(),
             telegram_bot_token: String::new(),
             telegram_bot_username: String::new(),
+            slack_webhook_url: String::new(),
             staff_emails: [
                 "admin@example.com".to_string(),
                 "staff@example.com".to_string(),
