@@ -102,12 +102,17 @@ WHERE lower(email) = ?2 AND deposit_credit_thb >= ?1` and consume only when
 `meta().changes > 0` (mirrors `try_settle_hold_credit`); spend via that CAS FIRST,
 then best-effort mirror the decrement to the Sheet for display.
 
-**Why this was flagged, not auto-applied:** credit is currently dual-stored
-(Sheet master + D1 mirror) and the two can diverge if any prior increment/decrement
-hit only one. Switching the spend gate to D1 without first reconciling the two
-stores risks rejecting a legit credit or honoring a stale one — a money bug. This
-needs a reconciliation step + review, so it's left as a scoped follow-up. Exploit
-is narrow (same verified email registering for two events *simultaneously*).
+**Why this was flagged, not auto-applied — CONFIRMED blocker:** the D1 credit
+columns exist but are **never written in production**. The only writer,
+`db::contacts::update_deposit_credit`, has **zero callers**; every real credit
+increment (`hold_credit.rs` → `sheets::contacts::increment_credit`), read
+(`get_credit_balance`), and decrement goes to the **Google Sheet**. So D1 credit is
+always the `0` default — a D1-CAS spend gate would reject *all* credit and break the
+feature. The prerequisite is a dedicated PR that makes D1 authoritative: dual-write
+every increment/decrement to D1, backfill balances from the Sheet, then add the CAS
+gate. This is real work on a money ledger and must be reviewed — not an overnight
+bolt-on. Exploit remains narrow (same verified email registering for two events
+*simultaneously*).
 
 ---
 
