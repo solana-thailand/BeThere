@@ -586,6 +586,25 @@ fn render_loaded_event(
         // Event Details Card
         {details_card(&data, countdown, event_completed)}
 
+        // NFT Badge — the reward, shown above the deposit/reserve ask to motivate
+        // ("here's what you'll earn") rather than buried after the form.
+        {if has_nft_image {
+            let url = nft_image_url.clone();
+            view! {
+                <div class="pe-card">
+                    <h2 class="pe-section-title">
+                        <Icon icon=IconName::Ticket class="icon-md" />" NFT Badge"
+                    </h2>
+                    <p class="pe-detail-secondary pe-mb-075">
+                        {if is_online_only { "Earn this NFT badge when you complete the quest after the event." } else { "Earn a commemorative NFT badge when you attend." }}
+                    </p>
+                    <img src=url alt="NFT Badge" class="pe-nft-img" />
+                </div>
+            }.into_any()
+        } else {
+            ().into_any()
+        }}
+
         // Deposit Info Section
         {deposit_section(&data)}
 
@@ -817,24 +836,6 @@ fn render_loaded_event(
                     }
                 }}
             }.into_any()
-        }}
-
-        // NFT Badge Section
-        {if has_nft_image {
-            let url = nft_image_url.clone();
-            view! {
-                <div class="pe-card">
-                    <h2 class="pe-section-title">
-                        <Icon icon=IconName::Ticket class="icon-md" />" NFT Badge"
-                    </h2>
-                    <p class="pe-detail-secondary pe-mb-075">
-                        {if is_online_only { "Earn this NFT badge when you complete the quest after the event." } else { "Earn a commemorative NFT badge when you attend." }}
-                    </p>
-                    <img src=url alt="NFT Badge" class="pe-nft-img" />
-                </div>
-            }.into_any()
-        } else {
-            ().into_any()
         }}
 
         // About this Event — moved below the action zone: it's reference content,
