@@ -88,8 +88,13 @@ pub async fn submit_quiz(
         "quiz submit requested"
     );
 
-    // Resolve event (uses events_kv if available, falls back to global config)
-    let event = resolve_event(&state, query.event_id.as_deref()).await?;
+    // Resolve the attendee's real event from the claim token — the SAME
+    // authoritative resolution the claim gate uses — so quiz progress is written
+    // under the event_id the claim later reads. Trusting the query param /
+    // active-event fallback here would store progress under the wrong event and
+    // the claim gate would never find it ("must complete the quiz").
+    let resolved = crate::claim::coalesce_event_id(&state, &token, query.event_id.as_deref()).await;
+    let event = resolve_event(&state, resolved.as_deref()).await?;
 
     let eid = event.id.as_str();
     let d1 = state.d1.as_deref();
@@ -172,8 +177,18 @@ pub async fn submit_quiz(
     let result = quiz::submit_quiz(d1, kv, eid, &config, &token, &body.answers)
         .await
         .map_err(|e| {
-            tracing::error!(claim_token = %token, error = ?e, "quiz submit failed");
-            AppError::Internal(e.to_string())
+            let msg = e.to_string();
+            // "No attempts remaining" is a normal user condition, not a server
+            // fault — surface it as a clean 4xx with a friendly message instead
+            // of a scary HTTP 500 "internal error".
+            if msg.contains("no attempts remaining") {
+                AppError::Validation(
+                    "You've used all your quiz attempts for this event. Ask an organizer to reset them.".to_string(),
+                )
+            } else {
+                tracing::error!(claim_token = %token, error = ?e, "quiz submit failed");
+                AppError::Internal(msg)
+            }
         })?;
 
     tracing::info!(
@@ -199,8 +214,10 @@ pub async fn get_quiz_status(
 ) -> Result<ApiOk<serde_json::Value>, WorkerError> {
     tracing::info!(claim_token = %token, "quiz status requested");
 
-    // Resolve event (uses events_kv if available, falls back to global config)
-    let event = resolve_event(&state, query.event_id.as_deref()).await?;
+    // Resolve the attendee's real event from the claim token (same as submit and
+    // the claim gate) so status reflects the progress the claim will read.
+    let resolved = crate::claim::coalesce_event_id(&state, &token, query.event_id.as_deref()).await;
+    let event = resolve_event(&state, resolved.as_deref()).await?;
 
     let eid = event.id.as_str();
     let d1 = state.d1.as_deref();

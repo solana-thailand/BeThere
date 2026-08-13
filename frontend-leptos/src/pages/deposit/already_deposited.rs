@@ -100,6 +100,20 @@ pub fn already_deposited_view(
 ) -> AnyView {
     let info = data.status.as_ref().unwrap();
     let (_method_icon, method_label) = deposit_method_display(&info.method);
+    // Rolling credit is reliably signalled by the method enum (auto-applied credit
+    // is stored as credit_thb/credit_usdc). The string checks are a legacy
+    // fallback; on their own they missed auto-applied credit (the markers live in
+    // slip_url/verified_by, which aren't exposed here).
+    let is_credit = matches!(
+        info.method,
+        DepositMethod::CreditThb | DepositMethod::CreditUsdc
+    ) || info.tx_signature.as_ref().is_some_and(|s| s.contains("CREDIT"))
+        || info.wallet_address.as_ref().is_some_and(|w| w.contains("CREDIT"));
+    let display_method_label = if is_credit {
+        "Rolling Credit (Previous Event)".to_string()
+    } else {
+        method_label.to_string()
+    };
     let verified_text = if info.verified {
         "Verified"
     } else {
@@ -125,6 +139,20 @@ pub fn already_deposited_view(
     let refund_info_clone = refund_info.clone();
     let data_clone_for_event_link = data.clone();
     let info_clone = data.status.clone();
+
+    // Non-USDC (THB / rolling credit) refund guidance — computed here (not inside
+    // the view) to avoid borrowing `info`. THB refund/credit actions live on the
+    // TICKET page, so point there; never mislabel a ฿ deposit as USDC.
+    let nonusdc_amount_display = if info.currency == "THB" {
+        format!("฿{}", info.amount)
+    } else {
+        format!("{} {}", format_usdc(info.amount), info.currency)
+    };
+    let nonusdc_ticket_href = if info.event_id.is_empty() {
+        format!("/ticket/{}", info.attendee_id)
+    } else {
+        format!("/ticket/{}?event_id={}", info.attendee_id, info.event_id)
+    };
 
     let set_state = *set_state;
 
@@ -165,7 +193,7 @@ pub fn already_deposited_view(
                 <div class="dep2-receipt-row">
                     <span class="dep2-receipt-label">"Method"</span>
                     <span class="dep2-receipt-value">
-                        {method_label}
+                        {display_method_label.clone()}
                     </span>
                 </div>
                 <div class="dep2-receipt-row">
@@ -261,12 +289,25 @@ pub fn already_deposited_view(
                         </p>
                     </div>
                 }.into_any()
-            } else {
+            } else if is_credit {
                 view! {
                     <div class="dep2-info-note">
                         <p class="hint-note">
-                            {format!("Your {usdc_fmt} USDC deposit is secured. Refund will be available after the event.")}
+                            {format!("This {nonusdc_amount_display} is rolling credit from a previous event, applied to your spot here.")}
                         </p>
+                    </div>
+                }.into_any()
+            } else {
+                // Verified THB deposit. Refund and hold-as-credit actions live on
+                // the ticket page — surface the choice honestly (no "USDC" label).
+                view! {
+                    <div class="dep2-info-note">
+                        <p class="hint-note">
+                            {format!("Your {nonusdc_amount_display} deposit is secured. After the event you can keep it as credit toward your next event, or request a refund — manage it from your ticket.")}
+                        </p>
+                        <a href=nonusdc_ticket_href class="btn btn-outline btn-block">
+                            "Go to your ticket →"
+                        </a>
                     </div>
                 }.into_any()
             }}

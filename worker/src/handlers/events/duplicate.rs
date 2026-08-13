@@ -16,6 +16,21 @@ use event_checkin_domain::models::auth::Claims;
 use event_checkin_domain::models::error::AppError;
 use event_checkin_domain::models::event::{CreateEventRequest, DuplicateEventRequest};
 
+/// Decide the NFT name template to carry onto a duplicated event.
+///
+/// A template containing `{event_name}` adapts to the new event and carries over
+/// unchanged. A fixed literal (or the empty default) does NOT adapt — carrying it
+/// verbatim would silently show the SOURCE event's number on the duplicate (the
+/// `#3`-on-`#4` drift), so it's reset to empty. Returns the new template and
+/// whether a "was reset" warning should be surfaced (only for a non-empty literal).
+fn carried_name_template(src: &str) -> (String, bool) {
+    if src.contains("{event_name}") {
+        (src.to_string(), false)
+    } else {
+        (String::new(), !src.trim().is_empty())
+    }
+}
+
 /// POST /api/events/{id}/duplicate — copy an event's settings into a new Draft.
 ///
 /// Delegates to `event_store::create_event` so KV/D1/audit/slug-dedup logic is
@@ -124,6 +139,17 @@ pub async fn duplicate_event(
         body.new_sheet_id.trim().to_string()
     };
 
+    // Carry the NFT name template only when it adapts to the new event; reset a
+    // fixed literal so the duplicate can't inherit the source event's number
+    // (see carried_name_template).
+    let (new_name_template, warn_template_reset) =
+        carried_name_template(&source.nft_name_template);
+    if warn_template_reset {
+        warnings.push(
+            "NFT name template was reset — the source used a fixed title; set a new one so the badge shows this event's name.".to_string(),
+        );
+    }
+
     // Escrow fields intentionally zeroed — create_event forces escrow_status=None
     // regardless, but we zero them too so the request is self-documenting and
     // survives any future loosening of create_event's escrow stripping.
@@ -143,7 +169,7 @@ pub async fn duplicate_event(
         nft_metadata_uri: source.nft_metadata_uri.clone(),
         nft_image_url: source.nft_image_url.clone(),
         poster_url: source.poster_url.clone(),
-        nft_name_template: source.nft_name_template.clone(),
+        nft_name_template: new_name_template,
         nft_symbol: source.nft_symbol.clone(),
         nft_description_template: source.nft_description_template.clone(),
         merkle_tree: source.merkle_tree.clone(),
@@ -245,4 +271,38 @@ pub async fn duplicate_event(
         "warnings": warnings,
         "updated_at": new_config.updated_at,
     })))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::carried_name_template;
+
+    #[test]
+    fn adaptive_template_carries_over() {
+        let (v, warn) = carried_name_template("{event_name} Badge");
+        assert_eq!(v, "{event_name} Badge");
+        assert!(!warn);
+    }
+
+    #[test]
+    fn fixed_literal_is_reset_with_warning() {
+        // The drift source: a hardcoded number must not follow to the duplicate.
+        let (v, warn) = carried_name_template("Solana x AI Builders #3");
+        assert_eq!(v, "");
+        assert!(warn);
+    }
+
+    #[test]
+    fn empty_template_stays_empty_no_warning() {
+        let (v, warn) = carried_name_template("");
+        assert_eq!(v, "");
+        assert!(!warn);
+    }
+
+    #[test]
+    fn whitespace_only_resets_without_warning() {
+        let (v, warn) = carried_name_template("   ");
+        assert_eq!(v, "");
+        assert!(!warn);
+    }
 }

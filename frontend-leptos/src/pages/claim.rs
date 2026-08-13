@@ -1060,6 +1060,11 @@ pub fn Claim() -> impl IntoView {
     // Wallet adapter state — detected wallets and connected wallet info
     let (detected_wallets, set_detected_wallets) = signal(Vec::<String>::new());
     let (connected_wallet, set_connected_wallet) = signal(None::<(String, String)>); // (wallet_name, public_key)
+    // When the attendee has a verified linked wallet, the claim defaults to a
+    // one-tap "mint to my linked wallet" path (resolved server-side) and hides the
+    // connect options until the user opts to use a different wallet.
+    let (change_wallet, set_change_wallet) = signal(false);
+    let (has_linked_wallet, set_has_linked_wallet) = signal(false);
 
     // Detect installed wallets on mount (poll with delay for late injection)
     {
@@ -1119,6 +1124,19 @@ pub fn Claim() -> impl IntoView {
                     set_deposit_amount_usdc.set(data.deposit_amount_usdc);
                     set_deposit_amount_thb.set(data.deposit_amount_thb);
 
+                    // Pre-fill the wallet field with the locked per-event address (the
+                    // full pre-registered wallet is public and server-enforced). A
+                    // linked profile wallet is NOT pre-filled here — its full address
+                    // never reaches the client; the one-tap path mints to it server-side.
+                    if let Some(w) = data.locked_wallet.clone().filter(|w| !w.is_empty()) {
+                        set_wallet_input.set(w);
+                    }
+                    set_has_linked_wallet.set(
+                        data.linked_wallet_display
+                            .as_deref()
+                            .is_some_and(|w| !w.is_empty()),
+                    );
+
                     if data.claimed {
                         set_state.set(ClaimState::AlreadyClaimed(data));
                     } else if !data.nft_available {
@@ -1151,12 +1169,7 @@ pub fn Claim() -> impl IntoView {
                             }
                         });
                     } else {
-                        // Pre-fill wallet if locked to a pre-registered address
-                        if let Some(ref wallet) = data.locked_wallet
-                            && !wallet.is_empty()
-                        {
-                            set_wallet_input.set(wallet.clone());
-                        }
+                        // (wallet pre-fill already applied above, before branching)
                         // Check adventure status — if required and not passed, show adventure gate
                         let claim_data_for_adventure = data.clone();
                         let token_for_adventure = token.clone();
@@ -1200,19 +1213,24 @@ pub fn Claim() -> impl IntoView {
 
     // Handle "Claim NFT" button click
     let handle_claim = move |_| {
+        // The one-tap linked path mints to the attendee's verified profile wallet,
+        // resolved server-side by email — no client address is sent. Any other case
+        // (a per-event lock, a connected wallet, or "use a different wallet") sends
+        // the explicit address in the input.
+        let use_linked =
+            has_linked_wallet.get() && !change_wallet.get() && connected_wallet.get().is_none();
         let wallet = wallet_input.get().trim().to_string();
         let token = match params.get() {
             Ok(p) => p.token.unwrap_or_default(),
             Err(_) => return,
         };
 
-        // Basic client-side validation
-        if wallet.is_empty() {
-            return;
-        }
-        let wallet_len = wallet.len();
-        if !(32..=44).contains(&wallet_len) {
-            return;
+        // Basic client-side validation for the explicit-wallet path only.
+        if !use_linked {
+            let wallet_len = wallet.len();
+            if wallet.is_empty() || !(32..=44).contains(&wallet_len) {
+                return;
+            }
         }
 
         // Transition to minting state
@@ -1225,7 +1243,8 @@ pub fn Claim() -> impl IntoView {
         let current_data_clone = current_data.clone();
         leptos::task::spawn_local(async move {
             let start = js_sys::Date::now();
-            let result = api::post_claim(&token, &wallet).await;
+            let arg = if use_linked { None } else { Some(wallet.as_str()) };
+            let result = api::post_claim(&token, arg, use_linked).await;
             // Ensure spinner displays for at least 1.5s for smooth UX
             let elapsed = js_sys::Date::now() - start;
             if elapsed < 1500.0 {
@@ -1465,6 +1484,11 @@ pub fn Claim() -> impl IntoView {
                         ClaimState::Ready(data) => {
                             let checked_in_display = checked_in_label(&data.checked_in_at, &data.participation_type);
                             let locked_wallet = data.locked_wallet.clone();
+                            let linked_wallet_display = data
+                                .linked_wallet_display
+                                .clone()
+                                .filter(|w| !w.is_empty());
+                            let has_suggested_wallet = linked_wallet_display.is_some();
                             view! {
                                 <div class="claim-state-full">
                                     // Attendee welcome
@@ -1502,6 +1526,39 @@ pub fn Claim() -> impl IntoView {
                                                         </svg>
                                                         <span class="locked-wallet-addr">{truncated}</span>
                                                     </div>
+                                                }.into_any()
+                                            } else if has_suggested_wallet
+                                                && connected_wallet.get().is_none()
+                                                && !change_wallet.get()
+                                            {
+                                                // Profile-linked wallet — the primary one-tap path.
+                                                // The connect/paste options are tucked behind
+                                                // "Use a different wallet". The address is already
+                                                // masked server-side (full address never sent here).
+                                                let truncated = linked_wallet_display
+                                                    .clone()
+                                                    .unwrap_or_default();
+                                                view! {
+                                                    <div class="wallet-connected-bar">
+                                                        <span class="wallet-icon-lg">
+                                                            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                                                                <rect x="2" y="4" width="12" height="9" rx="1.5"></rect>
+                                                                <path d="M11 8.5h.01"></path>
+                                                            </svg>
+                                                        </span>
+                                                        <div class="wallet-info-left">
+                                                            <div class="wallet-label">"Your linked wallet"</div>
+                                                            <div class="wallet-address-bold">{truncated}</div>
+                                                        </div>
+                                                        <span class="badge badge-success u-ml-auto"><Icon icon=IconName::Check class="icon-sm icon-success" />" Linked"</span>
+                                                    </div>
+                                                    <button
+                                                        class="btn btn-outline btn-sm claim-disconnect-btn"
+                                                        on:click=move |_| set_change_wallet.set(true)
+                                                        type="button"
+                                                    >
+                                                        "Use a different wallet"
+                                                    </button>
                                                 }.into_any()
                                             } else {
                                                 let cw = connected_wallet.get();
@@ -1640,6 +1697,7 @@ pub fn Claim() -> impl IntoView {
                                                                 {
                                                                     match &locked_wallet {
                                                                         Some(w) if !w.is_empty() => "Use the pre-filled wallet address to claim.",
+                                                                        _ if has_suggested_wallet => "Connect or enter the wallet you'd like the badge sent to instead of your linked one.",
                                                                         _ => "Tap Paste or type your Phantom, Solflare, or Backpack address.",
                                                                     }
                                                                 }
@@ -1656,6 +1714,14 @@ pub fn Claim() -> impl IntoView {
                                         class="claim-btn-mint"
                                         on:click=handle_claim
                                         disabled=move || {
+                                            // The one-tap linked path needs no input — the wallet is
+                                            // resolved server-side. Only gate the explicit-wallet path.
+                                            let use_linked = has_linked_wallet.get()
+                                                && !change_wallet.get()
+                                                && connected_wallet.get().is_none();
+                                            if use_linked {
+                                                return false;
+                                            }
                                             let w = wallet_input.get();
                                             let w_trimmed = w.trim();
                                             w_trimmed.is_empty() || !(32..=44).contains(&w_trimmed.len())
@@ -1763,15 +1829,10 @@ pub fn Claim() -> impl IntoView {
                                 }
                             );
 
-                            // Deposit link for refund (if applicable)
-                            let deposit_link = {
-                                let api_id = deposit_api_id.get();
-                                let event_id = deposit_event_id.get();
-                                if event_id.is_empty() {
-                                    format!("/deposit/{api_id}")
-                                } else {
-                                    format!("/deposit/{api_id}?event_id={event_id}")
-                                }
+                            let solscan_url = if data.signature.is_empty() {
+                                format!("https://solscan.io/account/{}?cluster={}", data.asset_id, data.cluster)
+                            } else {
+                                format!("https://solscan.io/tx/{}?cluster={}", data.signature, data.cluster)
                             };
 
                             view! {
@@ -1816,7 +1877,7 @@ pub fn Claim() -> impl IntoView {
                                         </div>
                                     </div>
 
-                                    <div class="success-actions">
+                                    <div class="success-actions" style="display: flex; flex-direction: column; gap: 10px;">
                                         <a
                                             href=orb_url
                                             target="_blank"
@@ -1824,6 +1885,15 @@ pub fn Claim() -> impl IntoView {
                                             class="btn btn-primary btn-block"
                                         >
                                             "View NFT on Orb ↗"
+                                        </a>
+                                        <a
+                                            href=solscan_url
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            class="btn btn-outline btn-block"
+                                            style="border-color: rgba(20, 241, 149, 0.4); color: #14F195; background: rgba(20, 241, 149, 0.06);"
+                                        >
+                                            "🔍 View Transaction on Solscan ↗"
                                         </a>
                                     </div>
 
@@ -1871,25 +1941,10 @@ pub fn Claim() -> impl IntoView {
                                     </div>
                                     </div>
 
-                                    // 4. Deposit refund link (if applicable)
-                                    {move || {
-                                        if deposit_enabled.get() && !deposit_api_id.get().is_empty() {
-                                            view! {
-                                                <div class="success-actions claim-success-actions-spaced">
-                                                                                                    <a
-                                                                                                        href=&deposit_link
-                                                                                                        class="btn btn-outline btn-block"
-                                                                                                    >
-                                                                                                        "Deposit & Refund Details →"
-                                                                                                    </a>
-                                                                                                </div>
-                                            }.into_any()
-                                        } else {
-                                            view! { <div></div> }.into_any()
-                                        }
-                                    }}
-
-                                    // 5. Back to Ticket link
+                                    // 4. Ticket link — the ticket page is the hub for
+                                    // deposit & refund status (per-method actions live there;
+                                    // the deposit page is only for PAYING a deposit, so linking
+                                    // there post-claim dead-ended non-depositors on a pay form).
                                     {
                                         let api_id = deposit_api_id.get();
                                         let event_id = deposit_event_id.get();
@@ -1898,15 +1953,20 @@ pub fn Claim() -> impl IntoView {
                                         } else {
                                             format!("/ticket/{api_id}?event_id={event_id}")
                                         };
+                                        let label = if deposit_enabled.get() {
+                                            "View ticket & deposit / refund →"
+                                        } else {
+                                            "← Back to Ticket"
+                                        };
                                         view! {
                                             <div class="success-actions claim-success-actions-spaced">
-                                                                                            <a
-                                                                                                href=ticket_href
-                                                                                                class="btn btn-outline btn-block"
-                                                                                            >
-                                                                                                "← Back to Ticket"
-                                                                                            </a>
-                                                                                        </div>
+                                                <a
+                                                    href=ticket_href
+                                                    class="btn btn-outline btn-block"
+                                                >
+                                                    {label}
+                                                </a>
+                                            </div>
                                         }.into_any()
                                     }
                                 </div>

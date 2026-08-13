@@ -136,3 +136,18 @@ pub async fn get_badge_hd_svg() -> Response {
     )
         .into_response()
 }
+
+/// GET /api/badge-hd.png  (also served at /api/badge.png)
+///
+/// Raster (PNG) twin of the HD badge, 512x512. Some services reject SVG image
+/// URLs — notably Crossmint minting — so the claim mint rewrites the badge
+/// `.svg` URL to this `.png` twin. Pre-rendered from `badge_production.svg`.
+pub async fn get_badge_hd_png() -> Response {
+    let png = include_bytes!("../badge_hd.png").to_vec();
+    (
+        StatusCode::OK,
+        [(header::CONTENT_TYPE, "image/png")],
+        png,
+    )
+        .into_response()
+}

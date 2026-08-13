@@ -21,6 +21,7 @@ pub mod public_event;
 pub mod qr;
 pub mod quiz;
 pub mod register;
+pub mod social_link;
 pub mod user_log;
 pub mod waitlist;
 pub mod walkin;
@@ -79,7 +80,13 @@ pub fn routes(state: AppState) -> Router<()> {
         .route("/auth/logout", post(auth::auth_logout))
         .route("/auth/wallet/nonce", post(auth::wallet_nonce))
         .route("/auth/wallet/verify", post(auth::wallet_verify))
-        .route("/auth/wallet/bind", post(auth::wallet_bind))
+        // Social account linking (public callback for GitHub, auth-guarded for others)
+        .route("/auth/github/callback", get(social_link::github_link_callback))
+        // Public Telegram widget config (is it enabled + which bot username)
+        .route("/auth/telegram/config", get(social_link::telegram_config))
+        // Public Telegram redirect-flow callback — identity via signed state,
+        // not a cookie (survives the cross-site redirect back from Telegram).
+        .route("/auth/telegram/callback", get(social_link::telegram_callback))
         .layer(middleware::from_fn(crate::middleware::cache_no_store_layer));
 
     // Public routes — no auth middleware required.
@@ -100,6 +107,9 @@ pub fn routes(state: AppState) -> Router<()> {
         .route("/metadata/{event_id}", get(metadata::get_metadata))
         .route("/badge.svg", get(metadata::get_badge_svg))
         .route("/badge-hd.svg", get(metadata::get_badge_hd_svg))
+        // Raster twins (Crossmint and other minters reject SVG image URLs).
+        .route("/badge-hd.png", get(metadata::get_badge_hd_png))
+        .route("/badge.png", get(metadata::get_badge_hd_png))
         // Wire-protocol smoke endpoint (Plan 014 Phase 1.3) — public, no auth.
         // Returns a fixed LevelScore sample as JSON (default) or binary
         // (?fmt=bin). Safe to remove after the GOAT-gate (Task 1.7) clears.
@@ -169,6 +179,8 @@ pub fn routes(state: AppState) -> Router<()> {
         // Auth route that requires session (reads Claims from middleware)
         // Works for both staff and non-staff — only requires valid JWT.
         .route("/auth/me", get(auth::auth_me))
+        // Bind a wallet to the signed-in account (reads Claims from middleware).
+        .route("/auth/wallet/bind", post(auth::wallet_bind))
         // Self-registration (requires verified email from JWT)
         .route("/public/register", post(register::register_attendee))
         // Post-event lead capture (Plan 008 — Phase 3): same JWT gate as normal
@@ -244,6 +256,13 @@ pub fn routes(state: AppState) -> Router<()> {
             "/my-profile",
             get(profile::get_my_profile).put(profile::update_my_profile),
         )
+        // Social account linking (auth-guarded — user must be logged in)
+        .route("/auth/github", get(social_link::github_link_start))
+        .route("/auth/telegram/verify", post(social_link::telegram_verify))
+        // Signed state for the Telegram widget's data-auth-url (auth-guarded).
+        .route("/auth/telegram/state", get(social_link::telegram_state))
+        .route("/auth/social/unlink", post(social_link::social_unlink))
+        .route("/checkin/nfc/verify", post(checkin::nfc_verify))
         // Campaign progress for current user (attendee-authed — my-progress must come before {id} routes)
         .route(
             "/campaigns/my-progress",

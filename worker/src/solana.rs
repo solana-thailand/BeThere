@@ -1,207 +1,288 @@
-//! Solana JSON-RPC client for minting compressed NFTs via Helius API.
+//! Solana NFT minting via the Crossmint REST API + DAS reads via Helius.
 //!
-//! Uses `worker::Fetch` to call the Helius `mintCompressedNft` RPC method.
-//! Auth is via query-param (`?api-key=KEY`) — no header-based auth.
+//! Helius retired its one-call `mintCompressedNft` RPC method (HTTP 410
+//! `-32410`), so minting now goes through Crossmint's hosted API: it custodies
+//! the merkle tree, signs, and pays fees, so the Worker needs no on-chain
+//! signer. Auth is header-based (`X-API-KEY`). The cluster is selected by host
+//! (`staging.crossmint.com` = devnet, `www.crossmint.com` = mainnet).
+//!
+//! Crossmint minting is asynchronous: we POST to fire the mint, then poll the
+//! NFT resource until it confirms on-chain and yields a signature + asset id.
+//! DAS reads (`getAssetsByOwner`, below) still use Helius and are unaffected.
 
 use serde::Deserialize;
 use worker::{Fetch, Headers, Method, Request, RequestInit};
+
+/// Crossmint API version segment (path-pinned by Crossmint).
+const CROSSMINT_API_VERSION: &str = "2022-06-09";
+/// Max confirmation polls before giving up (see [`mint_compressed_nft`]).
+const CROSSMINT_MAX_POLLS: u32 = 12;
+/// Delay between confirmation polls, milliseconds.
+const CROSSMINT_POLL_DELAY_MS: u64 = 1200;
 
 // ---------------------------------------------------------------------------
 // Request struct
 // ---------------------------------------------------------------------------
 
-/// Parameters for minting a compressed NFT.
+/// Parameters for minting a (compressed) NFT via Crossmint.
 pub struct MintRequest<'a> {
-    /// Owner's Solana wallet address (base58).
+    /// Recipient's Solana wallet address (base58). Sent as `solana:<addr>`.
     pub wallet_address: &'a str,
-    /// Helius RPC base URL (without query params).
-    pub rpc_url: &'a str,
-    /// Helius API key, appended as `?api-key=KEY`.
+    /// Crossmint host: `staging.crossmint.com` (devnet) or `www.crossmint.com`.
+    pub host: &'a str,
+    /// Crossmint server-side API key (`X-API-KEY`).
     pub api_key: &'a str,
-    /// Collection mint address; ignored if empty.
-    pub collection_mint: &'a str,
-    /// Off-chain metadata URI; ignored if empty.
-    pub metadata_uri: &'a str,
-    /// NFT image URL; ignored if empty.
-    pub image_url: &'a str,
+    /// Crossmint collection id to mint into (created once per cluster).
+    pub collection_id: &'a str,
     /// NFT name (e.g. event-specific title).
     pub nft_name: &'a str,
-    /// NFT symbol (e.g. event ticker).
-    pub nft_symbol: &'a str,
+    /// NFT image URL; omitted from metadata if empty.
+    pub image_url: &'a str,
     /// NFT description (e.g. proof of attendance text).
     pub nft_description: &'a str,
-    /// External URL associated with the NFT.
+    /// External URL associated with the NFT; omitted if empty.
     pub nft_external_url: &'a str,
-    /// Merkle tree address. Reserved for future use.
-    pub merkle_tree: &'a str,
+    /// Whether to mint compressed (cNFT). Solana only; Crossmint defaults true.
+    pub compressed: bool,
+    /// Idempotency key (the claim token). When set alongside a KV store, a mint
+    /// that fired but hasn't confirmed is resumed instead of re-fired on retry,
+    /// preventing a duplicate mint after a poll timeout. Empty = no guard.
+    pub idempotency_key: &'a str,
 }
-
-/// Priority fee in microLamports per compute unit for faster transaction inclusion.
-/// Reserved for future direct Bubblegum `mint_v2` calls (CLI already uses this).
-/// NOT sent to Helius `mintCompressedNft` — that API rejects unknown params.
-#[allow(dead_code)]
-const PRIORITY_FEE_MICROLAMPORTS: u64 = 100_000;
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-/// Result of a successful compressed NFT mint via Helius.
+/// Result of a successful NFT mint.
 #[derive(Debug, Clone, Deserialize)]
 pub struct MintResult {
     pub signature: String,
     pub asset_id: String,
 }
 
-/// Helius JSON-RPC response envelope.
-#[derive(Debug, Deserialize)]
-struct HeliusRpcResponse {
-    result: Option<HeliusMintResult>,
-    error: Option<HeliusRpcError>,
-}
-
-/// Inner `result` object from Helius `mintCompressedNft`.
-#[derive(Debug, Deserialize)]
-struct HeliusMintResult {
-    #[serde(rename = "assetId", default)]
-    asset_id: Option<String>,
-    /// Transaction signature. May be null if confirmation is pending.
-    #[serde(default)]
-    signature: Option<String>,
-    #[serde(default)]
-    minted: bool,
-}
-
-/// Helius JSON-RPC error object.
-#[derive(Debug, Deserialize)]
-struct HeliusRpcError {
-    message: String,
-    code: Option<i64>,
-}
-
 // ---------------------------------------------------------------------------
-// Mint compressed NFT
+// Mint compressed NFT (Crossmint)
 // ---------------------------------------------------------------------------
 
-/// Mint a compressed NFT via the Helius `mintCompressedNft` JSON-RPC method.
+/// Mint a (compressed) NFT via Crossmint and wait for on-chain confirmation.
 ///
-/// The Helius API uses query-param auth (`?api-key=KEY`), so the URL is built
-/// by appending the api key to the rpc url.
+/// Fires `POST /collections/{id}/nfts`, then polls the created NFT resource
+/// until Crossmint reports `onChain.status == "success"`, returning the
+/// transaction signature and asset id. Returns `Err` (which releases the claim
+/// lock upstream so the attendee can retry) on misconfiguration, an API error,
+/// a failed mint, or if confirmation is still pending after the poll budget.
 ///
-/// See [`MintRequest`] for field documentation.
-///
-/// Returns [`MintResult`] with the transaction signature and asset id on success.
-pub async fn mint_compressed_nft(req: &MintRequest<'_>) -> Result<MintResult, String> {
-    let url = format!("{}/?api-key={}", req.rpc_url, req.api_key);
-
-    // Build params — include collection/uri/imageUrl only when non-empty.
-    // NOTE: Helius mintCompressedNft only accepts documented params.
-    // "priorityFee" and "tree" cause Invalid request params errors.
-    // See: https://www.helius.dev/docs/api-reference/mint/mintcompressednft
-    let mut params = serde_json::json!({
-        "name": req.nft_name,
-        "symbol": req.nft_symbol,
-        "description": req.nft_description,
-        "owner": req.wallet_address,
-        "externalUrl": req.nft_external_url,
-        "sellerFeeBasisPoints": 0,
-        "confirmTransaction": true
-    });
-
-    if !req.collection_mint.is_empty() {
-        params["collection"] = serde_json::Value::String(req.collection_mint.to_string());
+/// See [`MintRequest`] for field documentation. `kv`, when present with a
+/// non-empty `idempotency_key`, guards against double-mint: the created NFT id
+/// is persisted before polling, so a retry after a poll timeout resumes the
+/// same mint instead of firing a new one.
+pub async fn mint_compressed_nft(
+    req: &MintRequest<'_>,
+    kv: Option<&worker::KvStore>,
+) -> Result<MintResult, String> {
+    if req.api_key.is_empty() {
+        return Err("crossmint not configured: missing CROSSMINT_API_KEY".to_string());
     }
-    if !req.metadata_uri.is_empty() {
-        params["uri"] = serde_json::Value::String(req.metadata_uri.to_string());
+    if req.collection_id.is_empty() {
+        return Err("crossmint not configured: missing CROSSMINT_COLLECTION_ID".to_string());
     }
-    if !req.image_url.is_empty() {
-        params["imageUrl"] = serde_json::Value::String(req.image_url.to_string());
+    let host = if req.host.is_empty() {
+        "staging.crossmint.com"
+    } else {
+        req.host
+    };
+    let base = format!(
+        "https://{host}/api/{CROSSMINT_API_VERSION}/collections/{}/nfts",
+        req.collection_id
+    );
+
+    // Idempotency: a pending-mint marker keyed by the claim token. Present only
+    // when both a KV store and a non-empty key are supplied.
+    let pending_key = (!req.idempotency_key.is_empty())
+        .then(|| format!("crossmint:pending:{}", req.idempotency_key));
+    let pending_kv = kv.zip(pending_key.as_ref());
+
+    // If a mint for this key already fired but never confirmed, resume polling it
+    // instead of firing a duplicate.
+    let resumed_nft_id = match pending_kv {
+        Some((kv, key)) => kv.get(key).text().await.ok().flatten(),
+        None => None,
+    };
+
+    let nft_id = if let Some(id) = resumed_nft_id {
+        tracing::info!(nft_id = %id, "crossmint: resuming in-flight mint (idempotent retry)");
+        id
+    } else {
+        // Metadata — only well-supported fields; add image/external_url when present.
+        let mut metadata = serde_json::json!({
+            "name": req.nft_name,
+            "description": req.nft_description,
+        });
+        if !req.image_url.is_empty() {
+            metadata["image"] = serde_json::Value::String(req.image_url.to_string());
+        }
+        if !req.nft_external_url.is_empty() {
+            metadata["external_url"] = serde_json::Value::String(req.nft_external_url.to_string());
+        }
+
+        let body = serde_json::json!({
+            "recipient": format!("solana:{}", req.wallet_address),
+            "metadata": metadata,
+            "compressed": req.compressed,
+        });
+        let json_body = serde_json::to_string(&body)
+            .map_err(|e| format!("failed to serialize mint request: {e}"))?;
+
+        // Fire the mint.
+        let post_json =
+            crossmint_request(&base, Method::Post, req.api_key, Some(&json_body)).await?;
+
+        // If Crossmint already confirmed synchronously (unlikely), short-circuit.
+        if let Some(result) = parse_crossmint_success(&post_json) {
+            tracing::info!(asset_id = %result.asset_id, "crossmint mint confirmed on submit");
+            return Ok(result);
+        }
+
+        let id = post_json
+            .get("id")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| format!("crossmint mint response missing id: {post_json}"))?
+            .to_string();
+        // Persist the pending marker BEFORE polling so a timeout/crash can resume.
+        // 24h TTL (not 1h): a slow on-chain confirmation that lands after our poll
+        // budget must still be resumable by a later retry, or a fresh mint would
+        // fire and the wallet would receive a duplicate badge. See
+        // docs/SECURITY-FINDINGS-2026-08-13.md #5.
+        if let Some((kv, key)) = pending_kv
+            && let Ok(builder) = kv.put(key, &id)
+        {
+            let _ = builder.expiration_ttl(86_400).execute().await;
+        }
+        tracing::info!(nft_id = %id, "crossmint mint submitted; polling for confirmation");
+        id
+    };
+
+    // Poll the NFT resource until it confirms on-chain.
+    let clear_pending = || async {
+        if let Some((kv, key)) = pending_kv {
+            let _ = kv.delete(key).await;
+        }
+    };
+    let poll_url = format!("{base}/{nft_id}");
+    for attempt in 1..=CROSSMINT_MAX_POLLS {
+        worker::Delay::from(std::time::Duration::from_millis(CROSSMINT_POLL_DELAY_MS)).await;
+
+        let poll_json = match crossmint_request(&poll_url, Method::Get, req.api_key, None).await {
+            Ok(v) => v,
+            Err(e) => {
+                tracing::warn!(attempt, error = %e, "crossmint poll failed; retrying");
+                continue;
+            }
+        };
+        // Log the raw shape on the first poll so field mapping can be verified
+        // against a real response (the exact asset-id field name is unconfirmed).
+        if attempt == 1 {
+            tracing::info!(nft_id = %nft_id, raw = %poll_json, "crossmint poll #1 raw response");
+        }
+
+        match crossmint_status(&poll_json).as_deref() {
+            Some("success") => {
+                let result = parse_crossmint_success(&poll_json).ok_or_else(|| {
+                    format!("crossmint reported success but no asset id/signature: {poll_json}")
+                })?;
+                clear_pending().await;
+                return Ok(result);
+            }
+            Some("failed") | Some("rejected") | Some("error") => {
+                // Definitive failure — clear the marker so a retry mints fresh.
+                clear_pending().await;
+                return Err(format!("crossmint mint failed: {poll_json}"));
+            }
+            _ => { /* pending — keep polling */ }
+        }
     }
 
-    // NOTE: Helius mintCompressedNft does NOT support a custom "tree" parameter.
-    // It always mints to Helius' own managed Merkle tree. The merkle_tree field
-    // is kept in MintRequest for future use (direct Bubblegum calls or when
-    // Helius adds custom tree support).
-    // See: https://www.helius.dev/docs/api-reference/mint/mintcompressednft
-    let _ = req.merkle_tree; // suppress unused warning
+    // Timeout: leave the pending marker in place so the next attempt resumes.
+    Err(format!(
+        "crossmint mint still pending after {CROSSMINT_MAX_POLLS} polls (nft_id={nft_id})"
+    ))
+}
 
-    let body = serde_json::json!({
-        "jsonrpc": "2.0",
-        "id": "bethere-claim",
-        "method": "mintCompressedNft",
-        "params": params
-    });
-
-    let json_body = serde_json::to_string(&body)
-        .map_err(|e| format!("failed to serialize mint request: {e}"))?;
-
+/// Send a Crossmint REST request and parse the JSON body. Non-2xx is an error.
+async fn crossmint_request(
+    url: &str,
+    method: Method,
+    api_key: &str,
+    body: Option<&str>,
+) -> Result<serde_json::Value, String> {
     let headers = Headers::new();
     headers
-        .set("Content-Type", "application/json")
-        .map_err(|e| format!("failed to set content-type: {e:?}"))?;
+        .set("X-API-KEY", api_key)
+        .map_err(|e| format!("failed to set api key header: {e:?}"))?;
+    if body.is_some() {
+        headers
+            .set("Content-Type", "application/json")
+            .map_err(|e| format!("failed to set content-type: {e:?}"))?;
+    }
 
     let mut init = RequestInit::new();
-    init.with_method(Method::Post)
-        .with_headers(headers)
-        .with_body(Some(wasm_bindgen::JsValue::from_str(&json_body)));
+    init.with_method(method).with_headers(headers);
+    if let Some(b) = body {
+        init.with_body(Some(wasm_bindgen::JsValue::from_str(b)));
+    }
 
-    let request = Request::new_with_init(&url, &init)
-        .map_err(|e| format!("failed to create mint request: {e:?}"))?;
-
+    let request = Request::new_with_init(url, &init)
+        .map_err(|e| format!("failed to create crossmint request: {e:?}"))?;
     let mut response = Fetch::Request(request)
         .send()
         .await
-        .map_err(|e| format!("helius mint request failed: {e:?}"))?;
+        .map_err(|e| format!("crossmint request failed: {e:?}"))?;
 
     let status = response.status_code();
-    if !(200..300).contains(&status) {
-        let body_text = response
-            .text()
-            .await
-            .unwrap_or_else(|_| "<failed to read body>".to_string());
-        return Err(format!("helius rpc returned HTTP {status}: {body_text}"));
-    }
-
-    // Read raw body text, then parse
-    let body_text = response
+    let text = response
         .text()
         .await
-        .map_err(|e| format!("failed to read helius response body: {e:?}"))?;
-
-    let rpc_response: HeliusRpcResponse = serde_json::from_str(&body_text)
-        .map_err(|e| format!("failed to parse helius rpc response: {e:?}"))?;
-
-    if let Some(err) = rpc_response.error {
-        let code = err.code.map(|c| format!(" (code {c})")).unwrap_or_default();
-        return Err(format!(
-            "helius rpc error: {message}{code}",
-            message = err.message
-        ));
+        .map_err(|e| format!("failed to read crossmint response body: {e:?}"))?;
+    if !(200..300).contains(&status) {
+        return Err(format!("crossmint returned HTTP {status}: {text}"));
     }
+    serde_json::from_str(&text).map_err(|e| format!("failed to parse crossmint response: {e}: {text}"))
+}
 
-    let result = rpc_response
-        .result
-        .ok_or_else(|| "helius rpc returned no result and no error".to_string())?;
+/// Extract the on-chain status (lowercased) from a Crossmint NFT/action body.
+fn crossmint_status(v: &serde_json::Value) -> Option<String> {
+    v.get("onChain")
+        .and_then(|o| o.get("status"))
+        .and_then(|s| s.as_str())
+        .or_else(|| v.get("status").and_then(|s| s.as_str()))
+        .map(|s| s.to_ascii_lowercase())
+}
 
-    if !result.minted {
-        return Err(format!(
-            "helius rpc returned minted=false (asset_id={:?}, signature={:?})",
-            result.asset_id, result.signature
-        ));
+/// Parse a confirmed Crossmint response into a [`MintResult`]. Returns `None`
+/// unless the status is `success` AND an asset id is present. Field names are
+/// tried defensively because Crossmint's exact keys are unconfirmed without a
+/// live account (poll #1 logs the raw body to pin these down).
+fn parse_crossmint_success(v: &serde_json::Value) -> Option<MintResult> {
+    if crossmint_status(v).as_deref() != Some("success") {
+        return None;
     }
+    let onchain = v.get("onChain");
+    let pick = |obj: Option<&serde_json::Value>, keys: &[&str]| -> Option<String> {
+        let obj = obj?;
+        keys.iter()
+            .find_map(|k| obj.get(*k).and_then(|s| s.as_str()))
+            .map(|s| s.to_string())
+    };
 
-    let asset_id = result
-        .asset_id
-        .ok_or_else(|| "helius rpc returned no assetId".to_string())?;
+    let asset_id = pick(onchain, &["assetId", "mintHash", "address"])
+        .or_else(|| pick(Some(v), &["assetId"]))?;
+    let signature = pick(onchain, &["txId", "signature", "transaction"])
+        .or_else(|| pick(Some(v), &["txId"]))
+        .unwrap_or_default();
 
-    tracing::info!(
-        asset_id = %asset_id,
-        signature = %result.signature.as_deref().unwrap_or("pending"),
-        "minted compressed nft"
-    );
-
-    Ok(MintResult {
-        signature: result.signature.unwrap_or_default(),
+    Some(MintResult {
+        signature,
         asset_id,
     })
 }
@@ -272,6 +353,13 @@ pub struct DasGrouping {
     pub group_key: Option<String>,
     #[serde(default)]
     pub group_value: Option<String>,
+}
+
+/// Helius JSON-RPC error object (DAS reads).
+#[derive(Debug, serde::Deserialize)]
+struct HeliusRpcError {
+    message: String,
+    code: Option<i64>,
 }
 
 /// Helius DAS JSON-RPC response envelope.
@@ -401,9 +489,78 @@ pub fn validate_wallet_address(address: &str) -> Result<(), String> {
     Ok(())
 }
 
+// ---------------------------------------------------------------------------
+// Sign-In With Solana (SIWS) signature verification
+// ---------------------------------------------------------------------------
+
+/// Verify that `signature_b58` is a valid ed25519 signature over `message`
+/// produced by the secret key for `wallet_address` (the base58 public key).
+///
+/// `signature_b58` is base58-encoded 64 signature bytes (as returned by the
+/// wallet's `signMessage`). Returns `Ok(())` on a valid signature.
+pub fn verify_siws_signature(
+    wallet_address: &str,
+    message: &str,
+    signature_b58: &str,
+) -> Result<(), String> {
+    use ed25519_dalek::{Signature, VerifyingKey};
+
+    let pubkey_bytes = crate::solana_escrow::crypto::base58_decode(wallet_address)
+        .map_err(|e| format!("invalid wallet public key: {e:?}"))?;
+    let pubkey_arr: [u8; 32] = pubkey_bytes
+        .as_slice()
+        .try_into()
+        .map_err(|_| format!("wallet public key must be 32 bytes, got {}", pubkey_bytes.len()))?;
+    let verifying_key = VerifyingKey::from_bytes(&pubkey_arr)
+        .map_err(|e| format!("wallet public key is not a valid ed25519 point: {e}"))?;
+
+    let sig_bytes = crate::solana_escrow::crypto::base58_decode(signature_b58)
+        .map_err(|e| format!("invalid signature encoding: {e:?}"))?;
+    let sig_arr: [u8; 64] = sig_bytes
+        .as_slice()
+        .try_into()
+        .map_err(|_| format!("signature must be 64 bytes, got {}", sig_bytes.len()))?;
+    let signature = Signature::from_bytes(&sig_arr);
+
+    verifying_key
+        .verify_strict(message.as_bytes(), &signature)
+        .map_err(|_| "signature does not match wallet and message".to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // Ed25519 vector generated offline (Node crypto) over the exact SIWS
+    // challenge message below, signed by the key whose public key is PUB_B58.
+    const SIWS_PUB_B58: &str = "FAe4sisG95oZ42w7buUn5qEE4TAnfTTFPiguZUHmhiF";
+    const SIWS_MSG: &str =
+        "BeThere Protocol Sign-In With Solana\nWallet: TEST\nNonce: deadbeef\nExpires: 1786400000";
+    const SIWS_SIG_B58: &str =
+        "5tYugeHRvrBvCMhC2NMdzxJxd43gkzXjcpkieC2FPrda8g2Tfb76G6cDxaiRNdMGxGiQfRCtiRon2uguwa8D73Lc";
+    const SIWS_BADSIG_B58: &str =
+        "5tYugeHRvrBvCMhC2NMdzxJxd43gkzXjcpkieC2FPrda8g2Tfb76G6cDxaiRNdMGxGiQfRCtiRon2uguwa8D73Lb";
+
+    #[test]
+    fn test_siws_valid_signature_accepts() {
+        assert!(verify_siws_signature(SIWS_PUB_B58, SIWS_MSG, SIWS_SIG_B58).is_ok());
+    }
+
+    #[test]
+    fn test_siws_tampered_signature_rejects() {
+        assert!(verify_siws_signature(SIWS_PUB_B58, SIWS_MSG, SIWS_BADSIG_B58).is_err());
+    }
+
+    #[test]
+    fn test_siws_wrong_message_rejects() {
+        assert!(verify_siws_signature(SIWS_PUB_B58, "different message", SIWS_SIG_B58).is_err());
+    }
+
+    #[test]
+    fn test_siws_placeholder_signature_rejects() {
+        // The old bypass sent this literal string as the "signature".
+        assert!(verify_siws_signature(SIWS_PUB_B58, SIWS_MSG, "siws_verified").is_err());
+    }
 
     #[test]
     fn test_validate_wallet_address_valid() {
@@ -456,5 +613,65 @@ mod tests {
         // A well-known Solana address (System Program)
         let addr = "11111111111111111111111111111111";
         assert!(validate_wallet_address(addr).is_ok());
+    }
+
+    // ── Crossmint response parsing ──────────────────────────────────────
+    // These lock the mint response mapping, which could not be verified against
+    // a live Crossmint account when written (fields parsed defensively).
+    use serde_json::json;
+
+    #[test]
+    fn test_crossmint_status_reads_onchain_first() {
+        let v = json!({ "onChain": { "status": "Success" }, "status": "pending" });
+        assert_eq!(crossmint_status(&v).as_deref(), Some("success")); // lowercased
+    }
+
+    #[test]
+    fn test_crossmint_status_falls_back_to_top_level() {
+        let v = json!({ "status": "PENDING" });
+        assert_eq!(crossmint_status(&v).as_deref(), Some("pending"));
+    }
+
+    #[test]
+    fn test_crossmint_status_absent_is_none() {
+        assert_eq!(crossmint_status(&json!({ "id": "x" })), None);
+    }
+
+    #[test]
+    fn test_parse_success_none_when_pending() {
+        // Even with an assetId present, a non-success status must not resolve.
+        let v = json!({ "onChain": { "status": "pending", "assetId": "AID", "txId": "SIG" } });
+        assert!(parse_crossmint_success(&v).is_none());
+    }
+
+    #[test]
+    fn test_parse_success_extracts_asset_and_signature() {
+        let v = json!({ "onChain": { "status": "success", "assetId": "AID123", "txId": "SIG456" } });
+        let r = parse_crossmint_success(&v).expect("should parse");
+        assert_eq!(r.asset_id, "AID123");
+        assert_eq!(r.signature, "SIG456");
+    }
+
+    #[test]
+    fn test_parse_success_asset_id_fallbacks() {
+        // mintHash is a valid asset-id source when assetId is absent.
+        let v = json!({ "onChain": { "status": "success", "mintHash": "MINT789" } });
+        let r = parse_crossmint_success(&v).expect("mintHash fallback");
+        assert_eq!(r.asset_id, "MINT789");
+        assert_eq!(r.signature, ""); // signature optional
+    }
+
+    #[test]
+    fn test_parse_success_none_when_success_but_no_asset_id() {
+        // Success with no recognizable asset-id field must NOT be treated as done
+        // (the caller surfaces the raw body so the mapping can be fixed).
+        let v = json!({ "onChain": { "status": "success", "txId": "SIG" } });
+        assert!(parse_crossmint_success(&v).is_none());
+    }
+
+    #[test]
+    fn test_parse_success_failed_status_is_none() {
+        let v = json!({ "onChain": { "status": "failed", "assetId": "AID" } });
+        assert!(parse_crossmint_success(&v).is_none());
     }
 }

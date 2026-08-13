@@ -120,9 +120,15 @@ pub async fn check_in(
         );
     }
 
-    // Generate claim token (UUID v7) for NFT/refund claim link.
-    // Frontend constructs the full claim URL using window.location.origin + /claim/{token}.
-    let claim_token = Uuid::now_v7().to_string();
+    // Claim token (UUID v7) for the NFT/refund claim link. Reuse the existing one
+    // on a re-check-in so a duplicate scan never invalidates a claim URL already
+    // shown to the attendee — a fresh token is only minted on first check-in (or
+    // after undo cleared it). D1 also preserves the token defensively; reusing it
+    // here keeps the Sheets copy consistent in the common case.
+    let claim_token = match attendee.claim_token.as_deref() {
+        Some(t) if !t.is_empty() => t.to_string(),
+        _ => Uuid::now_v7().to_string(),
+    };
 
     // Resolve column mapping for this event's sheet
     let mapping = match sheets::get_column_mapping(&state, &event.sheet_id, &event.sheet_name, kv)
@@ -376,5 +382,44 @@ pub async fn undo_check_in(
     Ok((
         StatusCode::OK,
         axum::Json(serde_json::json!({ "success": true })),
+    ))
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub struct NfcCheckinReq {
+    pub event_slug: String,
+    #[allow(dead_code)] // accepted from the client payload; unused until NFC is implemented
+    pub nonce: String,
+    #[allow(dead_code)] // accepted from the client payload but not used yet
+    pub timestamp: Option<f64>,
+}
+
+#[derive(Debug, serde::Serialize)]
+pub struct NfcCheckinRes {
+    pub success: bool,
+    pub message: String,
+    pub tx_signature: Option<String>,
+}
+
+/// POST /api/checkin/nfc/verify
+///
+/// NOT IMPLEMENTED. NFC tap check-in has no real verification or persistence
+/// yet — the previous body fabricated a fake success + `5xNFC…` tx signature
+/// and recorded nothing on-chain or in D1/Sheets. Returning an honest error
+/// prevents attendees from being shown a false "checked in on-chain" result.
+/// Re-enable with real tx-signature verification + a server-issued single-use
+/// nonce + D1 persistence + staff/terminal binding before presenting NFC as a
+/// working check-in path.
+#[worker::send]
+pub async fn nfc_verify(
+    State(_state): State<AppState>,
+    axum::Json(payload): axum::Json<NfcCheckinReq>,
+) -> Result<ApiOk<NfcCheckinRes>, crate::error::WorkerError> {
+    tracing::warn!(event = %payload.event_slug, "nfc checkin attempted — feature not implemented");
+    Err(crate::error::WorkerError(
+        event_checkin_domain::models::error::AppError::Validation(
+            "NFC tap check-in isn't available yet — please use QR check-in at the desk."
+                .to_string(),
+        ),
     ))
 }

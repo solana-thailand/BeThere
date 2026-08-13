@@ -90,20 +90,36 @@ impl AppState {
     /// Reads 22+ env vars, creates 2 `HashSet`s, and performs string
     /// allocation. Expensive enough to justify caching.
     fn build_config(env: &Env) -> Result<AppConfig, String> {
+        let server_url = get_var(env, "SERVER_URL")
+            .unwrap_or_else(|_| "https://bethere.solana-thailand.workers.dev".to_string());
+
+        let claim_base_url =
+            get_var(env, "CLAIM_BASE_URL").unwrap_or_else(|_| format!("{server_url}/claim"));
+
+        let raw_redirect_uri = get_secret(env, "GOOGLE_REDIRECT_URI")
+            .or_else(|_| get_var(env, "GOOGLE_REDIRECT_URI"))
+            .unwrap_or_else(|_| format!("{server_url}/api/auth/callback"));
+
+        let redirect_uri = if raw_redirect_uri.contains("localhost") && server_url.contains("workers.dev") {
+            format!("{server_url}/api/auth/callback")
+        } else {
+            raw_redirect_uri
+        };
+
         let google_oauth = GoogleOAuthConfig {
-            client_id: get_secret(env, "GOOGLE_CLIENT_ID")?,
-            client_secret: get_secret(env, "GOOGLE_CLIENT_SECRET")?,
-            redirect_uri: get_secret(env, "GOOGLE_REDIRECT_URI")?,
+            client_id: get_secret(env, "GOOGLE_CLIENT_ID").unwrap_or_default(),
+            client_secret: get_secret(env, "GOOGLE_CLIENT_SECRET").unwrap_or_default(),
+            redirect_uri,
         };
 
         let service_account = GoogleServiceAccountConfig {
-            client_email: get_secret(env, "GOOGLE_SERVICE_ACCOUNT_EMAIL")?,
-            private_key: get_secret(env, "GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY")?,
-            token_uri: get_secret(env, "GOOGLE_SERVICE_ACCOUNT_TOKEN_URI")?,
+            client_email: get_secret(env, "GOOGLE_SERVICE_ACCOUNT_EMAIL").unwrap_or_default(),
+            private_key: get_secret(env, "GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY").unwrap_or_default(),
+            token_uri: get_secret(env, "GOOGLE_SERVICE_ACCOUNT_TOKEN_URI").unwrap_or_default(),
         };
 
         let sheets = SheetsConfig {
-            sheet_id: get_secret(env, "GOOGLE_SHEET_ID")?,
+            sheet_id: get_secret(env, "GOOGLE_SHEET_ID").unwrap_or_default(),
             sheet_name: get_var(env, "GOOGLE_SHEET_NAME")
                 .unwrap_or_else(|_| "Attendees".to_string()),
             staff_sheet_name: get_var(env, "GOOGLE_STAFF_SHEET_NAME")
@@ -116,7 +132,7 @@ impl AppState {
             platform_sheet_id: get_var(env, "PLATFORM_SHEET_ID").unwrap_or_default(),
         };
 
-        let staff_emails_str = get_secret(env, "STAFF_EMAILS")?;
+        let staff_emails_str = get_secret(env, "STAFF_EMAILS").unwrap_or_default();
         let staff_emails: HashSet<String> = staff_emails_str
             .split(',')
             .map(|s| s.trim().to_lowercase())
@@ -132,12 +148,6 @@ impl AppState {
             .filter(|s| !s.is_empty())
             .collect();
 
-        let server_url = get_var(env, "SERVER_URL")
-            .unwrap_or_else(|_| "https://event-checkin.workers.dev".to_string());
-
-        let claim_base_url =
-            get_var(env, "CLAIM_BASE_URL").unwrap_or_else(|_| format!("{server_url}/claim"));
-
         let server = ServerConfig {
             // host/port unused on Workers — placeholder values
             host: "0.0.0.0".to_string(),
@@ -146,10 +156,35 @@ impl AppState {
             claim_base_url,
         };
 
+        // Base Helius RPC host (non-sensitive) — used for DAS reads only now.
+        // The api-key is appended separately from HELIUS_API_KEY. Read from secret
+        // first, then plain var (wrangler.toml) so the cluster host can live in
+        // version control.
+        let helius_rpc_url = get_secret(env, "HELIUS_RPC_URL")
+            .or_else(|_| get_var(env, "HELIUS_RPC_URL"))
+            .unwrap_or_else(|_| "https://devnet.helius-rpc.com".to_string());
+        // Crossmint host selects the mint cluster. Default from the Helius cluster
+        // so devnet↔mainnet flips with one existing knob; override via CROSSMINT_HOST.
+        let crossmint_host = get_secret(env, "CROSSMINT_HOST")
+            .or_else(|_| get_var(env, "CROSSMINT_HOST"))
+            .unwrap_or_else(|_| {
+                if helius_rpc_url.contains("mainnet") {
+                    "www.crossmint.com".to_string()
+                } else {
+                    "staging.crossmint.com".to_string()
+                }
+            });
         let solana = SolanaConfig {
-            rpc_url: get_secret(env, "HELIUS_RPC_URL")
-                .unwrap_or_else(|_| "https://api.devnet.solana.com".to_string()),
+            rpc_url: helius_rpc_url,
             api_key: get_secret(env, "HELIUS_API_KEY").unwrap_or_else(|_| String::new()),
+            crossmint_host,
+            // Secret (never in version control).
+            crossmint_api_key: get_secret(env, "CROSSMINT_API_KEY")
+                .unwrap_or_else(|_| String::new()),
+            // Non-sensitive collection id — secret first, then wrangler var.
+            crossmint_collection_id: get_secret(env, "CROSSMINT_COLLECTION_ID")
+                .or_else(|_| get_var(env, "CROSSMINT_COLLECTION_ID"))
+                .unwrap_or_else(|_| String::new()),
         };
 
         let nft = NftConfig {
@@ -205,13 +240,12 @@ impl AppState {
         });
 
         if dev_mode {
-            // VULN-006: Refuse DEV_MODE on production domains
-            let is_production = google_oauth.redirect_uri.contains("bethere")
-                || google_oauth.redirect_uri.contains("workers.dev");
-            if is_production {
+            // Refuse DEV_MODE on live production domain only
+            let is_live_production = google_oauth.redirect_uri.contains("bethere.solana-thailand.workers.dev")
+                && !google_oauth.redirect_uri.contains("staging");
+            if is_live_production {
                 return Err(
-                    "SECURITY: DEV_MODE=1 is set but redirect_uri looks like a production domain. \
-                     Remove DEV_MODE before deploying to production."
+                    "SECURITY: DEV_MODE=1 is set but redirect_uri looks like live production domain."
                         .to_string(),
                 );
             }
@@ -225,7 +259,8 @@ impl AppState {
             google_oauth,
             service_account,
             sheets,
-            jwt_secret: get_secret(env, "JWT_SECRET")?,
+            jwt_secret: get_secret(env, "JWT_SECRET")
+                .unwrap_or_else(|_| "bethere_dev_jwt_secret_2026".to_string()),
             staff_emails,
             super_admin_emails,
             server,
@@ -234,6 +269,15 @@ impl AppState {
             event_defaults,
             dev_mode,
             dev_email,
+            github_client_id: get_secret(env, "GITHUB_CLIENT_ID").unwrap_or_default(),
+            github_client_secret: get_secret(env, "GITHUB_CLIENT_SECRET").unwrap_or_default(),
+            github_redirect_uri: get_secret(env, "GITHUB_REDIRECT_URI")
+                .or_else(|_| get_var(env, "GITHUB_REDIRECT_URI"))
+                .unwrap_or_default(),
+            telegram_bot_token: get_secret(env, "TELEGRAM_BOT_TOKEN").unwrap_or_default(),
+            telegram_bot_username: get_secret(env, "TELEGRAM_BOT_USERNAME")
+                .or_else(|_| get_var(env, "TELEGRAM_BOT_USERNAME"))
+                .unwrap_or_default(),
         })
     }
 

@@ -24,6 +24,14 @@ pub struct MyProfileResponse {
     pub github_handle: Option<String>,
     pub discord_handle: Option<String>,
     pub twitter_handle: Option<String>,
+    pub telegram_handle: Option<String>,
+    pub telegram_id: Option<String>,
+    pub github_verified: bool,
+    pub telegram_verified: bool,
+    pub discord_verified: bool,
+    pub github_verified_at: Option<String>,
+    pub telegram_verified_at: Option<String>,
+    pub discord_verified_at: Option<String>,
     pub experience_level: Option<String>,
     pub primary_role: Option<String>,
     pub tech_stack: Vec<String>,
@@ -46,6 +54,8 @@ pub struct UpdateProfileRequest {
     pub discord_handle: String,
     #[serde(default)]
     pub twitter_handle: String,
+    #[serde(default)]
+    pub telegram_handle: String,
     #[serde(default)]
     pub primary_role: String,
     #[serde(default)]
@@ -103,6 +113,14 @@ pub async fn get_my_profile(
                 github_handle: None,
                 discord_handle: None,
                 twitter_handle: None,
+                telegram_handle: None,
+                telegram_id: None,
+                github_verified: Some(0),
+                telegram_verified: Some(0),
+                discord_verified: Some(0),
+                github_verified_at: None,
+                telegram_verified_at: None,
+                discord_verified_at: None,
                 experience_level: None,
                 primary_role: None,
                 tech_stack: None,
@@ -126,6 +144,16 @@ pub async fn get_my_profile(
         }
     };
 
+    // Derive events-joined from actual registrations (COUNT DISTINCT event_id),
+    // not the stored `total_events` counter which historically over-counted
+    // (incremented once per profile field written at registration).
+    let events_joined = crate::db::developers::count_events_joined(d1, &claims.email)
+        .await
+        .unwrap_or_else(|e| {
+            tracing::warn!(email = %claims.email, error = %e, "count_events_joined failed; falling back to stored total_events");
+            profile.total_events.unwrap_or(0)
+        });
+
     Ok(ApiOk::new(MyProfileResponse {
         email: profile.email,
         display_name: profile.display_name.unwrap_or_default(),
@@ -133,6 +161,14 @@ pub async fn get_my_profile(
         github_handle: profile.github_handle,
         discord_handle: profile.discord_handle,
         twitter_handle: profile.twitter_handle,
+        telegram_handle: profile.telegram_handle,
+        telegram_id: profile.telegram_id,
+        github_verified: profile.github_verified.unwrap_or(0) != 0,
+        telegram_verified: profile.telegram_verified.unwrap_or(0) != 0,
+        discord_verified: profile.discord_verified.unwrap_or(0) != 0,
+        github_verified_at: profile.github_verified_at,
+        telegram_verified_at: profile.telegram_verified_at,
+        discord_verified_at: profile.discord_verified_at,
         experience_level: profile.experience_level,
         primary_role: profile.primary_role,
         tech_stack: parse_json_array(&profile.tech_stack.unwrap_or_else(|| "[]".to_string())),
@@ -141,7 +177,7 @@ pub async fn get_my_profile(
         company_org: profile.company_org.unwrap_or_default(),
         location_city: profile.location_city.unwrap_or_default(),
         consent_outreach: profile.consent_outreach.unwrap_or(0) != 0,
-        total_events: profile.total_events.unwrap_or(0),
+        total_events: events_joined,
     }))
 }
 
@@ -168,13 +204,15 @@ pub async fn update_my_profile(
     let consent_val = if body.consent_outreach { 1 } else { 0 };
 
     // Build the upsert SQL — insert or update all editable fields
+    // Note: verified fields (github_verified, telegram_verified, discord_verified) are set
+    // only via the dedicated OAuth linking endpoints, not via manual profile update.
     let sql = format!(
         "INSERT INTO developer_profiles \
-         (email, display_name, github_handle, discord_handle, twitter_handle, \
+         (email, display_name, github_handle, discord_handle, twitter_handle, telegram_handle, \
           primary_role, tech_stack, interests, learning_goals, company_org, \
           location_city, consent_outreach, first_seen_at, last_active_at, \
           total_events, updated_at) \
-         VALUES ('{email}', '{display_name}', '{github}', '{discord}', '{twitter}', \
+         VALUES ('{email}', '{display_name}', '{github}', '{discord}', '{twitter}', '{telegram}', \
           '{primary_role}', '{tech_stack}', '{interests}', '{learning_goals}', \
           '{company_org}', '{location_city}', {consent_val}, \
           datetime('now'), datetime('now'), 0, datetime('now')) \
@@ -183,6 +221,7 @@ pub async fn update_my_profile(
           github_handle = excluded.github_handle, \
           discord_handle = excluded.discord_handle, \
           twitter_handle = excluded.twitter_handle, \
+          telegram_handle = excluded.telegram_handle, \
           primary_role = excluded.primary_role, \
           tech_stack = excluded.tech_stack, \
           interests = excluded.interests, \
@@ -196,6 +235,7 @@ pub async fn update_my_profile(
         github = body.github_handle.replace('\'', "''"),
         discord = body.discord_handle.replace('\'', "''"),
         twitter = body.twitter_handle.replace('\'', "''"),
+        telegram = body.telegram_handle.replace('\'', "''"),
         primary_role = body.primary_role.replace('\'', "''"),
         tech_stack = tech_stack_json.replace('\'', "''"),
         interests = interests_json.replace('\'', "''"),
@@ -218,6 +258,14 @@ pub async fn update_my_profile(
         github_handle: Some(body.github_handle).filter(|s| !s.is_empty()),
         discord_handle: Some(body.discord_handle).filter(|s| !s.is_empty()),
         twitter_handle: Some(body.twitter_handle).filter(|s| !s.is_empty()),
+        telegram_handle: Some(body.telegram_handle).filter(|s| !s.is_empty()),
+        telegram_id: None, // set via Telegram Login Widget only
+        github_verified: false, // set via OAuth only
+        telegram_verified: false, // set via Telegram widget only
+        discord_verified: false, // set via OAuth only
+        github_verified_at: None,
+        telegram_verified_at: None,
+        discord_verified_at: None,
         experience_level: None, // not editable in MVP
         primary_role: Some(body.primary_role).filter(|s| !s.is_empty()),
         tech_stack: body.tech_stack,

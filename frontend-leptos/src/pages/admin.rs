@@ -1315,6 +1315,27 @@ pub fn Admin() -> impl IntoView {
                     // Stats cards (tab-aware)
                     {move || render_stats(&stats.get(), &attendees.get(), active_tab.get(), &current_event_format.get())}
 
+                    // Check-in velocity neon progress bar
+                    {move || {
+                        let list = attendees.get();
+                        let total = list.len();
+                        let checked_in = list.iter().filter(|a| a.checked_in_at.is_some()).count();
+                        let pct = if total > 0 { (checked_in as f64 / total as f64 * 100.0) as u32 } else { 0 };
+                        view! {
+                            <div style="background: rgba(19, 20, 28, 0.6); border: 1px solid rgba(153, 69, 255, 0.25); border-radius: 14px; padding: 14px 18px; margin: 16px 0; backdrop-filter: blur(12px);">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                    <span style="font-weight: 700; color: #fff; font-size: 0.88rem; display: flex; align-items: center; gap: 6px;">
+                                        <span style="color: #14F195;">"⚡"</span>" Check-in Velocity"
+                                    </span>
+                                    <span style="font-weight: 800; color: #14F195; font-size: 0.88rem;">{pct}"% Checked In ("{checked_in}" / "{total}")"</span>
+                                </div>
+                                <div style="width: 100%; height: 8px; background: rgba(255,255,255,0.08); border-radius: 8px; overflow: hidden;">
+                                    <div style=format!("width: {pct}%; height: 100%; background: linear-gradient(90deg, #9945FF, #14F195); border-radius: 8px; transition: width 0.4s ease;")></div>
+                                </div>
+                            </div>
+                        }
+                    }}
+
                     // Search box
                     <div class="search-box">
                         <span class="search-icon"></span>

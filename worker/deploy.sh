@@ -280,10 +280,15 @@ else
     echo "🚀 Deploying to Cloudflare Workers (production: ${WORKER_NAME})..."
   fi
 
+  echo "🏗️  Building Leptos WASM frontend via build.sh..."
+  (cd "../frontend-leptos" && bash build.sh)
+
+  if [ -f "../frontend-leptos/_headers" ] && [ -d "${DIST_DIR}" ]; then
+    cp -f "../frontend-leptos/_headers" "${DIST_DIR}/_headers"
+    echo "📋 Copied _headers to ${DIST_DIR}/_headers for edge asset cache rules."
+  fi
+
   # ── Step 1: Try standard wrangler deploy ──
-  # wrangler deploy uploads assets via assets-upload-session (which works),
-  # then calls /versions (which fails with 10013).
-  # The assets are already uploaded and cached by Cloudflare at this point.
   if CI=true npx wrangler deploy $WRANGLER_ENV_FLAG 2>&1; then
     echo "✅ Deployed via wrangler"
     if verify_content_types; then

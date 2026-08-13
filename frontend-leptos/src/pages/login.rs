@@ -16,9 +16,6 @@ use crate::auth::get_url_error;
 use crate::icons::{Icon, IconName};
 
 /// Google SVG icon markup.
-///
-/// Defined as a module-level constant to avoid the `#[component]` macro
-/// misinterpreting hex color values like `#4285F4` as Rust tokens.
 fn google_icon() -> &'static str {
     "<svg viewBox=\"0 0 24 24\" width=\"20\" height=\"20\">\
         <path fill=\"#4285F4\" d=\"M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z\"/>\
@@ -31,36 +28,41 @@ fn google_icon() -> &'static str {
 /// Login page component.
 #[component]
 pub fn Login() -> impl IntoView {
-    let navigate = use_navigate();
-
     // Reactive state
     let (loading, set_loading) = signal(false);
     let (error_msg, set_error_msg) = signal(None::<String>);
 
-    // Read the `next` query param — the path the user should return to after
-    // sign-in. Set by deep-link entry points (e.g. the deposit page's
-    // "session expired" CTA) so the OAuth roundtrip returns them to the page
-    // they were trying to use, not the role-based default (/admin, /staff, /).
+    // Read the `next` query param
     let query = use_query_map();
     let next_param = query.get().get("next").map(|s| s.to_string());
 
+    // On successful wallet sign-in, hard-navigate to `next` (or home).
+    // Use window.location rather than the SPA router: this callback fires from
+    // inside the WalletSignInButton's async task, and an SPA navigate() disposes
+    // this component's reactive owner mid-callback → wasm "unreachable" panic.
+    let wallet_next = next_param.clone();
+    let on_wallet_success = Callback::new(move |_addr: String| {
+        let target = wallet_next
+            .clone()
+            .filter(|n| !n.is_empty())
+            .unwrap_or_else(|| "/".to_string());
+        if let Some(win) = web_sys::window() {
+            let _ = win.location().set_href(&target);
+        }
+    });
+
     // On mount: check for URL errors, check if already authenticated via cookie
     Effect::new(move |_| {
-        // Check for error in URL params (from OAuth callback failures)
         if let Some(err) = get_url_error() {
             log::warn!("[login] error from URL: {err}");
             set_error_msg.set(Some(err));
         }
 
-        // Check if already authenticated via cookie
-        let nav = navigate.clone();
+        let nav = use_navigate();
         let next_for_redirect = next_param.clone();
         leptos::task::spawn_local(async move {
             match crate::api::get_me().await {
                 Ok(me) => {
-                    // Prefer explicit `next` param over role-based defaults.
-                    // Capture whether we have one before `filter` consumes the
-                    // Option — the attendee-redirect check below needs it too.
                     let has_next = next_for_redirect
                         .as_deref()
                         .is_some_and(|n| !n.is_empty());
@@ -76,9 +78,6 @@ pub fn Login() -> impl IntoView {
                         me.role
                     );
 
-                    // For attendees, try to redirect to their latest registration.
-                    // Skip this if the user has an explicit `next` param —
-                    // respect the deep-link target over the heuristic.
                     if me.role == "attendee" && !has_next
                         && let Ok(resp) = crate::api::fetch::get("/api/my-registrations", &[]).await
                             && resp.status() == 200
@@ -101,10 +100,7 @@ pub fn Login() -> impl IntoView {
         });
     });
 
-    // Handle login button click.
-    // Fetches the Google OAuth URL and redirects the browser.
-    // Passes the `next` param as the OAuth `state` so the worker's callback
-    // handler redirects back to it after successful authentication.
+    // Handle Google login button click
     let handle_login = move |_| {
         set_loading.set(true);
         set_error_msg.set(None);
@@ -136,11 +132,11 @@ pub fn Login() -> impl IntoView {
                 <div class="brand-logo-sub">"Proof of Attendance"</div>
 
                 // Title
-                <h1 class="claim-title">"Staff Portal"</h1>
+                <h1 class="claim-title">"Sign In"</h1>
 
                 // Subtitle
                 <p class="subtitle">
-                    "Sign in with Google to access the staff check-in portal."
+                    "Choose your sign-in method to access BeThere Protocol."
                 </p>
 
                 // Powered by Solana badge
@@ -149,30 +145,36 @@ pub fn Login() -> impl IntoView {
                     "Powered by Solana"
                 </div>
 
-                // Google sign-in button (hidden when loading)
-                <Show
-                    when=move || !loading.get()
-                    fallback=move || {
-                        view! {
-                            <div class="loading visible">
-                                <span class="spinner"></span>
-                                " Redirecting to Google..."
-                            </div>
+                // Sign-in Buttons Stack
+                <div style="display: flex; flex-direction: column; gap: 14px; width: 100%; max-width: 340px; margin-top: 8px;">
+                    // Google sign-in button
+                    <Show
+                        when=move || !loading.get()
+                        fallback=move || {
+                            view! {
+                                <div class="loading visible">
+                                    <span class="spinner"></span>
+                                    " Redirecting to Google..."
+                                </div>
+                            }
                         }
-                    }
-                >
-                    <button class="btn-google" on:click=handle_login>
-                        <span inner_html=google_icon()></span>
-                        "Sign in with Google"
-                    </button>
-                </Show>
+                    >
+                        <button class="btn-google" on:click=handle_login>
+                            <span inner_html=google_icon()></span>
+                            "Sign in with Google"
+                        </button>
+                    </Show>
+
+                    // Solana Wallet sign-in button (shared component + SIWS modal)
+                    <crate::wallet_signin::WalletSignInButton on_success=on_wallet_success />
+                </div>
 
                 // Error message
                 <Show
                     when=move || error_msg.get().is_some()
                     fallback=|| view! { <div></div> }
                 >
-                    <div class="error-msg visible" role="alert" aria-live="assertive">
+                    <div class="error-msg visible" role="alert" aria-live="assertive" style="margin-top: 16px;">
                         <Icon icon=IconName::Denied class="icon-md icon-danger" />
                         " "
                         {move || error_msg.get().unwrap_or_default()}
@@ -180,7 +182,7 @@ pub fn Login() -> impl IntoView {
                 </Show>
 
                 // Back to landing
-                <a href="/" class="login-back-link">
+                <a href="/" class="login-back-link" style="margin-top: 24px;">
                     "← Back to home"
                 </a>
 

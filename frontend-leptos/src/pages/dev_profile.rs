@@ -5,11 +5,28 @@
 
 use leptos::prelude::*;
 use leptos_meta::Title;
+use wasm_bindgen::prelude::*;
 
 use crate::api::{
     self, DeveloperProfile, UpdateProfileBody, INTEREST_OPTIONS, ROLE_OPTIONS,
 };
 use crate::icons::{Icon, IconName};
+
+// ---------------------------------------------------------------------------
+// JS Interop
+// ---------------------------------------------------------------------------
+
+#[wasm_bindgen(module = "/js/clipboard.js")]
+extern "C" {
+    #[wasm_bindgen(js_name = "copyToClipboard")]
+    fn copy_to_clipboard_js(text: &str) -> bool;
+}
+
+#[wasm_bindgen(module = "/js/telegram_widget.js")]
+extern "C" {
+    #[wasm_bindgen(js_name = "mountTelegramWidget")]
+    fn mount_telegram_widget(container_id: &str, bot_username: &str, state: &str);
+}
 
 // ---------------------------------------------------------------------------
 // State
@@ -52,6 +69,114 @@ impl ProfileState {
 pub fn DevProfile() -> impl IntoView {
     let (state, set_state) = signal(ProfileState::LoadingAuth);
     let (dirty, set_dirty) = signal(false);
+
+    // Telegram Login Widget config + signed state (from /api/auth/telegram/*).
+    // The widget renders only when configured AND we have a signed state token
+    // (which carries our identity through Telegram's cookie-less redirect).
+    let (tg_bot_username, set_tg_bot_username) = signal(String::new());
+    let (tg_state, set_tg_state) = signal(String::new());
+    leptos::task::spawn_local(async move {
+        // 1) Is the widget configured?
+        let configured_name = match crate::api::fetch::get("/api/auth/telegram/config", &[]).await {
+            Ok(resp) => match crate::api::fetch::response_text(&resp).await {
+                Ok(text) => {
+                    serde_json::from_str::<serde_json::Value>(&text)
+                        .ok()
+                        .filter(|v| v.get("configured").and_then(|c| c.as_bool()).unwrap_or(false))
+                        .and_then(|v| v.get("bot_username").and_then(|u| u.as_str()).map(String::from))
+                }
+                Err(e) => {
+                    log::warn!("[telegram] config read failed: {}", e.message);
+                    None
+                }
+            },
+            Err(e) => {
+                log::warn!("[telegram] config fetch failed: {}", e.message);
+                None
+            }
+        };
+
+        let Some(name) = configured_name else {
+            return; // not configured — manual input fallback
+        };
+
+        // 2) Get a signed state token for this session (identity for the callback).
+        match crate::api::fetch::get("/api/auth/telegram/state", &[]).await {
+            Ok(resp) if resp.status() == 200 => {
+                if let Ok(v) = crate::api::fetch::response_json::<serde_json::Value>(&resp).await
+                    && let Some(s) = v.get("state").and_then(|s| s.as_str())
+                {
+                    set_tg_state.set(s.to_string());
+                    set_tg_bot_username.set(name);
+                } else {
+                    log::warn!("[telegram] state response missing token");
+                }
+            }
+            Ok(resp) => log::warn!("[telegram] state fetch HTTP {}", resp.status()),
+            Err(e) => log::warn!("[telegram] state fetch failed: {}", e.message),
+        }
+    });
+
+    // Social-link result banner, fed by ?linked= / ?error= from the OAuth
+    // callback redirect. (is_success, message)
+    let (link_banner, set_link_banner) = signal(None::<(bool, String)>);
+    if let Some(win) = web_sys::window()
+        && let Ok(href) = win.location().href()
+        && let Ok(url) = web_sys::Url::new(&href)
+    {
+        let params = url.search_params();
+        let banner = if let Some(linked) = params.get("linked") {
+            let msg = match linked.as_str() {
+                "github" => "GitHub account linked and verified!".to_string(),
+                "telegram" => "Telegram account linked and verified!".to_string(),
+                other => format!("{other} account linked!"),
+            };
+            Some((true, msg))
+        } else {
+            params.get("error").map(|err| {
+                let msg = match err.as_str() {
+                    "github_denied" => "GitHub authorization was cancelled.".to_string(),
+                    "github_state_expired" => {
+                        "GitHub link expired — please try again.".to_string()
+                    }
+                    "github_no_code" | "github_no_state" | "github_invalid_state" => {
+                        "GitHub link failed (invalid response). Please try again.".to_string()
+                    }
+                    "github_token_failed" => {
+                        "GitHub link failed during sign-in. Please try again.".to_string()
+                    }
+                    "github_user_failed" => {
+                        "Could not fetch your GitHub username. Please try again.".to_string()
+                    }
+                    "github_save_failed" | "db_unavailable" => {
+                        "Could not save your GitHub handle. Please try again.".to_string()
+                    }
+                    "telegram_bad_signature" | "telegram_invalid" => {
+                        "Telegram verification failed. Please try again.".to_string()
+                    }
+                    "telegram_expired" => {
+                        "Telegram login expired — please try again.".to_string()
+                    }
+                    "telegram_save_failed" | "telegram_unconfigured" => {
+                        "Could not save your Telegram link. Please try again.".to_string()
+                    }
+                    other => format!("Account linking failed ({other}). Please try again."),
+                };
+                (false, msg)
+            })
+        };
+        if banner.is_some() {
+            set_link_banner.set(banner);
+            // Strip the query string so a refresh doesn't re-show the banner
+            if let Ok(history) = win.history() {
+                let _ = history.replace_state_with_url(
+                    &wasm_bindgen::JsValue::NULL,
+                    "",
+                    Some(&url.pathname()),
+                );
+            }
+        }
+    }
 
     // Auth check + profile fetch on mount
     // Use API-based auth check (GET /api/auth/me) instead of localStorage-only check.
@@ -149,6 +274,7 @@ pub fn DevProfile() -> impl IntoView {
             "github_handle" => profile.github_handle = Some(value),
             "discord_handle" => profile.discord_handle = Some(value),
             "twitter_handle" => profile.twitter_handle = Some(value),
+            "telegram_handle" => profile.telegram_handle = Some(value),
             "primary_role" => profile.primary_role = if value.is_empty() { None } else { Some(value) },
             "learning_goals" => profile.learning_goals = value,
             "company_org" => profile.company_org = value,
@@ -187,6 +313,26 @@ pub fn DevProfile() -> impl IntoView {
                     "Tell us about yourself — your interests and skills help us improve events."
                 </p>
             </div>
+
+            {move || {
+                link_banner.get().map(|(ok, msg)| {
+                    let style = if ok {
+                        ""
+                    } else {
+                        "background:rgba(239,68,68,0.1);border-color:rgba(239,68,68,0.3);color:#ef4444;"
+                    };
+                    view! {
+                        <div class="dev-profile-saved-banner" style=style>
+                            {if ok {
+                                view! { <Icon icon=IconName::Check class="icon-sm icon-success" /> }.into_any()
+                            } else {
+                                view! { <Icon icon=IconName::Warning class="icon-sm icon-warning" /> }.into_any()
+                            }}
+                            " " {msg}
+                        </div>
+                    }
+                })
+            }}
 
             {move || {
                 let current = state.get();
@@ -229,11 +375,24 @@ pub fn DevProfile() -> impl IntoView {
                 };
                 let is_saving = current.is_saving();
                 let is_dirty = dirty.get();
-                let email = profile.email.clone();
+                // Wallet-only identities have a synthetic `wallet:<address>` email —
+                // show a friendly address and label the row accordingly (Plan 017).
+                let raw_email = profile.email.clone();
+                let is_wallet_identity = raw_email.starts_with("wallet:");
+                let (email_label, email) = if is_wallet_identity {
+                    let addr = raw_email.trim_start_matches("wallet:");
+                    ("Wallet Identity", crate::api::short_wallet(addr))
+                } else {
+                    ("Email", raw_email.clone())
+                };
                 let display_name = profile.display_name.clone();
                 let github = profile.github_handle.clone().unwrap_or_default();
+                let github_verified = profile.github_verified;
                 let discord = profile.discord_handle.clone().unwrap_or_default();
+                let discord_verified = profile.discord_verified;
                 let twitter = profile.twitter_handle.clone().unwrap_or_default();
+                let telegram = profile.telegram_handle.clone().unwrap_or_default();
+                let telegram_verified = profile.telegram_verified;
                 let role = profile.primary_role.clone().unwrap_or_default();
                 let company = profile.company_org.clone();
                 let city = profile.location_city.clone();
@@ -246,10 +405,15 @@ pub fn DevProfile() -> impl IntoView {
                 view! {
                     <div class="dev-profile-form">
 
-                        // Email (read-only)
+                        // Email / wallet identity (read-only)
                         <div class="dev-profile-field">
-                            <label class="dev-profile-label">"Email"</label>
+                            <label class="dev-profile-label">{email_label}</label>
                             <div class="dev-profile-readonly">{email}</div>
+                            {if is_wallet_identity {
+                                view! { <span class="dev-profile-hint">"Reserve a spot with your email to link it to this wallet."</span> }.into_any()
+                            } else {
+                                ().into_any()
+                            }}
                         </div>
 
                         // Display Name
@@ -315,45 +479,274 @@ pub fn DevProfile() -> impl IntoView {
 
                         // Social handles section
                         <div class="dev-profile-section">
-                            <h3 class="dev-profile-section-title">"Social Links"</h3>
+                            <h3 class="dev-profile-section-title">"Social Links"
+                                <span style="font-size:0.7rem;font-weight:400;color:#94a3b8;margin-left:8px;">"— Connect accounts to verify them"</span>
+                            </h3>
 
-                            <div class="dev-profile-field">
-                                <label class="dev-profile-label">"GitHub"</label>
-                                <input
-                                    class="dev-profile-input"
-                                    type="text"
-                                    placeholder="github_username"
-                                    prop:value=github.clone()
-                                    on:input=move |ev| {
-                                        update_field("github_handle", event_target_value(&ev));
-                                    }
-                                />
+                            // Accounts & sign-in explainer — shown when signed in via a
+                            // wallet-only session, the moment this is most confusing.
+                            {if is_wallet_identity {
+                                view! {
+                                    <div style="background:rgba(153,69,255,0.08);border:1px solid rgba(153,69,255,0.25);border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:0.8rem;line-height:1.45;color:#cbd5e1;">
+                                        <strong style="color:#fff;">"Accounts & sign-in: "</strong>
+                                        "You can sign in with Google or a Solana wallet — they become the same account once linked. If you already registered with Google, sign in with Google and press \"Connect Wallet\" to merge this wallet into that account."
+                                    </div>
+                                }.into_any()
+                            } else {
+                                ().into_any()
+                            }}
+
+                            // GitHub
+                            <div class="dev-profile-social-row">
+                                <div class="dev-profile-social-info">
+                                    <span class="dev-profile-social-icon"><Icon icon=IconName::GitHub /></span>
+                                    <span class="dev-profile-label">"GitHub"</span>
+                                    {if github_verified {
+                                        view! {
+                                            <span class="dev-profile-verified-badge">"✓ Verified"</span>
+                                        }.into_any()
+                                    } else {
+                                        ().into_any()
+                                    }}
+                                </div>
+                                {if github_verified {
+                                    let gh = github.clone();
+                                    let clean = gh.trim_start_matches('@').trim_start_matches("https://github.com/").trim().to_string();
+                                    let gh_url = format!("https://github.com/{clean}");
+                                    view! {
+                                        <div class="dev-profile-social-actions">
+                                            <a href=gh_url target="_blank" rel="noopener noreferrer" class="dev-profile-social-link-btn">
+                                                "@" {clean} " ↗"
+                                            </a>
+                                            <a href="/api/auth/social/unlink" class="dev-profile-social-unlink-btn"
+                                               on:click=move |ev| {
+                                                   ev.prevent_default();
+                                                   leptos::task::spawn_local(async move {
+                                                       let _ = api::social_unlink("github").await;
+                                                       web_sys::window().unwrap().location().reload().unwrap();
+                                                   });
+                                               }
+                                            >
+                                                "Unlink"
+                                            </a>
+                                        </div>
+                                    }.into_any()
+                                } else {
+                                    view! {
+                                        <div class="dev-profile-social-actions">
+                                            <a href="/api/auth/github" rel="external" class="dev-profile-social-connect-btn"
+                                                on:click=move |ev| {
+                                                    ev.prevent_default();
+                                                    if let Some(win) = web_sys::window() {
+                                                        let _ = win.location().set_href("/api/auth/github");
+                                                    }
+                                                }
+                                            >
+                                                "Connect GitHub →"
+                                            </a>
+                                        </div>
+                                    }.into_any()
+                                }}
                             </div>
 
-                            <div class="dev-profile-field">
-                                <label class="dev-profile-label">"Discord"</label>
-                                <input
-                                    class="dev-profile-input"
-                                    type="text"
-                                    placeholder="discord_username"
-                                    prop:value=discord.clone()
-                                    on:input=move |ev| {
-                                        update_field("discord_handle", event_target_value(&ev));
-                                    }
-                                />
+                            // Telegram
+                            <div class="dev-profile-social-row">
+                                <div class="dev-profile-social-info">
+                                    <span class="dev-profile-social-icon"><Icon icon=IconName::Telegram /></span>
+                                    <span class="dev-profile-label">"Telegram"</span>
+                                    {if telegram_verified {
+                                        view! {
+                                            <span class="dev-profile-verified-badge">"✓ Verified"</span>
+                                        }.into_any()
+                                    } else {
+                                        ().into_any()
+                                    }}
+                                </div>
+                                {if telegram_verified {
+                                    let tg = telegram.clone();
+                                    let tg_url = format!("https://t.me/{}", tg.trim_start_matches('@'));
+                                    view! {
+                                        <div class="dev-profile-social-actions">
+                                            <a href=tg_url target="_blank" rel="noopener noreferrer" class="dev-profile-social-link-btn">
+                                                "@" {tg} " ↗"
+                                            </a>
+                                        </div>
+                                    }.into_any()
+                                } else if !tg_bot_username.get().is_empty() {
+                                    // Telegram configured → render the official Login Widget.
+                                    // An Effect mounts it once the container exists; on success
+                                    // the JS glue POSTs to /verify and reloads.
+                                    Effect::new(move |_| {
+                                        let user = tg_bot_username.get();
+                                        let st = tg_state.get();
+                                        if !user.is_empty() && !st.is_empty() {
+                                            mount_telegram_widget("bt-telegram-login", &user, &st);
+                                        }
+                                    });
+                                    view! {
+                                        <div class="dev-profile-social-actions">
+                                            <div id="bt-telegram-login"></div>
+                                        </div>
+                                    }.into_any()
+                                } else {
+                                    // Not configured → manual (unverified) handle input.
+                                    let tg_val = telegram.clone();
+                                    view! {
+                                        <div class="dev-profile-social-actions" style="display:flex;align-items:center;gap:8px;">
+                                            <input
+                                                type="text"
+                                                class="dev-profile-input"
+                                                style="max-width:160px;padding:4px 10px;font-size:0.82rem;"
+                                                placeholder="@username"
+                                                prop:value=tg_val
+                                                on:input=move |ev| {
+                                                    update_field("telegram_handle", event_target_value(&ev));
+                                                }
+                                            />
+                                        </div>
+                                    }.into_any()
+                                }}
                             </div>
 
-                            <div class="dev-profile-field">
-                                <label class="dev-profile-label">"Twitter / X"</label>
-                                <input
-                                    class="dev-profile-input"
-                                    type="text"
-                                    placeholder="twitter_handle"
-                                    prop:value=twitter.clone()
-                                    on:input=move |ev| {
-                                        update_field("twitter_handle", event_target_value(&ev));
-                                    }
-                                />
+                            // Discord
+                            <div class="dev-profile-social-row">
+                                <div class="dev-profile-social-info">
+                                    <span class="dev-profile-social-icon"><Icon icon=IconName::Discord /></span>
+                                    <span class="dev-profile-label">"Discord"</span>
+                                    {if discord_verified {
+                                        view! {
+                                            <span class="dev-profile-verified-badge">"✓ Verified"</span>
+                                        }.into_any()
+                                    } else {
+                                        ().into_any()
+                                    }}
+                                </div>
+                                <div class="dev-profile-social-actions">
+                                    {if discord_verified {
+                                        let dc = discord.clone();
+                                        view! {
+                                            <span class="dev-profile-social-handle">"@"{dc}</span>
+                                        }.into_any()
+                                    } else {
+                                        view! {
+                                            <input
+                                                class="dev-profile-input dev-profile-social-input"
+                                                type="text"
+                                                placeholder="@username (manual)"
+                                                prop:value=discord.clone()
+                                                on:input=move |ev| {
+                                                    update_field("discord_handle", event_target_value(&ev));
+                                                }
+                                            />
+                                        }.into_any()
+                                    }}
+                                </div>
+                            </div>
+
+                            // Twitter / X (manual — Twitter OAuth is expensive)
+                            <div class="dev-profile-social-row">
+                                <div class="dev-profile-social-info">
+                                    <span class="dev-profile-social-icon"><Icon icon=IconName::Twitter /></span>
+                                    <span class="dev-profile-label">"Twitter / X"</span>
+                                </div>
+                                <div class="dev-profile-social-actions">
+                                    {if !twitter.is_empty() {
+                                        let clean = twitter.trim_start_matches('@').trim_start_matches("https://x.com/").trim_start_matches("https://twitter.com/").trim().to_string();
+                                        let x_url = format!("https://x.com/{clean}");
+                                        view! {
+                                            <div style="display:flex;gap:8px;align-items:center;">
+                                                <input
+                                                    class="dev-profile-input dev-profile-social-input"
+                                                    type="text"
+                                                    placeholder="@handle"
+                                                    prop:value=twitter.clone()
+                                                    on:input=move |ev| {
+                                                        update_field("twitter_handle", event_target_value(&ev));
+                                                    }
+                                                />
+                                                <a href=x_url target="_blank" rel="noopener noreferrer" class="dev-profile-social-link-btn" style="white-space:nowrap;">
+                                                    "↗"
+                                                </a>
+                                            </div>
+                                        }.into_any()
+                                    } else {
+                                        view! {
+                                            <input
+                                                class="dev-profile-input dev-profile-social-input"
+                                                type="text"
+                                                placeholder="@handle"
+                                                prop:value=twitter.clone()
+                                                on:input=move |ev| {
+                                                    update_field("twitter_handle", event_target_value(&ev));
+                                                }
+                                            />
+                                        }.into_any()
+                                    }}
+                                </div>
+                            </div>
+
+                            // Solana Wallet (On-Chain Identity)
+                            <div class="dev-profile-social-row">
+                                <div class="dev-profile-social-info">
+                                    <span class="dev-profile-social-icon"><Icon icon=IconName::Solana /></span>
+                                    <span class="dev-profile-label">"Solana Wallet"</span>
+                                    {if profile.wallet_address.is_some() {
+                                        view! {
+                                            <span class="dev-profile-verified-badge">"✓ On-Chain"</span>
+                                        }.into_any()
+                                    } else {
+                                        ().into_any()
+                                    }}
+                                </div>
+                                <div class="dev-profile-social-actions">
+                                    {if let Some(ref addr) = profile.wallet_address {
+                                        let addr_str = addr.clone();
+                                        let copy_addr = addr.clone();
+                                        let shortened = if addr_str.len() > 8 {
+                                            format!("{}...{}", &addr_str[..4], &addr_str[addr_str.len()-4..])
+                                        } else {
+                                            addr_str.clone()
+                                        };
+                                        let solscan_url = format!("https://solscan.io/account/{addr_str}?cluster=devnet");
+                                        view! {
+                                            <div style="display:flex;gap:6px;align-items:center;">
+                                                <a href=solscan_url target="_blank" rel="noopener noreferrer" class="dev-profile-social-link-btn">
+                                                    {shortened} " ↗"
+                                                </a>
+                                                <button type="button" class="dev-profile-social-link-btn" style="color:#94a3b8;border-color:rgba(255,255,255,0.15);"
+                                                        on:click=move |_| { let _ = copy_to_clipboard_js(&copy_addr); }>
+                                                    "Copy"
+                                                </button>
+                                            </div>
+                                        }.into_any()
+                                    } else if is_wallet_identity {
+                                        // Wallet-only session: binding here would just self-link
+                                        // to the synthetic wallet identity. Point them to the
+                                        // real merge path instead of offering a pointless bind.
+                                        view! {
+                                            <span class="dev-profile-hint" style="max-width:240px;text-align:right;line-height:1.4;">
+                                                "You're signed in with this wallet. To attach it to your main account, sign in with Google, then use Connect Wallet here."
+                                            </span>
+                                        }.into_any()
+                                    } else {
+                                        view! {
+                                            <crate::wallet_signin::WalletSignInButton
+                                                flow=crate::wallet_signin::WalletFlow::Bind
+                                                class="dev-profile-social-connect-btn"
+                                                style="background: linear-gradient(135deg, #9945FF 0%, #14F195 100%);"
+                                                label="Connect Wallet →"
+                                                on_success=Callback::new(move |addr: String| {
+                                                    // Attach the bound wallet to the in-memory
+                                                    // profile without a reload (preserves edits).
+                                                    if let Some(mut p) = state.get_untracked().profile().cloned() {
+                                                        p.wallet_address = Some(addr);
+                                                        set_state.set(ProfileState::Editing(p));
+                                                    }
+                                                })
+                                            />
+                                        }.into_any()
+                                    }}
+                                </div>
                             </div>
                         </div>
 
@@ -429,14 +822,14 @@ pub fn DevProfile() -> impl IntoView {
                             />
                         </div>
 
-                        // Events attended
+                        // Events joined (distinct events registered — derived server-side)
                         {if events > 0 {
                             view! {
                                 <div class="dev-profile-section">
                                     <h3 class="dev-profile-section-title">"Your Activity"</h3>
                                     <div class="dev-profile-stat-card">
                                         <span class="dev-profile-stat-number">{format!("{events}")}</span>
-                                        <span class="dev-profile-stat-label">{if events == 1 { "Event Attended" } else { "Events Attended" }}</span>
+                                        <span class="dev-profile-stat-label">{if events == 1 { "Event Joined" } else { "Events Joined" }}</span>
                                     </div>
                                 </div>
                             }.into_any()
@@ -445,7 +838,7 @@ pub fn DevProfile() -> impl IntoView {
                                 <div class="dev-profile-section">
                                     <h3 class="dev-profile-section-title">"Your Activity"</h3>
                                     <p class="dev-profile-hint">
-                                        "You haven't attended any events yet. Join an event to see your stats here!"
+                                        "You haven't joined any events yet. Register for an event to see your stats here!"
                                     </p>
                                 </div>
                             }.into_any()

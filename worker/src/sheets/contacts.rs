@@ -420,6 +420,55 @@ pub async fn increment_credit(
     Ok(())
 }
 
+/// Decrement a contact's deposit credit balance (when rolling credit is applied to a new event).
+pub async fn decrement_credit(
+    state: &AppState,
+    sheet_id: &str,
+    sheet_name: &str,
+    kv: Option<&KvStore>,
+    email: &str,
+    currency: &str,
+    amount: u64,
+) -> Result<(), String> {
+    let access_token = get_cached_access_token(state, kv).await?;
+    let email_lower = email.to_lowercase();
+
+    // 1. Find existing row by email
+    let (row_index, mut row_data) =
+        find_contact_row(&email_lower, sheet_id, sheet_name, &access_token)
+            .await?
+            .ok_or_else(|| format!("contact not found: {email_lower}"))?;
+
+    // 2. Determine which credit column to update
+    let credit_col = match currency.to_lowercase().as_str() {
+        "thb" => COL_DEPOSIT_CREDIT_THB,
+        "usdc" => COL_DEPOSIT_CREDIT_USDC,
+        other => return Err(format!("unsupported currency: {other}")),
+    };
+
+    // 3. Parse current value and subtract amount (saturating_sub to avoid underflow)
+    let current: u64 = row_data
+        .get(credit_col)
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0);
+    let new_total = current.saturating_sub(amount);
+    row_data[credit_col] = new_total.to_string();
+
+    // 4. Update the row
+    update_contact_row(row_index, &row_data, sheet_id, sheet_name, &access_token).await?;
+
+    tracing::info!(
+        %email_lower,
+        %currency,
+        amount,
+        new_total,
+        row_index,
+        "decremented deposit credit for contact"
+    );
+
+    Ok(())
+}
+
 /// Get a contact's deposit credit balance.
 pub async fn get_credit_balance(
     state: &AppState,

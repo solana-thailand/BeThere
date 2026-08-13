@@ -54,13 +54,20 @@ pub struct SheetsConfig {
     pub platform_sheet_id: String,
 }
 
-/// Solana/Helius RPC configuration.
+/// Solana configuration: Helius for DAS reads, Crossmint for minting.
 #[derive(Clone)]
 pub struct SolanaConfig {
-    /// Helius RPC URL for Solana JSON-RPC calls.
+    /// Helius RPC URL for Solana JSON-RPC / DAS calls (reads only).
     pub rpc_url: String,
     /// Helius API key for RPC authentication.
     pub api_key: String,
+    /// Crossmint host: `staging.crossmint.com` (devnet) or `www.crossmint.com`
+    /// (mainnet). Selects the cluster for minting.
+    pub crossmint_host: String,
+    /// Crossmint server-side API key (`X-API-KEY`) for minting.
+    pub crossmint_api_key: String,
+    /// Crossmint collection id to mint into (created once per cluster).
+    pub crossmint_collection_id: String,
 }
 
 impl SolanaConfig {
@@ -88,6 +95,9 @@ impl fmt::Debug for SolanaConfig {
         f.debug_struct("SolanaConfig")
             .field("rpc_url", &self.rpc_url)
             .field("api_key", &"***REDACTED***")
+            .field("crossmint_host", &self.crossmint_host)
+            .field("crossmint_api_key", &"***REDACTED***")
+            .field("crossmint_collection_id", &self.crossmint_collection_id)
             .finish()
     }
 }
@@ -196,6 +206,18 @@ pub struct AppConfig {
     /// Email to use as the authenticated user in dev mode.
     /// Defaults to the first super_admin_email or "dev@localhost".
     pub dev_email: String,
+    // ---- Social OAuth linking ----
+    /// GitHub OAuth app client ID for social account linking.
+    pub github_client_id: String,
+    /// GitHub OAuth app client secret for social account linking.
+    pub github_client_secret: String,
+    /// GitHub OAuth callback URL (should point to /api/auth/github/callback).
+    pub github_redirect_uri: String,
+    /// Telegram bot token for verifying Login Widget HMAC signatures.
+    pub telegram_bot_token: String,
+    /// Telegram bot username (without `@`) for rendering the Login Widget.
+    /// Public value; empty disables the widget (falls back to manual handle input).
+    pub telegram_bot_username: String,
 }
 
 impl fmt::Debug for AppConfig {
@@ -213,6 +235,10 @@ impl fmt::Debug for AppConfig {
             .field("event_defaults", &self.event_defaults)
             .field("dev_mode", &self.dev_mode)
             .field("dev_email", &self.dev_email)
+            .field("github_client_id", &self.github_client_id)
+            .field("github_client_secret", &"***REDACTED***")
+            .field("telegram_bot_token", &"***REDACTED***")
+            .field("telegram_bot_username", &self.telegram_bot_username)
             .finish()
     }
 }

@@ -66,6 +66,22 @@ SHIM
 [vars]
 SERVER_URL = "https://bethere.solana-thailand.workers.dev"
 CLAIM_BASE_URL = "https://bethere.solana-thailand.workers.dev/claim"
+# Telegram Login Widget bot username (public). The widget stays OFF until the
+# TELEGRAM_BOT_TOKEN secret is also set — see /api/auth/telegram/config.
+TELEGRAM_BOT_USERNAME = "BeThereProtocolBot"
+# Helius RPC host for cNFT minting (mintCompressedNft). Non-sensitive base host;
+# HELIUS_API_KEY (secret) is appended as ?api-key=. Flip to
+# https://mainnet.helius-rpc.com to mint real mainnet badges (cluster is derived
+# from this host). cNFT minting stays OFF per-event until an event has an
+# nft_image_url set.
+HELIUS_RPC_URL = "https://devnet.helius-rpc.com"
+# Crossmint hosted minting (replaces Helius' retired mintCompressedNft). Cluster
+# is selected by host: staging.crossmint.com = devnet, www.crossmint.com = mainnet.
+# Defaults from the HELIUS_RPC_URL cluster if unset. CROSSMINT_API_KEY is a SECRET
+# (wrangler secret put CROSSMINT_API_KEY). CROSSMINT_COLLECTION_ID is the devnet
+# collection created once in the Crossmint console; empty = minting disabled.
+CROSSMINT_HOST = "staging.crossmint.com"
+CROSSMINT_COLLECTION_ID = "4130f03c-7246-4447-be09-2a6bc3196898"
 GOOGLE_SHEET_NAME = "Attendees"
 GOOGLE_STAFF_SHEET_NAME = "staff"
 PLATFORM_SHEET_ID = "1oF54ia6mquO_kB869aQxmz3RD8nDcTRWfXIX0VmndxM"

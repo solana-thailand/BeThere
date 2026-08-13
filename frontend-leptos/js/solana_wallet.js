@@ -993,3 +993,26 @@ function getProvider(walletName) {
 
   return null;
 }
+
+/**
+ * Sign an arbitrary UTF-8 message string with the connected wallet (SIWS).
+ *
+ * @param {string} walletName - Name of the wallet (e.g. "Phantom", "Solflare")
+ * @param {string} message - Text message to sign
+ * @returns {Promise<string|null>} Base58 encoded signature string, or error JSON
+ */
+export async function signMessage(walletName, message) {
+  try {
+    var provider = getProvider(walletName);
+    if (!provider) {
+      return JSON.stringify({ __wallet_error__: true, message: "Wallet not found" });
+    }
+    var encodedMessage = new TextEncoder().encode(message);
+    var signedResult = await provider.signMessage(encodedMessage, "utf8");
+    var sigBytes = signedResult.signature || signedResult;
+    return base58Encode(sigBytes);
+  } catch (e) {
+    console.error("[solana_wallet] signMessage error:", e);
+    return JSON.stringify({ __wallet_error__: true, message: e.message || "Failed to sign message" });
+  }
+}

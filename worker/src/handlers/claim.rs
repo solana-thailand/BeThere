@@ -20,9 +20,16 @@ use crate::solana::validate_wallet_address;
 use crate::state::AppState;
 
 /// Request body for POST /api/claim/{token}.
-#[derive(Debug, Deserialize)]
+///
+/// The mint recipient is resolved SERVER-SIDE. A client may either ask to mint to
+/// its verified linked profile wallet (`use_linked_wallet: true`, no address
+/// trusted from the client) or supply an explicit override `wallet_address`.
+#[derive(Debug, Default, Deserialize)]
 pub struct ClaimRequest {
-    pub wallet_address: String,
+    #[serde(default)]
+    pub wallet_address: Option<String>,
+    #[serde(default)]
+    pub use_linked_wallet: bool,
 }
 
 /// GET /api/claim/{token}
@@ -46,6 +53,7 @@ pub async fn get_claim(
         claimed_at: lookup.claimed_at,
         nft_available: lookup.nft_available,
         locked_wallet: lookup.locked_wallet,
+        linked_wallet_display: lookup.linked_wallet_display,
         event: lookup.event,
         quiz_status: lookup.quiz_status,
         total_checked_in: lookup.total_checked_in,
@@ -77,8 +85,14 @@ pub async fn post_claim(
     Query(query): Query<EventIdQuery>,
     Json(body): Json<ClaimRequest>,
 ) -> Result<ApiOk<ClaimResponse>, crate::error::WorkerError> {
-    // Validate wallet address format
-    if let Err(e) = validate_wallet_address(&body.wallet_address) {
+    // The recipient wallet is validated and resolved server-side inside
+    // execute_claim (locked column-P wallet > verified linked wallet > explicit
+    // override), so a client address is only ever consulted for the override case.
+    let requested = body.wallet_address.as_deref();
+    if !body.use_linked_wallet
+        && let Some(w) = requested
+        && let Err(e) = validate_wallet_address(w)
+    {
         tracing::warn!(claim_token = %token, error = %e, "invalid wallet address for claim");
         return Err(AppError::Validation(e).into());
     }
@@ -86,7 +100,8 @@ pub async fn post_claim(
     let result = crate::claim::execute_claim(
         &state,
         &token,
-        &body.wallet_address,
+        requested,
+        body.use_linked_wallet,
         query.event_id.as_deref(),
     )
     .await?;

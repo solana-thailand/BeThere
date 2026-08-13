@@ -6,6 +6,7 @@ pub mod pages;
 pub mod utils;
 pub mod wallet;
 pub mod wallet_error;
+pub mod wallet_signin;
 
 use leptos::prelude::*;
 use leptos_meta::Title;
@@ -39,7 +40,7 @@ use crate::pages::{
     data_privacy::DataPrivacy, deposit::Deposit, dev_dashboard::DevDashboard,
     dev_profile::DevProfile, event_summary::EventSummary, landing::Landing, login::Login,
     pr_pack::PrPack, privacy::Privacy, public_event::PublicEvent, scanner::Scanner,
-    ticket::page::Ticket, EventRecap, PastEvents, PostEventRegister,
+    ticket::page::Ticket, EventRecap, NfcCheckin, PastEvents, PostEventRegister,
 };
 
 /// Main application component.
@@ -102,6 +103,7 @@ pub fn App() -> impl IntoView {
                     <Route path=path!("/adventure") view=Adventure />
                     <Route path=path!("/dashboard") view=DevDashboard />
                     <Route path=path!("/profile") view=DevProfile />
+                    <Route path=path!("/checkin/nfc") view=NfcCheckin />
                     <Route path=path!("/staff") view=ProtectedScanner />
                     <Route path=path!("/admin") view=ProtectedAdmin />
                     <Route path=path!("/dashboard/live") view=ProtectedLiveDashboard />

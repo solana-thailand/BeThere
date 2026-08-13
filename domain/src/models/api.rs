@@ -305,6 +305,12 @@ pub struct ClaimLookupResponse {
     /// When present, the claim is locked to this wallet — any other address is rejected.
     /// `None` means no pre-registered wallet; any valid address may claim.
     pub locked_wallet: Option<String>,
+    /// Masked display (e.g. `7Xk9…Qm3p`) of the attendee's verified profile-bound
+    /// wallet, surfaced only when there is no per-event lock. The full address is
+    /// never sent to the client; the mint resolves it server-side by email.
+    /// Presence enables the one-tap "mint to my linked wallet" claim path.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub linked_wallet_display: Option<String>,
     /// Dynamic event metadata (name, tagline, link, timestamps).
     pub event: EventConfig,
     /// Quiz requirement status for this attendee's claim.

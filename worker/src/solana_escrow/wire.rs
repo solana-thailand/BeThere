@@ -343,6 +343,42 @@ async fn account_exists_owned_by_program(
 /// rather than the batched `getMultipleAccountsInfo`, which the configured
 /// Helius devnet RPC rejects with "Method not found". The forfeited list is
 /// typically small (no-shows per event), so the per-call overhead is acceptable.
+/// Derive each attendee wallet's `AttendeeDeposit` PDA (base58), no RPC.
+///
+/// Seeds match `filter_forfeitable_deposits` / `EscrowCtx::attendee_deposit`:
+/// escrow = `["escrow", organizer, event_id_le]`, then deposit PDA =
+/// `["deposit", event_escrow, attendee]`. Used to map candidate wallets to the
+/// PDAs the on-chain indexer records for `MarkCheckedIn` events (which carry the
+/// deposit PDA, not the wallet) so checked-in attendees can be excluded from
+/// forfeiture.
+pub async fn derive_attendee_deposit_pdas(
+    organizer_pubkey: &str,
+    event_id: u64,
+    attendee_wallets: &[String],
+) -> Result<Vec<(String, String)>, EscrowError> {
+    if attendee_wallets.is_empty() {
+        return Ok(Vec::new());
+    }
+    let program_id = pubkey_from_base58(escrow_program_id())?;
+    let organizer = pubkey_from_base58(organizer_pubkey)?;
+    let (event_escrow, _) = find_program_address(
+        &[b"escrow", organizer.as_slice(), &event_id.to_le_bytes()],
+        &program_id,
+    )
+    .await?;
+    let mut pairs: Vec<(String, String)> = Vec::with_capacity(attendee_wallets.len());
+    for w in attendee_wallets {
+        let attendee = pubkey_from_base58(w)?;
+        let (deposit_pda, _) = find_program_address(
+            &[b"deposit", event_escrow.as_slice(), attendee.as_slice()],
+            &program_id,
+        )
+        .await?;
+        pairs.push((w.clone(), pubkey_to_base58(&deposit_pda)));
+    }
+    Ok(pairs)
+}
+
 pub async fn filter_forfeitable_deposits(
     rpc_url: &str,
     organizer_pubkey: &str,

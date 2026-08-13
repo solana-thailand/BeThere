@@ -244,6 +244,41 @@ pub fn InPersonView(
                             <DepositPendingCard method=dep.method />
                         }.into_any()
                     }}
+                    // Per-method refund guidance (post-check-in). Surfaces the refund
+                    // step that used to be missing/mislabeled: USDC is an attendee-
+                    // claimed on-chain refund (deposit page); THB is either kept as
+                    // credit (card below) or a cash refund arranged with the organizer.
+                    {if dep.verified && is_checked_in && !dep.refunded {
+                        match dep.method {
+                            DepositMethod::Usdc => {
+                                let href = deposit_href.clone();
+                                view! {
+                                    <div class="ticket-action-card ticket-action-card--info">
+                                        <div class="ticket-action-icon"><Icon icon=IconName::Wallet class="icon-sm" /></div>
+                                        <div>
+                                            <div class="ticket-action-title">"Deposit Refund"</div>
+                                            <p class="ticket-action-desc">"Your USDC deposit is held in escrow and can be returned to your wallet after the event ends. Open the refund page to claim it once the refund window opens."</p>
+                                            <a href=href class="btn btn-outline btn-sm ticket-action-btn">"View refund options →"</a>
+                                        </div>
+                                    </div>
+                                }.into_any()
+                            }
+                            DepositMethod::Thb if !dep.held_as_credit => {
+                                view! {
+                                    <div class="ticket-action-card ticket-action-card--info">
+                                        <div class="ticket-action-icon"><Icon icon=IconName::Info class="icon-sm" /></div>
+                                        <div>
+                                            <div class="ticket-action-title">"Your Deposit — Two Options"</div>
+                                            <p class="ticket-action-desc">{format!("Keep your ฿{deposit_amount_thb} as credit toward your next event (see below), or ask the organizer for a cash refund.")}</p>
+                                        </div>
+                                    </div>
+                                }.into_any()
+                            }
+                            _ => view! { <div></div> }.into_any(),
+                        }
+                    } else {
+                        view! { <div></div> }.into_any()
+                    }}
                     // Rollover opportunity (checked-in with verified USDC deposit and target event available)
                     {if let Some(ref target) = rollover_target_event {
                         if dep.verified && is_checked_in {

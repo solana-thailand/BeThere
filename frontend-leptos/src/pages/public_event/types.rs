@@ -101,6 +101,12 @@ pub struct RegisterData {
     pub email: String,
     pub claim_token: String,
     pub next_step: NextStep,
+    /// Plan 017: wallet↔email convergence outcome for wallet-only sessions.
+    /// `Some(true)` = wallet bound to this new email; `Some(false)` = email
+    /// already had an account so the wallet was NOT bound (link via profile);
+    /// `None` = not a wallet session.
+    #[serde(default)]
+    pub wallet_linked: Option<bool>,
 }
 
 /// Registration form state.
@@ -117,6 +123,7 @@ pub enum RegState {
 #[derive(Clone, Debug, Default)]
 pub struct FieldErrors {
     pub name: Option<String>,
+    pub email: Option<String>,
     pub contact_channel: Option<String>,
     pub contact_handle: Option<String>,
     pub deposit_agreed: Option<String>,
@@ -389,13 +396,9 @@ pub fn scroll_to_element(id: &str) {
 // Formatting helpers
 // ---------------------------------------------------------------------------
 
-pub fn format_usdc(amount_micro: f64) -> String {
-    let usdc = amount_micro / 1_000_000.0;
-    if usdc >= 1.0 {
-        format!("{usdc:.0} USDC")
-    } else {
-        format!("{usdc:.2} USDC")
-    }
+pub fn format_usdc(val: f64) -> String {
+    let usdc = if val > 1000.0 { val / 1_000_000.0 } else { val };
+    format!("{usdc:.2} USDC")
 }
 
 pub fn format_thb(amount: f64) -> String {

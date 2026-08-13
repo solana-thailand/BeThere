@@ -25,6 +25,13 @@ pub fn PublicEvent() -> impl IntoView {
     // Auth state
     let (auth_state, set_auth_state) = signal(AuthState::Checking);
     let (reg_lookup, set_reg_lookup) = signal(RegistrationLookup::Pending);
+    // Wallet-only session info (Plan 017): drives the friendly address label and
+    // the "enter your email" input on the reservation form.
+    let (wallet_only, set_wallet_only) = signal(false);
+    let (wallet_addr, set_wallet_addr) = signal(None::<String>);
+    // Rolling deposit credit (THB whole baht) for the signed-in attendee — shown
+    // on the reserve card so returning attendees know their credit will apply.
+    let (credit_thb, set_credit_thb) = signal(0u64);
 
     // Get slug from params
     let slug_val = match params.get() {
@@ -160,6 +167,14 @@ pub fn PublicEvent() -> impl IntoView {
                                 .to_string();
                             if !email.is_empty() {
                                 log::info!("[public_event] user signed in: {email}");
+                                set_wallet_only.set(
+                                    api_resp.get("data").and_then(|d| d.get("wallet_only"))
+                                        .and_then(|v| v.as_bool()).unwrap_or(false),
+                                );
+                                set_wallet_addr.set(
+                                    api_resp.get("data").and_then(|d| d.get("wallet_address"))
+                                        .and_then(|v| v.as_str()).map(|s| s.to_string()),
+                                );
                                 set_auth_state.set(AuthState::SignedIn(email));
                             } else {
                                 set_auth_state.set(AuthState::NotSignedIn);
@@ -256,6 +271,23 @@ pub fn PublicEvent() -> impl IntoView {
                 }
             }
             AuthState::Checking | AuthState::NotSignedIn => {}
+        }
+    });
+
+    // Fetch rolling deposit credit once signed in (best-effort, reassurance only).
+    Effect::new(move |_| {
+        if matches!(auth_state.get(), AuthState::SignedIn(_)) {
+            leptos::task::spawn_local(async move {
+                if let Ok(resp) = crate::api::fetch::get("/api/deposit/credit-balance", &[]).await
+                    && resp.status() == 200
+                    && let Ok(v) =
+                        crate::api::fetch::response_json::<serde_json::Value>(&resp).await
+                {
+                    let data = v.get("data").unwrap_or(&v);
+                    let t = data.get("credit_thb").and_then(|x| x.as_u64()).unwrap_or(0);
+                    set_credit_thb.set(t);
+                }
+            });
         }
     });
 
@@ -364,6 +396,9 @@ pub fn PublicEvent() -> impl IntoView {
                                 slug_for_event.clone(),
                                 share_copied,
                                 set_share_copied,
+                                wallet_only,
+                                wallet_addr,
+                                credit_thb,
                             )
                         }
                     }
@@ -395,6 +430,9 @@ fn render_loaded_event(
     current_slug: String,
     share_copied: ReadSignal<bool>,
     set_share_copied: WriteSignal<bool>,
+    wallet_only: ReadSignal<bool>,
+    wallet_addr: ReadSignal<Option<String>>,
+    credit_thb: ReadSignal<u64>,
 ) -> AnyView {
     let has_nft_image = !data.nft_image_url.is_empty();
     let has_description = !data.description.is_empty();
@@ -535,7 +573,14 @@ fn render_loaded_event(
         {move || {
             match &auth_state.get() {
                 AuthState::SignedIn(email) => {
-                    let email_disp = email.clone();
+                    // Wallet-only sessions show a friendly address, not `wallet:<addr>`.
+                    let email_disp = if wallet_only.get() {
+                        wallet_addr.get()
+                            .map(|a| crate::api::short_wallet(&a))
+                            .unwrap_or_else(|| "Wallet".to_string())
+                    } else {
+                        email.clone()
+                    };
                     view! {
                         <div class="pe-auth-bar">
                             <span class="pe-detail-secondary">
@@ -584,40 +629,53 @@ fn render_loaded_event(
                                         <Icon icon=IconName::Ticket class="icon-md" />" Reserve Your Spot"
                                     </h2>
                                     <p class="pe-detail-secondary pe-mb-1">
-                                        "Sign in with Google to register for this event."
+                                        "Sign in with Google or your Solana Wallet to register for this event."
                                     </p>
-                                    <button
-                                        class="btn-google"
-                                        on:click=move |_| {
-                                            let slug = slug.clone();
-                                            leptos::task::spawn_local(async move {
-                                                let window = web_sys::window().expect("no window");
-                                                let origin = window.location().origin().unwrap_or_else(|_| "http://localhost:8787".to_string());
-                                                let redirect = format!("/e/{slug}");
-                                                let api_url = format!(
-                                                    "{origin}/api/auth/url?redirect={}",
-                                                    urlencoding::encode(&redirect)
-                                                );
-                                                match crate::api::fetch::get(&api_url, &[]).await {
-                                                    Ok(resp) => {
-                                                        if let Ok(body) = crate::api::fetch::response_text(&resp).await
-                                                            && let Ok(json) = serde_json::from_str::<serde_json::Value>(&body)
-                                                                && let Some(auth_url) = json.get("data").and_then(|d| d.get("auth_url")).and_then(|u| u.as_str()) {
-                                                                    navigateTo(auth_url);
-                                                                    return;
-                                                                }
+                                    <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 16px;">
+                                        <button
+                                            class="btn-google"
+                                            on:click=move |_| {
+                                                let slug = slug.clone();
+                                                leptos::task::spawn_local(async move {
+                                                    let window = web_sys::window().expect("no window");
+                                                    let origin = window.location().origin().unwrap_or_else(|_| "http://localhost:8787".to_string());
+                                                    let redirect = format!("/e/{slug}");
+                                                    let api_url = format!(
+                                                        "{origin}/api/auth/url?redirect={}",
+                                                        urlencoding::encode(&redirect)
+                                                    );
+                                                    match crate::api::fetch::get(&api_url, &[]).await {
+                                                        Ok(resp) => {
+                                                            if let Ok(body) = crate::api::fetch::response_text(&resp).await
+                                                                && let Ok(json) = serde_json::from_str::<serde_json::Value>(&body)
+                                                                    && let Some(auth_url) = json.get("data").and_then(|d| d.get("auth_url")).and_then(|u| u.as_str()) {
+                                                                        navigateTo(auth_url);
+                                                                        return;
+                                                                    }
+                                                        }
+                                                        Err(e) => {
+                                                            log::error!("[public_event] failed to get auth URL: {e}");
+                                                        }
                                                     }
-                                                    Err(e) => {
-                                                        log::error!("[public_event] failed to get auth URL: {e}");
-                                                    }
+                                                    navigateTo("/login");
+                                                });
+                                            }
+                                        >
+                                            <span inner_html=google_icon()></span>
+                                            "Sign in with Google"
+                                        </button>
+
+                                        <crate::wallet_signin::WalletSignInButton
+                                            on_success=Callback::new(move |_| {
+                                                // Session cookie is set; reload so the page's
+                                                // mount auth-check picks it up and shows the
+                                                // registration form in place.
+                                                if let Some(win) = web_sys::window() {
+                                                    let _ = win.location().reload();
                                                 }
-                                                navigateTo("/login");
-                                            });
-                                        }
-                                    >
-                                        <span inner_html=google_icon()></span>
-                                        "Sign in with Google"
-                                    </button>
+                                            })
+                                        />
+                                    </div>
                                 </div>
                             }.into_any()
                         }
@@ -640,6 +698,7 @@ fn render_loaded_event(
                                     registration_form(
                                         slug_for_reg.clone(),
                                         email_val,
+                                        wallet_only.get(),
                                         is_hybrid,
                                         require_contact,
                                         has_deposit,
@@ -665,9 +724,20 @@ fn render_loaded_event(
                                 }
                                 RegistrationLookup::NotRegistered => {
                                     let email_val = email.clone();
-                                    registration_form(
+                                    // Reassure returning attendees that their rolling
+                                    // credit will cover this event's deposit (THB path).
+                                    let credit_amt = credit_thb.get();
+                                    let show_credit = has_deposit && credit_amt > 0;
+                                    // Wallet-only sessions can't spend credit until the
+                                    // wallet is bound / they use Google (credit is tied to
+                                    // a proven email). Explain that instead of silently
+                                    // showing nothing on a deposit event.
+                                    let show_wallet_credit_hint =
+                                        has_deposit && wallet_only.get() && credit_amt == 0;
+                                    let form = registration_form(
                                         slug_for_reg.clone(),
                                         email_val,
+                                        wallet_only.get(),
                                         is_hybrid,
                                         require_contact,
                                         has_deposit,
@@ -689,7 +759,32 @@ fn render_loaded_event(
                                         dev_profile_enabled,
                                         form_config.as_ref(),
                                         dynamic_field_values, set_dynamic_field_values,
-                                    )
+                                    );
+                                    view! {
+                                        {if show_credit {
+                                            view! {
+                                                <div class="pe-card" style="background:rgba(20,241,149,0.08);border:1px solid rgba(20,241,149,0.3);">
+                                                    <p class="pe-detail-secondary" style="margin:0;color:#14F195;font-weight:600;">
+                                                        {format!("💳 You have ฿{credit_amt} deposit credit from a previous event.")}
+                                                    </p>
+                                                    <p class="pe-detail-secondary" style="margin:4px 0 0;">
+                                                        "It's applied automatically when you register if it covers this event's deposit — you may not need to pay again."
+                                                    </p>
+                                                </div>
+                                            }.into_any()
+                                        } else if show_wallet_credit_hint {
+                                            view! {
+                                                <div class="pe-card" style="background:rgba(153,69,255,0.06);border:1px solid rgba(153,69,255,0.22);">
+                                                    <p class="pe-detail-secondary" style="margin:0;font-size:0.82rem;line-height:1.45;">
+                                                        "Have deposit credit from a previous event? Credit is tied to your email — sign in with Google, or connect this wallet from your Profile, to apply it."
+                                                    </p>
+                                                </div>
+                                            }.into_any()
+                                        } else {
+                                            ().into_any()
+                                        }}
+                                        {form}
+                                    }.into_any()
                                 }
                             }
                         }

@@ -37,9 +37,65 @@ pub async fn register_attendee(
         return Err(AppError::Validation("name is required (max 100 chars)".to_string()).into());
     }
 
-    // Email comes from JWT, not request body — ensures verified identity
-    let email = claims.email.trim().to_lowercase();
-    tracing::info!("registration email from JWT: {email}");
+    // Identity resolution (Plan 017 — wallet↔email convergence).
+    // Google sessions: email comes from the verified JWT. Wallet-only sessions
+    // have a synthetic `wallet:<address>` identity and MUST supply a real email
+    // in the body to reserve — the reservation is filed under that email, and
+    // (only if the email is brand-new) the proven wallet is bound to it.
+    let jwt_email = claims.email.trim().to_lowercase();
+    let is_wallet_session = jwt_email.starts_with("wallet:");
+    let email = if is_wallet_session {
+        let typed = body.email.trim().to_lowercase();
+        if !is_plausible_email(&typed) {
+            return Err(AppError::Validation(
+                "please enter a valid email to reserve your spot".to_string(),
+            )
+            .into());
+        }
+        typed
+    } else {
+        jwt_email.clone()
+    };
+    // Wallet address for wallet sessions (JWT `sub` = the base58 address).
+    let session_wallet = if is_wallet_session {
+        Some(claims.sub.trim().to_string())
+    } else {
+        None
+    };
+    tracing::info!(%email, is_wallet_session, "registration identity resolved");
+
+    // For wallet sessions, decide up-front whether this email is brand-new.
+    // Must be evaluated BEFORE we upsert the contact/attendee below (which would
+    // otherwise make every email look "existing"). On DB error, fail safe by
+    // treating the email as existing so we never auto-bind on uncertain state.
+    let email_is_new = if is_wallet_session {
+        match state.d1.as_deref() {
+            Some(db) => !crate::db::contacts::email_has_account(db, &email)
+                .await
+                .unwrap_or(true),
+            None => false,
+        }
+    } else {
+        false
+    };
+
+    // SECURITY: rolling deposit credit is stored value tied to an email. Only
+    // spend it when the caller has PROVEN ownership of that email — a Google-
+    // verified session, or a wallet session whose wallet is already bound to
+    // this email. A wallet session that merely *types* an email (Plan 017) has
+    // not proven ownership, so it must NOT be able to drain that email's credit
+    // (which would also hand the attacker a deposit-funded spot). Such sessions
+    // fall through to the normal payment path.
+    let credit_identity_ok = if !is_wallet_session {
+        true
+    } else if let (Some(db), Some(wallet)) = (state.d1.as_deref(), session_wallet.as_deref()) {
+        matches!(
+            crate::db::contacts::find_email_by_wallet(db, wallet).await,
+            Ok(Some(bound_email)) if bound_email.eq_ignore_ascii_case(&email)
+        )
+    } else {
+        false
+    };
 
     let slug = body.slug.trim();
     if slug.is_empty() {
@@ -144,6 +200,21 @@ pub async fn register_attendee(
     // showing an error. This handles the case where localStorage is cleared or the
     // attendee uses a different device.
     if let Some(existing) = attendees.iter().find(|a| a.email.to_lowercase() == email) {
+        // SECURITY (#1, IDOR): a wallet session that merely TYPED this email has
+        // NOT proven ownership (credit_identity_ok is false unless the wallet is
+        // bound to it). Returning the existing attendee's claim_token / api_id /
+        // name would let anyone with a throwaway wallet read a victim's claim and
+        // mint their badge. Block the read and direct them to authenticate.
+        if is_wallet_session && !credit_identity_ok {
+            tracing::warn!(
+                %email, %slug, wallet = ?session_wallet,
+                "blocked wallet-session duplicate-return for unproven email (IDOR guard)"
+            );
+            return Err(AppError::Validation(
+                "This email is already registered. Sign in with that email (Google) — or link this wallet to it from your profile — to access your ticket.".to_string(),
+            )
+            .into());
+        }
         tracing::info!(%email, %slug, "registration duplicate — returning existing attendee");
         let claim_token = existing.claim_token.clone().unwrap_or_default();
         // Fetch deposit status (D1-first, KV fallback)
@@ -220,7 +291,25 @@ pub async fn register_attendee(
             email: existing.email.clone(),
             claim_token,
             next_step,
+            // Already registered ⇒ email exists ⇒ never auto-bind here.
+            wallet_linked: if is_wallet_session { Some(false) } else { None },
         }));
+    }
+
+    // SECURITY (#3, identity spoofing): reaching here means the email is not yet
+    // registered for THIS event. A wallet session filing a NEW reservation under
+    // an email that already has an account it doesn't own would poison that
+    // identity (a token bound to the victim's email, a spot they never took).
+    // Brand-new emails (Plan 017 wallet→email bind) and proven owners are allowed.
+    if is_wallet_session && !credit_identity_ok && !email_is_new {
+        tracing::warn!(
+            %email, %slug, wallet = ?session_wallet,
+            "blocked wallet-session reservation under an existing unowned email (spoofing guard)"
+        );
+        return Err(AppError::Validation(
+            "This email already has an account. Sign in with that email (Google), or link this wallet to it from your profile, to register.".to_string(),
+        )
+        .into());
     }
 
     // 5b. Enforce capacity limits (only for new registrations)
@@ -228,7 +317,10 @@ pub async fn register_attendee(
 
     // 5c. Check if attendee has rolling deposit credit that covers this event's deposit
     let mut credit_covered_method: Option<String> = None;
-    if config.deposit_enabled && !is_online_participation(&participation_type) {
+    let mut credit_amount_applied: u64 = 0;
+    let mut resolved_contacts_sheet: Option<event_checkin_domain::models::org::ResolvedContactsSheet> = None;
+
+    if config.deposit_enabled && !is_online_participation(&participation_type) && credit_identity_ok {
         let resolved_contacts = if let Some(db) = state.d1.as_deref() {
             crate::org_store::resolve_contacts_sheet(db, &config, &state.config.sheets).await
         } else {
@@ -252,12 +344,15 @@ pub async fn register_attendee(
             let required_usdc = config.deposit_amount_usdc;
             if required_thb > 0 && credit_thb >= required_thb {
                 credit_covered_method = Some("credit_thb".to_string());
+                credit_amount_applied = required_thb;
             } else if required_usdc > 0 && credit_usdc >= required_usdc {
                 credit_covered_method = Some("credit_usdc".to_string());
+                credit_amount_applied = required_usdc;
             }
         }
         if let Some(ref method) = credit_covered_method {
-            tracing::info!(%email, %slug, %method, "deposit covered by rolling credit");
+            tracing::info!(%email, %slug, %method, amount = credit_amount_applied, "deposit covered by rolling credit");
+            resolved_contacts_sheet = Some(resolved_contacts);
         }
     }
 
@@ -269,6 +364,176 @@ pub async fn register_attendee(
     let (first_name, last_name) = split_name(name);
 
     let now = chrono::Utc::now().to_rfc3339();
+
+    // 7b. Persist the attendee to D1 (the source of truth) BEFORE spending any
+    // credit or returning success. Fatal by design: if this write fails the
+    // reservation isn't durable, so we must not (a) tell the attendee they're
+    // registered, nor (b) consume their rolling credit for a reservation that
+    // vanished. They get a retryable error instead of a silent lost registration.
+    // (When D1 isn't configured — tests/local — we skip and rely on Sheets.)
+    if let Some(ref d1) = state.d1
+        && let Err(e) = crate::db::attendees::upsert_attendee(
+            d1,
+            &api_id,
+            &event_id,
+            &email,
+            name,
+            "approved", // self-registered attendees are auto-approved
+            &participation_type,
+            contact_channel.unwrap_or(""),
+            contact_handle.unwrap_or(""),
+            body.consent_marketing,
+            Some(&claim_token),
+        )
+        .await
+    {
+        // A UNIQUE(event_id, lower(email)) violation means a concurrent or prior
+        // registration for the same person won the race (the Sheets-based dedup
+        // above can lag). D1 is authoritative, so treat it as already-registered
+        // rather than a hard failure — and importantly, no credit is spent (that
+        // happens below, only if we get past this).
+        if e.to_ascii_uppercase().contains("UNIQUE") {
+            tracing::info!(%email, %event_id, "duplicate registration blocked by unique index");
+            return Err(AppError::Validation(
+                "You're already registered for this event — check your email or 'My Registrations'."
+                    .to_string(),
+            )
+            .into());
+        }
+        tracing::error!(%api_id, %email, %event_id, error = %e, "D1 attendee write failed — failing registration (source of truth)");
+        return Err(AppError::Internal(
+            "could not save your registration — please try again".to_string(),
+        )
+        .into());
+    }
+
+    // Auto-apply rolling credit — fail-closed and correctly ordered.
+    //
+    // Consume the credit FIRST; only mark the deposit covered if that succeeded.
+    // If we can't decrement (e.g. Sheets write error / no contacts sheet), we do
+    // NOT grant a free deposit — `credit_covered_method` is cleared so the
+    // attendee falls back to the normal payment path and keeps their credit.
+    // The reverse order (mark covered, then decrement) risks double-spending
+    // credit whenever the decrement fails — real money leaking on every retry.
+    if let Some(method) = credit_covered_method.clone() {
+        let currency = if method == "credit_thb" { "thb" } else { "usdc" };
+        let decremented = match resolved_contacts_sheet {
+            Some(ref resolved) => {
+                // SECURITY (#4): the Google Sheet has no compare-and-swap, so two
+                // concurrent registrations by the same email could both read a
+                // sufficient balance and both decrement it (double-spend). Serialize
+                // the spend with a short per-email D1 advisory lock and RE-READ the
+                // balance under it — only decrement if it's still sufficient. A
+                // request that can't acquire the lock (or finds the credit already
+                // spent) falls back to normal payment and keeps its credit.
+                let lock_key = format!("credit-spend:{email}");
+                let lock_db = state.d1.as_deref();
+                // Distinguish CONTENTION (someone else holds the lock → fall back to
+                // payment) from the lock infra being UNAVAILABLE (e.g. the
+                // advisory_locks table isn't migrated yet, or a transient D1 error →
+                // degrade to the pre-lock behavior and apply credit, which is no worse
+                // than before the lock existed). `held` tracks whether we must release.
+                let (proceed, held) = match lock_db {
+                    Some(db) => match crate::db::advisory_locks::try_acquire(db, &lock_key, 30).await
+                    {
+                        Ok(true) => (true, true),
+                        Ok(false) => (false, false),
+                        Err(e) => {
+                            tracing::warn!(%email, error = %e, "credit-spend lock unavailable — proceeding without serialization");
+                            (true, false)
+                        }
+                    },
+                    None => (true, false), // no D1 → no lock available; preserve prior behavior
+                };
+                if !proceed {
+                    tracing::warn!(%email, "credit-spend lock busy — falling back to payment (credit kept)");
+                    false
+                } else {
+                    // Authoritative re-check under the lock.
+                    let still_sufficient = crate::sheets::contacts::get_credit_balance(
+                        &state,
+                        &resolved.sheet_id,
+                        &resolved.contacts_sheet_name,
+                        kv,
+                        &email,
+                    )
+                    .await
+                    .map(|(thb, usdc)| {
+                        if currency == "thb" {
+                            thb >= credit_amount_applied
+                        } else {
+                            usdc >= credit_amount_applied
+                        }
+                    })
+                    .unwrap_or(false);
+
+                    let ok = if !still_sufficient {
+                        tracing::warn!(%email, "credit no longer sufficient under lock — falling back to payment");
+                        false
+                    } else {
+                        match crate::sheets::contacts::decrement_credit(
+                            &state,
+                            &resolved.sheet_id,
+                            &resolved.contacts_sheet_name,
+                            kv,
+                            &email,
+                            currency,
+                            credit_amount_applied,
+                        )
+                        .await
+                        {
+                            Ok(()) => true,
+                            Err(e) => {
+                                tracing::error!(%email, error = %e, "rolling credit decrement failed — NOT applying credit; attendee pays normally");
+                                false
+                            }
+                        }
+                    };
+                    if held && let Some(db) = lock_db {
+                        let _ = crate::db::advisory_locks::release(db, &lock_key).await;
+                    }
+                    ok
+                }
+            }
+            None => {
+                tracing::error!(%email, "no resolved contacts sheet for credit decrement — NOT applying credit");
+                false
+            }
+        };
+
+        if decremented {
+            // Credit consumed — record the covered, verified deposit.
+            let thb_dep = event_checkin_domain::models::deposit::ThbDeposit {
+                event_id: event_id.clone(),
+                attendee_id: api_id.clone(),
+                amount_thb: credit_amount_applied,
+                slip_url: Some("ROLLING_CREDIT_AUTO_APPLIED".to_string()),
+                verified: true,
+                verified_at: Some(now.clone()),
+                verified_by: Some("SYSTEM_ROLLING_CREDIT".to_string()),
+                uploaded_at: now.clone(),
+                refunded: false,
+                refunded_at: None,
+                held_as_credit: false,
+                held_as_credit_at: None,
+                attendee_name: Some(name.to_string()),
+                bank_account: None,
+                bank_name: None,
+                account_name: None,
+                refund_proof_url: None,
+            };
+            if let Some(kv_store) = kv
+                && let Err(e) = crate::event_store::save_thb_deposit(kv_store, &thb_dep, state.d1.as_deref()).await
+            {
+                // Credit already consumed but the deposit record didn't persist.
+                // Non-fatal to the reservation; log loudly for reconciliation.
+                tracing::error!(%api_id, %email, error = %e, "credit consumed but deposit record save failed — needs reconciliation");
+            }
+        } else {
+            // Fail closed: revert to the normal payment path (credit untouched).
+            credit_covered_method = None;
+        }
+    }
 
     // 8. Resolve column mapping
     let mapping = match sheets::get_column_mapping(&state, &config.sheet_id, &config.sheet_name, kv)
@@ -283,25 +548,12 @@ pub async fn register_attendee(
 
     // 9. Write to D1 first (source of truth), then detach all Sheets writes
 
-    // 9a. Dual-write to D1 — attendee row (non-fatal, Phase 2a)
+    // 9a. Dual-write to D1 — contact row (non-fatal). The attendee row is
+    // already written fatally at step 7b above (before credit spend), so it is
+    // NOT re-written here.
     if let Some(ref d1) = state.d1 {
-        // Parallelize attendee + contact upserts (independent D1 writes)
-        let attendee_fut = crate::db::attendees::upsert_attendee(
-            d1,
-            &api_id,
-            &event_id,
-            &email,
-            name,
-            "approved", // self-registered attendees are auto-approved (consistent with Sheets)
-            &participation_type,
-            contact_channel.unwrap_or(""),
-            contact_handle.unwrap_or(""),
-            body.consent_marketing,
-            Some(&claim_token),
-        );
-
         let events_joined = event_id.clone();
-        let contact_fut = crate::db::contacts::upsert_contact(
+        if let Err(e) = crate::db::contacts::upsert_contact(
             d1,
             &email,
             name,
@@ -309,20 +561,9 @@ pub async fn register_attendee(
             1, // event_count will be updated on subsequent registrations
             contact_channel.unwrap_or(""),
             contact_handle.unwrap_or(""),
-        );
-
-        let (attendee_result, contact_result) = futures_util::join!(attendee_fut, contact_fut);
-
-        if let Err(e) = attendee_result {
-            tracing::warn!(
-                %api_id,
-                %email,
-                error = %e,
-                "D1 attendee upsert failed (non-fatal)"
-            );
-        }
-
-        if let Err(e) = contact_result {
+        )
+        .await
+        {
             tracing::warn!(
                 %email,
                 error = %e,
@@ -537,13 +778,53 @@ pub async fn register_attendee(
         "attendee self-registered"
     );
 
+    // Plan 017: converge wallet→email. Bind the proven wallet only when the
+    // email was brand-new; an existing email must be linked via the profile
+    // flow (ownership-verified) instead of a typed-email bind here.
+    let wallet_linked = if is_wallet_session {
+        if email_is_new
+            && let (Some(db), Some(w)) = (state.d1.as_deref(), session_wallet.as_ref())
+        {
+            match crate::db::contacts::link_wallet_to_email(db, &email, w).await {
+                Ok(()) => {
+                    tracing::info!(%email, "wallet bound to new email at registration");
+                    Some(true)
+                }
+                Err(e) => {
+                    tracing::warn!(%email, error = %e, "wallet bind at registration failed");
+                    Some(false)
+                }
+            }
+        } else {
+            tracing::info!(%email, "email already has an account — wallet not auto-bound");
+            Some(false)
+        }
+    } else {
+        None
+    };
+
     Ok(ApiOk::new(RegisterResponse {
         attendee_id: api_id,
         name: name.to_string(),
         email,
         claim_token,
         next_step,
+        wallet_linked,
     }))
+}
+
+/// Minimal sanity check for a typed email (wallet-session reservations).
+/// Not RFC-complete — just rejects obviously-invalid input: one `@`, a dot in
+/// the domain, no spaces, reasonable length.
+fn is_plausible_email(email: &str) -> bool {
+    let e = email.trim();
+    if e.len() < 3 || e.len() > 254 || e.contains(char::is_whitespace) {
+        return false;
+    }
+    let Some((local, domain)) = e.split_once('@') else {
+        return false;
+    };
+    !local.is_empty() && domain.contains('.') && !domain.starts_with('.') && !domain.ends_with('.')
 }
 
 /// Resolve participation type based on event format and user selection.
@@ -575,5 +856,28 @@ fn split_name(name: &str) -> (String, String) {
         [] => (String::new(), String::new()),
         [only] => (only.to_string(), String::new()),
         [first, rest @ ..] => (first.to_string(), rest.join(" ")),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_plausible_email;
+
+    #[test]
+    fn accepts_normal_emails() {
+        assert!(is_plausible_email("a@b.co"));
+        assert!(is_plausible_email("dev.user+tag@example.com"));
+    }
+
+    #[test]
+    fn rejects_malformed_emails() {
+        assert!(!is_plausible_email(""));
+        assert!(!is_plausible_email("no-at-sign"));
+        assert!(!is_plausible_email("@example.com"));
+        assert!(!is_plausible_email("user@nodot"));
+        assert!(!is_plausible_email("user@.com"));
+        assert!(!is_plausible_email("user@example."));
+        assert!(!is_plausible_email("has space@example.com"));
+        assert!(!is_plausible_email("wallet:So1111111111111111111111111111111111111111"));
     }
 }

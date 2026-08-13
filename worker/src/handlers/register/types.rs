@@ -57,6 +57,12 @@ pub struct RegisterResponse {
     pub email: String,
     pub claim_token: String,
     pub next_step: NextStep,
+    /// Wallet↔email convergence outcome for wallet-only sessions (Plan 017):
+    /// `Some(true)` = wallet was bound to this (brand-new) email; `Some(false)`
+    /// = email already had an account, so the wallet was NOT auto-bound (link
+    /// it from the profile page instead); `None` = not a wallet session.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub wallet_linked: Option<bool>,
 }
 
 // ---------------------------------------------------------------------------

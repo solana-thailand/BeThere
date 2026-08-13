@@ -24,6 +24,22 @@ pub struct DeveloperProfile {
     #[serde(default)]
     pub twitter_handle: Option<String>,
     #[serde(default)]
+    pub telegram_handle: Option<String>,
+    #[serde(default)]
+    pub telegram_id: Option<String>,
+    #[serde(default)]
+    pub github_verified: bool,
+    #[serde(default)]
+    pub telegram_verified: bool,
+    #[serde(default)]
+    pub discord_verified: bool,
+    #[serde(default)]
+    pub github_verified_at: Option<String>,
+    #[serde(default)]
+    pub telegram_verified_at: Option<String>,
+    #[serde(default)]
+    pub discord_verified_at: Option<String>,
+    #[serde(default)]
     pub experience_level: Option<String>,
     #[serde(default)]
     pub primary_role: Option<String>,
@@ -55,6 +71,8 @@ pub struct UpdateProfileBody {
     #[serde(default)]
     pub twitter_handle: String,
     #[serde(default)]
+    pub telegram_handle: String,
+    #[serde(default)]
     pub primary_role: String,
     #[serde(default)]
     pub tech_stack: Vec<String>,
@@ -77,6 +95,7 @@ impl From<&DeveloperProfile> for UpdateProfileBody {
             github_handle: p.github_handle.clone().unwrap_or_default(),
             discord_handle: p.discord_handle.clone().unwrap_or_default(),
             twitter_handle: p.twitter_handle.clone().unwrap_or_default(),
+            telegram_handle: p.telegram_handle.clone().unwrap_or_default(),
             primary_role: p.primary_role.clone().unwrap_or_default(),
             tech_stack: p.tech_stack.clone(),
             interests: p.interests.clone(),
@@ -122,6 +141,17 @@ pub async fn get_my_profile() -> Result<DeveloperProfile, ApiError> {
 /// PUT /api/my-profile — update the current user's developer profile.
 pub async fn update_my_profile(body: &UpdateProfileBody) -> Result<DeveloperProfile, ApiError> {
     api_put_json("/my-profile", body).await
+}
+
+/// POST /api/auth/social/unlink — remove a verified social account link.
+pub async fn social_unlink(platform: &str) -> Result<(), ApiError> {
+    #[derive(serde::Serialize)]
+    struct UnlinkBody<'a> {
+        platform: &'a str,
+    }
+    super::api_post_json::<serde_json::Value>("/auth/social/unlink", &UnlinkBody { platform })
+        .await
+        .map(|_| ())
 }
 
 // ---------------------------------------------------------------------------

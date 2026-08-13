@@ -32,7 +32,15 @@ pub struct ClaimLookup {
     pub claimed: bool,
     pub claimed_at: Option<String>,
     pub nft_available: bool,
+    /// Per-event pre-registered wallet (Sheet column P). When set, the claim is
+    /// LOCKED to this address (often the on-chain depositor).
     pub locked_wallet: Option<String>,
+    /// Masked display (e.g. `7Xk9…Qm3p`) of the attendee's profile-bound wallet
+    /// (developer_profiles.wallet_address), surfaced only when there is no
+    /// per-event lock. The full address is NEVER sent to the client — the mint
+    /// resolves it server-side by email. Presence signals "one-tap linked-wallet
+    /// claim is available"; the attendee may still opt to use a different wallet.
+    pub linked_wallet_display: Option<String>,
     pub event: ApiEventConfig,
     pub quiz_status: QuizStatus,
     pub total_checked_in: usize,
@@ -106,7 +114,12 @@ async fn resolve_event_id_from_token(state: &AppState, token: &str) -> Option<St
 ///
 /// If the caller passed a non-empty event_id, it wins (explicit context).
 /// Otherwise we try to recover the attendee's real event_id from D1.
-async fn coalesce_event_id(
+///
+/// Exposed so the token-bearing quiz endpoints resolve the SAME authoritative
+/// event_id the claim gate uses — otherwise quiz progress can be written under
+/// the active-event fallback and the claim gate (which coalesces from the token)
+/// never finds it.
+pub(crate) async fn coalesce_event_id(
     state: &AppState,
     token: &str,
     event_id: Option<&str>,
@@ -115,6 +128,19 @@ async fn coalesce_event_id(
         return Some(id.to_string());
     }
     resolve_event_id_from_token(state, token).await
+}
+
+/// Rewrite a badge image URL to a Crossmint-safe raster form.
+///
+/// Crossmint (and other minters) reject SVG image URLs. Our badge SVGs are
+/// served with PNG twins at the same path (`/api/badge-hd.svg` →
+/// `/api/badge-hd.png`), so swapping the extension yields a supported image.
+/// Non-SVG URLs pass through unchanged.
+fn crossmint_image_url(url: &str) -> String {
+    match url.strip_suffix(".svg") {
+        Some(stem) => format!("{stem}.png"),
+        None => url.to_string(),
+    }
 }
 
 /// Build an Orb Markets explorer URL for the claimed NFT.
@@ -183,6 +209,7 @@ pub async fn lookup_claim(
             claimed_at: walkin.claimed_at.clone(),
             nft_available,
             locked_wallet: walkin.wallet_address.clone(),
+            linked_wallet_display: None, // walk-ins have no developer profile
             event: ApiEventConfig {
                 event_name: event.name.clone(),
                 event_tagline: event.tagline.clone(),
@@ -331,6 +358,27 @@ pub async fn lookup_claim(
         (None, None, None, None)
     };
 
+    // When there's no per-event lock, signal that the attendee has a verified
+    // profile-bound wallet (via the SIWS bind flow) so the claim page can offer a
+    // one-tap "mint to my linked wallet" path. We expose ONLY a masked display —
+    // the full address stays server-side and the mint resolves it by email, so a
+    // leaked claim link can neither read the wallet nor redirect the badge.
+    let linked_wallet_display = if locked_wallet.is_none() {
+        match state.d1.as_deref() {
+            Some(db) => crate::db::developers::get_developer_profile(db, &attendee.email)
+                .await
+                .ok()
+                .flatten()
+                .and_then(|p| p.wallet_address)
+                .map(|w| w.trim().to_string())
+                .filter(|w| !w.is_empty())
+                .map(|w| mask_wallet(&w)),
+            None => None,
+        }
+    } else {
+        None
+    };
+
     Ok(ClaimLookup {
         name: display_name,
         checked_in_at,
@@ -339,6 +387,7 @@ pub async fn lookup_claim(
         claimed_at,
         nft_available,
         locked_wallet,
+        linked_wallet_display,
         event: api_event,
         quiz_status,
         total_checked_in,
@@ -401,10 +450,11 @@ async fn verify_online_quest_completion(
 pub async fn execute_claim(
     state: &AppState,
     token: &str,
-    wallet_address: &str,
+    requested_wallet: Option<&str>,
+    use_linked: bool,
     event_id: Option<&str>,
 ) -> Result<ClaimResult, AppError> {
-    tracing::info!(claim_token = %token, "claim mint request");
+    tracing::info!(claim_token = %token, use_linked, "claim mint request");
 
     // 1. Resolve event context. Same coalesce as lookup_claim: the public POST
     //    `/claim/{token}` carries no event_id, so recover the attendee's real
@@ -433,7 +483,7 @@ pub async fn execute_claim(
         });
     }
     if let Some(walkin) = walkin {
-        return execute_walkin_claim(state, &event, token, wallet_address, walkin).await;
+        return execute_walkin_claim(state, &event, token, requested_wallet, walkin).await;
     }
 
     // 3. Pre-registered path: look up attendee by claim token from Google Sheet, D1 fallback
@@ -651,26 +701,71 @@ pub async fn execute_claim(
         return Err(AppError::Validation("NFT has already been claimed".into()));
     }
 
-    // 7. Wallet match guard: if attendee pre-registered a Solana address (column P),
-    // the claiming wallet must match exactly. Prevents claim theft via leaked URLs.
-    if let Some(ref registered) = attendee.solana_address {
-        let registered = registered.trim();
-        if !registered.is_empty() {
-            let claiming = wallet_address.trim();
-            if registered != claiming {
-                tracing::warn!(
-                    claim_token = %token,
-                    registered = %mask_wallet(registered),
-                    claiming = %mask_wallet(claiming),
-                    "wallet mismatch"
-                );
-                return Err(AppError::Validation(format!(
-                    "This claim is locked to a pre-registered wallet ({})",
-                    mask_wallet(registered)
-                )));
+    // 7. Resolve the recipient wallet SERVER-SIDE. The client never dictates the
+    //    mint destination for the locked or linked cases — it can only supply an
+    //    explicit override wallet, which is the sole case a client address is used.
+    //    Precedence: pre-registered (column P, authoritative) > verified linked
+    //    profile wallet > explicit override.
+    let requested = requested_wallet.map(str::trim).filter(|w| !w.is_empty());
+    let recipient: String = if let Some(registered) = attendee
+        .solana_address
+        .as_deref()
+        .map(str::trim)
+        .filter(|w| !w.is_empty())
+    {
+        // Pre-registered: the claim is locked to this wallet. Reject a mismatched
+        // explicit request (prevents claim theft via leaked URLs).
+        if let Some(req) = requested
+            && !req.eq_ignore_ascii_case(registered)
+        {
+            tracing::warn!(
+                claim_token = %token,
+                registered = %mask_wallet(registered),
+                claiming = %mask_wallet(req),
+                "wallet mismatch"
+            );
+            return Err(AppError::Validation(format!(
+                "This claim is locked to a pre-registered wallet ({})",
+                mask_wallet(registered)
+            )));
+        }
+        registered.to_string()
+    } else if use_linked {
+        // Mint to the attendee's verified profile wallet — looked up server-side
+        // by email, never sent by (or trusted from) the client.
+        let linked = match state.d1.as_deref() {
+            Some(db) => crate::db::developers::get_developer_profile(db, &attendee.email)
+                .await
+                .ok()
+                .flatten()
+                .and_then(|p| p.wallet_address)
+                .map(|w| w.trim().to_string())
+                .filter(|w| !w.is_empty()),
+            None => None,
+        };
+        match linked {
+            Some(w) => w,
+            None => {
+                return Err(AppError::Validation(
+                    "no linked wallet on your profile — connect a wallet to claim".into(),
+                ));
             }
         }
+    } else {
+        // Explicit override — the only path where a client-supplied wallet is used.
+        match requested {
+            Some(w) => w.to_string(),
+            None => {
+                return Err(AppError::Validation("a wallet address is required".into()));
+            }
+        }
+    };
+
+    if let Err(e) = crate::solana::validate_wallet_address(&recipient) {
+        tracing::warn!(claim_token = %token, error = %e, "resolved recipient wallet invalid");
+        return Err(AppError::Validation(e));
     }
+    let wallet_address: &str = &recipient;
 
     // 8. Claim dedup lock — prevent concurrent double-claim
     let lock_kv: Option<&KvStore> = resolve_kv(state);
@@ -688,22 +783,22 @@ pub async fn execute_claim(
         return Err(AppError::RateLimited(e));
     }
 
-    // 9. Mint compressed NFT via Helius
+    // 9. Mint compressed NFT via Crossmint (custodial signer + tree + fees)
     let config = &state.config;
+    let mint_image = crossmint_image_url(&event.nft_image_url);
     let mint_req = MintRequest {
         wallet_address,
-        rpc_url: &config.solana.rpc_url,
-        api_key: &config.solana.api_key,
-        collection_mint: &event.nft_collection_mint,
-        metadata_uri: &event.nft_metadata_uri,
-        image_url: &event.nft_image_url,
+        host: &config.solana.crossmint_host,
+        api_key: &config.solana.crossmint_api_key,
+        collection_id: &config.solana.crossmint_collection_id,
+        image_url: &mint_image,
         nft_name: &event.nft_name(),
-        nft_symbol: &event.nft_symbol,
         nft_description: &event.nft_description(),
         nft_external_url: &event.link,
-        merkle_tree: &event.merkle_tree,
+        compressed: true,
+        idempotency_key: token,
     };
-    let mint_result = match solana::mint_compressed_nft(&mint_req).await {
+    let mint_result = match solana::mint_compressed_nft(&mint_req, lock_kv).await {
         Ok(result) => result,
         Err(ref e) => {
             tracing::error!(claim_token = %token, error = %e, "mint failed");
@@ -719,7 +814,7 @@ pub async fn execute_claim(
                 .await;
             }
             return Err(AppError::External {
-                service: "helius".into(),
+                service: "crossmint".into(),
                 status: 502,
                 body: e.to_string(),
             });
@@ -834,11 +929,23 @@ async fn execute_walkin_claim(
     state: &AppState,
     event: &event_checkin_domain::models::event::EventConfig,
     token: &str,
-    wallet_address: &str,
+    requested_wallet: Option<&str>,
     walkin: WalkinAttendee,
 ) -> Result<ClaimResult, AppError> {
     let display_name = walkin.name.clone();
     let kv = resolve_kv(state);
+
+    // Walk-ins have no developer profile, so there's no linked wallet to mint to:
+    // an explicit wallet address is required and validated server-side.
+    let recipient = match requested_wallet.map(str::trim).filter(|w| !w.is_empty()) {
+        Some(w) => w.to_string(),
+        None => return Err(AppError::Validation("a wallet address is required".into())),
+    };
+    if let Err(e) = crate::solana::validate_wallet_address(&recipient) {
+        tracing::warn!(claim_token = %token, error = %e, "walk-in recipient wallet invalid");
+        return Err(AppError::Validation(e));
+    }
+    let wallet_address: &str = &recipient;
 
     // Note: walk-ins are always in-person — no online claim timing gate needed
 
@@ -863,23 +970,23 @@ async fn execute_walkin_claim(
         return Err(AppError::RateLimited(e));
     }
 
-    // Mint compressed NFT via Helius
+    // Mint compressed NFT via Crossmint (custodial signer + tree + fees)
     let config = &state.config;
+    let mint_image = crossmint_image_url(&event.nft_image_url);
     let mint_req = MintRequest {
         wallet_address,
-        rpc_url: &config.solana.rpc_url,
-        api_key: &config.solana.api_key,
-        collection_mint: &event.nft_collection_mint,
-        metadata_uri: &event.nft_metadata_uri,
-        image_url: &event.nft_image_url,
+        host: &config.solana.crossmint_host,
+        api_key: &config.solana.crossmint_api_key,
+        collection_id: &config.solana.crossmint_collection_id,
+        image_url: &mint_image,
         nft_name: &event.nft_name(),
-        nft_symbol: &event.nft_symbol,
         nft_description: &event.nft_description(),
         nft_external_url: &event.link,
-        merkle_tree: &event.merkle_tree,
+        compressed: true,
+        idempotency_key: token,
     };
 
-    let mint_result = match crate::solana::mint_compressed_nft(&mint_req).await {
+    let mint_result = match crate::solana::mint_compressed_nft(&mint_req, kv).await {
         Ok(result) => result,
         Err(ref e) => {
             tracing::error!(claim_token = %token, error = %e, "walk-in mint failed");
@@ -962,4 +1069,50 @@ async fn execute_walkin_claim(
         claimed_at,
         cluster: cluster.to_string(),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── crossmint_image_url: SVG→PNG rewrite for the mint payload ──
+    #[test]
+    fn image_url_rewrites_hd_svg_to_png() {
+        assert_eq!(
+            crossmint_image_url("https://x.dev/api/badge-hd.svg"),
+            "https://x.dev/api/badge-hd.png"
+        );
+    }
+
+    #[test]
+    fn image_url_rewrites_plain_svg_to_png() {
+        assert_eq!(crossmint_image_url("/api/badge.svg"), "/api/badge.png");
+    }
+
+    #[test]
+    fn image_url_passes_through_png() {
+        assert_eq!(crossmint_image_url("https://x.dev/a.png"), "https://x.dev/a.png");
+    }
+
+    #[test]
+    fn image_url_passes_through_empty_and_non_svg() {
+        assert_eq!(crossmint_image_url(""), "");
+        assert_eq!(crossmint_image_url("https://x.dev/img"), "https://x.dev/img");
+        // Only a trailing .svg is rewritten — a mid-string ".svg" is untouched.
+        assert_eq!(crossmint_image_url("https://x.dev/a.svg.jpg"), "https://x.dev/a.svg.jpg");
+    }
+
+    // ── orb_nft_url: explorer link cluster mapping ──
+    #[test]
+    fn orb_url_mainnet_uses_mainnet_param() {
+        let u = orb_nft_url("AID", "mainnet-beta");
+        assert!(u.contains("AID"));
+        assert!(u.contains("cluster=mainnet"));
+        assert!(!u.contains("cluster=devnet"));
+    }
+
+    #[test]
+    fn orb_url_devnet_default() {
+        assert!(orb_nft_url("AID", "devnet").contains("cluster=devnet"));
+    }
 }

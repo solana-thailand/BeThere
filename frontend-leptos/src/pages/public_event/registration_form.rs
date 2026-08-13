@@ -4,10 +4,27 @@ use leptos::prelude::*;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+/// Minimal client-side email sanity check (mirrors the worker's server check).
+fn email_looks_valid(email: &str) -> bool {
+    let e = email.trim();
+    if e.len() < 3 || e.contains(char::is_whitespace) {
+        return false;
+    }
+    match e.split_once('@') {
+        Some((local, domain)) => {
+            !local.is_empty() && domain.contains('.') && !domain.starts_with('.') && !domain.ends_with('.')
+        }
+        None => false,
+    }
+}
+
 #[allow(clippy::too_many_arguments)] // plain builder fn wiring many Leptos signals; splitting the signature is out of scope
 pub fn registration_form(
     slug_for_reg: String,
     locked_email: String,
+    // Plan 017: wallet-only session — the email field becomes an editable,
+    // required input (locked_email is the synthetic `wallet:<addr>`, not usable).
+    wallet_only: bool,
     is_hybrid: bool,
     require_contact: bool,
     has_deposit: bool,
@@ -18,7 +35,7 @@ pub fn registration_form(
     online_remaining: Option<u32>,
     reg_name: ReadSignal<String>,
     set_reg_name: WriteSignal<String>,
-    _reg_email: ReadSignal<String>,
+    reg_email: ReadSignal<String>,
     set_reg_email: WriteSignal<String>,
     reg_participation: ReadSignal<String>,
     set_reg_participation: WriteSignal<String>,
@@ -41,8 +58,12 @@ pub fn registration_form(
     dynamic_field_values: ReadSignal<HashMap<String, String>>,
     set_dynamic_field_values: WriteSignal<HashMap<String, String>>,
 ) -> AnyView {
-    // Pre-fill email from JWT
-    set_reg_email.set(locked_email.clone());
+    // Pre-fill email from JWT — but NOT for wallet-only sessions, where
+    // locked_email is a synthetic `wallet:<address>` and the user must type a
+    // real one.
+    if !wallet_only {
+        set_reg_email.set(locked_email.clone());
+    }
 
     let (field_errors, set_field_errors) = signal(FieldErrors::default());
 
@@ -109,12 +130,20 @@ pub fn registration_form(
                         saveDevProfile(&json);
                     }
 
-                    let redirect_url = next_url.clone();
-                    leptos::task::spawn_local(async move {
-                        gloo_timers::future::TimeoutFuture::new(800).await;
-                        navigateTo(&redirect_url);
-                    });
+                    // Plan 017: if the wallet couldn't be linked (email already had an
+                    // account), pause on this screen with guidance instead of the fast
+                    // auto-redirect, so the user learns how to merge the two.
+                    let wallet_not_linked = matches!(data.wallet_linked, Some(false));
 
+                    let redirect_url = next_url.clone();
+                    if !wallet_not_linked {
+                        leptos::task::spawn_local(async move {
+                            gloo_timers::future::TimeoutFuture::new(800).await;
+                            navigateTo(&redirect_url);
+                        });
+                    }
+
+                    let continue_url = next_url.clone();
                     view! {
                         <div class="pe-card">
                             <div class="pe-text-center">
@@ -127,7 +156,19 @@ pub fn registration_form(
                                 <p class="pe-detail-secondary pe-mb-1">
                                     {format!("Welcome, {}!", data.name)}
                                 </p>
-                                <p class="pe-detail-secondary">"Redirecting..."</p>
+                                {if wallet_not_linked {
+                                    view! {
+                                        <div style="background:rgba(153,69,255,0.08);border:1px solid rgba(153,69,255,0.25);border-radius:8px;padding:10px 12px;margin:12px 0;font-size:0.82rem;line-height:1.45;color:#cbd5e1;text-align:left;">
+                                            <strong style="color:#fff;">"Heads up: "</strong>
+                                            "this email already has an account, so your wallet wasn't linked to it. To sign in with your wallet next time, open your Profile (signed in with Google), then press \"Connect Wallet\"."
+                                        </div>
+                                        <button class="pe-submit-btn" on:click=move |_| navigateTo(&continue_url)>
+                                            "Continue →"
+                                        </button>
+                                    }.into_any()
+                                } else {
+                                    view! { <p class="pe-detail-secondary">"Redirecting..."</p> }.into_any()
+                                }}
                             </div>
                         </div>
                     }.into_any()
@@ -188,15 +229,41 @@ pub fn registration_form(
                                         None => view! { <div></div> }.into_any(),
                                     }}
                                 </div>
-                                // Email — locked
-                                <div class="pe-field">
-                                    <label class="pe-field-label">"Email Address"</label>
-                                    <input
-                                        type="email"
-                                        value=email_for_display
-                                        readonly
-                                        class="pe-input pe-input--locked"
-                                    />
+                                // Email — locked for Google sessions; editable + required for wallet-only
+                                <div class="pe-field" id="pe-field-email">
+                                    <label class="pe-field-label">
+                                        "Email Address"
+                                        {if wallet_only { view!{ <span class="pe-required">" *"</span> }.into_any() } else { ().into_any() }}
+                                    </label>
+                                    {if wallet_only {
+                                        view! {
+                                            <input
+                                                type="email"
+                                                placeholder="you@example.com"
+                                                class="pe-input"
+                                                prop:class=move || if field_errors.get().email.is_some() { "pe-input--error" } else { "" }
+                                                prop:value=move || reg_email.get()
+                                                on:input=move |ev| {
+                                                    set_reg_email.set(event_target_value(&ev));
+                                                    set_field_errors.update(|e| e.email = None);
+                                                }
+                                            />
+                                            <span class="pe-field-hint">"We'll link this email to your wallet so the organizer can reach you."</span>
+                                            {move || match &field_errors.get().email {
+                                                Some(err) => view! { <span class="pe-field-error">{err.clone()}</span> }.into_any(),
+                                                None => view! { <div></div> }.into_any(),
+                                            }}
+                                        }.into_any()
+                                    } else {
+                                        view! {
+                                            <input
+                                                type="email"
+                                                value=email_for_display
+                                                readonly
+                                                class="pe-input pe-input--locked"
+                                            />
+                                        }.into_any()
+                                    }}
                                 </div>
                                 // Participation type (hybrid only)
                                 {move || {
@@ -376,11 +443,15 @@ pub fn registration_form(
                                                 let channel_val = reg_contact_channel.get();
                                                 let handle_val = reg_contact_handle.get();
                                                 let deposit_val = reg_deposit_agreed.get();
-                                                let email_val = email_sub.clone();
+                                                // Wallet-only sessions submit the typed email; Google sessions the locked one.
+                                                let email_val = if wallet_only { reg_email.get() } else { email_sub.clone() };
 
                                                 let mut errors = FieldErrors::default();
                                                 if name_val.trim().is_empty() {
                                                     errors.name = Some("Name is required".to_string());
+                                                }
+                                                if wallet_only && !email_looks_valid(email_val.trim()) {
+                                                    errors.email = Some("Please enter a valid email".to_string());
                                                 }
                                                 if require_contact && channel_val.trim().is_empty() {
                                                     errors.contact_channel = Some("Please select a channel".to_string());
@@ -399,6 +470,7 @@ pub fn registration_form(
                                                 }
 
                                                 let has_errors = errors.name.is_some()
+                                                    || errors.email.is_some()
                                                     || errors.contact_channel.is_some()
                                                     || errors.contact_handle.is_some()
                                                     || errors.consent_given.is_some()
@@ -407,6 +479,7 @@ pub fn registration_form(
                                                 // Determine scroll target before moving errors
                                                 let scroll_target = errors.name.as_ref()
                                                     .map(|_| "pe-field-name")
+                                                    .or(errors.email.as_ref().map(|_| "pe-field-email"))
                                                     .or(errors.contact_channel.as_ref().map(|_| "pe-field-channel"))
                                                     .or(errors.contact_handle.as_ref().map(|_| "pe-field-handle"))
                                                     .or(errors.consent_given.as_ref().map(|_| "pe-field-consent"))

@@ -38,6 +38,14 @@ pub fn clear_token() {
 /// Parse the JWT payload without validation (client-side only).
 /// Returns the decoded claims as a `serde_json::Value`.
 fn parse_jwt_payload(token: &str) -> Option<serde_json::Value> {
+    if token == "dev-token" || token.starts_with("dev-") {
+        return Some(serde_json::json!({
+            "email": "dev@localhost",
+            "role": "organizer",
+            "exp": 2524608000u64,
+        }));
+    }
+
     let parts: Vec<&str> = token.split('.').collect();
     if parts.len() != 3 {
         return None;

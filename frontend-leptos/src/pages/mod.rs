@@ -29,7 +29,9 @@ pub mod public_event;
 pub mod quiz_editor;
 pub mod scanner;
 pub mod ticket;
+pub mod nfc_checkin;
 
 pub use event_summary::EventSummary;
+pub use nfc_checkin::NfcCheckin;
 pub use pr_pack::PrPack;
 pub use public::{EventRecap, PastEvents, PostEventRegister};

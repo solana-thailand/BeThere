@@ -223,6 +223,26 @@ pub async fn refund_and_close_tx_handler(
         .into());
     }
 
+    // SECURITY (#2): the checks above key off `attendee_id`, but the refund TX is
+    // built from `wallet_address` (which derives the on-chain deposit PDA). If
+    // those aren't cross-checked, an overflow-tier (non-refundable) depositor
+    // could pass someone else's refundable `attendee_id` together with their OWN
+    // wallet and reclaim a deposit meant to be forfeited. Require the deposit of
+    // record to belong to the wallet being refunded.
+    let recorded_wallet = status.wallet_address.as_deref().unwrap_or("").trim();
+    if recorded_wallet.is_empty()
+        || !recorded_wallet.eq_ignore_ascii_case(body.wallet_address.trim())
+    {
+        tracing::warn!(
+            attendee_id = %body.attendee_id,
+            "escrow refund blocked: wallet does not match the deposit of record (authz guard)"
+        );
+        return Err(AppError::Validation(
+            "this wallet does not match the deposit on record — a refund goes to the wallet that placed the deposit".to_string(),
+        )
+        .into());
+    }
+
     let organizer_pubkey = if event.organizer_wallet.is_empty() {
         return Err(
             AppError::Internal("event has no organizer wallet configured".to_string()).into(),
@@ -697,23 +717,52 @@ pub async fn claim_forfeited_tx_handler(
     }
 
     let onchain_events = crate::escrow_indexer::get_onchain_events(db, &body.event_id, 200).await;
-    let mut excluded_wallets: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+    // Exclusions come in two shapes that MUST be matched differently:
+    //  - `Refund` events carry the attendee WALLET (accounts[0]).
+    //  - `MarkCheckedIn` events carry the attendee_deposit PDA (accounts[2]),
+    //    NOT a wallet.
+    // The previous code lumped both into one wallet set, so the checked-in PDAs
+    // never matched any wallet and checked-in attendees were never excluded —
+    // their still-refundable deposits were offered as forfeit candidates. Fix:
+    // derive each candidate wallet's deposit PDA and exclude it when that PDA
+    // appears in the checked-in set.
+    let mut refunded_wallets: std::collections::HashSet<String> =
+        std::collections::HashSet::new();
+    let mut checked_in_pdas: std::collections::HashSet<String> = std::collections::HashSet::new();
     for ev in &onchain_events {
         match ev.instruction {
-            crate::escrow_indexer::EscrowInstruction::MarkCheckedIn
-            | crate::escrow_indexer::EscrowInstruction::Refund => {
-                if let Some(ref attendee) = ev.attendee {
-                    excluded_wallets.insert(attendee.clone());
+            crate::escrow_indexer::EscrowInstruction::Refund => {
+                if let Some(ref wallet) = ev.attendee {
+                    refunded_wallets.insert(wallet.clone());
                 }
             }
-            crate::escrow_indexer::EscrowInstruction::ClaimForfeited => {}
+            crate::escrow_indexer::EscrowInstruction::MarkCheckedIn => {
+                if let Some(ref pda) = ev.attendee {
+                    checked_in_pdas.insert(pda.clone());
+                }
+            }
             _ => {}
         }
     }
 
+    // Map each candidate wallet → its deposit PDA, then exclude the checked-in ones.
+    let wallet_pda_pairs = crate::solana_escrow::derive_attendee_deposit_pdas(
+        organizer_pubkey,
+        on_chain_event_id,
+        &usdc_wallets,
+    )
+    .await
+    .map_err(|e| AppError::Internal(format!("deposit PDA derivation failed: {e}")))?;
+    let checked_in_wallets: std::collections::HashSet<String> = wallet_pda_pairs
+        .into_iter()
+        .filter(|(_, pda)| checked_in_pdas.contains(pda))
+        .map(|(wallet, _)| wallet)
+        .collect();
+
     let indexer_candidates: Vec<String> = usdc_wallets
         .into_iter()
-        .filter(|w| !excluded_wallets.contains(w))
+        .filter(|w| !refunded_wallets.contains(w) && !checked_in_wallets.contains(w))
         .collect();
 
     // Defense against indexer lag: the D1 on-chain event index (populated by the

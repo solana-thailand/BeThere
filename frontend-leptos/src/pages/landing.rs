@@ -24,36 +24,10 @@ enum AuthState {
     NotSignedIn,
 }
 
-/// Fetches the Google OAuth URL with a redirect back to `/`, then navigates.
+/// Navigates to the unified login page (/login) for Google or Solana Wallet authentication.
 fn trigger_landing_oauth() {
-    leptos::task::spawn_local(async move {
-        let window = web_sys::window().expect("no window");
-        let origin = window
-            .location()
-            .origin()
-            .unwrap_or_else(|_| "http://localhost:8787".to_string());
-        let api_url = format!(
-            "{origin}/api/auth/url?redirect={}",
-            urlencoding::encode("/")
-        );
-        match crate::api::fetch::get(&api_url, &[]).await {
-            Ok(resp) => {
-                if let Ok(body) = crate::api::fetch::response_text(&resp).await
-                    && let Ok(json) = serde_json::from_str::<serde_json::Value>(&body)
-                        && let Some(auth_url) =
-                            json.get("data").and_then(|d| d.get("auth_url")).and_then(|u| u.as_str())
-                        {
-                            let _ = window.location().set_href(auth_url);
-                            return;
-                        }
-            }
-            Err(e) => {
-                log::error!("[landing] failed to get auth URL: {e}");
-            }
-        }
-        // Fallback: navigate to /login
-        let _ = window.location().set_href("/login");
-    });
+    let window = web_sys::window().expect("no window");
+    let _ = window.location().set_href("/login");
 }
 
 /// Sign out: clear cookie + reload.
@@ -470,42 +444,33 @@ fn MyRegistrations() -> impl IntoView {
         let user_email = email.get();
 
         match (regs, user_email) {
-            (None, _) | (Some(_), None) => ().into_any(),
-            (Some(refs), Some(user)) if refs.is_empty() => {
-                view! {
-                    <section class="landing-reg-section">
-                        <div class="landing-reg-empty">
-                            <p class="landing-reg-empty-user">
-                                {format!("👤 {user}")}
-                            </p>
-                            <p class="landing-reg-empty-text">
-                                "You haven't registered for any events yet. Check out upcoming events above!"
-                            </p>
-                            <button
-                                class="btn btn-outline btn-xs landing-reg-signout-btn"
-                                on:click=move |_| {
-                                    leptos::task::spawn_local(async move {
-                                        let _ = crate::api::fetch::post("/api/auth/logout", &[], None).await;
-                                        let window = web_sys::window().expect("no window");
-                                        let _ = window.location().reload();
-                                    });
-                                }
-                            >
-                                "Sign out"
-                            </button>
-                        </div>
-                    </section>
-                }.into_any()
-            }
+            (None, _) | (_, None) => ().into_any(),
             (Some(refs), Some(user)) => {
+                let user_email = user.clone();
+                let has_regs = !refs.is_empty();
                 view! {
                     <section class="landing-reg-section">
-                        <div class="landing-reg-header">
-                            <h2 class="landing-reg-title">
-                                "Your Events"
-                            </h2>
-                            <div class="landing-reg-user">
-                                <span class="landing-email-text">{format!("\u{1f464} {user}")}</span>
+                        // Developer Passport Card (Always shown for logged-in users)
+                        <div class="landing-dev-passport">
+                            <div class="landing-passport-left">
+                                <div class="landing-passport-avatar">
+                                    <Icon icon=IconName::Crab class="icon-lg" />
+                                </div>
+                                <div class="landing-passport-info">
+                                    <div class="landing-passport-title-row">
+                                        <span class="landing-passport-name">{user_email.clone()}</span>
+                                        <span class="landing-passport-verified-badge">"✓ Verified Passport"</span>
+                                    </div>
+                                    <div class="landing-passport-sub">
+                                        "Solana Thailand Developer Community Member"
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="landing-passport-actions">
+                                <A href="/profile" attr:class="btn btn-primary btn-sm landing-passport-btn">
+                                    <Icon icon=IconName::Settings class="icon-sm" />
+                                    " Edit Profile"
+                                </A>
                                 <button
                                     class="btn btn-outline btn-xs"
                                     on:click=move |_| {
@@ -520,60 +485,74 @@ fn MyRegistrations() -> impl IntoView {
                                 </button>
                             </div>
                         </div>
-                        <div class="landing-reg-grid">
-                            {refs.into_iter().map(|reg| {
-                                let event_url = format!("/e/{}", reg.event_slug);
-                                let step_label = match reg.next_step.step_type.as_str() {
-                                    "claim" => "Claim Badge",
-                                    "deposit" => "Complete Deposit",
-                                    "quest" => "Start Quest",
-                                    "ticket" => "View Ticket",
-                                    _ => "View",
-                                };
-                                let date_str = if reg.event_start_ms > 0 {
-                                    let d = js_sys::Date::new_with_year_month_day(0, 0, 0);
-                                    d.set_time(reg.event_start_ms as f64);
-                                    d.to_locale_string("en-US", &js_sys::Object::new()).as_string().unwrap_or_default()
-                                } else {
-                                    "TBA".to_string()
-                                };
-                                let next_url = reg.next_step.url.clone();
-                                let status_color = match reg.status.as_str() {
-                                    "nft claimed" => "#4ade80",
-                                    "checked in" => "#4ade80",
-                                    "deposit confirmed" => "#22c55e",
-                                    "deposit pending" => "#facc15",
-                                    _ => "var(--text-secondary)",
-                                };
-                                view! {
-                                    <div class="landing-reg-card">
-                                        // Column 1: Event title & date
-                                        <div class="landing-reg-info">
-                                            <a href=event_url class="landing-reg-event-name">
-                                                {reg.event_name}
-                                            </a>
-                                            <p class="landing-reg-event-date">{date_str}</p>
-                                        </div>
-                                        // Column 2: User identity
-                                        <div class="landing-reg-identity">
-                                            <span class="landing-reg-identity-label">{user.clone()}</span>
-                                        </div>
-                                        // Column 3: Status badge
-                                        <div class="landing-reg-status-badge" style=format!(
-                                            "background:{}; color:#000;",
-                                            if status_color == "var(--text-secondary)" { "rgba(148,163,184,0.15)".to_string() } else { format!("{status_color}22") }
-                                        )>
-                                            <span class="landing-reg-status-dot" style=format!("background:{status_color};")></span>
-                                            {reg.status.clone()}
-                                        </div>
-                                        // Column 4: Action button
-                                        <a href=next_url class="btn btn-primary btn-sm landing-reg-action">
-                                            {step_label}" →"
-                                        </a>
-                                    </div>
-                                }
-                            }).collect::<Vec<_>>()}
-                        </div>
+
+                        {if has_regs {
+                            view! {
+                                <div class="landing-reg-header" style="margin-top: 24px;">
+                                    <h2 class="landing-reg-title">
+                                        "Your Events"
+                                    </h2>
+                                </div>
+                                <div class="landing-reg-grid">
+                                    {refs.into_iter().map(|reg| {
+                                        let event_url = format!("/e/{}", reg.event_slug);
+                                        let step_label = match reg.next_step.step_type.as_str() {
+                                            "claim" => "Claim Badge",
+                                            "deposit" => "Complete Deposit",
+                                            "quest" => "Start Quest",
+                                            "ticket" => "View Ticket",
+                                            _ => "View",
+                                        };
+                                        let date_str = if reg.event_start_ms > 0 {
+                                            let d = js_sys::Date::new_with_year_month_day(0, 0, 0);
+                                            d.set_time(reg.event_start_ms as f64);
+                                            d.to_locale_string("en-US", &js_sys::Object::new()).as_string().unwrap_or_default()
+                                        } else {
+                                            "TBA".to_string()
+                                        };
+                                        let next_url = reg.next_step.url.clone();
+                                        let status_color = match reg.status.as_str() {
+                                            "nft claimed" => "#4ade80",
+                                            "checked in" => "#4ade80",
+                                            "deposit confirmed" => "#22c55e",
+                                            "deposit pending" => "#facc15",
+                                            _ => "var(--text-secondary)",
+                                        };
+                                        view! {
+                                            <div class="landing-reg-card">
+                                                <div class="landing-reg-info">
+                                                    <a href=event_url class="landing-reg-event-name">
+                                                        {reg.event_name}
+                                                    </a>
+                                                    <p class="landing-reg-event-date">{date_str}</p>
+                                                </div>
+                                                <div class="landing-reg-identity">
+                                                    <span class="landing-reg-identity-label">{user.clone()}</span>
+                                                </div>
+                                                <div class="landing-reg-status-badge" style=format!(
+                                                    "background:{}; color:#000;",
+                                                    if status_color == "var(--text-secondary)" { "rgba(148,163,184,0.15)".to_string() } else { format!("{status_color}22") }
+                                                )>
+                                                    <span class="landing-reg-status-dot" style=format!("background:{status_color};")></span>
+                                                    {reg.status.clone()}
+                                                </div>
+                                                <a href=next_url class="btn btn-primary btn-sm landing-reg-action">
+                                                    {step_label}" →"
+                                                </a>
+                                            </div>
+                                        }
+                                    }).collect::<Vec<_>>()}
+                                </div>
+                            }.into_any()
+                        } else {
+                            view! {
+                                <div class="landing-reg-empty" style="margin-top: 16px;">
+                                    <p class="landing-reg-empty-text">
+                                        "You haven't registered for any events yet. Check out upcoming events below!"
+                                    </p>
+                                </div>
+                            }.into_any()
+                        }}
                     </section>
                 }.into_any()
             }
@@ -658,77 +637,91 @@ pub fn Landing() -> impl IntoView {
                         <a href="#waitlist">"For Organizers"</a>
                         <a href="/past-events">"Past Events"</a>
                     </div>
-                    // Hamburger button — visible only on mobile
-                    <button
-                        class="landing-nav-hamburger"
-                        on:click=move |_| set_mobile_menu_open.update(|v| *v = !*v)
-                    >
-                        {move || {
-                            let open = mobile_menu_open.get();
-                            if open {
-                                view! {
-                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-                                        <line x1="18" y1="6" x2="6" y2="18"></line>
-                                        <line x1="6" y1="6" x2="18" y2="18"></line>
-                                    </svg>
-                                }.into_any()
-                            } else {
-                                view! {
-                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-                                        <line x1="3" y1="6" x2="21" y2="6"></line>
-                                        <line x1="3" y1="12" x2="21" y2="12"></line>
-                                        <line x1="3" y1="18" x2="21" y2="18"></line>
-                                    </svg>
-                                }.into_any()
-                            }
-                        }}
-                    </button>
-                    <div class="landing-nav-actions">
-                        {move || {
-                            let state = auth_state.get();
-                            let role = user_role.get();
-                            match state {
-                                AuthState::NotSignedIn => {
-                                    view! {
-                                        <button
-                                            class="btn btn-outline btn-sm"
-                                            on:click=move |_| trigger_landing_oauth()
-                                        >
-                                            "Sign In"
-                                        </button>
-                                    }.into_any()
-                                }
-                                AuthState::SignedIn(email) => {
-                                    view! {
-                                        <span class="landing-email-text hide-mobile">
-                                            {email.clone()}
-                                        </span>
-                                        {if is_admin_role(&role) {
-                                            view! {
-                                                <A href="/admin" attr:class="btn btn-outline btn-sm">
-                                                    "Dashboard"
-                                                </A>
-                                            }.into_any()
-                                        } else if role == "staff" {
-                                            view! {
-                                                <A href="/staff" attr:class="btn btn-outline btn-sm">
-                                                    "Scanner"
-                                                </A>
-                                            }.into_any()
+                    <div class="landing-nav-right" style="display:flex;align-items:center;gap:8px;">
+                        <div class="landing-nav-actions">
+                            {move || {
+                                let state = auth_state.get();
+                                let role = user_role.get();
+                                match state {
+                                    AuthState::NotSignedIn => {
+                                        view! {
+                                            <button
+                                                class="btn btn-outline btn-sm"
+                                                on:click=move |_| trigger_landing_oauth()
+                                            >
+                                                "Sign In"
+                                            </button>
+                                        }.into_any()
+                                    }
+                                    AuthState::SignedIn(email) => {
+                                        let clean_email = email.clone();
+                                        let short_email = if clean_email.len() > 18 {
+                                            format!("{}...", &clean_email[..15])
                                         } else {
-                                            ().into_any()
-                                        }}
-                                        <button
-                                            class="btn btn-outline btn-sm"
-                                            on:click=move |_| trigger_landing_signout()
-                                        >
-                                            "Sign Out"
-                                        </button>
+                                            clean_email.clone()
+                                        };
+                                        let avatar_char = clean_email.chars().next().unwrap_or('?').to_uppercase().to_string();
+                                        view! {
+                                            <A href="/profile" attr:class="landing-user-badge" attr:style="display:flex;align-items:center;gap:6px;background:rgba(20,241,149,0.1);border:1px solid rgba(20,241,149,0.3);padding:4px 10px;border-radius:999px;text-decoration:none;color:#fff;font-weight:600;font-size:0.82rem;transition:all 0.2s ease;">
+                                                <span class="landing-user-avatar" style="width:22px;height:22px;border-radius:50%;background:#14F195;color:#000;display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:0.72rem;">
+                                                    {avatar_char}
+                                                </span>
+                                                <span class="landing-email-text hide-mobile" style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{short_email}</span>
+                                            </A>
+                                            {if is_admin_role(&role) {
+                                                view! {
+                                                    <A href="/admin" attr:class="btn btn-outline btn-xs landing-desktop-only-btn">
+                                                        "Dashboard"
+                                                    </A>
+                                                }.into_any()
+                                            } else if role == "staff" {
+                                                view! {
+                                                    <A href="/staff" attr:class="btn btn-outline btn-xs landing-desktop-only-btn">
+                                                        "Scanner"
+                                                    </A>
+                                                }.into_any()
+                                            } else {
+                                                ().into_any()
+                                            }}
+                                            <button
+                                                class="btn btn-outline btn-xs landing-desktop-only-btn"
+                                                style="color:#94a3b8;border-color:rgba(255,255,255,0.15);"
+                                                on:click=move |_| trigger_landing_signout()
+                                                title="Sign Out"
+                                            >
+                                                "Sign Out"
+                                            </button>
+                                        }.into_any()
+                                    }
+                                    AuthState::Checking => ().into_any(),
+                                }
+                            }}
+                        </div>
+                        // Hamburger button — visible only on mobile
+                        <button
+                            class="landing-nav-hamburger"
+                            on:click=move |_| set_mobile_menu_open.update(|v| *v = !*v)
+                        >
+                            {move || {
+                                let open = mobile_menu_open.get();
+                                if open {
+                                    view! {
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                                        </svg>
+                                    }.into_any()
+                                } else {
+                                    view! {
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                                            <line x1="3" y1="6" x2="21" y2="6"></line>
+                                            <line x1="3" y1="12" x2="21" y2="12"></line>
+                                            <line x1="3" y1="18" x2="21" y2="18"></line>
+                                        </svg>
                                     }.into_any()
                                 }
-                                AuthState::Checking => ().into_any(),
-                            }
-                        }}
+                            }}
+                        </button>
                     </div>
                 </div>
                 // Mobile dropdown menu
@@ -741,6 +734,10 @@ pub fn Landing() -> impl IntoView {
                                 <a href="#faq" on:click=move |_| set_mobile_menu_open.set(false)>"FAQ"</a>
                                 <a href="#waitlist" on:click=move |_| set_mobile_menu_open.set(false)>"For Organizers"</a>
                                 <a href="/past-events" on:click=move |_| set_mobile_menu_open.set(false)>"Past Events"</a>
+                                <A href="/profile" on:click=move |_| set_mobile_menu_open.set(false) attr:style="display:flex;align-items:center;gap:8px;">
+                                    <Icon icon=IconName::User class="icon-sm" />
+                                    "Developer Profile"
+                                </A>
                                 {move || match auth_state.get() {
                                     AuthState::NotSignedIn | AuthState::Checking => {
                                         view! {
@@ -758,20 +755,26 @@ pub fn Landing() -> impl IntoView {
                                     AuthState::SignedIn(email) => {
                                         let role = user_role.get();
                                         view! {
-                                            <div class="landing-mobile-divider">
-                                                <span class="landing-email-text">{email}</span>
-                                            </div>
                                             {if is_admin_role(&role) {
                                                 view! {
-                                                    <A href="/admin" on:click=move |_| set_mobile_menu_open.set(false)>"Dashboard"</A>
+                                                    <A href="/admin" on:click=move |_| set_mobile_menu_open.set(false) attr:style="display:flex;align-items:center;gap:8px;">
+                                                        <Icon icon=IconName::Chart class="icon-sm" />
+                                                        "Dashboard"
+                                                    </A>
                                                 }.into_any()
                                             } else if role == "staff" {
                                                 view! {
-                                                    <A href="/staff" on:click=move |_| set_mobile_menu_open.set(false)>"Scanner"</A>
+                                                    <A href="/staff" on:click=move |_| set_mobile_menu_open.set(false) attr:style="display:flex;align-items:center;gap:8px;">
+                                                        <Icon icon=IconName::Camera class="icon-sm" />
+                                                        "Scanner"
+                                                    </A>
                                                 }.into_any()
                                             } else {
                                                 ().into_any()
                                             }}
+                                            <div class="landing-mobile-divider" style="padding-top:8px;">
+                                                <span class="landing-email-text">{email}</span>
+                                            </div>
                                             <button
                                                 class="btn btn-outline btn-sm landing-mobile-signout"
                                                 on:click=move |_| {
@@ -855,6 +858,22 @@ pub fn Landing() -> impl IntoView {
                     <Icon icon=IconName::Solana />
                 </div>
 
+                // Platform stats — paper ticket stubs on the night ground
+                <div class="landing-stat-stubs">
+                    <div class="landing-stat-stub">
+                        <div class="landing-stat-stub-value stub-green">"100%"</div>
+                        <div class="landing-stat-stub-label">"Refund Guarantee"</div>
+                    </div>
+                    <div class="landing-stat-stub">
+                        <div class="landing-stat-stub-value stub-poppy">"Instant"</div>
+                        <div class="landing-stat-stub-label">"PromptPay & Solana Payouts"</div>
+                    </div>
+                    <div class="landing-stat-stub">
+                        <div class="landing-stat-stub-value">"< 1s"</div>
+                        <div class="landing-stat-stub-label">"Smart Contract Check-In"</div>
+                    </div>
+                </div>
+
                 <div class="landing-ctas">
                     {move || {
                         let state = auth_state.get();
@@ -894,30 +913,20 @@ pub fn Landing() -> impl IntoView {
                                 }.into_any()
                             }
                             _ => {
-                                // Attendee persona — primary = find events, ghost = create
+                                // Attendee persona — primary = find events, secondary = create event
                                 view! {
                                     <a href="#events" class="btn btn-primary landing-cta-link">
                                         "Find Events ↓"
                                     </a>
+                                    <button
+                                        class="btn btn-outline landing-cta-link"
+                                        on:click=move |_| trigger_landing_oauth()
+                                    >
+                                        "Create an Event →"
+                                    </button>
                                 }.into_any()
                             }
                         }
-                    }}
-                    {move || match auth_state.get() {
-                        AuthState::SignedIn(_) => ().into_any(),
-                        _ if persona.get() == 0 => view! {
-                            <button
-                                class="btn btn-outline landing-cta-link"
-                                on:click=move |_| trigger_landing_oauth()
-                            >
-                                "Create an Event"
-                            </button>
-                        }.into_any(),
-                        _ => view! {
-                            <a href="#events" class="btn btn-outline landing-cta-link">
-                                "Find Events"
-                            </a>
-                        }.into_any(),
                     }}
                 </div>
             </section>
