@@ -80,10 +80,20 @@ verification (or wallet-email binding) before reserving under a non-owned addres
 
 ---
 
-## 4. MEDIUM — Rolling-credit double-spend across concurrent registrations
+## 4. MEDIUM — Rolling-credit double-spend across concurrent registrations *(FIXED this session)*
 
 **File:** `worker/src/handlers/register/signup.rs` (read ~L302-321, decrement
-~L387-413). **PLAUSIBLE.**
+~L387-413). **PLAUSIBLE → mitigated.**
+
+**Fix applied (serialization, not the D1-authoritative rewrite below):** the credit
+spend now takes a short **per-email D1 advisory lock** (`credit-spend:<email>`,
+`db::advisory_locks`, migration `0027`) and **re-reads the balance under the lock**
+before decrementing. Two concurrent registrations by the same email serialize; the
+loser (can't acquire the lock, or finds the credit already spent) falls back to
+normal payment and keeps its credit. This closes the race without changing the
+credit source of truth, so it carries none of the divergence risk of the
+D1-authoritative approach — which is left below as an optional future cleanup, no
+longer required for correctness.
 
 **What:** Credit is read (`get_credit_balance`) then decremented
 (`decrement_credit`) against the Google **Contacts Sheet**, which has no

@@ -419,22 +419,69 @@ pub async fn register_attendee(
         let currency = if method == "credit_thb" { "thb" } else { "usdc" };
         let decremented = match resolved_contacts_sheet {
             Some(ref resolved) => {
-                match crate::sheets::contacts::decrement_credit(
-                    &state,
-                    &resolved.sheet_id,
-                    &resolved.contacts_sheet_name,
-                    kv,
-                    &email,
-                    currency,
-                    credit_amount_applied,
-                )
-                .await
-                {
-                    Ok(()) => true,
-                    Err(e) => {
-                        tracing::error!(%email, error = %e, "rolling credit decrement failed — NOT applying credit; attendee pays normally");
+                // SECURITY (#4): the Google Sheet has no compare-and-swap, so two
+                // concurrent registrations by the same email could both read a
+                // sufficient balance and both decrement it (double-spend). Serialize
+                // the spend with a short per-email D1 advisory lock and RE-READ the
+                // balance under it — only decrement if it's still sufficient. A
+                // request that can't acquire the lock (or finds the credit already
+                // spent) falls back to normal payment and keeps its credit.
+                let lock_key = format!("credit-spend:{email}");
+                let lock_db = state.d1.as_deref();
+                let acquired = match lock_db {
+                    Some(db) => crate::db::advisory_locks::try_acquire(db, &lock_key, 30)
+                        .await
+                        .unwrap_or(false),
+                    None => true, // no D1 → no lock available; preserve prior behavior
+                };
+                if !acquired {
+                    tracing::warn!(%email, "credit-spend lock busy — falling back to payment (credit kept)");
+                    false
+                } else {
+                    // Authoritative re-check under the lock.
+                    let still_sufficient = crate::sheets::contacts::get_credit_balance(
+                        &state,
+                        &resolved.sheet_id,
+                        &resolved.contacts_sheet_name,
+                        kv,
+                        &email,
+                    )
+                    .await
+                    .map(|(thb, usdc)| {
+                        if currency == "thb" {
+                            thb >= credit_amount_applied
+                        } else {
+                            usdc >= credit_amount_applied
+                        }
+                    })
+                    .unwrap_or(false);
+
+                    let ok = if !still_sufficient {
+                        tracing::warn!(%email, "credit no longer sufficient under lock — falling back to payment");
                         false
+                    } else {
+                        match crate::sheets::contacts::decrement_credit(
+                            &state,
+                            &resolved.sheet_id,
+                            &resolved.contacts_sheet_name,
+                            kv,
+                            &email,
+                            currency,
+                            credit_amount_applied,
+                        )
+                        .await
+                        {
+                            Ok(()) => true,
+                            Err(e) => {
+                                tracing::error!(%email, error = %e, "rolling credit decrement failed — NOT applying credit; attendee pays normally");
+                                false
+                            }
+                        }
+                    };
+                    if let Some(db) = lock_db {
+                        let _ = crate::db::advisory_locks::release(db, &lock_key).await;
                     }
+                    ok
                 }
             }
             None => {

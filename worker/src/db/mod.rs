@@ -1,4 +1,5 @@
 pub mod adventure;
+pub mod advisory_locks;
 pub mod attendees;
 pub mod audit;
 pub mod campaigns;
