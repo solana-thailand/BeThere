@@ -299,13 +299,28 @@ pub async fn credit_liability_handler(
 ) -> Result<ApiOk<crate::db::contacts::CreditLiability>, WorkerError> {
     tracing::info!(admin_email = %claims.email, "credit liability requested");
 
+    // Source of truth is the org-scoped credit ledger (the old path summed a D1
+    // contacts column that hold never wrote, so it always read zero — masking a
+    // ฿5,000 real liability). Fold the per-(org,currency) rows into the existing
+    // CreditLiability shape so the admin chip's response is unchanged.
     let liability = match state.d1.as_deref() {
-        Some(db) => crate::db::contacts::credit_liability(db).await,
-        // No D1 binding → we cannot read credit state. The contacts sheet is
-        // the alternate source but a SUM over it would be a full-table scan +
-        // per-row parse via the Sheets API (expensive + rate-limited). D1 is
-        // the read path for aggregates (handover 104). Degrade to zero rather
-        // than block the deposits view.
+        Some(db) => match crate::db::credit_ledger::liability(db).await {
+            Ok(rows) => {
+                let mut out = crate::db::contacts::CreditLiability::default();
+                for r in &rows {
+                    if r.currency == "usdc" {
+                        out.total_usdc += r.balance;
+                    } else {
+                        out.total_thb += r.balance;
+                    }
+                }
+                out.contact_count = rows.iter().map(|r| r.holders).max().unwrap_or(0);
+                out
+            }
+            Err(_) => crate::db::contacts::CreditLiability::default(),
+        },
+        // No D1 → cannot read credit state; degrade to zero rather than block
+        // the deposits view.
         None => crate::db::contacts::CreditLiability::default(),
     };
 

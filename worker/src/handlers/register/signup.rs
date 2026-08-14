@@ -318,28 +318,22 @@ pub async fn register_attendee(
     // 5c. Check if attendee has rolling deposit credit that covers this event's deposit
     let mut credit_covered_method: Option<String> = None;
     let mut credit_amount_applied: u64 = 0;
-    let mut resolved_contacts_sheet: Option<event_checkin_domain::models::org::ResolvedContactsSheet> = None;
 
     if config.deposit_enabled && !is_online_participation(&participation_type) && credit_identity_ok {
-        let resolved_contacts = if let Some(db) = state.d1.as_deref() {
-            crate::org_store::resolve_contacts_sheet(db, &config, &state.config.sheets).await
-        } else {
-            event_checkin_domain::models::org::ResolvedContactsSheet {
-                sheet_id: state.config.sheets.contacts_sheet_id.clone(),
-                contacts_sheet_name: state.config.sheets.contacts_sheet_name.clone(),
-                events_sheet_name: state.config.sheets.events_sheet_name.clone(),
-            }
-        };
-        if !resolved_contacts.sheet_id.is_empty()
-            && let Ok((credit_thb, credit_usdc)) = crate::sheets::contacts::get_credit_balance(
-                &state,
-                &resolved_contacts.sheet_id,
-                &resolved_contacts.contacts_sheet_name,
-                kv,
-                &email,
-            )
-            .await
-        {
+        // Balance comes from the org-scoped D1 credit ledger (source of truth),
+        // not the Google Contacts sheet (whose duplicate rows shadowed credit and
+        // whose non-atomic writes lost it — incident 2026-08-14). Scoped by the
+        // event's organization_id so Org A's credit can't cover Org B's deposit.
+        if let Some(db) = state.d1.as_deref() {
+            let org = &config.organization_id;
+            let credit_thb = crate::db::credit_ledger::balance(db, &email, org, "thb")
+                .await
+                .unwrap_or(0)
+                .max(0) as u64;
+            let credit_usdc = crate::db::credit_ledger::balance(db, &email, org, "usdc")
+                .await
+                .unwrap_or(0)
+                .max(0) as u64;
             let required_thb = config.deposit_amount_thb;
             let required_usdc = config.deposit_amount_usdc;
             if required_thb > 0 && credit_thb >= required_thb {
@@ -349,10 +343,9 @@ pub async fn register_attendee(
                 credit_covered_method = Some("credit_usdc".to_string());
                 credit_amount_applied = required_usdc;
             }
-        }
-        if let Some(ref method) = credit_covered_method {
-            tracing::info!(%email, %slug, %method, amount = credit_amount_applied, "deposit covered by rolling credit");
-            resolved_contacts_sheet = Some(resolved_contacts);
+            if let Some(ref method) = credit_covered_method {
+                tracing::info!(%email, %slug, %method, amount = credit_amount_applied, "deposit covered by rolling credit (ledger)");
+            }
         }
     }
 
@@ -417,89 +410,45 @@ pub async fn register_attendee(
     // credit whenever the decrement fails — real money leaking on every retry.
     if let Some(method) = credit_covered_method.clone() {
         let currency = if method == "credit_thb" { "thb" } else { "usdc" };
-        let decremented = match resolved_contacts_sheet {
-            Some(ref resolved) => {
-                // SECURITY (#4): the Google Sheet has no compare-and-swap, so two
-                // concurrent registrations by the same email could both read a
-                // sufficient balance and both decrement it (double-spend). Serialize
-                // the spend with a short per-email D1 advisory lock and RE-READ the
-                // balance under it — only decrement if it's still sufficient. A
-                // request that can't acquire the lock (or finds the credit already
-                // spent) falls back to normal payment and keeps its credit.
-                let lock_key = format!("credit-spend:{email}");
-                let lock_db = state.d1.as_deref();
-                // Distinguish CONTENTION (someone else holds the lock → fall back to
-                // payment) from the lock infra being UNAVAILABLE (e.g. the
-                // advisory_locks table isn't migrated yet, or a transient D1 error →
-                // degrade to the pre-lock behavior and apply credit, which is no worse
-                // than before the lock existed). `held` tracks whether we must release.
-                let (proceed, held) = match lock_db {
-                    Some(db) => match crate::db::advisory_locks::try_acquire(db, &lock_key, 30).await
-                    {
-                        Ok(true) => (true, true),
-                        Ok(false) => (false, false),
-                        Err(e) => {
-                            tracing::warn!(%email, error = %e, "credit-spend lock unavailable — proceeding without serialization");
-                            (true, false)
-                        }
-                    },
-                    None => (true, false), // no D1 → no lock available; preserve prior behavior
-                };
-                if !proceed {
-                    tracing::warn!(%email, "credit-spend lock busy — falling back to payment (credit kept)");
-                    false
-                } else {
-                    // Authoritative re-check under the lock.
-                    let still_sufficient = crate::sheets::contacts::get_credit_balance(
-                        &state,
-                        &resolved.sheet_id,
-                        &resolved.contacts_sheet_name,
-                        kv,
-                        &email,
-                    )
-                    .await
-                    .map(|(thb, usdc)| {
-                        if currency == "thb" {
-                            thb >= credit_amount_applied
-                        } else {
-                            usdc >= credit_amount_applied
-                        }
-                    })
-                    .unwrap_or(false);
-
-                    let ok = if !still_sufficient {
-                        tracing::warn!(%email, "credit no longer sufficient under lock — falling back to payment");
-                        false
-                    } else {
-                        match crate::sheets::contacts::decrement_credit(
-                            &state,
-                            &resolved.sheet_id,
-                            &resolved.contacts_sheet_name,
-                            kv,
-                            &email,
-                            currency,
-                            credit_amount_applied,
-                        )
-                        .await
-                        {
-                            Ok(()) => true,
-                            Err(e) => {
-                                tracing::error!(%email, error = %e, "rolling credit decrement failed — NOT applying credit; attendee pays normally");
-                                false
-                            }
-                        }
-                    };
-                    if held && let Some(db) = lock_db {
-                        let _ = crate::db::advisory_locks::release(db, &lock_key).await;
-                    }
-                    ok
-                }
-            }
-            None => {
-                tracing::error!(%email, "no resolved contacts sheet for credit decrement — NOT applying credit");
-                false
-            }
+        // Atomic spend against the org-scoped credit ledger: one conditional
+        // INSERT (balance >= amount) — no advisory lock or Sheets re-read needed,
+        // and two concurrent registrations for the same email can't double-spend
+        // (guard + insert are a single statement). Idempotent per (event, email).
+        let apply_key = format!("apply:{}:{}", event_id, email.to_lowercase());
+        let decremented = match state.d1.as_deref() {
+            Some(db) => crate::db::credit_ledger::try_spend(
+                db,
+                &email,
+                &config.organization_id,
+                currency,
+                credit_amount_applied as i64,
+                &event_id,
+                &apply_key,
+            )
+            .await
+            .unwrap_or(false),
+            // No D1 → can't spend safely → charge normally and keep the credit.
+            None => false,
         };
+        // Best-effort Sheets mirror of the spend (display only; ledger is truth).
+        if decremented
+            && let Some(db) = state.d1.as_deref()
+        {
+            let resolved =
+                crate::org_store::resolve_contacts_sheet(db, &config, &state.config.sheets).await;
+            if !resolved.sheet_id.is_empty() {
+                let _ = crate::sheets::contacts::decrement_credit(
+                    &state,
+                    &resolved.sheet_id,
+                    &resolved.contacts_sheet_name,
+                    kv,
+                    &email,
+                    currency,
+                    credit_amount_applied,
+                )
+                .await;
+            }
+        }
 
         if decremented {
             // Credit consumed — record the covered, verified deposit.

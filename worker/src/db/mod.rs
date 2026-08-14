@@ -5,6 +5,7 @@ pub mod audit;
 pub mod campaigns;
 pub mod claim_locks;
 pub mod contacts;
+pub mod credit_ledger;
 pub mod d1_safe;
 pub mod dashboard;
 pub mod deposit_statuses;
