@@ -1526,6 +1526,9 @@ pub fn Admin() -> impl IntoView {
                                         let is_deposit_verified = attendee.deposit_verified.as_deref() == Some("true");
                                         if attendee.refund_status.is_some() {
                                             Some(("badge badge-refunded", "Refunded"))
+                                        } else if attendee.used_credit {
+                                            // Got in by spending rolling credit — distinct from cash.
+                                            Some(("badge badge-info", "Credit \u{2713}"))
                                         } else if is_deposit_verified {
                                             Some(("badge badge-success", "Deposit \u{2713}"))
                                         } else if has_deposit {

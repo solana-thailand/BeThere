@@ -175,6 +175,11 @@ pub struct AttendeeListItem {
     /// action + credit badge on the in-person list.
     #[serde(default)]
     pub credit_thb: i64,
+    /// Whether the attendee got in by SPENDING rolling credit at THIS event
+    /// (has an `apply` ledger entry for it). Annotated by the list handler; drives
+    /// the "Credit ✓" badge distinguishing credit-covered from cash registrations.
+    #[serde(default)]
+    pub used_credit: bool,
 }
 
 impl AttendeeListItem {
@@ -202,8 +207,9 @@ impl AttendeeListItem {
             nft_proof_url: attendee.nft_proof_url.clone(),
             refund_status: attendee.refund_status.clone(),
             refund_link: attendee.refund_link.clone(),
-            // Default 0; the list handler annotates the real balance post-build.
+            // Defaults; the list handler annotates these post-build from the ledger.
             credit_thb: 0,
+            used_credit: false,
         }
     }
 }

@@ -139,16 +139,25 @@ pub async fn list_attendees(
         .map(|a| AttendeeListItem::from_attendee(a))
         .collect();
 
-    // Annotate each row with the attendee's rolling THB credit (org-scoped) via a
-    // single batch query — powers the "Apply Credit" action + credit badge on the
-    // in-person list. Best-effort: a failure just leaves credit at 0.
-    if let Some(db) = state.d1.as_deref()
-        && let Ok(balances) =
+    // Annotate each row from the credit ledger (two batch queries, best-effort):
+    //  - credit_thb: remaining rolling credit (powers the Apply-Credit action + badge)
+    //  - used_credit: whether the attendee got in by spending credit AT this event
+    //    (powers the "Credit ✓" badge / who-used-credit view)
+    if let Some(db) = state.d1.as_deref() {
+        if let Ok(balances) =
             crate::db::credit_ledger::thb_balances_by_email(db, &event.organization_id).await
-    {
-        for item in attendee_responses.iter_mut() {
-            if let Some(&bal) = balances.get(&item.email.to_lowercase()) {
-                item.credit_thb = bal.max(0);
+        {
+            for item in attendee_responses.iter_mut() {
+                if let Some(&bal) = balances.get(&item.email.to_lowercase()) {
+                    item.credit_thb = bal.max(0);
+                }
+            }
+        }
+        if let Ok(applied) = crate::db::credit_ledger::emails_applied_credit(db, &event.id).await {
+            for item in attendee_responses.iter_mut() {
+                if applied.contains(&item.email.to_lowercase()) {
+                    item.used_credit = true;
+                }
             }
         }
     }

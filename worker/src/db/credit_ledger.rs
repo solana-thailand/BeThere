@@ -13,7 +13,7 @@
 //! See migration `0028_credit_ledger.sql`. The sheet stays as a display mirror.
 
 use super::d1_safe::safe_all_rows;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use worker::{D1Database, D1Type};
 
 /// Audit reason label for a hold entry (deposit converted to rolling credit).
@@ -215,6 +215,30 @@ pub async fn thb_balances_by_email(
         }
     }
     Ok(map)
+}
+
+/// Lowercased emails that APPLIED (spent) rolling credit at a given event — i.e.
+/// attendees who "got in using credit". Powers the Credit ✓ badge / credit-used
+/// list on the in-person roster. One query; membership lookup in-memory.
+pub async fn emails_applied_credit(
+    db: &D1Database,
+    event_id: &str,
+) -> Result<HashSet<String>, String> {
+    let sql = "SELECT DISTINCT email FROM credit_ledger \
+               WHERE event_id = ?1 AND reason = 'apply'";
+    let stmt = db
+        .prepare(sql)
+        .bind_refs(&[D1Type::Text(event_id)])
+        .map_err(|e| format!("D1 credit_ledger emails_applied bind: {e:?}"))?;
+    let rows = safe_all_rows(&stmt).await?;
+    Ok(rows
+        .into_iter()
+        .filter_map(|v| {
+            v.get("email")
+                .and_then(|x| x.as_str())
+                .map(|s| s.to_lowercase())
+        })
+        .collect())
 }
 
 /// Result of a credit-ledger reconciliation sweep (run daily by the cron). An
