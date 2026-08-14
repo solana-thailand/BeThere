@@ -416,6 +416,12 @@ pub fn routes(state: AppState) -> Router<()> {
             "/refund/hold/{attendee_id}",
             post(deposit::admin_hold_deposit_handler),
         )
+        // Admin applies an attendee's rolling credit to complete a registration
+        // stuck at the deposit step (credit-holder who never uploaded a slip).
+        .route(
+            "/deposit/apply-credit/{attendee_id}",
+            post(deposit::admin_apply_credit_handler),
+        )
         // Total deposit-credit liability across all contacts — the organizer's
         // "Total credit held" header chip (Issue #061 Phase 2 option a2).
         // One D1 SUM/COUNT; degrades to zeros if D1 is unavailable.
