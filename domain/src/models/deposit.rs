@@ -157,6 +157,23 @@ pub struct ThbDeposit {
     pub refund_proof_url: Option<String>,
 }
 
+impl ThbDeposit {
+    /// True when this deposit is NOT backed by real cash — a rolling-credit
+    /// application (`SYSTEM_ROLLING_CREDIT` / `ROLLING_CREDIT_AUTO_APPLIED`) or a
+    /// staff comp (`SYSTEM_STAFF_WAIVE` / `STAFF_COMP_WAIVED` / ฿0). Such a deposit
+    /// must never be cash-refunded or re-held-as-credit: doing so would pay out —
+    /// or mint credit from — money that was never deposited.
+    pub fn is_non_cash(&self) -> bool {
+        matches!(
+            self.verified_by.as_deref(),
+            Some("SYSTEM_ROLLING_CREDIT" | "SYSTEM_STAFF_WAIVE")
+        ) || matches!(
+            self.slip_url.as_deref(),
+            Some("ROLLING_CREDIT_AUTO_APPLIED" | "STAFF_COMP_WAIVED")
+        ) || self.amount_thb == 0
+    }
+}
+
 /// Request body for POST /api/deposit/usdc — build a Solana Pay deposit TX.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UsdcDepositRequest {

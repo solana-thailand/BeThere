@@ -560,7 +560,12 @@ pub fn AdminDeposits(
                             let uploaded_ago = utils::time_ago(&slip.uploaded_at);
                             let uploaded_formatted = utils::format_timestamp(&slip.uploaded_at);
                             let slip_url = slip.slip_url.clone();
-                            let has_slip_url = slip_url.is_some();
+                            // Only real serving paths are viewable slips. Credit-covered /
+                            // staff-comp deposits store a sentinel (ROLLING_CREDIT_AUTO_APPLIED /
+                            // STAFF_COMP_WAIVED) in slip_url — not a URL — so suppress the link.
+                            let has_slip_url = slip_url
+                                .as_deref()
+                                .is_some_and(|u| u.starts_with("/api/") || u.starts_with("http"));
                             let display_name = slip.attendee_name.as_deref().unwrap_or(&slip.attendee_id);
 
                             let slip_for_approve = slip.clone();
@@ -658,7 +663,12 @@ pub fn AdminDeposits(
                             let verified_at = item.verified_at.as_deref().map(utils::format_timestamp).unwrap_or_else(|| "N/A".to_string());
                             let display_name = item.attendee_name.as_deref().unwrap_or(&item.attendee_id);
                             let slip_url = item.slip_url.clone();
-                            let has_slip_url = slip_url.is_some();
+                            // Only real serving paths are viewable slips. Credit-covered /
+                            // staff-comp deposits store a sentinel (ROLLING_CREDIT_AUTO_APPLIED /
+                            // STAFF_COMP_WAIVED) in slip_url — not a URL — so suppress the link.
+                            let has_slip_url = slip_url
+                                .as_deref()
+                                .is_some_and(|u| u.starts_with("/api/") || u.starts_with("http"));
                             let has_bank_info = item.bank_account.is_some() && item.bank_name.is_some() && item.account_name.is_some();
                             let display_bank_account = item.bank_account.clone();
                             let display_bank_name = item.bank_name.clone();
@@ -819,7 +829,12 @@ pub fn AdminDeposits(
                             let refunded_at = item.refunded_at.as_deref().map(utils::format_timestamp).unwrap_or_else(|| "N/A".to_string());
                             let display_name = item.attendee_name.as_deref().unwrap_or(&item.attendee_id).to_string();
                             let slip_url = item.slip_url.clone();
-                            let has_slip_url = slip_url.is_some();
+                            // Only real serving paths are viewable slips. Credit-covered /
+                            // staff-comp deposits store a sentinel (ROLLING_CREDIT_AUTO_APPLIED /
+                            // STAFF_COMP_WAIVED) in slip_url — not a URL — so suppress the link.
+                            let has_slip_url = slip_url
+                                .as_deref()
+                                .is_some_and(|u| u.starts_with("/api/") || u.starts_with("http"));
                             let has_bank_info = item.bank_account.is_some() && item.bank_name.is_some() && item.account_name.is_some();
                             let display_bank_account = item.bank_account.clone();
                             let display_bank_name = item.bank_name.clone();
@@ -1026,7 +1041,12 @@ pub fn AdminDeposits(
                             let held_at = item.held_as_credit_at.as_deref().map(utils::format_timestamp).unwrap_or_else(|| "N/A".to_string());
                             let display_name = item.attendee_name.as_deref().unwrap_or(&item.attendee_id).to_string();
                             let slip_url = item.slip_url.clone();
-                            let has_slip_url = slip_url.is_some();
+                            // Only real serving paths are viewable slips. Credit-covered /
+                            // staff-comp deposits store a sentinel (ROLLING_CREDIT_AUTO_APPLIED /
+                            // STAFF_COMP_WAIVED) in slip_url — not a URL — so suppress the link.
+                            let has_slip_url = slip_url
+                                .as_deref()
+                                .is_some_and(|u| u.starts_with("/api/") || u.starts_with("http"));
 
                             (amount, verified_by, held_at, display_name, slip_url, has_slip_url)
                         }).collect();

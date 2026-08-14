@@ -57,6 +57,15 @@ pub async fn mark_refund_handler(
         .into());
     }
 
+    // MONEY-SAFETY: a rolling-credit application or staff comp was never funded
+    // with cash — cash-refunding it would pay out money that was never deposited.
+    if thb_deposit.is_non_cash() {
+        return Err(AppError::Validation(
+            "this is a credit-covered / comp deposit (no cash was received) — it cannot be cash-refunded".to_string(),
+        )
+        .into());
+    }
+
     if !thb_deposit.verified {
         return Err(
             AppError::Validation("deposit not verified yet — cannot refund".to_string()).into(),
@@ -279,6 +288,12 @@ pub async fn batch_thb_refund_handler(
         // MONEY-SAFETY: never cash-refund a deposit already held as rolling
         // credit — the attendee already received that value as credit.
         if dep.held_as_credit {
+            skipped += 1;
+            continue;
+        }
+        // MONEY-SAFETY: never cash-refund a non-cash deposit (rolling-credit
+        // application / staff comp / ฿0) — no cash was ever received.
+        if dep.is_non_cash() {
             skipped += 1;
             continue;
         }

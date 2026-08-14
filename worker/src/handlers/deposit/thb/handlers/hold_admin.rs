@@ -193,6 +193,15 @@ pub async fn admin_hold_deposit_handler(
     if thb_deposit.held_as_credit {
         return Err(AppError::Validation("deposit already held as credit".to_string()).into());
     }
+    // MONEY-SAFETY: a rolling-credit application / staff comp was never funded
+    // with cash. Holding it as credit would MINT credit from a deposit that was
+    // itself created from credit (free ticket + restored balance).
+    if thb_deposit.is_non_cash() {
+        return Err(AppError::Validation(
+            "this is a credit-covered / comp deposit — it cannot be held as rolling credit".to_string(),
+        )
+        .into());
+    }
 
     // 5. Resolve per-org contacts sheet (same logic as the attendee handler).
     let resolved = if let Some(db) = state.d1.as_deref() {

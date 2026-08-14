@@ -89,7 +89,10 @@ pub async fn refund_queue_handler(
     // admin does not double-process a deposit the attendee already converted.
     let mut pending: Vec<ThbDeposit> = all_deposits
         .into_iter()
-        .filter(|d| d.verified && !d.refunded && !d.held_as_credit)
+        // Exclude non-cash deposits (rolling-credit applications, staff comps, ฿0):
+        // they were never funded with cash, so they must not enter the refund
+        // queue — refunding one pays out money that was never deposited.
+        .filter(|d| d.verified && !d.refunded && !d.held_as_credit && !d.is_non_cash())
         .collect();
 
     // Migrate any inline base64 slip/refund URLs to R2 (keeps response payload small)
