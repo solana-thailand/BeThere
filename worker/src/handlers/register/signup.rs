@@ -170,9 +170,22 @@ pub async fn register_attendee(
         .into());
     }
 
-    // 3e. Validate deposit agreement if deposit is enabled — skip for Online attendees
+    // Staff / organizer / super-admin registering for their own event: waive the
+    // deposit entirely (they run the event, won't no-show). This replaces the old
+    // workaround of uploading a fake slip to get past the deposit step, and marks
+    // the record as a comp so it is never treated as a cash deposit to refund.
+    let deposit_waived = crate::event_store::has_event_access(&config, &email)
+        || state.is_staff(&email)
+        || state
+            .config
+            .super_admin_emails
+            .contains(&email.to_lowercase());
+
+    // 3e. Validate deposit agreement if deposit is enabled — skip for Online
+    // attendees and for waived staff/organizers.
     if config.deposit_enabled
         && !is_online_participation(&participation_type)
+        && !deposit_waived
         && body.deposit_agreed != Some(true)
     {
         return Err(AppError::Validation(
@@ -319,7 +332,11 @@ pub async fn register_attendee(
     let mut credit_covered_method: Option<String> = None;
     let mut credit_amount_applied: u64 = 0;
 
-    if config.deposit_enabled && !is_online_participation(&participation_type) && credit_identity_ok {
+    if config.deposit_enabled
+        && !is_online_participation(&participation_type)
+        && credit_identity_ok
+        && !deposit_waived
+    {
         // Balance comes from the org-scoped D1 credit ledger (source of truth),
         // not the Google Contacts sheet (whose duplicate rows shadowed credit and
         // whose non-atomic writes lost it — incident 2026-08-14). Scoped by the
@@ -481,6 +498,41 @@ pub async fn register_attendee(
         } else {
             // Fail closed: revert to the normal payment path (credit untouched).
             credit_covered_method = None;
+        }
+    }
+
+    // Staff/organizer comp: record a waived deposit (฿0, verified, not
+    // refundable) so the ticket flow proceeds without a real or faked payment.
+    // Marked distinctly (STAFF_COMP_WAIVED / ฿0) so refund + held-as-credit
+    // tooling never treats it as cash.
+    if deposit_waived
+        && config.deposit_enabled
+        && !is_online_participation(&participation_type)
+    {
+        let comp = event_checkin_domain::models::deposit::ThbDeposit {
+            event_id: event_id.clone(),
+            attendee_id: api_id.clone(),
+            amount_thb: 0,
+            slip_url: Some("STAFF_COMP_WAIVED".to_string()),
+            verified: true,
+            verified_at: Some(now.clone()),
+            verified_by: Some("SYSTEM_STAFF_WAIVE".to_string()),
+            uploaded_at: now.clone(),
+            refunded: false,
+            refunded_at: None,
+            held_as_credit: false,
+            held_as_credit_at: None,
+            attendee_name: Some(name.to_string()),
+            bank_account: None,
+            bank_name: None,
+            account_name: None,
+            refund_proof_url: None,
+        };
+        if let Some(kv_store) = kv
+            && let Err(e) =
+                crate::event_store::save_thb_deposit(kv_store, &comp, state.d1.as_deref()).await
+        {
+            tracing::warn!(%api_id, %email, error = %e, "staff comp deposit record save failed");
         }
     }
 
@@ -700,7 +752,7 @@ pub async fn register_attendee(
     // 10. Determine next_step based on event format and participation type
     // Note: deposit_method is now written in the background (step 9b)
     // New registrations are never checked in or claimed yet
-    let next_step = if credit_covered_method.is_some() {
+    let next_step = if credit_covered_method.is_some() || deposit_waived {
         NextStep {
             step_type: "ticket".to_string(),
             url: format!("/ticket/{api_id}?event_id={event_id}"),
