@@ -425,6 +425,27 @@ pub async fn get_credit_refund_requested(db: &D1Database, email: &str) -> bool {
     }
 }
 
+/// Read the timestamp of a contact's OPEN credit-refund request (the value of
+/// `credit_refund_requested_at` while the flag is set), or `None` if no request
+/// is open. Used as a stable idempotency key when reversing held credit in the
+/// ledger on payout, so a double-clear can't double-refund (each request stamps
+/// a fresh `requested_at`).
+pub async fn get_credit_refund_requested_at(db: &D1Database, email: &str) -> Option<String> {
+    let email_lower = email.to_lowercase();
+    let stmt = db.prepare(
+        "SELECT COALESCE(credit_refund_requested_at, '') AS requested_at \
+         FROM contacts \
+         WHERE email = ?1 AND credit_refund_requested = 1",
+    );
+    let bound = stmt.bind_refs(&[D1Type::Text(&email_lower)]).ok()?;
+    let rows = safe_all_rows(&bound).await.ok()?;
+    rows.into_iter().next().and_then(|v| {
+        v.get("requested_at")
+            .and_then(|x| x.as_str())
+            .map(str::to_string)
+    })
+}
+
 // ---------------------------------------------------------------------------
 // Per-contact event history (Plan 008 §3.5 — read-side fix)
 // ---------------------------------------------------------------------------

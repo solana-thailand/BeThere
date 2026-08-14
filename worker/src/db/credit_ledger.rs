@@ -16,9 +16,12 @@ use super::d1_safe::safe_all_rows;
 use worker::{D1Database, D1Type};
 
 /// Audit reason label for a hold entry (deposit converted to rolling credit).
-/// `apply` (spend) is written inline by [`try_spend`]; `refund`/`backfill` are
-/// used by the SQL backfill + future refund path.
+/// `apply` (spend) is written inline by [`try_spend`]; `backfill` is used by the
+/// SQL backfill.
 pub const REASON_HOLD: &str = "hold";
+/// Audit reason label for a refund reversal (organizer paid the held credit back
+/// out-of-band → remove it from the ledger).
+pub const REASON_REFUND: &str = "refund";
 
 /// Record a signed credit movement.
 ///
@@ -184,4 +187,60 @@ pub async fn liability(db: &D1Database) -> Result<Vec<OrgLiability>, String> {
         .into_iter()
         .filter_map(|v| serde_json::from_value::<OrgLiability>(v).ok())
         .collect())
+}
+
+/// Result of a credit-ledger reconciliation sweep (run daily by the cron). An
+/// all-zero report is healthy; any nonzero count is a money-integrity alarm.
+#[derive(Debug, Default, Clone)]
+pub struct ReconcileReport {
+    /// Held deposits (`held_as_credit=1, refunded=0`) with NO matching ledger
+    /// `hold` entry — credit that was converted but never recorded. This is the
+    /// exact 2026-08-14 loss signature.
+    pub orphan_holds: i64,
+    /// `(email, org, currency)` groups whose net balance is negative — an
+    /// over-spend the atomic `try_spend` guard should make impossible; nonzero
+    /// means an invariant broke.
+    pub negative_balances: i64,
+}
+
+impl ReconcileReport {
+    pub fn is_clean(&self) -> bool {
+        self.orphan_holds == 0 && self.negative_balances == 0
+    }
+}
+
+async fn count_query(db: &D1Database, sql: &str) -> Result<i64, String> {
+    let stmt = db.prepare(sql);
+    let rows = safe_all_rows(&stmt).await?;
+    Ok(rows
+        .into_iter()
+        .next()
+        .and_then(|v| v.get("n").and_then(serde_json::Value::as_i64))
+        .unwrap_or(0))
+}
+
+/// Reconcile the ledger against deposit truth. Two cheap COUNT queries — safe to
+/// run daily from the cron. Callers alert (Slack) on a non-clean report so a
+/// silent credit loss surfaces within a day instead of at the next event.
+pub async fn reconcile(db: &D1Database) -> Result<ReconcileReport, String> {
+    let orphan_holds = count_query(
+        db,
+        "SELECT COUNT(*) AS n FROM thb_deposits d \
+         WHERE d.held_as_credit = 1 AND d.refunded = 0 \
+           AND NOT EXISTS (SELECT 1 FROM credit_ledger l \
+                           WHERE l.reason = 'hold' \
+                             AND l.deposit_id = d.event_id || ':' || d.attendee_id)",
+    )
+    .await?;
+    let negative_balances = count_query(
+        db,
+        "SELECT COUNT(*) AS n FROM (\
+             SELECT SUM(delta) AS bal FROM credit_ledger \
+             GROUP BY email, organization_id, currency HAVING SUM(delta) < 0)",
+    )
+    .await?;
+    Ok(ReconcileReport {
+        orphan_holds,
+        negative_balances,
+    })
 }
