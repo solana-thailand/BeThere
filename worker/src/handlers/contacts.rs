@@ -34,7 +34,11 @@ pub struct ContactsListResponse {
 #[worker::send]
 pub async fn list_contacts_handler(
     State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
 ) -> Result<ApiOk<ContactsListResponse>, WorkerError> {
+    // Cross-org platform view — super-admin only (was ungated: any staff could
+    // dump every org's contacts). See admin security review S1.
+    crate::auth::require_super_admin(&claims.email, &state, "view all contacts").await?;
     let config = &state.config.sheets;
     if config.contacts_sheet_id.is_empty() {
         return Ok(ApiOk::new(ContactsListResponse {
@@ -70,7 +74,9 @@ pub struct EventsTabListResponse {
 #[worker::send]
 pub async fn list_events_tab_handler(
     State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
 ) -> Result<ApiOk<EventsTabListResponse>, WorkerError> {
+    crate::auth::require_super_admin(&claims.email, &state, "view the events tab").await?;
     let config = &state.config.sheets;
     if config.contacts_sheet_id.is_empty() {
         return Ok(ApiOk::new(EventsTabListResponse {
@@ -116,7 +122,9 @@ pub struct EventContactCount {
 #[worker::send]
 pub async fn contacts_stats_handler(
     State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
 ) -> Result<ApiOk<ContactsStatsResponse>, WorkerError> {
+    crate::auth::require_super_admin(&claims.email, &state, "view contact stats").await?;
     let config = &state.config.sheets;
     if config.contacts_sheet_id.is_empty() {
         return Ok(ApiOk::new(ContactsStatsResponse {
@@ -390,6 +398,11 @@ pub async fn audience_handler(
     Extension(claims): Extension<Claims>,
     Query(query): Query<AudienceQuery>,
 ) -> Result<ApiOk<AudienceResponse>, WorkerError> {
+    // Cross-event/cross-org aggregation with CSV export of every email/wallet —
+    // super-admin only (was ungated: any staff could dump the whole platform's
+    // audience). See admin security review S1.
+    crate::auth::require_super_admin(&claims.email, &state, "export the audience list").await?;
+
     let db = state
         .d1
         .as_deref()
@@ -567,16 +580,17 @@ pub struct ContactHistoryResponse {
 /// NOT the deprecated `contacts.events_joined` CSV column — see
 /// [`crate::db::contacts::list_contact_events`] for the deprecation rationale.
 ///
-/// Protected: requires an authenticated organizer (any organizer can look up
-/// any contact — there is no per-event scoping on the contacts master list).
+/// Super-admin only: returns any contact's cross-event history (PII) with no
+/// per-event scoping, so it must not be exposed to per-event staff (review S1).
 /// The email is bound as a positional SQL parameter, never interpolated, to
 /// guard against SQL injection.
 #[worker::send]
 pub async fn contact_history_handler(
     State(state): State<AppState>,
-    Extension(_claims): Extension<Claims>,
+    Extension(claims): Extension<Claims>,
     Path(email): Path<String>,
 ) -> Result<ApiOk<ContactHistoryResponse>, WorkerError> {
+    crate::auth::require_super_admin(&claims.email, &state, "view contact history").await?;
     let db = state
         .d1
         .as_deref()

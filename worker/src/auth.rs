@@ -503,6 +503,22 @@ pub enum UserRole {
 /// Checks in order: super_admin → event organizer → Google Sheet organizer → event staff → Google Sheet staff.
 /// Uses the existing `is_event_organizer` / `is_event_staff` helpers from event_store
 /// to avoid duplicating email-matching logic.
+/// Fail with 403 unless the caller is a super-admin. Shared gate for cross-org
+/// platform views (all-contacts, audience export, community directory) that must
+/// never be exposed to per-event staff/organizers.
+pub async fn require_super_admin(
+    email: &str,
+    state: &AppState,
+    action: &str,
+) -> Result<(), event_checkin_domain::models::error::AppError> {
+    if resolve_user_role(email, state, None).await != UserRole::SuperAdmin {
+        return Err(event_checkin_domain::models::error::AppError::Forbidden(
+            format!("super-admin only: {action}"),
+        ));
+    }
+    Ok(())
+}
+
 pub async fn resolve_user_role(
     email: &str,
     state: &AppState,

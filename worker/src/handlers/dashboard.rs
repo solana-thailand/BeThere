@@ -101,7 +101,7 @@ pub struct LiveDashboardResponse {
 #[worker::send]
 pub async fn live_dashboard(
     State(state): State<AppState>,
-    Extension(_claims): Extension<Claims>,
+    Extension(claims): Extension<Claims>,
     Query(query): Query<LiveDashboardQuery>,
 ) -> Result<ApiOk<LiveDashboardResponse>, WorkerError> {
     let d1 = state
@@ -125,6 +125,11 @@ pub async fn live_dashboard(
     if event_id.is_empty() {
         return Err(AppError::Internal("event row missing id".to_string()).into());
     }
+
+    // Authorize the caller for THIS event (S5: was ungated — any staff could poll
+    // another organizer's live check-in stats). resolve_event_with_access layers
+    // super-admin → per-event organizer/staff and 403s otherwise.
+    crate::handlers::ext::resolve_event_with_access(&state, &claims, Some(&event_id)).await?;
 
     tracing::info!(
         event_id = %event_id,

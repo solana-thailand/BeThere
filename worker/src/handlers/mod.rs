@@ -230,15 +230,10 @@ pub fn routes(state: AppState) -> Router<()> {
             "/escrow/rollover-deposit",
             post(deposit::rollover_deposit_tx_handler),
         )
-        // R2 storage — financial docs require identity (VULN-008 fix)
-        .route(
-            "/storage/slips/{event_id}/{attendee_id}",
-            get(crate::storage::serve_slip),
-        )
-        .route(
-            "/storage/refunds/{event_id}/{attendee_id}",
-            get(crate::storage::serve_refund),
-        )
+        // NOTE: R2 slip/refund financial docs (bank account #/name) moved to the
+        // `protected` (staff) router — they were only identity-gated here, so any
+        // logged-in attendee could view any other attendee's slip by guessing the
+        // (event_id, attendee_id) pair (both non-secret). See admin security review.
         // Adventure virtual check-in (attendee-authed — casual mode quest completion)
         .route(
             "/adventure/quest-complete",
@@ -402,6 +397,16 @@ pub fn routes(state: AppState) -> Router<()> {
         )
         .route("/refund/queue", get(deposit::refund_queue_handler))
         .route("/refund/refunded", get(deposit::refunded_list_handler))
+        // R2 financial docs (bank slip + refund receipt) — STAFF-only (moved here
+        // from the identity-only router to close the slip IDOR).
+        .route(
+            "/storage/slips/{event_id}/{attendee_id}",
+            get(crate::storage::serve_slip),
+        )
+        .route(
+            "/storage/refunds/{event_id}/{attendee_id}",
+            get(crate::storage::serve_refund),
+        )
         // Held-as-credit list (admin) — sibling of refunded list, filters on
         // held_as_credit = true (Issue #061 Phase 2).
         .route("/refund/held", get(deposit::held_list_handler))
