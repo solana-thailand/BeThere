@@ -13,6 +13,7 @@
 //! See migration `0028_credit_ledger.sql`. The sheet stays as a display mirror.
 
 use super::d1_safe::safe_all_rows;
+use std::collections::HashMap;
 use worker::{D1Database, D1Type};
 
 /// Audit reason label for a hold entry (deposit converted to rolling credit).
@@ -187,6 +188,33 @@ pub async fn liability(db: &D1Database) -> Result<Vec<OrgLiability>, String> {
         .into_iter()
         .filter_map(|v| serde_json::from_value::<OrgLiability>(v).ok())
         .collect())
+}
+
+/// THB credit balance keyed by (lowercased) email for one org — holders only.
+/// One query to annotate the admin attendee list's per-row credit (powers the
+/// "Apply Credit" action + a credit badge) without an N+1 per attendee.
+pub async fn thb_balances_by_email(
+    db: &D1Database,
+    organization_id: &str,
+) -> Result<HashMap<String, i64>, String> {
+    let sql = "SELECT email, COALESCE(SUM(delta), 0) AS bal FROM credit_ledger \
+               WHERE organization_id = ?1 AND currency = 'thb' \
+               GROUP BY email HAVING SUM(delta) > 0";
+    let stmt = db
+        .prepare(sql)
+        .bind_refs(&[D1Type::Text(organization_id)])
+        .map_err(|e| format!("D1 credit_ledger thb_balances bind: {e:?}"))?;
+    let rows = safe_all_rows(&stmt).await?;
+    let mut map = HashMap::new();
+    for v in rows {
+        if let (Some(email), Some(bal)) = (
+            v.get("email").and_then(|x| x.as_str()),
+            v.get("bal").and_then(serde_json::Value::as_i64),
+        ) {
+            map.insert(email.to_lowercase(), bal);
+        }
+    }
+    Ok(map)
 }
 
 /// Result of a credit-ledger reconciliation sweep (run daily by the cron). An

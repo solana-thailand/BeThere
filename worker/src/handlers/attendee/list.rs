@@ -134,10 +134,24 @@ pub async fn list_attendees(
         None
     };
 
-    let attendee_responses: Vec<AttendeeListItem> = page
+    let mut attendee_responses: Vec<AttendeeListItem> = page
         .iter()
         .map(|a| AttendeeListItem::from_attendee(a))
         .collect();
+
+    // Annotate each row with the attendee's rolling THB credit (org-scoped) via a
+    // single batch query — powers the "Apply Credit" action + credit badge on the
+    // in-person list. Best-effort: a failure just leaves credit at 0.
+    if let Some(db) = state.d1.as_deref()
+        && let Ok(balances) =
+            crate::db::credit_ledger::thb_balances_by_email(db, &event.organization_id).await
+    {
+        for item in attendee_responses.iter_mut() {
+            if let Some(&bal) = balances.get(&item.email.to_lowercase()) {
+                item.credit_thb = bal.max(0);
+            }
+        }
+    }
 
     let data = json!({
         "attendees": attendee_responses,

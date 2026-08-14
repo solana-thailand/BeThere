@@ -170,6 +170,11 @@ pub struct AttendeeListItem {
     pub refund_status: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub refund_link: Option<String>,
+    /// Attendee's rolling THB deposit credit (org-scoped), annotated by the list
+    /// handler from the credit ledger. 0 when none. Powers the "Apply Credit"
+    /// action + credit badge on the in-person list.
+    #[serde(default)]
+    pub credit_thb: i64,
 }
 
 impl AttendeeListItem {
@@ -197,6 +202,8 @@ impl AttendeeListItem {
             nft_proof_url: attendee.nft_proof_url.clone(),
             refund_status: attendee.refund_status.clone(),
             refund_link: attendee.refund_link.clone(),
+            // Default 0; the list handler annotates the real balance post-build.
+            credit_thb: 0,
         }
     }
 }

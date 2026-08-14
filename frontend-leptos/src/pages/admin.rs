@@ -1546,11 +1546,16 @@ pub fn Admin() -> impl IntoView {
                                         None
                                     };
 
-                                    // Stuck in-person registration: registered + holds credit but no
-                                    // deposit record yet. The Apply-Credit action completes it server-side
-                                    // (backend spends credit only if it covers the deposit).
-                                    let is_stuck_deposit = is_attendee_in_person
-                                        && attendee.deposit_amount.is_none()
+                                    // "Apply Credit" is offered when an in-person attendee holds rolling
+                                    // THB credit and has not completed/refunded a deposit — the backend
+                                    // spends it (only if sufficient) and writes a covered deposit.
+                                    // NOTE: deposit_amount is USDC-only, so it can't detect THB-stuck rows;
+                                    // credit_thb (annotated by the list handler) is the correct gate.
+                                    let credit_thb = attendee.credit_thb;
+                                    let has_credit = credit_thb > 0;
+                                    let can_apply_credit = is_attendee_in_person
+                                        && has_credit
+                                        && attendee.deposit_verified.as_deref() != Some("true")
                                         && attendee.refund_status.is_none();
                                     let apply_credit_id_click = attendee.api_id.clone();
                                     let apply_credit_id_disabled = attendee.api_id.clone();
@@ -1600,6 +1605,16 @@ pub fn Admin() -> impl IntoView {
                                                         let (cls, txt) = claim_badge.unwrap_or(("", ""));
                                                         view! { <span class=cls.to_string()>{txt}</span> }
                                                     }
+                                                </Show>
+                                                // Rolling deposit credit the attendee holds — makes credit
+                                                // visible at the row level (previously only on the Held tab).
+                                                <Show
+                                                    when=move || has_credit
+                                                    fallback=|| view! { <span></span> }
+                                                >
+                                                    <span class="badge badge-info" title="Rolling deposit credit available — use the Apply Credit button to cover this event">
+                                                        {format!("\u{0e3f}{credit_thb} credit")}
+                                                    </span>
                                                 </Show>
                                                 <Show
                                                     when=move || has_nft
@@ -1685,7 +1700,7 @@ pub fn Admin() -> impl IntoView {
                                                     // no deposit). The backend spends credit only if it covers
                                                     // the deposit, else surfaces a toast error.
                                                     <Show
-                                                        when=move || current_deposit_enabled.get() && is_stuck_deposit
+                                                        when=move || current_deposit_enabled.get() && can_apply_credit
                                                         fallback=|| view! { <span></span> }
                                                     >
                                                         <button
