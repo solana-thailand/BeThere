@@ -31,7 +31,7 @@
 | Metric | Value |
 |--------|-------|
 | On-chain program | **88 KB** (optimized, 89,856 bytes) |
-| NFT mint cost | **$0.001** on-chain (cNFT) · ~$0.01 via Crossmint hosted mint |
+| NFT mint cost | **$0.001** on-chain (cNFT) · hosted mint billed per Crossmint pricing |
 | Transaction cost | **$0.00087** (at $172/SOL) |
 | Check-in latency | **< 500ms** (edge worker) |
 | Tests | **250 passing** (54 on-chain + 73 domain + 123 worker) + 147 frontend specs + 16 Kani harnesses |
@@ -592,7 +592,7 @@ See [`docs/security_audit.md`](docs/security_audit.md) for the full escrow secur
 | Core Flow | Status | Details |
 |-----------|--------|----------|
 | QR check-in | ✅ | Camera scan + manual lookup, staff logging |
-| cNFT badges | ✅ **mainnet** | Compressed NFTs via Crossmint hosted mint (~$0.01/mint), idempotent, PNG badge |
+| cNFT badges | ✅ **mainnet** | Compressed NFTs via Crossmint hosted mint (airdropped free to attendees), idempotent, PNG badge |
 | Quiz gating | ✅ | Per-event quiz before NFT claim |
 | Adventure gating | ✅ | Rust-themed educational game (10 levels) |
 | Multi-event | ✅ | KV registry, 4-tier roles (super_admin/organizer/staff/attendee) |
