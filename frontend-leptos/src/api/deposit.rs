@@ -621,6 +621,25 @@ pub async fn admin_hold_deposit(
     api_post_json(&path, body).await
 }
 
+/// Request body for POST /api/deposit/apply-credit/{attendee_id} — admin applies
+/// an attendee's rolling deposit credit to complete a registration stuck at the
+/// deposit step (credit-holder who never uploaded a slip).
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ApplyCreditRequest {
+    pub event_id: String,
+}
+
+/// POST /api/deposit/apply-credit/{attendee_id} — spends the attendee's rolling
+/// credit (only if it covers the event deposit) and writes a credit-covered
+/// deposit so they proceed to the ticket. Backend enforces sufficiency.
+pub async fn apply_credit(
+    attendee_id: &str,
+    body: &ApplyCreditRequest,
+) -> Result<serde_json::Value, ApiError> {
+    let path = format!("/deposit/apply-credit/{attendee_id}");
+    api_post_json(&path, body).await
+}
+
 /// Response for GET /api/deposit/credit-liability — the organizer's total
 /// deposit-credit liability across all contacts (Issue #061 Phase 2 option a2).
 /// Backing data for the "Total credit held: X THB across N contacts" header chip.

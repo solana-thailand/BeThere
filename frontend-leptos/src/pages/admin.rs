@@ -1546,6 +1546,15 @@ pub fn Admin() -> impl IntoView {
                                         None
                                     };
 
+                                    // Stuck in-person registration: registered + holds credit but no
+                                    // deposit record yet. The Apply-Credit action completes it server-side
+                                    // (backend spends credit only if it covers the deposit).
+                                    let is_stuck_deposit = is_attendee_in_person
+                                        && attendee.deposit_amount.is_none()
+                                        && attendee.refund_status.is_none();
+                                    let apply_credit_id_click = attendee.api_id.clone();
+                                    let apply_credit_id_disabled = attendee.api_id.clone();
+
                                     view! {
                                         <div class="attendee-item" class:vip=is_vip class:selected=is_selected>
                                             // Row 1: checkbox + name + badges + status indicators
@@ -1668,6 +1677,60 @@ pub fn Admin() -> impl IntoView {
                                                             }
                                                         >
                                                             "Record Slip"
+                                                        </button>
+                                                    </Show>
+                                                    // Apply Credit — complete a registration stuck at the
+                                                    // deposit step by spending the attendee's rolling credit.
+                                                    // Shown only for the stuck state (in-person, registered,
+                                                    // no deposit). The backend spends credit only if it covers
+                                                    // the deposit, else surfaces a toast error.
+                                                    <Show
+                                                        when=move || current_deposit_enabled.get() && is_stuck_deposit
+                                                        fallback=|| view! { <span></span> }
+                                                    >
+                                                        <button
+                                                            class="btn btn-outline btn-xs btn-xs-override"
+                                                            disabled=switching_ids.get().contains(&apply_credit_id_disabled)
+                                                            title="Apply this attendee's rolling deposit credit to cover this event (completes a registration stuck at the deposit step). No effect if they have insufficient credit."
+                                                            on:click={
+                                                                let aid = apply_credit_id_click.clone();
+                                                                let set_toast = set_toast;
+                                                                let set_switching_ids = set_switching_ids;
+                                                                let set_refresh_counter = set_refresh_counter;
+                                                                let eid = event_id_for_delete.get();
+                                                                move |_| {
+                                                                    let aid = aid.clone();
+                                                                    let set_toast = set_toast;
+                                                                    let set_switching_ids = set_switching_ids;
+                                                                    let set_refresh_counter = set_refresh_counter;
+                                                                    let eid = eid.clone();
+                                                                    set_switching_ids.update(|ids| { ids.insert(aid.clone()); });
+                                                                    leptos::task::spawn_local(async move {
+                                                                        let body = api::ApplyCreditRequest { event_id: eid.clone().unwrap_or_default() };
+                                                                        match api::apply_credit(&aid, &body).await {
+                                                                            Ok(_) => {
+                                                                                api::invalidate_attendee_cache();
+                                                                                set_refresh_counter.update(|c| *c += 1);
+                                                                                components::show_toast(
+                                                                                    &set_toast,
+                                                                                    "Rolling credit applied \u{2014} registration completed",
+                                                                                    ToastType::Success,
+                                                                                );
+                                                                            }
+                                                                            Err(e) => {
+                                                                                components::show_toast(
+                                                                                    &set_toast,
+                                                                                    &format!("Apply credit failed: {e}"),
+                                                                                    ToastType::Error,
+                                                                                );
+                                                                            }
+                                                                        }
+                                                                        set_switching_ids.update(|ids| { ids.remove(&aid); });
+                                                                    });
+                                                                }
+                                                            }
+                                                        >
+                                                            "Apply Credit"
                                                         </button>
                                                     </Show>
                                                     // Participation-type toggle — flip In-Person ⇄ Online.
