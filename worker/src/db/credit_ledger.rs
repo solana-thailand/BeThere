@@ -44,7 +44,7 @@ pub async fn record(
     let sql = "INSERT INTO credit_ledger \
                (email, organization_id, currency, delta, reason, event_id, deposit_id, note) \
                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8) \
-               ON CONFLICT (deposit_id, reason) DO NOTHING";
+               ON CONFLICT (deposit_id, reason) WHERE deposit_id IS NOT NULL DO NOTHING";
     let result = db
         .prepare(sql)
         .bind_refs(&[
@@ -97,7 +97,7 @@ pub async fn try_spend(
                SELECT ?1, ?2, ?3, -1 * ?4, 'apply', ?5, ?6 \
                WHERE (SELECT COALESCE(SUM(delta), 0) FROM credit_ledger \
                       WHERE email = ?1 AND organization_id = ?2 AND currency = ?3) >= ?4 \
-               ON CONFLICT (deposit_id, reason) DO NOTHING";
+               ON CONFLICT (deposit_id, reason) WHERE deposit_id IS NOT NULL DO NOTHING";
     let result = db
         .prepare(sql)
         .bind_refs(&[
