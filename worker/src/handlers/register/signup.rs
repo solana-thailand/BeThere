@@ -495,6 +495,27 @@ pub async fn register_attendee(
                 // Non-fatal to the reservation; log loudly for reconciliation.
                 tracing::error!(%api_id, %email, error = %e, "credit consumed but deposit record save failed — needs reconciliation");
             }
+            // Also write the VERIFIED deposit_status — the ticket page gates the
+            // check-in QR on this record; thb_deposits alone leaves it "waiting".
+            if let Some(kv_store) = kv {
+                let status = event_checkin_domain::models::deposit::DepositStatus {
+                    attendee_id: api_id.clone(),
+                    event_id: event_id.clone(),
+                    method: event_checkin_domain::models::deposit::DepositMethod::Thb,
+                    amount: credit_amount_applied,
+                    currency: "THB".to_string(),
+                    tx_signature: None,
+                    verified: true,
+                    deposited_at: now.clone(),
+                    wallet_address: None,
+                    deposit_order: 0,
+                    refundable: false,
+                    rejected: false,
+                };
+                if let Err(e) = crate::event_store::save_deposit_status(kv_store, &status, state.d1.as_deref()).await {
+                    tracing::error!(%api_id, %email, error = %e, "credit deposit_status save failed — ticket may show 'waiting'");
+                }
+            }
         } else {
             // Fail closed: revert to the normal payment path (credit untouched).
             credit_covered_method = None;
