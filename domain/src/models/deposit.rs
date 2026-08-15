@@ -157,29 +157,52 @@ pub struct ThbDeposit {
     pub refund_proof_url: Option<String>,
 }
 
+/// The economic source of a THB deposit — the single classification every
+/// refund / hold / roll rule keys on. Replaces scattered `slip_url` /
+/// `verified_by` sentinel sniffing with one exhaustive, typed decision.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DepositSource {
+    /// Real cash (a bank-transfer slip). Cash-refundable; holdable-as-credit.
+    Cash,
+    /// Covered by the attendee's rolling credit. NOT cash-refundable; rolls back
+    /// to the balance on check-in (Model B); exit-to-cash via credit-refund.
+    Credit,
+    /// Staff / organizer comp (฿0 waive). Never cash, never credit — nothing to
+    /// refund, hold, or roll.
+    Comp,
+}
+
 impl ThbDeposit {
-    /// True when this deposit is NOT backed by real cash — a rolling-credit
-    /// application (`SYSTEM_ROLLING_CREDIT` / `ROLLING_CREDIT_AUTO_APPLIED`) or a
-    /// staff comp (`SYSTEM_STAFF_WAIVE` / `STAFF_COMP_WAIVED` / ฿0). Such a deposit
-    /// must never be cash-refunded or re-held-as-credit: doing so would pay out —
-    /// or mint credit from — money that was never deposited.
-    pub fn is_non_cash(&self) -> bool {
-        matches!(
-            self.verified_by.as_deref(),
-            Some("SYSTEM_ROLLING_CREDIT" | "SYSTEM_STAFF_WAIVE")
-        ) || matches!(
-            self.slip_url.as_deref(),
-            Some("ROLLING_CREDIT_AUTO_APPLIED" | "STAFF_COMP_WAIVED")
-        ) || self.amount_thb == 0
+    /// Classify this deposit's economic source — the one place the
+    /// credit/comp/cash decision is made.
+    pub fn source(&self) -> DepositSource {
+        if matches!(self.verified_by.as_deref(), Some("SYSTEM_ROLLING_CREDIT"))
+            || matches!(self.slip_url.as_deref(), Some("ROLLING_CREDIT_AUTO_APPLIED"))
+        {
+            DepositSource::Credit
+        } else if matches!(self.verified_by.as_deref(), Some("SYSTEM_STAFF_WAIVE"))
+            || matches!(self.slip_url.as_deref(), Some("STAFF_COMP_WAIVED"))
+            || self.amount_thb == 0
+        {
+            DepositSource::Comp
+        } else {
+            DepositSource::Cash
+        }
     }
 
-    /// True specifically for a ROLLING-CREDIT-covered deposit (NOT a staff comp).
-    /// Model B: on check-in these roll the ฿ back to the attendee's credit balance
-    /// (the commitment is honoured by showing up); a no-show forfeits it. Staff
-    /// comps are excluded — a comp never consumed credit, so nothing rolls back.
+    /// NOT backed by real cash (credit application or staff comp): must never be
+    /// cash-refunded or re-held-as-credit (would pay out / mint money never
+    /// deposited).
+    pub fn is_non_cash(&self) -> bool {
+        !matches!(self.source(), DepositSource::Cash)
+    }
+
+    /// Specifically a ROLLING-CREDIT-covered deposit (not a staff comp). Model B:
+    /// on check-in these roll the ฿ back to the attendee's balance; a no-show
+    /// forfeits it.
     pub fn is_credit_covered(&self) -> bool {
-        matches!(self.verified_by.as_deref(), Some("SYSTEM_ROLLING_CREDIT"))
-            || matches!(self.slip_url.as_deref(), Some("ROLLING_CREDIT_AUTO_APPLIED"))
+        matches!(self.source(), DepositSource::Credit)
     }
 }
 
