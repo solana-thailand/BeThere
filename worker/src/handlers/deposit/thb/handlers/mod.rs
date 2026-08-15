@@ -18,7 +18,9 @@ pub use hold_refund_request::{
 };
 pub use refund::{batch_thb_refund_handler, mark_manual_refund_handler, mark_refund_handler};
 pub use slip_admin_upload::admin_upload_thb_slip_handler;
-pub use slip_list::{pending_thb_slips_handler, refund_queue_handler, refunded_list_handler};
+pub use slip_list::{
+    credit_used_handler, pending_thb_slips_handler, refund_queue_handler, refunded_list_handler,
+};
 pub use slip_upload::upload_thb_slip_handler;
 pub use slip_verify::verify_thb_slip_handler;
 

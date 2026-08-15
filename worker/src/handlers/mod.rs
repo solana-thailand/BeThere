@@ -410,6 +410,8 @@ pub fn routes(state: AppState) -> Router<()> {
         // Held-as-credit list (admin) — sibling of refunded list, filters on
         // held_as_credit = true (Issue #061 Phase 2).
         .route("/refund/held", get(deposit::held_list_handler))
+        // Who got in via rolling credit + Cash/Credit/Comp summary (GOAT view).
+        .route("/deposit/credit-used", get(deposit::credit_used_handler))
         .route(
             "/refund/mark/{attendee_id}",
             post(deposit::mark_refund_handler),

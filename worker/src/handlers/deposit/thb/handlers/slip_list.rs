@@ -60,6 +60,82 @@ pub async fn pending_thb_slips_handler(
 }
 
 // ---------------------------------------------------------------------------
+// GET /api/deposit/credit-used (admin) — who got in via credit + source summary
+// ---------------------------------------------------------------------------
+
+/// Count + ฿ total of an event's deposits, classified by [`DepositSource`].
+#[derive(Debug, Default, Serialize, Deserialize)]
+pub struct DepositSourceSummary {
+    pub cash_count: u32,
+    pub cash_thb: u64,
+    pub credit_count: u32,
+    pub credit_thb: u64,
+    pub comp_count: u32,
+}
+
+/// Response for GET /api/deposit/credit-used.
+#[derive(Debug, Default, Serialize, Deserialize)]
+pub struct CreditUsedResponse {
+    pub summary: DepositSourceSummary,
+    /// The credit-covered deposits (source == Credit), name-enriched.
+    pub credit_used: Vec<ThbDeposit>,
+}
+
+/// List the attendees who got in by SPENDING rolling credit, plus a
+/// Cash/Credit/Comp summary so the money reconciles at a glance. Keys off the
+/// single `DepositSource` classification (not sentinel sniffing).
+#[worker::send]
+pub async fn credit_used_handler(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Query(query): Query<EventIdQuery>,
+) -> Result<ApiOk<CreditUsedResponse>, WorkerError> {
+    let kv = state
+        .events_kv
+        .as_ref()
+        .ok_or_else(|| AppError::Internal("EVENTS KV not configured".to_string()))?;
+    let d1 = state.d1.as_deref();
+
+    let event =
+        crate::handlers::ext::resolve_event_with_access(&state, &claims, query.event_id.as_deref())
+            .await?;
+
+    let all_deposits = event_store::list_thb_deposits(kv, &event.id, d1)
+        .await
+        .map_err(AppError::Internal)?;
+
+    use event_checkin_domain::models::deposit::DepositSource;
+    let mut summary = DepositSourceSummary::default();
+    let mut credit_used: Vec<ThbDeposit> = Vec::new();
+    for d in &all_deposits {
+        match d.source() {
+            DepositSource::Cash => {
+                summary.cash_count += 1;
+                summary.cash_thb += d.amount_thb;
+            }
+            DepositSource::Credit => {
+                summary.credit_count += 1;
+                summary.credit_thb += d.amount_thb;
+                credit_used.push(d.clone());
+            }
+            DepositSource::Comp => summary.comp_count += 1,
+        }
+    }
+
+    let names =
+        super::resolve_attendee_names(&state, &event.sheet_id, &event.sheet_name, &credit_used)
+            .await;
+    for d in &mut credit_used {
+        d.attendee_name = names.get(&d.attendee_id).cloned();
+    }
+
+    Ok(ApiOk::new(CreditUsedResponse {
+        summary,
+        credit_used,
+    }))
+}
+
+// ---------------------------------------------------------------------------
 // GET /api/refund/queue (admin)
 // ---------------------------------------------------------------------------
 

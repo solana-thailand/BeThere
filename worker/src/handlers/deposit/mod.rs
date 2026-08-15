@@ -28,7 +28,7 @@ pub use escrow::{
 };
 pub use thb::{
     admin_apply_credit_handler, admin_hold_deposit_handler, admin_upload_thb_slip_handler,
-    batch_thb_refund_handler,
+    batch_thb_refund_handler, credit_used_handler,
     clear_credit_refund_request_handler, credit_balance_handler, credit_liability_handler,
     credit_refund_request_status_handler, credit_refund_requests_handler, held_list_handler,
     hold_deposit_handler, mark_manual_refund_handler, mark_refund_handler,

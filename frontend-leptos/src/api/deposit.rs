@@ -682,6 +682,59 @@ pub async fn get_credit_liability() -> Result<CreditLiability, ApiError> {
     })
 }
 
+/// Cash / Credit / Comp deposit-source breakdown for one event — reconciles how
+/// attendees got in (paid cash vs spent rolling credit vs staff comp).
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+pub struct DepositSourceSummary {
+    #[serde(default)]
+    pub cash_count: u32,
+    #[serde(default)]
+    pub cash_thb: u64,
+    #[serde(default)]
+    pub credit_count: u32,
+    #[serde(default)]
+    pub credit_thb: u64,
+    #[serde(default)]
+    pub comp_count: u32,
+}
+
+/// Response for GET /api/deposit/credit-used. The `credit_used` list the backend
+/// also returns is intentionally not modelled here (serde ignores it) — the
+/// per-attendee "Credit ✓" view lives on the in-person roster; this is the
+/// event-level money summary.
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+pub struct CreditUsedResponse {
+    #[serde(default)]
+    pub summary: DepositSourceSummary,
+}
+
+/// GET /api/deposit/credit-used?event_id= — Cash/Credit/Comp summary for the event.
+pub async fn get_credit_used(event_id: Option<&str>) -> Result<CreditUsedResponse, ApiError> {
+    let path = match event_id {
+        Some(eid) if !eid.is_empty() => format!("/deposit/credit-used?event_id={eid}"),
+        _ => "/deposit/credit-used".to_string(),
+    };
+    let response = api_get(&path).await?;
+
+    if !response.ok() {
+        return Err(ApiError {
+            message: "Failed to load credit-used summary".to_string(),
+            status: 0,
+        });
+    }
+
+    let wrapper: ApiResponse<CreditUsedResponse> =
+        response_json(&response).await.map_err(|e| ApiError {
+            message: format!("Failed to parse credit-used summary: {e}"),
+            status: 0,
+        })?;
+
+    wrapper.data.ok_or_else(|| ApiError {
+        message: wrapper.error.unwrap_or("No data".to_string()),
+        status: 0,
+    })
+}
+
 // ===== Phase 3 — Credit Refund Request (exit path) =====
 
 /// Response for POST /api/deposit/request-credit-refund — attendee requests

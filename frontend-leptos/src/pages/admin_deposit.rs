@@ -60,6 +60,8 @@ pub fn AdminDeposits(
     // deposit credit across ALL contacts (backs the header chip). Global, not
     // per-event; loaded alongside the per-event lists for one refresh cycle.
     let (liability, set_liability) = signal(CreditLiability::default());
+    // Per-event Cash/Credit/Comp source summary (GOAT reconciliation chip).
+    let (source_summary, set_source_summary) = signal(api::DepositSourceSummary::default());
     // Cross-event credit-refund-request queue — contacts who requested return
     // of their held credit (Issue #061 Phase 3 exit path). Backs the badge on
     // the Held-as-Credit tab. Global, not per-event; same refresh cycle as the
@@ -106,6 +108,7 @@ pub fn AdminDeposits(
         let set_refunds = set_refunds;
         let set_held_list = set_held_list;
         let set_liability = set_liability;
+        let set_source_summary = set_source_summary;
         let set_credit_refund_requests = set_credit_refund_requests;
         let set_loading = set_loading;
         let set_toast = set_toast;
@@ -116,6 +119,7 @@ pub fn AdminDeposits(
             let refunded_result = api::get_refunded_list(eid.as_deref()).await;
             let held_result = api::get_held_list(eid.as_deref()).await;
             let liability_result = api::get_credit_liability().await;
+            let source_result = api::get_credit_used(eid.as_deref()).await;
             let refund_requests_result = api::get_credit_refund_requests().await;
 
             match slips_result {
@@ -162,6 +166,14 @@ pub fn AdminDeposits(
                 Ok(data) => set_liability.set(data),
                 Err(e) => {
                     log::warn!("[admin-deposit] failed to load credit liability: {e}");
+                }
+            }
+
+            // Per-event Cash/Credit/Comp summary — non-fatal.
+            match source_result {
+                Ok(data) => set_source_summary.set(data.summary),
+                Err(e) => {
+                    log::warn!("[admin-deposit] failed to load source summary: {e}");
                 }
             }
 
@@ -442,6 +454,26 @@ pub fn AdminDeposits(
                                 "Total credit held: {} across {} contacts",
                                 parts.join(" + "),
                                 l.contact_count
+                            )
+                        }}
+                    </span>
+                </div>
+            </Show>
+            // Per-event Cash/Credit/Comp summary chip (GOAT reconciliation): how
+            // attendees got in for THIS event — paid cash, spent rolling credit,
+            // or staff comp. Complements the per-attendee "Credit ✓" roster badge.
+            <Show when=move || { let s = source_summary.get(); s.cash_count + s.credit_count + s.comp_count > 0 } fallback=|| view! { <div></div> }>
+                <div
+                    class="admin-dep-liability-chip"
+                    title="How attendees got in for this event: paid cash vs spent rolling credit vs staff comp."
+                >
+                    <Icon icon=IconName::MoneyWings class="icon-sm"/>
+                    <span>
+                        {move || {
+                            let s = source_summary.get();
+                            format!(
+                                "This event \u{2014} Cash: {} (\u{0e3f}{}) \u{00b7} Credit: {} (\u{0e3f}{}) \u{00b7} Comp: {}",
+                                s.cash_count, s.cash_thb, s.credit_count, s.credit_thb, s.comp_count
                             )
                         }}
                     </span>
