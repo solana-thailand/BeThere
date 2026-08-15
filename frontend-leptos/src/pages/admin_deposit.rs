@@ -62,6 +62,8 @@ pub fn AdminDeposits(
     let (liability, set_liability) = signal(CreditLiability::default());
     // Per-event Cash/Credit/Comp source summary (GOAT reconciliation chip).
     let (source_summary, set_source_summary) = signal(api::DepositSourceSummary::default());
+    // The attendees who got in by spending rolling credit (for the summary list).
+    let (credit_used_list, set_credit_used_list) = signal(Vec::<ThbDepositInfo>::new());
     // Cross-event credit-refund-request queue — contacts who requested return
     // of their held credit (Issue #061 Phase 3 exit path). Backs the badge on
     // the Held-as-Credit tab. Global, not per-event; same refresh cycle as the
@@ -111,6 +113,7 @@ pub fn AdminDeposits(
         let set_held_list = set_held_list;
         let set_liability = set_liability;
         let set_source_summary = set_source_summary;
+        let set_credit_used_list = set_credit_used_list;
         let set_credit_refund_requests = set_credit_refund_requests;
         let set_loading = set_loading;
         let set_toast = set_toast;
@@ -171,9 +174,12 @@ pub fn AdminDeposits(
                 }
             }
 
-            // Per-event Cash/Credit/Comp summary — non-fatal.
+            // Per-event Cash/Credit/Comp summary + credit-used list — non-fatal.
             match source_result {
-                Ok(data) => set_source_summary.set(data.summary),
+                Ok(data) => {
+                    set_source_summary.set(data.summary);
+                    set_credit_used_list.set(data.credit_used);
+                }
                 Err(e) => {
                     log::warn!("[admin-deposit] failed to load source summary: {e}");
                 }
@@ -481,18 +487,31 @@ pub fn AdminDeposits(
             <Show when=move || { let s = source_summary.get(); s.cash_count + s.credit_count + s.comp_count > 0 } fallback=|| view! { <div></div> }>
                 <div
                     class="admin-dep-liability-chip"
-                    title="How attendees got in for this event: paid cash vs spent rolling credit vs staff comp."
+                    title="How attendees got in for this event: paid cash vs spent rolling credit vs free (staff/comp)."
                 >
                     <Icon icon=IconName::MoneyWings class="icon-sm"/>
                     <span>
                         {move || {
                             let s = source_summary.get();
                             format!(
-                                "This event \u{2014} Cash: {} (\u{0e3f}{}) \u{00b7} Credit: {} (\u{0e3f}{}) \u{00b7} Comp: {}",
+                                "This event \u{2014} Cash: {} (\u{0e3f}{}) \u{00b7} Credit: {} (\u{0e3f}{}) \u{00b7} Free/staff: {}",
                                 s.cash_count, s.cash_thb, s.credit_count, s.credit_thb, s.comp_count
                             )
                         }}
                     </span>
+                </div>
+            </Show>
+            // Who got in via credit (names) — the GOAT credit-used list on the money page.
+            <Show when=move || !credit_used_list.get().is_empty() fallback=|| view! { <div></div> }>
+                <div class="admin-dep-credit-used" style="margin:4px 0 8px; font-size:0.85em; opacity:0.85;">
+                    <strong>"Used credit: "</strong>
+                    {move || {
+                        let names: Vec<String> = credit_used_list.get().iter().map(|d| {
+                            let name = d.attendee_name.clone().unwrap_or_else(|| d.attendee_id.clone());
+                            format!("{name} (\u{0e3f}{})", d.amount_thb)
+                        }).collect();
+                        names.join(" \u{00b7} ")
+                    }}
                 </div>
             </Show>
             // Sub-tab navigation

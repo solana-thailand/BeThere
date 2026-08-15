@@ -698,14 +698,14 @@ pub struct DepositSourceSummary {
     pub comp_count: u32,
 }
 
-/// Response for GET /api/deposit/credit-used. The `credit_used` list the backend
-/// also returns is intentionally not modelled here (serde ignores it) — the
-/// per-attendee "Credit ✓" view lives on the in-person roster; this is the
-/// event-level money summary.
+/// Response for GET /api/deposit/credit-used — the event-level money summary plus
+/// the list of attendees who got in by spending rolling credit.
 #[derive(Debug, Clone, Default, serde::Deserialize)]
 pub struct CreditUsedResponse {
     #[serde(default)]
     pub summary: DepositSourceSummary,
+    #[serde(default)]
+    pub credit_used: Vec<ThbDepositInfo>,
 }
 
 /// GET /api/deposit/credit-used?event_id= — Cash/Credit/Comp summary for the event.
