@@ -42,7 +42,7 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 use fetch::{get as http_get, get_no_cache as http_get_no_cache, post as http_post, put as http_put, delete as http_delete, response_json, response_text};
-use crate::auth::{clear_token, get_token};
+use crate::auth::{get_token, redirect_to_login_expired};
 
 // ---------------------------------------------------------------------------
 // B5: Stale-while-revalidate in-memory API response cache
@@ -175,7 +175,7 @@ pub(crate) async fn api_get(path: &str) -> Result<web_sys::Response, ApiError> {
     let response = http_get(&url, &hdrs).await?;
 
     if response.status() == 401 {
-        clear_token();
+        redirect_to_login_expired();
         return Err(ApiError {
             message: "Session expired".to_string(),
             status: 401,
@@ -217,7 +217,7 @@ pub(crate) async fn api_get_no_cache(path: &str) -> Result<web_sys::Response, Ap
     let response = http_get_no_cache(&url, &hdrs).await?;
 
     if response.status() == 401 {
-        clear_token();
+        redirect_to_login_expired();
         return Err(ApiError {
             message: "Session expired".to_string(),
             status: 401,
@@ -255,7 +255,7 @@ pub(crate) async fn api_post(path: &str) -> Result<web_sys::Response, ApiError> 
     let response = http_post(&url, &hdrs, None).await?;
 
     if response.status() == 401 {
-        clear_token();
+        redirect_to_login_expired();
         return Err(ApiError {
             message: "Session expired".to_string(),
             status: 401,
@@ -280,7 +280,7 @@ pub(crate) async fn api_delete(path: &str) -> Result<web_sys::Response, ApiError
     let response = http_delete(&url, &hdrs).await?;
 
     if response.status() == 401 {
-        clear_token();
+        redirect_to_login_expired();
         return Err(ApiError {
             message: "Session expired".to_string(),
             status: 401,
@@ -313,7 +313,7 @@ pub(crate) async fn api_post_blob(
     let response = http_post_raw(&url, &hdrs, blob.clone()).await?;
 
     if response.status() == 401 {
-        clear_token();
+        redirect_to_login_expired();
         return Err(ApiError {
             message: "Session expired".to_string(),
             status: 401,
@@ -358,7 +358,7 @@ async fn api_json_with_body<T: serde::de::DeserializeOwned + Default>(
     };
 
     if response.status() == 401 {
-        clear_token();
+        redirect_to_login_expired();
         return Err(ApiError {
             message: "Session expired".to_string(),
             status: 401,

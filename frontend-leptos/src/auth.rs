@@ -224,6 +224,25 @@ pub fn require_auth(navigate: &dyn Fn(&str)) {
 /// We use fetch() instead of page navigation because browsers may not reliably
 /// process `Set-Cookie` headers on 303 redirect responses. After the cookie is
 /// cleared, we navigate to the login page.
+/// A 401 means the session is gone. Clear any stale token and bounce to /login
+/// (preserving where they were), instead of leaving the user on a broken page.
+/// Loop-guarded: no-op when already on /login.
+pub fn redirect_to_login_expired() {
+    clear_token();
+    if let Some(w) = window() {
+        let path = w.location().pathname().unwrap_or_default();
+        if path == "/login" {
+            return;
+        }
+        let target = if path.is_empty() {
+            "/login".to_string()
+        } else {
+            format!("/login?next={path}")
+        };
+        let _ = w.location().set_href(&target);
+    }
+}
+
 pub fn logout() {
     clear_token();
     let window = match window() {
