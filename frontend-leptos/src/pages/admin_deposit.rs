@@ -609,7 +609,7 @@ pub fn AdminDeposits(
                                     <div class="flex-row-wrap">
                                         <div>
                                             <div class="admin-attendee-name">
-                                                {format!("Attendee: {}", utils::escape_html(display_name))}
+                                                {format!("Attendee: {display_name}")}
                                             </div>
                                             <div class="admin-amount-line">
                                                 {amount}
@@ -721,13 +721,13 @@ pub fn AdminDeposits(
                                     <div class="flex-row-wrap">
                                         <div>
                                             <div class="admin-attendee-name">
-                                                {format!("Attendee: {}", utils::escape_html(display_name))}
+                                                {format!("Attendee: {display_name}")}
                                             </div>
                                             <div class="admin-amount-line">
                                                 {amount}
                                             </div>
                                             <div class="panel-hint">
-                                                {format!("Verified by: {}", utils::escape_html(verified_by))}
+                                                {format!("Verified by: {verified_by}")}
                                             </div>
                                             <div class="panel-hint">
                                                 {format!("Verified at: {verified_at}")}
@@ -752,13 +752,13 @@ pub fn AdminDeposits(
                                                 <div class="panel-hint admin-dep-bank-label">"Refund Bank Info"</div>
                                                 <Show when=move || has_bank_info fallback=|| view! { <span></span> }>
                                                     <div class="panel-hint">
-                                                        {format!("Account: {}", utils::escape_html(display_bank_account.as_deref().unwrap_or("-")))}
+                                                        {format!("Account: {}", display_bank_account.as_deref().unwrap_or("-"))}
                                                     </div>
                                                     <div class="panel-hint">
-                                                        {format!("Bank: {}", utils::escape_html(display_bank_name.as_deref().unwrap_or("-")))}
+                                                        {format!("Bank: {}", display_bank_name.as_deref().unwrap_or("-"))}
                                                     </div>
                                                     <div class="panel-hint">
-                                                        {format!("Name: {}", utils::escape_html(display_account_name.as_deref().unwrap_or("-")))}
+                                                        {format!("Name: {}", display_account_name.as_deref().unwrap_or("-"))}
                                                     </div>
                                                 </Show>
                                                 <Show when=move || !has_bank_info fallback=|| view! { <span></span> }>
@@ -883,7 +883,7 @@ pub fn AdminDeposits(
                                     <div class="flex-row-wrap">
                                         <div>
                                             <div class="admin-attendee-name">
-                                                {format!("Attendee: {}", utils::escape_html(&display_name))}
+                                                {format!("Attendee: {display_name}")}
                                             </div>
                                             <div class="admin-amount-line">
                                                 {amount}
@@ -914,13 +914,13 @@ pub fn AdminDeposits(
                                                 <div class="panel-hint admin-dep-bank-label">"Refund Bank Info"</div>
                                                 <Show when=move || has_bank_info fallback=|| view! { <span></span> }>
                                                     <div class="panel-hint">
-                                                        {format!("Account: {}", utils::escape_html(display_bank_account.as_deref().unwrap_or("-")))}
+                                                        {format!("Account: {}", display_bank_account.as_deref().unwrap_or("-"))}
                                                     </div>
                                                     <div class="panel-hint">
-                                                        {format!("Bank: {}", utils::escape_html(display_bank_name.as_deref().unwrap_or("-")))}
+                                                        {format!("Bank: {}", display_bank_name.as_deref().unwrap_or("-"))}
                                                     </div>
                                                     <div class="panel-hint">
-                                                        {format!("Name: {}", utils::escape_html(display_account_name.as_deref().unwrap_or("-")))}
+                                                        {format!("Name: {}", display_account_name.as_deref().unwrap_or("-"))}
                                                     </div>
                                                 </Show>
                                                 <Show when=move || !has_bank_info fallback=|| view! { <span></span> }>
@@ -1089,7 +1089,7 @@ pub fn AdminDeposits(
                                     <div class="flex-row-wrap">
                                         <div>
                                             <div class="admin-attendee-name">
-                                                {format!("Attendee: {}", utils::escape_html(&display_name))}
+                                                {format!("Attendee: {display_name}")}
                                             </div>
                                             <div class="admin-amount-line">
                                                 {amount}
