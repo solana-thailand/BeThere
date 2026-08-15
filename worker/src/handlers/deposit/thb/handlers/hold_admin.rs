@@ -250,8 +250,26 @@ pub async fn admin_hold_deposit_handler(
         .await
         .map_err(AppError::Internal)?;
 
-    // 7. Increment credit on the ATTENDEE's contact row (not the admin's).
-    crate::sheets::contacts::increment_credit(
+    // 7. Record the credit — authoritative append to the org-scoped D1 ledger
+    //    (idempotent per deposit), crediting the ATTENDEE's email. This MUST
+    //    succeed; the Sheets write below is a best-effort display mirror.
+    let deposit_key = format!("{}:{}", event.id, attendee_id);
+    if let Some(db) = d1 {
+        crate::db::credit_ledger::record(
+            db,
+            &attendee_email,
+            &event.organization_id,
+            "thb",
+            held_amount as i64,
+            crate::db::credit_ledger::REASON_HOLD,
+            Some(&event.id),
+            Some(&deposit_key),
+            None,
+        )
+        .await
+        .map_err(AppError::Internal)?;
+    }
+    if let Err(e) = crate::sheets::contacts::increment_credit(
         &state,
         &resolved.sheet_id,
         &resolved.contacts_sheet_name,
@@ -261,7 +279,9 @@ pub async fn admin_hold_deposit_handler(
         held_amount,
     )
     .await
-    .map_err(AppError::Internal)?;
+    {
+        tracing::warn!(email = %attendee_email, error = %e, "credit Sheets mirror (admin hold) failed — D1 ledger is authoritative");
+    }
 
     tracing::info!(
         attendee_id = %attendee_id,

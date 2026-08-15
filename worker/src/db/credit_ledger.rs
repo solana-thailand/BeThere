@@ -23,6 +23,10 @@ pub const REASON_HOLD: &str = "hold";
 /// Audit reason label for a refund reversal (organizer paid the held credit back
 /// out-of-band → remove it from the ledger).
 pub const REASON_REFUND: &str = "refund";
+/// Model B: rolling credit RETURNED to the attendee on check-in — attending
+/// honours the commitment, so the ฿ rolls back to their balance for the next
+/// event (a no-show simply never triggers this, forfeiting it). +delta.
+pub const REASON_RETURN: &str = "return";
 
 /// Record a signed credit movement.
 ///
@@ -239,6 +243,22 @@ pub async fn emails_applied_credit(
                 .map(|s| s.to_lowercase())
         })
         .collect())
+}
+
+/// Delete the Model-B credit-return entry for (event, email) — used on undo-
+/// check-in so a subsequent re-check-in re-adds it (keeps the rolling balance
+/// correct across corrections). No-op when none exists.
+pub async fn remove_return(db: &D1Database, event_id: &str, email: &str) -> Result<(), String> {
+    let email_lc = email.to_lowercase();
+    let sql = "DELETE FROM credit_ledger WHERE reason = 'return' \
+               AND event_id = ?1 AND email = ?2";
+    db.prepare(sql)
+        .bind_refs(&[D1Type::Text(event_id), D1Type::Text(&email_lc)])
+        .map_err(|e| format!("D1 credit_ledger remove_return bind: {e:?}"))?
+        .run()
+        .await
+        .map_err(|e| format!("D1 credit_ledger remove_return run: {e:?}"))?;
+    Ok(())
 }
 
 /// Result of a credit-ledger reconciliation sweep (run daily by the cron). An

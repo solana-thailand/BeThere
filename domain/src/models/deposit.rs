@@ -172,6 +172,15 @@ impl ThbDeposit {
             Some("ROLLING_CREDIT_AUTO_APPLIED" | "STAFF_COMP_WAIVED")
         ) || self.amount_thb == 0
     }
+
+    /// True specifically for a ROLLING-CREDIT-covered deposit (NOT a staff comp).
+    /// Model B: on check-in these roll the ฿ back to the attendee's credit balance
+    /// (the commitment is honoured by showing up); a no-show forfeits it. Staff
+    /// comps are excluded — a comp never consumed credit, so nothing rolls back.
+    pub fn is_credit_covered(&self) -> bool {
+        matches!(self.verified_by.as_deref(), Some("SYSTEM_ROLLING_CREDIT"))
+            || matches!(self.slip_url.as_deref(), Some("ROLLING_CREDIT_AUTO_APPLIED"))
+    }
 }
 
 /// Request body for POST /api/deposit/usdc — build a Solana Pay deposit TX.
