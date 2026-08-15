@@ -34,6 +34,7 @@
 
 | Document | Description |
 |---|---|
+| [Handover 2026-08-15 — Credit + Security](HANDOVER-2026-08-15-credit-and-security.md) | Rolling-credit ledger rebuild (Model B) + all admin IDOR/PII fixes — **read this first** for the credit/deposit + admin-authz state |
 | [Security Findings 2026-08-13](SECURITY-FINDINGS-2026-08-13.md) | This cycle's branch-review findings (IDOR, credit double-spend, wallet binding) + fixes |
 | [Escrow Audit & Go/No-Go 2026-08-13](escrow-audit-2026-08-13.md) | Pre-mainnet audit of the escrow program + **USDC mainnet checklist** (F1–F8) |
 | [Security Audit](security_audit.md) | Original SEC-001–015 review and checklist |
