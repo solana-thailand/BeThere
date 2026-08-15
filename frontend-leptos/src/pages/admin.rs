@@ -1298,7 +1298,7 @@ pub fn Admin() -> impl IntoView {
                                                         <strong>"Errors:"</strong>
                                                         <ul>
                                                             {errors.iter().map(|e| view! {
-                                                                <li>{utils::escape_html(e)}</li>
+                                                                <li>{e.clone()}</li>
                                                             }).collect_view()}
                                                         </ul>
                                                     </div>
@@ -1506,7 +1506,7 @@ pub fn Admin() -> impl IntoView {
                                     let time_ago_str = attendee.checked_in_at.as_deref().map(utils::time_ago).unwrap_or_default();
                                     let has_time_ago = is_checked_in && !time_ago_str.is_empty();
                                     let checked_in_by_suffix = attendee.checked_in_by.as_ref().map_or(String::new(), |by| {
-                                        if by.is_empty() { String::new() } else { format!(" by {}", utils::escape_html(by)) }
+                                        if by.is_empty() { String::new() } else { format!(" by {by}") }
                                     });
                                     let deposit_link = match active_event_id.get() {
                                         Some(ref eid) => format!("/deposit/{api_id}?event_id={eid}"),
@@ -1576,7 +1576,7 @@ pub fn Admin() -> impl IntoView {
                                                 >
                                                     {if is_selected { "✓" } else { "" }}
                                                 </button>
-                                                <div class="attendee-name">{utils::escape_html(&name)}</div>
+                                                <div class="attendee-name">{name.clone()}</div>
                                                 <span class=p_class.clone()>{p_label.clone()}</span>
                                                 <span class=badge_class>{badge_text}</span>
                                                 <Show
@@ -1642,12 +1642,12 @@ pub fn Admin() -> impl IntoView {
                                             // Row 2: email + ticket + time ago + action buttons
                                             <div class="attendee-row-bottom">
                                                 <div class="attendee-meta">
-                                                    <span class="attendee-email-inline">{utils::escape_html(&email)}</span>
+                                                    <span class="attendee-email-inline">{email.clone()}</span>
                                                     <Show
                                                         when=move || has_ticket
                                                         fallback=|| view! { <span></span> }
                                                     >
-                                                        <span class="admin-ticket-tag">{utils::escape_html(&ticket)}</span>
+                                                        <span class="admin-ticket-tag">{ticket.clone()}</span>
                                                     </Show>
                                                     <Show
                                                         when=move || has_time_ago
@@ -2238,7 +2238,7 @@ fn render_recent_check_ins(
                             let at = check_in.checked_in_at.clone();
                             let formatted = utils::format_timestamp(&at);
                             let by_suffix = check_in.checked_in_by.as_ref().map_or(String::new(), |by| {
-                                if by.is_empty() { String::new() } else { format!(" by {}", utils::escape_html(by)) }
+                                if by.is_empty() { String::new() } else { format!(" by {by}") }
                             });
 
                             let p_type = participation_map
@@ -2252,7 +2252,7 @@ fn render_recent_check_ins(
                             view! {
                                 <div class="attendee-item">
                                     <div class="attendee-row-top">
-                                        <div class="attendee-name">{utils::escape_html(&name)}</div>
+                                        <div class="attendee-name">{name.clone()}</div>
                                         <span class=format!("{p_class} admin-badge-inline")>
                                             {p_label.clone()}
                                         </span>
@@ -2260,7 +2260,7 @@ fn render_recent_check_ins(
                                     <div class="attendee-row-bottom">
                                         <div class="attendee-meta">
                                             <span class="attendee-email-inline admin-recent-email">
-                                                {utils::escape_html(&api_id)}
+                                                {api_id.clone()}
                                             </span>
                                         </div>
                                         <div class="admin-checkin-time">

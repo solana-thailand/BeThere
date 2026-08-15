@@ -83,6 +83,8 @@ pub fn AdminDeposits(
     let (refresh_counter, set_refresh_counter) = signal(0u32);
     let (action_pending, set_action_pending) = signal(None::<String>);
     let (confirm_reject_id, set_confirm_reject_id) = signal(None::<String>);
+    // 2-step confirm for the irreversible "Hold as Credit" money action.
+    let (confirm_hold_id, set_confirm_hold_id) = signal(None::<String>);
     // Refund proof: 2-step flow — first click shows input, second click confirms.
     // Per-row state: each refund queue item has its own proof URL value,
     // keyed by attendee_id. A single shared signal would cause typing in row A
@@ -367,6 +369,20 @@ pub fn AdminDeposits(
     // all financial invariants (settle-before-increment, idempotency guards).
     let handle_admin_hold = move |item: ThbDepositInfo| {
         let attendee_id = item.attendee_id.clone();
+
+        // First click arms confirm — Hold irreversibly converts a refundable cash
+        // deposit into rolling credit, so require a 2-step (like reject/delete).
+        if confirm_hold_id.get().as_deref() != Some(&attendee_id) {
+            set_confirm_hold_id.set(Some(attendee_id.clone()));
+            let set_confirm = set_confirm_hold_id;
+            gloo_timers::callback::Timeout::new(3000, move || {
+                set_confirm.set(None);
+            })
+            .forget();
+            return;
+        }
+        set_confirm_hold_id.set(None);
+
         let event_id = item.event_id.clone();
         let key = format!("hold-{attendee_id}");
         set_action_pending.set(Some(key));
@@ -689,6 +705,7 @@ pub fn AdminDeposits(
                             let hold_key = format!("hold-{item_id}");
                             let hold_disabled = current_action.as_ref() == Some(&hold_key);
                             let hold_loading = hold_disabled;
+                            let is_confirming_hold = confirm_hold_id.get().as_deref() == Some(&item_id);
 
                             let amount = format!("{} THB", item.amount_thb);
                             let verified_by = item.verified_by.as_deref().unwrap_or("Unknown");
@@ -825,7 +842,7 @@ pub fn AdminDeposits(
                                                     title="Hold this deposit as rolling credit for the attendee's next event (use when the attendee confirmed hold verbally)"
                                                     on:click=move |_| handle_admin_hold(item_for_hold.clone())
                                                 >
-                                                    {if hold_loading { "Holding..." } else { "↻ Hold as Credit" }}
+                                                    {if hold_loading { "Holding..." } else if is_confirming_hold { "Confirm hold?" } else { "↻ Hold as Credit" }}
                                                 </button>
                                             </div>
                                         </div>
