@@ -2,8 +2,8 @@
 
 // serde derives used via full path in attribute macros
 
-use super::types::{ApiError, ApiResponse};
-use super::{api_get, api_post_json, fetch::response_json};
+use super::types::ApiError;
+use super::{api_get_json, api_post_json};
 
 // ===== Deposit/Refund Types =====
 
@@ -328,31 +328,7 @@ pub async fn get_deposit_status(
         Some(eid) if !eid.is_empty() => format!("/deposit/status/{attendee_id}?event_id={eid}"),
         _ => format!("/deposit/status/{attendee_id}"),
     };
-    let response = api_get(&path).await?;
-
-    if !response.ok() {
-        let body: ApiResponse<()> = response_json(&response).await.unwrap_or(ApiResponse {
-            success: false,
-            data: None,
-            error: Some("Failed to get deposit status".to_string()),
-            correlation_id: None,
-        });
-        return Err(ApiError {
-            message: body.error.unwrap_or_default(),
-            status: 0,
-        });
-    }
-
-    let wrapper: ApiResponse<DepositStatusResponse> =
-        response_json(&response).await.map_err(|e| ApiError {
-            message: format!("Failed to parse deposit status: {e}"),
-            status: 0,
-        })?;
-
-    wrapper.data.ok_or_else(|| ApiError {
-        message: wrapper.error.unwrap_or("No data".to_string()),
-        status: 0,
-    })
+    api_get_json(&path).await
 }
 
 /// POST /api/deposit/usdc
@@ -380,31 +356,7 @@ pub async fn confirm_deposit(
     attendee_id: &str,
 ) -> Result<ConfirmDepositResponse, ApiError> {
     let path = format!("/deposit/usdc/confirm?event_id={event_id}&attendee_id={attendee_id}");
-    let response = api_get(&path).await?;
-
-    if !response.ok() {
-        let body: ApiResponse<()> = response_json(&response).await.unwrap_or(ApiResponse {
-            success: false,
-            data: None,
-            error: Some("Failed to check deposit confirmation".to_string()),
-            correlation_id: None,
-        });
-        return Err(ApiError {
-            message: body.error.unwrap_or_default(),
-            status: 0,
-        });
-    }
-
-    let wrapper: ApiResponse<ConfirmDepositResponse> =
-        response_json(&response).await.map_err(|e| ApiError {
-            message: format!("Failed to parse deposit confirmation: {e}"),
-            status: 0,
-        })?;
-
-    wrapper.data.ok_or_else(|| ApiError {
-        message: wrapper.error.unwrap_or("No data".to_string()),
-        status: 0,
-    })
+    api_get_json(&path).await
 }
 
 /// POST /api/deposit/thb/upload
@@ -435,31 +387,7 @@ pub async fn get_pending_slips(event_id: Option<&str>) -> Result<PendingSlipResp
         Some(eid) if !eid.is_empty() => format!("/deposit/thb/pending?event_id={eid}"),
         _ => "/deposit/thb/pending".to_string(),
     };
-    let response = api_get(&path).await?;
-
-    if !response.ok() {
-        let body: ApiResponse<()> = response_json(&response).await.unwrap_or(ApiResponse {
-            success: false,
-            data: None,
-            error: Some("Failed to get pending slips".to_string()),
-            correlation_id: None,
-        });
-        return Err(ApiError {
-            message: body.error.unwrap_or_default(),
-            status: 0,
-        });
-    }
-
-    let wrapper: ApiResponse<PendingSlipResponse> =
-        response_json(&response).await.map_err(|e| ApiError {
-            message: format!("Failed to parse pending slips: {e}"),
-            status: 0,
-        })?;
-
-    wrapper.data.ok_or_else(|| ApiError {
-        message: wrapper.error.unwrap_or("No data".to_string()),
-        status: 0,
-    })
+    api_get_json(&path).await
 }
 
 /// GET /api/refund/queue?event_id=xxx
@@ -468,31 +396,7 @@ pub async fn get_refund_queue(event_id: Option<&str>) -> Result<RefundQueueRespo
         Some(eid) if !eid.is_empty() => format!("/refund/queue?event_id={eid}"),
         _ => "/refund/queue".to_string(),
     };
-    let response = api_get(&path).await?;
-
-    if !response.ok() {
-        let body: ApiResponse<()> = response_json(&response).await.unwrap_or(ApiResponse {
-            success: false,
-            data: None,
-            error: Some("Failed to get refund queue".to_string()),
-            correlation_id: None,
-        });
-        return Err(ApiError {
-            message: body.error.unwrap_or_default(),
-            status: 0,
-        });
-    }
-
-    let wrapper: ApiResponse<RefundQueueResponse> =
-        response_json(&response).await.map_err(|e| ApiError {
-            message: format!("Failed to parse refund queue: {e}"),
-            status: 0,
-        })?;
-
-    wrapper.data.ok_or_else(|| ApiError {
-        message: wrapper.error.unwrap_or("No data".to_string()),
-        status: 0,
-    })
+    api_get_json(&path).await
 }
 
 /// POST /api/refund/mark/{attendee_id}
@@ -537,31 +441,7 @@ pub async fn get_refunded_list(
         Some(eid) if !eid.is_empty() => format!("/refund/refunded?event_id={eid}"),
         _ => "/refund/refunded".to_string(),
     };
-    let response = api_get(&path).await?;
-
-    if !response.ok() {
-        let body: ApiResponse<()> = response_json(&response).await.unwrap_or(ApiResponse {
-            success: false,
-            data: None,
-            error: Some("Failed to get refunded list".to_string()),
-            correlation_id: None,
-        });
-        return Err(ApiError {
-            message: body.error.unwrap_or_default(),
-            status: 0,
-        });
-    }
-
-    let wrapper: ApiResponse<RefundedListResponse> =
-        response_json(&response).await.map_err(|e| ApiError {
-            message: format!("Failed to parse refunded list: {e}"),
-            status: 0,
-        })?;
-
-    wrapper.data.ok_or_else(|| ApiError {
-        message: wrapper.error.unwrap_or("No data".to_string()),
-        status: 0,
-    })
+    api_get_json(&path).await
 }
 
 /// Response for GET /api/refund/held — deposits held as rolling credit.
@@ -578,31 +458,7 @@ pub async fn get_held_list(event_id: Option<&str>) -> Result<HeldListResponse, A
         Some(eid) if !eid.is_empty() => format!("/refund/held?event_id={eid}"),
         _ => "/refund/held".to_string(),
     };
-    let response = api_get(&path).await?;
-
-    if !response.ok() {
-        let body: ApiResponse<()> = response_json(&response).await.unwrap_or(ApiResponse {
-            success: false,
-            data: None,
-            error: Some("Failed to get held list".to_string()),
-            correlation_id: None,
-        });
-        return Err(ApiError {
-            message: body.error.unwrap_or_default(),
-            status: 0,
-        });
-    }
-
-    let wrapper: ApiResponse<HeldListResponse> =
-        response_json(&response).await.map_err(|e| ApiError {
-            message: format!("Failed to parse held list: {e}"),
-            status: 0,
-        })?;
-
-    wrapper.data.ok_or_else(|| ApiError {
-        message: wrapper.error.unwrap_or("No data".to_string()),
-        status: 0,
-    })
+    api_get_json(&path).await
 }
 
 /// Request body for POST /api/refund/hold/{attendee_id} — admin marks a
@@ -655,31 +511,7 @@ pub struct CreditLiability {
 
 /// GET /api/deposit/credit-liability — total credit held across all contacts.
 pub async fn get_credit_liability() -> Result<CreditLiability, ApiError> {
-    let response = api_get("/deposit/credit-liability").await?;
-
-    if !response.ok() {
-        let body: ApiResponse<()> = response_json(&response).await.unwrap_or(ApiResponse {
-            success: false,
-            data: None,
-            error: Some("Failed to get credit liability".to_string()),
-            correlation_id: None,
-        });
-        return Err(ApiError {
-            message: body.error.unwrap_or_default(),
-            status: 0,
-        });
-    }
-
-    let wrapper: ApiResponse<CreditLiability> =
-        response_json(&response).await.map_err(|e| ApiError {
-            message: format!("Failed to parse credit liability: {e}"),
-            status: 0,
-        })?;
-
-    wrapper.data.ok_or_else(|| ApiError {
-        message: wrapper.error.unwrap_or("No data".to_string()),
-        status: 0,
-    })
+    api_get_json("/deposit/credit-liability").await
 }
 
 /// Cash / Credit / Comp deposit-source breakdown for one event — reconciles how
@@ -714,25 +546,7 @@ pub async fn get_credit_used(event_id: Option<&str>) -> Result<CreditUsedRespons
         Some(eid) if !eid.is_empty() => format!("/deposit/credit-used?event_id={eid}"),
         _ => "/deposit/credit-used".to_string(),
     };
-    let response = api_get(&path).await?;
-
-    if !response.ok() {
-        return Err(ApiError {
-            message: "Failed to load credit-used summary".to_string(),
-            status: 0,
-        });
-    }
-
-    let wrapper: ApiResponse<CreditUsedResponse> =
-        response_json(&response).await.map_err(|e| ApiError {
-            message: format!("Failed to parse credit-used summary: {e}"),
-            status: 0,
-        })?;
-
-    wrapper.data.ok_or_else(|| ApiError {
-        message: wrapper.error.unwrap_or("No data".to_string()),
-        status: 0,
-    })
+    api_get_json(&path).await
 }
 
 // ===== Phase 3 — Credit Refund Request (exit path) =====
@@ -772,31 +586,7 @@ pub struct CreditRefundRequestStatus {
 
 /// GET /api/deposit/credit-refund-request — read the attendee's own flag state.
 pub async fn get_credit_refund_request_status() -> Result<CreditRefundRequestStatus, ApiError> {
-    let response = api_get("/deposit/credit-refund-request").await?;
-
-    if !response.ok() {
-        let body: ApiResponse<()> = response_json(&response).await.unwrap_or(ApiResponse {
-            success: false,
-            data: None,
-            error: Some("Failed to get credit refund request status".to_string()),
-            correlation_id: None,
-        });
-        return Err(ApiError {
-            message: body.error.unwrap_or_default(),
-            status: 0,
-        });
-    }
-
-    let wrapper: ApiResponse<CreditRefundRequestStatus> =
-        response_json(&response).await.map_err(|e| ApiError {
-            message: format!("Failed to parse credit refund request status: {e}"),
-            status: 0,
-        })?;
-
-    wrapper.data.ok_or_else(|| ApiError {
-        message: wrapper.error.unwrap_or("No data".to_string()),
-        status: 0,
-    })
+    api_get_json("/deposit/credit-refund-request").await
 }
 
 /// One row in the admin "credit refund requested" listing (Issue #061 Phase 3).
@@ -827,31 +617,7 @@ pub struct CreditRefundRequestsResponse {
 /// GET /api/deposit/credit-refund-requests — admin lists open credit-refund
 /// requests. Cross-event (global), backs the badge on the Held-as-Credit tab.
 pub async fn get_credit_refund_requests() -> Result<CreditRefundRequestsResponse, ApiError> {
-    let response = api_get("/deposit/credit-refund-requests").await?;
-
-    if !response.ok() {
-        let body: ApiResponse<()> = response_json(&response).await.unwrap_or(ApiResponse {
-            success: false,
-            data: None,
-            error: Some("Failed to get credit refund requests".to_string()),
-            correlation_id: None,
-        });
-        return Err(ApiError {
-            message: body.error.unwrap_or_default(),
-            status: 0,
-        });
-    }
-
-    let wrapper: ApiResponse<CreditRefundRequestsResponse> =
-        response_json(&response).await.map_err(|e| ApiError {
-            message: format!("Failed to parse credit refund requests: {e}"),
-            status: 0,
-        })?;
-
-    wrapper.data.ok_or_else(|| ApiError {
-        message: wrapper.error.unwrap_or("No data".to_string()),
-        status: 0,
-    })
+    api_get_json("/deposit/credit-refund-requests").await
 }
 
 /// Request body for POST /api/deposit/clear-credit-refund-request — admin
@@ -978,29 +744,5 @@ pub async fn hold_deposit(body: &HoldDepositRequest) -> Result<HoldDepositRespon
 
 /// GET /api/deposit/credit-balance — fetch the authenticated attendee's rolling credit balance.
 pub async fn get_credit_balance() -> Result<CreditBalanceResponse, ApiError> {
-    let response = api_get("/deposit/credit-balance").await?;
-
-    if !response.ok() {
-        let body: ApiResponse<()> = response_json(&response).await.unwrap_or(ApiResponse {
-            success: false,
-            data: None,
-            error: Some("Failed to get credit balance".to_string()),
-            correlation_id: None,
-        });
-        return Err(ApiError {
-            message: body.error.unwrap_or_default(),
-            status: 0,
-        });
-    }
-
-    let wrapper: ApiResponse<CreditBalanceResponse> =
-        response_json(&response).await.map_err(|e| ApiError {
-            message: format!("Failed to parse credit balance: {e}"),
-            status: 0,
-        })?;
-
-    wrapper.data.ok_or_else(|| ApiError {
-        message: wrapper.error.unwrap_or("No data".to_string()),
-        status: 0,
-    })
+    api_get_json("/deposit/credit-balance").await
 }

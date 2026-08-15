@@ -398,6 +398,47 @@ async fn api_json_with_body<T: serde::de::DeserializeOwned + Default>(
     })
 }
 
+/// Authenticated GET that unwraps the `ApiResponse<T>` envelope — collapses the
+/// ok()/parse/`ok_or_else` boilerplate every `get_*` handler used to repeat. 401
+/// and 403 are handled inside `api_get` (redirect / access-denied).
+pub(crate) async fn api_get_json<T: serde::de::DeserializeOwned + Default>(
+    path: &str,
+) -> Result<T, ApiError> {
+    let response = api_get(path).await?;
+
+    if !response.ok() {
+        let body: ApiResponse<()> = response_json(&response).await.unwrap_or(ApiResponse {
+            success: false,
+            data: None,
+            error: Some("Request failed".to_string()),
+            correlation_id: None,
+        });
+        return Err(ApiError {
+            message: body
+                .error
+                .unwrap_or_else(|| format!("HTTP {}", response.status())),
+            status: response.status(),
+        });
+    }
+
+    let result: ApiResponse<T> = response_json(&response).await.map_err(|e| ApiError {
+        message: format!("Failed to parse response: {e}"),
+        status: 0,
+    })?;
+
+    if !result.success {
+        return Err(ApiError {
+            message: result.error.unwrap_or("Unknown error".to_string()),
+            status: 0,
+        });
+    }
+
+    result.data.ok_or_else(|| ApiError {
+        message: "No data in response".to_string(),
+        status: 0,
+    })
+}
+
 /// Make an authenticated POST request with JSON body to the API.
 pub(crate) async fn api_post_json<T: serde::de::DeserializeOwned + Default>(
     path: &str,
