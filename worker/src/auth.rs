@@ -519,6 +519,30 @@ pub async fn require_super_admin(
     Ok(())
 }
 
+/// Fail with 403 unless the caller is a super-admin OR an owner of
+/// `organization_id` (email ∈ the org's `owner_emails`). An empty/unknown org has
+/// no owners, so it falls through to super-admin only. Gate for cross-org
+/// resources (campaigns) keyed on a caller-supplied / record-derived org id.
+pub async fn require_org_access(
+    email: &str,
+    organization_id: &str,
+    state: &AppState,
+    action: &str,
+) -> Result<(), event_checkin_domain::models::error::AppError> {
+    if resolve_user_role(email, state, None).await == UserRole::SuperAdmin {
+        return Ok(());
+    }
+    if let Some(db) = state.d1.as_deref()
+        && let Ok(Some(org)) = crate::db::organizations::get_org_config(db, organization_id).await
+        && org.owner_emails.iter().any(|e| e.eq_ignore_ascii_case(email))
+    {
+        return Ok(());
+    }
+    Err(event_checkin_domain::models::error::AppError::Forbidden(
+        format!("not authorized for this organization: {action}"),
+    ))
+}
+
 pub async fn resolve_user_role(
     email: &str,
     state: &AppState,

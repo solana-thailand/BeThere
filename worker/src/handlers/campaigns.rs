@@ -212,14 +212,33 @@ fn validate_reward_type(reward_type: &str) -> Result<(), AppError> {
 // Campaign CRUD handlers
 // ---------------------------------------------------------------------------
 
+/// Load a campaign's organization_id for the per-org access check (404 if absent).
+async fn campaign_org(d1: &worker::D1Database, id: &str) -> Result<String, WorkerError> {
+    let c = crate::db::campaigns::get_campaign(d1, id)
+        .await
+        .map_err(|e| AppError::Internal(format!("failed to get campaign: {e}")))?
+        .ok_or_else(|| AppError::NotFound(format!("campaign not found: {id}")))?;
+    Ok(c.organization_id)
+}
+
 /// GET /api/campaigns
 #[worker::send]
 pub async fn list_campaigns(
     State(state): State<AppState>,
-    Extension(_claims): Extension<Claims>,
+    Extension(claims): Extension<Claims>,
     axum::extract::Query(params): axum::extract::Query<ListCampaignsParams>,
 ) -> Result<ApiOk<serde_json::Value>, WorkerError> {
     let d1 = require_d1(&state)?;
+
+    // S3: an org filter must be one the caller owns; listing ALL is super-admin.
+    match params.organization_id.as_deref() {
+        Some(org) => {
+            crate::auth::require_org_access(&claims.email, org, &state, "list campaigns").await?
+        }
+        None => {
+            crate::auth::require_super_admin(&claims.email, &state, "list all campaigns").await?
+        }
+    }
 
     let campaigns = crate::db::campaigns::list_campaigns(
         d1,
@@ -238,10 +257,14 @@ pub async fn list_campaigns(
 #[worker::send]
 pub async fn create_campaign(
     State(state): State<AppState>,
-    Extension(_claims): Extension<Claims>,
+    Extension(claims): Extension<Claims>,
     axum::Json(body): axum::Json<CreateCampaignRequest>,
 ) -> Result<ApiOk<CampaignDetail>, WorkerError> {
     let d1 = require_d1(&state)?;
+
+    // S3: only an owner of the target org (or super-admin) may create in it.
+    crate::auth::require_org_access(&claims.email, &body.organization_id, &state, "create campaign")
+        .await?;
 
     validate_reward_type(&body.reward_type)?;
 
@@ -270,10 +293,11 @@ pub async fn create_campaign(
 #[worker::send]
 pub async fn get_campaign(
     State(state): State<AppState>,
-    Extension(_claims): Extension<Claims>,
+    Extension(claims): Extension<Claims>,
     Path(id): Path<String>,
 ) -> Result<ApiOk<serde_json::Value>, WorkerError> {
     let d1 = require_d1(&state)?;
+    crate::auth::require_org_access(&claims.email, &campaign_org(d1, &id).await?, &state, "view campaign").await?;
 
     let campaign = crate::db::campaigns::get_campaign(d1, &id)
         .await
@@ -298,11 +322,12 @@ pub async fn get_campaign(
 #[worker::send]
 pub async fn update_campaign(
     State(state): State<AppState>,
-    Extension(_claims): Extension<Claims>,
+    Extension(claims): Extension<Claims>,
     Path(id): Path<String>,
     axum::Json(body): axum::Json<UpdateCampaignRequest>,
 ) -> Result<ApiOk<CampaignDetail>, WorkerError> {
     let d1 = require_d1(&state)?;
+    crate::auth::require_org_access(&claims.email, &campaign_org(d1, &id).await?, &state, "update campaign").await?;
 
     validate_reward_type(&body.reward_type)?;
 
@@ -336,10 +361,11 @@ pub async fn update_campaign(
 #[worker::send]
 pub async fn delete_campaign(
     State(state): State<AppState>,
-    Extension(_claims): Extension<Claims>,
+    Extension(claims): Extension<Claims>,
     Path(id): Path<String>,
 ) -> Result<ApiOk<serde_json::Value>, WorkerError> {
     let d1 = require_d1(&state)?;
+    crate::auth::require_org_access(&claims.email, &campaign_org(d1, &id).await?, &state, "delete campaign").await?;
 
     // Cascade delete: events + progress first, then campaign
     crate::db::campaigns::set_campaign_events(d1, &id, &[])
@@ -365,11 +391,12 @@ pub async fn delete_campaign(
 #[worker::send]
 pub async fn update_campaign_status(
     State(state): State<AppState>,
-    Extension(_claims): Extension<Claims>,
+    Extension(claims): Extension<Claims>,
     Path(id): Path<String>,
     axum::Json(body): axum::Json<UpdateStatusRequest>,
 ) -> Result<ApiOk<CampaignDetail>, WorkerError> {
     let d1 = require_d1(&state)?;
+    crate::auth::require_org_access(&claims.email, &campaign_org(d1, &id).await?, &state, "update campaign status").await?;
 
     validate_campaign_status(&body.status)?;
 
@@ -399,10 +426,11 @@ pub async fn update_campaign_status(
 #[worker::send]
 pub async fn list_campaign_events(
     State(state): State<AppState>,
-    Extension(_claims): Extension<Claims>,
+    Extension(claims): Extension<Claims>,
     Path(id): Path<String>,
 ) -> Result<ApiOk<serde_json::Value>, WorkerError> {
     let d1 = require_d1(&state)?;
+    crate::auth::require_org_access(&claims.email, &campaign_org(d1, &id).await?, &state, "view campaign events").await?;
 
     let events = crate::db::campaigns::list_campaign_events(d1, &id)
         .await
@@ -425,11 +453,12 @@ pub async fn list_campaign_events(
 #[worker::send]
 pub async fn set_campaign_events(
     State(state): State<AppState>,
-    Extension(_claims): Extension<Claims>,
+    Extension(claims): Extension<Claims>,
     Path(id): Path<String>,
     axum::Json(body): axum::Json<SetCampaignEventsRequest>,
 ) -> Result<ApiOk<serde_json::Value>, WorkerError> {
     let d1 = require_d1(&state)?;
+    crate::auth::require_org_access(&claims.email, &campaign_org(d1, &id).await?, &state, "set campaign events").await?;
 
     // Verify campaign exists
     let _ = crate::db::campaigns::get_campaign(d1, &id)
@@ -470,10 +499,11 @@ pub async fn set_campaign_events(
 #[worker::send]
 pub async fn list_campaign_progress(
     State(state): State<AppState>,
-    Extension(_claims): Extension<Claims>,
+    Extension(claims): Extension<Claims>,
     Path(id): Path<String>,
 ) -> Result<ApiOk<serde_json::Value>, WorkerError> {
     let d1 = require_d1(&state)?;
+    crate::auth::require_org_access(&claims.email, &campaign_org(d1, &id).await?, &state, "view campaign progress").await?;
 
     let progress = crate::db::campaigns::list_campaign_progress(d1, &id)
         .await
@@ -527,10 +557,11 @@ pub async fn list_campaign_progress(
 #[worker::send]
 pub async fn campaign_stats(
     State(state): State<AppState>,
-    Extension(_claims): Extension<Claims>,
+    Extension(claims): Extension<Claims>,
     Path(id): Path<String>,
 ) -> Result<ApiOk<CampaignStatsResponse>, WorkerError> {
     let d1 = require_d1(&state)?;
+    crate::auth::require_org_access(&claims.email, &campaign_org(d1, &id).await?, &state, "view campaign stats").await?;
 
     let stats = crate::db::campaigns::campaign_completion_stats(d1, &id)
         .await
