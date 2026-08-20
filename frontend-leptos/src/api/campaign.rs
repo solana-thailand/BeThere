@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::types::ApiError;
-use super::{api_delete, api_get, api_post_json, api_put_json, fetch::response_json};
+use super::{api_delete, api_get, api_get_json, api_post_json, api_put_json, fetch::response_json};
 
 // ===== Campaign Types =====
 
@@ -260,6 +260,26 @@ pub async fn get_campaign(id: &str) -> Result<CampaignDetailResponse, ApiError> 
             status: 0,
         })
     })
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct CampaignExistsResponse {
+    #[serde(default)]
+    pub exists: bool,
+}
+
+/// GET /api/campaigns/{id}/exists — is this campaign id (slug) already taken?
+///
+/// Campaign ids are globally unique, so this answers for every org, not just
+/// the caller's. The id is URL-encoded so a hand-typed slug containing `/`
+/// reaches the handler as one path segment and comes back as a shape error
+/// (HTTP 400) rather than a router 404.
+pub async fn campaign_exists(id: &str) -> Result<bool, ApiError> {
+    let encoded = js_sys::encode_uri_component(id);
+    let path = format!("/campaigns/{encoded}/exists");
+    api_get_json::<CampaignExistsResponse>(&path)
+        .await
+        .map(|r| r.exists)
 }
 
 /// POST /api/campaigns — create campaign

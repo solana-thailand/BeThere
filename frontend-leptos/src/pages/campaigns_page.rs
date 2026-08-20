@@ -36,6 +36,23 @@ enum DetailTab {
     Stats,
 }
 
+/// Availability of the campaign id (slug) currently in the create form.
+///
+/// Answers are advisory except for [`SlugStatus::Taken`], which is a certain
+/// save failure and so blocks submission.
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum SlugStatus {
+    /// Never checked, or the slug changed since the last answer arrived.
+    Unchecked,
+    Checking,
+    Available,
+    Taken,
+    /// Rejected by the server as malformed (not `[A-Za-z0-9_-]`, or too long).
+    Malformed,
+    /// The probe itself failed (offline, 5xx). Never blocks saving.
+    CheckFailed,
+}
+
 // ===== Helper =====
 
 fn status_badge_class(status: &str) -> &'static str {
@@ -101,6 +118,8 @@ pub fn CampaignsPage(
     let (form_id, set_form_id) = signal(String::new());
     // True once the user manually edits the slug; suppresses auto-fill from Title.
     let (slug_manually_edited, set_slug_manually_edited) = signal(false);
+    // Availability of the slug currently in the create form (plan 016 P2.1).
+    let (slug_status, set_slug_status) = signal(SlugStatus::Unchecked);
     let (form_title, set_form_title) = signal(String::new());
     let (form_description, set_form_description) = signal(String::new());
     let (form_org_id, set_form_org_id) = signal(String::new());
@@ -225,6 +244,7 @@ pub fn CampaignsPage(
     let reset_form = move || {
         set_form_id.set(String::new());
         set_slug_manually_edited.set(false);
+        set_slug_status.set(SlugStatus::Unchecked);
         set_form_title.set(String::new());
         set_form_description.set(String::new());
         set_form_org_id.set(String::new());
@@ -312,6 +332,43 @@ pub fn CampaignsPage(
         }
     });
 
+    // Probe whether the typed slug is already taken.
+    //
+    // Fired on blur of the slug *and* title fields — the title auto-fills the
+    // slug, so checking only the slug field would miss the common path where an
+    // organizer types a title and submits without ever focusing the slug. Blur
+    // is already low-frequency, so no debounce is needed.
+    let check_slug = move || {
+        // Only meaningful on create; the slug is immutable once a campaign exists.
+        if editing_id.get_untracked().is_some() {
+            return;
+        }
+        let slug = form_id.get_untracked().trim().to_string();
+        if slug.is_empty() {
+            set_slug_status.set(SlugStatus::Unchecked);
+            return;
+        }
+        set_slug_status.set(SlugStatus::Checking);
+        leptos::task::spawn_local(async move {
+            let result = api::campaign_exists(&slug).await;
+            // Discard a stale answer: the organizer may have kept typing while
+            // this request was in flight.
+            if form_id.get_untracked().trim() != slug {
+                return;
+            }
+            let status = match result {
+                Ok(true) => SlugStatus::Taken,
+                Ok(false) => SlugStatus::Available,
+                Err(e) if e.status == 400 => SlugStatus::Malformed,
+                Err(e) => {
+                    log::warn!("[campaigns-page] slug availability check failed: {e}");
+                    SlugStatus::CheckFailed
+                }
+            };
+            set_slug_status.set(status);
+        });
+    };
+
     // Create new
     let handle_create_new = move |_: web_sys::MouseEvent| {
         reset_form();
@@ -385,6 +442,28 @@ pub fn CampaignsPage(
                     ToastType::Warning,
                 );
                 return;
+            }
+            // Availability is advisory — the probe can fail offline, and an
+            // unchecked slug still saves. A *known* collision, though, is a
+            // certain failure, so stop before the round-trip.
+            match slug_status.get() {
+                SlugStatus::Taken => {
+                    components::show_toast(
+                        &set_toast,
+                        "That Campaign ID is already taken — pick a different one",
+                        ToastType::Warning,
+                    );
+                    return;
+                }
+                SlugStatus::Malformed => {
+                    components::show_toast(
+                        &set_toast,
+                        "Campaign ID may only contain letters, numbers, '-' and '_'",
+                        ToastType::Warning,
+                    );
+                    return;
+                }
+                _ => {}
             }
         }
 
@@ -837,8 +916,36 @@ pub fn CampaignsPage(
                                 on:input=move |ev| {
                                     set_form_id.set(event_target_value(&ev));
                                     set_slug_manually_edited.set(true);
+                                    // The previous verdict described a different
+                                    // slug — drop it rather than show it stale.
+                                    set_slug_status.set(SlugStatus::Unchecked);
                                 }
+                                on:blur=move |_| check_slug()
                             />
+                            {move || {
+                                let (text, class) = match slug_status.get() {
+                                    SlugStatus::Unchecked => return ().into_any(),
+                                    SlugStatus::Checking => {
+                                        ("Checking availability…", "hint-note-sm")
+                                    }
+                                    SlugStatus::Available => {
+                                        ("Available", "hint-note-sm slug-ok")
+                                    }
+                                    SlugStatus::Taken => (
+                                        "Already taken — pick a different Campaign ID.",
+                                        "hint-note-sm slug-bad",
+                                    ),
+                                    SlugStatus::Malformed => (
+                                        "Use letters, numbers, '-' or '_' only (max 64 characters).",
+                                        "hint-note-sm slug-bad",
+                                    ),
+                                    SlugStatus::CheckFailed => (
+                                        "Could not check availability — you can still save.",
+                                        "hint-note-sm",
+                                    ),
+                                };
+                                view! { <p class=class>{text}</p> }.into_any()
+                            }}
                         </div>
                         <div class="form-group">
                             <label class="form-label">"Title" <span class="required-marker">"*"</span></label>
@@ -854,8 +961,10 @@ pub fn CampaignsPage(
                                     // has manually edited the slug field.
                                     if editing_id.get().is_none() && !slug_manually_edited.get() {
                                         set_form_id.set(slugify(&v));
+                                        set_slug_status.set(SlugStatus::Unchecked);
                                     }
                                 }
+                                on:blur=move |_| check_slug()
                             />
                         </div>
                         <div class="form-group">

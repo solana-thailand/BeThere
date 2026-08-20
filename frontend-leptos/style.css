@@ -9075,6 +9075,17 @@ nav a.active {
     font-weight: 700;
 }
 
+/* Campaign slug availability verdict — recolours .hint-note-sm in place.
+   Neutral (inherited) is used for "checking" and for a failed probe, so only
+   a definite answer draws the eye. */
+.hint-note-sm.slug-ok {
+    color: var(--success);
+}
+
+.hint-note-sm.slug-bad {
+    color: var(--danger);
+}
+
 /* Post-create draft nudge banner shown in the Detail → Events tab to remind
    the organizer that a freshly created campaign is still a draft and needs
    events before it can be activated. */
