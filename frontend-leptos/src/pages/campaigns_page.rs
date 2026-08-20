@@ -53,6 +53,127 @@ enum SlugStatus {
     CheckFailed,
 }
 
+/// Build the `reward_config` JSON object from the individual form fields.
+///
+/// Shared by the save path and the preview card so the card previews exactly
+/// what will be persisted. Blank fields are written through as `""` rather than
+/// omitted — that is the historical shape of this column, and
+/// `domain::models::campaign` treats blank as unset when resolving defaults.
+///
+/// The three minted fields are keyed off the domain constants rather than
+/// string literals: renaming one there is then a compile-time change here, so
+/// the form and the mint resolver cannot silently drift apart. The other three
+/// are stored for the organizer's reference and never reach the mint request.
+#[allow(clippy::too_many_arguments)]
+fn build_reward_config(
+    name: &str,
+    symbol: &str,
+    description: &str,
+    image_url: &str,
+    metadata_uri: &str,
+    collection_mint: &str,
+) -> serde_json::Value {
+    use event_checkin_domain::models::campaign as reward;
+
+    serde_json::json!({
+        reward::KEY_NAME: name,
+        reward::KEY_DESCRIPTION: description,
+        reward::KEY_IMAGE_URL: image_url,
+        "symbol": symbol,
+        "metadata_uri": metadata_uri,
+        "collection_mint": collection_mint,
+    })
+}
+
+/// Live "what gets minted" card for the NFT reward section (plan 016 P2.2).
+///
+/// Resolves through `domain::models::campaign::resolve_reward` — the very
+/// function the worker's mint path calls — rather than re-deriving the defaults
+/// here, so the card cannot drift from what actually mints.
+///
+/// Only the three fields that reach the mint request are shown. Symbol,
+/// Metadata URI and Collection Mint are stored on the campaign but are not part
+/// of the minted metadata, so previewing them would imply otherwise.
+fn nft_preview_card(title: &str, rc: &serde_json::Value) -> AnyView {
+    use event_checkin_domain::models::campaign as reward;
+
+    let resolved = reward::resolve_reward(title, rc);
+    // Both textual defaults interpolate the title. With no title typed yet they
+    // read as " - Campaign Complete", which looks like a bug rather than a
+    // default — prompt for the title instead.
+    let needs_title = title.trim().is_empty();
+    let name_is_default = reward::reward_config_field(rc, "name").is_none();
+    let desc_is_default = reward::reward_config_field(rc, "description").is_none();
+
+    let line = |value: String, is_default: bool, prompt: &'static str| match is_default
+        && needs_title
+    {
+        true => (prompt.to_string(), true, false),
+        false => (value, false, is_default),
+    };
+    let (name_text, name_pending, name_tagged) = line(
+        resolved.name,
+        name_is_default,
+        "Set a title to preview the minted name",
+    );
+    let (desc_text, desc_pending, desc_tagged) = line(
+        resolved.description,
+        desc_is_default,
+        "Set a title to preview the minted description",
+    );
+
+    let image_url = resolved.image_url;
+    let has_image = !image_url.is_empty();
+    let default_tag = |shown: bool| {
+        shown.then(|| view! { <span class="nft-preview-tag">"default"</span> })
+    };
+    let pending_class = |pending: bool| match pending {
+        true => "nft-preview-pending",
+        false => "",
+    };
+
+    view! {
+        <div class="nft-preview-card">
+            <div class="nft-preview-media">
+                // Placeholder sits underneath; a failed <img> uncovers it.
+                <Icon icon=IconName::Trophy class="icon-lg" />
+                {has_image
+                    .then(|| {
+                        view! {
+                            <img
+                                class="nft-preview-img"
+                                src=image_url.clone()
+                                alt=""
+                                on:error=move |ev| {
+                                    // A dead artwork URL should fall back to the
+                                    // placeholder, not a broken-image glyph.
+                                    use wasm_bindgen::JsCast;
+                                    if let Some(el) = ev
+                                        .target()
+                                        .and_then(|t| t.dyn_into::<web_sys::HtmlElement>().ok())
+                                    {
+                                        let _ = el.style().set_property("display", "none");
+                                    }
+                                }
+                            />
+                        }
+                    })}
+            </div>
+            <div class="nft-preview-meta">
+                <p class=format!("nft-preview-name {}", pending_class(name_pending))>
+                    {name_text}
+                    {default_tag(name_tagged)}
+                </p>
+                <p class=format!("nft-preview-desc {}", pending_class(desc_pending))>
+                    {desc_text}
+                    {default_tag(desc_tagged)}
+                </p>
+            </div>
+        </div>
+    }
+    .into_any()
+}
+
 // ===== Helper =====
 
 fn status_badge_class(status: &str) -> &'static str {
@@ -123,6 +244,11 @@ pub fn CampaignsPage(
     let (form_title, set_form_title) = signal(String::new());
     let (form_description, set_form_description) = signal(String::new());
     let (form_org_id, set_form_org_id) = signal(String::new());
+    // Initial status chosen on create (plan 016 P2.3). Draft is the default,
+    // matching the behaviour from before the selector existed.
+    let (form_status, set_form_status) = signal(
+        api::CampaignStatus::Draft.as_str().to_string(),
+    );
     let (form_reward_type, set_form_reward_type) = signal(String::new());
     let (form_criteria, set_form_criteria) = signal(String::new());
     let (form_rc_name, set_form_rc_name) = signal(String::new());
@@ -248,6 +374,7 @@ pub fn CampaignsPage(
         set_form_title.set(String::new());
         set_form_description.set(String::new());
         set_form_org_id.set(String::new());
+        set_form_status.set(api::CampaignStatus::Draft.as_str().to_string());
         set_form_reward_type.set(String::new());
         set_form_criteria.set(String::new());
         set_form_rc_name.set(String::new());
@@ -468,14 +595,14 @@ pub fn CampaignsPage(
         }
 
         // Build reward_config JSON from individual fields
-        let rc = serde_json::json!({
-            "name": form_rc_name.get(),
-            "symbol": form_rc_symbol.get(),
-            "description": form_rc_description.get(),
-            "image_url": form_rc_image_url.get(),
-            "metadata_uri": form_rc_metadata_uri.get(),
-            "collection_mint": form_rc_collection_mint.get(),
-        });
+        let rc = build_reward_config(
+            &form_rc_name.get(),
+            &form_rc_symbol.get(),
+            &form_rc_description.get(),
+            &form_rc_image_url.get(),
+            &form_rc_metadata_uri.get(),
+            &form_rc_collection_mint.get(),
+        );
         let reward_config = serde_json::to_string(&rc).unwrap_or_default();
 
         set_saving.set(true);
@@ -518,6 +645,7 @@ pub fn CampaignsPage(
                     title,
                     description: form_description.get(),
                     organization_id: form_org_id.get(),
+                    status: form_status.get(),
                     completion_criteria: form_criteria.get(),
                     reward_type: form_reward_type.get(),
                     reward_config,
@@ -1008,6 +1136,20 @@ pub fn CampaignsPage(
                                     "Organization is set on create and cannot be changed after."
                                 </p>
                             </div>
+                            <div class="form-group">
+                                <label class="form-label">"Initial status"</label>
+                                <select
+                                    class="form-select"
+                                    prop:value=move || form_status.get()
+                                    on:change=move |ev| set_form_status.set(event_target_value(&ev))
+                                >
+                                    <option value="draft">"Draft"</option>
+                                    <option value="active">"Active"</option>
+                                </select>
+                                <p class="hint-note-sm">
+                                    "Draft is a planning marker — check-in progress is tracked either way. You can switch status later from the campaign list."
+                                </p>
+                            </div>
                         </Show>
                         <div class="form-group">
                             <label class="form-label">"Reward Type"</label>
@@ -1037,6 +1179,22 @@ pub fn CampaignsPage(
                             <div class="form-section">
                                 <h4 class="form-section-title">"NFT Reward Configuration"</h4>
                                 <p class="hint-note-sm">"All fields below are optional — sensible defaults are applied on mint."</p>
+                                <div class="nft-preview">
+                                    <p class="nft-preview-label">"Preview — what gets minted"</p>
+                                    {move || {
+                                        nft_preview_card(
+                                            &form_title.get(),
+                                            &build_reward_config(
+                                                &form_rc_name.get(),
+                                                &form_rc_symbol.get(),
+                                                &form_rc_description.get(),
+                                                &form_rc_image_url.get(),
+                                                &form_rc_metadata_uri.get(),
+                                                &form_rc_collection_mint.get(),
+                                            ),
+                                        )
+                                    }}
+                                </div>
                                 <div class="form-group">
                                     <label class="form-label">"NFT Name"</label>
                                     <input class="form-input" type="text"
@@ -1053,7 +1211,9 @@ pub fn CampaignsPage(
                                         prop:value=move || form_rc_symbol.get()
                                         on:input=move |ev| set_form_rc_symbol.set(event_target_value(&ev))
                                     />
-                                    <p class="hint-note-sm">"Leave blank to use 'CAMPAIGN' on mint."</p>
+                                    <p class="hint-note-sm">
+                                        "Stored on the campaign for your own reference. Not part of the minted metadata, so it does not appear in the preview above."
+                                    </p>
                                 </div>
                                 <div class="form-group">
                                     <label class="form-label">"Description"</label>
@@ -1569,5 +1729,104 @@ pub fn CampaignsPage(
             </Show>
 
         </div>
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use event_checkin_domain::models::campaign as reward;
+
+    // --- slugify (plan 016 P0.1) -------------------------------------------
+
+    #[test]
+    fn slugify_produces_kebab_case() {
+        assert_eq!(slugify("Solana Hacker Series 2025"), "solana-hacker-series-2025");
+    }
+
+    #[test]
+    fn slugify_collapses_runs_and_trims() {
+        assert_eq!(slugify("  Hello --- World!!  "), "hello-world");
+    }
+
+    #[test]
+    fn slugify_returns_empty_for_blank_input() {
+        assert_eq!(slugify(""), "");
+        assert_eq!(slugify("   "), "");
+        assert_eq!(slugify("!!!"), "");
+    }
+
+    #[test]
+    fn slugify_caps_length_without_trailing_dash() {
+        let long = "a".repeat(80);
+        assert_eq!(slugify(&long).len(), 60);
+        // A cut landing on a separator must not leave a dangling dash.
+        let awkward = format!("{} x", "a".repeat(59));
+        let out = slugify(&awkward);
+        assert!(!out.ends_with('-'), "slug ended with a dash: {out}");
+    }
+
+    // --- reward_config contract (plan 016 P2.2) ----------------------------
+
+    fn config() -> serde_json::Value {
+        build_reward_config("", "BUILDER", "", "", "https://arweave.net/x", "mint111")
+    }
+
+    /// The form must write the exact keys the mint resolver reads, or both the
+    /// preview and the mint would silently fall back to defaults forever.
+    #[test]
+    fn build_reward_config_writes_the_resolver_keys() {
+        let rc = config();
+        assert!(rc.get(reward::KEY_NAME).is_some());
+        assert!(rc.get(reward::KEY_DESCRIPTION).is_some());
+        assert!(rc.get(reward::KEY_IMAGE_URL).is_some());
+    }
+
+    /// Fields stored for the organizer's reference are persisted but must not
+    /// reach the minted metadata — the preview card omits them for that reason.
+    #[test]
+    fn build_reward_config_keeps_unminted_fields_out_of_resolution() {
+        let rc = config();
+        assert_eq!(rc.get("symbol").and_then(|v| v.as_str()), Some("BUILDER"));
+        assert_eq!(
+            rc.get("metadata_uri").and_then(|v| v.as_str()),
+            Some("https://arweave.net/x")
+        );
+
+        let resolved = reward::resolve_reward("My Campaign", &rc);
+        assert_eq!(resolved.name, reward::default_reward_name("My Campaign"));
+        assert_eq!(
+            resolved.description,
+            reward::default_reward_description("My Campaign")
+        );
+        assert_eq!(resolved.image_url, "");
+    }
+
+    /// Blank inputs are written as `""`, not omitted — the preview relies on the
+    /// resolver treating that as unset.
+    #[test]
+    fn blank_form_fields_round_trip_to_defaults() {
+        let rc = build_reward_config("", "", "", "", "", "");
+        assert_eq!(rc.get(reward::KEY_NAME).and_then(|v| v.as_str()), Some(""));
+
+        let resolved = reward::resolve_reward("Devcon", &rc);
+        assert_eq!(resolved.name, "Devcon - Campaign Complete");
+        assert_eq!(resolved.description, "Completed the Devcon campaign");
+    }
+
+    #[test]
+    fn filled_form_fields_survive_resolution() {
+        let rc = build_reward_config(
+            "Builder Badge",
+            "BUILDER",
+            "You shipped.",
+            "https://example.com/i.png",
+            "",
+            "",
+        );
+        let resolved = reward::resolve_reward("Devcon", &rc);
+        assert_eq!(resolved.name, "Builder Badge");
+        assert_eq!(resolved.description, "You shipped.");
+        assert_eq!(resolved.image_url, "https://example.com/i.png");
     }
 }

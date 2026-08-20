@@ -163,6 +163,10 @@ pub struct CreateCampaignRequest {
     pub description: String,
     #[serde(default)]
     pub organization_id: String,
+    /// Initial status — `draft` or `active`. The worker rejects anything else
+    /// on create (a campaign cannot be born `completed`).
+    #[serde(default)]
+    pub status: String,
     #[serde(default)]
     pub completion_criteria: String,
     #[serde(default)]

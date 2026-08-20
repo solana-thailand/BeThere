@@ -9075,6 +9075,99 @@ nav a.active {
     font-weight: 700;
 }
 
+/* NFT reward preview card (plan 016 P2.2) — live "what gets minted" panel in
+   the campaign create form. Mirrors the mint request's three metadata fields;
+   anything not sent to the mint is deliberately absent. */
+.nft-preview {
+    margin-bottom: 1rem;
+}
+
+.nft-preview-label {
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    margin: 0 0 0.5rem;
+}
+
+.nft-preview-card {
+    display: flex;
+    align-items: center;
+    gap: 0.875rem;
+    padding: 0.875rem;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+}
+
+/* Fixed box so the card does not reflow while an image loads. The placeholder
+   icon is centred underneath the <img>, which covers it when it loads and
+   uncovers it again if the URL is dead (see the on:error handler). */
+.nft-preview-media {
+    position: relative;
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 64px;
+    height: 64px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text-muted);
+    overflow: hidden;
+}
+
+.nft-preview-img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.nft-preview-meta {
+    min-width: 0;
+}
+
+.nft-preview-name {
+    color: var(--text-primary);
+    font-size: 0.95rem;
+    font-weight: 600;
+    margin: 0 0 0.25rem;
+    overflow-wrap: anywhere;
+}
+
+.nft-preview-desc {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    line-height: 1.4;
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+/* Marks a value the organizer left blank, so it is clear the text shown is a
+   default rather than something they typed. */
+.nft-preview-tag {
+    display: inline-block;
+    margin-left: 0.4rem;
+    padding: 0.05rem 0.35rem;
+    background: var(--bg-hover);
+    border-radius: 0.35rem;
+    color: var(--text-muted);
+    font-size: 0.68rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    vertical-align: middle;
+}
+
+/* Waiting on the campaign title, which both defaults interpolate. */
+.nft-preview-pending {
+    color: var(--text-muted);
+    font-style: italic;
+}
+
 /* Campaign slug availability verdict — recolours .hint-note-sm in place.
    Neutral (inherited) is used for "checking" and for a failed probe, so only
    a definite answer draws the eye. */
