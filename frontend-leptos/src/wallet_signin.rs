@@ -136,6 +136,65 @@ fn wallet_install_row(name: &str, download_url: &str) -> AnyView {
     .into_any()
 }
 
+/// Wallet apps we can hand off to with a universal "browse" link.
+///
+/// The path shapes are vendor-specific and are taken from their docs:
+///  - Phantom  <https://docs.phantom.com/phantom-deeplinks/other-methods/browse>
+///  - Solflare <https://docs.solflare.com/solflare/technical/deeplinks/other-methods/browse>
+///
+/// Backpack is deliberately absent: it publishes no equivalent browse link, and
+/// guessing one would produce a button that silently goes nowhere.
+const DEEP_LINK_WALLETS: [(&str, &str); 2] = [
+    ("Phantom", "https://phantom.app/ul/browse/"),
+    ("Solflare", "https://solflare.com/ul/v1/browse/"),
+];
+
+/// Build a universal link that reopens the current page inside a wallet app's
+/// in-app browser.
+///
+/// This is the only sign-in route on iOS, which has no Mobile Wallet Adapter.
+/// Inside that browser the wallet injects a normal provider, the origin is
+/// unchanged, and the existing SIWS handshake runs untouched.
+///
+/// Returns `None` only if the location is unreadable, in which case the row is
+/// skipped rather than rendered as a dead link.
+fn wallet_browse_url(base: &str) -> Option<String> {
+    let location = web_sys::window()?.location();
+    let href = location.href().ok()?;
+    let origin = location.origin().ok()?;
+    let target = js_sys::encode_uri_component(&href);
+    let referrer = js_sys::encode_uri_component(&origin);
+    Some(format!("{base}{target}?ref={referrer}"))
+}
+
+/// Hand-off row rendered as a real anchor.
+///
+/// Deliberately not a JS `location.href` assignment: both vendors document that
+/// browse links must be *clicked*, and iOS is markedly more reliable about
+/// routing a user-activated link to the app than a scripted navigation.
+fn wallet_deep_link_row(name: &str, base: &str) -> Option<AnyView> {
+    let url = wallet_browse_url(base)?;
+    Some(
+        view! {
+            <a class="siws-wallet-option" href=url style="text-decoration: none;">
+                {wallet_identity(name)}
+                <span class="siws-badge-install">"Open App ↗"</span>
+            </a>
+        }
+        .into_any(),
+    )
+}
+
+/// Caption introducing the hand-off rows.
+fn deep_link_caption() -> AnyView {
+    view! {
+        <p style="margin: 8px 0 0; font-size: 0.8rem; color: #94a3b8; line-height: 1.45;">
+            "Or open this page inside your wallet app and sign in from there:"
+        </p>
+    }
+    .into_any()
+}
+
 /// Shown when nothing connectable was found, so the modal is never empty.
 fn no_wallet_row(mobile: bool) -> AnyView {
     let msg = match mobile {
@@ -432,6 +491,24 @@ pub fn WalletSignInButton(
                                         // Absent on mobile: no extension store
                                         // to send them to, so say nothing here.
                                         (false, true) => {}
+                                    }
+                                }
+
+                                // Mobile hand-off. Offered even when something
+                                // connectable was found: on Android the Mobile
+                                // Wallet Adapter row covers only the wallet the
+                                // OS resolves the intent to, and on iOS there is
+                                // no adapter at all, so this is the sole route.
+                                if mobile {
+                                    let links: Vec<AnyView> = DEEP_LINK_WALLETS
+                                        .iter()
+                                        .filter_map(|(name, base)| {
+                                            wallet_deep_link_row(name, base)
+                                        })
+                                        .collect();
+                                    if !links.is_empty() {
+                                        rows.push(deep_link_caption());
+                                        rows.extend(links);
                                     }
                                 }
 
