@@ -165,8 +165,86 @@ The existing `GET /orgs` is **SuperAdmin-only**. Plain organizers (who can creat
 
 ---
 
-## 4. P2 — Detail (defer until P0/P1 land)
-- **P2.1 Slug uniqueness**: new `GET /campaigns/{id}/exists` (or reuse `get_campaign`) checked on slug blur; show inline "already taken" if collision.
+## 4. P2 — Detail
+
+### P2.1 — Inline slug uniqueness  ✅ implemented
+
+**Chosen shape:** a **new** `GET /api/campaigns/{id}/exists` rather than reusing
+`get_campaign`. Reuse was rejected on inspection: `get_campaign` runs
+`require_org_access` against the campaign's owning org, so a slug held by
+*another* org answers `403`, and a free slug answers `404` — the frontend would
+have to infer availability from error codes, and a plain organizer could never
+distinguish "taken elsewhere" from "denied". Campaign ids are the primary key of
+`campaigns` and therefore globally unique, so the probe must be global too.
+
+**Backend** (`worker/src/handlers/campaigns.rs`, `worker/src/db/campaigns.rs`,
+`worker/src/handlers/mod.rs`)
+- `campaign_id_exists` returns `{ "exists": bool }` and nothing else — no
+  campaign data, not even the owning org. It sits behind the authenticated
+  admin router, so it discloses no more than the create attempt it replaces.
+- Deliberately **not** org-scoped (see above); the reasoning is recorded in the
+  handler doc comment so it is not "fixed" later by mistake.
+- `db::campaigns::campaign_exists` selects a constant (`SELECT 1 ... LIMIT 1`)
+  instead of the whole row — nothing about the campaign is needed.
+- New `validate_campaign_id` (`[A-Za-z0-9_-]`, 1..=64 chars) with 6 unit tests
+  in an inline `#[cfg(test)]` module, per the convention documented in
+  `worker/tests/do_claim_lock.rs`.
+
+**Security fix beyond the plan's letter (deliberate, flagged):**
+`db::campaigns::create_campaign` interpolates `id` straight into the `INSERT`
+(`VALUES ('{id}', ...)`) — like every other helper in that module it does not
+bind parameters. The plan did not call for touching create, but shipping the
+probe alone would have left the two disagreeing: `/exists` would reject a slug
+shape that `create` still accepted, so the form would tell the organizer one
+thing and the server do another. `validate_campaign_id` is therefore enforced on
+**both** paths, which also closes a pre-existing SQL-injection vector on an
+authenticated admin endpoint.
+**Not fixed, and still open:** the same interpolation applies to `title`,
+`description`, `completion_criteria`, `reward_type` and `reward_config` in
+`create_campaign`/`update_campaign`, and to ids across the rest of
+`db/campaigns.rs`. That is a module-wide parameter-binding refactor, out of
+scope here — tracked as a follow-up, not silently absorbed.
+
+**Frontend** (`api/campaign.rs`, `pages/campaigns_page.rs`, `style.css`)
+- `api::campaign_exists(id)` over the generic `api_get_json<T>`; the id is
+  URL-encoded so a hand-typed `a/b` reaches the handler as one segment and
+  returns a shape error (400) rather than a router 404.
+- `SlugStatus` = `Unchecked | Checking | Available | Taken | Malformed | CheckFailed`.
+- Probe fires on **blur of both the slug and the title** field. Title matters
+  because it auto-fills the slug (P0.1): checking only the slug field would miss
+  the common path where an organizer types a title and saves without ever
+  focusing the slug. Blur is already low-frequency, so no debounce was added.
+- Any edit that changes the slug resets the status to `Unchecked`, so a stale
+  verdict is never shown against a different slug. In-flight answers are
+  discarded if the slug moved on while the request was outstanding.
+- Save is blocked only on `Taken` and `Malformed` (both are certain failures).
+  `CheckFailed` and `Unchecked` deliberately still save — an offline probe must
+  not stop an organizer from creating a campaign.
+
+**Acceptance**
+- [x] `GET /campaigns/{id}/exists` returns `{"exists": true}` for a live slug and
+      `{"exists": false}` for a free one, for any authenticated admin regardless
+      of which org owns the campaign.
+- [x] A malformed slug returns `400` (not `404`/`500`) with a shape message.
+- [x] The create form shows "Available" / "Already taken" / a shape hint under
+      the Campaign ID field after blurring either Title or Campaign ID.
+- [x] Editing the slug clears the previous verdict rather than showing it stale.
+- [x] Save is blocked with a warning toast on a known collision; an unchecked or
+      unreachable probe still saves.
+- [x] `validate_campaign_id` rejects quotes, semicolons, whitespace, `/` and
+      non-ASCII, and accepts `x--y` (a doubled dash is a legal slug, not a SQL
+      comment — `--` can only open a comment outside a string literal, and
+      quoting is impossible). 202 worker unit tests pass.
+- [x] `cargo clippy -p worker -- -D warnings` clean; frontend wasm32 `--lib`
+      clippy `-D warnings` clean; `bash build.sh` succeeds.
+- [ ] Manual click-through pending.
+
+**Deploy note:** requires a **worker redeploy** — the endpoint does not exist in
+prod, so until the worker ships, the probe returns 404 and the form degrades to
+`CheckFailed` ("Could not check availability — you can still save"), which is
+non-blocking by design.
+
+### Remaining P2 (not started)
 - **P2.2 Preview**: render a small NFT preview card (name/symbol/image) live from the form fields.
 - **P2.3 Status on create**: optional active/draft selector; only if draft-default proves problematic. Backend `create_campaign` currently hardcodes `'draft'`.
 
@@ -202,7 +280,10 @@ The existing `GET /orgs` is **SuperAdmin-only**. Plain organizers (who can creat
 - [x] P1.1 advanced disclosure (wasm32 check clean; the false "3× leaderboard" claim was corrected — see §3 P1.1)
 - [x] P1.2 required markers (wasm32 check clean; added org validation on create; manual click-through pending)
 - [x] P1.3 post-create nudge (wasm32 check clean; honest deviation — one local `draft_nudge` signal added, see §3 P1.3; manual click-through pending)
-- [ ] P2 deferred
+- [x] P2.1 slug uniqueness (new `GET /campaigns/{id}/exists`; worker clippy + 202 unit tests + wasm32 clippy + `build.sh` clean; manual click-through pending; **requires worker redeploy**)
+      Includes a deliberate, flagged security fix: `validate_campaign_id` is now enforced on `create_campaign` too, closing a pre-existing SQL-injection vector on the campaign id. See §4 P2.1.
+- [ ] P2.2 preview card — not started
+- [ ] P2.3 status on create — not started (still conditional on draft-default proving problematic)
 
 **P0.3 decision (resolved):** Option **A** — widened `GET /orgs` read access to any authenticated admin; mutations stay SuperAdmin-only. Worker redeploy required.
 ````
