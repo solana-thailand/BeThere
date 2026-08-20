@@ -182,18 +182,31 @@ Leptos chat → POST /api/agent/chat (SSE)
 
 ## 6. Risk register (owners TBD at ratification)
 
-| Risk | Mitigation | Owner |
-|---|---|---|
-| Privilege escalation via inherited JWT | §4 `is_staff` recompute + `∩ agent_scope` (Q7/Q8/Q10) | _tbd_ |
-| PII leak into Anthropic context | §3 redaction at proxy (Q11/Q12) | _tbd_ |
-| Hallucinated id → mutation | §5 layer-2 existence check (Q20) | _tbd_ |
-| Auto-executed refund drains escrow | Bucket D never auto; browser-signed (Q19) | _tbd_ |
-| API key in bundle | server-side secret only (Q2) | _tbd_ |
-| 30s CPU overrun | streaming + chain-depth cap + async queue (Q15/Q16/Q18) | _tbd_ |
-| Lands before SIWS | pinned after Plan 006 (Q23) | _tbd_ |
-| No audit trail | D1 audit table day one (Q21) | _tbd_ |
-| Reads stale (CSV) | tools use Plan 008 JOIN path (Q5) | _tbd_ |
-| D1 hammering | reuse `EVENTS` KV TTL (Q17) | _tbd_ |
+Severity is the blast radius **if the mitigation fails**, not the likelihood.
+"Ratification must establish" is the concrete question each owner has to answer
+yes/no to — without it, "reviewed" means nothing and the checkbox is theatre.
+
+| Risk | Mitigation | Severity | Ratification must establish | Owner |
+|---|---|---|---|---|
+| Privilege escalation via inherited JWT | §4 `is_staff` recompute + `∩ agent_scope` (Q7/Q8/Q10) | **Critical** | That `agent_scope` is intersected **server-side on every call**, and that a captured staff JWT cannot widen it by replay. Who signs off on the `auth.rs` addendum? | _tbd_ |
+| PII leak into Anthropic context | §3 redaction at proxy (Q11/Q12) | **Critical** | The exact redacted column list, checked against the live schema — prod currently holds 467 `attendees` and 172 `contacts` rows — and that redaction runs at the proxy, not as a prompt instruction. | _tbd_ |
+| Hallucinated id → mutation | §5 layer-2 existence check (Q20) | High | That every Bucket M/D tool resolves ids against D1 before acting, and what a miss does (refuse vs. ask). | _tbd_ |
+| Auto-executed refund drains escrow | Bucket D never auto; browser-signed (Q19) | **Critical** | That no Bucket D route is reachable without a browser signature. Note prod runs `mainnet-beta` today, so a failure here spends real funds. | _tbd_ |
+| API key in bundle | server-side secret only (Q2) | High | That the Anthropic key is a Worker secret and never reaches `frontend-leptos/dist` — verifiable by grepping the built bundle in CI. | _tbd_ |
+| 30s CPU overrun | streaming + chain-depth cap + async queue (Q15/Q16/Q18) | Medium | The chain-depth cap's actual number and what the user sees when it trips. | _tbd_ |
+| Lands before SIWS | pinned after Plan 006 (Q23) | Medium | Plan 006's status at ratification. This is a sequencing gate, not a code change — it either holds or the plan slips. | _tbd_ |
+| No audit trail | D1 audit table day one (Q21) | High | The table schema and retention, and that the row is written **before** the tool result returns, so a crash cannot lose it. | _tbd_ |
+| Reads stale (CSV) | tools use Plan 008 JOIN path (Q5) | Medium | That no tool reads the Sheets/CSV path. | _tbd_ |
+| D1 hammering | reuse `EVENTS` KV TTL (Q17) | Medium | The TTL value, and whether it suits an agent's read pattern (bursty, repeated) rather than a page load's. | _tbd_ |
+
+**Why the owners are still `_tbd_`.** Asked directly on 2026-08-20; the answer was
+that the owners aren't known yet. Inventing names would make the Definition of
+Done pass while leaving every mitigation unaccounted for, which is the exact
+failure this row exists to prevent — so §7's checkbox stays unticked. What was
+missing for a real review has been added instead: severity, and a specific
+question per row. `git shortlog` shows a single human contributor, so if this
+stays a solo project the honest resolution is one name in all ten cells — but
+that is a call for the plan's owner, not for this document to assume.
 
 ---
 
@@ -203,7 +216,10 @@ Leptos chat → POST /api/agent/chat (SSE)
 - [x] Tool inventory finalized in R/M/D/X buckets (§3).
 - [x] Auth path documented as an `auth.rs` addendum (§4).
 - [x] PII redaction policy stated (§3 columns, Q11/Q12).
-- [ ] Risk register reviewed; every mitigation has an **owner** (§6 — needs team).
+- [ ] Risk register reviewed; every mitigation has an **owner** (§6). *Blocked on
+      one input only: who owns each row. Severity and a per-row ratification
+      question were filled in on 2026-08-20 so this is now a short sitting, not
+      a blank table. Confirmed still unknown as of that date — see the note under §6.*
 - [x] Output: this `.plans/` design doc.
 
 ---
