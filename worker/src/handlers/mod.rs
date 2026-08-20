@@ -520,6 +520,13 @@ pub fn routes(state: AppState) -> Router<()> {
             "/campaigns",
             get(campaigns::list_campaigns).post(campaigns::create_campaign),
         )
+        // Slug availability probe — must precede nothing in particular (axum
+        // matches the literal `exists` segment ahead of a bare `{id}` route),
+        // but is kept adjacent to the campaign CRUD block for legibility.
+        .route(
+            "/campaigns/{id}/exists",
+            get(campaigns::campaign_id_exists),
+        )
         .route(
             "/campaigns/{id}",
             get(campaigns::get_campaign)

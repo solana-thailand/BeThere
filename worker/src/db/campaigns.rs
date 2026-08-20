@@ -144,6 +144,33 @@ pub(crate) async fn get_campaign(db: &D1Database, id: &str) -> Result<Option<Cam
         .map_err(|e| format!("D1 get_campaign query: {e:?}"))
 }
 
+/// Does a campaign with this id already exist?
+///
+/// Used by the create-form slug availability probe, so it selects a constant
+/// instead of the whole row — nothing about the campaign is needed, only
+/// whether the primary key is taken.
+///
+/// `id` MUST already be shape-validated by the caller (see
+/// `handlers::campaigns::is_valid_campaign_id`): like the rest of this module
+/// the query is interpolated rather than bound, so an unvalidated id would be
+/// an injection vector.
+pub(crate) async fn campaign_exists(db: &D1Database, id: &str) -> Result<bool, String> {
+    let sql = format!("SELECT 1 AS present FROM campaigns WHERE id = '{id}' LIMIT 1");
+    let row = db
+        .prepare(&sql)
+        .first::<ExistsRow>(None)
+        .await
+        .map_err(|e| format!("D1 campaign_exists query: {e:?}"))?;
+    Ok(row.is_some())
+}
+
+/// Single-column probe row for [`campaign_exists`].
+#[derive(Debug, serde::Deserialize)]
+struct ExistsRow {
+    #[allow(dead_code)]
+    present: i64,
+}
+
 #[allow(dead_code)]
 /// Fetch all distinct `collection_mint` values from active campaigns with
 /// `reward_type = 'nft_certificate'`. Used to classify NFTs as campaign vs event.

@@ -3,6 +3,7 @@
 //! Protected endpoints (require staff auth):
 //!   GET    /api/campaigns                    — list campaigns
 //!   POST   /api/campaigns                    — create campaign
+//!   GET    /api/campaigns/{id}/exists        — is this campaign id taken?
 //!   GET    /api/campaigns/{id}               — get campaign detail
 //!   PUT    /api/campaigns/{id}               — update campaign
 //!   DELETE /api/campaigns/{id}               — delete campaign
@@ -208,6 +209,33 @@ fn validate_reward_type(reward_type: &str) -> Result<(), AppError> {
     }
 }
 
+/// Maximum length of a campaign id (slug). The create form caps its generated
+/// slug at 60; the extra headroom allows hand-typed ids without surprises.
+const MAX_CAMPAIGN_ID_LEN: usize = 64;
+
+/// Shape-check a campaign id (slug).
+///
+/// Two jobs. It is the shape the create form's slugify produces, and — because
+/// the D1 helpers in `db::campaigns` interpolate rather than bind — it is what
+/// keeps a user-supplied slug out of the SQL string. Restricting to
+/// `[A-Za-z0-9_-]` makes quoting impossible.
+///
+/// Enforced on both create and the availability probe so the two never
+/// disagree about what counts as a usable id.
+fn validate_campaign_id(id: &str) -> Result<(), AppError> {
+    let ok = !id.is_empty()
+        && id.len() <= MAX_CAMPAIGN_ID_LEN
+        && id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
+    match ok {
+        true => Ok(()),
+        false => Err(AppError::Validation(format!(
+            "invalid campaign id: use letters, numbers, '-' or '_' (max {MAX_CAMPAIGN_ID_LEN} characters)"
+        ))),
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Campaign CRUD handlers
 // ---------------------------------------------------------------------------
@@ -266,6 +294,7 @@ pub async fn create_campaign(
     crate::auth::require_org_access(&claims.email, &body.organization_id, &state, "create campaign")
         .await?;
 
+    validate_campaign_id(&body.id)?;
     validate_reward_type(&body.reward_type)?;
 
     crate::db::campaigns::create_campaign(
@@ -287,6 +316,35 @@ pub async fn create_campaign(
         .ok_or_else(|| AppError::Internal("campaign created but not found".to_string()))?;
 
     Ok(ApiOk::new(row_to_detail(campaign)))
+}
+
+/// GET /api/campaigns/{id}/exists
+///
+/// Slug-availability probe for the campaign create form, so an organizer is
+/// told "already taken" while typing instead of on a failed save.
+///
+/// Deliberately NOT org-scoped. Campaign ids are the primary key of
+/// `campaigns` and therefore globally unique: a slug held by another org is
+/// still unavailable, and an org-scoped check would answer "free" for an id
+/// that then fails to insert. The response carries a single boolean — no
+/// campaign data, not even the owning org — and the route sits behind the
+/// authenticated admin router, so this exposes no more than the create attempt
+/// it replaces.
+#[worker::send]
+pub async fn campaign_id_exists(
+    State(state): State<AppState>,
+    Extension(_claims): Extension<Claims>,
+    Path(id): Path<String>,
+) -> Result<ApiOk<serde_json::Value>, WorkerError> {
+    let d1 = require_d1(&state)?;
+
+    validate_campaign_id(&id)?;
+
+    let exists = crate::db::campaigns::campaign_exists(d1, &id)
+        .await
+        .map_err(|e| AppError::Internal(format!("failed to check campaign id: {e}")))?;
+
+    Ok(ApiOk::new(serde_json::json!({ "exists": exists })))
 }
 
 /// GET /api/campaigns/{id}
@@ -739,4 +797,60 @@ pub async fn claim_campaign_reward(
         "asset_id": mint_result.asset_id,
         "signature": mint_result.signature,
     })))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn is_ok(id: &str) -> bool {
+        validate_campaign_id(id).is_ok()
+    }
+
+    #[test]
+    fn accepts_slugs_the_create_form_produces() {
+        assert!(is_ok("solana-hacker-series-2025"));
+        assert!(is_ok("campaign"));
+        assert!(is_ok("2025"));
+        assert!(is_ok("my_campaign-2"));
+        // Promote-from-event builds `{event_id}-campaign`.
+        assert!(is_ok("devday-bkk-campaign"));
+        // A doubled dash is a legal slug, not a SQL comment: `--` can only
+        // start a comment outside a string literal, and quoting is impossible.
+        assert!(is_ok("x--y"));
+    }
+
+    #[test]
+    fn rejects_empty_id() {
+        assert!(!is_ok(""));
+    }
+
+    #[test]
+    fn enforces_the_length_cap() {
+        let at_cap = "a".repeat(MAX_CAMPAIGN_ID_LEN);
+        let over_cap = "a".repeat(MAX_CAMPAIGN_ID_LEN + 1);
+        assert!(is_ok(&at_cap));
+        assert!(!is_ok(&over_cap));
+    }
+
+    /// The validator is the only thing standing between a user-supplied slug
+    /// and an interpolated D1 query, so quoting must be impossible.
+    #[test]
+    fn rejects_sql_metacharacters() {
+        assert!(!is_ok("x' OR '1'='1"));
+        assert!(!is_ok("x'; DROP TABLE campaigns;--"));
+        assert!(!is_ok("x\"y"));
+        assert!(!is_ok("x`y"));
+        assert!(!is_ok("x;y"));
+        assert!(!is_ok("x y"));
+        assert!(!is_ok("x\ny"));
+    }
+
+    #[test]
+    fn rejects_path_and_non_ascii_characters() {
+        assert!(!is_ok("a/b"));
+        assert!(!is_ok("a%2Fb"));
+        assert!(!is_ok("café"));
+        assert!(!is_ok("キャンペーン"));
+    }
 }
