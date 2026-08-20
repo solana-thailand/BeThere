@@ -87,12 +87,19 @@ pub(crate) struct EventDropOff {
 // ---------------------------------------------------------------------------
 
 #[allow(clippy::too_many_arguments)]
+/// Insert a campaign.
+///
+/// `id` and `status` MUST already be validated by the caller
+/// (`handlers::campaigns::validate_campaign_id` / `validate_create_status`) —
+/// like the rest of this module the query is interpolated rather than bound.
+/// `status` is checked against a closed set, so it can never carry a quote.
 pub(crate) async fn create_campaign(
     db: &D1Database,
     id: &str,
     title: &str,
     description: &str,
     organization_id: &str,
+    status: &str,
     completion_criteria: &str,
     reward_type: &str,
     reward_config: &str,
@@ -100,7 +107,7 @@ pub(crate) async fn create_campaign(
     let sql = format!(
         "INSERT INTO campaigns (id, title, description, organization_id, status, \
          completion_criteria, reward_type, reward_config, created_at, updated_at) \
-         VALUES ('{id}', '{title}', '{description}', '{organization_id}', 'draft', \
+         VALUES ('{id}', '{title}', '{description}', '{organization_id}', '{status}', \
          '{completion_criteria}', '{reward_type}', '{reward_config}', \
          datetime('now'), datetime('now'))"
     );

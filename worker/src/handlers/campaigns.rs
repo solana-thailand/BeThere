@@ -40,6 +40,10 @@ pub struct CreateCampaignRequest {
     pub description: String,
     #[serde(default)]
     pub organization_id: String,
+    /// Initial status. Omitted by older clients, which is why it defaults to
+    /// `draft` — the value this endpoint previously hardcoded.
+    #[serde(default = "default_campaign_status")]
+    pub status: String,
     #[serde(default = "default_completion_criteria")]
     pub completion_criteria: String,
     #[serde(default)]
@@ -161,6 +165,13 @@ fn default_completion_criteria() -> String {
     "{}".to_string()
 }
 
+/// Status a campaign is created with when the client does not choose one.
+/// Matches the value `create_campaign` hardcoded before plan 016 P2.3, so an
+/// older client that omits the field keeps its previous behaviour exactly.
+fn default_campaign_status() -> String {
+    "draft".to_string()
+}
+
 fn default_reward_config() -> String {
     "{}".to_string()
 }
@@ -196,6 +207,21 @@ fn validate_campaign_status(status: &str) -> Result<(), AppError> {
         "draft" | "active" | "completed" => Ok(()),
         _ => Err(AppError::Validation(format!(
             "invalid campaign status: {status} (expected draft/active/completed)"
+        ))),
+    }
+}
+
+/// Statuses a campaign may be *created* with.
+///
+/// Narrower than [`validate_campaign_status`] by design: `completed` is
+/// excluded because nothing has been completed at create time, and a campaign
+/// born `completed` could never be progressed through. Transitioning to
+/// `completed` later remains available via `update_campaign_status`.
+fn validate_create_status(status: &str) -> Result<(), AppError> {
+    match status {
+        "draft" | "active" => Ok(()),
+        _ => Err(AppError::Validation(format!(
+            "invalid initial campaign status: {status} (expected draft/active)"
         ))),
     }
 }
@@ -295,6 +321,7 @@ pub async fn create_campaign(
         .await?;
 
     validate_campaign_id(&body.id)?;
+    validate_create_status(&body.status)?;
     validate_reward_type(&body.reward_type)?;
 
     crate::db::campaigns::create_campaign(
@@ -303,6 +330,7 @@ pub async fn create_campaign(
         &body.title,
         &body.description,
         &body.organization_id,
+        &body.status,
         &body.completion_criteria,
         &body.reward_type,
         &body.reward_config,
@@ -719,29 +747,19 @@ pub async fn claim_campaign_reward(
         .map_err(|e| AppError::Internal(format!("failed to get campaign: {e}")))?
         .ok_or_else(|| AppError::NotFound(format!("campaign not found: {id}")))?;
 
-    // Parse reward_config JSON for NFT metadata
-    let reward_config: serde_json::Value =
-        serde_json::from_str(&campaign.reward_config).unwrap_or_else(|_| serde_json::json!({}));
-
-    let default_name = format!("{} - Campaign Complete", campaign.title);
-    let reward_name = reward_config
-        .get("name")
-        .and_then(|v| v.as_str())
-        .unwrap_or(&default_name)
-        .to_string();
-
-    let default_desc = format!("Completed the {} campaign", campaign.title);
-    let reward_description = reward_config
-        .get("description")
-        .and_then(|v| v.as_str())
-        .unwrap_or(&default_desc)
-        .to_string();
-
-    let reward_image_url = reward_config
-        .get("image_url")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
+    // Resolve the metadata this reward mints with.
+    //
+    // Shared with the admin create-form preview card (plan 016 P2.2) so the
+    // preview cannot drift from what actually mints. It also fixes a real bug
+    // in the code this replaced: the admin form serialises untouched fields as
+    // `""` rather than omitting them, and `.and_then(as_str).unwrap_or(default)`
+    // reads `""` as a deliberate choice — so a campaign saved with a blank NFT
+    // name minted an NFT literally named "", while the form's hint promised the
+    // title-based default. `resolve_reward_str` treats blank as unset.
+    let reward = event_checkin_domain::models::campaign::resolve_reward_str(
+        &campaign.title,
+        &campaign.reward_config,
+    );
 
     // Mint campaign cNFT via Crossmint (custodial signer + tree + fees). Campaign
     // rewards mint into the same Crossmint collection as event badges.
@@ -752,9 +770,9 @@ pub async fn claim_campaign_reward(
         host: &config.solana.crossmint_host,
         api_key: &config.solana.crossmint_api_key,
         collection_id: &config.solana.crossmint_collection_id,
-        image_url: &reward_image_url,
-        nft_name: &reward_name,
-        nft_description: &reward_description,
+        image_url: &reward.image_url,
+        nft_name: &reward.name,
+        nft_description: &reward.description,
         nft_external_url: &campaign_external_url,
         compressed: true,
         idempotency_key: "",
@@ -844,6 +862,49 @@ mod tests {
         assert!(!is_ok("x;y"));
         assert!(!is_ok("x y"));
         assert!(!is_ok("x\ny"));
+    }
+
+    #[test]
+    fn create_accepts_only_draft_and_active() {
+        assert!(validate_create_status("draft").is_ok());
+        assert!(validate_create_status("active").is_ok());
+        // Nothing has been completed at create time, and a campaign born
+        // `completed` could never be progressed through.
+        assert!(validate_create_status("completed").is_err());
+        assert!(validate_create_status("").is_err());
+        assert!(validate_create_status("Draft").is_err());
+        assert!(validate_create_status("archived").is_err());
+    }
+
+    /// `completed` stays reachable through the status-transition endpoint —
+    /// create is narrower than the general validator on purpose.
+    #[test]
+    fn transition_validator_still_accepts_completed() {
+        assert!(validate_campaign_status("completed").is_ok());
+        assert!(validate_campaign_status("draft").is_ok());
+        assert!(validate_campaign_status("active").is_ok());
+        assert!(validate_campaign_status("nonsense").is_err());
+    }
+
+    /// An older client that omits `status` must behave exactly as before
+    /// plan 016 P2.3, when the handler hardcoded `'draft'`.
+    #[test]
+    fn omitted_status_defaults_to_draft() {
+        let body: CreateCampaignRequest = serde_json::from_str(
+            r#"{"id":"c1","title":"T","organization_id":"org"}"#,
+        )
+        .expect("request without status should deserialize");
+        assert_eq!(body.status, "draft");
+        assert!(validate_create_status(&body.status).is_ok());
+    }
+
+    #[test]
+    fn explicit_status_is_carried_through() {
+        let body: CreateCampaignRequest = serde_json::from_str(
+            r#"{"id":"c1","title":"T","organization_id":"org","status":"active"}"#,
+        )
+        .expect("request with status should deserialize");
+        assert_eq!(body.status, "active");
     }
 
     #[test]
