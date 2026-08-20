@@ -249,7 +249,12 @@ pub fn CampaignsPage(
     let (form_status, set_form_status) = signal(
         api::CampaignStatus::Draft.as_str().to_string(),
     );
-    let (form_reward_type, set_form_reward_type) = signal(String::new());
+    // Must match the first `<option value="none">` below. An empty default
+    // made the select *display* "None" while the signal stayed `""`, which the
+    // worker rejects (`invalid reward_type:`) — so creating a campaign without
+    // touching this dropdown failed with a 400 on the default happy path.
+    // Caught in staging click-through, 2026-08-20.
+    let (form_reward_type, set_form_reward_type) = signal("none".to_string());
     let (form_criteria, set_form_criteria) = signal(String::new());
     let (form_rc_name, set_form_rc_name) = signal(String::new());
     let (form_rc_symbol, set_form_rc_symbol) = signal(String::new());
@@ -267,7 +272,11 @@ pub fn CampaignsPage(
     // One-shot nudge flag: set true right after a fresh (non-promote) create so
     // the Detail → Events tab can show a "add events to activate" banner.
     // Cleared on any navigation away from the just-created detail view.
-    let (draft_nudge, set_draft_nudge) = signal(false);
+    // Holds the status the campaign was created with, so the banner describes
+    // what actually happened. Was a plain bool until P2.3 made the status a
+    // choice — at which point creating an Active campaign still announced
+    // "created as draft" (caught in staging click-through, 2026-08-20).
+    let (draft_nudge, set_draft_nudge) = signal(None::<String>);
     // Event id awaiting auto-link after a successful create (set when the
     // create form was pre-filled via "promote from event").
     let (pending_event_to_link, set_pending_event_to_link) = signal(None::<String>);
@@ -375,7 +384,7 @@ pub fn CampaignsPage(
         set_form_description.set(String::new());
         set_form_org_id.set(String::new());
         set_form_status.set(api::CampaignStatus::Draft.as_str().to_string());
-        set_form_reward_type.set(String::new());
+        set_form_reward_type.set("none".to_string());
         set_form_criteria.set(String::new());
         set_form_rc_name.set(String::new());
         set_form_rc_symbol.set(String::new());
@@ -504,7 +513,7 @@ pub fn CampaignsPage(
         // "promote from event" auto-link intent.
         set_pending_event_to_link.set(None);
         // Also clear any stale draft nudge from a prior create.
-        set_draft_nudge.set(false);
+        set_draft_nudge.set(None);
         set_current_view.set(CampaignView::Create);
     };
 
@@ -519,7 +528,7 @@ pub fn CampaignsPage(
     let handle_view = move |id: String| {
         // Selecting a different campaign clears any stale draft nudge left
         // over from a prior just-created campaign.
-        set_draft_nudge.set(false);
+        set_draft_nudge.set(None);
         set_selected_id.set(Some(id));
         set_detail_tab.set(DetailTab::Events);
         set_current_view.set(CampaignView::Detail);
@@ -533,7 +542,7 @@ pub fn CampaignsPage(
         // cancels out of the form, so a later manual create isn't auto-linked.
         set_pending_event_to_link.set(None);
         // Leaving the detail view dismisses any draft nudge.
-        set_draft_nudge.set(false);
+        set_draft_nudge.set(None);
         do_reload();
     };
     // Save (create or update)
@@ -654,6 +663,9 @@ pub fn CampaignsPage(
                 // capture the source event id so we can auto-link it.
                 let link_event_id = pending_event_to_link.get();
                 let id_for_link = req.id.clone();
+                // Captured before the request moves `req`, so the post-create
+                // banner can describe the status that was actually requested.
+                let created_status = req.status.clone();
                 leptos::task::spawn_local(async move {
                     match api::create_campaign(&req).await {
                         Ok(_) => {
@@ -696,7 +708,7 @@ pub fn CampaignsPage(
                                 // drop the organizer into the new campaign's
                                 // Events tab and show a one-shot "add events to
                                 // activate" nudge instead of returning to List.
-                                set_draft_nudge.set(true);
+                                set_draft_nudge.set(Some(created_status.clone()));
                                 set_selected_id.set(Some(id_for_link));
                                 set_detail_tab.set(DetailTab::Events);
                                 set_current_view.set(CampaignView::Detail);
@@ -1375,14 +1387,36 @@ pub fn CampaignsPage(
                     // One-shot "add events to activate" nudge shown right after
                     // a fresh (non-promote) create. Dismissable and auto-cleared
                     // on any navigation away from this detail view.
-                    <Show when=move || draft_nudge.get() fallback=|| view! { <div></div> }>
+                    <Show
+                        when=move || draft_nudge.get().is_some()
+                        fallback=|| view! { <div></div> }
+                    >
                         <div class="campaign-nudge">
-                            <strong>"Campaign created as draft."</strong>
-                            " Add events to activate it."
+                            {move || {
+                                // Describe the status actually chosen on create.
+                                // An Active campaign announced as a draft would
+                                // send the organizer looking for an Activate
+                                // button that no longer applies.
+                                let created = draft_nudge.get().unwrap_or_default();
+                                match created.as_str() {
+                                    "active" => {
+                                        view! {
+                                            <strong>"Campaign created and active."</strong>
+                                            " Add events so attendees can make progress."
+                                        }
+                                    }
+                                    _ => {
+                                        view! {
+                                            <strong>"Campaign created as draft."</strong>
+                                            " Add events to activate it."
+                                        }
+                                    }
+                                }
+                            }}
                             <button
                                 class="btn btn-sm btn-secondary"
                                 style="margin-left: 0.75rem; padding: 0.15rem 0.5rem; font-size: 0.75rem;"
-                                on:click=move |_: web_sys::MouseEvent| set_draft_nudge.set(false)
+                                on:click=move |_: web_sys::MouseEvent| set_draft_nudge.set(None)
                             >
                                 "Dismiss"
                             </button>
