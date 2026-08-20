@@ -105,6 +105,28 @@ The `reward_config` is **not** a raw JSON textarea (good) — it's already struc
       blank, exactly as the hints advertise.)
 - [x] wasm32 check clean (commit `4c99532`).
 
+**Honest correction (2026-08-20, while building P2.2):** both acceptance notes
+above were verified by *code trace* and both were wrong on a point of fact.
+
+1. **There is no `'CAMPAIGN'` symbol default.** The note cited
+   `campaigns.rs:647` as `.unwrap_or("CAMPAIGN")`. No such line exists: the
+   string `"CAMPAIGN"` appears nowhere in `worker/src` or `domain/src`, and
+   `solana::MintRequest` has no symbol field at all — `symbol` is never sent to
+   the mint. The shipped hint "Leave blank to use 'CAMPAIGN' on mint" was
+   therefore misleading. It now reads: *"Stored on the campaign for your own
+   reference. Not part of the minted metadata."*
+2. **Blank fields did not fall back to defaults.** `handle_save` serialises
+   untouched fields as `""`, not as absent keys, and the mint path's
+   `.get(k).and_then(as_str).unwrap_or(&default)` reads `""` as a deliberate
+   value. A campaign saved with a blank NFT name minted an NFT named `""`,
+   while the hint promised the title-based default. Fixed in P2.2 by
+   `domain::models::campaign::resolve_reward`, which treats blank and
+   whitespace-only as unset.
+
+The lesson is not that code-tracing is useless but that it was done against
+remembered line numbers rather than a re-read of the file — the same failure
+mode as the "3× leaderboard" claim corrected in P1.1.
+
 ### P0.3 — Organization ID → dropdown  ⚠️ has open access-control decision
 **Behavior (frontend)**
 - Replace the raw `<input>` with a `<select>` populated from a new `api::list_orgs()` call (mirror the event-picker mount-Effect pattern from P1 of plan 015).
@@ -244,9 +266,88 @@ prod, so until the worker ships, the probe returns 404 and the form degrades to
 `CheckFailed` ("Could not check availability — you can still save"), which is
 non-blocking by design.
 
-### Remaining P2 (not started)
-- **P2.2 Preview**: render a small NFT preview card (name/symbol/image) live from the form fields.
-- **P2.3 Status on create**: optional active/draft selector; only if draft-default proves problematic. Backend `create_campaign` currently hardcodes `'draft'`.
+### P2.2 — NFT preview card  ✅ implemented
+
+**The problem the plan did not anticipate.** A preview card is a promise:
+"this is what will be minted". Building one exposed two ways the existing code
+broke that promise — no symbol is ever minted, and blank fields did not resolve
+to their advertised defaults (both written up under P0.2 above). Shipping a
+card that rendered the *intended* defaults would have made the UI lie more
+confidently, so the defaults were fixed first.
+
+**Shared SSOT rather than a mirror** (`domain/src/models/campaign.rs`, new)
+- `resolve_reward(title, config) -> ResolvedReward { name, description, image_url }`
+  is the single implementation of "what does this reward mint", called by
+  **both** `worker::handlers::campaigns::claim_campaign_reward` and the admin
+  preview card. A frontend copy of the defaults would have been a mirror with
+  no guard; the repo already has an `ssot_mirror_audit` test precisely because
+  that pattern drifts.
+- `reward_config_field` collapses missing / non-string / blank / whitespace-only
+  into `None`, which is the actual bug fix.
+- `KEY_NAME`/`KEY_DESCRIPTION`/`KEY_IMAGE_URL` are exported constants used by
+  the resolver *and* by the form's `build_reward_config`, so a key rename is a
+  compile-time break instead of a silent all-defaults regression.
+- The worker's hand-rolled default block is deleted, not duplicated.
+
+**Card** (`campaigns_page.rs::nft_preview_card`, `style.css`)
+- Shows only the three fields that reach `MintRequest`. Symbol, Metadata URI
+  and Collection Mint are stored but never minted, so previewing them would
+  imply otherwise; a hint says so explicitly.
+- Values the organizer left blank are rendered with a `default` tag, so a
+  default is never mistaken for something they typed.
+- With no title yet, both textual defaults would interpolate to
+  `" - Campaign Complete"`, which reads as a bug — the card prompts for a title
+  instead.
+- A dead artwork URL falls back to the placeholder icon underneath rather than
+  a broken-image glyph (`on:error` hides the `<img>`).
+
+**Acceptance**
+- [x] Card renders live under the NFT section when `reward_type == nft_certificate`.
+- [x] Preview values are produced by the same function the mint path calls, so
+      they cannot drift; the worker no longer computes defaults itself.
+- [x] Blank name/description resolve to the title-based defaults (previously
+      minted as `""`) and are tagged `default` in the card.
+- [x] Blank/whitespace/non-string/absent all resolve identically.
+- [x] Unminted fields (symbol, metadata_uri, collection_mint) never affect the
+      resolved metadata and are absent from the card.
+- [x] 15 domain tests (`domain/tests/campaign_reward.rs`) + 8 frontend inline
+      tests (`campaigns_page.rs`, covering `slugify` and the
+      `build_reward_config` → `resolve_reward` contract).
+- [ ] Manual click-through pending.
+
+### P2.3 — Status on create  ✅ implemented
+
+The plan gated this on "only if draft-default proves problematic"; it was
+requested directly, so it is implemented. **Finding worth recording:** `draft`
+is very nearly cosmetic today. The only status gate anywhere in the worker is
+`db::campaigns::campaign_collection_mints` (`WHERE status = 'active'`, used to
+classify NFTs). Check-in enrolment (`on_event_checkin`), progress tracking and
+reward claiming do **not** consult status — a draft campaign still accrues
+progress and still mints rewards. The selector's hint says so rather than
+implying a visibility guarantee that does not exist. Making `draft` actually
+gate anything is a separate decision, deliberately not taken here.
+
+**Backend**
+- `CreateCampaignRequest.status`, defaulted to `"draft"` via serde so a client
+  that omits it behaves exactly as before this change.
+- `validate_create_status` accepts `draft|active` only — narrower than
+  `validate_campaign_status` on purpose: nothing is complete at create time, and
+  a campaign born `completed` could never be progressed through.
+  `update_campaign_status` still accepts `completed`.
+- `db::create_campaign` takes `status` instead of hardcoding `'draft'`; it is
+  interpolated like every other column in that module, which is safe only
+  because the value is checked against a closed set first (documented on the fn).
+
+**Frontend**
+- Draft/Active `<select>` on the create form only (status is changed afterwards
+  from the campaign list, which already has activate/complete controls).
+
+**Acceptance**
+- [x] Creating with Active yields an `active` campaign; the default is still `draft`.
+- [x] A request omitting `status` deserializes to `draft` (pinned by test).
+- [x] `completed` is rejected on create but still allowed as a transition.
+- [x] 4 worker unit tests covering the above; 206 worker tests pass.
+- [ ] Manual click-through pending.
 
 ---
 
@@ -282,8 +383,10 @@ non-blocking by design.
 - [x] P1.3 post-create nudge (wasm32 check clean; honest deviation — one local `draft_nudge` signal added, see §3 P1.3; manual click-through pending)
 - [x] P2.1 slug uniqueness (new `GET /campaigns/{id}/exists`; worker clippy + 202 unit tests + wasm32 clippy + `build.sh` clean; manual click-through pending; **requires worker redeploy**)
       Includes a deliberate, flagged security fix: `validate_campaign_id` is now enforced on `create_campaign` too, closing a pre-existing SQL-injection vector on the campaign id. See §4 P2.1.
-- [ ] P2.2 preview card — not started
-- [ ] P2.3 status on create — not started (still conditional on draft-default proving problematic)
+- [x] P2.2 preview card (shared `domain::models::campaign` SSOT; 15 domain + 8 frontend tests; manual click-through pending)
+      Fixed two false claims carried by P0.2 — no `'CAMPAIGN'` symbol default exists, and blank fields minted `""` instead of the advertised defaults. See §2 P0.2 correction and §4 P2.2.
+- [x] P2.3 status on create (draft/active selector; `draft` default preserved for older clients; 4 worker tests; manual click-through pending)
+      Finding: `draft` currently gates only NFT classification — progress and reward claiming ignore status. See §4 P2.3.
 
 **P0.3 decision (resolved):** Option **A** — widened `GET /orgs` read access to any authenticated admin; mutations stay SuperAdmin-only. Worker redeploy required.
 ````
