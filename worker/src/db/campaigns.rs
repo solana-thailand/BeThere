@@ -517,19 +517,30 @@ struct EventDropOffRow {
     attended: i64,
 }
 
+/// Build the totals query for [`campaign_completion_stats`].
+///
+/// Extracted so the `COALESCE` is unit-testable. It is not cosmetic: SQLite's
+/// `SUM` over an empty set returns NULL, which cannot deserialize into
+/// `TotalsRow::total_completed` (`i64`), so the whole stats call 500s. Every
+/// campaign has no enrolled developers at creation, so this fired on every new
+/// campaign until 2026-08-21.
+fn totals_sql(campaign_id: &str) -> String {
+    format!(
+        "SELECT \
+         COUNT(*) AS total_enrolled, \
+         COALESCE(SUM(CASE WHEN is_complete = 1 THEN 1 ELSE 0 END), 0) AS total_completed \
+         FROM developer_campaign_progress \
+         WHERE campaign_id = '{campaign_id}'"
+    )
+}
+
 #[allow(dead_code)]
 pub(crate) async fn campaign_completion_stats(
     db: &D1Database,
     campaign_id: &str,
 ) -> Result<CampaignCompletionStats, String> {
     // Total enrolled and completed from developer_campaign_progress.
-    let totals_sql = format!(
-        "SELECT \
-         COUNT(*) AS total_enrolled, \
-         SUM(CASE WHEN is_complete = 1 THEN 1 ELSE 0 END) AS total_completed \
-         FROM developer_campaign_progress \
-         WHERE campaign_id = '{campaign_id}'"
-    );
+    let totals_sql = totals_sql(campaign_id);
     let totals = db
         .prepare(&totals_sql)
         .first::<TotalsRow>(None)
@@ -591,6 +602,12 @@ pub(crate) async fn campaign_completion_stats(
 #[derive(Debug, Clone, serde::Deserialize)]
 struct TotalsRow {
     total_enrolled: i64,
+    /// MUST stay non-optional only because the query wraps the `SUM` in
+    /// `COALESCE(..., 0)`. SQLite's `SUM` over an empty set is NULL, and a NULL
+    /// here fails deserialization and surfaces as a 500 — which is exactly what
+    /// every campaign with no enrolled developers did until 2026-08-21, i.e.
+    /// every campaign the moment it was created. Found via the plan 016
+    /// staging click-through.
     total_completed: i64,
 }
 
@@ -864,6 +881,22 @@ pub fn compute_series_neighbors(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Guards the fix for the stats 500. Asserting on the SQL string is the
+    /// only native check available — the NULL behaviour lives in SQLite, not in
+    /// Rust — but it does catch the realistic regression: someone "simplifying"
+    /// the COALESCE away and reintroducing a 500 on every new campaign.
+    #[test]
+    fn totals_sql_coalesces_the_sum() {
+        let sql = totals_sql("c1");
+        assert!(
+            sql.contains("COALESCE(SUM(CASE WHEN is_complete = 1 THEN 1 ELSE 0 END), 0)"),
+            "SUM must stay wrapped in COALESCE — an empty set yields NULL and 500s: {sql}"
+        );
+        assert!(sql.contains("COUNT(*) AS total_enrolled"));
+        assert!(sql.contains("FROM developer_campaign_progress"));
+        assert!(sql.contains("WHERE campaign_id = 'c1'"));
+    }
 
     fn entry(id: &str, seq: i64) -> EventSeriesEntry {
         EventSeriesEntry {
