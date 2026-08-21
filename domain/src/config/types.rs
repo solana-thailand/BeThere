@@ -218,6 +218,10 @@ pub struct AppConfig {
     /// Telegram bot username (without `@`) for rendering the Login Widget.
     /// Public value; empty disables the widget (falls back to manual handle input).
     pub telegram_bot_username: String,
+    // ---- Observability ----
+    /// Slack incoming-webhook URL for server-error (5xx) alerts. Empty disables
+    /// alerting (the middleware becomes a no-op). Best-effort, fire-and-forget.
+    pub slack_webhook_url: String,
 }
 
 impl fmt::Debug for AppConfig {

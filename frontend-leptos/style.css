@@ -9075,6 +9075,110 @@ nav a.active {
     font-weight: 700;
 }
 
+/* NFT reward preview card (plan 016 P2.2) — live "what gets minted" panel in
+   the campaign create form. Mirrors the mint request's three metadata fields;
+   anything not sent to the mint is deliberately absent. */
+.nft-preview {
+    margin-bottom: 1rem;
+}
+
+.nft-preview-label {
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    margin: 0 0 0.5rem;
+}
+
+.nft-preview-card {
+    display: flex;
+    align-items: center;
+    gap: 0.875rem;
+    padding: 0.875rem;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+}
+
+/* Fixed box so the card does not reflow while an image loads. The placeholder
+   icon is centred underneath the <img>, which covers it when it loads and
+   uncovers it again if the URL is dead (see the on:error handler). */
+.nft-preview-media {
+    position: relative;
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 64px;
+    height: 64px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text-muted);
+    overflow: hidden;
+}
+
+.nft-preview-img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.nft-preview-meta {
+    min-width: 0;
+}
+
+.nft-preview-name {
+    color: var(--text-primary);
+    font-size: 0.95rem;
+    font-weight: 600;
+    margin: 0 0 0.25rem;
+    overflow-wrap: anywhere;
+}
+
+.nft-preview-desc {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    line-height: 1.4;
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+/* Marks a value the organizer left blank, so it is clear the text shown is a
+   default rather than something they typed. */
+.nft-preview-tag {
+    display: inline-block;
+    margin-left: 0.4rem;
+    padding: 0.05rem 0.35rem;
+    background: var(--bg-hover);
+    border-radius: 0.35rem;
+    color: var(--text-muted);
+    font-size: 0.68rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    vertical-align: middle;
+}
+
+/* Waiting on the campaign title, which both defaults interpolate. */
+.nft-preview-pending {
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+/* Campaign slug availability verdict — recolours .hint-note-sm in place.
+   Neutral (inherited) is used for "checking" and for a failed probe, so only
+   a definite answer draws the eye. */
+.hint-note-sm.slug-ok {
+    color: var(--success);
+}
+
+.hint-note-sm.slug-bad {
+    color: var(--danger);
+}
+
 /* Post-create draft nudge banner shown in the Detail → Events tab to remind
    the organizer that a freshly created campaign is still a draft and needs
    events before it can be activated. */
@@ -16006,4 +16110,94 @@ a.ticket-series-card:hover {
     border-top: 1px dashed var(--paper-dim);
     padding-top: 6px;
     margin-top: 6px;
+}
+
+/* ── Public-event slug page: hero CTA + sticky mobile CTA (conversion) ── */
+.pe-hero-cta {
+    margin-top: 0.85rem;
+}
+/* Offset the scroll target so the section isn't flush against the top edge. */
+.pe-anchor {
+    scroll-margin-top: 1rem;
+}
+/* Sticky mobile CTA: hidden on desktop, fixed bottom bar on phones. */
+.pe-sticky-cta {
+    display: none;
+}
+.pe-sticky-spacer {
+    display: none;
+}
+@media (max-width: 640px) {
+    .pe-sticky-cta {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 60;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0.95rem 1rem;
+        padding-bottom: calc(0.95rem + env(safe-area-inset-bottom, 0px));
+        background: linear-gradient(135deg, #ff5c39 0%, #ff7b5c 100%);
+        color: var(--text-heading);
+        font-weight: 700;
+        font-size: 1.02rem;
+        text-decoration: none;
+        box-shadow: 0 -6px 20px rgba(0, 0, 0, 0.35);
+    }
+    .pe-sticky-cta:active {
+        background: linear-gradient(135deg, #ff7b5c 0%, #ffa184 100%);
+    }
+    .pe-sticky-spacer {
+        display: block;
+        height: 4.5rem;
+    }
+}
+
+/* ── Public-event slug page: loading skeleton (perceived performance) ── */
+.pe-skeleton {
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+    width: 100%;
+}
+.pe-skel {
+    border-radius: 12px;
+    background: linear-gradient(
+        100deg,
+        var(--bg-card) 30%,
+        rgba(255, 255, 255, 0.06) 50%,
+        var(--bg-card) 70%
+    );
+    background-size: 200% 100%;
+    animation: pe-skel-shimmer 1.3s ease-in-out infinite;
+}
+.pe-skel-hero {
+    height: 180px;
+    border-radius: 16px;
+}
+.pe-skel-title {
+    height: 28px;
+    width: 70%;
+    margin-top: 0.4rem;
+}
+.pe-skel-sub {
+    height: 16px;
+    width: 45%;
+}
+.pe-skel-cta {
+    height: 46px;
+    border-radius: 10px;
+    margin-top: 0.3rem;
+}
+.pe-skel-card {
+    height: 96px;
+}
+@keyframes pe-skel-shimmer {
+    from { background-position: 200% 0; }
+    to   { background-position: -200% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .pe-skel { animation: none; }
 }

@@ -259,6 +259,14 @@ pub struct AttendeeListItem {
     pub refund_status: Option<String>,
     #[serde(default)]
     pub refund_link: Option<String>,
+    /// Rolling THB deposit credit the attendee holds (org-scoped), annotated by
+    /// the backend list handler. 0 when none. Gates the "Apply Credit" button.
+    #[serde(default)]
+    pub credit_thb: i64,
+    /// Whether the attendee got in by spending rolling credit at this event.
+    /// Drives the "Credit ✓" badge (distinct from cash "Deposit ✓").
+    #[serde(default)]
+    pub used_credit: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

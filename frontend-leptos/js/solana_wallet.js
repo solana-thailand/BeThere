@@ -10,6 +10,217 @@
  * Imported via `#[wasm_bindgen(module = "/js/solana_wallet.js")]` in Rust.
  */
 
+// ---------------------------------------------------------------------------
+// Wallet Standard registry (app side)
+// ---------------------------------------------------------------------------
+//
+// Modern wallets — and crucially the Mobile Wallet Adapter shim registered by
+// `mobile_wallet.js` — do NOT inject a `window.<name>` provider. They announce
+// themselves over the Wallet Standard event protocol
+// (`@wallet-standard/wallet#registerWallet`), which has two halves:
+//
+//   1. the wallet dispatches `wallet-standard:register-wallet` carrying a
+//      callback, for apps that were already listening;
+//   2. the wallet listens for `wallet-standard:app-ready` and invokes that same
+//      callback, for apps that loaded after it registered.
+//
+// The app has to implement BOTH, otherwise load order silently decides whether
+// a wallet is ever discovered. We implement it inline rather than pulling in
+// `@wallet-standard/app` so the project keeps its no-bundler JS convention.
+//
+// NOTE: `registerWallet` does not touch `window.navigator.wallets` — only the
+// deprecated `DEPRECATED_registerWallet` does. That array (of registration
+// callbacks) is drained too, since a few wallets still use it.
+
+/** @type {Array<object>} Wallets registered via the Wallet Standard. */
+var __standardWallets = [];
+var __registryReady = false;
+
+/**
+ * Add a wallet to the registry, deduping by object identity and by name.
+ * @returns {boolean} true if the wallet was newly added
+ */
+function addStandardWallet(wallet) {
+  if (!wallet || !wallet.name) {
+    return false;
+  }
+  for (var i = 0; i < __standardWallets.length; i++) {
+    var known = __standardWallets[i];
+    if (known === wallet || known.name === wallet.name) {
+      return false;
+    }
+  }
+  __standardWallets.push(wallet);
+  console.log("[solana_wallet] Wallet Standard wallet registered:", wallet.name);
+  return true;
+}
+
+/**
+ * The registry API handed to wallets. Shape is fixed by the Wallet Standard:
+ * `{ register(...wallets): () => void }`, returning an unregister callback.
+ */
+var __registryApi = {
+  register: function () {
+    var added = [];
+    for (var i = 0; i < arguments.length; i++) {
+      var wallet = arguments[i];
+      if (addStandardWallet(wallet)) {
+        added.push(wallet);
+      }
+    }
+    return function unregister() {
+      __standardWallets = __standardWallets.filter(function (w) {
+        return added.indexOf(w) === -1;
+      });
+    };
+  },
+};
+
+/**
+ * Drain the deprecated `window.navigator.wallets` interface.
+ *
+ * Two historical shapes exist: an array of registration callbacks (what
+ * `DEPRECATED_registerWallet` pushes), and an object exposing `.get()` (what
+ * the old `@wallet-standard/app` window shim installed). Both are handled.
+ * Safe to call repeatedly — `addStandardWallet` dedupes.
+ */
+function drainDeprecatedRegistry() {
+  try {
+    var legacy = window.navigator && window.navigator.wallets;
+    if (!legacy) {
+      return;
+    }
+    if (typeof legacy.get === "function") {
+      var list = legacy.get() || [];
+      for (var i = 0; i < list.length; i++) {
+        addStandardWallet(list[i]);
+      }
+      return;
+    }
+    if (Array.isArray(legacy)) {
+      for (var j = 0; j < legacy.length; j++) {
+        try {
+          legacy[j](__registryApi);
+        } catch (inner) {
+          console.warn("[solana_wallet] deprecated registry callback failed:", inner);
+        }
+      }
+    }
+  } catch (e) {
+    console.warn("[solana_wallet] deprecated registry drain failed:", e);
+  }
+}
+
+/**
+ * Install the Wallet Standard listeners. Runs once, at module load — which is
+ * before `mobile_wallet.js#registerMwa()` finishes its dynamic import, so MWA
+ * registration is always observed.
+ */
+function initStandardRegistry() {
+  if (__registryReady) {
+    return;
+  }
+  __registryReady = true;
+
+  try {
+    // Half 1: wallets that register from now on.
+    window.addEventListener("wallet-standard:register-wallet", function (event) {
+      try {
+        event.detail(__registryApi);
+      } catch (e) {
+        console.warn("[solana_wallet] register-wallet callback failed:", e);
+      }
+    });
+
+    // Half 2: wallets that already registered before this module loaded.
+    window.dispatchEvent(
+      new CustomEvent("wallet-standard:app-ready", { detail: __registryApi }),
+    );
+  } catch (e) {
+    console.error("[solana_wallet] Wallet Standard registry init failed:", e);
+  }
+
+  drainDeprecatedRegistry();
+}
+
+initStandardRegistry();
+
+/** Does this Wallet Standard wallet support any Solana chain? */
+function isSolanaStandardWallet(wallet) {
+  if (!wallet || !wallet.chains) {
+    return false;
+  }
+  for (var i = 0; i < wallet.chains.length; i++) {
+    var chain = wallet.chains[i];
+    if (typeof chain === "string" && chain.indexOf("solana:") === 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * All Solana-capable Wallet Standard wallets currently registered.
+ * @returns {Array<object>}
+ */
+function getSolanaStandardWallets() {
+  drainDeprecatedRegistry();
+  return __standardWallets.filter(isSolanaStandardWallet);
+}
+
+/**
+ * Look up a registered Wallet Standard wallet by name (case-insensitive).
+ * @returns {object|null}
+ */
+function getStandardWallet(walletName) {
+  var target = String(walletName || "").trim().toLowerCase();
+  if (!target) {
+    return null;
+  }
+  var wallets = getSolanaStandardWallets();
+  for (var i = 0; i < wallets.length; i++) {
+    if (String(wallets[i].name).toLowerCase() === target) {
+      return wallets[i];
+    }
+  }
+  return null;
+}
+
+/** Read a Wallet Standard feature object, or undefined. */
+function standardFeature(wallet, name) {
+  return wallet && wallet.features ? wallet.features[name] : undefined;
+}
+
+/** The wallet's currently authorized account, or null. */
+function getStandardAccount(wallet) {
+  var accounts = (wallet && wallet.accounts) || [];
+  return accounts.length > 0 ? accounts[0] : null;
+}
+
+/** Build the standard `__wallet_error__` envelope the Rust side expects. */
+function walletError(message, code, logs) {
+  return JSON.stringify({
+    __wallet_error__: true,
+    code: code || null,
+    message: message || "Unknown wallet error",
+    logs: logs || null,
+  });
+}
+
+// Cluster name (as reported by /api/health) <-> Wallet Standard chain id.
+var CLUSTER_TO_CHAIN = {
+  "mainnet-beta": "solana:mainnet",
+  devnet: "solana:devnet",
+  testnet: "solana:testnet",
+  localnet: "solana:localnet",
+};
+var CHAIN_TO_CLUSTER = {
+  "solana:mainnet": "mainnet-beta",
+  "solana:devnet": "devnet",
+  "solana:testnet": "testnet",
+  "solana:localnet": "localnet",
+};
+
 /**
  * Get a list of detected Solana wallet adapter names.
  *
@@ -65,28 +276,15 @@ export function getDetectedWallets() {
     wallets.push("Solana");
   }
 
-  // Wallet Standard detection (newer approach — used by most modern wallets)
-  // window.navigator.wallets is the Wallet Standard registry
-  if (window.navigator && window.navigator.wallets) {
-    try {
-      var standardWallets = window.navigator.wallets.get();
-      for (var i = 0; i < standardWallets.length; i++) {
-        var w = standardWallets[i];
-        // Only include Solana-capable wallets not already detected
-        if (
-          w.chains &&
-          w.chains.some(function (c) {
-            return c.indexOf("solana:") === 0;
-          })
-        ) {
-          var name = w.name || "Unknown";
-          if (wallets.indexOf(name) === -1) {
-            wallets.push(name);
-          }
-        }
-      }
-    } catch (e) {
-      console.warn("[solana_wallet] Wallet Standard registry error:", e);
+  // Wallet Standard detection — covers modern extensions that dropped legacy
+  // injection, and the Mobile Wallet Adapter shim on Android (which registers
+  // under the name "Mobile Wallet Adapter"). Appended after the legacy names
+  // so the button order above is preserved.
+  var standardWallets = getSolanaStandardWallets();
+  for (var i = 0; i < standardWallets.length; i++) {
+    var name = standardWallets[i].name || "Unknown";
+    if (wallets.indexOf(name) === -1) {
+      wallets.push(name);
     }
   }
 
@@ -162,16 +360,23 @@ export async function connectWallet(walletName) {
     });
   }
 
-  // Try synchronously first
+  // A legacy injected provider wins when present — it is already loaded, and
+  // the deposit/claim flows have been exercised against it.
   var provider = getProvider(walletName);
   if (provider) {
     return doConnect(provider, walletName);
   }
 
-  // Provider not found yet — wallet may be injecting async.
-  // Wait up to 3 seconds polling every 300ms.
+  // Wallet Standard wallet: modern extensions, and Mobile Wallet Adapter.
+  var standard = getStandardWallet(walletName);
+  if (standard) {
+    return standardConnect(standard);
+  }
+
+  // Neither channel has it yet. Extensions inject asynchronously, and MWA only
+  // registers once its dynamic import resolves — so poll both.
   console.log(
-    "[solana_wallet] Provider not found yet, waiting for async injection...",
+    "[solana_wallet] Wallet not found yet, waiting for injection/registration...",
   );
   var maxAttempts = 10;
   var delay = 300;
@@ -185,6 +390,15 @@ export async function connectWallet(walletName) {
         "ms",
       );
       return doConnect(provider, walletName);
+    }
+    standard = getStandardWallet(walletName);
+    if (standard) {
+      console.log(
+        "[solana_wallet] Wallet Standard wallet found after",
+        (i + 1) * delay,
+        "ms",
+      );
+      return standardConnect(standard);
     }
   }
 
@@ -317,7 +531,13 @@ function sleep(ms) {
 export async function getConnectedPublicKey(walletName) {
   try {
     var provider = getProvider(walletName);
-    if (!provider) return null;
+    if (!provider) {
+      // Wallet Standard: `accounts` is non-empty only while authorized, so
+      // reading it never prompts.
+      var standard = getStandardWallet(walletName);
+      var account = standard ? getStandardAccount(standard) : null;
+      return account ? account.address || null : null;
+    }
 
     // Check if already connected
     if (provider.isConnected && provider.publicKey) {
@@ -392,24 +612,48 @@ function loadWeb3() {
   return web3Promise;
 }
 
-async function getRpcUrl() {
-  try {
-    var response = await fetch("/api/health");
-    if (response.ok) {
-      var data = await response.json();
-      var cluster = data.cluster || "devnet";
-      if (cluster === "mainnet-beta") {
-        return "https://api.mainnet-beta.solana.com";
-      } else if (cluster === "testnet") {
-        return "https://api.testnet.solana.com";
-      } else if (cluster === "localnet") {
-        return "http://localhost:8899";
+var __appClusterPromise = null;
+
+/**
+ * The cluster this deployment targets, per `/api/health`.
+ *
+ * Cached for the page lifetime — it is fixed per deployment, and both the RPC
+ * URL and Wallet Standard chain selection need it.
+ *
+ * @returns {Promise<string>} "devnet" | "mainnet-beta" | "testnet" | "localnet"
+ */
+function getAppCluster() {
+  if (!__appClusterPromise) {
+    __appClusterPromise = (async function () {
+      try {
+        var response = await fetch("/api/health");
+        if (response.ok) {
+          var data = await response.json();
+          return data.cluster || "devnet";
+        }
+      } catch (e) {
+        console.warn(
+          "[solana_wallet] Failed to fetch cluster from /api/health:",
+          e,
+        );
       }
-    }
-  } catch (e) {
-    console.warn("[solana_wallet] Failed to fetch cluster from /api/health:", e);
+      return "devnet"; // Fallback to devnet
+    })();
   }
-  return "https://api.devnet.solana.com"; // Fallback to devnet
+  return __appClusterPromise;
+}
+
+async function getRpcUrl() {
+  switch (await getAppCluster()) {
+    case "mainnet-beta":
+      return "https://api.mainnet-beta.solana.com";
+    case "testnet":
+      return "https://api.testnet.solana.com";
+    case "localnet":
+      return "http://localhost:8899";
+    default:
+      return "https://api.devnet.solana.com";
+  }
 }
 
 /**
@@ -435,24 +679,18 @@ export async function signAndSendTransaction(walletName, transactionB64) {
   try {
     var provider = getProvider(walletName);
     if (!provider) {
+      var standard = getStandardWallet(walletName);
+      if (standard) {
+        return standardSignAndSendTransaction(standard, transactionB64);
+      }
       console.error("[solana_wallet] Wallet not found:", walletName);
-      return JSON.stringify({
-        __wallet_error__: true,
-        code: null,
-        message: "Wallet not found. Please connect your wallet first.",
-        logs: null,
-      });
+      return walletError("Wallet not found. Please connect your wallet first.");
     }
 
     // Load web3.js dynamically
     var web3 = await loadWeb3();
 
-    // Decode base64 to Uint8Array
-    var binaryString = atob(transactionB64);
-    var bytes = new Uint8Array(binaryString.length);
-    for (var i = 0; i < binaryString.length; i++) {
-      bytes[i] = binaryString.charCodeAt(i);
-    }
+    var bytes = base64ToBytes(transactionB64);
 
     // Deserialize transaction bytes into a real @solana/web3.js Transaction/VersionedTransaction
     var tx;
@@ -608,7 +846,7 @@ export async function fetchTransactionFromCallback(callbackUrl) {
  * @returns {boolean} True if the wallet is detected
  */
 export function isWalletAvailable(walletName) {
-  return getProvider(walletName) !== null;
+  return getProvider(walletName) !== null || getStandardWallet(walletName) !== null;
 }
 
 // ---------------------------------------------------------------------------
@@ -647,6 +885,10 @@ export async function getWalletCluster(walletName) {
   try {
     var provider = getProvider(walletName);
     if (!provider) {
+      var standard = getStandardWallet(walletName);
+      if (standard) {
+        return standardCluster(standard);
+      }
       console.warn(
         "[solana_wallet] getWalletCluster: provider not found for",
         walletName,
@@ -805,12 +1047,7 @@ export async function simulateTransactionB64(walletName, transactionB64) {
       return JSON.stringify({ ok: true, skipped: true, logs: [] });
     }
 
-    // Decode base64 transaction
-    var binaryString = atob(transactionB64);
-    var bytes = new Uint8Array(binaryString.length);
-    for (var i = 0; i < binaryString.length; i++) {
-      bytes[i] = binaryString.charCodeAt(i);
-    }
+    var bytes = base64ToBytes(transactionB64);
 
     // Encode bytes as base58 for the RPC call
     // Solana RPC simulateTransaction expects the transaction as a base58 or base64 string
@@ -928,6 +1165,233 @@ function base58Encode(bytes) {
 }
 
 // ---------------------------------------------------------------------------
+// Wallet Standard operations
+// ---------------------------------------------------------------------------
+//
+// These drive wallets discovered through the Wallet Standard registry above.
+// Such wallets expose capabilities as `features[...]` objects rather than the
+// legacy `provider.connect()` / `provider.signMessage()` methods, so none of
+// the `getProvider()`-based code below can reach them.
+//
+// Every function returns the same contract as its legacy counterpart: a plain
+// base58 string on success, or a `walletError(...)` envelope on failure.
+
+/** Decode a base64 string into a Uint8Array. */
+function base64ToBytes(b64) {
+  var binaryString = atob(b64);
+  var bytes = new Uint8Array(binaryString.length);
+  for (var i = 0; i < binaryString.length; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  return bytes;
+}
+
+/**
+ * Connect and return the account address.
+ *
+ * On Android this is what hands control to the wallet app: MWA's `connect`
+ * opens an intent-based session with Phantom/Solflare/Seed Vault.
+ *
+ * @returns {Promise<string>} base58 address, or a walletError envelope
+ */
+async function standardConnect(wallet) {
+  try {
+    console.log("[solana_wallet] Connecting via Wallet Standard:", wallet.name);
+    var account = await ensureStandardAccount(wallet);
+    if (!account) {
+      return walletError(wallet.name + " returned no account");
+    }
+    // Solana Wallet Standard accounts carry `address` as a base58 public key.
+    if (!account.address) {
+      return walletError("Wallet returned no public key");
+    }
+    console.log("[solana_wallet] Connected via Wallet Standard:", account.address);
+    return account.address;
+  } catch (e) {
+    console.error("[solana_wallet] Wallet Standard connect failed:", e);
+    return walletError(e.message || "Wallet connection failed", e.code);
+  }
+}
+
+/**
+ * The wallet's authorized account, connecting first if it has none yet.
+ * @returns {Promise<object|null>}
+ */
+async function ensureStandardAccount(wallet) {
+  var account = getStandardAccount(wallet);
+  if (account) {
+    return account;
+  }
+  var connectFeature = standardFeature(wallet, "standard:connect");
+  if (!connectFeature || typeof connectFeature.connect !== "function") {
+    console.error("[solana_wallet]", wallet.name, "has no standard:connect");
+    return null;
+  }
+  var result = await connectFeature.connect();
+  var accounts = (result && result.accounts) || wallet.accounts || [];
+  return accounts.length > 0 ? accounts[0] : null;
+}
+
+/**
+ * Sign a UTF-8 message (SIWS challenge) via `solana:signMessage`.
+ * @returns {Promise<string>} base58 signature, or a walletError envelope
+ */
+async function standardSignMessage(wallet, message) {
+  try {
+    var feature = standardFeature(wallet, "solana:signMessage");
+    if (!feature || typeof feature.signMessage !== "function") {
+      return walletError(wallet.name + " does not support message signing");
+    }
+    var account = await ensureStandardAccount(wallet);
+    if (!account) {
+      return walletError("Wallet is not connected");
+    }
+    var outputs = await feature.signMessage({
+      account: account,
+      message: new TextEncoder().encode(message),
+    });
+    var signature = outputs && outputs[0] && outputs[0].signature;
+    if (!signature) {
+      return walletError("Wallet returned no signature");
+    }
+    return base58Encode(signature);
+  } catch (e) {
+    console.error("[solana_wallet] Wallet Standard signMessage failed:", e);
+    return walletError(e.message || "Failed to sign message", e.code);
+  }
+}
+
+/**
+ * Sign and broadcast a transaction via `solana:signAndSendTransaction`,
+ * falling back to `solana:signTransaction` plus a local broadcast.
+ *
+ * @returns {Promise<string>} base58 signature, or a walletError envelope
+ */
+async function standardSignAndSendTransaction(wallet, transactionB64) {
+  try {
+    var account = await ensureStandardAccount(wallet);
+    if (!account) {
+      return walletError("Wallet is not connected");
+    }
+    var chain = await pickStandardChain(wallet, account);
+    var bytes = base64ToBytes(transactionB64);
+
+    // Preference is inverted relative to the legacy path above. That path
+    // signs locally and broadcasts itself to dodge wallets pointed at the
+    // wrong network; here the target `chain` travels with the request, so the
+    // ambiguity does not exist — and signAndSendTransaction is the transaction
+    // method Mobile Wallet Adapter serves most reliably.
+    var sendFeature = standardFeature(wallet, "solana:signAndSendTransaction");
+    if (sendFeature && typeof sendFeature.signAndSendTransaction === "function") {
+      var sent = await sendFeature.signAndSendTransaction({
+        account: account,
+        chain: chain,
+        transaction: bytes,
+        options: { skipPreflight: true },
+      });
+      var signature = sent && sent[0] && sent[0].signature;
+      if (!signature) {
+        return walletError("Wallet returned no transaction signature");
+      }
+      console.log("[solana_wallet] Sent via Wallet Standard on", chain);
+      return base58Encode(signature);
+    }
+
+    var signFeature = standardFeature(wallet, "solana:signTransaction");
+    if (signFeature && typeof signFeature.signTransaction === "function") {
+      var signed = await signFeature.signTransaction({
+        account: account,
+        chain: chain,
+        transaction: bytes,
+      });
+      var signedTx = signed && signed[0] && signed[0].signedTransaction;
+      if (!signedTx) {
+        return walletError("Wallet returned no signed transaction");
+      }
+      var web3 = await loadWeb3();
+      var rpcUrl = await getRpcUrl();
+      var connection = new web3.Connection(rpcUrl, "confirmed");
+      console.log("[solana_wallet] Broadcasting standard signature to", rpcUrl);
+      return await connection.sendRawTransaction(signedTx, {
+        skipPreflight: true,
+      });
+    }
+
+    return walletError(wallet.name + " does not support transaction signing");
+  } catch (e) {
+    console.error("[solana_wallet] Wallet Standard sign/send failed:", e);
+    return walletError(
+      e.message || "Unknown transaction error",
+      e.code,
+      e.logs || null,
+    );
+  }
+}
+
+/**
+ * Choose the Wallet Standard chain id to submit against.
+ *
+ * Always the app's own cluster: sending the wallet's preferred chain instead
+ * could silently land a transaction on the wrong network. If the wallet does
+ * not advertise it, we still ask for it — the wallet rejects it loudly, which
+ * beats a mis-targeted transfer.
+ */
+async function pickStandardChain(wallet, account) {
+  var advertised =
+    (account && account.chains && account.chains.length
+      ? account.chains
+      : wallet.chains) || [];
+  var preferred = CLUSTER_TO_CHAIN[await getAppCluster()] || "solana:devnet";
+  for (var i = 0; i < advertised.length; i++) {
+    if (advertised[i] === preferred) {
+      return preferred;
+    }
+  }
+  console.warn(
+    "[solana_wallet] Wallet does not advertise",
+    preferred,
+    "— advertised:",
+    advertised,
+  );
+  return preferred;
+}
+
+/**
+ * SEC-014 cluster probe for Wallet Standard wallets.
+ *
+ * Standard wallets expose no RPC endpoint, so the cluster is read from the
+ * authorized chain instead. Only conclusive when exactly one Solana chain is
+ * in scope — MWA advertises devnet *and* mainnet until an account authorizes
+ * one of them. Returns null when ambiguous, which callers treat as
+ * "undetectable" and allow through, matching the legacy behaviour.
+ *
+ * @returns {string|null} cluster name, or null
+ */
+function standardCluster(wallet) {
+  var account = getStandardAccount(wallet);
+  var chains =
+    (account && account.chains && account.chains.length
+      ? account.chains
+      : wallet.chains) || [];
+  var clusters = [];
+  for (var i = 0; i < chains.length; i++) {
+    var cluster = CHAIN_TO_CLUSTER[chains[i]];
+    if (cluster && clusters.indexOf(cluster) === -1) {
+      clusters.push(cluster);
+    }
+  }
+  if (clusters.length !== 1) {
+    console.warn(
+      "[solana_wallet] Wallet Standard cluster ambiguous, chains:",
+      chains,
+    );
+    return null;
+  }
+  console.log("[solana_wallet] Wallet Standard cluster:", clusters[0]);
+  return clusters[0];
+}
+
+// ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
 
@@ -1005,7 +1469,11 @@ export async function signMessage(walletName, message) {
   try {
     var provider = getProvider(walletName);
     if (!provider) {
-      return JSON.stringify({ __wallet_error__: true, message: "Wallet not found" });
+      var standard = getStandardWallet(walletName);
+      if (standard) {
+        return standardSignMessage(standard, message);
+      }
+      return walletError("Wallet not found");
     }
     var encodedMessage = new TextEncoder().encode(message);
     var signedResult = await provider.signMessage(encodedMessage, "utf8");

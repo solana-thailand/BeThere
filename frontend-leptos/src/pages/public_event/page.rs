@@ -344,10 +344,18 @@ pub fn PublicEvent() -> impl IntoView {
                     let s = state.get();
                     match s {
                         PublicEventState::Loading => {
+                            // Skeleton mirrors the real layout (hero → name → CTA →
+                            // cards) so the page reads as "loading content" rather
+                            // than a blank/spinner — better perceived speed on
+                            // venue wifi.
                             view! {
-                                <div class="pe-loading">
-                                    <div class="pe-icon-mb"><Icon icon=IconName::Ticket class="icon-2xl" /></div>
-                                    <p class="pe-detail-secondary">"Loading event..."</p>
+                                <div class="pe-skeleton" aria-busy="true" aria-label="Loading event">
+                                    <div class="pe-skel pe-skel-hero"></div>
+                                    <div class="pe-skel pe-skel-title"></div>
+                                    <div class="pe-skel pe-skel-sub"></div>
+                                    <div class="pe-skel pe-skel-cta"></div>
+                                    <div class="pe-skel pe-skel-card"></div>
+                                    <div class="pe-skel pe-skel-card"></div>
                                 </div>
                             }.into_any()
                         }
@@ -541,27 +549,63 @@ fn render_loaded_event(
             }}
         </div>
 
-        // Share button
-        {share_button(&current_slug, &data.name, share_copied, set_share_copied)}
+        // Hero CTA — the primary action, reachable above the fold. Jumps to the
+        // reserve/action zone (the form itself is further down the page). Label
+        // adapts once we know the attendee's registration state.
+        {move || {
+            if !show_reg_form {
+                return ().into_any();
+            }
+            let label = match reg_lookup.get() {
+                RegistrationLookup::Registered(_) => "View Your Ticket →",
+                _ => "Reserve Your Spot →",
+            };
+            view! {
+                <a href="#reserve" class="btn btn-primary btn-block pe-hero-cta">{label}</a>
+            }.into_any()
+        }}
+
+        // Sticky mobile CTA — a persistent bottom action bar on phones (CSS hides
+        // it on desktop). Keeps the primary action one tap away while scrolling.
+        {move || {
+            if !show_reg_form {
+                return ().into_any();
+            }
+            let label = match reg_lookup.get() {
+                RegistrationLookup::Registered(_) => "View Your Ticket →",
+                _ => "Reserve Your Spot →",
+            };
+            view! {
+                <a href="#reserve" class="pe-sticky-cta">{label}</a>
+            }.into_any()
+        }}
 
         // Event Details Card
         {details_card(&data, countdown, event_completed)}
 
-        // About this Event
-        {if has_description {
-            let desc = description.clone();
+        // Share / Add-to-Calendar — secondary actions, placed AFTER the details
+        // (so they don't crowd the primary hero CTA, and "Add to Calendar" sits
+        // right next to the date/time it saves).
+        {share_button(&current_slug, &data.name, share_copied, set_share_copied)}
+
+        // NFT Badge — the reward, shown above the deposit/reserve ask to motivate
+        // ("here's what you'll earn") rather than buried after the form.
+        {if has_nft_image {
+            let url = nft_image_url.clone();
             view! {
                 <div class="pe-card">
-                    <h2 class="pe-section-title">"About this Event"</h2>
-                    <p class="pe-description">{desc}</p>
+                    <h2 class="pe-section-title">
+                        <Icon icon=IconName::Ticket class="icon-md" />" NFT Badge"
+                    </h2>
+                    <p class="pe-detail-secondary pe-mb-075">
+                        {if is_online_only { "Earn this NFT badge when you complete the quest after the event." } else { "Earn a commemorative NFT badge when you attend." }}
+                    </p>
+                    <img src=url alt="NFT Badge" class="pe-nft-img" />
                 </div>
             }.into_any()
         } else {
             ().into_any()
         }}
-
-        // Community Links
-        {crate::pages::ticket::community_links::community_links_section(community_links.clone(), crate::pages::ticket::community_links::CommunityLinksVariant::PublicEvent)}
 
         // Deposit Info Section
         {deposit_section(&data)}
@@ -603,6 +647,9 @@ fn render_loaded_event(
                 _ => ().into_any(),
             }
         }}
+
+        // Anchor target for the hero / sticky CTAs (scrolls the action zone into view).
+        <div id="reserve" class="pe-anchor"></div>
 
         // Registration Section — auth-gated
         {if !show_reg_form {
@@ -793,23 +840,23 @@ fn render_loaded_event(
             }.into_any()
         }}
 
-        // NFT Badge Section
-        {if has_nft_image {
-            let url = nft_image_url.clone();
+        // About this Event — moved below the action zone: it's reference content,
+        // not a gate to the primary CTA (which is above the fold + sticky on mobile).
+        {if has_description {
+            let desc = description.clone();
             view! {
                 <div class="pe-card">
-                    <h2 class="pe-section-title">
-                        <Icon icon=IconName::Ticket class="icon-md" />" NFT Badge"
-                    </h2>
-                    <p class="pe-detail-secondary pe-mb-075">
-                        {if is_online_only { "Earn this NFT badge when you complete the quest after the event." } else { "Earn a commemorative NFT badge when you attend." }}
-                    </p>
-                    <img src=url alt="NFT Badge" class="pe-nft-img" />
+                    <h2 class="pe-section-title">"About this Event"</h2>
+                    <p class="pe-description">{desc}</p>
                 </div>
             }.into_any()
         } else {
             ().into_any()
         }}
+
+        // Join the Community — engagement/social content, kept at the bottom
+        // (below the action zone), not competing with the reserve CTA.
+        {crate::pages::ticket::community_links::community_links_section(community_links.clone(), crate::pages::ticket::community_links::CommunityLinksVariant::PublicEvent)}
 
         // External Link
         {if has_link {
@@ -827,5 +874,8 @@ fn render_loaded_event(
         } else {
             ().into_any()
         }}
+
+        // Bottom spacer so the sticky mobile CTA never hides the last section.
+        <div class="pe-sticky-spacer"></div>
     }.into_any()
 }

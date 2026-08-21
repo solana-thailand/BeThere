@@ -78,9 +78,5 @@ tokio = { version = "1", features = ["rt", "macros"] }
 [lib]
 crate-type = ["cdylib", "rlib"]
 
-[profile.release]
-opt-level = "z"
-lto = true
-strip = true
-codegen-units = 1
-panic = "abort"
+# NOTE: the release profile is defined at the WORKSPACE ROOT (../Cargo.toml).
+# Cargo ignores [profile.*] in workspace-member crates, so it must not live here.

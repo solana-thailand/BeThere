@@ -289,36 +289,10 @@ pub struct CreditLiability {
     pub contact_count: i64,
 }
 
-/// Aggregate the organizer's total deposit-credit liability.
-///
-/// One round-trip SUM/COUNT over the `contacts` table — the cheapest possible
-/// read for the admin liability chip. Source of truth is the `contacts` table
-/// (D1 cols K–M), the same rows `increment_credit` writes. Single-org scope:
-/// the table is not org-partitioned (Issue #029 multi-org isolation deferred).
-///
-/// Returns `CreditLiability::default()` (all zeros) when D1 is unreachable —
-/// the chip renders "0 THB" rather than failing the deposits view.
-pub async fn credit_liability(db: &D1Database) -> CreditLiability {
-    let sql = "\
-         SELECT \
-           COALESCE(SUM(deposit_credit_thb), 0)  AS total_thb, \
-           COALESCE(SUM(deposit_credit_usdc), 0) AS total_usdc, \
-           COUNT(*)                               AS contact_count \
-         FROM contacts \
-         WHERE deposit_credit_thb > 0 OR deposit_credit_usdc > 0";
-
-    let stmt = db.prepare(sql);
-    match safe_all_rows(&stmt).await {
-        Ok(rows) => rows
-            .into_iter()
-            .next()
-            .and_then(|v| serde_json::from_value::<CreditLiability>(v).ok())
-            .unwrap_or_default(),
-        // Non-fatal: the deposits view must still render without the chip's
-        // number. Logged upstream if needed; here we degrade to zero.
-        Err(_) => CreditLiability::default(),
-    }
-}
+// NOTE: `credit_liability` (which summed the `contacts.deposit_credit_thb`
+// column) was removed — that column was never written by the hold path, so it
+// always read zero and masked the real liability. The admin chip now sums the
+// `credit_ledger` (see `db::credit_ledger::liability`), the source of truth.
 
 // ---------------------------------------------------------------------------
 // Credit refund-from-credit request flag (Issue #061 Phase 3 — exit path)
@@ -449,6 +423,27 @@ pub async fn get_credit_refund_requested(db: &D1Database, email: &str) -> bool {
         Ok(rows) => !rows.is_empty(),
         Err(_) => false,
     }
+}
+
+/// Read the timestamp of a contact's OPEN credit-refund request (the value of
+/// `credit_refund_requested_at` while the flag is set), or `None` if no request
+/// is open. Used as a stable idempotency key when reversing held credit in the
+/// ledger on payout, so a double-clear can't double-refund (each request stamps
+/// a fresh `requested_at`).
+pub async fn get_credit_refund_requested_at(db: &D1Database, email: &str) -> Option<String> {
+    let email_lower = email.to_lowercase();
+    let stmt = db.prepare(
+        "SELECT COALESCE(credit_refund_requested_at, '') AS requested_at \
+         FROM contacts \
+         WHERE email = ?1 AND credit_refund_requested = 1",
+    );
+    let bound = stmt.bind_refs(&[D1Type::Text(&email_lower)]).ok()?;
+    let rows = safe_all_rows(&bound).await.ok()?;
+    rows.into_iter().next().and_then(|v| {
+        v.get("requested_at")
+            .and_then(|x| x.as_str())
+            .map(str::to_string)
+    })
 }
 
 // ---------------------------------------------------------------------------

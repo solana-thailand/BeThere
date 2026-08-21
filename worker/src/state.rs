@@ -278,6 +278,7 @@ impl AppState {
             telegram_bot_username: get_secret(env, "TELEGRAM_BOT_USERNAME")
                 .or_else(|_| get_var(env, "TELEGRAM_BOT_USERNAME"))
                 .unwrap_or_default(),
+            slack_webhook_url: get_secret(env, "SLACK_WEBHOOK_URL").unwrap_or_default(),
         })
     }
 

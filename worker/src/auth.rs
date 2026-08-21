@@ -503,6 +503,46 @@ pub enum UserRole {
 /// Checks in order: super_admin → event organizer → Google Sheet organizer → event staff → Google Sheet staff.
 /// Uses the existing `is_event_organizer` / `is_event_staff` helpers from event_store
 /// to avoid duplicating email-matching logic.
+/// Fail with 403 unless the caller is a super-admin. Shared gate for cross-org
+/// platform views (all-contacts, audience export, community directory) that must
+/// never be exposed to per-event staff/organizers.
+pub async fn require_super_admin(
+    email: &str,
+    state: &AppState,
+    action: &str,
+) -> Result<(), event_checkin_domain::models::error::AppError> {
+    if resolve_user_role(email, state, None).await != UserRole::SuperAdmin {
+        return Err(event_checkin_domain::models::error::AppError::Forbidden(
+            format!("super-admin only: {action}"),
+        ));
+    }
+    Ok(())
+}
+
+/// Fail with 403 unless the caller is a super-admin OR an owner of
+/// `organization_id` (email ∈ the org's `owner_emails`). An empty/unknown org has
+/// no owners, so it falls through to super-admin only. Gate for cross-org
+/// resources (campaigns) keyed on a caller-supplied / record-derived org id.
+pub async fn require_org_access(
+    email: &str,
+    organization_id: &str,
+    state: &AppState,
+    action: &str,
+) -> Result<(), event_checkin_domain::models::error::AppError> {
+    if resolve_user_role(email, state, None).await == UserRole::SuperAdmin {
+        return Ok(());
+    }
+    if let Some(db) = state.d1.as_deref()
+        && let Ok(Some(org)) = crate::db::organizations::get_org_config(db, organization_id).await
+        && org.owner_emails.iter().any(|e| e.eq_ignore_ascii_case(email))
+    {
+        return Ok(());
+    }
+    Err(event_checkin_domain::models::error::AppError::Forbidden(
+        format!("not authorized for this organization: {action}"),
+    ))
+}
+
 pub async fn resolve_user_role(
     email: &str,
     state: &AppState,
@@ -636,6 +676,7 @@ mod tests {
             github_redirect_uri: String::new(),
             telegram_bot_token: String::new(),
             telegram_bot_username: String::new(),
+            slack_webhook_url: String::new(),
             staff_emails: [
                 "admin@example.com".to_string(),
                 "staff@example.com".to_string(),

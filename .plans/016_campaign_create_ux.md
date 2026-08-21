@@ -105,6 +105,28 @@ The `reward_config` is **not** a raw JSON textarea (good) — it's already struc
       blank, exactly as the hints advertise.)
 - [x] wasm32 check clean (commit `4c99532`).
 
+**Honest correction (2026-08-20, while building P2.2):** both acceptance notes
+above were verified by *code trace* and both were wrong on a point of fact.
+
+1. **There is no `'CAMPAIGN'` symbol default.** The note cited
+   `campaigns.rs:647` as `.unwrap_or("CAMPAIGN")`. No such line exists: the
+   string `"CAMPAIGN"` appears nowhere in `worker/src` or `domain/src`, and
+   `solana::MintRequest` has no symbol field at all — `symbol` is never sent to
+   the mint. The shipped hint "Leave blank to use 'CAMPAIGN' on mint" was
+   therefore misleading. It now reads: *"Stored on the campaign for your own
+   reference. Not part of the minted metadata."*
+2. **Blank fields did not fall back to defaults.** `handle_save` serialises
+   untouched fields as `""`, not as absent keys, and the mint path's
+   `.get(k).and_then(as_str).unwrap_or(&default)` reads `""` as a deliberate
+   value. A campaign saved with a blank NFT name minted an NFT named `""`,
+   while the hint promised the title-based default. Fixed in P2.2 by
+   `domain::models::campaign::resolve_reward`, which treats blank and
+   whitespace-only as unset.
+
+The lesson is not that code-tracing is useless but that it was done against
+remembered line numbers rather than a re-read of the file — the same failure
+mode as the "3× leaderboard" claim corrected in P1.1.
+
 ### P0.3 — Organization ID → dropdown  ⚠️ has open access-control decision
 **Behavior (frontend)**
 - Replace the raw `<input>` with a `<select>` populated from a new `api::list_orgs()` call (mirror the event-picker mount-Effect pattern from P1 of plan 015).
@@ -146,7 +168,12 @@ The existing `GET /orgs` is **SuperAdmin-only**. Plain organizers (who can creat
 - [x] Red `*` appended to `Campaign ID (slug)`, `Title`, and `Organization` labels via a reusable `.required-marker` CSS class (`color: var(--danger)`).
 - [x] On Save (create path): org validation added — blank org → `ToastType::Warning` "Organization is required", returns without saving. Mirrors the existing title/slug guard pattern.
 - [x] wasm32 check clean; no new clippy findings (verified: 10 pre-existing findings unchanged, 0 introduced).
-- [ ] Manual click-through pending.
+- [x] **Click-through verified 2026-08-20** against the staging deployment
+      (`bethere-staging`, version `71091cdb` glue, same commit) in a scripted
+      Chromium session. Observed: 3 `.required-marker` asterisks on the create
+      form (`Campaign ID (slug)*`, `Title*`, `Organization*`); saving with the
+      Organization dropdown untouched produced the toast "Organization is
+      required" and stayed on the form without creating anything.
 
 ### P1.3 — Post-create nudge
 - After a successful create, instead of (or in addition to) the success toast, navigate to the new campaign's **Detail → Events tab** with a visible banner: *"Campaign created as draft. Add events to activate."*
@@ -159,16 +186,195 @@ The existing `GET /orgs` is **SuperAdmin-only**. Plain organizers (who can creat
 - [x] Banner auto-clears on navigation away (handle_view/handle_back/handle_create_new) and is dismissible inline.
 - [x] The promote-from-event path is unchanged (it already navigates to Detail and auto-links the source event; the nudge is intentionally skipped there since a campaign promoted from an event already has an event linked).
 - [x] wasm32 check clean; no new clippy findings.
-- [ ] Manual click-through pending.
+- [x] **Click-through verified 2026-08-20** (staging). After a create the app
+      landed on Detail → Events with the `.campaign-nudge` banner and a Dismiss
+      button; clicking Dismiss removed the banner (`.campaign-nudge` count 1 → 0).
+      **This click-through found a real defect** — see "Defects found" in §9.
 
 **Acceptance (P1)**: each item wasm32-check clean (verified); manual click-through still pending for all P1 items.
 
 ---
 
-## 4. P2 — Detail (defer until P0/P1 land)
-- **P2.1 Slug uniqueness**: new `GET /campaigns/{id}/exists` (or reuse `get_campaign`) checked on slug blur; show inline "already taken" if collision.
-- **P2.2 Preview**: render a small NFT preview card (name/symbol/image) live from the form fields.
-- **P2.3 Status on create**: optional active/draft selector; only if draft-default proves problematic. Backend `create_campaign` currently hardcodes `'draft'`.
+## 4. P2 — Detail
+
+### P2.1 — Inline slug uniqueness  ✅ implemented
+
+**Chosen shape:** a **new** `GET /api/campaigns/{id}/exists` rather than reusing
+`get_campaign`. Reuse was rejected on inspection: `get_campaign` runs
+`require_org_access` against the campaign's owning org, so a slug held by
+*another* org answers `403`, and a free slug answers `404` — the frontend would
+have to infer availability from error codes, and a plain organizer could never
+distinguish "taken elsewhere" from "denied". Campaign ids are the primary key of
+`campaigns` and therefore globally unique, so the probe must be global too.
+
+**Backend** (`worker/src/handlers/campaigns.rs`, `worker/src/db/campaigns.rs`,
+`worker/src/handlers/mod.rs`)
+- `campaign_id_exists` returns `{ "exists": bool }` and nothing else — no
+  campaign data, not even the owning org. It sits behind the authenticated
+  admin router, so it discloses no more than the create attempt it replaces.
+- Deliberately **not** org-scoped (see above); the reasoning is recorded in the
+  handler doc comment so it is not "fixed" later by mistake.
+- `db::campaigns::campaign_exists` selects a constant (`SELECT 1 ... LIMIT 1`)
+  instead of the whole row — nothing about the campaign is needed.
+- New `validate_campaign_id` (`[A-Za-z0-9_-]`, 1..=64 chars) with 6 unit tests
+  in an inline `#[cfg(test)]` module, per the convention documented in
+  `worker/tests/do_claim_lock.rs`.
+
+**Security fix beyond the plan's letter (deliberate, flagged):**
+`db::campaigns::create_campaign` interpolates `id` straight into the `INSERT`
+(`VALUES ('{id}', ...)`) — like every other helper in that module it does not
+bind parameters. The plan did not call for touching create, but shipping the
+probe alone would have left the two disagreeing: `/exists` would reject a slug
+shape that `create` still accepted, so the form would tell the organizer one
+thing and the server do another. `validate_campaign_id` is therefore enforced on
+**both** paths, which also closes a pre-existing SQL-injection vector on an
+authenticated admin endpoint.
+**Not fixed, and still open:** the same interpolation applies to `title`,
+`description`, `completion_criteria`, `reward_type` and `reward_config` in
+`create_campaign`/`update_campaign`, and to ids across the rest of
+`db/campaigns.rs`. That is a module-wide parameter-binding refactor, out of
+scope here — tracked as a follow-up, not silently absorbed.
+
+**Frontend** (`api/campaign.rs`, `pages/campaigns_page.rs`, `style.css`)
+- `api::campaign_exists(id)` over the generic `api_get_json<T>`; the id is
+  URL-encoded so a hand-typed `a/b` reaches the handler as one segment and
+  returns a shape error (400) rather than a router 404.
+- `SlugStatus` = `Unchecked | Checking | Available | Taken | Malformed | CheckFailed`.
+- Probe fires on **blur of both the slug and the title** field. Title matters
+  because it auto-fills the slug (P0.1): checking only the slug field would miss
+  the common path where an organizer types a title and saves without ever
+  focusing the slug. Blur is already low-frequency, so no debounce was added.
+- Any edit that changes the slug resets the status to `Unchecked`, so a stale
+  verdict is never shown against a different slug. In-flight answers are
+  discarded if the slug moved on while the request was outstanding.
+- Save is blocked only on `Taken` and `Malformed` (both are certain failures).
+  `CheckFailed` and `Unchecked` deliberately still save — an offline probe must
+  not stop an organizer from creating a campaign.
+
+**Acceptance**
+- [x] `GET /campaigns/{id}/exists` returns `{"exists": true}` for a live slug and
+      `{"exists": false}` for a free one, for any authenticated admin regardless
+      of which org owns the campaign.
+- [x] A malformed slug returns `400` (not `404`/`500`) with a shape message.
+- [x] The create form shows "Available" / "Already taken" / a shape hint under
+      the Campaign ID field after blurring either Title or Campaign ID.
+- [x] Editing the slug clears the previous verdict rather than showing it stale.
+- [x] Save is blocked with a warning toast on a known collision; an unchecked or
+      unreachable probe still saves.
+- [x] `validate_campaign_id` rejects quotes, semicolons, whitespace, `/` and
+      non-ASCII, and accepts `x--y` (a doubled dash is a legal slug, not a SQL
+      comment — `--` can only open a comment outside a string literal, and
+      quoting is impossible). 202 worker unit tests pass.
+- [x] `cargo clippy -p worker -- -D warnings` clean; frontend wasm32 `--lib`
+      clippy `-D warnings` clean; `bash build.sh` succeeds.
+- [x] **Click-through verified 2026-08-20** (staging). Observed in the form:
+      typing "Plan016 Final Probe" auto-filled the slug `plan016-final-probe`;
+      blurring a free slug rendered "Available"; entering the seeded, occupied
+      slug `p016-taken-slug` rendered "Already taken — pick a different Campaign
+      ID."; entering `bad slug!` rendered the shape hint; and pressing Save on a
+      known collision was blocked with a warning toast, leaving the form intact.
+      Prod (`587dfa2a`): `GET /api/campaigns/{id}/exists` returns 401 where it
+      returned 404 before the deploy, confirming the route is live.
+
+**Deploy note:** requires a **worker redeploy** — the endpoint does not exist in
+prod, so until the worker ships, the probe returns 404 and the form degrades to
+`CheckFailed` ("Could not check availability — you can still save"), which is
+non-blocking by design.
+
+### P2.2 — NFT preview card  ✅ implemented
+
+**The problem the plan did not anticipate.** A preview card is a promise:
+"this is what will be minted". Building one exposed two ways the existing code
+broke that promise — no symbol is ever minted, and blank fields did not resolve
+to their advertised defaults (both written up under P0.2 above). Shipping a
+card that rendered the *intended* defaults would have made the UI lie more
+confidently, so the defaults were fixed first.
+
+**Shared SSOT rather than a mirror** (`domain/src/models/campaign.rs`, new)
+- `resolve_reward(title, config) -> ResolvedReward { name, description, image_url }`
+  is the single implementation of "what does this reward mint", called by
+  **both** `worker::handlers::campaigns::claim_campaign_reward` and the admin
+  preview card. A frontend copy of the defaults would have been a mirror with
+  no guard; the repo already has an `ssot_mirror_audit` test precisely because
+  that pattern drifts.
+- `reward_config_field` collapses missing / non-string / blank / whitespace-only
+  into `None`, which is the actual bug fix.
+- `KEY_NAME`/`KEY_DESCRIPTION`/`KEY_IMAGE_URL` are exported constants used by
+  the resolver *and* by the form's `build_reward_config`, so a key rename is a
+  compile-time break instead of a silent all-defaults regression.
+- The worker's hand-rolled default block is deleted, not duplicated.
+
+**Card** (`campaigns_page.rs::nft_preview_card`, `style.css`)
+- Shows only the three fields that reach `MintRequest`. Symbol, Metadata URI
+  and Collection Mint are stored but never minted, so previewing them would
+  imply otherwise; a hint says so explicitly.
+- Values the organizer left blank are rendered with a `default` tag, so a
+  default is never mistaken for something they typed.
+- With no title yet, both textual defaults would interpolate to
+  `" - Campaign Complete"`, which reads as a bug — the card prompts for a title
+  instead.
+- A dead artwork URL falls back to the placeholder icon underneath rather than
+  a broken-image glyph (`on:error` hides the `<img>`).
+
+**Acceptance**
+- [x] Card renders live under the NFT section when `reward_type == nft_certificate`.
+- [x] Preview values are produced by the same function the mint path calls, so
+      they cannot drift; the worker no longer computes defaults itself.
+- [x] Blank name/description resolve to the title-based defaults (previously
+      minted as `""`) and are tagged `default` in the card.
+- [x] Blank/whitespace/non-string/absent all resolve identically.
+- [x] Unminted fields (symbol, metadata_uri, collection_mint) never affect the
+      resolved metadata and are absent from the card.
+- [x] 15 domain tests (`domain/tests/campaign_reward.rs`) + 8 frontend inline
+      tests (`campaigns_page.rs`, covering `slugify` and the
+      `build_reward_config` → `resolve_reward` contract).
+- [x] **Click-through verified 2026-08-20** (staging). Selecting reward type
+      "NFT Certificate" rendered `.nft-preview-card` reading
+      `Plan016 Live Probe - Campaign Complete` + `DEFAULT` tag and
+      `Completed the Plan016 Live Probe campaign` + `DEFAULT`; typing a name
+      updated the card live to `Live Probe Badge` and dropped that field's tag.
+      The saved campaign's `reward_config` then read `"name":"Live Probe Badge"`,
+      matching the card.
+      **Not covered by this click-through:** mint-time resolution itself, which
+      needs a completed enrolment plus a Crossmint mint. That path is covered
+      only by the 15 domain tests.
+
+### P2.3 — Status on create  ✅ implemented
+
+The plan gated this on "only if draft-default proves problematic"; it was
+requested directly, so it is implemented. **Finding worth recording:** `draft`
+is very nearly cosmetic today. The only status gate anywhere in the worker is
+`db::campaigns::campaign_collection_mints` (`WHERE status = 'active'`, used to
+classify NFTs). Check-in enrolment (`on_event_checkin`), progress tracking and
+reward claiming do **not** consult status — a draft campaign still accrues
+progress and still mints rewards. The selector's hint says so rather than
+implying a visibility guarantee that does not exist. Making `draft` actually
+gate anything is a separate decision, deliberately not taken here.
+
+**Backend**
+- `CreateCampaignRequest.status`, defaulted to `"draft"` via serde so a client
+  that omits it behaves exactly as before this change.
+- `validate_create_status` accepts `draft|active` only — narrower than
+  `validate_campaign_status` on purpose: nothing is complete at create time, and
+  a campaign born `completed` could never be progressed through.
+  `update_campaign_status` still accepts `completed`.
+- `db::create_campaign` takes `status` instead of hardcoding `'draft'`; it is
+  interpolated like every other column in that module, which is safe only
+  because the value is checked against a closed set first (documented on the fn).
+
+**Frontend**
+- Draft/Active `<select>` on the create form only (status is changed afterwards
+  from the campaign list, which already has activate/complete controls).
+
+**Acceptance**
+- [x] Creating with Active yields an `active` campaign; the default is still `draft`.
+- [x] A request omitting `status` deserializes to `draft` (pinned by test).
+- [x] `completed` is rejected on create but still allowed as a transition.
+- [x] 4 worker unit tests covering the above; 206 worker tests pass.
+- [x] **Click-through verified 2026-08-20** (staging). The "Initial status"
+      select rendered with Draft/Active and defaulted to `draft`; choosing
+      Active and saving produced a campaign the API then reported as
+      `status=active` (`GET /api/campaigns/plan016-final-probe`).
 
 ---
 
@@ -196,13 +402,78 @@ The existing `GET /orgs` is **SuperAdmin-only**. Plain organizers (who can creat
 ---
 
 ## 8. Status
-- [x] P0.1 auto-slug (wasm32 check clean; manual click-through pending)
-- [x] P0.2 optional hints (wasm32 check clean; manual click-through pending)
-- [x] P0.3 org dropdown — **option A** (wasm32 + worker check + clippy `-D warnings` clean; manual click-through pending; **requires worker redeploy** for non-super-admin access)
+- [x] P0.1 auto-slug (wasm32 check clean; click-through verified 2026-08-20 — see §9)
+- [x] P0.2 optional hints (wasm32 check clean; click-through verified 2026-08-20 — see §9)
+- [x] P0.3 org dropdown — **option A** (wasm32 + worker check + clippy `-D warnings` clean; click-through verified 2026-08-20; **requires worker redeploy** for non-super-admin access)
 - [x] P1.1 advanced disclosure (wasm32 check clean; the false "3× leaderboard" claim was corrected — see §3 P1.1)
-- [x] P1.2 required markers (wasm32 check clean; added org validation on create; manual click-through pending)
-- [x] P1.3 post-create nudge (wasm32 check clean; honest deviation — one local `draft_nudge` signal added, see §3 P1.3; manual click-through pending)
-- [ ] P2 deferred
+- [x] P1.2 required markers (wasm32 check clean; added org validation on create; click-through verified 2026-08-20 — see §9)
+- [x] P1.3 post-create nudge (wasm32 check clean; honest deviation — one local `draft_nudge` signal added, see §3 P1.3; click-through verified 2026-08-20 — see §9)
+- [x] P2.1 slug uniqueness (new `GET /campaigns/{id}/exists`; worker clippy + 202 unit tests + wasm32 clippy + `build.sh` clean; click-through verified 2026-08-20; **requires worker redeploy**)
+      Includes a deliberate, flagged security fix: `validate_campaign_id` is now enforced on `create_campaign` too, closing a pre-existing SQL-injection vector on the campaign id. See §4 P2.1.
+- [x] P2.2 preview card (shared `domain::models::campaign` SSOT; 15 domain + 8 frontend tests; click-through verified 2026-08-20 — see §9)
+      Fixed two false claims carried by P0.2 — no `'CAMPAIGN'` symbol default exists, and blank fields minted `""` instead of the advertised defaults. See §2 P0.2 correction and §4 P2.2.
+- [x] P2.3 status on create (draft/active selector; `draft` default preserved for older clients; 4 worker tests; click-through verified 2026-08-20 — see §9)
+      Finding: `draft` currently gates only NFT classification — progress and reward claiming ignore status. See §4 P2.3.
 
 **P0.3 decision (resolved):** Option **A** — widened `GET /orgs` read access to any authenticated admin; mutations stay SuperAdmin-only. Worker redeploy required.
+
+All "manual click-through pending" items are now closed — see §9 for how, and for
+what the click-through found that no amount of code-tracing had.
+
+---
+
+## 9. Deployment & click-through verification (2026-08-20)
+
+### Deployed
+| Env | Worker | Version | Content-Type check |
+|---|---|---|---|
+| Staging | `bethere-staging` | `c439a555` → reverified after fixes | `/` text/html, JS text/javascript ✅ |
+| Prod | `bethere` | `587dfa2a` | `/` text/html, JS text/javascript, wasm application/wasm, css text/css ✅ |
+
+Prod D1 (`bethere-db`) was exported to `~/bethere-backups/` before deploying, per
+the standing pre-deploy rule. The backup lives outside the repo — it contains PII.
+
+**Prod route liveness:** `GET /api/campaigns/{id}/exists` returned **404 before**
+the deploy and **401 after**, which is the discriminator that proves the new
+route shipped rather than merely that the worker responded. `dev-token` is
+rejected on prod (401) — `DEV_MODE=0` there, as it must be.
+
+### How the click-throughs were done
+Against **staging**, not prod. Staging runs `DEV_MODE=1`, so a browser carrying
+`localStorage.event_checkin_token = "dev-token"` authenticates as the configured
+super admin; a scripted Chromium session (Playwright) then drove the real
+deployed UI. Staging has its own D1/KV/R2, so the probe campaigns never touched
+production data, and all fixtures (one org, four campaigns) were deleted
+afterwards — `GET /api/orgs` returns `{"orgs":[]}` again.
+
+**Prod's UI was not click-through tested.** That needs a Google OAuth admin
+session in a real browser. Prod verification is limited to the route/content-type
+evidence above.
+
+### Defects found — none of which the code-trace passes had caught
+1. **P1.3 banner contradicted P2.3** *(introduced by this plan; fixed)*. Creating
+   an Active campaign still announced "Campaign created as draft." P1.3's copy
+   was written when draft was the only outcome, and P2.3 made status a choice
+   without revisiting it. `draft_nudge` went from `Signal<bool>` to
+   `Signal<Option<String>>` carrying the created status; Active now reads
+   "Campaign created and active. Add events so attendees can make progress."
+2. **Reward Type defaulted to `""`, so the default happy path 400'd**
+   *(pre-existing; fixed)*. `form_reward_type` initialised to `String::new()`
+   while the `<select>`'s first option is `value="none"` — so the control
+   *displayed* "None" while the signal stayed empty, and
+   `POST /api/campaigns` answered `invalid reward_type:  (expected
+   none/nft_certificate/badge)`. A first-time organizer who never touched that
+   dropdown could not create a campaign at all. Directly defeats this plan's
+   stated goal, and every prior verification pass missed it because the API was
+   always exercised with an explicit `reward_type`. Signal now defaults to
+   `"none"` in both the initialiser and `reset_form`.
+3. **`GET /api/campaigns/{id}/stats` returns 500 for a campaign with no
+   enrolments** *(pre-existing; NOT fixed — out of scope, flagged)*. In
+   `db::campaigns::campaign_completion_stats`, `SUM(CASE WHEN is_complete = 1
+   ...)` is NULL over an empty set, and `TotalsRow.total_completed` is a
+   non-optional `i64`, so deserialization fails. Every newly created campaign
+   therefore 500s on its Stats tab. The frontend degrades gracefully (logs a
+   warning, renders no stats), which is why it went unnoticed. One-line fix:
+   `COALESCE(SUM(...), 0)`. Left for a separate change since it predates this
+   plan and touches the stats path, not the create UX.
 ````

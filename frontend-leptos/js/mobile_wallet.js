@@ -129,3 +129,23 @@ export function isMwaRegistered() {
 export function isAndroidDevice() {
   return isAndroid();
 }
+
+/**
+ * Synchronous probe — is this a phone or tablet browser?
+ *
+ * The wallet picker uses this to drop "Get Extension" rows: mobile browsers
+ * have no extension store, so those rows are dead ends that make it look like
+ * signing in is impossible. Deliberately broader than `isAndroid()`, which
+ * gates MWA registration — iOS has no MWA but still needs mobile-shaped UI.
+ */
+export function isMobileDevice() {
+  try {
+    if (/android|iphone|ipad|ipod/i.test(navigator.userAgent)) {
+      return true;
+    }
+    // iPadOS 13+ reports a desktop UA; it is the only "Mac" with touch points.
+    return navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1;
+  } catch (e) {
+    return false;
+  }
+}

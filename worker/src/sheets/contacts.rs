@@ -469,34 +469,6 @@ pub async fn decrement_credit(
     Ok(())
 }
 
-/// Get a contact's deposit credit balance.
-pub async fn get_credit_balance(
-    state: &AppState,
-    sheet_id: &str,
-    sheet_name: &str,
-    kv: Option<&KvStore>,
-    email: &str,
-) -> Result<(u64, u64), String> {
-    let access_token = get_cached_access_token(state, kv).await?;
-    let email_lower = email.to_lowercase();
-
-    let (_row_index, row_data) =
-        find_contact_row(&email_lower, sheet_id, sheet_name, &access_token)
-            .await?
-            .ok_or_else(|| format!("contact not found: {email_lower}"))?;
-
-    let credit_thb: u64 = row_data
-        .get(COL_DEPOSIT_CREDIT_THB)
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(0);
-    let credit_usdc: u64 = row_data
-        .get(COL_DEPOSIT_CREDIT_USDC)
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(0);
-
-    Ok((credit_thb, credit_usdc))
-}
-
 /// Set the `credit_refund_requested` flag on a contact (Issue #061 Phase 3
 /// exit path). Attendee-side "Request Return of Held Credit" action — writes
 /// "1" to column N so the organizer sees the request surface in the admin

@@ -58,7 +58,7 @@ use event_checkin_domain::models::adventure::{AdventureConfig, AdventureSaveRequ
 use event_checkin_domain::models::auth::Claims;
 use event_checkin_domain::models::error::AppError;
 
-use super::ext::{EventIdQuery, resolve_event, resolve_kv};
+use super::ext::{EventIdQuery, resolve_event, resolve_event_with_access, resolve_kv};
 use crate::adventure;
 use crate::error::WorkerError;
 use crate::state::AppState;
@@ -216,12 +216,13 @@ pub async fn save_adventure_progress(
 #[worker::send]
 pub async fn get_admin_adventure(
     State(state): State<AppState>,
-    Extension(_claims): Extension<Claims>,
+    Extension(claims): Extension<Claims>,
     Query(query): Query<EventIdQuery>,
 ) -> Result<ApiOk<serde_json::Value>, WorkerError> {
-    tracing::info!("admin adventure config read by {}", _claims.email);
+    tracing::info!("admin adventure config read by {}", claims.email);
 
-    let event = resolve_event(&state, query.event_id.as_deref()).await?;
+    // S2: per-event access check (was resolve_event — cross-event read IDOR).
+    let event = resolve_event_with_access(&state, &claims, query.event_id.as_deref()).await?;
     let db = state
         .d1
         .as_deref()
@@ -242,17 +243,18 @@ pub async fn get_admin_adventure(
 #[worker::send]
 pub async fn put_admin_adventure(
     State(state): State<AppState>,
-    Extension(_claims): Extension<Claims>,
+    Extension(claims): Extension<Claims>,
     Query(query): Query<EventIdQuery>,
     Json(body): Json<AdventureConfig>,
 ) -> Result<ApiOk<serde_json::Value>, WorkerError> {
     tracing::info!(
         "admin adventure config update by {} (enabled={})",
-        _claims.email,
+        claims.email,
         body.enabled
     );
 
-    let event = resolve_event(&state, query.event_id.as_deref()).await?;
+    // S2: per-event access check (was resolve_event — cross-event write IDOR).
+    let event = resolve_event_with_access(&state, &claims, query.event_id.as_deref()).await?;
     let db = state
         .d1
         .as_deref()

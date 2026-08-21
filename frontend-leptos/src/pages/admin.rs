@@ -1298,7 +1298,7 @@ pub fn Admin() -> impl IntoView {
                                                         <strong>"Errors:"</strong>
                                                         <ul>
                                                             {errors.iter().map(|e| view! {
-                                                                <li>{utils::escape_html(e)}</li>
+                                                                <li>{e.clone()}</li>
                                                             }).collect_view()}
                                                         </ul>
                                                     </div>
@@ -1506,7 +1506,7 @@ pub fn Admin() -> impl IntoView {
                                     let time_ago_str = attendee.checked_in_at.as_deref().map(utils::time_ago).unwrap_or_default();
                                     let has_time_ago = is_checked_in && !time_ago_str.is_empty();
                                     let checked_in_by_suffix = attendee.checked_in_by.as_ref().map_or(String::new(), |by| {
-                                        if by.is_empty() { String::new() } else { format!(" by {}", utils::escape_html(by)) }
+                                        if by.is_empty() { String::new() } else { format!(" by {by}") }
                                     });
                                     let deposit_link = match active_event_id.get() {
                                         Some(ref eid) => format!("/deposit/{api_id}?event_id={eid}"),
@@ -1526,6 +1526,9 @@ pub fn Admin() -> impl IntoView {
                                         let is_deposit_verified = attendee.deposit_verified.as_deref() == Some("true");
                                         if attendee.refund_status.is_some() {
                                             Some(("badge badge-refunded", "Refunded"))
+                                        } else if attendee.used_credit {
+                                            // Got in by spending rolling credit — distinct from cash.
+                                            Some(("badge badge-info", "Credit \u{2713}"))
                                         } else if is_deposit_verified {
                                             Some(("badge badge-success", "Deposit \u{2713}"))
                                         } else if has_deposit {
@@ -1546,6 +1549,20 @@ pub fn Admin() -> impl IntoView {
                                         None
                                     };
 
+                                    // "Apply Credit" is offered when an in-person attendee holds rolling
+                                    // THB credit and has not completed/refunded a deposit — the backend
+                                    // spends it (only if sufficient) and writes a covered deposit.
+                                    // NOTE: deposit_amount is USDC-only, so it can't detect THB-stuck rows;
+                                    // credit_thb (annotated by the list handler) is the correct gate.
+                                    let credit_thb = attendee.credit_thb;
+                                    let has_credit = credit_thb > 0;
+                                    let can_apply_credit = is_attendee_in_person
+                                        && has_credit
+                                        && attendee.deposit_verified.as_deref() != Some("true")
+                                        && attendee.refund_status.is_none();
+                                    let apply_credit_id_click = attendee.api_id.clone();
+                                    let apply_credit_id_disabled = attendee.api_id.clone();
+
                                     view! {
                                         <div class="attendee-item" class:vip=is_vip class:selected=is_selected>
                                             // Row 1: checkbox + name + badges + status indicators
@@ -1559,7 +1576,7 @@ pub fn Admin() -> impl IntoView {
                                                 >
                                                     {if is_selected { "✓" } else { "" }}
                                                 </button>
-                                                <div class="attendee-name">{utils::escape_html(&name)}</div>
+                                                <div class="attendee-name">{name.clone()}</div>
                                                 <span class=p_class.clone()>{p_label.clone()}</span>
                                                 <span class=badge_class>{badge_text}</span>
                                                 <Show
@@ -1592,6 +1609,16 @@ pub fn Admin() -> impl IntoView {
                                                         view! { <span class=cls.to_string()>{txt}</span> }
                                                     }
                                                 </Show>
+                                                // Rolling deposit credit the attendee holds — makes credit
+                                                // visible at the row level (previously only on the Held tab).
+                                                <Show
+                                                    when=move || has_credit
+                                                    fallback=|| view! { <span></span> }
+                                                >
+                                                    <span class="badge badge-info" title="Rolling deposit credit available — use the Apply Credit button to cover this event">
+                                                        {format!("\u{0e3f}{credit_thb} credit")}
+                                                    </span>
+                                                </Show>
                                                 <Show
                                                     when=move || has_nft
                                                     fallback=|| view! { <span></span> }
@@ -1615,12 +1642,12 @@ pub fn Admin() -> impl IntoView {
                                             // Row 2: email + ticket + time ago + action buttons
                                             <div class="attendee-row-bottom">
                                                 <div class="attendee-meta">
-                                                    <span class="attendee-email-inline">{utils::escape_html(&email)}</span>
+                                                    <span class="attendee-email-inline">{email.clone()}</span>
                                                     <Show
                                                         when=move || has_ticket
                                                         fallback=|| view! { <span></span> }
                                                     >
-                                                        <span class="admin-ticket-tag">{utils::escape_html(&ticket)}</span>
+                                                        <span class="admin-ticket-tag">{ticket.clone()}</span>
                                                     </Show>
                                                     <Show
                                                         when=move || has_time_ago
@@ -1668,6 +1695,60 @@ pub fn Admin() -> impl IntoView {
                                                             }
                                                         >
                                                             "Record Slip"
+                                                        </button>
+                                                    </Show>
+                                                    // Apply Credit — complete a registration stuck at the
+                                                    // deposit step by spending the attendee's rolling credit.
+                                                    // Shown only for the stuck state (in-person, registered,
+                                                    // no deposit). The backend spends credit only if it covers
+                                                    // the deposit, else surfaces a toast error.
+                                                    <Show
+                                                        when=move || current_deposit_enabled.get() && can_apply_credit
+                                                        fallback=|| view! { <span></span> }
+                                                    >
+                                                        <button
+                                                            class="btn btn-outline btn-xs btn-xs-override"
+                                                            disabled=switching_ids.get().contains(&apply_credit_id_disabled)
+                                                            title="Apply this attendee's rolling deposit credit to cover this event (completes a registration stuck at the deposit step). No effect if they have insufficient credit."
+                                                            on:click={
+                                                                let aid = apply_credit_id_click.clone();
+                                                                let set_toast = set_toast;
+                                                                let set_switching_ids = set_switching_ids;
+                                                                let set_refresh_counter = set_refresh_counter;
+                                                                let eid = event_id_for_delete.get();
+                                                                move |_| {
+                                                                    let aid = aid.clone();
+                                                                    let set_toast = set_toast;
+                                                                    let set_switching_ids = set_switching_ids;
+                                                                    let set_refresh_counter = set_refresh_counter;
+                                                                    let eid = eid.clone();
+                                                                    set_switching_ids.update(|ids| { ids.insert(aid.clone()); });
+                                                                    leptos::task::spawn_local(async move {
+                                                                        let body = api::ApplyCreditRequest { event_id: eid.clone().unwrap_or_default() };
+                                                                        match api::apply_credit(&aid, &body).await {
+                                                                            Ok(_) => {
+                                                                                api::invalidate_attendee_cache();
+                                                                                set_refresh_counter.update(|c| *c += 1);
+                                                                                components::show_toast(
+                                                                                    &set_toast,
+                                                                                    "Rolling credit applied \u{2014} registration completed",
+                                                                                    ToastType::Success,
+                                                                                );
+                                                                            }
+                                                                            Err(e) => {
+                                                                                components::show_toast(
+                                                                                    &set_toast,
+                                                                                    &format!("Apply credit failed: {e}"),
+                                                                                    ToastType::Error,
+                                                                                );
+                                                                            }
+                                                                        }
+                                                                        set_switching_ids.update(|ids| { ids.remove(&aid); });
+                                                                    });
+                                                                }
+                                                            }
+                                                        >
+                                                            "Apply Credit"
                                                         </button>
                                                     </Show>
                                                     // Participation-type toggle — flip In-Person ⇄ Online.
@@ -2157,7 +2238,7 @@ fn render_recent_check_ins(
                             let at = check_in.checked_in_at.clone();
                             let formatted = utils::format_timestamp(&at);
                             let by_suffix = check_in.checked_in_by.as_ref().map_or(String::new(), |by| {
-                                if by.is_empty() { String::new() } else { format!(" by {}", utils::escape_html(by)) }
+                                if by.is_empty() { String::new() } else { format!(" by {by}") }
                             });
 
                             let p_type = participation_map
@@ -2171,7 +2252,7 @@ fn render_recent_check_ins(
                             view! {
                                 <div class="attendee-item">
                                     <div class="attendee-row-top">
-                                        <div class="attendee-name">{utils::escape_html(&name)}</div>
+                                        <div class="attendee-name">{name.clone()}</div>
                                         <span class=format!("{p_class} admin-badge-inline")>
                                             {p_label.clone()}
                                         </span>
@@ -2179,7 +2260,7 @@ fn render_recent_check_ins(
                                     <div class="attendee-row-bottom">
                                         <div class="attendee-meta">
                                             <span class="attendee-email-inline admin-recent-email">
-                                                {utils::escape_html(&api_id)}
+                                                {api_id.clone()}
                                             </span>
                                         </div>
                                         <div class="admin-checkin-time">

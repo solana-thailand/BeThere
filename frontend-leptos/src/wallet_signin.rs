@@ -20,6 +20,9 @@ extern "C" {
     #[wasm_bindgen(js_name = "getDetectedWallets")]
     fn get_detected_wallets_js() -> Vec<String>;
 
+    #[wasm_bindgen(js_name = "getDetectedWalletsAsync")]
+    fn get_detected_wallets_async_js() -> js_sys::Promise;
+
     #[wasm_bindgen(js_name = "isWalletAvailable")]
     fn is_wallet_available_js(wallet_name: &str) -> bool;
 
@@ -37,6 +40,178 @@ fn solana_icon() -> &'static str {
         <path fill=\"#14F195\" d=\"M64.6 3.8C67 1.4 70.3 0 73.8 0h317.4c5.8 0 8.7 7 4.6 11.1l-62.7 62.7c-2.4 2.4-5.7 3.8-9.2 3.8H6.5c-5.8 0-8.7-7-4.6-11.1L64.6 3.8z\"/>\
         <path fill=\"#00C2FF\" d=\"M333.1 120.1c-2.4-2.4-5.7-3.8-9.2-3.8H6.5c-5.8 0-8.7 7-4.6 11.1l62.7 62.7c2.4 2.4 5.7 3.8 9.2 3.8h317.4c5.8 0 8.7-7 4.6-11.1l-62.7-62.7z\"/>\
     </svg>"
+}
+
+/// Wallets we can point at an install page when they are not detected.
+const KNOWN_WALLETS: [(&str, &str); 3] = [
+    ("Phantom", "https://phantom.app/"),
+    ("Solflare", "https://solflare.com/"),
+    ("Backpack", "https://backpack.app/"),
+];
+
+/// Registry name of the Mobile Wallet Adapter pseudo-wallet, registered by
+/// `js/mobile_wallet.js` on Android. It stands in for whichever wallet app the
+/// user actually has, so the raw name means nothing to them and is relabelled.
+const MWA_WALLET: &str = "Mobile Wallet Adapter";
+
+/// User-facing name for a Wallet Standard registry entry.
+fn wallet_label(name: &str) -> &str {
+    match name {
+        MWA_WALLET => "Solana Wallet App",
+        other => other,
+    }
+}
+
+/// Secondary line under the wallet name, where the name alone is not enough.
+fn wallet_hint(name: &str) -> Option<&'static str> {
+    match name {
+        MWA_WALLET => Some("Opens Phantom, Solflare or Seed Vault"),
+        _ => None,
+    }
+}
+
+/// Name + icon cell shared by the connect and install rows.
+fn wallet_identity(name: &str) -> AnyView {
+    let icon_name = crate::icons::wallet_icon_name(name);
+    let label = wallet_label(name).to_string();
+    let hint = wallet_hint(name);
+    view! {
+        <span style="display: flex; align-items: center; gap: 12px;">
+            <span style="display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; background: rgba(255,255,255,0.06); border-radius: 10px;">
+                <Icon icon=icon_name class="icon-sm" />
+            </span>
+            <span style="display: flex; flex-direction: column; gap: 2px; text-align: left;">
+                <span>{label}</span>
+                {hint
+                    .map(|h| {
+                        view! {
+                            <span style="font-size: 0.75rem; font-weight: 400; color: #94a3b8;">
+                                {h}
+                            </span>
+                        }
+                    })}
+            </span>
+        </span>
+    }
+    .into_any()
+}
+
+/// A wallet that is present and can complete the SIWS handshake.
+///
+/// The whole row is the click target (CSS already makes it look clickable);
+/// the badge is a visual affordance only.
+fn wallet_connect_row(name: &str, connect: impl Fn(String) + 'static) -> AnyView {
+    let name_owned = name.to_string();
+    view! {
+        <div
+            class="siws-wallet-option"
+            role="button"
+            tabindex="0"
+            on:click=move |_| connect(name_owned.clone())
+        >
+            {wallet_identity(name)}
+            <span class="siws-badge-installed">"Connect →"</span>
+        </div>
+    }
+    .into_any()
+}
+
+/// A known wallet that is absent — offer its install page. Desktop only: the
+/// links point at extension stores that do not exist on mobile.
+fn wallet_install_row(name: &str, download_url: &str) -> AnyView {
+    view! {
+        <div class="siws-wallet-option" style="cursor: default;">
+            {wallet_identity(name)}
+            <a
+                href=download_url.to_string()
+                target="_blank"
+                rel="noopener noreferrer"
+                class="siws-badge-install"
+                on:click=move |e| e.stop_propagation()
+            >
+                "Get Extension ↗"
+            </a>
+        </div>
+    }
+    .into_any()
+}
+
+/// Wallet apps we can hand off to with a universal "browse" link.
+///
+/// The path shapes are vendor-specific and are taken from their docs:
+///  - Phantom  <https://docs.phantom.com/phantom-deeplinks/other-methods/browse>
+///  - Solflare <https://docs.solflare.com/solflare/technical/deeplinks/other-methods/browse>
+///
+/// Backpack is deliberately absent: it publishes no equivalent browse link, and
+/// guessing one would produce a button that silently goes nowhere.
+const DEEP_LINK_WALLETS: [(&str, &str); 2] = [
+    ("Phantom", "https://phantom.app/ul/browse/"),
+    ("Solflare", "https://solflare.com/ul/v1/browse/"),
+];
+
+/// Build a universal link that reopens the current page inside a wallet app's
+/// in-app browser.
+///
+/// This is the only sign-in route on iOS, which has no Mobile Wallet Adapter.
+/// Inside that browser the wallet injects a normal provider, the origin is
+/// unchanged, and the existing SIWS handshake runs untouched.
+///
+/// Returns `None` only if the location is unreadable, in which case the row is
+/// skipped rather than rendered as a dead link.
+fn wallet_browse_url(base: &str) -> Option<String> {
+    let location = web_sys::window()?.location();
+    let href = location.href().ok()?;
+    let origin = location.origin().ok()?;
+    let target = js_sys::encode_uri_component(&href);
+    let referrer = js_sys::encode_uri_component(&origin);
+    Some(format!("{base}{target}?ref={referrer}"))
+}
+
+/// Hand-off row rendered as a real anchor.
+///
+/// Deliberately not a JS `location.href` assignment: both vendors document that
+/// browse links must be *clicked*, and iOS is markedly more reliable about
+/// routing a user-activated link to the app than a scripted navigation.
+fn wallet_deep_link_row(name: &str, base: &str) -> Option<AnyView> {
+    let url = wallet_browse_url(base)?;
+    Some(
+        view! {
+            <a class="siws-wallet-option" href=url style="text-decoration: none;">
+                {wallet_identity(name)}
+                <span class="siws-badge-install">"Open App ↗"</span>
+            </a>
+        }
+        .into_any(),
+    )
+}
+
+/// Caption introducing the hand-off rows.
+fn deep_link_caption() -> AnyView {
+    view! {
+        <p style="margin: 8px 0 0; font-size: 0.8rem; color: #94a3b8; line-height: 1.45;">
+            "Or open this page inside your wallet app and sign in from there:"
+        </p>
+    }
+    .into_any()
+}
+
+/// Shown when nothing connectable was found, so the modal is never empty.
+fn no_wallet_row(mobile: bool) -> AnyView {
+    let msg = match mobile {
+        true => {
+            "No Solana wallet found in this browser. Open this page from inside              your wallet app's built-in browser to sign in."
+        }
+        false => "No Solana wallet detected. Install one and refresh the page.",
+    };
+    view! {
+        <div
+            class="siws-wallet-option"
+            style="cursor: default; color: #94a3b8; font-size: 0.85rem; line-height: 1.5;"
+        >
+            {msg}
+        </div>
+    }
+    .into_any()
 }
 
 /// Which SIWS flow the button performs.
@@ -86,10 +261,26 @@ pub fn WalletSignInButton(
     let (error_msg, set_error_msg) = signal(None::<String>);
     let (detected_wallets, set_detected_wallets) = signal(Vec::<String>::new());
 
-    // Detect wallets on mount (Wallet Standard registry may populate late, so
-    // we also refresh when the modal opens, below).
+    // Detect wallets on mount. Seed synchronously, then await the polling
+    // variant: extensions inject late, and Mobile Wallet Adapter only registers
+    // once `mobile_wallet.js` finishes its dynamic import — without the second
+    // pass a mobile user who opens the picker quickly sees no wallet at all.
+    // The list is refreshed again when the modal opens, below.
     Effect::new(move |_| {
         set_detected_wallets.set(get_detected_wallets_js());
+        leptos::task::spawn_local(async move {
+            let Ok(val) = wasm_bindgen_futures::JsFuture::from(get_detected_wallets_async_js()).await
+            else {
+                return;
+            };
+            let names: Vec<String> = js_sys::Array::from(&val)
+                .iter()
+                .filter_map(|v| v.as_string())
+                .collect();
+            if !names.is_empty() {
+                set_detected_wallets.set(names);
+            }
+        });
     });
 
     let connect_wallet_by_name = move |wallet_name: String| {
@@ -267,60 +458,64 @@ pub fn WalletSignInButton(
 
                         <div style="display: flex; flex-direction: column; gap: 12px;">
                             {move || {
-                                let installed_list = detected_wallets.get();
-                                let supported = vec![
-                                    ("Phantom", "https://phantom.app/"),
-                                    ("Solflare", "https://solflare.com/"),
-                                    ("Backpack", "https://backpack.app/"),
-                                ];
+                                let detected = detected_wallets.get();
+                                let mobile = crate::wallet::is_mobile_device();
 
-                                supported.into_iter().map(|(w_name, download_url)| {
-                                    let is_installed = installed_list.iter().any(|w| w.eq_ignore_ascii_case(w_name)) || is_wallet_available_js(w_name);
-                                    let name_str = w_name.to_string();
-                                    let icon_name = crate::icons::wallet_icon_name(w_name);
-                                    let connect_fn = connect_wallet_by_name;
+                                // Everything the registry actually found, in
+                                // detection order. These are the only rows that
+                                // can complete a sign-in — on Android that
+                                // includes the Mobile Wallet Adapter entry,
+                                // which hands off to the installed wallet app.
+                                let mut rows: Vec<AnyView> = detected
+                                    .iter()
+                                    .map(|name| wallet_connect_row(name, connect_wallet_by_name))
+                                    .collect();
 
-                                    // The whole row is the click target when the wallet is
-                                    // installed (the row already looks clickable via CSS); the
-                                    // green badge is now just a visual affordance. Not-installed
-                                    // rows aren't connect targets — they carry a "Get Extension" link.
-                                    let label = view! {
-                                        <span style="display: flex; align-items: center; gap: 12px;">
-                                            <span style="display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; background: rgba(255,255,255,0.06); border-radius: 10px;">
-                                                <Icon icon=icon_name class="icon-sm" />
-                                            </span>
-                                            {w_name}
-                                        </span>
-                                    };
-                                    if is_installed {
-                                        view! {
-                                            <div
-                                                class="siws-wallet-option"
-                                                role="button"
-                                                tabindex="0"
-                                                on:click=move |_| connect_fn(name_str.clone())
-                                            >
-                                                {label}
-                                                <span class="siws-badge-installed">"Connect →"</span>
-                                            </div>
-                                        }.into_any()
-                                    } else {
-                                        view! {
-                                            <div class="siws-wallet-option" style="cursor: default;">
-                                                {label}
-                                                <a
-                                                    href=download_url
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    class="siws-badge-install"
-                                                    on:click=move |e| e.stop_propagation()
-                                                >
-                                                    "Get Extension ↗"
-                                                </a>
-                                            </div>
-                                        }.into_any()
+                                // Then the known wallets that were not found.
+                                for (name, download_url) in KNOWN_WALLETS {
+                                    if detected.iter().any(|d| d.eq_ignore_ascii_case(name)) {
+                                        continue;
                                     }
-                                }).collect::<Vec<_>>()
+                                    // `is_wallet_available_js` catches wallets
+                                    // that inject a provider without announcing
+                                    // a matching registry name.
+                                    match (is_wallet_available_js(name), mobile) {
+                                        (true, _) => {
+                                            rows.push(
+                                                wallet_connect_row(name, connect_wallet_by_name),
+                                            )
+                                        }
+                                        (false, false) => {
+                                            rows.push(wallet_install_row(name, download_url))
+                                        }
+                                        // Absent on mobile: no extension store
+                                        // to send them to, so say nothing here.
+                                        (false, true) => {}
+                                    }
+                                }
+
+                                // Mobile hand-off. Offered even when something
+                                // connectable was found: on Android the Mobile
+                                // Wallet Adapter row covers only the wallet the
+                                // OS resolves the intent to, and on iOS there is
+                                // no adapter at all, so this is the sole route.
+                                if mobile {
+                                    let links: Vec<AnyView> = DEEP_LINK_WALLETS
+                                        .iter()
+                                        .filter_map(|(name, base)| {
+                                            wallet_deep_link_row(name, base)
+                                        })
+                                        .collect();
+                                    if !links.is_empty() {
+                                        rows.push(deep_link_caption());
+                                        rows.extend(links);
+                                    }
+                                }
+
+                                match rows.is_empty() {
+                                    true => vec![no_wallet_row(mobile)],
+                                    false => rows,
+                                }
                             }}
                         </div>
                     </div>

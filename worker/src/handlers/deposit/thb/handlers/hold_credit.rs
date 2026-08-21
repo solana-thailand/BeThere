@@ -174,8 +174,29 @@ pub async fn hold_deposit_handler(
         .await
         .map_err(AppError::Internal)?;
 
-    // 9. Increment credit (THB only — USDC path rejected above).
-    crate::sheets::contacts::increment_credit(
+    // 9. Record the credit — authoritative append to the org-scoped D1 ledger,
+    //    idempotent per deposit. This MUST succeed. The Sheets write below is a
+    //    best-effort display mirror and no longer gates the request: a failed
+    //    Sheets write is exactly what silently lost 6 balances in the 2026-08-14
+    //    incident (D1 flag flipped, Sheets increment errored, request 500'd).
+    let deposit_key = format!("{}:{}", event.id, body.attendee_id);
+    if let Some(db) = d1 {
+        crate::db::credit_ledger::record(
+            db,
+            &claims.email,
+            &event.organization_id,
+            "thb",
+            held_amount as i64,
+            crate::db::credit_ledger::REASON_HOLD,
+            Some(&event.id),
+            Some(&deposit_key),
+            None,
+        )
+        .await
+        .map_err(AppError::Internal)?;
+    }
+    // Best-effort Sheets mirror (display only — never fails the request).
+    if let Err(e) = crate::sheets::contacts::increment_credit(
         &state,
         &resolved.sheet_id,
         &resolved.contacts_sheet_name,
@@ -185,18 +206,24 @@ pub async fn hold_deposit_handler(
         held_amount,
     )
     .await
-    .map_err(AppError::Internal)?;
+    {
+        tracing::warn!(email = %claims.email, error = %e, "credit Sheets mirror (increment) failed — D1 ledger is authoritative");
+    }
 
-    // 10. Get updated balance
-    let (credit_thb, credit_usdc) = crate::sheets::contacts::get_credit_balance(
-        &state,
-        &resolved.sheet_id,
-        &resolved.contacts_sheet_name,
-        Some(kv),
-        &claims.email,
-    )
-    .await
-    .map_err(AppError::Internal)?;
+    // 10. Get updated balance from the ledger (source of truth).
+    let (credit_thb, credit_usdc) = match d1 {
+        Some(db) => (
+            crate::db::credit_ledger::balance(db, &claims.email, &event.organization_id, "thb")
+                .await
+                .unwrap_or(0)
+                .max(0) as u64,
+            crate::db::credit_ledger::balance(db, &claims.email, &event.organization_id, "usdc")
+                .await
+                .unwrap_or(0)
+                .max(0) as u64,
+        ),
+        None => (held_amount, 0),
+    };
 
     tracing::info!(
         attendee_id = %body.attendee_id,
@@ -244,34 +271,22 @@ pub async fn credit_balance_handler(
     State(state): State<AppState>,
     Extension(claims): Extension<Claims>,
 ) -> Result<ApiOk<CreditBalanceResponse>, WorkerError> {
-    let kv = state
-        .events_kv
-        .as_ref()
-        .ok_or_else(|| AppError::Internal("EVENTS KV not configured".to_string()))?;
-
-    // Resolve contacts sheet using global config (no event context needed)
-    let resolved = {
-        let global = &state.config.sheets;
-        event_checkin_domain::models::org::ResolvedContactsSheet {
-            sheet_id: global.contacts_sheet_id.clone(),
-            contacts_sheet_name: global.contacts_sheet_name.clone(),
-            events_sheet_name: global.events_sheet_name.clone(),
-        }
+    // Source of truth is the org-scoped credit ledger. No event context here, so
+    // report the default org ("") balance — single-org today; a per-org breakdown
+    // is a future multi-org enhancement (Issue #029).
+    let (credit_thb, credit_usdc) = match state.d1.as_deref() {
+        Some(db) => (
+            crate::db::credit_ledger::balance(db, &claims.email, "", "thb")
+                .await
+                .unwrap_or(0)
+                .max(0) as u64,
+            crate::db::credit_ledger::balance(db, &claims.email, "", "usdc")
+                .await
+                .unwrap_or(0)
+                .max(0) as u64,
+        ),
+        None => (0, 0),
     };
-
-    if resolved.sheet_id.is_empty() {
-        return Err(AppError::Internal("contacts sheet not configured".to_string()).into());
-    }
-
-    let (credit_thb, credit_usdc) = crate::sheets::contacts::get_credit_balance(
-        &state,
-        &resolved.sheet_id,
-        &resolved.contacts_sheet_name,
-        Some(kv),
-        &claims.email,
-    )
-    .await
-    .map_err(AppError::Internal)?;
 
     Ok(ApiOk::new(CreditBalanceResponse {
         credit_thb,

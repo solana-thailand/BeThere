@@ -31,7 +31,7 @@
 | Metric | Value |
 |--------|-------|
 | On-chain program | **88 KB** (optimized, 89,856 bytes) |
-| NFT mint cost | **$0.001** per badge |
+| NFT mint cost | **$0.001** on-chain (cNFT) · hosted mint billed per Crossmint pricing |
 | Transaction cost | **$0.00087** (at $172/SOL) |
 | Check-in latency | **< 500ms** (edge worker) |
 | Tests | **250 passing** (54 on-chain + 73 domain + 123 worker) + 147 frontend specs + 16 Kani harnesses |
@@ -393,7 +393,7 @@ worker/src/             — Cloudflare Worker
     write.rs              — Sheet mutations: check-in, claim, QR URLs, row append
     contacts.rs           — Master contacts deduplication + sync
     events_tab.rs         — Events tab management
-  solana.rs             — Helius cNFT minting (mintCompressedNft RPC, MintRequest struct)
+  solana.rs             — Crossmint hosted cNFT minting (fire-and-poll REST, MintRequest struct, KV idempotency marker)
   solana_escrow/        — Solana escrow TX builders
     mod.rs                — Types, constants, EscrowError
     crypto.rs             — SHA-256, base58, PDA/ATA derivation (WASM SubtleCrypto + native)
@@ -585,12 +585,14 @@ See [`docs/security_audit.md`](docs/security_audit.md) for the full escrow secur
 
 ## 🏆 What's Built (Devnet-Validated)
 
-✅ 10 phases complete — from check-in to escrow to attendee identity. Everything runs on Solana devnet with real wallets.
+✅ 10 phases complete — from check-in to escrow to attendee identity, on Solana with real wallets.
+
+> **Deployment split (as of 2026-08):** cNFT **badges mint on mainnet** (Crossmint) — the attendance proof is real, on-chain, and DAS-readable by any dApp. The **USDC escrow/deposit program is still on devnet** (`C6HDeZES9aPpNwe3UvS9ecmfcRhH1XeJb8PGJmLG3z3T`); mainnet USDC is gated on the go/no-go checklist in [`docs/escrow-audit-2026-08-13.md`](docs/escrow-audit-2026-08-13.md) (program deploy → Squads multisig → external audit → canary).
 
 | Core Flow | Status | Details |
 |-----------|--------|----------|
 | QR check-in | ✅ | Camera scan + manual lookup, staff logging |
-| cNFT badges | ✅ | Compressed NFTs via Helius, $0.001 mint |
+| cNFT badges | ✅ **mainnet** | Compressed NFTs via Crossmint hosted mint (airdropped free to attendees), idempotent, PNG badge |
 | Quiz gating | ✅ | Per-event quiz before NFT claim |
 | Adventure gating | ✅ | Rust-themed educational game (10 levels) |
 | Multi-event | ✅ | KV registry, 4-tier roles (super_admin/organizer/staff/attendee) |

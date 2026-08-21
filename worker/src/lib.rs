@@ -131,9 +131,15 @@ async fn fetch(
     };
 
     // Build the API router with middleware stack.
-    let mut api_routes = handlers::routes(state)
+    let mut api_routes = handlers::routes(state.clone())
         .layer(axum::middleware::from_fn(middleware::rate_limit_layer))
         .layer(axum::middleware::from_fn(middleware::correlation_id_layer))
+        // Outside correlation so it can read the x-correlation-id it stamps on the
+        // response; fires a best-effort Slack alert on 5xx (no-op if unconfigured).
+        .layer(axum::middleware::from_fn_with_state(
+            state,
+            middleware::slack_alert_layer,
+        ))
         .layer(axum::middleware::from_fn(
             middleware::security_headers_layer,
         ));
@@ -170,4 +176,31 @@ async fn scheduled(_event: worker::ScheduledEvent, env: Env, _ctx: worker::Sched
     let d1 = env.d1("DB").ok();
 
     cleanup::run_cleanup(&events_kv, d1.as_ref()).await;
+
+    // Daily credit-ledger reconciliation — the safety net that would have caught
+    // the 2026-08-14 silent credit loss on day one. Alerts (Slack) if any held
+    // deposit lacks a ledger `hold` entry (credit not recorded) or any balance
+    // went negative (over-spend). Non-fatal: a query failure just logs.
+    if let Some(ref db) = d1 {
+        match db::credit_ledger::reconcile(db).await {
+            Ok(report) if !report.is_clean() => {
+                tracing::error!(
+                    orphan_holds = report.orphan_holds,
+                    negative_balances = report.negative_balances,
+                    "credit ledger reconcile FAILED"
+                );
+                if let Ok(webhook) = env.secret("SLACK_WEBHOOK_URL").map(|s| s.to_string())
+                    && !webhook.is_empty()
+                {
+                    let msg = format!(
+                        ":rotating_light: BeThere credit-ledger reconcile FAILED — {} orphan hold(s) (held deposit with no ledger credit), {} negative balance(s). Check credit_ledger vs thb_deposits.",
+                        report.orphan_holds, report.negative_balances
+                    );
+                    let _ = middleware::alert::post_slack(&webhook, &msg).await;
+                }
+            }
+            Ok(_) => tracing::info!("credit ledger reconcile clean"),
+            Err(e) => tracing::warn!(error = %e, "credit ledger reconcile query failed"),
+        }
+    }
 }

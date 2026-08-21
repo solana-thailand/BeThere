@@ -166,9 +166,12 @@ pub async fn get_global_audit(
 #[worker::send]
 pub async fn get_form_config(
     State(state): State<AppState>,
-    Extension(_claims): Extension<Claims>,
+    Extension(claims): Extension<Claims>,
     Path(event_id): Path<String>,
 ) -> Result<ApiOk<serde_json::Value>, crate::error::WorkerError> {
+    // S2: verify the caller has access to THIS event (was ungated).
+    crate::handlers::ext::resolve_event_with_access(&state, &claims, Some(&event_id)).await?;
+
     let config = crate::event_store::get_form_config(
         &event_id,
         state.d1.as_deref(),
@@ -190,10 +193,14 @@ pub async fn get_form_config(
 #[worker::send]
 pub async fn put_form_config(
     State(state): State<AppState>,
-    Extension(_claims): Extension<Claims>,
+    Extension(claims): Extension<Claims>,
     Path(event_id): Path<String>,
     Json(body): Json<RegistrationFormConfig>,
 ) -> Result<ApiOk<serde_json::Value>, crate::error::WorkerError> {
+    // S2: verify the caller has access to THIS event (was ungated — any staff
+    // could rewrite another organizer's registration form).
+    crate::handlers::ext::resolve_event_with_access(&state, &claims, Some(&event_id)).await?;
+
     // Validate that all profile_field keys map to known developer_profiles columns
     let valid_profile_keys = [
         "experience_level",

@@ -60,8 +60,9 @@ pub struct DeveloperSummary {
 #[worker::send]
 pub async fn get_community_insights(
     State(state): State<AppState>,
-    Extension(_claims): Extension<Claims>,
+    Extension(claims): Extension<Claims>,
 ) -> Result<ApiOk<CommunityInsightsResponse>, WorkerError> {
+    crate::auth::require_super_admin(&claims.email, &state, "view community insights").await?;
     let d1 = state
         .d1
         .as_ref()
@@ -118,9 +119,10 @@ pub async fn get_community_insights(
 #[worker::send]
 pub async fn list_developers(
     State(state): State<AppState>,
-    Extension(_claims): Extension<Claims>,
+    Extension(claims): Extension<Claims>,
     axum::extract::Query(params): axum::extract::Query<DeveloperListParams>,
 ) -> Result<ApiOk<DeveloperListResponse>, WorkerError> {
+    crate::auth::require_super_admin(&claims.email, &state, "list developers").await?;
     let d1 = state
         .d1
         .as_ref()

@@ -22,7 +22,7 @@ use event_checkin_domain::models::api::{
 use event_checkin_domain::models::auth::Claims;
 use event_checkin_domain::models::error::AppError;
 
-use super::ext::{EventIdQuery, resolve_event};
+use super::ext::{EventIdQuery, resolve_event, resolve_event_with_access};
 use crate::error::{ApiOk, WorkerError};
 use crate::quiz;
 use crate::state::AppState;
@@ -282,13 +282,14 @@ pub async fn get_quiz_status(
 #[worker::send]
 pub async fn get_admin_quiz(
     State(state): State<AppState>,
-    Extension(_claims): Extension<Claims>,
+    Extension(claims): Extension<Claims>,
     Query(query): Query<EventIdQuery>,
 ) -> Result<ApiOk<serde_json::Value>, WorkerError> {
-    tracing::info!(staff_email = %_claims.email, "admin quiz read");
+    tracing::info!(staff_email = %claims.email, "admin quiz read");
 
-    // Resolve event (uses events_kv if available, falls back to global config)
-    let event = resolve_event(&state, query.event_id.as_deref()).await?;
+    // Resolve event WITH per-event access (S2: was resolve_event — any staff
+    // could read another organizer's quiz incl. the answer key).
+    let event = resolve_event_with_access(&state, &claims, query.event_id.as_deref()).await?;
 
     let eid = event.id.as_str();
     let d1 = state.d1.as_deref();
@@ -325,18 +326,18 @@ pub async fn get_admin_quiz(
 #[worker::send]
 pub async fn put_quiz(
     State(state): State<AppState>,
-    Extension(_claims): Extension<Claims>,
+    Extension(claims): Extension<Claims>,
     Query(query): Query<EventIdQuery>,
     Json(body): Json<QuizConfig>,
 ) -> Result<ApiOk<serde_json::Value>, WorkerError> {
     tracing::info!(
-        staff_email = %_claims.email,
+        staff_email = %claims.email,
         question_count = body.questions.len(),
         "admin quiz update"
     );
 
-    // Resolve event (uses events_kv if available, falls back to global config)
-    let event = resolve_event(&state, query.event_id.as_deref()).await?;
+    // S2: per-event access check (was resolve_event — cross-event write IDOR).
+    let event = resolve_event_with_access(&state, &claims, query.event_id.as_deref()).await?;
 
     let eid = event.id.as_str();
     let d1 = state.d1.as_deref();
@@ -414,17 +415,18 @@ pub async fn put_quiz(
 #[worker::send]
 pub async fn add_quiz_question(
     State(state): State<AppState>,
-    Extension(_claims): Extension<Claims>,
+    Extension(claims): Extension<Claims>,
     Query(query): Query<EventIdQuery>,
     Json(body): Json<QuizQuestion>,
 ) -> Result<ApiOk<serde_json::Value>, WorkerError> {
     tracing::info!(
-        staff_email = %_claims.email,
+        staff_email = %claims.email,
         question_id = %body.id,
         "admin quiz add question"
     );
 
-    let event = resolve_event(&state, query.event_id.as_deref()).await?;
+    // S2: per-event access check (was resolve_event — cross-event write IDOR).
+    let event = resolve_event_with_access(&state, &claims, query.event_id.as_deref()).await?;
     let d1 = state.d1.as_deref();
     let kv = state.events_kv.as_ref().or(state.quiz_kv.as_ref());
 
@@ -460,18 +462,19 @@ pub async fn add_quiz_question(
 #[worker::send]
 pub async fn update_quiz_question(
     State(state): State<AppState>,
-    Extension(_claims): Extension<Claims>,
+    Extension(claims): Extension<Claims>,
     Path(question_id): Path<String>,
     Query(query): Query<EventIdQuery>,
     Json(body): Json<QuizQuestion>,
 ) -> Result<ApiOk<serde_json::Value>, WorkerError> {
     tracing::info!(
-        staff_email = %_claims.email,
+        staff_email = %claims.email,
         question_id = %question_id,
         "admin quiz update question"
     );
 
-    let event = resolve_event(&state, query.event_id.as_deref()).await?;
+    // S2: per-event access check (was resolve_event — cross-event write IDOR).
+    let event = resolve_event_with_access(&state, &claims, query.event_id.as_deref()).await?;
     let d1 = state.d1.as_deref();
     let kv = state.events_kv.as_ref().or(state.quiz_kv.as_ref());
 
@@ -504,17 +507,18 @@ pub async fn update_quiz_question(
 #[worker::send]
 pub async fn delete_quiz_question(
     State(state): State<AppState>,
-    Extension(_claims): Extension<Claims>,
+    Extension(claims): Extension<Claims>,
     Path(question_id): Path<String>,
     Query(query): Query<EventIdQuery>,
 ) -> Result<ApiOk<serde_json::Value>, WorkerError> {
     tracing::info!(
-        staff_email = %_claims.email,
+        staff_email = %claims.email,
         question_id = %question_id,
         "admin quiz delete question"
     );
 
-    let event = resolve_event(&state, query.event_id.as_deref()).await?;
+    // S2: per-event access check (was resolve_event — cross-event write IDOR).
+    let event = resolve_event_with_access(&state, &claims, query.event_id.as_deref()).await?;
     let d1 = state.d1.as_deref();
     let kv = state.events_kv.as_ref().or(state.quiz_kv.as_ref());
 
@@ -533,17 +537,18 @@ pub async fn delete_quiz_question(
 #[worker::send]
 pub async fn toggle_quiz_question(
     State(state): State<AppState>,
-    Extension(_claims): Extension<Claims>,
+    Extension(claims): Extension<Claims>,
     Path(question_id): Path<String>,
     Query(query): Query<EventIdQuery>,
 ) -> Result<ApiOk<serde_json::Value>, WorkerError> {
     tracing::info!(
-        staff_email = %_claims.email,
+        staff_email = %claims.email,
         question_id = %question_id,
         "admin quiz toggle question"
     );
 
-    let event = resolve_event(&state, query.event_id.as_deref()).await?;
+    // S2: per-event access check (was resolve_event — cross-event write IDOR).
+    let event = resolve_event_with_access(&state, &claims, query.event_id.as_deref()).await?;
     let d1 = state.d1.as_deref();
     let kv = state.events_kv.as_ref().or(state.quiz_kv.as_ref());
 

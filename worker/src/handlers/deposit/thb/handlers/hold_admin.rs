@@ -193,6 +193,15 @@ pub async fn admin_hold_deposit_handler(
     if thb_deposit.held_as_credit {
         return Err(AppError::Validation("deposit already held as credit".to_string()).into());
     }
+    // MONEY-SAFETY: a rolling-credit application / staff comp was never funded
+    // with cash. Holding it as credit would MINT credit from a deposit that was
+    // itself created from credit (free ticket + restored balance).
+    if thb_deposit.is_non_cash() {
+        return Err(AppError::Validation(
+            "this is a credit-covered / comp deposit — it cannot be held as rolling credit".to_string(),
+        )
+        .into());
+    }
 
     // 5. Resolve per-org contacts sheet (same logic as the attendee handler).
     let resolved = if let Some(db) = state.d1.as_deref() {
@@ -241,8 +250,26 @@ pub async fn admin_hold_deposit_handler(
         .await
         .map_err(AppError::Internal)?;
 
-    // 7. Increment credit on the ATTENDEE's contact row (not the admin's).
-    crate::sheets::contacts::increment_credit(
+    // 7. Record the credit — authoritative append to the org-scoped D1 ledger
+    //    (idempotent per deposit), crediting the ATTENDEE's email. This MUST
+    //    succeed; the Sheets write below is a best-effort display mirror.
+    let deposit_key = format!("{}:{}", event.id, attendee_id);
+    if let Some(db) = d1 {
+        crate::db::credit_ledger::record(
+            db,
+            &attendee_email,
+            &event.organization_id,
+            "thb",
+            held_amount as i64,
+            crate::db::credit_ledger::REASON_HOLD,
+            Some(&event.id),
+            Some(&deposit_key),
+            None,
+        )
+        .await
+        .map_err(AppError::Internal)?;
+    }
+    if let Err(e) = crate::sheets::contacts::increment_credit(
         &state,
         &resolved.sheet_id,
         &resolved.contacts_sheet_name,
@@ -252,7 +279,9 @@ pub async fn admin_hold_deposit_handler(
         held_amount,
     )
     .await
-    .map_err(AppError::Internal)?;
+    {
+        tracing::warn!(email = %attendee_email, error = %e, "credit Sheets mirror (admin hold) failed — D1 ledger is authoritative");
+    }
 
     tracing::info!(
         attendee_id = %attendee_id,
@@ -299,15 +328,196 @@ pub async fn credit_liability_handler(
 ) -> Result<ApiOk<crate::db::contacts::CreditLiability>, WorkerError> {
     tracing::info!(admin_email = %claims.email, "credit liability requested");
 
+    // Source of truth is the org-scoped credit ledger (the old path summed a D1
+    // contacts column that hold never wrote, so it always read zero — masking a
+    // ฿5,000 real liability). Fold the per-(org,currency) rows into the existing
+    // CreditLiability shape so the admin chip's response is unchanged.
     let liability = match state.d1.as_deref() {
-        Some(db) => crate::db::contacts::credit_liability(db).await,
-        // No D1 binding → we cannot read credit state. The contacts sheet is
-        // the alternate source but a SUM over it would be a full-table scan +
-        // per-row parse via the Sheets API (expensive + rate-limited). D1 is
-        // the read path for aggregates (handover 104). Degrade to zero rather
-        // than block the deposits view.
+        Some(db) => match crate::db::credit_ledger::liability(db).await {
+            Ok(rows) => {
+                let mut out = crate::db::contacts::CreditLiability::default();
+                for r in &rows {
+                    if r.currency == "usdc" {
+                        out.total_usdc += r.balance;
+                    } else {
+                        out.total_thb += r.balance;
+                    }
+                }
+                out.contact_count = rows.iter().map(|r| r.holders).max().unwrap_or(0);
+                out
+            }
+            Err(_) => crate::db::contacts::CreditLiability::default(),
+        },
+        // No D1 → cannot read credit state; degrade to zero rather than block
+        // the deposits view.
         None => crate::db::contacts::CreditLiability::default(),
     };
 
     Ok(ApiOk::new(liability))
+}
+
+/// Request body for the admin apply-credit endpoint.
+#[derive(Debug, Clone, Deserialize)]
+pub struct AdminApplyCreditRequest {
+    pub event_id: String,
+}
+
+/// Admin applies an attendee's rolling credit to COMPLETE a registration stuck
+/// at the deposit step — a credit-holder who registered but never uploaded a
+/// slip (e.g. registered before the auto-apply shipped). Server-side equivalent
+/// of the registration auto-apply: atomically spends the credit from the ledger
+/// (`try_spend`) and writes a credit-covered deposit so the attendee proceeds to
+/// the ticket. Never creates money — spends only if the balance covers the
+/// event's deposit, and is idempotent per `(event, email)`.
+#[worker::send]
+pub async fn admin_apply_credit_handler(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(attendee_id): Path<String>,
+    Json(body): Json<AdminApplyCreditRequest>,
+) -> Result<ApiOk<serde_json::Value>, WorkerError> {
+    tracing::info!(
+        attendee_id = %attendee_id,
+        event_id = %body.event_id,
+        admin_email = %claims.email,
+        "admin apply-credit initiated"
+    );
+
+    let kv = state
+        .events_kv
+        .as_ref()
+        .ok_or_else(|| AppError::Internal("EVENTS KV not configured".to_string()))?;
+    let d1 = state
+        .d1
+        .as_deref()
+        .ok_or_else(|| AppError::Internal("D1 not configured".to_string()))?;
+
+    // Admin access + event resolution (staff auth via resolve_event_with_access).
+    let event =
+        crate::handlers::ext::resolve_event_with_access(&state, &claims, Some(&body.event_id))
+            .await?;
+    if !event.deposit_enabled {
+        return Err(AppError::Validation("deposit not enabled for this event".to_string()).into());
+    }
+
+    // Load attendee — credit applies to the attendee's email, not the admin's.
+    let attendee =
+        crate::sheets::get_attendee_by_id(&attendee_id, &state, &event.sheet_id, &event.sheet_name, Some(kv))
+            .await
+            .map_err(AppError::Internal)?
+            .ok_or_else(|| AppError::NotFound(format!("attendee '{attendee_id}' not found")))?;
+    let email = attendee.email.trim().to_lowercase();
+    if email.is_empty() {
+        return Err(AppError::Validation("attendee has no email".to_string()).into());
+    }
+
+    // Only for STUCK registrations: if a deposit already exists, there is nothing
+    // to complete (and we must not create a second one).
+    let required = event.deposit_amount_thb;
+    if required == 0 {
+        return Err(AppError::Validation("event has no THB deposit amount".to_string()).into());
+    }
+    let now = Utc::now().to_rfc3339();
+
+    // An existing deposit must be a prior credit application (whose deposit_status
+    // we heal below) — a real CASH deposit must never be overwritten. Idempotent:
+    // re-running for a credit-covered attendee just (re)writes the verified status.
+    let existing = event_store::get_thb_deposit(kv, &event.id, &attendee_id, Some(d1))
+        .await
+        .map_err(AppError::Internal)?;
+    let healed = match existing {
+        Some(dep) if dep.is_non_cash() => true,
+        Some(_) => {
+            return Err(AppError::Validation(
+                "attendee already has a cash deposit for this event".to_string(),
+            )
+            .into());
+        }
+        None => {
+            // Atomic ledger spend (idempotent per apply:event:email). Spends only
+            // if the balance covers the deposit — never creates money.
+            let apply_key = format!("apply:{}:{}", event.id, email);
+            let spent = crate::db::credit_ledger::try_spend(
+                d1,
+                &email,
+                &event.organization_id,
+                "thb",
+                required as i64,
+                &event.id,
+                &apply_key,
+            )
+            .await
+            .map_err(AppError::Internal)?;
+            if !spent {
+                let bal =
+                    crate::db::credit_ledger::balance(d1, &email, &event.organization_id, "thb")
+                        .await
+                        .unwrap_or(0)
+                        .max(0);
+                return Err(AppError::Validation(format!(
+                    "insufficient rolling credit: balance ฿{bal} < required ฿{required}"
+                ))
+                .into());
+            }
+            // Write the credit-covered deposit so the registration completes.
+            let covered = ThbDeposit {
+                event_id: event.id.clone(),
+                attendee_id: attendee_id.clone(),
+                amount_thb: required,
+                slip_url: Some("ROLLING_CREDIT_AUTO_APPLIED".to_string()),
+                verified: true,
+                verified_at: Some(now.clone()),
+                verified_by: Some("SYSTEM_ROLLING_CREDIT".to_string()),
+                uploaded_at: now.clone(),
+                refunded: false,
+                refunded_at: None,
+                held_as_credit: false,
+                held_as_credit_at: None,
+                attendee_name: Some(attendee.name.clone()),
+                bank_account: None,
+                bank_name: None,
+                account_name: None,
+                refund_proof_url: None,
+            };
+            event_store::save_thb_deposit(kv, &covered, Some(d1))
+                .await
+                .map_err(AppError::Internal)?;
+            false
+        }
+    };
+
+    // Write the VERIFIED deposit_status — the record the ticket page gates the
+    // check-in QR on. Credit registrations previously wrote only thb_deposits, so
+    // the ticket sat at "waiting for verify" with no QR. refundable=false: credit
+    // is not cash. The ticket page lazily (re)generates the QR once this is verified.
+    let status = event_checkin_domain::models::deposit::DepositStatus {
+        attendee_id: attendee_id.clone(),
+        event_id: event.id.clone(),
+        method: event_checkin_domain::models::deposit::DepositMethod::Thb,
+        amount: required,
+        currency: "THB".to_string(),
+        tx_signature: None,
+        verified: true,
+        deposited_at: now,
+        wallet_address: None,
+        deposit_order: 0,
+        refundable: false,
+        rejected: false,
+    };
+    event_store::save_deposit_status(kv, &status, Some(d1))
+        .await
+        .map_err(AppError::Internal)?;
+
+    let remaining = crate::db::credit_ledger::balance(d1, &email, &event.organization_id, "thb")
+        .await
+        .unwrap_or(0)
+        .max(0);
+    tracing::info!(%email, event_id = %event.id, applied = required, remaining, healed, "admin applied rolling credit to complete registration");
+    Ok(ApiOk::new(serde_json::json!({
+        "applied_thb": required,
+        "email": email,
+        "remaining_credit_thb": remaining,
+        "healed": healed,
+        "next_step": "ticket",
+    })))
 }

@@ -265,6 +265,41 @@ pub async fn clear_credit_refund_request_handler(
         "admin clearing credit refund request flag"
     );
 
+    // Reverse the held credit in the ledger BEFORE clearing the flag. Clearing
+    // the request == the organizer paid the credit back out-of-band, so it must
+    // leave the ledger — otherwise the attendee keeps usable credit AND got the
+    // cash (double payout). Read requested_at while the flag is still set and use
+    // it as the idempotency key: a double-clear finds the flag already gone
+    // (None) and skips, so the reversal happens exactly once per request.
+    // Single-org scope today (organization_id ""); multi-org would reverse per org.
+    if let Some(db) = state.d1.as_deref()
+        && let Some(requested_at) =
+            crate::db::contacts::get_credit_refund_requested_at(db, &body.email).await
+    {
+        let bal = crate::db::credit_ledger::balance(db, &body.email, "", "thb")
+            .await
+            .unwrap_or(0);
+        if bal > 0 {
+            let key = format!("refund:{}:{}", body.email.to_lowercase(), requested_at);
+            match crate::db::credit_ledger::record(
+                db,
+                &body.email,
+                "",
+                "thb",
+                -bal,
+                crate::db::credit_ledger::REASON_REFUND,
+                None,
+                Some(&key),
+                Some("held-credit payout processed by organizer"),
+            )
+            .await
+            {
+                Ok(_) => tracing::info!(email = %body.email, amount = bal, "reversed held credit in ledger on payout"),
+                Err(e) => tracing::error!(email = %body.email, error = %e, "ledger refund reversal failed — credit NOT reversed; reconcile manually"),
+            }
+        }
+    }
+
     // D1 clear — source of truth. Best-effort log on failure: an unreachable
     // D1 is non-fatal for the response shape (the organizer sees the request
     // disappear from the admin list on next refresh either way), but we still

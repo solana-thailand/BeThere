@@ -3,6 +3,7 @@
 //! Protected endpoints (require staff auth):
 //!   GET    /api/campaigns                    — list campaigns
 //!   POST   /api/campaigns                    — create campaign
+//!   GET    /api/campaigns/{id}/exists        — is this campaign id taken?
 //!   GET    /api/campaigns/{id}               — get campaign detail
 //!   PUT    /api/campaigns/{id}               — update campaign
 //!   DELETE /api/campaigns/{id}               — delete campaign
@@ -39,6 +40,10 @@ pub struct CreateCampaignRequest {
     pub description: String,
     #[serde(default)]
     pub organization_id: String,
+    /// Initial status. Omitted by older clients, which is why it defaults to
+    /// `draft` — the value this endpoint previously hardcoded.
+    #[serde(default = "default_campaign_status")]
+    pub status: String,
     #[serde(default = "default_completion_criteria")]
     pub completion_criteria: String,
     #[serde(default)]
@@ -160,6 +165,13 @@ fn default_completion_criteria() -> String {
     "{}".to_string()
 }
 
+/// Status a campaign is created with when the client does not choose one.
+/// Matches the value `create_campaign` hardcoded before plan 016 P2.3, so an
+/// older client that omits the field keeps its previous behaviour exactly.
+fn default_campaign_status() -> String {
+    "draft".to_string()
+}
+
 fn default_reward_config() -> String {
     "{}".to_string()
 }
@@ -199,6 +211,21 @@ fn validate_campaign_status(status: &str) -> Result<(), AppError> {
     }
 }
 
+/// Statuses a campaign may be *created* with.
+///
+/// Narrower than [`validate_campaign_status`] by design: `completed` is
+/// excluded because nothing has been completed at create time, and a campaign
+/// born `completed` could never be progressed through. Transitioning to
+/// `completed` later remains available via `update_campaign_status`.
+fn validate_create_status(status: &str) -> Result<(), AppError> {
+    match status {
+        "draft" | "active" => Ok(()),
+        _ => Err(AppError::Validation(format!(
+            "invalid initial campaign status: {status} (expected draft/active)"
+        ))),
+    }
+}
+
 fn validate_reward_type(reward_type: &str) -> Result<(), AppError> {
     match reward_type {
         "none" | "nft_certificate" | "badge" => Ok(()),
@@ -208,18 +235,64 @@ fn validate_reward_type(reward_type: &str) -> Result<(), AppError> {
     }
 }
 
+/// Maximum length of a campaign id (slug). The create form caps its generated
+/// slug at 60; the extra headroom allows hand-typed ids without surprises.
+const MAX_CAMPAIGN_ID_LEN: usize = 64;
+
+/// Shape-check a campaign id (slug).
+///
+/// Two jobs. It is the shape the create form's slugify produces, and — because
+/// the D1 helpers in `db::campaigns` interpolate rather than bind — it is what
+/// keeps a user-supplied slug out of the SQL string. Restricting to
+/// `[A-Za-z0-9_-]` makes quoting impossible.
+///
+/// Enforced on both create and the availability probe so the two never
+/// disagree about what counts as a usable id.
+fn validate_campaign_id(id: &str) -> Result<(), AppError> {
+    let ok = !id.is_empty()
+        && id.len() <= MAX_CAMPAIGN_ID_LEN
+        && id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
+    match ok {
+        true => Ok(()),
+        false => Err(AppError::Validation(format!(
+            "invalid campaign id: use letters, numbers, '-' or '_' (max {MAX_CAMPAIGN_ID_LEN} characters)"
+        ))),
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Campaign CRUD handlers
 // ---------------------------------------------------------------------------
+
+/// Load a campaign's organization_id for the per-org access check (404 if absent).
+async fn campaign_org(d1: &worker::D1Database, id: &str) -> Result<String, WorkerError> {
+    let c = crate::db::campaigns::get_campaign(d1, id)
+        .await
+        .map_err(|e| AppError::Internal(format!("failed to get campaign: {e}")))?
+        .ok_or_else(|| AppError::NotFound(format!("campaign not found: {id}")))?;
+    Ok(c.organization_id)
+}
 
 /// GET /api/campaigns
 #[worker::send]
 pub async fn list_campaigns(
     State(state): State<AppState>,
-    Extension(_claims): Extension<Claims>,
+    Extension(claims): Extension<Claims>,
     axum::extract::Query(params): axum::extract::Query<ListCampaignsParams>,
 ) -> Result<ApiOk<serde_json::Value>, WorkerError> {
     let d1 = require_d1(&state)?;
+
+    // S3: an org filter must be one the caller owns; listing ALL is super-admin.
+    match params.organization_id.as_deref() {
+        Some(org) => {
+            crate::auth::require_org_access(&claims.email, org, &state, "list campaigns").await?
+        }
+        None => {
+            crate::auth::require_super_admin(&claims.email, &state, "list all campaigns").await?
+        }
+    }
 
     let campaigns = crate::db::campaigns::list_campaigns(
         d1,
@@ -238,11 +311,17 @@ pub async fn list_campaigns(
 #[worker::send]
 pub async fn create_campaign(
     State(state): State<AppState>,
-    Extension(_claims): Extension<Claims>,
+    Extension(claims): Extension<Claims>,
     axum::Json(body): axum::Json<CreateCampaignRequest>,
 ) -> Result<ApiOk<CampaignDetail>, WorkerError> {
     let d1 = require_d1(&state)?;
 
+    // S3: only an owner of the target org (or super-admin) may create in it.
+    crate::auth::require_org_access(&claims.email, &body.organization_id, &state, "create campaign")
+        .await?;
+
+    validate_campaign_id(&body.id)?;
+    validate_create_status(&body.status)?;
     validate_reward_type(&body.reward_type)?;
 
     crate::db::campaigns::create_campaign(
@@ -251,6 +330,7 @@ pub async fn create_campaign(
         &body.title,
         &body.description,
         &body.organization_id,
+        &body.status,
         &body.completion_criteria,
         &body.reward_type,
         &body.reward_config,
@@ -266,14 +346,44 @@ pub async fn create_campaign(
     Ok(ApiOk::new(row_to_detail(campaign)))
 }
 
-/// GET /api/campaigns/{id}
+/// GET /api/campaigns/{id}/exists
+///
+/// Slug-availability probe for the campaign create form, so an organizer is
+/// told "already taken" while typing instead of on a failed save.
+///
+/// Deliberately NOT org-scoped. Campaign ids are the primary key of
+/// `campaigns` and therefore globally unique: a slug held by another org is
+/// still unavailable, and an org-scoped check would answer "free" for an id
+/// that then fails to insert. The response carries a single boolean — no
+/// campaign data, not even the owning org — and the route sits behind the
+/// authenticated admin router, so this exposes no more than the create attempt
+/// it replaces.
 #[worker::send]
-pub async fn get_campaign(
+pub async fn campaign_id_exists(
     State(state): State<AppState>,
     Extension(_claims): Extension<Claims>,
     Path(id): Path<String>,
 ) -> Result<ApiOk<serde_json::Value>, WorkerError> {
     let d1 = require_d1(&state)?;
+
+    validate_campaign_id(&id)?;
+
+    let exists = crate::db::campaigns::campaign_exists(d1, &id)
+        .await
+        .map_err(|e| AppError::Internal(format!("failed to check campaign id: {e}")))?;
+
+    Ok(ApiOk::new(serde_json::json!({ "exists": exists })))
+}
+
+/// GET /api/campaigns/{id}
+#[worker::send]
+pub async fn get_campaign(
+    State(state): State<AppState>,
+    Extension(claims): Extension<Claims>,
+    Path(id): Path<String>,
+) -> Result<ApiOk<serde_json::Value>, WorkerError> {
+    let d1 = require_d1(&state)?;
+    crate::auth::require_org_access(&claims.email, &campaign_org(d1, &id).await?, &state, "view campaign").await?;
 
     let campaign = crate::db::campaigns::get_campaign(d1, &id)
         .await
@@ -298,11 +408,12 @@ pub async fn get_campaign(
 #[worker::send]
 pub async fn update_campaign(
     State(state): State<AppState>,
-    Extension(_claims): Extension<Claims>,
+    Extension(claims): Extension<Claims>,
     Path(id): Path<String>,
     axum::Json(body): axum::Json<UpdateCampaignRequest>,
 ) -> Result<ApiOk<CampaignDetail>, WorkerError> {
     let d1 = require_d1(&state)?;
+    crate::auth::require_org_access(&claims.email, &campaign_org(d1, &id).await?, &state, "update campaign").await?;
 
     validate_reward_type(&body.reward_type)?;
 
@@ -336,10 +447,11 @@ pub async fn update_campaign(
 #[worker::send]
 pub async fn delete_campaign(
     State(state): State<AppState>,
-    Extension(_claims): Extension<Claims>,
+    Extension(claims): Extension<Claims>,
     Path(id): Path<String>,
 ) -> Result<ApiOk<serde_json::Value>, WorkerError> {
     let d1 = require_d1(&state)?;
+    crate::auth::require_org_access(&claims.email, &campaign_org(d1, &id).await?, &state, "delete campaign").await?;
 
     // Cascade delete: events + progress first, then campaign
     crate::db::campaigns::set_campaign_events(d1, &id, &[])
@@ -365,11 +477,12 @@ pub async fn delete_campaign(
 #[worker::send]
 pub async fn update_campaign_status(
     State(state): State<AppState>,
-    Extension(_claims): Extension<Claims>,
+    Extension(claims): Extension<Claims>,
     Path(id): Path<String>,
     axum::Json(body): axum::Json<UpdateStatusRequest>,
 ) -> Result<ApiOk<CampaignDetail>, WorkerError> {
     let d1 = require_d1(&state)?;
+    crate::auth::require_org_access(&claims.email, &campaign_org(d1, &id).await?, &state, "update campaign status").await?;
 
     validate_campaign_status(&body.status)?;
 
@@ -399,10 +512,11 @@ pub async fn update_campaign_status(
 #[worker::send]
 pub async fn list_campaign_events(
     State(state): State<AppState>,
-    Extension(_claims): Extension<Claims>,
+    Extension(claims): Extension<Claims>,
     Path(id): Path<String>,
 ) -> Result<ApiOk<serde_json::Value>, WorkerError> {
     let d1 = require_d1(&state)?;
+    crate::auth::require_org_access(&claims.email, &campaign_org(d1, &id).await?, &state, "view campaign events").await?;
 
     let events = crate::db::campaigns::list_campaign_events(d1, &id)
         .await
@@ -425,11 +539,12 @@ pub async fn list_campaign_events(
 #[worker::send]
 pub async fn set_campaign_events(
     State(state): State<AppState>,
-    Extension(_claims): Extension<Claims>,
+    Extension(claims): Extension<Claims>,
     Path(id): Path<String>,
     axum::Json(body): axum::Json<SetCampaignEventsRequest>,
 ) -> Result<ApiOk<serde_json::Value>, WorkerError> {
     let d1 = require_d1(&state)?;
+    crate::auth::require_org_access(&claims.email, &campaign_org(d1, &id).await?, &state, "set campaign events").await?;
 
     // Verify campaign exists
     let _ = crate::db::campaigns::get_campaign(d1, &id)
@@ -470,10 +585,11 @@ pub async fn set_campaign_events(
 #[worker::send]
 pub async fn list_campaign_progress(
     State(state): State<AppState>,
-    Extension(_claims): Extension<Claims>,
+    Extension(claims): Extension<Claims>,
     Path(id): Path<String>,
 ) -> Result<ApiOk<serde_json::Value>, WorkerError> {
     let d1 = require_d1(&state)?;
+    crate::auth::require_org_access(&claims.email, &campaign_org(d1, &id).await?, &state, "view campaign progress").await?;
 
     let progress = crate::db::campaigns::list_campaign_progress(d1, &id)
         .await
@@ -527,10 +643,11 @@ pub async fn list_campaign_progress(
 #[worker::send]
 pub async fn campaign_stats(
     State(state): State<AppState>,
-    Extension(_claims): Extension<Claims>,
+    Extension(claims): Extension<Claims>,
     Path(id): Path<String>,
 ) -> Result<ApiOk<CampaignStatsResponse>, WorkerError> {
     let d1 = require_d1(&state)?;
+    crate::auth::require_org_access(&claims.email, &campaign_org(d1, &id).await?, &state, "view campaign stats").await?;
 
     let stats = crate::db::campaigns::campaign_completion_stats(d1, &id)
         .await
@@ -630,29 +747,19 @@ pub async fn claim_campaign_reward(
         .map_err(|e| AppError::Internal(format!("failed to get campaign: {e}")))?
         .ok_or_else(|| AppError::NotFound(format!("campaign not found: {id}")))?;
 
-    // Parse reward_config JSON for NFT metadata
-    let reward_config: serde_json::Value =
-        serde_json::from_str(&campaign.reward_config).unwrap_or_else(|_| serde_json::json!({}));
-
-    let default_name = format!("{} - Campaign Complete", campaign.title);
-    let reward_name = reward_config
-        .get("name")
-        .and_then(|v| v.as_str())
-        .unwrap_or(&default_name)
-        .to_string();
-
-    let default_desc = format!("Completed the {} campaign", campaign.title);
-    let reward_description = reward_config
-        .get("description")
-        .and_then(|v| v.as_str())
-        .unwrap_or(&default_desc)
-        .to_string();
-
-    let reward_image_url = reward_config
-        .get("image_url")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
+    // Resolve the metadata this reward mints with.
+    //
+    // Shared with the admin create-form preview card (plan 016 P2.2) so the
+    // preview cannot drift from what actually mints. It also fixes a real bug
+    // in the code this replaced: the admin form serialises untouched fields as
+    // `""` rather than omitting them, and `.and_then(as_str).unwrap_or(default)`
+    // reads `""` as a deliberate choice — so a campaign saved with a blank NFT
+    // name minted an NFT literally named "", while the form's hint promised the
+    // title-based default. `resolve_reward_str` treats blank as unset.
+    let reward = event_checkin_domain::models::campaign::resolve_reward_str(
+        &campaign.title,
+        &campaign.reward_config,
+    );
 
     // Mint campaign cNFT via Crossmint (custodial signer + tree + fees). Campaign
     // rewards mint into the same Crossmint collection as event badges.
@@ -663,9 +770,9 @@ pub async fn claim_campaign_reward(
         host: &config.solana.crossmint_host,
         api_key: &config.solana.crossmint_api_key,
         collection_id: &config.solana.crossmint_collection_id,
-        image_url: &reward_image_url,
-        nft_name: &reward_name,
-        nft_description: &reward_description,
+        image_url: &reward.image_url,
+        nft_name: &reward.name,
+        nft_description: &reward.description,
         nft_external_url: &campaign_external_url,
         compressed: true,
         idempotency_key: "",
@@ -708,4 +815,103 @@ pub async fn claim_campaign_reward(
         "asset_id": mint_result.asset_id,
         "signature": mint_result.signature,
     })))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn is_ok(id: &str) -> bool {
+        validate_campaign_id(id).is_ok()
+    }
+
+    #[test]
+    fn accepts_slugs_the_create_form_produces() {
+        assert!(is_ok("solana-hacker-series-2025"));
+        assert!(is_ok("campaign"));
+        assert!(is_ok("2025"));
+        assert!(is_ok("my_campaign-2"));
+        // Promote-from-event builds `{event_id}-campaign`.
+        assert!(is_ok("devday-bkk-campaign"));
+        // A doubled dash is a legal slug, not a SQL comment: `--` can only
+        // start a comment outside a string literal, and quoting is impossible.
+        assert!(is_ok("x--y"));
+    }
+
+    #[test]
+    fn rejects_empty_id() {
+        assert!(!is_ok(""));
+    }
+
+    #[test]
+    fn enforces_the_length_cap() {
+        let at_cap = "a".repeat(MAX_CAMPAIGN_ID_LEN);
+        let over_cap = "a".repeat(MAX_CAMPAIGN_ID_LEN + 1);
+        assert!(is_ok(&at_cap));
+        assert!(!is_ok(&over_cap));
+    }
+
+    /// The validator is the only thing standing between a user-supplied slug
+    /// and an interpolated D1 query, so quoting must be impossible.
+    #[test]
+    fn rejects_sql_metacharacters() {
+        assert!(!is_ok("x' OR '1'='1"));
+        assert!(!is_ok("x'; DROP TABLE campaigns;--"));
+        assert!(!is_ok("x\"y"));
+        assert!(!is_ok("x`y"));
+        assert!(!is_ok("x;y"));
+        assert!(!is_ok("x y"));
+        assert!(!is_ok("x\ny"));
+    }
+
+    #[test]
+    fn create_accepts_only_draft_and_active() {
+        assert!(validate_create_status("draft").is_ok());
+        assert!(validate_create_status("active").is_ok());
+        // Nothing has been completed at create time, and a campaign born
+        // `completed` could never be progressed through.
+        assert!(validate_create_status("completed").is_err());
+        assert!(validate_create_status("").is_err());
+        assert!(validate_create_status("Draft").is_err());
+        assert!(validate_create_status("archived").is_err());
+    }
+
+    /// `completed` stays reachable through the status-transition endpoint —
+    /// create is narrower than the general validator on purpose.
+    #[test]
+    fn transition_validator_still_accepts_completed() {
+        assert!(validate_campaign_status("completed").is_ok());
+        assert!(validate_campaign_status("draft").is_ok());
+        assert!(validate_campaign_status("active").is_ok());
+        assert!(validate_campaign_status("nonsense").is_err());
+    }
+
+    /// An older client that omits `status` must behave exactly as before
+    /// plan 016 P2.3, when the handler hardcoded `'draft'`.
+    #[test]
+    fn omitted_status_defaults_to_draft() {
+        let body: CreateCampaignRequest = serde_json::from_str(
+            r#"{"id":"c1","title":"T","organization_id":"org"}"#,
+        )
+        .expect("request without status should deserialize");
+        assert_eq!(body.status, "draft");
+        assert!(validate_create_status(&body.status).is_ok());
+    }
+
+    #[test]
+    fn explicit_status_is_carried_through() {
+        let body: CreateCampaignRequest = serde_json::from_str(
+            r#"{"id":"c1","title":"T","organization_id":"org","status":"active"}"#,
+        )
+        .expect("request with status should deserialize");
+        assert_eq!(body.status, "active");
+    }
+
+    #[test]
+    fn rejects_path_and_non_ascii_characters() {
+        assert!(!is_ok("a/b"));
+        assert!(!is_ok("a%2Fb"));
+        assert!(!is_ok("café"));
+        assert!(!is_ok("キャンペーン"));
+    }
 }

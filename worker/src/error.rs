@@ -27,6 +27,16 @@ impl IntoResponse for WorkerError {
         let status = self.0.status_code();
         let message = self.0.to_string();
 
+        // Central failure capture: previously a 5xx was only visible in logs if
+        // the handler happened to call tracing::error! itself, so server-side
+        // failures could be entirely silent. Surface every 5xx at error level so
+        // `wrangler tail` / Logpush can see and alert on them. (4xx are expected
+        // client errors and stay quiet to avoid log noise.) The correlation id for
+        // this request is on the response header + the middleware completion log.
+        if status >= 500 {
+            tracing::error!(status, error = %message, "request failed (server error)");
+        }
+
         let body = ApiResponse::<()> {
             success: false,
             data: None,

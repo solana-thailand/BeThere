@@ -247,6 +247,38 @@ pub async fn check_in(
         .await;
     }
 
+    // Model B — roll rolling credit back on attendance. If this attendee got in
+    // with a CREDIT-covered deposit, checking in honours the commitment, so the ฿
+    // returns to their balance for the next event (a no-show simply never triggers
+    // this, forfeiting it). In-person only; cash + staff-comp deposits are
+    // unaffected. Idempotent per (event, attendee) so undo→redo stays correct.
+    if !query.online
+        && let (Some(db), Some(kv)) = (state.d1.as_deref(), state.events_kv.as_ref())
+        && let Ok(Some(dep)) =
+            crate::event_store::get_thb_deposit(kv, &event.id, &attendee.api_id, Some(db)).await
+        && dep.is_credit_covered()
+    {
+        let email = attendee.email.trim().to_lowercase();
+        let key = format!("return:{}:{}", event.id, email);
+        match crate::db::credit_ledger::record(
+            db,
+            &email,
+            &event.organization_id,
+            "thb",
+            dep.amount_thb as i64,
+            crate::db::credit_ledger::REASON_RETURN,
+            Some(&event.id),
+            Some(&key),
+            None,
+        )
+        .await
+        {
+            Ok(true) => tracing::info!(%email, event_id = %event.id, amount = dep.amount_thb, "rolling credit returned on check-in (Model B)"),
+            Ok(false) => {} // already returned — idempotent
+            Err(e) => tracing::error!(%email, error = %e, "credit return on check-in failed — reconcile"),
+        }
+    }
+
     Ok(ApiOk::new(response))
 }
 
@@ -377,6 +409,22 @@ pub async fn undo_check_in(
             state.d1.as_deref(),
         )
         .await;
+    }
+
+    // Model B — undo the credit return so a subsequent re-check-in re-adds it
+    // (keeps the rolling balance correct across corrections). Only relevant for a
+    // credit-covered deposit; best-effort.
+    if let (Some(db), Some(kv_ref)) = (state.d1.as_deref(), state.events_kv.as_ref())
+        && let Ok(Some(dep)) =
+            crate::event_store::get_thb_deposit(kv_ref, &event.id, &attendee.api_id, Some(db)).await
+        && dep.is_credit_covered()
+    {
+        let email = attendee.email.trim().to_lowercase();
+        if let Err(e) = crate::db::credit_ledger::remove_return(db, &event.id, &email).await {
+            tracing::error!(%email, error = %e, "credit return undo failed — reconcile");
+        } else {
+            tracing::info!(%email, event_id = %event.id, "rolling credit return undone on undo-check-in");
+        }
     }
 
     Ok((

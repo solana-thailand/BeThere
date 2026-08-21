@@ -2,3 +2,15 @@
 members = ["domain", "worker"]
 exclude = ["frontend-leptos"]
 resolver = "2"
+
+# Release profile MUST live at the workspace root — Cargo ignores profiles in
+# member crates (worker/Cargo.toml) with a warning, so without this the worker
+# shipped with the DEFAULT release profile (opt-level=3, no strip, panic=unwind)
+# instead of the intended size-optimized one. Smaller worker = faster cold start.
+# (frontend-leptos is `exclude`d, so it keeps its own identical profile.)
+[profile.release]
+opt-level = "z"
+lto = true
+strip = true
+codegen-units = 1
+panic = "abort"

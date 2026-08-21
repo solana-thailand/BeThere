@@ -26,6 +26,19 @@ extern "C" {
     /// Is this an Android device (where MWA could work)? (sync probe)
     #[wasm_bindgen(js_name = "isAndroidDevice")]
     pub fn js_is_android_device() -> bool;
+
+    /// Is this a phone/tablet browser? (sync probe)
+    #[wasm_bindgen(js_name = "isMobileDevice")]
+    fn js_is_mobile_device() -> bool;
+}
+
+/// Is the app running in a phone or tablet browser?
+///
+/// Broader than [`js_is_android_device`], which gates MWA registration: iOS has
+/// no Mobile Wallet Adapter but still needs mobile-shaped UI (no "install the
+/// browser extension" affordances, app deep links instead).
+pub fn is_mobile_device() -> bool {
+    js_is_mobile_device()
 }
 
 /// Register Mobile Wallet Adapter at app boot.

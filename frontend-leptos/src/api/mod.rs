@@ -42,7 +42,7 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 use fetch::{get as http_get, get_no_cache as http_get_no_cache, post as http_post, put as http_put, delete as http_delete, response_json, response_text};
-use crate::auth::{clear_token, get_token};
+use crate::auth::{get_token, redirect_to_login_expired};
 
 // ---------------------------------------------------------------------------
 // B5: Stale-while-revalidate in-memory API response cache
@@ -175,7 +175,7 @@ pub(crate) async fn api_get(path: &str) -> Result<web_sys::Response, ApiError> {
     let response = http_get(&url, &hdrs).await?;
 
     if response.status() == 401 {
-        clear_token();
+        redirect_to_login_expired();
         return Err(ApiError {
             message: "Session expired".to_string(),
             status: 401,
@@ -217,7 +217,7 @@ pub(crate) async fn api_get_no_cache(path: &str) -> Result<web_sys::Response, Ap
     let response = http_get_no_cache(&url, &hdrs).await?;
 
     if response.status() == 401 {
-        clear_token();
+        redirect_to_login_expired();
         return Err(ApiError {
             message: "Session expired".to_string(),
             status: 401,
@@ -255,7 +255,7 @@ pub(crate) async fn api_post(path: &str) -> Result<web_sys::Response, ApiError> 
     let response = http_post(&url, &hdrs, None).await?;
 
     if response.status() == 401 {
-        clear_token();
+        redirect_to_login_expired();
         return Err(ApiError {
             message: "Session expired".to_string(),
             status: 401,
@@ -280,7 +280,7 @@ pub(crate) async fn api_delete(path: &str) -> Result<web_sys::Response, ApiError
     let response = http_delete(&url, &hdrs).await?;
 
     if response.status() == 401 {
-        clear_token();
+        redirect_to_login_expired();
         return Err(ApiError {
             message: "Session expired".to_string(),
             status: 401,
@@ -313,7 +313,7 @@ pub(crate) async fn api_post_blob(
     let response = http_post_raw(&url, &hdrs, blob.clone()).await?;
 
     if response.status() == 401 {
-        clear_token();
+        redirect_to_login_expired();
         return Err(ApiError {
             message: "Session expired".to_string(),
             status: 401,
@@ -358,12 +358,53 @@ async fn api_json_with_body<T: serde::de::DeserializeOwned + Default>(
     };
 
     if response.status() == 401 {
-        clear_token();
+        redirect_to_login_expired();
         return Err(ApiError {
             message: "Session expired".to_string(),
             status: 401,
         });
     }
+
+    if !response.ok() {
+        let body: ApiResponse<()> = response_json(&response).await.unwrap_or(ApiResponse {
+            success: false,
+            data: None,
+            error: Some("Request failed".to_string()),
+            correlation_id: None,
+        });
+        return Err(ApiError {
+            message: body
+                .error
+                .unwrap_or_else(|| format!("HTTP {}", response.status())),
+            status: response.status(),
+        });
+    }
+
+    let result: ApiResponse<T> = response_json(&response).await.map_err(|e| ApiError {
+        message: format!("Failed to parse response: {e}"),
+        status: 0,
+    })?;
+
+    if !result.success {
+        return Err(ApiError {
+            message: result.error.unwrap_or("Unknown error".to_string()),
+            status: 0,
+        });
+    }
+
+    result.data.ok_or_else(|| ApiError {
+        message: "No data in response".to_string(),
+        status: 0,
+    })
+}
+
+/// Authenticated GET that unwraps the `ApiResponse<T>` envelope — collapses the
+/// ok()/parse/`ok_or_else` boilerplate every `get_*` handler used to repeat. 401
+/// and 403 are handled inside `api_get` (redirect / access-denied).
+pub(crate) async fn api_get_json<T: serde::de::DeserializeOwned + Default>(
+    path: &str,
+) -> Result<T, ApiError> {
+    let response = api_get(path).await?;
 
     if !response.ok() {
         let body: ApiResponse<()> = response_json(&response).await.unwrap_or(ApiResponse {

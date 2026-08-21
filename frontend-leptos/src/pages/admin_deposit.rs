@@ -60,6 +60,10 @@ pub fn AdminDeposits(
     // deposit credit across ALL contacts (backs the header chip). Global, not
     // per-event; loaded alongside the per-event lists for one refresh cycle.
     let (liability, set_liability) = signal(CreditLiability::default());
+    // Per-event Cash/Credit/Comp source summary (GOAT reconciliation chip).
+    let (source_summary, set_source_summary) = signal(api::DepositSourceSummary::default());
+    // The attendees who got in by spending rolling credit (for the summary list).
+    let (credit_used_list, set_credit_used_list) = signal(Vec::<ThbDepositInfo>::new());
     // Cross-event credit-refund-request queue — contacts who requested return
     // of their held credit (Issue #061 Phase 3 exit path). Backs the badge on
     // the Held-as-Credit tab. Global, not per-event; same refresh cycle as the
@@ -81,6 +85,8 @@ pub fn AdminDeposits(
     let (refresh_counter, set_refresh_counter) = signal(0u32);
     let (action_pending, set_action_pending) = signal(None::<String>);
     let (confirm_reject_id, set_confirm_reject_id) = signal(None::<String>);
+    // 2-step confirm for the irreversible "Hold as Credit" money action.
+    let (confirm_hold_id, set_confirm_hold_id) = signal(None::<String>);
     // Refund proof: 2-step flow — first click shows input, second click confirms.
     // Per-row state: each refund queue item has its own proof URL value,
     // keyed by attendee_id. A single shared signal would cause typing in row A
@@ -106,6 +112,8 @@ pub fn AdminDeposits(
         let set_refunds = set_refunds;
         let set_held_list = set_held_list;
         let set_liability = set_liability;
+        let set_source_summary = set_source_summary;
+        let set_credit_used_list = set_credit_used_list;
         let set_credit_refund_requests = set_credit_refund_requests;
         let set_loading = set_loading;
         let set_toast = set_toast;
@@ -116,6 +124,7 @@ pub fn AdminDeposits(
             let refunded_result = api::get_refunded_list(eid.as_deref()).await;
             let held_result = api::get_held_list(eid.as_deref()).await;
             let liability_result = api::get_credit_liability().await;
+            let source_result = api::get_credit_used(eid.as_deref()).await;
             let refund_requests_result = api::get_credit_refund_requests().await;
 
             match slips_result {
@@ -162,6 +171,17 @@ pub fn AdminDeposits(
                 Ok(data) => set_liability.set(data),
                 Err(e) => {
                     log::warn!("[admin-deposit] failed to load credit liability: {e}");
+                }
+            }
+
+            // Per-event Cash/Credit/Comp summary + credit-used list — non-fatal.
+            match source_result {
+                Ok(data) => {
+                    set_source_summary.set(data.summary);
+                    set_credit_used_list.set(data.credit_used);
+                }
+                Err(e) => {
+                    log::warn!("[admin-deposit] failed to load source summary: {e}");
                 }
             }
 
@@ -355,6 +375,20 @@ pub fn AdminDeposits(
     // all financial invariants (settle-before-increment, idempotency guards).
     let handle_admin_hold = move |item: ThbDepositInfo| {
         let attendee_id = item.attendee_id.clone();
+
+        // First click arms confirm — Hold irreversibly converts a refundable cash
+        // deposit into rolling credit, so require a 2-step (like reject/delete).
+        if confirm_hold_id.get().as_deref() != Some(&attendee_id) {
+            set_confirm_hold_id.set(Some(attendee_id.clone()));
+            let set_confirm = set_confirm_hold_id;
+            gloo_timers::callback::Timeout::new(3000, move || {
+                set_confirm.set(None);
+            })
+            .forget();
+            return;
+        }
+        set_confirm_hold_id.set(None);
+
         let event_id = item.event_id.clone();
         let key = format!("hold-{attendee_id}");
         set_action_pending.set(Some(key));
@@ -445,6 +479,39 @@ pub fn AdminDeposits(
                             )
                         }}
                     </span>
+                </div>
+            </Show>
+            // Per-event Cash/Credit/Comp summary chip (GOAT reconciliation): how
+            // attendees got in for THIS event — paid cash, spent rolling credit,
+            // or staff comp. Complements the per-attendee "Credit ✓" roster badge.
+            <Show when=move || { let s = source_summary.get(); s.cash_count + s.credit_count + s.comp_count > 0 } fallback=|| view! { <div></div> }>
+                <div
+                    class="admin-dep-liability-chip"
+                    title="How attendees got in for this event: paid cash vs spent rolling credit vs free (staff/comp)."
+                >
+                    <Icon icon=IconName::MoneyWings class="icon-sm"/>
+                    <span>
+                        {move || {
+                            let s = source_summary.get();
+                            format!(
+                                "This event \u{2014} Cash: {} (\u{0e3f}{}) \u{00b7} Credit: {} (\u{0e3f}{}) \u{00b7} Free/staff: {}",
+                                s.cash_count, s.cash_thb, s.credit_count, s.credit_thb, s.comp_count
+                            )
+                        }}
+                    </span>
+                </div>
+            </Show>
+            // Who got in via credit (names) — the GOAT credit-used list on the money page.
+            <Show when=move || !credit_used_list.get().is_empty() fallback=|| view! { <div></div> }>
+                <div class="admin-dep-credit-used" style="margin:4px 0 8px; font-size:0.85em; opacity:0.85;">
+                    <strong>"Used credit: "</strong>
+                    {move || {
+                        let names: Vec<String> = credit_used_list.get().iter().map(|d| {
+                            let name = d.attendee_name.clone().unwrap_or_else(|| d.attendee_id.clone());
+                            format!("{name} (\u{0e3f}{})", d.amount_thb)
+                        }).collect();
+                        names.join(" \u{00b7} ")
+                    }}
                 </div>
             </Show>
             // Sub-tab navigation
@@ -560,7 +627,12 @@ pub fn AdminDeposits(
                             let uploaded_ago = utils::time_ago(&slip.uploaded_at);
                             let uploaded_formatted = utils::format_timestamp(&slip.uploaded_at);
                             let slip_url = slip.slip_url.clone();
-                            let has_slip_url = slip_url.is_some();
+                            // Only real serving paths are viewable slips. Credit-covered /
+                            // staff-comp deposits store a sentinel (ROLLING_CREDIT_AUTO_APPLIED /
+                            // STAFF_COMP_WAIVED) in slip_url — not a URL — so suppress the link.
+                            let has_slip_url = slip_url
+                                .as_deref()
+                                .is_some_and(|u| u.starts_with("/api/") || u.starts_with("http"));
                             let display_name = slip.attendee_name.as_deref().unwrap_or(&slip.attendee_id);
 
                             let slip_for_approve = slip.clone();
@@ -572,7 +644,7 @@ pub fn AdminDeposits(
                                     <div class="flex-row-wrap">
                                         <div>
                                             <div class="admin-attendee-name">
-                                                {format!("Attendee: {}", utils::escape_html(display_name))}
+                                                {format!("Attendee: {display_name}")}
                                             </div>
                                             <div class="admin-amount-line">
                                                 {amount}
@@ -652,13 +724,19 @@ pub fn AdminDeposits(
                             let hold_key = format!("hold-{item_id}");
                             let hold_disabled = current_action.as_ref() == Some(&hold_key);
                             let hold_loading = hold_disabled;
+                            let is_confirming_hold = confirm_hold_id.get().as_deref() == Some(&item_id);
 
                             let amount = format!("{} THB", item.amount_thb);
                             let verified_by = item.verified_by.as_deref().unwrap_or("Unknown");
                             let verified_at = item.verified_at.as_deref().map(utils::format_timestamp).unwrap_or_else(|| "N/A".to_string());
                             let display_name = item.attendee_name.as_deref().unwrap_or(&item.attendee_id);
                             let slip_url = item.slip_url.clone();
-                            let has_slip_url = slip_url.is_some();
+                            // Only real serving paths are viewable slips. Credit-covered /
+                            // staff-comp deposits store a sentinel (ROLLING_CREDIT_AUTO_APPLIED /
+                            // STAFF_COMP_WAIVED) in slip_url — not a URL — so suppress the link.
+                            let has_slip_url = slip_url
+                                .as_deref()
+                                .is_some_and(|u| u.starts_with("/api/") || u.starts_with("http"));
                             let has_bank_info = item.bank_account.is_some() && item.bank_name.is_some() && item.account_name.is_some();
                             let display_bank_account = item.bank_account.clone();
                             let display_bank_name = item.bank_name.clone();
@@ -679,13 +757,13 @@ pub fn AdminDeposits(
                                     <div class="flex-row-wrap">
                                         <div>
                                             <div class="admin-attendee-name">
-                                                {format!("Attendee: {}", utils::escape_html(display_name))}
+                                                {format!("Attendee: {display_name}")}
                                             </div>
                                             <div class="admin-amount-line">
                                                 {amount}
                                             </div>
                                             <div class="panel-hint">
-                                                {format!("Verified by: {}", utils::escape_html(verified_by))}
+                                                {format!("Verified by: {verified_by}")}
                                             </div>
                                             <div class="panel-hint">
                                                 {format!("Verified at: {verified_at}")}
@@ -710,13 +788,13 @@ pub fn AdminDeposits(
                                                 <div class="panel-hint admin-dep-bank-label">"Refund Bank Info"</div>
                                                 <Show when=move || has_bank_info fallback=|| view! { <span></span> }>
                                                     <div class="panel-hint">
-                                                        {format!("Account: {}", utils::escape_html(display_bank_account.as_deref().unwrap_or("-")))}
+                                                        {format!("Account: {}", display_bank_account.as_deref().unwrap_or("-"))}
                                                     </div>
                                                     <div class="panel-hint">
-                                                        {format!("Bank: {}", utils::escape_html(display_bank_name.as_deref().unwrap_or("-")))}
+                                                        {format!("Bank: {}", display_bank_name.as_deref().unwrap_or("-"))}
                                                     </div>
                                                     <div class="panel-hint">
-                                                        {format!("Name: {}", utils::escape_html(display_account_name.as_deref().unwrap_or("-")))}
+                                                        {format!("Name: {}", display_account_name.as_deref().unwrap_or("-"))}
                                                     </div>
                                                 </Show>
                                                 <Show when=move || !has_bank_info fallback=|| view! { <span></span> }>
@@ -783,7 +861,7 @@ pub fn AdminDeposits(
                                                     title="Hold this deposit as rolling credit for the attendee's next event (use when the attendee confirmed hold verbally)"
                                                     on:click=move |_| handle_admin_hold(item_for_hold.clone())
                                                 >
-                                                    {if hold_loading { "Holding..." } else { "↻ Hold as Credit" }}
+                                                    {if hold_loading { "Holding..." } else if is_confirming_hold { "Confirm hold?" } else { "↻ Hold as Credit" }}
                                                 </button>
                                             </div>
                                         </div>
@@ -819,7 +897,12 @@ pub fn AdminDeposits(
                             let refunded_at = item.refunded_at.as_deref().map(utils::format_timestamp).unwrap_or_else(|| "N/A".to_string());
                             let display_name = item.attendee_name.as_deref().unwrap_or(&item.attendee_id).to_string();
                             let slip_url = item.slip_url.clone();
-                            let has_slip_url = slip_url.is_some();
+                            // Only real serving paths are viewable slips. Credit-covered /
+                            // staff-comp deposits store a sentinel (ROLLING_CREDIT_AUTO_APPLIED /
+                            // STAFF_COMP_WAIVED) in slip_url — not a URL — so suppress the link.
+                            let has_slip_url = slip_url
+                                .as_deref()
+                                .is_some_and(|u| u.starts_with("/api/") || u.starts_with("http"));
                             let has_bank_info = item.bank_account.is_some() && item.bank_name.is_some() && item.account_name.is_some();
                             let display_bank_account = item.bank_account.clone();
                             let display_bank_name = item.bank_name.clone();
@@ -836,7 +919,7 @@ pub fn AdminDeposits(
                                     <div class="flex-row-wrap">
                                         <div>
                                             <div class="admin-attendee-name">
-                                                {format!("Attendee: {}", utils::escape_html(&display_name))}
+                                                {format!("Attendee: {display_name}")}
                                             </div>
                                             <div class="admin-amount-line">
                                                 {amount}
@@ -867,13 +950,13 @@ pub fn AdminDeposits(
                                                 <div class="panel-hint admin-dep-bank-label">"Refund Bank Info"</div>
                                                 <Show when=move || has_bank_info fallback=|| view! { <span></span> }>
                                                     <div class="panel-hint">
-                                                        {format!("Account: {}", utils::escape_html(display_bank_account.as_deref().unwrap_or("-")))}
+                                                        {format!("Account: {}", display_bank_account.as_deref().unwrap_or("-"))}
                                                     </div>
                                                     <div class="panel-hint">
-                                                        {format!("Bank: {}", utils::escape_html(display_bank_name.as_deref().unwrap_or("-")))}
+                                                        {format!("Bank: {}", display_bank_name.as_deref().unwrap_or("-"))}
                                                     </div>
                                                     <div class="panel-hint">
-                                                        {format!("Name: {}", utils::escape_html(display_account_name.as_deref().unwrap_or("-")))}
+                                                        {format!("Name: {}", display_account_name.as_deref().unwrap_or("-"))}
                                                     </div>
                                                 </Show>
                                                 <Show when=move || !has_bank_info fallback=|| view! { <span></span> }>
@@ -1026,7 +1109,12 @@ pub fn AdminDeposits(
                             let held_at = item.held_as_credit_at.as_deref().map(utils::format_timestamp).unwrap_or_else(|| "N/A".to_string());
                             let display_name = item.attendee_name.as_deref().unwrap_or(&item.attendee_id).to_string();
                             let slip_url = item.slip_url.clone();
-                            let has_slip_url = slip_url.is_some();
+                            // Only real serving paths are viewable slips. Credit-covered /
+                            // staff-comp deposits store a sentinel (ROLLING_CREDIT_AUTO_APPLIED /
+                            // STAFF_COMP_WAIVED) in slip_url — not a URL — so suppress the link.
+                            let has_slip_url = slip_url
+                                .as_deref()
+                                .is_some_and(|u| u.starts_with("/api/") || u.starts_with("http"));
 
                             (amount, verified_by, held_at, display_name, slip_url, has_slip_url)
                         }).collect();
@@ -1037,7 +1125,7 @@ pub fn AdminDeposits(
                                     <div class="flex-row-wrap">
                                         <div>
                                             <div class="admin-attendee-name">
-                                                {format!("Attendee: {}", utils::escape_html(&display_name))}
+                                                {format!("Attendee: {display_name}")}
                                             </div>
                                             <div class="admin-amount-line">
                                                 {amount}

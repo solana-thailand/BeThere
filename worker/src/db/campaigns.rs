@@ -87,12 +87,19 @@ pub(crate) struct EventDropOff {
 // ---------------------------------------------------------------------------
 
 #[allow(clippy::too_many_arguments)]
+/// Insert a campaign.
+///
+/// `id` and `status` MUST already be validated by the caller
+/// (`handlers::campaigns::validate_campaign_id` / `validate_create_status`) —
+/// like the rest of this module the query is interpolated rather than bound.
+/// `status` is checked against a closed set, so it can never carry a quote.
 pub(crate) async fn create_campaign(
     db: &D1Database,
     id: &str,
     title: &str,
     description: &str,
     organization_id: &str,
+    status: &str,
     completion_criteria: &str,
     reward_type: &str,
     reward_config: &str,
@@ -100,7 +107,7 @@ pub(crate) async fn create_campaign(
     let sql = format!(
         "INSERT INTO campaigns (id, title, description, organization_id, status, \
          completion_criteria, reward_type, reward_config, created_at, updated_at) \
-         VALUES ('{id}', '{title}', '{description}', '{organization_id}', 'draft', \
+         VALUES ('{id}', '{title}', '{description}', '{organization_id}', '{status}', \
          '{completion_criteria}', '{reward_type}', '{reward_config}', \
          datetime('now'), datetime('now'))"
     );
@@ -142,6 +149,33 @@ pub(crate) async fn get_campaign(db: &D1Database, id: &str) -> Result<Option<Cam
         .first::<CampaignRow>(None)
         .await
         .map_err(|e| format!("D1 get_campaign query: {e:?}"))
+}
+
+/// Does a campaign with this id already exist?
+///
+/// Used by the create-form slug availability probe, so it selects a constant
+/// instead of the whole row — nothing about the campaign is needed, only
+/// whether the primary key is taken.
+///
+/// `id` MUST already be shape-validated by the caller (see
+/// `handlers::campaigns::is_valid_campaign_id`): like the rest of this module
+/// the query is interpolated rather than bound, so an unvalidated id would be
+/// an injection vector.
+pub(crate) async fn campaign_exists(db: &D1Database, id: &str) -> Result<bool, String> {
+    let sql = format!("SELECT 1 AS present FROM campaigns WHERE id = '{id}' LIMIT 1");
+    let row = db
+        .prepare(&sql)
+        .first::<ExistsRow>(None)
+        .await
+        .map_err(|e| format!("D1 campaign_exists query: {e:?}"))?;
+    Ok(row.is_some())
+}
+
+/// Single-column probe row for [`campaign_exists`].
+#[derive(Debug, serde::Deserialize)]
+struct ExistsRow {
+    #[allow(dead_code)]
+    present: i64,
 }
 
 #[allow(dead_code)]
@@ -483,19 +517,30 @@ struct EventDropOffRow {
     attended: i64,
 }
 
+/// Build the totals query for [`campaign_completion_stats`].
+///
+/// Extracted so the `COALESCE` is unit-testable. It is not cosmetic: SQLite's
+/// `SUM` over an empty set returns NULL, which cannot deserialize into
+/// `TotalsRow::total_completed` (`i64`), so the whole stats call 500s. Every
+/// campaign has no enrolled developers at creation, so this fired on every new
+/// campaign until 2026-08-21.
+fn totals_sql(campaign_id: &str) -> String {
+    format!(
+        "SELECT \
+         COUNT(*) AS total_enrolled, \
+         COALESCE(SUM(CASE WHEN is_complete = 1 THEN 1 ELSE 0 END), 0) AS total_completed \
+         FROM developer_campaign_progress \
+         WHERE campaign_id = '{campaign_id}'"
+    )
+}
+
 #[allow(dead_code)]
 pub(crate) async fn campaign_completion_stats(
     db: &D1Database,
     campaign_id: &str,
 ) -> Result<CampaignCompletionStats, String> {
     // Total enrolled and completed from developer_campaign_progress.
-    let totals_sql = format!(
-        "SELECT \
-         COUNT(*) AS total_enrolled, \
-         SUM(CASE WHEN is_complete = 1 THEN 1 ELSE 0 END) AS total_completed \
-         FROM developer_campaign_progress \
-         WHERE campaign_id = '{campaign_id}'"
-    );
+    let totals_sql = totals_sql(campaign_id);
     let totals = db
         .prepare(&totals_sql)
         .first::<TotalsRow>(None)
@@ -557,6 +602,12 @@ pub(crate) async fn campaign_completion_stats(
 #[derive(Debug, Clone, serde::Deserialize)]
 struct TotalsRow {
     total_enrolled: i64,
+    /// MUST stay non-optional only because the query wraps the `SUM` in
+    /// `COALESCE(..., 0)`. SQLite's `SUM` over an empty set is NULL, and a NULL
+    /// here fails deserialization and surfaces as a 500 — which is exactly what
+    /// every campaign with no enrolled developers did until 2026-08-21, i.e.
+    /// every campaign the moment it was created. Found via the plan 016
+    /// staging click-through.
     total_completed: i64,
 }
 
@@ -830,6 +881,22 @@ pub fn compute_series_neighbors(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Guards the fix for the stats 500. Asserting on the SQL string is the
+    /// only native check available — the NULL behaviour lives in SQLite, not in
+    /// Rust — but it does catch the realistic regression: someone "simplifying"
+    /// the COALESCE away and reintroducing a 500 on every new campaign.
+    #[test]
+    fn totals_sql_coalesces_the_sum() {
+        let sql = totals_sql("c1");
+        assert!(
+            sql.contains("COALESCE(SUM(CASE WHEN is_complete = 1 THEN 1 ELSE 0 END), 0)"),
+            "SUM must stay wrapped in COALESCE — an empty set yields NULL and 500s: {sql}"
+        );
+        assert!(sql.contains("COUNT(*) AS total_enrolled"));
+        assert!(sql.contains("FROM developer_campaign_progress"));
+        assert!(sql.contains("WHERE campaign_id = 'c1'"));
+    }
 
     fn entry(id: &str, seq: i64) -> EventSeriesEntry {
         EventSeriesEntry {

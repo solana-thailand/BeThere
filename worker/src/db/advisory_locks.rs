@@ -7,6 +7,11 @@
 //!
 //! See migration `0027_advisory_locks.sql` and
 //! `docs/SECURITY-FINDINGS-2026-08-13.md` #4.
+//!
+//! NOTE: the credit-spend caller migrated to the atomic `credit_ledger` (a
+//! single-statement conditional insert), so these are currently unused — kept as
+//! a general-purpose primitive for other Sheets-touching critical sections.
+#![allow(dead_code)]
 
 use worker::{D1Database, D1Type};
 

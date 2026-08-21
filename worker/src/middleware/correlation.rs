@@ -38,11 +38,13 @@ pub async fn correlation_id_layer(mut req: Request, next: Next) -> Response {
     req.extensions_mut()
         .insert(CorrelationId(correlation_id.clone()));
 
-    // 3. Log request entry
+    // 3. Log request entry (capture method/path before `req` is consumed).
+    let method = req.method().clone();
+    let path = req.uri().path().to_string();
     tracing::info!(
         correlation_id = %correlation_id,
-        method = %req.method(),
-        path = %req.uri().path(),
+        method = %method,
+        path = %path,
         "request started"
     );
 
@@ -56,13 +58,25 @@ pub async fn correlation_id_layer(mut req: Request, next: Next) -> Response {
         correlation_id.parse().unwrap(),
     );
 
-    // 6. Log response
-    let status = response.status();
-    tracing::info!(
-        correlation_id = %correlation_id,
-        status = %status.as_u16(),
-        "request completed"
-    );
+    // 6. Log response — elevate 5xx to error level (with method+path) so server
+    //    failures are filterable/alertable in the log stream instead of hiding
+    //    among INFO "request completed" lines.
+    let code = response.status().as_u16();
+    if code >= 500 {
+        tracing::error!(
+            correlation_id = %correlation_id,
+            method = %method,
+            path = %path,
+            status = code,
+            "request completed with server error"
+        );
+    } else {
+        tracing::info!(
+            correlation_id = %correlation_id,
+            status = code,
+            "request completed"
+        );
+    }
 
     response
 }

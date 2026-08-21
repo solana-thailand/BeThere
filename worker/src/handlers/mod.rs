@@ -230,15 +230,10 @@ pub fn routes(state: AppState) -> Router<()> {
             "/escrow/rollover-deposit",
             post(deposit::rollover_deposit_tx_handler),
         )
-        // R2 storage — financial docs require identity (VULN-008 fix)
-        .route(
-            "/storage/slips/{event_id}/{attendee_id}",
-            get(crate::storage::serve_slip),
-        )
-        .route(
-            "/storage/refunds/{event_id}/{attendee_id}",
-            get(crate::storage::serve_refund),
-        )
+        // NOTE: R2 slip/refund financial docs (bank account #/name) moved to the
+        // `protected` (staff) router — they were only identity-gated here, so any
+        // logged-in attendee could view any other attendee's slip by guessing the
+        // (event_id, attendee_id) pair (both non-secret). See admin security review.
         // Adventure virtual check-in (attendee-authed — casual mode quest completion)
         .route(
             "/adventure/quest-complete",
@@ -300,6 +295,8 @@ pub fn routes(state: AppState) -> Router<()> {
         .route("/generate-qrs", post(qr::generate_qrs))
         // Flush server-side caches (attendee list + column mapping)
         .route("/admin/flush-cache", post(attendee::flush_cache))
+        // Send a test Slack alert (super-admin) — verify observability wiring
+        .route("/admin/test-alert", post(attendee::test_alert))
         // Repair empty claim_tokens in D1
         .route(
             "/admin/repair-claim-tokens",
@@ -400,9 +397,21 @@ pub fn routes(state: AppState) -> Router<()> {
         )
         .route("/refund/queue", get(deposit::refund_queue_handler))
         .route("/refund/refunded", get(deposit::refunded_list_handler))
+        // R2 financial docs (bank slip + refund receipt) — STAFF-only (moved here
+        // from the identity-only router to close the slip IDOR).
+        .route(
+            "/storage/slips/{event_id}/{attendee_id}",
+            get(crate::storage::serve_slip),
+        )
+        .route(
+            "/storage/refunds/{event_id}/{attendee_id}",
+            get(crate::storage::serve_refund),
+        )
         // Held-as-credit list (admin) — sibling of refunded list, filters on
         // held_as_credit = true (Issue #061 Phase 2).
         .route("/refund/held", get(deposit::held_list_handler))
+        // Who got in via rolling credit + Cash/Credit/Comp summary (GOAT view).
+        .route("/deposit/credit-used", get(deposit::credit_used_handler))
         .route(
             "/refund/mark/{attendee_id}",
             post(deposit::mark_refund_handler),
@@ -413,6 +422,12 @@ pub fn routes(state: AppState) -> Router<()> {
         .route(
             "/refund/hold/{attendee_id}",
             post(deposit::admin_hold_deposit_handler),
+        )
+        // Admin applies an attendee's rolling credit to complete a registration
+        // stuck at the deposit step (credit-holder who never uploaded a slip).
+        .route(
+            "/deposit/apply-credit/{attendee_id}",
+            post(deposit::admin_apply_credit_handler),
         )
         // Total deposit-credit liability across all contacts — the organizer's
         // "Total credit held" header chip (Issue #061 Phase 2 option a2).
@@ -504,6 +519,13 @@ pub fn routes(state: AppState) -> Router<()> {
         .route(
             "/campaigns",
             get(campaigns::list_campaigns).post(campaigns::create_campaign),
+        )
+        // Slug availability probe — must precede nothing in particular (axum
+        // matches the literal `exists` segment ahead of a bare `{id}` route),
+        // but is kept adjacent to the campaign CRUD block for legibility.
+        .route(
+            "/campaigns/{id}/exists",
+            get(campaigns::campaign_id_exists),
         )
         .route(
             "/campaigns/{id}",
