@@ -199,6 +199,32 @@ yes/no to — without it, "reviewed" means nothing and the checkbox is theatre.
 | Reads stale (CSV) | tools use Plan 008 JOIN path (Q5) | Medium | That no tool reads the Sheets/CSV path. | _tbd_ |
 | D1 hammering | reuse `EVENTS` KV TTL (Q17) | Medium | The TTL value, and whether it suits an agent's read pattern (bursty, repeated) rather than a page load's. | _tbd_ |
 
+### 6.1 Mitigation review — 2026-08-21, against `develop` @ `446b6d8`
+
+The "reviewed" half of §7's Definition of Done. Each mitigation was checked
+against the actual codebase rather than accepted as written. The register was
+ten unowned assertions; it is now graded, and **two risks turn out to be already
+mitigated**.
+
+| # | Risk | Mitigation status today | Evidence |
+|---|---|---|---|
+| 1 | Privilege escalation via inherited JWT | **Design only** — the *foundation* holds (`Claims` carries no role; role is recomputed per call), but `agent_scope` does not exist yet | §10 citation table |
+| 2 | PII leak into Anthropic context | **Design only** — now concrete: the columns needing redaction are `first_name`, `last_name`, `name`, `email`, `ticket_name`, `phone`, `bank_name`, `account_name`, over 468 live attendee and 172 contact rows | `domain/src/models/attendee.rs`, prod `/api/health` |
+| 3 | Hallucinated id → mutation | **Design only, but proven in prod** — `validate_campaign_id` + `campaign_exists` + `GET /campaigns/{id}/exists` shipped 2026-08-20 and is exactly the layer-2 existence check this row proposes | `worker/src/handlers/campaigns.rs:362`, `db/campaigns.rs:164` |
+| 4 | Auto-executed refund drains escrow | **Design only** — `/escrow/refund` exists and sits in the authed router; the "never auto" policy is not encoded anywhere yet | `worker/src/handlers/mod.rs:150` |
+| 5 | API key in bundle | **Vacuously clean** — no Anthropic key appears in the built frontend JS, but only because the integration does not exist. Re-run this grep as a CI gate once it does | `frontend-leptos/dist/*.js` |
+| 6 | 30s CPU overrun | **Design only** — no chain-depth cap exists to inspect | — |
+| 7 | Lands before SIWS | ✅ **SATISFIED — gate cleared** | `/auth/wallet/nonce` + `/auth/wallet/verify` are live (`handlers/mod.rs:81-82`); the frontend SIWS flow shipped in `wallet_signin.rs` |
+| 8 | No audit trail | ✅ **Already available** — `audit_log` exists with a working insert/query layer and 29 rows in prod. "Day one" is satisfied by construction; the agent only has to call it | `worker/src/db/audit.rs`, prod `/api/health` |
+| 9 | Reads stale (CSV) | **Not verified** — needs a pass over which handlers still touch the Sheets path | — |
+| 10 | D1 hammering | **Available** — the `EVENTS` KV binding exists in both prod and staging config, so the TTL reuse this row assumes is real | `worker/wrangler.toml:152,248` |
+
+**What this changes.** Risk 7 was a sequencing gate and it is now cleared — the
+plan is no longer blocked behind Plan 006. Risk 8's mitigation is already built.
+Risk 3 has a working precedent shipped in prod, so the layer-2 pattern is no
+longer speculative. That leaves six design-only rows plus one (R9) that still
+needs a look — a materially smaller ratification than the blank table suggested.
+
 **Why the owners are still `_tbd_`.** Asked directly on 2026-08-20; the answer was
 that the owners aren't known yet. Inventing names would make the Definition of
 Done pass while leaving every mitigation unaccounted for, which is the exact
@@ -216,10 +242,15 @@ that is a call for the plan's owner, not for this document to assume.
 - [x] Tool inventory finalized in R/M/D/X buckets (§3).
 - [x] Auth path documented as an `auth.rs` addendum (§4).
 - [x] PII redaction policy stated (§3 columns, Q11/Q12).
-- [ ] Risk register reviewed; every mitigation has an **owner** (§6). *Blocked on
-      one input only: who owns each row. Severity and a per-row ratification
-      question were filled in on 2026-08-20 so this is now a short sitting, not
-      a blank table. Confirmed still unknown as of that date — see the note under §6.*
+- [x] Risk register **reviewed** — every mitigation checked against the codebase
+      on 2026-08-21, with severity and a per-row ratification question added
+      2026-08-20 (§6, §6.1). Outcome: R7's sequencing gate is cleared, R8 is
+      already built, R3 has a shipped precedent; six rows remain design-only and
+      R9 still needs a pass.
+- [ ] Risk register **owners** assigned (§6). *Blocked on one input only: who owns
+      each row. Asked 2026-08-20 and again 2026-08-21; still unknown. Split from
+      the review item above so the completed half is not hidden behind the
+      blocked half.*
 - [x] Output: this `.plans/` design doc.
 
 ---
