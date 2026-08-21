@@ -130,16 +130,132 @@ searching before concluding.
 
 ## 4. Open work
 
-- [ ] **4.1 Write the distribution half of the sentence.** One page: which of the
-      three buyer types (slide 5) BeThere sells to, the named channel that
-      produced the 15 events so far, and whether it repeats. The deck's test is
-      whether it fits in a sentence — a paragraph means it is not an answer yet.
-- [ ] **4.2 Decide on building in public.** Either commit to the cadence the deck
-      describes (daily, video-first, founder-fronted) or accept the scored
-      penalty deliberately. Both are valid; drifting is not.
-- [ ] **4.3 Name the ICP in one sentence.** Per slide 5, *"for developers"* or
-      *"for event organizers"* does not pass. The 15 events are the evidence
-      base for a sharper answer than that.
+- [x] **4.1 Distribution — written from the 15 events' actual provenance.** §4.1 below.
+- [ ] **4.2 Decide on building in public.** Prepared, not decided — §4.2 below.
+      This is a founder's call, not an engineering one.
+- [x] **4.3 ICP named in one sentence, from the same data.** §4.3 below.
+
+All figures below come from the prod D1 export taken 2026-08-20 before the
+`587dfa2a` deploy (`~/bethere-backups/`, outside the repo — it holds PII). Only
+event-level aggregates are reproduced here. Full breakdown in §8.
+
+### 4.1 Distribution — the honest sentence
+
+> **Every event to date came from one channel: the founder's own Solana Thailand
+> community. The channel has not yet been shown to transfer.**
+
+The 15 events are four things, not fifteen:
+
+| Cluster | Events | Cadence | What it proves |
+|---|---|---|---|
+| *Solana x AI Builders: The Road to Mainnet* | 5 | Monthly, Apr→Aug 2026 | The whole product loop, repeatedly |
+| *Solana in Latent Space* Pt 1–7 | 7 | Weekly, Jun→Jul 2026 | Registration only — see §4.3 |
+| *Intro to Vibing on Solana* | 1 | One-off online | Registration only |
+| *IslandDAO V4 Demo* | 1 | One-off, 1 attendee | A demo, not an event |
+| *ComfyUI Thailand 1st Meetup* | 1 (draft, unrun) | — | **First non-founder community** |
+
+So the repeatable, revenue-bearing unit is **one monthly series**, run five times.
+That is a real, working channel — but it is a channel of one, and the person
+operating it is the founder.
+
+**The one piece of evidence that it might transfer** is *ComfyUI Thailand 1st
+Meetup*: a different community (AI image generation, not Solana), the largest
+capacity ever configured (200 vs the series' usual 21–23), deposits enabled at
+THB 100. It is still `draft` with 0 registrations and is scheduled for
+2026-09-12 — **after** any plausible submission date.
+
+**What to say, and what not to.** The defensible claim is *"a monthly deposit-backed
+meetup series, run five times, with a second community onboarding."* The
+indefensible one is *"we have distribution."* A judge asking "how do you reach the
+next hundred organizers?" has no answer in this data yet, and inventing one is
+worse than naming the gap — the deck's own framing is that judges are
+underwriting a company, and companies get diligenced.
+
+**The highest-value action before submission** is therefore not more code: it is
+running ComfyUI Thailand with an organizer who is not you, and reporting what
+broke. That single data point converts "a channel of one" into "a channel."
+
+### 4.2 Building in public — decision prepared, not taken
+
+Nothing in the repo addresses this and I am not going to decide it for you. The
+two honest options, with their real costs:
+
+**A — Commit to the cadence.** Daily, video-first, founder-fronted, ~30–45
+min/day. The deck is specific that a 20-second screen recording of the thing
+working beats a paragraph, and that *"you are the distribution channel, not the
+product account."* Cost is real founder hours during the build window, taken
+from engineering.
+
+**B — Decline it deliberately.** Accept the scored penalty and spend the hours
+on §4.1's ComfyUI handoff instead. Defensible: you have something most entrants
+do not (a running product with paying users), and one transferred channel is
+worth more to a judge than ten days of posts.
+
+**What is not an option** is drifting — intending A and delivering nothing, which
+costs the hours anyway and produces no artifact.
+
+*Recommendation, weakly held:* **B, plus a single retrospective thread** at
+submission. You are asymmetrically strong on substance and weak on narrative; one
+well-made artifact showing 64 real on-chain deposits and 18 refunds closes more
+of that gap than daily posting would, at a fraction of the cost.
+
+### 4.3 ICP — one sentence, and the data forces it
+
+> **Recurring, in-person developer meetups in Thailand of 20–50 people, whose
+> organizer is willing to charge a refundable deposit to stop no-shows.**
+
+The data does not merely support this; it rules out the alternative. Split by
+format:
+
+| Format | Events | Registered | Checked in | Rate |
+|---|---|---|---|---|
+| hybrid | 6 | 261 | 74 | 28% |
+| in_person | 1 | 1 | 1 | — |
+| **online** | **8** | **204** | **1** | **0.5%** |
+
+**Online is not an ICP — it is a non-user.** 204 people registered across eight
+online events and exactly one ever checked in. For those events BeThere is a
+signup list; the deposit, check-in, refund and badge loop — the entire product —
+is never exercised. That is 53% of the events and 44% of the registrations
+producing none of the value.
+
+The corollary is a scoping decision the deck would endorse: *"if nobody outside
+your team has a reason to open it twice, it is a demo."* Online organizers open
+it once. The product should either drop them or serve them with something else,
+but it should not count them as traction.
+
+The 28% hybrid check-in rate needs one caveat stated up front rather than
+discovered by a judge: these are *hybrid* events, so a registrant who attended
+online has no reason to check in. The number is a floor on in-person attendance,
+not a retention rate.
+
+---
+
+## 5.5 What the money actually did (correcting the pitch's framing)
+
+Worth fixing before submission, because it is checkable and a judge will check.
+
+The deck's headline is **"USDC deposit commitments."** Production is more
+interesting and slightly different:
+
+- **64 deposits** carry a `deposit_tx_hash`, all pure base58 with a max length of
+  88 — Solana transaction signatures. Settlement is genuinely on-chain.
+- **18 refunds** carry a `refund_tx_hash`. The money-back promise has been kept,
+  on-chain, eighteen times. This is the single most valuable fact in the dataset
+  and it is currently buried.
+- Deposits are **denominated in THB 500** (THB 100 for ComfyUI), not USDC. The
+  one USDC-denominated event is the 1-person IslandDAO demo (15 USDC, escrow
+  `initialized`).
+- **PromptPay is offered on 6 events and was used zero times** — no attendee has
+  ever uploaded a payment slip (`deposit_slip_r2_key` is empty across all 467
+  rows). The THB rail exists as a fallback nobody needed.
+
+So the accurate sentence is *"deposits denominated in Thai baht, settled on
+Solana, refunded on-chain on check-in"* — which is a stronger claim than the deck
+makes, since it demonstrates a working local-currency on-ramp rather than
+assuming crypto-native users. Recommend aligning `scripts/make_pitch_deck.py`
+before submission; `.plans/002` already established the discipline of not
+shipping a number the repo cannot back.
 
 ---
 
@@ -187,5 +303,40 @@ checkbox is blocked on a decision, not on engineering.
 - [x] Deck distilled with attribution; source file location recorded.
 - [x] BeThere scored against all four criteria with repo/prod evidence.
 - [x] Prior incorrect claim about the business model corrected (§3).
-- [ ] §4 gaps closed, or consciously declined.
-- [ ] §5 eligibility answered by the organizers.
+- [x] §4.1 distribution sentence written from the 15 events' real provenance.
+- [x] §4.3 ICP named, with the data that rules out the alternative.
+- [x] §5.5 payment-rail framing corrected against the prod dataset.
+- [ ] §4.2 building-in-public decided (A or B). *Prepared with costs; the call
+      is the founder's. Not marked complete on a recommendation alone.*
+- [ ] §5 eligibility answered by the organizers. **Still blocking** — none of the
+      above matters if an existing product cannot enter.
+
+---
+
+## 8. Data appendix — provenance of all 15 events
+
+Source: prod D1 export 2026-08-20 (pre-`587dfa2a`). Event-level only; no
+attendee data is reproduced. `dep` = deposits enabled, `thb` = deposit price,
+`reg`/`in` = registered / checked in.
+
+| Event | Format | Date | dep | thb | reg | in |
+|---|---|---|---|---|---|---|
+| Solana x AI Builders: Road to Mainnet | hybrid | 2026-04-26 | ✅ | 500 | 104 | 25 |
+| Solana x AI Builders: Road to Mainnet | hybrid | 2026-05-24 | ✅ | 500 | 36 | 20 |
+| Intro to Vibing on Solana | online | 2026-06-10 | — | — | 24 | 1 |
+| Solana in Latent Space Part 1 | online | 2026-06-17 | — | — | 30 | 0 |
+| Solana x AI Builders: Road to Mainnet | hybrid | 2026-06-20 | ✅ | 500 | 55 | 13 |
+| IslandDAO V4 Demo | in_person | 2026-06-23 | ✅ | 15 USDC | 1 | 1 |
+| Solana in Latent Space Part 2 | online | 2026-06-24 | — | — | 31 | 0 |
+| Solana in Latent Space Part 3 | online | 2026-07-01 | — | — | 41 | 0 |
+| Solana in Latent Space Part 4 | online | 2026-07-08 | — | — | 28 | 0 |
+| Solana in Latent Space Part 5 | online | 2026-07-15 | — | — | 35 | 0 |
+| Solana x AI Builders: Road to Mainnet | hybrid | 2026-07-19 | ✅ | 500 | 41 | 16 |
+| Solana in Latent Space Part 6 | online | 2026-07-22 | — | — | 15 | 0 |
+| Solana in Latent Space Part 7 (draft) | online | 2026-07-29 | — | — | 0 | 0 |
+| Solana x AI Builders: Road to Mainnet | hybrid | 2026-08-23 | ✅ | 500 | 25 | 0 |
+| ComfyUI Thailand 1st Meetup (draft) | hybrid | 2026-09-12 | ✅ | 100 | 0 | 0 |
+
+Deposit lifecycle across all 467 attendee rows: `none` 403, `verified` 29,
+`refunded` 18, `pending` 17. 64 on-chain deposit signatures, 18 on-chain refund
+signatures, 0 payment slips, 17 `credit_ledger` entries (rolling credit).
