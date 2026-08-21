@@ -1076,7 +1076,7 @@ pub fn EventFormComponent(
                                 when=move || !editing_id.get().unwrap_or_default().is_empty()
                                 fallback=|| view! {
                                     <div class="quiz-setting-hint">
-                                        "Save the event first, then return here to upload a poster file."
+                                        "\u{1F4CE} File upload needs a saved event. For now, paste an image URL just below \u{2014} or Save the event first, then re-open it (Edit) to upload a file."
                                     </div>
                                 }
                             >
