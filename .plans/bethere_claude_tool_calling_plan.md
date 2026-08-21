@@ -243,6 +243,23 @@ that is a call for the plan's owner, not for this document to assume.
 
 ## 10. Reviewer's Note (pre-ratification, grounded in code)
 
+> **Citations re-verified 2026-08-21** against `develop` @ `6f32317`. All three
+> code references below still land on what this section claims, and the load-
+> bearing assertion — that `Claims` carries **no** `role` field, so authorization
+> cannot be spoofed via the token — holds unchanged:
+>
+> | Reference | Status |
+> |---|---|
+> | `domain/src/models/auth.rs#L6-15` | ✅ `Claims { email, sub, iat, exp }` — no `role` |
+> | `worker/src/durable_objects/event_do/sync.rs#L6-10` | ✅ `sync_claim_lock_to_d1`, DO→D1 fire-and-forget |
+> | `worker/src/handlers/walkin.rs#L171-179` | ✅ `WalkinRegisterRequest`, incl. `override_capacity` |
+> | `UserRole` = `{Staff, Organizer, SuperAdmin}` (`worker/src/auth.rs:492`) | ✅ unchanged |
+>
+> Checked because line-number citations rot silently, and this repo has now been
+> bitten twice by "verified" claims that pointed at lines which had moved or never
+> existed (`.plans/016` §2, `.plans/014` P1.1). Re-run this check before
+> ratification if the tree has moved on.
+
 > Added during the draft review. These are recommendations to settle three of the open items in §9 by reading the actual handlers/structs — not new scope. Each can be accepted, amended, or rejected at ratification. Code references are repo-relative.
 
 ### 10.1 `Claims.role` — add an optional, re-validated hint (settles §4 wording)
