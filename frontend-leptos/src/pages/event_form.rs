@@ -859,6 +859,65 @@ pub fn EventFormComponent(
                             <span class="quiz-setting-hint">
                                 "Shown publicly under \"About this Event\". Line breaks are preserved, so an agenda can be pasted straight in."
                             </span>
+                            <label class="quiz-field-label" style="margin-top: 0.5rem;">
+                                "Import an Ontime rundown"
+                            </label>
+                            <input
+                                type="file"
+                                accept=".csv,text/csv"
+                                on:change=move |ev| {
+                                    // Parsed entirely in the browser — the file is
+                                    // never uploaded. The organizer reviews (and can
+                                    // edit) the generated text before saving.
+                                    let Some(target) = ev.target() else { return };
+                                    let input: web_sys::HtmlInputElement = target.unchecked_into();
+                                    let Some(file) = input.files().and_then(|fl| fl.item(0)) else {
+                                        return;
+                                    };
+                                    // Allow re-selecting the same file after a failed
+                                    // parse; without this `change` never fires again.
+                                    input.set_value("");
+                                    leptos::task::spawn_local(async move {
+                                        let text = match wasm_bindgen_futures::JsFuture::from(file.text()).await {
+                                            Ok(v) => v.as_string().unwrap_or_default(),
+                                            Err(_) => {
+                                                components::show_toast(
+                                                    &set_toast,
+                                                    "Could not read that file",
+                                                    components::ToastType::Error,
+                                                );
+                                                return;
+                                            }
+                                        };
+                                        use event_checkin_domain::models::rundown;
+                                        match rundown::parse_ontime_csv(&text) {
+                                            Ok(sessions) => {
+                                                let count = sessions.len();
+                                                let agenda = rundown::to_agenda_text(&sessions);
+                                                set_form.update(|f| f.description = agenda);
+                                                components::show_toast(
+                                                    &set_toast,
+                                                    &format!(
+                                                        "Imported {count} sessions — review below, then Save"
+                                                    ),
+                                                    components::ToastType::Success,
+                                                );
+                                            }
+                                            Err(e) => {
+                                                // Leave the textarea untouched on failure.
+                                                components::show_toast(
+                                                    &set_toast,
+                                                    &format!("Could not import rundown: {e}"),
+                                                    components::ToastType::Error,
+                                                );
+                                            }
+                                        }
+                                    });
+                                }
+                            />
+                            <span class="quiz-setting-hint">
+                                "Export the rundown from Ontime as CSV. Skipped rows are left out; run-of-show notes and colours are not published."
+                            </span>
                         </div>
                         <div class="quiz-setting-item">
                             <label class="quiz-field-label">"Link"<span class="field-optional-badge">"Optional"</span></label>
