@@ -24,6 +24,8 @@ pub struct EventForm {
     pub name: String,
     pub slug: String,
     pub tagline: String,
+    /// Long-form public description (agenda, schedule, details).
+    pub description: String,
     pub link: String,
     pub event_start: String,
     pub event_end: String,
@@ -162,6 +164,7 @@ pub fn default_form() -> EventForm {
         name: String::new(),
         slug: String::new(),
         tagline: String::new(),
+        description: String::new(),
         link: String::new(),
         event_start: String::new(),
         event_end: String::new(),
@@ -215,6 +218,7 @@ pub fn form_from_detail(detail: &api::EventDetail) -> EventForm {
         name: detail.name.clone(),
         slug: detail.slug.clone(),
         tagline: detail.tagline.clone(),
+        description: detail.description.clone(),
         link: detail.link.clone(),
         event_start: if detail.event_start_ms > 0 {
             format_datetime_local(detail.event_start_ms)
@@ -537,6 +541,7 @@ pub fn EventFormComponent(
                 name: current_form.name.trim().to_string(),
                 slug: current_form.slug.trim().to_string(),
                 tagline: current_form.tagline.trim().to_string(),
+                description: current_form.description.trim().to_string(),
                 link: current_form.link.trim().to_string(),
                 event_start_ms: start_ms,
                 event_end_ms: end_ms,
@@ -710,6 +715,7 @@ pub fn EventFormComponent(
                 name: Some(current_form.name.trim().to_string()),
                 slug: Some(current_form.slug.trim().to_string()),
                 tagline: Some(current_form.tagline.trim().to_string()),
+                description: Some(current_form.description.trim().to_string()),
                 link: Some(current_form.link.trim().to_string()),
                 status: Some(current_form.status.clone()),
                 event_start_ms: Some(start_ms),
@@ -838,6 +844,21 @@ pub fn EventFormComponent(
                                 prop:value=move || form.get().tagline
                                 on:input=move |ev| set_form.update(|f| f.tagline = event_target_value(&ev))
                             />
+                        </div>
+                        <div class="quiz-setting-item">
+                            <label class="quiz-field-label">
+                                "Description"<span class="field-optional-badge">"Optional"</span>
+                            </label>
+                            <textarea
+                                class="quiz-textarea"
+                                rows="8"
+                                placeholder="Agenda, schedule, what to bring, links…&#10;&#10;13:00  Registration&#10;13:30  Keynote&#10;15:00  Workshop"
+                                prop:value=move || form.get().description
+                                on:input=move |ev| set_form.update(|f| f.description = event_target_value(&ev))
+                            ></textarea>
+                            <span class="quiz-setting-hint">
+                                "Shown publicly under \"About this Event\". Line breaks are preserved, so an agenda can be pasted straight in."
+                            </span>
                         </div>
                         <div class="quiz-setting-item">
                             <label class="quiz-field-label">"Link"<span class="field-optional-badge">"Optional"</span></label>

@@ -190,6 +190,9 @@ pub struct EventMeta {
 pub struct EventDetail {
     #[serde(default)]
     pub id: String,
+    /// Long-form public description shown in "About this Event".
+    #[serde(default)]
+    pub description: String,
     #[serde(default)]
     pub name: String,
     #[serde(default)]
@@ -308,6 +311,10 @@ pub struct EventDetailData {
 /// Request body for POST /api/events — create event.
 #[derive(Debug, Clone, Serialize, Default)]
 pub struct CreateEventBody {
+    /// Long-form public description. Line breaks are preserved on the public
+    /// page (`white-space: pre-line`), so an agenda pastes in readably.
+    #[serde(default)]
+    pub description: String,
     #[serde(default)]
     pub name: String,
     #[serde(default)]
@@ -406,6 +413,9 @@ pub struct CreateEventBody {
 /// All fields optional for partial update.
 #[derive(Debug, Clone, Serialize, Default)]
 pub struct UpdateEventBody {
+    /// New long-form public description. `None` leaves it untouched.
+    #[serde(default)]
+    pub description: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
