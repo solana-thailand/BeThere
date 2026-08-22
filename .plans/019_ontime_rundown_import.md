@@ -128,18 +128,41 @@ the organizer can edit before saving.
 Presenter appended as `— {presenter}` only when non-empty. `white-space: pre-line`
 already renders this correctly on the public page.
 
-**Acceptance**
-- [ ] 3.1 A real export (`ontime/solana-dev-thailand-26apr.csv`) parses to 8 rows.
-- [ ] 3.2 `Skip == true` rows are excluded.
-- [ ] 3.3 Empty `Presenter` yields no trailing dash.
-- [ ] 3.4 Quoted fields containing commas parse as one field (§5.4).
-- [ ] 3.5 Rows are ordered by `Cue` numerically, not lexically (`10` after `9`).
-- [ ] 3.6 A malformed file surfaces a toast and leaves the textarea untouched.
-- [ ] 3.7 Parser unit tests live in `domain/` (shared, host-agnostic) with the two
-      committed CSVs as fixtures.
+**Acceptance — implemented `0d07da6`, verified 2026-08-23**
 
-**Cost:** roughly a day. No migration, no new endpoint, no new dependency if the
-CSV reader is hand-rolled for this 13-column shape.
+Parser: `domain/src/models/rundown.rs` (`parse_ontime_csv`, `to_agenda_text`).
+UI: file input beside the Description field in `event_form.rs`.
+Browser verification ran against the staging deployment in a scripted Chromium
+session, using the committed April export as the input file.
+
+- [x] 3.1 `ontime/solana-dev-thailand-26apr.csv` parses to 8 rows — asserted in
+      tests and observed in the browser (`line count = 8`).
+- [x] 3.2 `Skip == true` rows excluded; matching is case-insensitive.
+- [x] 3.3 Empty `Presenter` yields no trailing dash — no line ends in `—`.
+- [x] 3.4 Quoted fields parse as one field, including embedded commas, escaped
+      `""`, and newlines inside quotes.
+- [x] 3.5 Ordered by `Cue` numerically (`10` after `9`); missing `Cue` falls back
+      to row order.
+- [x] 3.6 A malformed file leaves the textarea untouched and toasts
+      *"Could not import rundown: no 'Title' column found — export the rundown
+      from Ontime as CSV"* — observed in the browser, textarea still `""` after.
+- [x] 3.7 26 tests in `domain/tests/rundown_import.rs`, fixtured on **both**
+      committed CSVs via `include_str!`.
+
+**Two things the browser run caught that the spec had not anticipated:**
+
+1. **The presenter is often already inside the title.** The April export's row 2
+   is titled *"Opening by Solana Developer Thailand & Solana Thailand DAO"* with
+   the presenter *"Solana Developer Thailand & Solana Thailand DAO"*, so the
+   naive `title — presenter` render repeated it verbatim. `to_agenda_text` now
+   suppresses a presenter already named in the title (case-insensitive), with a
+   regression test pinned to that real row.
+2. **A file input does not re-fire `change` for the same file.** After a failed
+   import the organizer would re-pick the same corrected file and nothing would
+   happen. The handler now clears `input.value` after reading.
+
+**Actual cost:** a few hours, no migration, no new endpoint, no new dependency —
+the CSV reader is hand-rolled for this shape.
 
 ---
 
@@ -234,5 +257,6 @@ Do not repeat it here.
 - [x] Source format established from real committed exports, not assumed (§1).
 - [x] Arm's-length boundary justified and its failure mode named (§2).
 - [x] The four latent bugs identified before implementation (§5).
-- [ ] Phase 1 implemented and its acceptance list green (§3).
+- [x] Phase 1 implemented (`0d07da6`) and its acceptance list green (§3),
+      verified in a browser against staging rather than by code trace.
 - [ ] §6 decisions taken.
