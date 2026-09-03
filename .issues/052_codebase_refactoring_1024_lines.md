@@ -140,3 +140,37 @@ so `-D warnings` clippy is the only automated check; correctness would have to b
 > frontend** — the worker has 254 tests so splits are safe to verify, whereas the frontend has ~0 native
 > tests (`#[wasm_bindgen_test]` only), making its refactors higher-risk. Next backend targets: `register.rs`,
 > `handlers/deposit/usdc/mod.rs`, `db/attendees.rs`.
+
+---
+
+## Follow-up (2026-09-04) — a split regression the gates never caught
+
+The claim above that "the frontend has ~0 native tests (`#[wasm_bindgen_test]` only)" is **wrong**.
+`frontend-leptos` carries **167 native `#[test]` cases**, including the SSOT mirror audit in
+`frontend-leptos/tests/ssot_mirror_audit.rs`. They were never run because:
+
+- `frontend-leptos` is excluded from the root cargo workspace, so `cargo test --workspace` skips it;
+- the `frontend-clippy` CI job only ran `cargo clippy`, which compiles but does not execute tests.
+
+Consequence: the Phase 5 splits **broke four of those tests** and nothing noticed. The audit pins
+`MIRROR_FILES` / `DOMAIN_PREDICATE_PATHS` to literal `.rs` paths, and `domain/src/models/attendee.rs`,
+`domain/src/models/event.rs` and `frontend-leptos/src/api/event.rs` had all become module directories.
+
+Fixed on this branch:
+
+| Commit | Change |
+|---|---|
+| `5dfb874` | audit resolves a configured entry as either a `.rs` file or a module directory (recursive, sorted), and the constants point at the split directories |
+| `6bd2d77` | cleared two native-target clippy errors in `pages/adventure/tests/playtest.rs` (`module_inception`, `collapsible_if`) that `--all-targets` had never seen |
+| `d103421` | `frontend-clippy` job now also runs `cargo test --locked` on the host target |
+| `069b97b`, `b2f6019` | repo-wide `cargo fmt` (workspace + frontend), deliberately deferred during the splits to preserve the verbatim property |
+| `0978334` | `cargo fmt --all -- --check` gate added to the `build-test` job |
+
+**Verification bar for any future frontend work is now higher than clippy alone:**
+
+```
+cd frontend-leptos
+cargo clippy --locked --target wasm32-unknown-unknown -- -D warnings
+cargo clippy --locked --all-targets -- -D warnings   # native, catches test-only lints
+cargo test --locked                                   # 167 tests
+```
