@@ -465,3 +465,40 @@ respectively; 3 new domain tests pin the wire strings and error format;
 workspace tests 311 (was 308, +3), frontend 159 (unchanged). Only R3
 (substantive EventFormat/EscrowStatus type-merge decision) remains open and
 is not required to close the guard gap.
+---
+
+## Follow-up (2026-09-04) — a mirror drift the guard cannot see
+
+`frontend-leptos/src/pages/public_event/types.rs` mirrored two money fields of
+`domain::models::event::EventConfig` with the wrong Rust type:
+
+| Field | Domain (SSOT) | Mirror (before) |
+|---|---|---|
+| `deposit_amount_usdc` | `u64` (6-decimal smallest unit) | `f64` |
+| `deposit_amount_thb` | `u64` (whole baht) | `f64` |
+
+The wire value is an integer either way (`worker/src/handlers/public_event.rs`
+serialises `config.deposit_amount_*` directly), so `serde` accepted it and
+nothing failed. The cost showed up one layer down: because the field was a
+float of unknown scale, the page grew a magnitude-guessing formatter —
+`if val > 1000.0 { val / 1_000_000.0 }` — on the **public registration page**,
+the most-visited page in the product. It rendered correctly for realistic
+deposits and wrong for anything at or below 1000 atomic units.
+
+Two facts worth carrying forward:
+
+1. **`ssot_mirror_audit` structurally cannot catch this.** The guard compares
+   *predicates* (`is_*`/`can_*`/`has_*`/…), never field types. A mirror can
+   restate every field at the wrong width and stay green. Catching this class
+   means parsing the domain struct and comparing field-by-field — a materially
+   bigger guard than the current text scan. Recorded as an explicit limitation
+   in the test's module docs; not built.
+2. **`public_event/types.rs` was outside `MIRROR_FILES` entirely.** It is now
+   listed. It contributes zero predicates today, so the addition changes no
+   assertion — it closes the coverage hole prospectively, which is exactly the
+   failure mode this plan warned about in §"Why the Phase 2.3 guard missed them".
+
+Fixed in `1914308` (mirror retyped to `u64`; the four divergent frontend
+`format_usdc` implementations collapsed into `crate::utils::money::format_usdc`,
+which truncates sub-cent remainders so a displayed balance can never overstate
+what is held).
