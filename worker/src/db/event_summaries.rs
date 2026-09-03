@@ -235,30 +235,25 @@ pub async fn set_recap(
     image_url: &str,
     published_at: Option<&str>,
 ) -> Result<(), String> {
-    // Escape single quotes in text fields to keep the interpolated SQL valid.
-    // Both fields are organizer-authored but authenticated + role-gated; the
-    // escaping is defensive against legitimate content (e.g. apostrophes).
-    let esc = |s: &str| s.replace('\'', "''");
-
-    let published_sql = match published_at {
-        Some(ts) => format!("'{}'", esc(ts)),
-        None => "NULL".to_string(),
-    };
-
-    let sql = format!(
-        "UPDATE event_summaries SET \
-            recap_markdown = '{markdown}', \
-            recap_image_url = '{image_url}', \
-            recap_published_at = {published_sql}, \
+    let sql = "UPDATE event_summaries SET \
+            recap_markdown = ?, \
+            recap_image_url = ?, \
+            recap_published_at = ?, \
             updated_at = datetime('now') \
-         WHERE event_id = '{event_id}'",
-        markdown = esc(markdown),
-        image_url = esc(image_url),
-        published_sql = published_sql,
-        event_id = esc(event_id),
-    );
+         WHERE event_id = ?";
+    let args = [
+        D1Type::Text(markdown),
+        D1Type::Text(image_url),
+        match published_at {
+            Some(ts) => D1Type::Text(ts),
+            None => D1Type::Null,
+        },
+        D1Type::Text(event_id),
+    ];
 
-    db.prepare(&sql)
+    db.prepare(sql)
+        .bind_refs(&args)
+        .map_err(|e| format!("D1 set_recap bind: {e:?}"))?
         .run()
         .await
         .map_err(|e| format!("D1 set_recap run: {e:?}"))?;

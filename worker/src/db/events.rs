@@ -281,10 +281,11 @@ pub async fn save_form_config(
 ) -> Result<(), String> {
     let json_str = serde_json::to_string(config)
         .map_err(|e| format!("failed to serialize form config: {e:?}"))?;
-    // Escape single quotes for SQL
-    let json_escaped = json_str.replace('\'', "''");
-    let sql = format!("UPDATE events SET form_config = '{json_escaped}' WHERE id = '{event_id}'");
-    db.exec(&sql)
+    let args = [D1Type::Text(&json_str), D1Type::Text(event_id)];
+    db.prepare("UPDATE events SET form_config = ? WHERE id = ?")
+        .bind_refs(&args)
+        .map_err(|e| format!("D1 save_form_config bind: {e:?}"))?
+        .run()
         .await
         .map_err(|e| format!("D1 save_form_config: {e:?}"))?;
     Ok(())
@@ -653,8 +654,15 @@ async fn get_event_raw(
     column: &str,
     value: &str,
 ) -> Result<Option<D1EventRow>, String> {
-    let sql = format!("SELECT * FROM events WHERE {column} = '{value}' LIMIT 1");
-    let stmt = db.prepare(&sql);
+    // `column` is always a caller-supplied literal ("id" / "slug") — SQLite
+    // cannot parameterise an identifier. `value` comes from a URL path segment
+    // and is bound.
+    let sql = format!("SELECT * FROM events WHERE {column} = ? LIMIT 1");
+    let args = [D1Type::Text(value)];
+    let stmt = db
+        .prepare(&sql)
+        .bind_refs(&args)
+        .map_err(|e| format!("D1 get_event_raw bind: {e:?}"))?;
     let raw_first = JsFuture::from(
         stmt.inner()
             .first(None)
