@@ -104,10 +104,15 @@ pub(crate) async fn update_deposit_credit(
 
 /// Clear PII for a contact (PDPA right to erasure).
 /// Keeps the row but blanks name and contact fields.
+///
+/// `contact_channel` and `contact_handle` are `TEXT NOT NULL DEFAULT ''`, so they
+/// are blanked rather than nulled — the same defect class as `clear_developer_pii`.
+/// A NULL aborted the whole statement on the NOT NULL constraint, so the erasure
+/// silently cleared nothing, `name` included.
 pub(crate) async fn clear_contact_pii(db: &D1Database, email: &str) -> Result<(), String> {
     let sql = "UPDATE contacts SET \
          name = '[DELETED]', \
-         contact_channel = NULL, contact_handle = NULL, \
+         contact_channel = '', contact_handle = '', \
          last_registered = datetime('now') \
          WHERE LOWER(email) = ?";
     db.prepare(sql)

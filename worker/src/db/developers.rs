@@ -458,6 +458,9 @@ pub(crate) async fn clear_developer_pii(db: &D1Database, email: &str) -> Result<
     let sql = "UPDATE developer_profiles SET \
          display_name = '[DELETED]', wallet_address = NULL, \
          github_handle = NULL, discord_handle = NULL, twitter_handle = NULL, \
+         telegram_handle = NULL, telegram_id = NULL, \
+         github_verified = 0, telegram_verified = 0, discord_verified = 0, \
+         github_verified_at = NULL, telegram_verified_at = NULL, discord_verified_at = NULL, \
          company_org = '', location_city = '', \
          updated_at = datetime('now') \
          WHERE LOWER(email) = ?";
