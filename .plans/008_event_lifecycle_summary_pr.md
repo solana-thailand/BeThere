@@ -457,7 +457,57 @@ The `contacts.events_joined` CSV (`worker/src/db/contacts.rs#L22-31`) is overwri
   3. `GET /summary` → assert `frozen: true`, correct counts.
   4. Refund a deposit after freeze.
   5. `GET /summary` → assert numbers **unchanged** (freeze is durable).
-- [ ] `worker/tests/post_event_registration.rs` — toggle + register + contact upsert + `registration_phase` correctness + capacity invariant (post-event regs do not affect capacity).
+- [x] `worker/tests/post_event_registration.rs` — **superseded: exercised against
+      local D1 instead (2026-09-04), and it found two live defects.** The
+      endpoint is `#[worker::send]` axum over a D1 binding, so a host-target
+      `tests/*.rs` can only re-implement it, not run it. Ran the real handler
+      under `wrangler dev --local` (see `.plans/020_sql_parameter_binding.md`
+      for the harness) against a seeded `completed` event with
+      `post_event_registration_open = 1`.
+
+      **What held.** `registration_phase = 'post_event'` /
+      `approval_status = 'post_event_registered'` are written correctly, and the
+      capacity invariant holds *by construction* rather than by an explicit
+      filter: `count_registered` selects `approval_status = 'approved'`
+      (`db/dashboard.rs:57`), and post-event rows are never written to Sheets, so
+      neither the dashboard nor the Sheets capacity check can see them.
+      `post_event_registered` appears in exactly two files repo-wide — nothing
+      else needs to exclude it.
+
+      **Defect 1 — a repeat submission was silently discarded (fixed, `2f25910`).**
+      `upsert_post_event_attendee` carried `ON CONFLICT (id) DO UPDATE`, but the
+      caller mints a fresh `Uuid::now_v7()` per request, so that clause could
+      never fire. The real conflict is on `idx_attendees_unique_event_email`
+      (migration 0026, partial on `participation_type <> 'walkin'` — post-event
+      rows use `online`, so they are covered). Reproduced: second submission →
+      `UNIQUE constraint failed: index 'idx_attendees_unique_event_email'`,
+      swallowed by the handler's "non-fatal" warn → **HTTP 200 "Thanks!"** with a
+      brand-new `attendee_id` matching no row, and the attendee row unchanged.
+      A visitor who resubmitted **withdrawing marketing consent** was told
+      "Thanks!" while `attendees.consent_marketing` stayed `1` — and
+      `write_developer_data` did succeed, so `developer_profiles.consent_outreach`
+      went to `0`. The two stores then disagreed on consent, with the permissive
+      value surviving in `attendees`. Fixed by targeting the real index and
+      `RETURNING id`. The `DO UPDATE` set deliberately omits `approval_status` /
+      `participation_type` / `registration_phase`: the conflicting row may be a
+      genuine pre-event in-person attendee, and refreshing their contact details
+      is right while demoting them to an `online` lead is not. Verified: repeat
+      submission now updates the one row and returns its real id; a seeded
+      `approved` / `in_person` / `pre_event` row keeps all three fields.
+
+      **Defect 2 — a failed write reported success (fixed, `2f25910`).** Every D1
+      write in this handler was warn-and-continue. That is defensible in
+      `signup.rs`, where Sheets is the primary store and D1 a mirror — but this
+      endpoint has **no** Sheets write, so a failed attendee insert loses the lead
+      outright and still answers `200 {"message": "Thanks!..."}`. The attendee
+      write is now fatal (contact/profile enrichment stays non-fatal). Verified
+      with a `BEFORE UPDATE … RAISE(ABORT)` trigger on `attendees`: **500** with
+      `"could not save your registration — please try again"` — no SQL text or JS
+      stack in the response, detail stays in the log.
+
+      A host-target regression test still cannot cover either defect; both are
+      properties of the SQL against a live SQLite. Re-run the local harness when
+      touching this path.
 - [ ] `worker/tests/pr_pack.rs` — endpoint smoke test against a fixture event.
 
 ### Manual
