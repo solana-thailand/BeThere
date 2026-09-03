@@ -52,8 +52,11 @@
 //!   `deposit_amount_usdc`/`deposit_amount_thb` (both `u64` in
 //!   `domain::models::event::EventConfig`) as `f64`, which forced a
 //!   magnitude-guessing money formatter on the public registration page
-//!   (fixed 2026-09-04). Catching this class needs the domain struct parsed
-//!   and compared field-by-field — a bigger guard than this one.
+//!   (fixed 2026-09-04). **Now covered separately** by
+//!   `tests/mirror_field_types.rs`, which parses paired mirror/domain structs
+//!   and compares shared scalar fields. That companion guard is scoped to
+//!   scalars; non-scalar divergence (`String` mirroring a typed enum) is
+//!   still out of scope on both sides.
 //! - **UI helper methods** (`as_str()`, `label()`, `css_class()`). These are
 //!   explicitly part of the mirror types' value-add and are NOT business
 //!   predicates. The guard only looks at `is_*`/`can_*`/`has_*`/etc.

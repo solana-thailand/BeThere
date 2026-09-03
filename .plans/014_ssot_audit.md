@@ -502,3 +502,52 @@ Fixed in `1914308` (mirror retyped to `u64`; the four divergent frontend
 `format_usdc` implementations collapsed into `crate::utils::money::format_usdc`,
 which truncates sub-cent remainders so a displayed balance can never overstate
 what is held).
+
+---
+
+## Follow-up 2 (2026-09-04) — the field-type guard, now built
+
+Item 1 above ("not built") is closed. `frontend-leptos/tests/mirror_field_types.rs`
+parses paired mirror/domain structs out of source and compares every field name
+present on both sides.
+
+**Scope is deliberately narrow.** A divergence is only reported when at least
+one side's core type (after unwrapping one `Option<..>` layer) is a Rust scalar
+— integer, float or `bool`. That is exactly the class that corrupts values
+silently, because `serde` accepts an integer into an `f64` without complaint.
+Non-scalar divergence (`status: String` mirroring a typed `EventStatus`,
+`Vec<CommunityLink>` mirroring the domain's own `CommunityLink`) is the
+intentional mirror pattern documented in `ssot_mirror_audit.rs`; flagging it
+would have meant dozens of allowlist entries all carrying the same reason, and
+the scalar signal would have drowned in them.
+
+Optionality is checked asymmetrically. Frontend `Option<T>` over domain `T` is
+the defensive-deserialization pattern and passes. The reverse — domain
+`Option<T>`, mirror `T` — is flagged, because the field can legitimately be
+absent and the mirror would then fail to deserialize at runtime.
+
+**19 struct pairs are audited**, covering `PublicEventData`, `EventDetail`,
+`EventMeta`, `CommunityLink`, the four `api/types.rs` response mirrors, the
+create/update request bodies, the summary/recap payloads, and both the public
+and admin form-config mirrors. Every pair carries a `min_shared_fields` floor:
+the guard's realistic silent-death mode is a rename on one side dropping the
+shared-field set to zero while the type comparison keeps passing vacuously, and
+the floor turns that into a failure.
+
+`ALLOWED_TYPE_DIVERGENCES` is **empty** — every audited pair currently agrees on
+every shared scalar field. The struct is kept rather than deleted so a future
+intentional divergence has a documented home instead of someone weakening the
+guard to make it pass.
+
+**Verified against the real regression, not just unit tests.** Reverting
+`domain`'s `EventConfig::refund_deadline_hours` from `u32` to `u64` makes the
+guard fail and name both affected mirrors (`PublicEventData`, `EventDetail`).
+Re-creating the original `f64` drift is no longer possible as a compiling
+mutation — commit `1914308` also tightened the call sites, so the mutation now
+fails to typecheck first. That is a stronger outcome than the guard catching it,
+but it only holds for fields with arithmetic call sites; the guard is what
+covers a newly added field that nothing computes on yet.
+
+**Still not covered on either guard:** non-scalar type divergence, inline
+predicate re-implementations, and mirror structs absent from both manifests. The
+manifests are the artifact — a new mirror struct must be added by hand.
