@@ -1,6 +1,6 @@
 # 022 — Sweep every writer of a state transition before trusting a guard
 
-**Status:** in progress. Four transitions swept, one fix landed each; the rest listed below are unswept.
+**Status:** in progress. Five transitions swept (four needed a fix, `claimed_at` was already clean); the rest listed below are unswept.
 
 ## Why this plan exists
 
@@ -163,11 +163,20 @@ given a second column); each turned it red.
   on-chain (`AttendeeDeposit.refunded`, `solana_escrow/wire.rs:344`) and is read,
   not written, by the worker.
 
-## Transitions not yet swept
+## §4 — `claimed_at` (swept, clean, no change)
 
-- `claimed_at` / `claim_asset_id` — `db::attendees::claim_attendee`, the walk-in
-  claim path (`claim/mint/walkin.rs`, which skips the quiz/adventure gates), the
-  DO copy, and the Sheets `mark_claimed` writer.
+Two live writers: `claim/mint/execute.rs:411` (the gated mint) and
+`claim/mint/walkin.rs:107` (the walk-in claim, which legitimately skips the
+quiz/adventure gates — a walk-in never registered online). The
+`EventDurableObject` copy (`event_do/checkin.rs:113`) is not reachable; DO
+bindings are disabled.
+
+Both live paths are structurally parallel: check `claimed_at.is_some()` first,
+`acquire_claim_lock`, mint, `finalize_claim_lock` on success,
+`release_claim_lock` on failure. No divergence — this transition was already
+brought into line by the claim-lock work (plan 020 §10). **No change made.**
+
+## Transitions not yet swept
 - `approval_status` itself — who may set it to `Approved`.
 - credit-balance mutations (hold → balance → auto-apply; see
   `credit_ledger_guards.rs` for what is already pinned).
@@ -178,7 +187,8 @@ given a second column); each turned it red.
 
 - [x] `checked_in_at` swept; divergence fixed and guarded.
 - [x] THB `refunded` / `held_as_credit` swept; blanket writer defanged and guarded.
+- [x] `claimed_at` swept — clean, both writers already share the claim lock.
 - [x] `verified` (USDC deposit) swept — plan 003 §7.
 - [x] claim-lock cleanup swept — plan 020 §10.
-- [ ] The four transitions still listed above swept.
+- [ ] The three transitions still listed above swept.
 - [ ] Nothing here is deployed; this branch is unpushed.
