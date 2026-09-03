@@ -12,6 +12,7 @@ mod enums;
 mod form;
 mod requests;
 mod responses;
+mod sheet_name;
 
 #[cfg(test)]
 mod tests;
@@ -22,4 +23,8 @@ pub use form::{FormFieldConfig, FormFieldType, RegistrationFormConfig};
 pub use requests::{CreateEventRequest, DuplicateEventRequest, UpdateEventRequest};
 pub use responses::{
     CreateEventResponse, EventDetailResponse, EventListResponse, UpdateEventResponse,
+};
+pub use sheet_name::{
+    DEFAULT_ATTENDEE_SHEET_NAME, DEFAULT_STAFF_SHEET_NAME, MAX_SHEET_NAME_CHARS,
+    normalize_sheet_name,
 };

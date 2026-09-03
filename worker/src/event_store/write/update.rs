@@ -2,7 +2,10 @@
 
 use worker::KvStore;
 
-use event_checkin_domain::models::event::{EscrowStatus, EventConfig, UpdateEventRequest};
+use event_checkin_domain::models::event::{
+    DEFAULT_ATTENDEE_SHEET_NAME, DEFAULT_STAFF_SHEET_NAME, EscrowStatus, EventConfig,
+    UpdateEventRequest, normalize_sheet_name,
+};
 
 use crate::event_store::read::get_event_index;
 use crate::event_store::schema::slugify;
@@ -126,12 +129,7 @@ pub async fn update_event(
         }
         config.sheet_id = sheet_id.trim().to_string();
     }
-    if let Some(ref sheet_name) = req.sheet_name {
-        config.sheet_name = sheet_name.clone();
-    }
-    if let Some(ref staff_sheet_name) = req.staff_sheet_name {
-        config.staff_sheet_name = staff_sheet_name.clone();
-    }
+    apply_sheet_names(&mut config, req)?;
     if let Some(enabled) = req.quiz_enabled {
         config.quiz_enabled = enabled;
     }
@@ -396,12 +394,7 @@ pub fn apply_update(config: &mut EventConfig, req: &UpdateEventRequest) -> Resul
         }
         config.sheet_id = sheet_id.trim().to_string();
     }
-    if let Some(ref sheet_name) = req.sheet_name {
-        config.sheet_name = sheet_name.clone();
-    }
-    if let Some(ref staff_sheet_name) = req.staff_sheet_name {
-        config.staff_sheet_name = staff_sheet_name.clone();
-    }
+    apply_sheet_names(config, req)?;
     if let Some(enabled) = req.quiz_enabled {
         config.quiz_enabled = enabled;
     }
@@ -543,4 +536,39 @@ pub fn apply_update(config: &mut EventConfig, req: &UpdateEventRequest) -> Resul
     }
 
     Ok(())
+}
+
+/// Apply the two organiser-supplied Google Sheets tab names, if present.
+///
+/// Tab names reach an A1 range on every Sheets read and write, so they are
+/// validated here rather than at the API — the Sheets calls are detached
+/// best-effort work whose errors are logged and dropped, which would turn an
+/// unusable name into a tab that silently never fills in.
+///
+/// A blank value keeps the event's current tab rather than resetting it to the
+/// default: clearing the field in the form must not silently retarget a live
+/// event from `Registrations` to `Attendees`.
+fn apply_sheet_names(config: &mut EventConfig, req: &UpdateEventRequest) -> Result<(), String> {
+    if let Some(ref sheet_name) = req.sheet_name {
+        config.sheet_name = normalize_sheet_name(
+            sheet_name,
+            fallback(&config.sheet_name, DEFAULT_ATTENDEE_SHEET_NAME),
+        )?;
+    }
+    if let Some(ref staff_sheet_name) = req.staff_sheet_name {
+        config.staff_sheet_name = normalize_sheet_name(
+            staff_sheet_name,
+            fallback(&config.staff_sheet_name, DEFAULT_STAFF_SHEET_NAME),
+        )?;
+    }
+    Ok(())
+}
+
+/// The stored tab name, or `default` when the event predates validation and has
+/// none.
+fn fallback<'a>(current: &'a str, default: &'a str) -> &'a str {
+    match current.trim().is_empty() {
+        true => default,
+        false => current,
+    }
 }
