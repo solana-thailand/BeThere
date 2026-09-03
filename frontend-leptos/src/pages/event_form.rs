@@ -3,6 +3,9 @@
 //! Contains the `EventForm` struct, all form helpers, and the `<EventFormComponent>`
 //! that renders the full form UI with validation, save, and escrow init logic.
 
+use event_checkin_domain::models::event::{
+    DEFAULT_ATTENDEE_SHEET_NAME, DEFAULT_STAFF_SHEET_NAME, normalize_sheet_name,
+};
 use leptos::prelude::*;
 use std::sync::Arc;
 use wasm_bindgen::JsCast;
@@ -171,8 +174,8 @@ pub fn default_form() -> EventForm {
         event_end: String::new(),
         time_tba: false,
         sheet_id: String::new(),
-        sheet_name: "Attendees".to_string(),
-        staff_sheet_name: "staff".to_string(),
+        sheet_name: DEFAULT_ATTENDEE_SHEET_NAME.to_string(),
+        staff_sheet_name: DEFAULT_STAFF_SHEET_NAME.to_string(),
         quiz_enabled: false,
         nft_collection_mint: String::new(),
         nft_metadata_uri: String::new(),
@@ -234,12 +237,12 @@ pub fn form_from_detail(detail: &api::EventDetail) -> EventForm {
         time_tba: detail.time_tba,
         sheet_id: detail.sheet_id.clone(),
         sheet_name: if detail.sheet_name.is_empty() {
-            "Attendees".to_string()
+            DEFAULT_ATTENDEE_SHEET_NAME.to_string()
         } else {
             detail.sheet_name.clone()
         },
         staff_sheet_name: if detail.staff_sheet_name.is_empty() {
-            "staff".to_string()
+            DEFAULT_STAFF_SHEET_NAME.to_string()
         } else {
             detail.staff_sheet_name.clone()
         },
@@ -493,6 +496,30 @@ pub fn EventFormComponent(
                 components::ToastType::Error,
             );
             return;
+        }
+        // Tab names reach a Google Sheets A1 range on every sync. The backend
+        // rejects a name Google would refuse to create; check here too so the
+        // organiser sees which field is wrong without a round trip.
+        for (label, raw, fallback) in [
+            (
+                "Attendee tab name",
+                &current_form.sheet_name,
+                DEFAULT_ATTENDEE_SHEET_NAME,
+            ),
+            (
+                "Staff tab name",
+                &current_form.staff_sheet_name,
+                DEFAULT_STAFF_SHEET_NAME,
+            ),
+        ] {
+            if let Err(e) = normalize_sheet_name(raw, fallback) {
+                components::show_toast(
+                    &set_toast,
+                    &format!("{label}: {e}"),
+                    components::ToastType::Error,
+                );
+                return;
+            }
         }
 
         // Validate schedule — backend requires positive start_ms and end > start
