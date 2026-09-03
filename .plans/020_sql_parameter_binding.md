@@ -478,3 +478,51 @@ Gates: `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets
 
 > **Still unpushed, so still live in production.** Like §6, this fix only exists
 > on `feature/sql_binding_phase2`.
+
+### 7.4 The guard had an escape hatch of its own (2026-09-04)
+
+§7.3's scanner only recognised a literal as SQL when it opened with a
+*statement* keyword (`SELECT `, `INSERT `, …, plus `WHERE `). Two allowlist rows
+— `db/campaigns/crud.rs` and `db/contacts.rs` — sanction a `{where_clause}`
+placeholder whose value is a `String` assembled elsewhere in the same file. So a
+clause fragment written as
+
+```rust
+where_clause.push_str(&format!(" AND email = '{email}'"));
+```
+
+was invisible to the guard (it opens with `AND`, not a statement keyword) and
+had a pre-approved path straight into a live query. The guard would have passed.
+The module docstring asserted this shape "does not exist in the tree today",
+which was wrong — the `where_clause` builders are exactly that shape.
+
+`SQL_PREFIXES` now covers clause fragments as well: `AND`, `OR`, `SET`,
+`VALUES`, `FROM`, `JOIN`, `GROUP BY`, `ORDER BY`, `HAVING`, `LIMIT`, `OFFSET`.
+
+Matching had to become **case-sensitive** to absorb them. Every one of those
+words is also ordinary English, and the tree logs `"set algo name: {e:?}"`,
+`"delete attendee request"`, `"update campaign"` — a case-insensitive match
+reports all of them as SQL. This tree writes SQL keywords in upper case
+throughout (all 206 recognised literals), so case is the available
+discriminator.
+
+The cost is that a lower-case query would now slip past. That is accepted and
+documented rather than papered over: an attempt to pin the convention with a
+test failed because deciding whether a lower-case `"set …"` is SQL or prose is
+the very question at issue — the test is circular and was dropped. Instead
+`SQL_LITERAL_FLOOR = 80` fails the guard if the recognised-literal count
+collapses, which is what both real failure modes look like (the lexer breaking,
+or the tree drifting off the upper-case convention wholesale). Actual count is
+206, so the floor has wide headroom and ordinary query deletions will not trip
+it.
+
+Mutation-tested: appending `format!(" AND c.email = '{email}'")` to
+`db/contacts.rs` — the file whose `{where_clause}` row would have laundered it —
+now fails the guard and names the file and the placeholder. Reverted after.
+
+No allowlist row went stale in the switch, so the tightened matching lost no
+coverage of the 58 known sites.
+
+Gates: `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets
+-- -D warnings`, 15 workspace test binaries green. The wasm build was not re-run
+— the change is confined to `worker/tests/`, which is not in that target.

@@ -30,10 +30,16 @@
 //! ## What this guard does NOT prove
 //!
 //! It proves nothing about values that are bound — a bound parameter is safe by
-//! construction. It also cannot see interpolation built up outside a SQL-shaped
-//! literal (e.g. a `String` assembled from pieces and only later concatenated
-//! into a query). That shape does not exist in the tree today; if it is ever
-//! introduced, this guard will not catch it, and the reviewer is the backstop.
+//! construction.
+//!
+//! Interpolation assembled *outside* a SQL-shaped literal and only later
+//! concatenated into a query is the guard's blind spot. That shape does exist
+//! here — `db/campaigns/crud.rs` and `db/contacts.rs` both build a
+//! `where_clause` `String` and interpolate it — so [`SQL_PREFIXES`] covers
+//! clause fragments (`AND`, `SET`, `ORDER BY`, …), not just whole statements.
+//! What still escapes it is a fragment that opens with no SQL keyword at all
+//! (`format!("id = '{id}'")`) or one written in lower case; there the reviewer
+//! is the backstop.
 //!
 //! ## Run
 //!
@@ -219,22 +225,54 @@ const ALLOWED_INTERPOLATIONS: &[AllowedInterpolation] = &[
     },
 ];
 
-/// Keywords that mark a string literal as SQL. Matched against the literal's
-/// uppercased, left-trimmed start, so a comment or a message that merely
-/// mentions "select" is not picked up.
+/// Keywords that mark a string literal as SQL, matched **case-sensitively**
+/// against the literal's left-trimmed start.
 ///
-/// `WHERE` and `AND` are included because the tree builds clause *fragments*
-/// (`format!("WHERE {}", …)`) that are later concatenated into a statement —
-/// a fragment is exactly as injectable as a whole statement.
+/// Clause *fragments* are listed alongside whole statements. A fragment is
+/// exactly as injectable as a statement, and it has a sanctioned path into a
+/// live query: the two `{where_clause}` allowlist rows (`db/campaigns/crud.rs`,
+/// `db/contacts.rs`) interpolate a `String` built elsewhere. Without the
+/// fragment keywords, `format!(" AND email = '{email}'")` would be invisible to
+/// this guard and would land inside an already-approved placeholder.
+///
+/// Case is the discriminator because every one of these words is also ordinary
+/// English — the tree logs "delete attendee request", "update campaign",
+/// "set algo name: {e:?}" — and this tree writes SQL keywords in upper case
+/// throughout. Matching case-insensitively reports those as SQL; matching
+/// case-sensitively means a lower-case query would slip past. The latter is the
+/// better trade, and [`SQL_LITERAL_FLOOR`] catches the tree drifting off the
+/// convention wholesale.
 const SQL_PREFIXES: &[&str] = &[
+    // Whole statements.
     "SELECT ",
     "INSERT ",
     "UPDATE ",
     "DELETE ",
     "REPLACE INTO ",
     "WITH ",
+    // Clause fragments, concatenated into a statement later.
     "WHERE ",
+    "AND ",
+    "OR ",
+    "SET ",
+    "VALUES ",
+    "FROM ",
+    "JOIN ",
+    "GROUP BY ",
+    "ORDER BY ",
+    "HAVING ",
+    "LIMIT ",
+    "OFFSET ",
 ];
+
+/// Fewest SQL literals the scan may find before it is presumed broken.
+///
+/// Two failure modes would otherwise turn this guard into a no-op that still
+/// reports success: the lexer stops recognising string literals, or the tree
+/// stops writing SQL keywords in upper case (see [`SQL_PREFIXES`]). Either
+/// collapses the count. The tree currently yields comfortably more than this;
+/// the floor is set well below that so ordinary query deletions do not trip it.
+const SQL_LITERAL_FLOOR: usize = 80;
 
 #[test]
 fn no_unsanctioned_sql_interpolation_in_worker_src() {
@@ -251,6 +289,7 @@ fn no_unsanctioned_sql_interpolation_in_worker_src() {
 
     let mut violations = Vec::new();
     let mut matched = vec![false; ALLOWED_INTERPOLATIONS.len()];
+    let mut sql_literals = 0usize;
 
     for file in &files {
         let rel = relative_path(file);
@@ -259,6 +298,7 @@ fn no_unsanctioned_sql_interpolation_in_worker_src() {
             if !is_sql_literal(&literal) {
                 continue;
             }
+            sql_literals += 1;
             for placeholder in placeholders(&literal) {
                 match ALLOWED_INTERPOLATIONS
                     .iter()
@@ -273,6 +313,15 @@ fn no_unsanctioned_sql_interpolation_in_worker_src() {
             }
         }
     }
+
+    assert!(
+        sql_literals >= SQL_LITERAL_FLOOR,
+        "only {sql_literals} SQL literal(s) recognised across {} files, below the \
+         floor of {SQL_LITERAL_FLOOR} — either the lexer broke or the tree stopped \
+         writing SQL keywords in upper case, and this guard is now inspecting almost \
+         nothing. Do not lower the floor; fix the cause.",
+        files.len()
+    );
 
     assert!(
         violations.is_empty(),
@@ -478,8 +527,8 @@ fn string_literals(source: &str) -> Vec<String> {
 /// `"D1 update_campaign_status bind: …"` mentions a statement but does not
 /// start with one, so it is not scanned.
 fn is_sql_literal(literal: &str) -> bool {
-    let upper = literal.trim_start().to_ascii_uppercase();
-    SQL_PREFIXES.iter().any(|kw| upper.starts_with(kw))
+    let trimmed = literal.trim_start();
+    SQL_PREFIXES.iter().any(|kw| trimmed.starts_with(kw))
 }
 
 /// Placeholder names inside a format string. `{{` is an escaped brace and is
