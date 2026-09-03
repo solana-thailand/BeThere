@@ -675,7 +675,36 @@ fifth instance of this bug class exists in the codebase.**
 
 ### Still not done
 
-- **The `claim_locks` backfill** is unchanged and still an owner call.
+- ~~**The `claim_locks` backfill** is unchanged and still an owner call.~~
+  **Written 2026-09-04 (`40a9563`)** as
+  `worker/migrations/0029_backfill_claim_locks_from_attendees.sql`. The premise
+  that it "would have to join against Solana" was wrong: `attendees` already
+  carries `claimed_at`, `claim_asset_id` and `claim_signature`, written by
+  `db::attendees::writes::claim_attendee` in the same claim flow, so the backfill
+  is a pure intra-database join on `attendees.claim_token` — the same UNIQUE key
+  `claim_attendee` matches on. No RPC, no key material, no network.
+
+  Guards: only rows with all three target columns still NULL (never overwrites a
+  finalized row, and re-running is a no-op); only from attendees with all three
+  source columns non-NULL (a half-written attendee cannot make a half-written
+  lock); `expires_at` reproduces `claim::finalized_expires_at`'s 90-day horizon
+  measured from the *original* claim, wrapped in `COALESCE` because `strftime`
+  returns NULL on an unparseable timestamp and `expires_at` is NOT NULL — the
+  exact abort class §8–§9 are about.
+
+  Verified by `worker/tests/claim_locks_backfill_migration.rs`, which builds a
+  real SQLite database from the real 28-migration chain, seeds six fixtures (one
+  per branch), executes the migration and asserts every outcome plus idempotency.
+  Mutation-tested twice against the real migration: dropping the `COALESCE`
+  produces `NOT NULL constraint failed: claim_locks.expires_at`, and weakening
+  the already-finalized guard overwrites `OLD_ASSET` with `ASSET2`. Both were
+  caught; the file was restored.
+
+  **Read impact today: none.** `db::claim_locks::get_claim_lock` is the only
+  reader and is `#[allow(dead_code)]` with no call sites, and nothing prunes the
+  table on `expires_at`. This repairs an audit trail; it does not change
+  behaviour. **Applying it to prod is a separate, owner-gated step**
+  (`wrangler d1 migrations apply`) and has not been done.
 - **`format!`-built column lists are invisible.** The guard reads string
   literals; a column list assembled at runtime is not checked. None exist today.
 - **Only the first statement per literal is read** — the scan stops at the
