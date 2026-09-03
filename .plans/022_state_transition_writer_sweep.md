@@ -1,6 +1,6 @@
 # 022 — Sweep every writer of a state transition before trusting a guard
 
-**Status:** in progress. Five transitions swept (four needed a fix, `claimed_at` was already clean); the rest listed below are unswept. `checked_in_at` was swept twice — the second pass (§2b) collapsed the copied gate into a single writer and closed two more defects the copy had left behind.
+**Status:** in progress. Seven transitions swept (four needed a fix, `claimed_at` was already clean); the rest listed below are unswept. `checked_in_at` was swept twice — the second pass (§2b) collapsed the copied gate into a single writer and closed two more defects the copy had left behind.
 
 ## Why this plan exists
 
@@ -203,12 +203,103 @@ Both live paths are structurally parallel: check `claimed_at.is_some()` first,
 `release_claim_lock` on failure. No divergence — this transition was already
 brought into line by the claim-lock work (plan 020 §10). **No change made.**
 
+## §5 — `approval_status` (swept, clean, no change)
+
+Writers of `approval_status = 'approved'`:
+
+| writer | entry | value | scope |
+|---|---|---|---|
+| `upsert_attendee` | `register/signup.rs` | `"approved"` | self-registration is auto-approved by design |
+| `upsert_attendee_full` | `events/sync.rs::sync_sheet_to_d1` | normalized Sheets cell | organiser-gated (`auth::check_event_access`) |
+| `insert_walkin_attendee` | `walkin::register_walkin` | `'approved'` literal | staff-gated router |
+| `upsert_post_event_attendee` | post-event lead form | `'post_event_registered'`, and the `DO UPDATE` deliberately omits the column | cannot promote |
+| `EventDurableObject` | DO RPC | — | not reachable; DO bindings disabled |
+
+There is **no** "approve attendee" endpoint: approval is edited in the Google
+Sheet and flows one way, Sheets → D1, through the sync. No divergence found, and
+every unhandled value fails *closed*:
+
+- `CheckInStatus::from_str` is total and maps anything unrecognised (including
+  `""` and `rejected`, which is not a variant) to `PendingApproval`;
+  `normalize_approval_status` passes unknown values through verbatim, so D1 can
+  hold a status no reader recognises — but every reader either parses it through
+  `from_str` or filters `approval_status = 'approved'` literally. An unknown
+  status therefore denies, never grants.
+- `upsert_attendee`'s `ON CONFLICT (id)` can never fire from `signup.rs` (the
+  caller mints a fresh `Uuid::now_v7()`); a repeat registration hits the partial
+  unique index and is handled as already-registered. So the auto-approve is
+  insert-only and cannot promote a registrant an organiser has demoted.
+- `upsert_attendee_full` blanket-overwrites `approval_status` from the sheet while
+  COALESCE-preserving `checked_in_at`. That asymmetry is the same shape as §3's
+  defect, but here it is the correct direction: the Sheet is the organiser's
+  editing surface for approval and the worker never writes approval to D1 outside
+  the signup insert. Checked that the registration append writes `"Approved"` into
+  the approval column (`sheets/write/append.rs:71`) — without it, every
+  self-registration would be demoted to `pending_approval` by the next sync.
+
+**No change made.** Worst case is a *denial*: an organiser clearing or typo-ing
+the approval cell demotes the attendee on the next sync, recoverable by fixing
+the cell.
+
+## §6 — credit balance (swept, fixed in `9870709`)
+
+Balance is `SUM(delta)` over `(email, organization_id, currency)` in the
+append-only `credit_ledger`. Writers:
+
+| writer | scope used |
+|---|---|
+| `record(+hold)` — `hold_credit.rs` (attendee elects), `hold_admin.rs` (organiser) | `event.organization_id` |
+| `record(+return)` — `handlers/checkin.rs` Model B | `event.organization_id` |
+| `remove_return` — undo check-in | keyed by `(event_id, email)`, org-independent |
+| `try_spend(-apply)` — `signup.rs`, `hold_admin.rs` | `event.organization_id` |
+| ~~`record(-refund)`~~ — `clear_credit_refund_request_handler` | **hard-coded `""`** |
+
+**The defect.** Two paths hang off the *contact*, not an event, so they have no
+org context: the attendee's balance chip (`credit_balance_handler`) and the
+payout reversal that fires when an organiser clears a "return my held credit"
+request. Both guessed `organization_id = ""`. The ledger's own migration says
+"events carry an empty organization_id today" and the handler carried the comment
+"Single-org scope today" — the same *assertion that a sibling path is safe* this
+plan warns about. The Events tab has an Org ID column (`sheets/events_tab.rs`
+column Q, documented example `solana-thailand`) and `org_store.rs` reads a per-org
+config whenever it is non-empty, so the assertion holds only until an organiser
+types into that cell.
+
+Once it is set, holds land under the real org and:
+
+- the balance chip reads `("", …)` → **0**, so the attendee is told they hold no
+  credit; and
+- the reversal reads the same empty bucket → `bal > 0` is false → **no reversal is
+  written**, while the organiser has already paid the cash out. The attendee keeps
+  the full spendable balance. That is the double payout the reversal exists to
+  prevent, reintroduced by a scope mismatch rather than a missing guard.
+
+**The fix.** `credit_ledger::positive_balances(email)` enumerates every
+`(organization_id, currency)` bucket the email still holds — one `GROUP BY …
+HAVING SUM(delta) > 0` query. The reversal writes one entry per bucket, with the
+bucket in the idempotency key (`refund:{email}:{requested_at}:{org}:{currency}`),
+so a double-clear finds each bucket already at zero. The balance chip sums the
+buckets per currency; what is *spendable* at a given event is still resolved
+per-org at registration, which is unchanged.
+
+Guarded by a fourth test in `worker/tests/credit_ledger_guards.rs`: it walks
+`worker/src` and fails if **any** caller passes an empty-string org to
+`credit_ledger::{balance, record, try_spend}` — so a new contact-scoped path
+cannot repeat the guess. Mutation-tested by restoring the hard-coded org at one
+call site; red.
+
+### Still open on this transition
+
+- The Sheets `contacts` mirror (`increment_credit`) is inherently org-blind — one
+  contacts sheet for all orgs. It is display-only (the D1 ledger is authoritative
+  and the module doc says so), but a multi-org deployment will show a merged
+  number there.
+- `reconcile` (`lib.rs:195`, the scheduled job) was not re-read as part of this
+  sweep.
+
 ## Transitions not yet swept
-- `approval_status` itself — who may set it to `Approved`.
-- credit-balance mutations (hold → balance → auto-apply; see
-  `credit_ledger_guards.rs` for what is already pinned).
 - `escrow` state transitions (`escrow_transition_contract.rs` covers the wire
-  shape, not the set of writers).
+  shape, not the set of writers). **The only one left.**
 
 ## DoD
 
@@ -220,5 +311,8 @@ brought into line by the claim-lock work (plan 020 §10). **No change made.**
 - [x] `claimed_at` swept — clean, both writers already share the claim lock.
 - [x] `verified` (USDC deposit) swept — plan 003 §7.
 - [x] claim-lock cleanup swept — plan 020 §10.
-- [ ] The three transitions still listed above swept.
+- [x] `approval_status` swept — clean; Sheets is the only editing surface and
+      every unrecognised value fails closed.
+- [x] credit balance swept; the two contact-scoped paths no longer guess the org.
+- [ ] `escrow` state transitions swept — the last one.
 - [ ] Nothing here is deployed; this branch is unpushed.
