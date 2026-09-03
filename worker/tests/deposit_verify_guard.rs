@@ -1,10 +1,12 @@
 //! Guard: every path that flips a USDC deposit to `verified` must go through
 //! the guarded read-path recovery, and the webhook must not leak or clobber.
 //!
-//! `handlers/deposit/usdc/` has two entry points that can set
+//! `handlers/deposit/usdc/` had three entry points that could set
 //! `DepositStatus::verified = true`: the read path (`recover_and_verify_deposit`,
-//! called from `/public/ticket` and friends) and the Helius/frontend webhook
-//! (`verify_and_confirm_deposit`, detached via `wait_until`).
+//! called from `/public/ticket` and friends), the Helius/frontend webhook
+//! (`verify_and_confirm_deposit`, detached via `wait_until`) and the polling
+//! endpoint (`confirm_deposit_handler`, `GET /api/deposit/usdc/confirm`).
+//! Only the read path was guarded; the other two carried their own copies.
 //!
 //! The read path grew two guards the webhook path never received:
 //!
@@ -24,6 +26,8 @@
 //! unguarded verification path.
 
 const CONFIRM: &str = include_str!("../src/handlers/deposit/usdc/confirm.rs");
+const POLL: &str = include_str!("../src/handlers/deposit/usdc/handlers/confirm.rs");
+const USDC_MOD: &str = include_str!("../src/handlers/deposit/usdc/mod.rs");
 const RECOVER: &str = include_str!("../src/handlers/deposit/usdc/recover.rs");
 const WEBHOOK: &str = include_str!("../src/handlers/deposit/usdc/handlers/webhook.rs");
 
@@ -135,5 +139,55 @@ fn the_webhook_refuses_to_rewrite_a_verified_deposits_signature() {
         guard < assign,
         "the `verified` check must come *before* the `tx_signature` write, \
          otherwise the clobber has already happened"
+    );
+}
+
+#[test]
+fn the_polling_endpoint_delegates_to_the_guarded_read_path() {
+    let code = code_only(POLL);
+
+    assert!(
+        code.contains("recover_and_verify_deposit(&state, &event, status)"),
+        "`confirm_deposit_handler` must delegate the verified transition to \
+         `recover_and_verify_deposit`. It used to carry ~270 lines duplicating \
+         `recover.rs` — discovery, signer cross-check, D1 dual-write, sheet \
+         write, QR auto-gen — and never received F1 or Guard 2."
+    );
+
+    for banned in [
+        "verify_tx_with_signer",
+        "is_confirmed_and_matched",
+        "discover_deposit_tx_on_chain",
+        "verified = true",
+    ] {
+        assert!(
+            !code.contains(banned),
+            "`confirm_deposit_handler` references `{banned}` — that is the \
+             shape of the unguarded copy of the verification transition. \
+             Delegate to `recover_and_verify_deposit` instead."
+        );
+    }
+}
+
+#[test]
+fn the_verification_primitives_stay_private_to_the_usdc_module() {
+    let code = code_only(USDC_MOD);
+    for primitive in [
+        "verify_tx_with_signer",
+        "VerifyWithSignerOutcome",
+        "discover_deposit_tx_on_chain",
+    ] {
+        assert!(
+            !code.contains(primitive),
+            "`usdc/mod.rs` re-exports `{primitive}`. These are the primitives \
+             of the deposit-verification transition; widening them past this \
+             module is how a second, unguarded verification path gets built. \
+             Callers should use `recover_and_verify_deposit`."
+        );
+    }
+    assert!(
+        code.contains("pub(crate) use recover::recover_and_verify_deposit;"),
+        "`recover_and_verify_deposit` must stay the module's exported entry \
+         point for the verified transition"
     );
 }
