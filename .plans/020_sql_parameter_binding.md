@@ -1,8 +1,9 @@
 # 020 — SQL parameter binding across `worker/src/db`
 
 Status: **Phase 1 done and staging-verified** (on `develop`).
-**Phase 2 done but compile-verified only** (on `feature/sql_binding_phase2`) —
-see §4.4 before merging.
+**Phase 2 done and runtime-verified against a local D1** (on
+`feature/sql_binding_phase2`) — see §4.4 for what was driven and §6 for the
+three pre-existing production bugs the run surfaced.
 
 Follow-up to the item flagged but deliberately not fixed in
 `016_campaign_create_ux.md` §"Not fixed, and still open".
@@ -169,19 +170,40 @@ Notes:
   malformed SQLite modifier that evaluates to NULL, not an injection. Left
   as-is.
 
-### 4.4 What Phase 2 still needs
+### 4.4 Phase 2 runtime verification — done locally (2026-09-03)
 
-`cargo clippy -D warnings` clean and 212 lib tests pass, but **that only
-proves it compiles**. Every real defect in this workstream was found by
-running the code, not reading it. Before this branch merges it needs the same
-staging treatment Phase 1 got: deploy `bethere-staging`, then exercise
-campaign CRUD + set-events, check-in auto-progress, campaign stats, the
-profile update endpoint, marketing-consent toggle, logout (JWT blacklist),
-summary freeze, and the post-event-registration toggle.
+`cargo clippy -D warnings` clean and 212 lib tests pass, but that only proves it
+compiles. Every real defect in this workstream was found by running the code, so
+Phase 2 got the same treatment Phase 1 got — except **locally**, not on staging,
+because the standing instruction is that nothing leaves this machine:
 
-The highest-risk conversions to check first are `list_campaigns` (dynamic
-`WHERE`), `upsert_summary` (three placeholders across a 19-column INSERT),
-and `update_my_profile` (12 placeholders).
+    npx wrangler d1 migrations apply bethere-db --local
+    npx wrangler dev --local --port 8788        # .dev.vars sets DEV_MODE=1
+
+Real HTTP against `127.0.0.1:8788` with `Authorization: Bearer dev-token`,
+payloads carrying `'`, `"` and `'); DROP TABLE …; --`, read back from the API
+and from local D1 with `wrangler d1 execute --local`.
+
+| Path | Result |
+|---|---|
+| campaign create / get / exists / update / status / delete | hostile free text round-trips byte-exact |
+| `list_campaigns` — 0, 1 and 2 filters, matching and non-matching | dynamic `WHERE` binds correctly in every arity; `?status=x' OR 1=1--` returns empty, not everything |
+| `set_campaign_events` / `list_campaign_events` | `event_id` values `ev-o'neil` and `ev2" x` both round-trip — the `"` case is exactly what the deleted `esc` in §4.2 corrupted |
+| `campaign_stats` (`totals_sql` + drop-off) | correct with 0 and with 1 enrolment |
+| `update_my_profile` (12 placeholders) | all 12 fields round-trip byte-exact, INSERT and ON CONFLICT paths |
+| `set_marketing_consent` (`meta.changes`) | 0 with no matching row, 1 with one, and the row really flipped — the §4.3 behaviour change is correct |
+| `jwt_blacklist::insert` / `exists` | logout with a real HS256 JWT inserts the hash; the next request on that token 401s "token has been revoked" |
+| `upsert_summary` (3 placeholders in a 19-column INSERT) | column alignment proven with *distinguishable* values: `registered=1, checked_in=1, in_person_*=1`, the rest 0, and two distinct ms columns |
+| `set_recap` / `set_recap_published_flag` | markdown with quotes round-trips; `publish:false` exercises the `D1Type::Null` branch |
+| `save_form_config` / `get_form_config` | nested labels with `'` and `"` round-trip |
+| `set_post_event_registration` | open + close |
+| campaign cascade delete | campaigns, campaign_events and developer_campaign_progress all cleared |
+| PDPA erasure (`get_attendees_by_email`, `clear_attendee_pii`, `clear_contact_pii`, developer erasure) | **found broken — see §6.2**; now verified erasing |
+| cron `cleanup.rs` | **found broken — see §6.3**; now completes |
+
+Not exercised locally: registration and the Sheets sync, which need a real
+Google Sheet. Check-in was driven by seeding the attendee row directly into
+local D1.
 
 ### 4.5 Still open: no email validation
 
@@ -196,3 +218,72 @@ auth boundary, tracked separately.
 `GET /api/events/{id}` returns **500** for a missing event, not 404
 (`"internal error: failed to read event: event '…' not found"`). Pre-existing,
 unrelated to this work, not fixed.
+
+## 6. Three pre-existing production bugs the Phase 2 run surfaced
+
+None of these are regressions — all three are present on `main` and are live in
+production. All three were invisible to reading the code and to the test suite,
+and all three were found by driving real requests.
+
+### 6.1 `results::<T>()` panics on a narrow projection
+
+`worker-0.8.1`'s `D1Result::results::<T>()` does
+`serde_wasm_bindgen::from_value(result).unwrap()` per row. A struct with fields
+the `SELECT` does not project is therefore **not** a recoverable `Err` — it is an
+unconditional wasm panic, and the `match … Err(e) => warn!` arm around it is
+dead code. (`first::<T>()` is fine; it propagates with `?`.)
+
+Two sites had this:
+
+- `on_event_checkin` — `SELECT DISTINCT campaign_id` deserialized into the
+  4-field `CampaignEventRow`. It runs inside `ctx.wait_until`, so every check-in
+  on an event belonging to a campaign panicked the isolate after the 200 had
+  been sent. **Campaign auto-progress has never once worked**, and the panic
+  also took down whatever else was queued in that `wait_until` — the Google
+  Sheets `mark_checked_in` write shares it.
+- `campaign_collection_mints` — `SELECT reward_config` into the 10-field
+  `CampaignRow`. Reachable from two call sites in `handlers/wallet.rs`; panics
+  as soon as one active `nft_certificate` campaign exists.
+
+Fixed in `32eacb0` with dedicated `CampaignIdRow` / `RewardConfigRow`
+projection structs. All 19 `.results::<T>()` sites were audited; the other 17
+align with their projections.
+
+After the fix, a check-in writes `developer_campaign_progress`
+(`events_completed=1, total_required=1, is_complete=1`) and `my-progress`,
+`/progress` and `/stats` all report it. That is the first time this feature has
+produced a row.
+
+### 6.2 Both PDPA erasure updates fail on NOT NULL and the failure is swallowed
+
+- `clear_attendee_pii` set `contact_channel` and `contact_handle` to NULL; both
+  are `TEXT NOT NULL DEFAULT ''`.
+- `clear_developer_pii` set `company_org` and `location_city` to NULL; same.
+
+SQLite aborts the whole `UPDATE`, so **nothing** was erased — not the name, not
+the email, not the social handles. `handlers/privacy.rs` logs the error at WARN
+and continues, so `POST /api/privacy/delete-request` returned
+`200 {"status":"completed"}` while the PII sat untouched. Observed:
+`d1_attendees_cleared: 0`, `d1_developer_cleared: 0`, row unchanged.
+
+Fixed in `eb1549a` by blanking those four columns instead of nulling them.
+Verified: the same request now reports `d1_attendees_cleared: 2`,
+`d1_developer_cleared: 1`, and the rows really are `[DELETED]` / `''` / NULL.
+
+Note this is the exact code Phase 1 §3 could only compile-check.
+
+**Follow-up worth its own change:** `delete_request` reports `"completed"` even
+when every D1 write failed. A PDPA erasure that silently no-ops is worse than
+one that errors. The handler should count failures and return `partial`.
+
+### 6.3 The cron handler panics on a warm isolate
+
+`lib.rs` `fetch` guards `tracing_wasm::set_as_global_default()` behind
+`LOG_INITIALIZED: OnceLock`. The `#[event(scheduled)]` handler called it
+unguarded. `scheduled` and `fetch` share an isolate, so on any isolate that had
+already served a request the cron panicked immediately with
+`SetGlobalDefaultError("a global default trace dispatcher has already been
+set")` — the daily 03:00 UTC cleanup never ran there.
+
+Fixed in `c933e98` with the same `OnceLock` guard. Verified: fetch first, then
+`/cdn-cgi/handler/scheduled` → 200 and `cleanup: daily pass complete`.
