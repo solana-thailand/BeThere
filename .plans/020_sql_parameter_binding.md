@@ -374,3 +374,107 @@ set")` — the daily 03:00 UTC cleanup never ran there.
 
 Fixed in `c933e98` with the same `OnceLock` guard. Verified: fetch first, then
 `/cdn-cgi/handler/scheduled` → 200 and `cleanup: daily pass complete`.
+
+---
+
+## 7. Phase 3 (2026-09-04) — the audit was incomplete; a live injection remained
+
+Phases 1 and 2 audited by reading the `db` layer and grepping for
+`format!("SELECT …")`. That grep only matches a `format!` whose SQL literal
+starts on the same line, and most of this tree writes multi-line SQL with
+backslash continuations. It found six interpolation sites. A lexer that walks
+every string literal finds **fifty-eight**.
+
+### 7.1 The one that was not safe
+
+`db::developers::upsert_developer_field` took `field_name: &str` and
+interpolated it as a **column identifier**:
+
+```sql
+INSERT INTO developer_profiles (email, {field_name}, first_seen_at, …)
+VALUES (?1, ?2, …)
+ON CONFLICT (email) DO UPDATE SET {field_name} = excluded.{field_name}, …
+```
+
+`handlers::register::contact` calls it in a loop over `data.profile_fields`,
+which is assembled in `register::signup` (and `register::post_event`) from
+`body.profile_fields` — a `HashMap<String, String>` deserialized straight from
+the **public, unauthenticated registration body**. The key was never validated
+against anything; the attacker chose the identifier.
+
+This is not a theoretical shape. The statement is `prepare().run()`, so stacked
+statements are out, but everything inside one statement was reachable: closing
+the column list early and supplying the rest of the `VALUES` tuple, or extending
+the `DO UPDATE SET` to write columns the request has no business setting —
+`total_events`, `consent_outreach`, or (since migration `0025`)
+`github_verified` / `telegram_verified`, the flags the social-link flow only
+sets after a provider actually verified the account.
+
+It also failed silently in the honest case: every caller logs the error as
+non-fatal, so a rejected statement produced one `warn!` and nothing else.
+
+**Fixed.** `field_name` is now resolved through `resolve_profile_column`, which
+returns `Option<&'static str>` drawn from `UPSERTABLE_PROFILE_COLUMNS`. Only the
+returned `&'static str` is in scope at the `format!`, so the untrusted string
+cannot reach the SQL even by accident. The allowlist is the fourteen
+profile-owned columns; `email` (bound), `wallet_address` (owned by
+`upsert_developer_wallet`), the `telegram_id` / `*_verified` / `*_verified_at`
+social columns and the six bookkeeping columns are all excluded, each with its
+reason recorded on the const.
+
+**No behaviour change for legitimate traffic.** An organizer's custom form key
+was never a `developer_profiles` column, so it already produced a D1
+"no such column" error that was logged and dropped; it now produces a Rust error
+that is logged and dropped. Custom answers were and are stored in
+`registration_responses` by the sibling batch insert, with bound values.
+
+### 7.2 The other fifty-seven are safe, and now they are safe *by type*
+
+Every remaining interpolation is one of two shapes:
+
+- **an identifier or predicate fragment**, which SQLite cannot parameterise —
+  `get_event_raw`'s `column`, `count_by_status`'s `column`,
+  `dashboard::count_attendees_by_predicate`'s `predicate`, the two
+  `event_summaries` predicate helpers, `contacts`'s generated `?N` list;
+- **an integer or bool**, interpolated only because `worker::d1::D1Type::Integer`
+  is `i32`-only while these values are `u64` / `u32` — the `EventConfig` columns
+  in `events.rs`, the summary counters, `jwt_blacklist`'s `expires_at`,
+  `LIMIT`/`OFFSET`.
+
+Two of the identifier helpers took `&str` and relied on a comment asserting that
+callers only pass literals. Both are now `&'static str`, so the property the
+comment claimed is the one the compiler checks:
+`db::events::get_event_raw` and `db::attendees::reads::count_by_status`.
+
+### 7.3 The regression gate
+
+`worker/tests/sql_interpolation_guard.rs` lexes every `.rs` file under
+`worker/src` (a hand-rolled lexer, not a grep — it has to tell a string literal
+from a doc comment, and it has to follow `\`-continued multi-line SQL), keeps the
+literals that begin with a SQL keyword, and fails on any `{…}` placeholder that
+is not on `ALLOWED_INTERPOLATIONS`. Each allowlist row names the *type* that
+makes its site safe; a second test rejects any row whose stated reason does not
+cite one, so "callers only pass constants" cannot be the justification. A third
+check fails on stale rows, which would otherwise silently pre-authorize whatever
+lands at that path next.
+
+Mutation-tested: adding
+`format!("SELECT * FROM jwt_blacklist WHERE token_hash = '{token_hash}'")` to
+`db/jwt_blacklist.rs` fails the guard and names the file and the placeholder.
+
+`db::developers` also gained three unit tests: the allowlist is checked against
+the `developer_profiles` DDL parsed out of `worker/migrations/*.sql` (a typo'd
+column would otherwise silently drop a registrant's answer), hostile field names
+are asserted not to resolve, and the list is asserted sorted and duplicate-free.
+
+**Not fixed, noted:** `db::attendees::management::set_marketing_consent`
+interpolates a `bool`, which renders as SQLite's `TRUE`/`FALSE` keywords rather
+than `1`/`0`. Correct on D1's SQLite version and not injectable, so it was left
+alone rather than widening this change.
+
+Gates: `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets
+-- -D warnings`, 15 workspace test binaries green, and
+`cargo build -p event-checkin-worker --target wasm32-unknown-unknown --release`.
+
+> **Still unpushed, so still live in production.** Like §6, this fix only exists
+> on `feature/sql_binding_phase2`.
