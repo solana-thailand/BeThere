@@ -245,6 +245,9 @@ pub async fn admin_hold_deposit_handler(
         .into());
     }
 
+    // Reflect the settled state on the in-memory record for the writes below.
+    // D1 was already flipped by the CAS; the save persists the non-settlement
+    // columns (and the whole struct on the KV fallback path, where there is no CAS).
     thb_deposit.held_as_credit = true;
     thb_deposit.held_as_credit_at = Some(now);
     event_store::save_thb_deposit(kv, &thb_deposit, d1)
