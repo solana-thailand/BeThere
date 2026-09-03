@@ -148,6 +148,25 @@ pub async fn upsert_summary(
     Ok(())
 }
 
+/// Delete the frozen snapshot for an event.
+///
+/// Called on permanent event deletion. The row is derived data — a snapshot of
+/// a funnel that no longer has an event to hang off — so it has no
+/// record-keeping value once the event is gone, unlike `audit_log` or
+/// `credit_ledger`. `event_summaries` has no FK to `events`, so nothing
+/// removes it otherwise.
+///
+/// Idempotent: deleting a non-existent row is a no-op, not an error.
+pub async fn delete_summary(db: &D1Database, event_id: &str) -> Result<(), String> {
+    db.prepare("DELETE FROM event_summaries WHERE event_id = ?1")
+        .bind_refs(&[D1Type::Text(event_id)])
+        .map_err(|e| format!("D1 delete_summary bind: {e:?}"))?
+        .run()
+        .await
+        .map_err(|e| format!("D1 delete_summary: {e:?}"))?;
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // Recap authoring (Plan 008 — Phase 2)
 // ---------------------------------------------------------------------------
