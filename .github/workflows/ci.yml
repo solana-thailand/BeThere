@@ -108,6 +108,103 @@ jobs:
       - name: cargo clippy (frontend, wasm32, -D warnings)
         run: cargo clippy --locked --target wasm32-unknown-unknown -- -D warnings
 
+  e2e:
+    name: playwright e2e (SPA served by the worker)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # The five specs in `e2e/` were never wired into CI, so a frontend regression
+    # that still compiles (a renamed CSS hook, a dead route, a broken auth guard)
+    # only surfaced in a browser. frontend-clippy compiles the SPA but never runs it.
+    #
+    # Topology mirrors production rather than `trunk serve`: the worker's [assets]
+    # block serves `frontend-leptos/dist` with SPA fallback, so one origin on 8788
+    # answers both the app and /api. That means /claim/<bad-token> gets a real 404
+    # from a real handler instead of a proxy error, which is what claim.spec.ts asserts.
+    #
+    # No secrets: every spec is unauthenticated, `wrangler dev --local` simulates
+    # D1/KV/R2 in-process, and `.dev.vars` is absent. Verified locally that the run
+    # makes zero `sheets::` calls — nothing in this job can reach a live Google Sheet.
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust (stable, wasm32 target)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache cargo registry + target
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            .
+            frontend-leptos
+
+      - name: Install trunk + wasm-bindgen-cli
+        # trunk builds the Leptos SPA; wasm-bindgen is invoked directly by the
+        # worker's [build] command in wrangler.toml and must be on PATH at the
+        # exact crate version (a mismatch fails the bindgen step, not the build).
+        uses: taiki-e/install-action@v2
+        with:
+          tool: trunk@0.21.7,wasm-bindgen-cli@0.2.118
+
+      - name: Build frontend (trunk)
+        # Trunk.toml sets release = true, so this is the shipped artifact.
+        working-directory: frontend-leptos
+        run: trunk build
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: worker/pnpm-lock.yaml
+
+      - name: Install worker node deps
+        working-directory: worker
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright chromium
+        working-directory: worker
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Start worker (wrangler dev --local)
+        working-directory: worker
+        env:
+          WRANGLER_SEND_METRICS: "false"
+        run: |
+          nohup pnpm exec wrangler dev --local --port 8788 > /tmp/wrangler-dev.log 2>&1 &
+          for _ in $(seq 1 150); do
+            if curl -sf http://localhost:8788/api/health > /dev/null; then
+              echo "worker ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::worker did not answer /api/health within 300s"
+          cat /tmp/wrangler-dev.log
+          exit 1
+
+      - name: Run Playwright specs
+        working-directory: worker
+        env:
+          BASE_URL: http://localhost:8788
+        run: pnpm exec playwright test
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: worker/playwright-report/
+          retention-days: 7
+
+      - name: Worker log on failure
+        if: failure()
+        run: cat /tmp/wrangler-dev.log
+
   escrow-tests:
     name: escrow SVM tests (quasar)
     runs-on: ubuntu-latest

@@ -618,17 +618,39 @@ it just cannot be done from a shell.
       --all-targets` failed with `could not compile event-checkin-worker (lib
       test)`. Any PR from this branch would have gone red on the `build-test`
       job. Use `--all-targets` when checking clippy locally.
-- [ ] **New gap — the Playwright e2e suite is not in CI at all.** `e2e/` holds 5
-      smoke specs (`auth-guards`, `claim`, `landing`, `login`, `routes`; 95
+- [x] **Closed 2026-09-04 — the Playwright e2e suite is now in CI.** `e2e/` holds
+      5 smoke specs (`auth-guards`, `claim`, `landing`, `login`, `routes`; 95
       lines total) driven by `worker/playwright.config.ts`, whose `testDir` is
-      `../e2e` and whose `baseURL` defaults to `http://localhost:3001`. The
-      config has **no `webServer` block**, so the specs assume something is
-      already serving; nothing in `.github/workflows/ci.yml` runs them, and
-      `worker/package.json` has no plain `test` script to hang them off.
-      Wiring them would need a `trunk` frontend build plus a `wrangler dev`
-      (or a `webServer` entry doing both) inside the runner — a real job, not a
-      one-line addition, and out of scope for plan 008. Filed here so it is not
-      lost; it belongs to whoever next touches CI.
+      `../e2e`. The config has no `webServer` block and nothing in
+      `.github/workflows/ci.yml` ran them, so a frontend regression that still
+      compiles — a renamed CSS hook, a dead route, a broken auth guard — only
+      surfaced in a browser. `frontend-clippy` compiles the SPA but never runs it.
+
+      New `e2e` job: trunk-build the SPA, then serve **everything from the
+      worker** on one port rather than `trunk serve` + a proxy. The worker's
+      `[assets]` block already points at `frontend-leptos/dist` with SPA
+      fallback, so 8788 answers both the app and `/api` — the production
+      topology. That matters for `claim.spec.ts`, which asserts an error state
+      for a bad token: against the real handler it gets a genuine 404, not a
+      proxy failure that happens to render the same way.
+
+      `BASE_URL` overrides the config's `localhost:3001` default; the config's
+      own `CI` branches (`retries: 2`, `workers: 1`, `forbidOnly`) apply
+      unchanged. `trunk` and `wasm-bindgen-cli@0.2.118` come from
+      `taiki-e/install-action` (`wasm-bindgen-cli` is a documented alias of
+      `wasm-bindgen`); the exact wasm-bindgen version matters because the
+      worker's `[build]` command in `wrangler.toml` shells out to it directly
+      and a mismatch fails at bindgen, not at compile.
+
+      **Verified locally before wiring**, since a green YAML file proves
+      nothing: built the SPA with trunk, ran `wrangler dev --local` with
+      `worker/.dev.vars` moved aside to simulate a secretless runner, and ran
+      `BASE_URL=http://localhost:8788 npx playwright test` → **13 passed in
+      3.6s**. Also grepped the dev log for `sheets::` afterwards → **0 hits**,
+      confirming the job cannot reach a live Google Sheet (see plan 020 §4.4 —
+      `--local` does not sandbox Sheets, so this is not free by default; it
+      holds here only because every spec is unauthenticated and no role
+      resolution fires).
 
 ---
 
