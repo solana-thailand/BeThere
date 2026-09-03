@@ -290,14 +290,19 @@ async fn resolve_event_from_d1(
 ///
 /// 1. If `events_kv` is `Some` → scan KV index for slug → load full config
 /// 2. If KV miss or unavailable → try D1 `get_event_by_slug`
+///
+/// The [`ResolveError`] split matters the same way it does for
+/// [`resolve_event`]: a KV or D1 outage is not "no such event". Collapsing both
+/// into one string made every caller answer 404 for a backend failure, which
+/// tells the visitor the event does not exist and hides the incident.
 pub async fn resolve_event_by_slug(
     events_kv: Option<&KvStore>,
     slug: &str,
     d1: Option<&worker::D1Database>,
-) -> Result<EventConfig, String> {
+) -> Result<EventConfig, ResolveError> {
     // Try KV first
     if let Some(kv) = events_kv {
-        let index = get_event_index(kv).await?;
+        let index = get_event_index(kv).await.map_err(ResolveError::Backend)?;
         if let Some(meta) = index.events.iter().find(|e| e.slug == slug)
             && let Ok(Some(config)) = get_event_config(kv, &meta.id).await
         {
@@ -307,13 +312,15 @@ pub async fn resolve_event_by_slug(
 
     // D1 fallback
     if let Some(db) = d1
-        && let Some(row) = crate::db::events::get_event_by_slug(db, slug).await?
+        && let Some(row) = crate::db::events::get_event_by_slug(db, slug)
+            .await
+            .map_err(ResolveError::Backend)?
     {
         tracing::info!(%slug, event_id = %row.id.clone().unwrap_or_default(), "resolved event by slug from D1");
         return Ok(row.to_event_config());
     }
 
-    Err(format!("event '{slug}' not found"))
+    Err(ResolveError::NotFound(format!("event '{slug}' not found")))
 }
 
 // ---------------------------------------------------------------------------

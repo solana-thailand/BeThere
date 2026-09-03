@@ -39,7 +39,7 @@ pub async fn my_registration(
 
     let config = crate::event_store::resolve_event_by_slug(kv, slug, state.d1.as_deref())
         .await
-        .map_err(AppError::NotFound)?;
+        .map_err(AppError::from)?;
 
     // Fetch attendees and find by email (case-insensitive)
     let attendees = sheets::get_attendees_for_event(

@@ -111,7 +111,7 @@ pub async fn get_public_event(
         state.d1.as_deref(),
     )
     .await
-    .map_err(AppError::NotFound)?;
+    .map_err(AppError::from)?;
 
     // Read form config for dynamic rendering (Issue #049 Phase 2)
     let form_config = if config.dev_profile_enabled {
@@ -324,8 +324,9 @@ pub async fn get_public_recap(
         state.d1.as_deref(),
     )
     .await
-    // 404 (not "unpublished") — slug doesn't resolve to any event.
-    .map_err(|_| AppError::NotFound(format!("event '{slug}' not found")))?;
+    // 404 (not "unpublished") when the slug resolves to nothing; a KV/D1 outage
+    // stays a 500 rather than masquerading as a missing event.
+    .map_err(AppError::from)?;
 
     // 2. Public recap requires the event to be Completed and published.
     //    Any other state returns 404 (indistinguishable from "no recap").

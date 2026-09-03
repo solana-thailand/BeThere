@@ -107,7 +107,7 @@ pub async fn register_attendee(
 
     let config = crate::event_store::resolve_event_by_slug(kv, slug, state.d1.as_deref())
         .await
-        .map_err(AppError::NotFound)?;
+        .map_err(AppError::from)?;
 
     let event_id = config.id.clone();
 
