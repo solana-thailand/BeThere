@@ -690,7 +690,7 @@ mod r9_tests {
     /// not the drifting stored CSV.
     #[test]
     fn repeat_attendees_use_the_joined_count() {
-        let rows = vec![row("a@x", 2, "e1,e2"), row("b@x", 1, "e1"), row("c@x", 5, "e1")];
+        let rows = [row("a@x", 2, "e1,e2"), row("b@x", 1, "e1"), row("c@x", 5, "e1")];
         assert_eq!(rows.iter().filter(|r| r.events_joined > 1).count(), 2);
     }
 }
