@@ -150,43 +150,51 @@ pub fn DataPrivacy() -> impl IntoView {
                         Some(DeleteState::Result(resp)) => {
                             let status = resp.status.clone();
                             let is_completed = status == "completed";
-                            let is_blocked = status == "blocked";
                             let is_partial = status == "partial";
 
                             let blocked = resp.blocked_events.clone();
                             let affected = resp.events_affected;
+                            let had_failures = !resp.failures.is_empty();
 
                             view! {
                                 <div class=if is_completed { "pe-success-box" } else { "pe-error-box" } style="margin-top: 0.75rem;">
-                                    {if is_completed {
-                                        view! {
+                                    {match status.as_str() {
+                                        "completed" => view! {
                                             <div>
                                                 <strong>"Deletion Completed"</strong>
                                                 <p style="margin-top: 0.25rem;">
                                                     {format!("Personal data cleared from {} event(s).", affected)}
                                                 </p>
                                             </div>
-                                        }.into_any()
-                                    } else if is_blocked {
-                                        view! {
+                                        }.into_any(),
+                                        "blocked" => view! {
                                             <div>
                                                 <strong>"Deletion Blocked"</strong>
                                                 <p style="margin-top: 0.25rem;">
                                                     "Your data cannot be deleted yet because you have active/upcoming events."
                                                 </p>
                                             </div>
-                                        }.into_any()
-                                    } else if is_partial {
-                                        view! {
+                                        }.into_any(),
+                                        "partial" => view! {
                                             <div>
                                                 <strong>"Partial Deletion"</strong>
                                                 <p style="margin-top: 0.25rem;">
-                                                    {format!("Data deleted from {} event(s). Some events are still active.", affected)}
+                                                    {match had_failures {
+                                                        true => format!("Data deleted from {affected} event(s), but some records could not be erased. Please contact support so the rest can be removed."),
+                                                        false => format!("Data deleted from {affected} event(s). Some events are still active."),
+                                                    }}
                                                 </p>
                                             </div>
-                                        }.into_any()
-                                    } else {
-                                        view! { <div></div> }.into_any()
+                                        }.into_any(),
+                                        "failed" => view! {
+                                            <div>
+                                                <strong>"Deletion Failed"</strong>
+                                                <p style="margin-top: 0.25rem;">
+                                                    "None of your personal data could be erased. Please contact support so we can complete your request."
+                                                </p>
+                                            </div>
+                                        }.into_any(),
+                                        _ => view! { <div></div> }.into_any(),
                                     }}
                                 </div>
 

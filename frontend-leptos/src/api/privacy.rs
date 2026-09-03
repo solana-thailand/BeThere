@@ -22,6 +22,9 @@ pub struct DeleteRequestResponse {
     pub kv_keys_deleted: usize,
     #[serde(default)]
     pub r2_objects_deleted: usize,
+    /// D1 writes that errored. Non-empty means some personal data was NOT erased.
+    #[serde(default)]
+    pub failures: Vec<String>,
     #[serde(default)]
     pub on_chain_note: Option<String>,
     #[serde(default)]

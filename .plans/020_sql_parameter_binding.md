@@ -272,9 +272,38 @@ Verified: the same request now reports `d1_attendees_cleared: 2`,
 
 Note this is the exact code Phase 1 §3 could only compile-check.
 
-**Follow-up worth its own change:** `delete_request` reports `"completed"` even
-when every D1 write failed. A PDPA erasure that silently no-ops is worse than
-one that errors. The handler should count failures and return `partial`.
+**Follow-up — done.** `delete_request` reported `"completed"` even when every D1
+write failed. `DeletionSummary` now carries a `failures` list; the status is
+computed as: any failure with no successful D1 write → `failed`; any failure
+with at least one success → `partial`; otherwise the previous
+`completed`/`partial`/`blocked` time-gate result. A write failure outranks the
+time gate, because a caller who sees `blocked` retries after the event ends
+while one who sees `completed` assumes their data is gone. `failures` carries
+only operation names — the D1 error text (SQL + JS stack) stays in the log.
+The frontend (`pages/data_privacy.rs`) gained a `Deletion Failed` state and a
+distinct `partial`-with-failures message.
+
+Two further defects found while making that change, both the same class as the
+bugs above and both still live in prod:
+
+- **`clear_contact_pii` had the identical NOT NULL abort.** `contacts.contact_channel`
+  and `contact_handle` are `TEXT NOT NULL DEFAULT ''` and it set them to NULL,
+  so contact erasure cleared nothing, `name` included. §6.2's fix covered
+  `attendees` and `developer_profiles` but missed `contacts`. Reproduced
+  directly against local D1: `NOT NULL constraint failed: contacts.contact_channel`.
+- **`clear_developer_pii` never erased the social-linking columns.** Migration
+  `0025_social_linking` added `telegram_handle`, `telegram_id` and the
+  `*_verified` / `*_verified_at` flags; the erasure statement predates it, so a
+  Telegram handle survived a completed PDPA erasure. Now nulled/zeroed.
+
+`d1_responses_deleted` also reported `1` on success rather than the number of
+rows deleted; it now uses the count `delete_developer_responses` returns.
+
+Runtime-verified on local D1 (`wrangler dev --local`): happy path →
+`completed`, `failures: []`, contacts row `[DELETED]`/`''`/`''` and the
+developer row with every social column cleared; `BEFORE UPDATE ... RAISE(ABORT)`
+triggers on `contacts` → `partial ['clear_contact_pii']`; triggers on all three
+tables → `failed ['clear_attendee_pii','clear_contact_pii','clear_developer_pii']`.
 
 ### 6.3 The cron handler panics on a warm isolate
 
