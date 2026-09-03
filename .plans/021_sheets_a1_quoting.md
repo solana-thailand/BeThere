@@ -110,11 +110,79 @@ Reverted after.
 warnings`, `cargo test --workspace` (all binaries green), and `cargo build -p
 event-checkin-worker --target wasm32-unknown-unknown --release`.
 
-## 5. Not done
+## 6. Validation (2026-09-04)
 
-- **No server-side validation of `sheet_name`.** Quoting makes any name *work*;
-  it does not stop an organiser from naming a tab something the rest of the
-  system handles badly. Out of scope here.
+§5's first "not done" item, closed. Quoting makes any *legal* name work; it
+cannot make an *illegal* one exist. Google refuses a tab name that is over 100
+characters, contains `[ ] * ? / \`, or starts or ends with an apostrophe. Such
+a name was accepted by the form, stored, and then failed on every Sheets call —
+silently, for the same reason the quoting bug was silent: nearly every Sheets
+call is detached best-effort work whose errors are logged and dropped.
+
+The rule lives in `domain/src/models/event/sheet_name.rs::normalize_sheet_name`,
+in the crate the worker and the Leptos form share, so the two cannot drift. It
+trims, falls back to a default when blank, and otherwise rejects with a message
+written for the organiser looking at the form field. It also exports
+`DEFAULT_ATTENDEE_SHEET_NAME` / `DEFAULT_STAFF_SHEET_NAME`, which replace the
+four hardcoded `"Attendees"` / `"staff"` literals in `create.rs` and
+`event_form.rs`.
+
+Design points:
+
+- **Length is counted in characters, not bytes.** Thai tab names are ordinary
+  here; a byte cap would reject a 34-character Thai name.
+- **A leading or trailing `'` is rejected** rather than quoted. It is the shape
+  an organiser produces by pasting the already-quoted form (`'Day 1'`) out of a
+  formula; left alone it addresses a tab literally named `'Day 1'`, which cannot
+  exist.
+- **Control characters are rejected.** They cannot be typed into a tab title at
+  all — they arrive from a paste or a scripted request — and would otherwise
+  reach a Sheets URL path via the four `:append` endpoints.
+- **Blank on update keeps the event's current tab**, not the default: clearing
+  the field must not silently retarget a live event from `Registrations` to
+  `Attendees`. Only an event that has no stored name (predating this) falls
+  back to the default.
+- `:` is *allowed*. Google accepts it in a tab title, and the A1 parser splits
+  on `!` before the range separator, so `'a:b'!A1:B2` is fine.
+
+Wiring: `event_store/write/create.rs` validates both names before building the
+config; `event_store/write/update.rs` routes both of its near-identical copies
+of the update logic (`update_event`, async and DB-backed; `apply_update`, pure)
+through one new `apply_sheet_names` helper. The Leptos form checks the same rule
+before submit, in the established toast style, so the organiser is told which
+field is wrong without a round trip — the server 400 already surfaced as a toast,
+but without naming the field.
+
+`worker/tests/sheet_name_validation.rs` pins it: behaviour through
+`apply_update`, plus two source scans — that both copies call
+`apply_sheet_names`, and that neither assigns a tab name from the request
+directly (the shape that was there before, and the one that gets reintroduced by
+copying a neighbouring field's line). Mutation-tested by restoring the old
+assignment in `apply_update`: all seven tests fail and both scans name the file
+and line. Reverted after.
+
+Six unit tests in `sheet_name.rs` cover the shipped defaults, legal-but-unusual
+names (`Attendee List`, `Bob's tab`, `ผู้เข้าร่วม`, `2026`, `a:b`), the rejected
+set, the character-vs-byte cap, and control characters.
+
+Gates: `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -D
+warnings`, `cargo test --workspace`, the wasm release build, plus
+`frontend-leptos` clippy on `wasm32-unknown-unknown` and its own `cargo test`
+(the crate is outside the workspace).
+
+## 7. Not done
+
+- **`worker/src/state.rs` still hardcodes** `"Attendees"` / `"staff"` /
+  `"Contacts"` / `"Events"` as env-var fallbacks. Deliberately left: those are
+  platform deployment config, not organiser input, and two of the four names
+  have no constant to share.
+- **`update.rs` holds two near-identical copies of the whole update path**
+  (`update_event` and `apply_update`) — `escrow_transition_contract.rs` pins the
+  same duplication for escrow transitions. The tab names now route through one
+  helper, but every other field is still duplicated. Its own task.
+- **Existing events are not migrated.** An event stored with an illegal tab name
+  before this keeps it; validation only fires on write. No such event is known
+  to exist, and a migration would have to guess a replacement name.
 - **Not verified against the live API.** The quoting rule is implemented from
   Google's A1 grammar and unit-tested; no request with a spaced tab name has
   been made against a real spreadsheet. That needs an owner with a sheet.
