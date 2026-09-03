@@ -196,7 +196,7 @@ yes/no to — without it, "reviewed" means nothing and the checkbox is theatre.
 | 30s CPU overrun | streaming + chain-depth cap + async queue (Q15/Q16/Q18) | Medium | The chain-depth cap's actual number and what the user sees when it trips. | _tbd_ |
 | Lands before SIWS | pinned after Plan 006 (Q23) | Medium | Plan 006's status at ratification. This is a sequencing gate, not a code change — it either holds or the plan slips. | _tbd_ |
 | No audit trail | D1 audit table day one (Q21) | High | The table schema and retention, and that the row is written **before** the tool result returns, so a crash cannot lose it. | _tbd_ |
-| Reads stale (CSV) | tools use Plan 008 JOIN path (Q5) | Medium | That no tool reads the Sheets/CSV path. | _tbd_ |
+| Reads stale (CSV) | aggregate tools use the Plan 008 JOIN path (Q5); `get_attendee` / `list_attendees` stay Sheet-latency reads and may not ground a mutation | Medium | That no tool reads the denormalized `contacts.events_joined` CSV column, and that the two Sheet-reading Bucket R tools are read-only — never the basis for a Bucket M/D call. | _tbd_ |
 | D1 hammering | reuse `EVENTS` KV TTL (Q17) | Medium | The TTL value, and whether it suits an agent's read pattern (bursty, repeated) rather than a page load's. | _tbd_ |
 
 ### 6.1 Mitigation review — 2026-08-21, against `develop` @ `446b6d8`
@@ -271,13 +271,16 @@ paths. Rewriting them to read D1 would change behaviour for the live admin UI an
 check-in flow, and depends on an unanswered question — whether D1 is authoritative
 for attendees or a lagging mirror of the Sheet.
 
-**Therefore R9's mitigation needs one word changed at ratification.** It currently
-reads *"tools use Plan 008 JOIN path"*, which is not achievable for these two
-tools as written. The honest mitigation is: **prefer D1-backed aggregate tools
-(`list_attendees` → counts via `audience_aggregate` / `dashboard/live`) and treat
-`get_attendee` / `list_attendees` as Sheet-latency reads** — acceptable for an
-agent answering questions, not acceptable as the basis for a mutation. Whoever
-owns this row should confirm that wording.
+**R9's mitigation wording has been corrected in §6 (2026-09-04).** It previously
+read *"tools use Plan 008 JOIN path"*, which is not achievable for these two
+tools as written. The register row now says: **aggregate tools use the Plan 008
+JOIN path (counts via `audience_aggregate` / `dashboard/live`); `get_attendee` /
+`list_attendees` stay Sheet-latency reads and may not ground a mutation** —
+acceptable for an agent answering questions, not acceptable as the basis for a
+Bucket M/D call. The ratification question was narrowed to match: no tool may
+read the denormalized `contacts.events_joined` CSV column, and the two
+Sheet-reading Bucket R tools must stay read-only. Whoever owns this row still
+confirms the wording; only the unachievable claim was removed.
 
 **Why the owners are still `_tbd_`.** Asked directly on 2026-08-20; the answer was
 that the owners aren't known yet. Inventing names would make the Definition of
@@ -301,8 +304,9 @@ that is a call for the plan's owner, not for this document to assume.
       2026-08-20 (§6, §6.1). Outcome: R7's sequencing gate is cleared, R8 is
       already built, R3 has a shipped precedent, and **R9 was audited 2026-08-21
       (§6.2) — one real stale-read defect found and fixed in `9388ddf`**. Six
-      rows remain design-only, and R9's mitigation wording needs a correction at
-      ratification (see §6.2).
+      rows remain design-only. R9's mitigation wording was corrected in the
+      register on 2026-09-04 (see §6.2) — the unachievable "no tool reads the
+      Sheets path" claim is gone; the owner still confirms the replacement.
 - [ ] Risk register **owners** assigned (§6). *Blocked on one input only: who owns
       each row. Asked 2026-08-20 and again 2026-08-21; still unknown. Split from
       the review item above so the completed half is not hidden behind the
