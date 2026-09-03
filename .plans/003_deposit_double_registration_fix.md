@@ -182,16 +182,17 @@ EXISTS` so it is safe to apply on already-deployed DBs.
 
 ## §7 — The webhook path never got the guards (2026-09-04, `bd33825`)
 
-**The deferral above was the defect.** Two entry points can set
-`DepositStatus::verified = true`:
+**The deferral above was the defect — and it named both paths that were
+missing the guards.** Three entry points could set `DepositStatus::verified = true`:
 
-| | read path | webhook path |
-|---|---|---|
-| entry | `recover_and_verify_deposit` (`recover.rs`) | `verify_and_confirm_deposit` (`confirm.rs`) |
-| reached from | `/public/ticket` and friends | `POST /api/deposit/usdc/webhook`, detached via `wait_until` |
-| signer cross-check | ✅ | ✅ |
-| **F1** — on-chain `AttendeeDeposit` PDA | ✅ | ❌ |
-| **Guard 2** — `binding_conflict` | ✅ | ❌ |
+| | read path | webhook path | polling endpoint |
+|---|---|---|---|
+| entry | `recover_and_verify_deposit` (`recover.rs`) | `verify_and_confirm_deposit` (`confirm.rs`) | `confirm_deposit_handler` (`handlers/confirm.rs`) |
+| reached from | `/public/ticket` and friends | `POST /api/deposit/usdc/webhook`, detached via `wait_until` | `GET /api/deposit/usdc/confirm`, polled by the frontend |
+| signer cross-check | ✅ | ✅ | ✅ |
+| **F1** — on-chain `AttendeeDeposit` PDA | ✅ | ❌ | ❌ |
+| **Guard 2** — `binding_conflict` | ✅ | ❌ | ❌ |
+| discovery rate-limit cooldown | ✅ | n/a | ❌ |
 
 The deferral rested on "already enforce the wallet→attendee link via
 `get_deposit_status_with_fallback` + signer cross-check." Both halves are false:
@@ -248,6 +249,33 @@ three ways — restoring the pre-fix `confirm.rs` verbatim, deleting the
 verified-clobber guard, and restoring the raw-header log each turn it red.
 Source restored, all gates green (`fmt`, `clippy -D warnings`, 530 workspace
 tests, wasm32 release build).
+
+### The polling endpoint — the third copy (`e8fc217`)
+
+`confirm_deposit_handler` was ~270 lines duplicating `recover.rs` end to end:
+PDA discovery in the no-signature arm, signer cross-check, `verified = true`,
+D1 dual-write, detached sheet write, QR auto-gen, and a blocking fallback for
+tests. Same two guards missing. The route requires identity (the VULN-004 fix)
+but never binds the caller to `query.attendee_id`, so any signed-in attendee
+could drive it on anyone's behalf — and it is the endpoint the frontend
+actually polls in a loop, while it was the only one of the three *without* the
+read path's `DISCOVERY_COOLDOWN_SECS` rate limit on `getSignaturesForAddress`.
+
+Now ~100 lines: load the config and the record, hand both to
+`recover_and_verify_deposit`, map the returned status onto
+`ConfirmDepositResponse`. Every observable response is preserved — verified,
+pending-with-signature, and the Solana Pay retry URL when nothing is recorded or
+discoverable. "Not yet confirmed", "RPC error" and "a guard refused" all collapse
+to the same pending response, which is what the endpoint already did and the only
+thing the frontend can act on. **Net −331 lines across the two fixes.**
+
+**The re-exports were narrowed to match.** `usdc/mod.rs` no longer exports
+`verify_tx_with_signer`, `VerifyWithSignerOutcome` or
+`discover_deposit_tx_on_chain` — clippy flagged all three as unused the moment
+the last duplicate went away, which is the collapse proving itself. They are now
+private to the module, so **restoring either pre-fix handler verbatim no longer
+compiles**. That is a stronger guard than a test; `deposit_verify_guard.rs` (7
+tests) covers the shapes that still would, and was mutation-tested against one.
 
 ### Still open
 
