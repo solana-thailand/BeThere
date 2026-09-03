@@ -100,14 +100,41 @@ fn format_usdc(micro: u64) -> String {
 
 /// The public registration URL for an event.
 ///
-/// Prefers `claim_base_url` (the organizer-configured base). Falls back to a
-/// `/e/{slug}` path relative to the site root so the social post always has a
-/// clickable link even when `claim_base_url` is empty.
+/// This string is pasted into tweets and emails, so it has to be absolute and
+/// it has to point at a page a stranger can register on. In order:
+///
+///   1. `event.link` — the organizer's external event page, when they set one.
+///   2. The origin of `claim_base_url` + `/e/{slug}` — our own public event
+///      page. `claim_base_url` is a *claim* endpoint (`{base}/{claim_token}`,
+///      see `handlers/walkin.rs`), so only its origin is reusable; emitting it
+///      verbatim sent readers to a token-gated claim page.
+///   3. `/e/{slug}` — root-relative last resort. Not clickable off-site, but
+///      there is no origin to be had.
 fn registration_url(event: &EventConfig) -> String {
-    if !event.claim_base_url.is_empty() {
-        event.claim_base_url.clone()
-    } else {
-        format!("/e/{}", event.slug)
+    let path = format!("/e/{}", event.slug);
+
+    match event.link.trim() {
+        "" => match origin_of(&event.claim_base_url) {
+            Some(origin) => format!("{origin}{path}"),
+            None => path,
+        },
+        link => link.to_string(),
+    }
+}
+
+/// Scheme + authority of an absolute URL (`https://host:port`), or `None` if
+/// the input is not an absolute `http(s)` URL.
+fn origin_of(url: &str) -> Option<&str> {
+    let scheme_end = url.find("://")? + 3;
+    if !url.starts_with("http://") && !url.starts_with("https://") {
+        return None;
+    }
+    let authority_len = url[scheme_end..]
+        .find('/')
+        .unwrap_or(url.len() - scheme_end);
+    match authority_len {
+        0 => None,
+        n => Some(&url[..scheme_end + n]),
     }
 }
 
@@ -435,6 +462,46 @@ mod tests {
             "expected slug fallback in blurb: {}",
             pack.short_blurb
         );
+    }
+
+    #[test]
+    fn registration_url_uses_claim_origin_not_the_claim_path() {
+        // `claim_base_url` is `{origin}/claim` — the token-gated claim page.
+        // The PR pack must borrow its origin and point at the event page.
+        let pack = generate(&sample_event());
+        assert!(
+            pack.short_blurb
+                .contains("https://bethere.example/e/solana-bangkok-2025"),
+            "expected absolute event-page URL in blurb: {}",
+            pack.short_blurb
+        );
+        assert!(
+            !pack.short_blurb.contains("bethere.example/claim"),
+            "must not send readers to the claim page: {}",
+            pack.short_blurb
+        );
+    }
+
+    #[test]
+    fn registration_url_prefers_the_organizers_external_link() {
+        let mut e = sample_event();
+        e.link = "https://lu.ma/solana-bangkok".into();
+        let pack = generate(&e);
+        assert!(
+            pack.short_blurb.contains("https://lu.ma/solana-bangkok"),
+            "expected the organizer link to win: {}",
+            pack.short_blurb
+        );
+    }
+
+    #[test]
+    fn origin_of_rejects_non_absolute_urls() {
+        assert_eq!(origin_of("https://a.test/claim"), Some("https://a.test"));
+        assert_eq!(origin_of("http://a.test:8787"), Some("http://a.test:8787"));
+        assert_eq!(origin_of("/claim"), None);
+        assert_eq!(origin_of("ftp://a.test/x"), None);
+        assert_eq!(origin_of(""), None);
+        assert_eq!(origin_of("https:///claim"), None);
     }
 
     #[test]
