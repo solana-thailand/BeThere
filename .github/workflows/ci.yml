@@ -78,7 +78,7 @@ jobs:
         run: cargo build -p event-checkin-worker --target wasm32-unknown-unknown --locked --release
 
   frontend-clippy:
-    name: frontend wasm32 clippy
+    name: frontend wasm32 clippy + native tests
     runs-on: ubuntu-latest
     timeout-minutes: 15
     # `frontend-leptos` is EXCLUDED from the cargo workspace (see root Cargo.toml),
@@ -86,8 +86,12 @@ jobs:
     # regresses clippy) only surfaced at `deploy.sh` build time. This job clippy-checks
     # the frontend for its real ship target (wasm32); clippy also compiles, so it
     # subsumes a plain `cargo check` and enforces the -D warnings policy.
-    # The frontend's tests are #[wasm_bindgen_test] (run under wasm-pack, not
-    # `cargo test`), so they are not run here.
+    # The frontend also carries native (non-wasm) tests — notably the SSOT mirror
+    # audit in `tests/`, which guards the frontend's mirror types against domain
+    # drift. Clippy compiles but never runs them, and the crate is outside the
+    # workspace, so `cargo test` here is the only thing that executes them; a
+    # module split once broke that audit and nothing in CI noticed. The
+    # #[wasm_bindgen_test] cases still need wasm-pack and stay out of scope.
     defaults:
       run:
         working-directory: frontend-leptos
@@ -107,6 +111,11 @@ jobs:
 
       - name: cargo clippy (frontend, wasm32, -D warnings)
         run: cargo clippy --locked --target wasm32-unknown-unknown -- -D warnings
+
+      - name: cargo test (frontend, host target)
+        # Host target on purpose: these are plain #[test] cases, and the wasm32
+        # target has no test runner on the runner box.
+        run: cargo test --locked
 
   e2e:
     name: playwright e2e (SPA served by the worker)
