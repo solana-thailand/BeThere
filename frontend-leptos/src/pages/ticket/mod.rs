@@ -2,6 +2,7 @@ pub mod access_logistics;
 pub mod action_cards;
 pub mod calendar_links;
 pub mod community_links;
+pub mod credit_chip;
 pub mod event_context;
 pub mod hero;
 pub mod in_person_view;

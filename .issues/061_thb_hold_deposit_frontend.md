@@ -105,8 +105,14 @@ Hold gets a confirm step because cash stays with the organizer. Refund stays the
 - [x] `frontend-leptos/src/pages/ticket/in_person_view.rs` — insert `<HoldDepositCard />` in the
       deposit-action branch when: `dep.verified && !dep.refunded && is_checked_in && method == Thb`
       (passes `already_held=dep.held_as_credit` so reload mounts in `AlreadyHeld`)
-- [ ] (Optional polish) Credit chip on ticket page that fetches `get_credit_balance()` on mount
-      when `is_checked_in` — shows "Deposit Credit: 500 THB" if balance > 0.
+- [x] **Credit chip on ticket page** — `pages/ticket/credit_chip.rs` (`CreditBalanceChip`)
+      fetches `get_credit_balance()` on mount, gated on `is_checked_in`, and renders the
+      balance above the deposit action cards ("Deposit Credit — 500 THB / Auto-applied to
+      your next registration"). Renders **nothing** when the balance is zero or the read
+      fails, so attendees without credit see no change and a broken read never implies zero.
+      The shared `credit_balance_label()` helper scales USDC out of its 6-decimal smallest
+      unit (`15_000_000` → `15.00 USDC`) and is reused by `HoldDepositCard`'s `Confirmed`
+      arm, which previously printed the raw integer. 4 native unit tests cover the helper.
 
 **Backend hardening landed alongside Phase 1 (commit `b5ee048`):** the double-credit gap in
 `hold_deposit_handler` is resolved via a distinct `held_as_credit` flag on `ThbDeposit`
@@ -226,9 +232,11 @@ around L236-L290. Current branch order:
    ever happens (Issue #029).
 2. **No exit path until Phase 3** — without D3, "hold forever" feels like a trap. Phase 3 should
    land in the same release window as Phase 1/2 even if minimal.
-3. **USDC `RolloverActionCard` only checks `rollover_target_event` presence** — if backend ever
-   returns a target for THB attendees, the USDC card would wrongly render. Confirm backend
-   only sets `rollover_target_event` for USDC deposits.
+3. ~~**USDC `RolloverActionCard` only checks `rollover_target_event` presence** — if backend ever
+   returns a target for THB attendees, the USDC card would wrongly render.~~ **CONFIRMED SAFE**
+   (2026-09-04) — `worker/src/handlers/attendee/read.rs` computes the target behind
+   `is_usdc_verified = d.verified && d.method == DepositMethod::Usdc`, so a THB attendee always
+   gets `rollover_target_event: null` and the card never mounts. No code change needed.
 
 ---
 

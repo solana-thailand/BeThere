@@ -13642,6 +13642,76 @@ a.ticket-series-card:hover {
     color: var(--danger);
 }
 
+/* Hold-as-credit action card (Issue #061) — success-tinted, distinguishing the
+   "keep your money with us" path from the info-tinted refund guidance above it.
+   The modifier was referenced by HoldDepositCard before it had a rule, so the
+   card silently fell back to the neutral accent base. */
+.ticket-action-card--hold {
+    border-left-color: var(--success);
+    background: linear-gradient(
+        135deg,
+        var(--success-bg) 0%,
+        var(--bg-card) 100%
+    );
+}
+.ticket-action-card--hold .ticket-action-btn {
+    background: var(--success);
+}
+.ticket-action-card--hold .ticket-action-btn:hover {
+    opacity: 0.85;
+}
+
+/* Credit-return request card (Issue #061 Phase 3 exit path) — warning-tinted:
+   it moves money back out, the counterpart to the success-tinted hold. */
+.ticket-action-card--credit-refund {
+    border-left-color: var(--warning);
+    background: linear-gradient(
+        135deg,
+        var(--warning-bg) 0%,
+        var(--bg-card) 100%
+    );
+}
+.ticket-action-card--credit-refund .ticket-action-btn {
+    background: var(--warning);
+}
+.ticket-action-card--credit-refund .ticket-action-btn:hover {
+    opacity: 0.85;
+}
+
+/* Rolling deposit-credit chip (Issue #061) — a one-line balance readout above
+   the ticket action cards. Deliberately lighter than a card: it is a status
+   readout, not an action, and it is absent entirely when the balance is zero. */
+.ticket-credit-chip {
+    max-width: 420px;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    padding: 0.5rem 0.75rem;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--success);
+    background: var(--success-bg);
+    font-size: 0.8rem;
+}
+.ticket-credit-chip .icon-sm {
+    color: var(--success);
+    flex-shrink: 0;
+}
+.ticket-credit-chip-label {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+.ticket-credit-chip-value {
+    font-weight: 700;
+    color: var(--success);
+}
+.ticket-credit-chip-hint {
+    flex-basis: 100%;
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+}
+
 /* ===== dep-choose inline style extractions (choose_payment.rs) ===== */
 
 /* dep-info-note with bottom spacing — extends dep-info-note */
