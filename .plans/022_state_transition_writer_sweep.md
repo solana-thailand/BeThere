@@ -1,6 +1,10 @@
 # 022 — Sweep every writer of a state transition before trusting a guard
 
-**Status:** in progress. Seven transitions swept (four needed a fix, `claimed_at` was already clean); the rest listed below are unswept. `checked_in_at` was swept twice — the second pass (§2b) collapsed the copied gate into a single writer and closed two more defects the copy had left behind.
+**Status:** every transition identified for this plan has been swept — eight in
+total. Five needed a fix; `claimed_at`, `approval_status` and `escrow_status` were
+already clean (the last two picked up a writer-set guard anyway). `checked_in_at`
+was swept twice: the second pass (§2b) collapsed the copied gate into a single
+writer and closed two more defects the copy had left behind.
 
 ## Why this plan exists
 
@@ -297,9 +301,49 @@ call site; red.
 - `reconcile` (`lib.rs:195`, the scheduled job) was not re-read as part of this
   sweep.
 
+## §7 — `escrow_status` (swept, clean, guard added in the same commit)
+
+The event-level escrow lifecycle already had a behavioural contract test
+(`worker/tests/escrow_transition_contract.rs`, plan 014 §2.4) pinning the five
+legal transitions, the twenty illegal ones and the exact error format. What it did
+**not** pin is the set of writers — and every event write persists a whole
+`EventConfig` through `save_event_config` / the D1 `upsert_event`, so a handler
+that loads a config, assigns the field and saves would bypass the allowlist while
+keeping all thirteen existing tests green.
+
+Swept anyway:
+
+| writer | verdict |
+|---|---|
+| `event_store::apply_update` | the allowlist itself — the only assignment in `worker/src` |
+| `event_store::update_event` | loads → `apply_update` → persists; the two copies were already collapsed |
+| escrow-init confirmation (`escrow/status.rs`) | builds an `UpdateEventRequest`, goes through `update_event` |
+| `PUT /events/{id}` (`handlers/events/update.rs`) | same; its two `escrow_status` mentions are `==` comparisons for an audit-log entry |
+| `write/create.rs`, `write/seed.rs`, `duplicate.rs` | hard-code `EscrowStatus::None` in a struct literal — not a transition |
+| Events tab column K (`sheets/events_tab.rs`) | **write-only** from the worker; the only reader is a super-admin listing endpoint, and no path imports the cell back into a config |
+| `db/events.rs` upsert | `escrow_status = excluded.escrow_status` — persistence of whatever the caller already validated |
+
+**No divergence found; no behaviour changed.** A third layer was added to the
+contract test: it walks `worker/src` and fails on any `.escrow_status =`
+assignment outside `event_store/write/update.rs`. Mutation-tested by adding one in
+`handlers/events/recap.rs`; red.
+
+### Noted, not changed
+
+- Re-initialising an escrow to a *different* address while the event is still
+  `Initialized` is rejected by the allowlist (self-transitions are illegal), so
+  `confirm_escrow_init` returns a 500 "failed to persist escrow state" rather than
+  a clear error. Fail-closed, and the documented recovery is `Closed → None` first.
+- The contract test's module header still describes "two copies in write.rs" in
+  places, and the file it reads moved to `event_store/write/update.rs` in the #052
+  split. The assertions are current (they require exactly one copy); only the prose
+  lags.
+
 ## Transitions not yet swept
-- `escrow` state transitions (`escrow_transition_contract.rs` covers the wire
-  shape, not the set of writers). **The only one left.**
+
+None. Every transition identified at the start of this plan has been swept.
+New ones should be added here as they appear — the procedure above is the
+deliverable, not the list.
 
 ## DoD
 
@@ -314,5 +358,6 @@ call site; red.
 - [x] `approval_status` swept — clean; Sheets is the only editing surface and
       every unrecognised value fails closed.
 - [x] credit balance swept; the two contact-scoped paths no longer guess the org.
-- [ ] `escrow` state transitions swept — the last one.
+- [x] `escrow` state transitions swept — clean; a writer-set guard now backs the
+      existing allowlist contract.
 - [ ] Nothing here is deployed; this branch is unpushed.

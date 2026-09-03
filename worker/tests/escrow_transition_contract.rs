@@ -449,3 +449,73 @@ mod self_tests {
         );
     }
 }
+
+// ---------------------------------------------------------------------------
+// Layer 3 — writer-set guard (plan 022 §7)
+// ---------------------------------------------------------------------------
+
+/// The allowlist only protects the transition if `apply_update` is the *only*
+/// place that assigns `escrow_status`. Every event write ultimately persists a
+/// whole `EventConfig` (`save_event_config` / the D1 `upsert_event`), so a
+/// handler that loads a config, mutates the field and saves would bypass the
+/// allowlist entirely while compiling and passing every test above — the
+/// recurring defect shape plan 022 exists for.
+///
+/// Today the only assignment is in `apply_update`; the creation paths
+/// (`write/create.rs`, `write/seed.rs`, `duplicate.rs`) hard-code
+/// `EscrowStatus::None` in a struct literal, which cannot be a transition.
+#[test]
+fn apply_update_is_the_only_writer_of_escrow_status() {
+    const LICENSED: &str = "src/event_store/write/update.rs";
+
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let mut offenders = Vec::new();
+    walk(&root.join("src"), &mut |path, contents| {
+        let rel = path
+            .strip_prefix(root)
+            .unwrap_or(path)
+            .to_string_lossy()
+            .replace('\\', "/");
+        if rel == LICENSED {
+            return;
+        }
+        for line in contents.lines() {
+            let l = line.trim_start();
+            // `==` is a comparison, not a write; the SQL `escrow_status =
+            // excluded.escrow_status` has no leading dot on the left-hand side.
+            if l.starts_with("//") {
+                continue;
+            }
+            if let Some(rest) = l.split(".escrow_status =").nth(1)
+                && !rest.starts_with('=')
+            {
+                offenders.push(format!("{rel}: {}", l.trim()));
+            }
+        }
+    });
+
+    assert!(
+        offenders.is_empty(),
+        "these sites assign `escrow_status` outside `apply_update`, so they \
+         bypass the 5-transition allowlist while still persisting through \
+         `save_event_config` / `upsert_event`: {offenders:?}"
+    );
+}
+
+fn walk(dir: &Path, f: &mut impl FnMut(&Path, &str)) {
+    for entry in std::fs::read_dir(dir)
+        .expect("worker/src must be readable")
+        .flatten()
+    {
+        let path = entry.path();
+        match path.is_dir() {
+            true => walk(&path, f),
+            false if path.extension().is_some_and(|e| e == "rs") => {
+                let contents =
+                    std::fs::read_to_string(&path).expect("source file must be readable");
+                f(&path, &contents);
+            }
+            false => {}
+        }
+    }
+}
