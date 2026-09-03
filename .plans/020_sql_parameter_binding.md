@@ -627,7 +627,8 @@ followed by a lock the attendee could not clear for the rest of its 300-second
 TTL.
 
 Same shape as the finalize fix: hold the error, do the KV delete, return the
-error afterwards. The DO branch already warned-and-continued; the D1 branch now
+error afterwards. The DO branch already warned-and-continued *on a `success:
+false` response* (but not on a transport failure — see §10); the D1 branch now
 warns *and* still returns the error, because both callers use `let _ =` and
 silently dropping it would be a second swallow.
 
@@ -679,3 +680,73 @@ fifth instance of this bug class exists in the codebase.**
   literals; a column list assembled at runtime is not checked. None exist today.
 - **Only the first statement per literal is read** — the scan stops at the
   closing quote or the first `;`.
+
+
+## 10. The third instance of the same defect — `73d1eed` (2026-09-04)
+
+§8 fixed `finalize_claim_lock`'s D1 branch and §9 fixed `release_claim_lock`'s.
+Both DO branches still carried the defect, one level up: the *response* was
+handled (`resp.success == false` → warn or carry the error past the KV write),
+but the *transport* was not. Both did
+
+```rust
+let resp = do_rpc(namespace, event_id, DoRequest::…).await?;
+```
+
+so an `id_from_name` / `get_stub` / `fetch` / parse failure returned early and
+skipped the KV write immediately below — under the same comments promising it
+would always happen.
+
+| Path | Harm when the DO RPC fails in transport |
+|---|---|
+| `finalize_claim_lock` | KV never gets `asset_id`/`signature`, so the attendee loses the proof link the claim and attendee read paths render — exactly what the existing comment says must not happen |
+| `release_claim_lock` | KV lock survives, stranding the attendee behind their own lock for the rest of its 300-second TTL |
+
+### Fix
+
+A new `do_rpc_err(namespace, event_id, request, fallback) -> Option<String>`
+flattens both failure modes into one optional error the caller carries *past*
+the mandatory KV write. Both cleanup paths use it; the release DO branch now
+also returns that error rather than always `Ok(())`, matching its D1 branch.
+
+`acquire_claim_lock` deliberately keeps `do_rpc(..).await?`. There a DO failure
+*must* abort — handing out a lock that was never durably recorded is the worse
+bug — so the exemption is asserted, not assumed.
+
+### Latency
+
+Not live: DO bindings are currently unbound in production (the PUT API deploy
+fallback rejects them, `10021`), so `event_do` is `None` and both paths take the
+D1 branch. Fixed because the branch is one binding away from being live.
+
+### Guard — `worker/tests/claim_lock_cleanup_guard.rs` (3 tests)
+
+Source scan over `claim/lock.rs`:
+
+1. `finalize_claim_lock` and `release_claim_lock` must route through
+   `do_rpc_err` and must contain no bare `do_rpc(` call.
+2. `acquire_claim_lock` must still contain `do_rpc(` *and* `.await?`, so the
+   exemption cannot be "fixed" away by a future sweep.
+3. `do_rpc_err` must map both `Err(e)` and `resp.success == false` into the
+   returned `Option`.
+
+**Mutation-tested against real source:** restoring the pre-fix
+`let resp = do_rpc(…).await?;` in `release_claim_lock` — a form that still
+compiles — turns test 1 red with
+*"release_claim_lock no longer routes its DO call through `do_rpc_err`"*. The
+file was restored afterwards (`git diff -- src` clean).
+
+### Gates
+
+`cargo fmt --all -- --check` · `cargo clippy --workspace --all-targets -D warnings` ·
+`cargo test --workspace` (0 failures) ·
+`cargo build -p event-checkin-worker --target wasm32-unknown-unknown --release`.
+
+### Conclusion on this defect class
+
+All three call sites in `claim/lock.rs` are now closed at both the response and
+transport levels, and the fourth (`acquire`) is exempt by design and pinned by a
+test. No other cleanup path in `worker/src` was found with the shape — the sweep
+covered every comment promising unconditional follow-through (`Always `,
+`even if`, `regardless`, `best-effort`, `cleanup`); `db/advisory_locks.rs` has
+the shape's ingredients but is `#[allow(dead_code)]` with no callers.
