@@ -37,6 +37,14 @@ jobs:
           printf '<!DOCTYPE html><html><head><title>ci-stub</title></head><body></body></html>\n' \
             > frontend-leptos/dist/index.html
 
+      - name: cargo fmt --check (workspace)
+        # The tree was brought fully rustfmt-clean; this keeps it that way rather
+        # than letting drift accumulate into another repo-wide reformat commit.
+        # Scoped to the workspace: frontend-leptos is excluded from it, and rustfmt
+        # hard-errors on whitespace-only lines inside Leptos `view!` macros, which
+        # would make a --check gate there fail on formatting it cannot itself fix.
+        run: cargo fmt --all -- --check
+
       - name: cargo check (workspace)
         run: cargo check --workspace --locked --all-targets
 
