@@ -175,10 +175,15 @@ pub fn generate(event: &EventConfig) -> PrPack {
     };
 
     // ── social_post (Twitter/X-shaped, ≤280 chars when possible) ─────────
-    let mut social_post = format!(
-        "🗓️ {} — {} @ {}\n{}\n{}",
-        event.name, date, location, event.tagline, reg_url
-    );
+    // An empty tagline must not leave a blank line in the middle of the post —
+    // the tagline line is omitted, not rendered empty.
+    let mut social_post = match event.tagline.is_empty() {
+        true => format!("🗓️ {} — {} @ {}\n{}", event.name, date, location, reg_url),
+        false => format!(
+            "🗓️ {} — {} @ {}\n{}\n{}",
+            event.name, date, location, event.tagline, reg_url
+        ),
+    };
     if social_post.chars().count() > 280 {
         // Trim the tagline to fit. Recompute without the tagline line so the
         // essentials (name, date, location, link) always survive.
@@ -221,16 +226,29 @@ pub fn generate(event: &EventConfig) -> PrPack {
     let deposit_terms = if !event.deposit_enabled {
         "No deposit required — free registration.".to_string()
     } else {
-        let mut terms = format!(
-            "A deposit is required to secure your spot: {}",
-            format_usdc(event.deposit_amount_usdc)
-        );
-        if event.deposit_amount_thb > 0 {
-            terms.push_str(&format!(
-                " (or {} THB via PromptPay)",
+        // Production events are THB-only (`deposit_amount_usdc == 0`), so the
+        // amount clause is chosen by which currencies are actually set. Emitting
+        // `format_usdc(0)` unconditionally produced "a deposit is required to
+        // secure your spot: $0 (or 500 THB via PromptPay)" — which reads as
+        // "this event is free" on every real deposit event.
+        let usdc = event.deposit_amount_usdc > 0;
+        let thb = event.deposit_amount_thb > 0;
+        let amount = match (usdc, thb) {
+            (true, true) => format!(
+                " {} (or {} THB via PromptPay)",
+                format_usdc(event.deposit_amount_usdc),
                 event.deposit_amount_thb
-            ));
-        }
+            ),
+            (true, false) => format!(" {}", format_usdc(event.deposit_amount_usdc)),
+            (false, true) => format!(" {} THB via PromptPay", event.deposit_amount_thb),
+            // Deposits enabled with no amount set is a misconfiguration; state
+            // the requirement without inventing a price.
+            (false, false) => String::new(),
+        };
+        let mut terms = match amount.is_empty() {
+            true => "A deposit is required to secure your spot".to_string(),
+            false => format!("A deposit is required to secure your spot:{amount}"),
+        };
         terms.push_str(&format!(
             ". Fully refunded within {} hours after the event",
             event.refund_deadline_hours
@@ -426,6 +444,68 @@ mod tests {
             "expected cap in: {}",
             pack.deposit_terms
         );
+    }
+
+    /// Production events are THB-only. `format_usdc(0)` used to be emitted
+    /// unconditionally, so every real deposit event's PR pack advertised
+    /// "A deposit is required to secure your spot: $0 (or 500 THB …)".
+    #[test]
+    fn deposit_terms_omit_usdc_when_the_event_is_thb_only() {
+        let mut event = sample_event();
+        event.deposit_amount_usdc = 0;
+        let pack = generate(&event);
+        assert!(
+            !pack.deposit_terms.contains('$'),
+            "a THB-only event must not quote a dollar amount: {}",
+            pack.deposit_terms
+        );
+        assert!(
+            pack.deposit_terms.contains("spot: 500 THB via PromptPay"),
+            "expected a bare THB amount in: {}",
+            pack.deposit_terms
+        );
+        assert!(pack.deposit_terms.contains("168 hours"));
+    }
+
+    /// A USDC-only event must not carry an empty PromptPay parenthetical.
+    #[test]
+    fn deposit_terms_omit_thb_when_the_event_is_usdc_only() {
+        let mut event = sample_event();
+        event.deposit_amount_thb = 0;
+        let pack = generate(&event);
+        assert!(pack.deposit_terms.contains("spot: $15."));
+        assert!(!pack.deposit_terms.contains("PromptPay"));
+    }
+
+    /// Deposits enabled with no amount configured is a misconfiguration; the
+    /// copy states the requirement rather than inventing a price of $0.
+    #[test]
+    fn deposit_terms_quote_no_price_when_no_amount_is_set() {
+        let mut event = sample_event();
+        event.deposit_amount_usdc = 0;
+        event.deposit_amount_thb = 0;
+        let pack = generate(&event);
+        assert!(
+            pack.deposit_terms
+                .starts_with("A deposit is required to secure your spot."),
+            "unexpected copy: {}",
+            pack.deposit_terms
+        );
+        assert!(!pack.deposit_terms.contains('$'));
+    }
+
+    /// An empty tagline must not leave a blank line mid-post.
+    #[test]
+    fn social_post_has_no_blank_line_without_a_tagline() {
+        let mut event = sample_event();
+        event.tagline = String::new();
+        let pack = generate(&event);
+        assert!(
+            !pack.social_post.contains("\n\n"),
+            "blank line in: {:?}",
+            pack.social_post
+        );
+        assert_eq!(pack.social_post.lines().count(), 2);
     }
 
     #[test]
