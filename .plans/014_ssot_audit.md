@@ -526,10 +526,11 @@ the defensive-deserialization pattern and passes. The reverse — domain
 `Option<T>`, mirror `T` — is flagged, because the field can legitimately be
 absent and the mirror would then fail to deserialize at runtime.
 
-**19 struct pairs are audited**, covering `PublicEventData`, `EventDetail`,
+**24 struct pairs are audited**, covering `PublicEventData`, `EventDetail`,
 `EventMeta`, `CommunityLink`, the four `api/types.rs` response mirrors, the
-create/update request bodies, the summary/recap payloads, and both the public
-and admin form-config mirrors. Every pair carries a `min_shared_fields` floor:
+create/update request bodies, the summary/recap payloads, both the public and
+admin form-config mirrors, the quiz and adventure config mirrors, `PrPack`, and
+`PublicRecapFunnel`. Every pair carries a `min_shared_fields` floor:
 the guard's realistic silent-death mode is a rename on one side dropping the
 shared-field set to zero while the type comparison keeps passing vacuously, and
 the floor turns that into a failure.

@@ -215,6 +215,41 @@ const MIRROR_STRUCT_PAIRS: &[MirrorPair] = &[
         domain_struct: "RegistrationFormConfig",
         min_shared_fields: 2,
     },
+    MirrorPair {
+        frontend_file: "src/api/admin.rs",
+        frontend_struct: "QuizQuestionAdmin",
+        domain_file: "domain/src/models/api.rs",
+        domain_struct: "QuizQuestion",
+        min_shared_fields: 3,
+    },
+    MirrorPair {
+        frontend_file: "src/api/admin.rs",
+        frontend_struct: "QuizConfigAdmin",
+        domain_file: "domain/src/models/api.rs",
+        domain_struct: "QuizConfig",
+        min_shared_fields: 2,
+    },
+    MirrorPair {
+        frontend_file: "src/api/admin.rs",
+        frontend_struct: "AdventureConfigData",
+        domain_file: "domain/src/models/adventure.rs",
+        domain_struct: "AdventureConfig",
+        min_shared_fields: 2,
+    },
+    MirrorPair {
+        frontend_file: "src/api/event/pr_pack.rs",
+        frontend_struct: "PrPack",
+        domain_file: "domain/src/pr_pack.rs",
+        domain_struct: "PrPack",
+        min_shared_fields: 2,
+    },
+    MirrorPair {
+        frontend_file: "src/api/event/recap.rs",
+        frontend_struct: "PublicRecapFunnel",
+        domain_file: "domain/src/models/event_summary.rs",
+        domain_struct: "FunnelSnapshot",
+        min_shared_fields: 2,
+    },
 ];
 
 /// A scalar type divergence that is INTENTIONAL. Every entry must carry a
