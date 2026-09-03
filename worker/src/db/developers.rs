@@ -448,11 +448,17 @@ pub(crate) async fn developer_count(db: &D1Database) -> Result<i64, String> {
 
 /// Clear PII for a developer profile (PDPA right to erasure).
 /// Keeps the row but blanks all identifying fields.
+///
+/// `company_org` and `location_city` are `TEXT NOT NULL DEFAULT ''`, so they are
+/// blanked rather than nulled. Setting them to NULL aborted the whole statement
+/// on a NOT NULL constraint, and `handlers::privacy` only logs that error — so
+/// the erasure silently cleared nothing at all, including `display_name` and the
+/// social handles.
 pub(crate) async fn clear_developer_pii(db: &D1Database, email: &str) -> Result<(), String> {
     let sql = "UPDATE developer_profiles SET \
          display_name = '[DELETED]', wallet_address = NULL, \
          github_handle = NULL, discord_handle = NULL, twitter_handle = NULL, \
-         company_org = NULL, location_city = NULL, \
+         company_org = '', location_city = '', \
          updated_at = datetime('now') \
          WHERE LOWER(email) = ?";
     db.prepare(sql)

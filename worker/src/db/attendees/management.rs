@@ -97,10 +97,15 @@ pub(crate) async fn get_attendees_by_email(
 /// Keeps the row but blanks: name, email, contact_channel, contact_handle,
 /// checked_in_by, deposit_verified_by, refund_marked_by, refund_link,
 /// bank_name, bank_account_number, bank_account_name, claim_token, qr_url.
+///
+/// `contact_channel` and `contact_handle` are `TEXT NOT NULL DEFAULT ''`, so
+/// they are blanked rather than nulled. Setting them to NULL aborted the whole
+/// statement on a NOT NULL constraint, and `handlers::privacy` only logs that
+/// error — so the erasure silently cleared nothing, name and email included.
 pub(crate) async fn clear_attendee_pii(db: &D1Database, attendee_id: &str) -> Result<(), String> {
     let sql = "UPDATE attendees SET \
          name = '[DELETED]', email = '[DELETED]:' || id, \
-         contact_channel = NULL, contact_handle = NULL, \
+         contact_channel = '', contact_handle = '', \
          checked_in_by = NULL, \
          claim_token = NULL, qr_url = NULL, \
          bank_name = NULL, bank_account_number = NULL, bank_account_name = NULL, \
