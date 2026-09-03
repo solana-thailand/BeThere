@@ -94,8 +94,45 @@
   **No backend file over 1024 lines remains** (verified 2026-09-04: the largest are
   `handlers/deposit/usdc/handlers.rs` at 1021, `bethere-escrow/src/tests/close.rs` at 976 and
   `db/event_summaries.rs` at 968).
-- [ ] Phase 3: Frontend splits (landing, quiz_editor)
-- [ ] Phase 5: Hard frontend (scanner, claim, event_form, admin)
+- [x] Phase 3: Frontend splits — **`pages/landing.rs` ✅** (1255 → `landing/`: auth/waitlist/upcoming/
+  registrations/page) and **`pages/quiz_editor.rs` ✅** (1240 → `quiz_editor/`: helpers/editor/preview).
+- [~] Phase 5: Hard frontend — done so far, all **verbatim** (concatenated submodules diffed against the
+  pre-split file; the only differences are removed section banners, `pub(super)` visibility widenings, and
+  import re-qualification forced by the extra module level):
+  - **`api/event.rs` ✅** 1406 → `event/`: enums/types/crud/summary/recap/pr_pack/post_event (largest 421).
+    `super::types::CommunityLink` → `crate::api::types::CommunityLink` (same type, deeper module).
+  - **`pages/claim.rs` ✅** 2060 → `claim/`: interop/state/helpers/stepper/widgets/quiz_helpers/quiz_views/page.
+  - **`pages/scanner.rs` ✅** 2109 → `scanner/`: interop/state/logic/views/page.
+  - **`pages/adventure/levels.rs` ✅** 1197 → `levels/`: basics/advanced/registry/config (byte-identical).
+  - **`pages/deposit/handlers.rs` ✅** 1060 → `handlers/`: wallet/send/polling/qr/slip/refund/close.
+  - **`pages/escrow_init.rs` ✅** 1183 → `escrow_init/`: wallet/state/panel (largest 967).
+
+  Verified with the real CI gates: `cargo clippy --workspace --locked --all-targets -- -D warnings`,
+  481 workspace tests, `cargo build -p event-checkin-worker --target wasm32-unknown-unknown --release`,
+  and `cargo clippy --locked --target wasm32-unknown-unknown -- -D warnings` in `frontend-leptos`.
+
+### Phase 5 remainder — blocked on a structural limit, not on effort
+
+Every file still over 1024 lines is **one Leptos component whose single `view!` macro is the bulk**.
+A contiguous, verbatim move cannot split a `view!` block, so these cannot be brought under the guideline
+by the mechanical technique used above:
+
+| File | Lines | Component starts | `view!` starts | Residual after pulling out all non-component code |
+|---|---|---|---|---|
+| `pages/event_form.rs` | 2291 | 334 | 794 | ~1960 |
+| `pages/admin.rs` | 2280 | 195 | 892 | ~2086 |
+| `pages/campaigns_page.rs` | 1866 | 216 | 892 | ~1651 |
+| `pages/adventure/page.rs` | 1408 | 26 | 582 | ~1383 |
+| `pages/admin_deposit.rs` | 1168 | 40 | 430 | ~1129 |
+
+Three already-split files also keep a component over the line for the same reason:
+`scanner/page.rs` (1269), `claim/page.rs` (1061), `quiz_editor/editor.rs` (1013 — just under).
+`adventure/tests/playtest.rs` (1048) is a test file and was left alone.
+
+Closing these requires **extracting real sub-components with props** — a behaviour-affecting refactor that
+changes reactivity boundaries, not a move. The frontend has ~0 native tests (`#[wasm_bindgen_test]` only),
+so `-D warnings` clippy is the only automated check; correctness would have to be confirmed in a browser.
+**Recommend treating that as its own owner-gated task rather than folding it into this issue.**
 
 > **Note (2026-07-28):** the file inventory above is stale — the tree now has ~21 files >1024 lines
 > (several new since this issue, e.g. `handlers/deposit/usdc/mod.rs`, `db/attendees.rs`,
