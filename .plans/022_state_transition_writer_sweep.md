@@ -1,6 +1,6 @@
 # 022 — Sweep every writer of a state transition before trusting a guard
 
-**Status:** in progress. Five transitions swept (four needed a fix, `claimed_at` was already clean); the rest listed below are unswept.
+**Status:** in progress. Five transitions swept (four needed a fix, `claimed_at` was already clean); the rest listed below are unswept. `checked_in_at` was swept twice — the second pass (§2b) collapsed the copied gate into a single writer and closed two more defects the copy had left behind.
 
 ## Why this plan exists
 
@@ -79,21 +79,48 @@ decision about the other). Shape pinned by `worker/tests/virtual_checkin_guard.r
 `checkin.rs` restored to the hand-rolled copy, and the domain gate stripped of its
 approval check. Each turned it red.
 
-The fourth guard test asserts `claim/mint/execute.rs` still *lacks* an approval
-check — the premise the other three protect. If that changes, the guards should be
-re-derived deliberately rather than left asserting a stale assumption.
+### §2b — the follow-up: one writer instead of two (`e33b2c5`)
 
-### Still open on this transition
+`e628759` copied the gate into `quest_complete_checkin`. Step 3 of the sweep says
+to prefer collapsing over copying, and the two remaining "still open" items on
+this transition were both consequences of the copy, so the two self-serve paths
+were collapsed into one writer:
 
-- `quest_complete_checkin`'s doc comment claims it "verifies … the required levels
-  are completed in D1". It does not — it fetches the config and checks only
-  `enabled`. Harmless today (the claim gate catches it) but the comment is wrong
-  and the endpoint hands out a `checked_in_at` for an unstarted adventure, which
-  inflates attendance. Fixing it means calling `get_adventure_status` here too;
-  left out of `e628759` to keep that commit to the security defect.
-- `claim/mint/execute.rs`'s auto check-in writes the in-memory struct and Sheets
-  but **not D1**, unlike the other two writers, which write D1 first because
-  my-registration reads D1-first. Suspected dual-write gap; not yet traced.
+**`worker/src/virtual_checkin.rs` — `commit_virtual_check_in`.** It owns both
+event/attendee gates (online track, `can_check_in_virtually`), writes D1
+synchronously, then mirrors to Sheets via `wait_until`. `handlers/adventure.rs`
+and `claim/mint/execute.rs` call it and nothing else. The staff scan is
+deliberately *not* a caller: it writes `checked_in_by = <staff email>` plus a
+claim token, a different transition, and runs the same domain gate directly.
+
+Three defects closed by the collapse:
+
+1. **The claim path now runs the approval gate.** It previously did not — it read
+   a set `checked_in_at` as proof one had run. That transitive trust is what
+   `quest_complete_checkin` broke, and it is now unnecessary: the gate is in the
+   writer, so it cannot be reached without it. The guard test that pinned the old
+   premise ("`execute.rs` still lacks an approval check") was rewritten rather
+   than left asserting a stale assumption, as it asked to be.
+2. **The claim path now writes D1.** It set the in-memory struct and the Sheet
+   only; `my-registration` reads D1-first, so an online attendee auto-checked-in
+   by the claim flow still saw "not checked in" until the next sync.
+3. **`quest_complete_checkin` now verifies the adventure.** It checked only
+   `config.enabled` while its doc comment promised the required levels were
+   verified in D1. It now requires `AdventureStatus::Passed` (progress is keyed by
+   claim token, so an unresolvable token denies). Minting was never at risk — the
+   claim gate re-verifies — but `checked_in_at` is the attendance signal the
+   dashboards, `db/event_summaries.rs` and the plan 008 recap count, so an
+   unstarted adventure must not set it.
+
+`worker/tests/virtual_checkin_guard.rs` (5 tests) pins the new shape: the shared
+writer gates before it writes; both self-serve paths delegate and call
+`check_in_attendee` nowhere themselves; the adventure status is read before the
+commit; the staff branch still shares the domain gate. The fifth **walks
+`worker/src` and fails on any file outside the three licensed ones that writes the
+virtual check-in columns** — it catches a *fourth* writer, not just a regression
+of the two known ones. Mutation-tested four ways: the write inlined again in
+`execute.rs`, the gate moved after the write in `virtual_checkin.rs`, the
+adventure status check deleted, and a new unlicensed writer added. Each red.
 
 ## §3 — THB `refunded` / `held_as_credit` (swept, fixed in `186d057`)
 
@@ -186,6 +213,9 @@ brought into line by the claim-lock work (plan 020 §10). **No change made.**
 ## DoD
 
 - [x] `checked_in_at` swept; divergence fixed and guarded.
+- [x] `checked_in_at` re-swept — the two self-serve writers collapsed into
+      `virtual_checkin::commit_virtual_check_in`; no "still open" items remain
+      on this transition.
 - [x] THB `refunded` / `held_as_credit` swept; blanket writer defanged and guarded.
 - [x] `claimed_at` swept — clean, both writers already share the claim lock.
 - [x] `verified` (USDC deposit) swept — plan 003 §7.
