@@ -159,8 +159,14 @@ async fn fetch(
 /// event configs) based on retention policy defined in `cleanup.rs`.
 #[event(scheduled)]
 async fn scheduled(_event: worker::ScheduledEvent, env: Env, _ctx: worker::ScheduleContext) {
-    console_error_panic_hook::set_once();
-    tracing_wasm::set_as_global_default();
+    // Same `OnceLock` guard as `fetch`: `tracing_wasm::set_as_global_default()`
+    // panics with `SetGlobalDefaultError` if a dispatcher is already installed.
+    // The cron and the fetch handler share an isolate, so an unguarded call here
+    // aborted the whole cleanup run on any isolate that had served a request.
+    let _ = LOG_INITIALIZED.get_or_init(|| {
+        console_error_panic_hook::set_once();
+        tracing_wasm::set_as_global_default();
+    });
 
     // Seed the escrow cluster in this isolate too — the cron path does not build AppState,
     // so any escrow read from a future scheduled job would otherwise default to devnet.
