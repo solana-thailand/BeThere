@@ -305,11 +305,12 @@ pub fn ImageLightbox(
         if !visible.get() {
             return;
         }
-        let cleanup = window_event_listener(leptos::ev::keydown, move |ev: web_sys::KeyboardEvent| {
-            if ev.key() == "Escape" {
-                set_visible.set(false);
-            }
-        });
+        let cleanup =
+            window_event_listener(leptos::ev::keydown, move |ev: web_sys::KeyboardEvent| {
+                if ev.key() == "Escape" {
+                    set_visible.set(false);
+                }
+            });
         on_cleanup(move || drop(cleanup));
     });
 

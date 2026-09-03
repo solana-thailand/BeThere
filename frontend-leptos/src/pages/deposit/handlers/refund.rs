@@ -2,14 +2,11 @@
 
 use leptos::prelude::*;
 
-use crate::api::{
-    self, RefundTxRequest,
-};
+use crate::api::{self, RefundTxRequest};
 use crate::components::{self as app_components, ToastType};
 
 use crate::pages::deposit::js_interop;
 use crate::pages::deposit::types::*;
-
 
 // ---------------------------------------------------------------------------
 // Refund: connect wallet
@@ -147,25 +144,23 @@ pub fn make_claim_refund(
 
             // SEC-014
             let expected_cluster = crate::utils::get_cluster();
-            if let Err(cluster_err) =
-                crate::pages::escrow_init::check_wallet_cluster(&wallet_name_for_tx, &expected_cluster).await
+            if let Err(cluster_err) = crate::pages::escrow_init::check_wallet_cluster(
+                &wallet_name_for_tx,
+                &expected_cluster,
+            )
+            .await
             {
                 log::error!("[deposit] cluster mismatch (refund): {cluster_err}");
                 app_components::show_toast(&set_toast, &cluster_err, ToastType::Error);
                 return;
             }
 
-            match crate::pages::escrow_init::simulate_transaction_js(
-                &wallet_name_for_tx,
-                &tx_b64,
-            )
-            .await
+            match crate::pages::escrow_init::simulate_transaction_js(&wallet_name_for_tx, &tx_b64)
+                .await
             {
                 Ok(sim) if sim.ok => {}
                 Ok(sim) => {
-                    let err_msg = sim
-                        .error
-                        .unwrap_or_else(|| "Simulation failed".to_string());
+                    let err_msg = sim.error.unwrap_or_else(|| "Simulation failed".to_string());
                     log::error!("[deposit] refund simulation failed: {err_msg}");
                     app_components::show_toast(
                         &set_toast,

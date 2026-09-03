@@ -434,9 +434,7 @@ pub struct RefundedListResponse {
 }
 
 /// GET /api/refund/refunded?event_id=xxx
-pub async fn get_refunded_list(
-    event_id: Option<&str>,
-) -> Result<RefundedListResponse, ApiError> {
+pub async fn get_refunded_list(event_id: Option<&str>) -> Result<RefundedListResponse, ApiError> {
     let path = match event_id {
         Some(eid) if !eid.is_empty() => format!("/refund/refunded?event_id={eid}"),
         _ => "/refund/refunded".to_string(),
@@ -653,12 +651,16 @@ pub async fn build_refund_tx(body: &RefundTxRequest) -> Result<RefundTxResponse,
 }
 
 /// POST /api/escrow/mark-checked-in — mark attendee checked in
-pub async fn mark_checked_in(body: &MarkCheckedInRequest) -> Result<MarkCheckedInResponse, ApiError> {
+pub async fn mark_checked_in(
+    body: &MarkCheckedInRequest,
+) -> Result<MarkCheckedInResponse, ApiError> {
     api_post_json("/escrow/mark-checked-in", body).await
 }
 
 /// POST /api/escrow/deactivate-event — build deactivate_event TX
-pub async fn deactivate_event(body: &DeactivateEventRequest) -> Result<DeactivateEventResponse, ApiError> {
+pub async fn deactivate_event(
+    body: &DeactivateEventRequest,
+) -> Result<DeactivateEventResponse, ApiError> {
     api_post_json("/escrow/deactivate-event", body).await
 }
 
@@ -673,7 +675,9 @@ pub async fn close_deposit(body: &CloseDepositRequest) -> Result<CloseDepositRes
 }
 
 /// POST /api/escrow/claim-forfeited — build claim_forfeited TX
-pub async fn claim_forfeited(body: &ClaimForfeitedRequest) -> Result<ClaimForfeitedResponse, ApiError> {
+pub async fn claim_forfeited(
+    body: &ClaimForfeitedRequest,
+) -> Result<ClaimForfeitedResponse, ApiError> {
     api_post_json("/escrow/claim-forfeited", body).await
 }
 
@@ -702,7 +706,9 @@ pub struct RolloverDepositResponse {
 }
 
 /// POST /api/escrow/rollover-deposit — build rollover_deposit TX
-pub async fn rollover_deposit(body: &RolloverDepositRequest) -> Result<RolloverDepositResponse, ApiError> {
+pub async fn rollover_deposit(
+    body: &RolloverDepositRequest,
+) -> Result<RolloverDepositResponse, ApiError> {
     api_post_json("/escrow/rollover-deposit", body).await
 }
 

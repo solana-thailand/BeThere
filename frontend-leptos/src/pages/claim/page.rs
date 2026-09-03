@@ -4,9 +4,7 @@ use leptos::prelude::*;
 use leptos_meta::Title;
 use leptos_router::hooks::use_params;
 
-use crate::api::{
-    self, AdventureStatusType, QuizStatus,
-};
+use crate::api::{self, AdventureStatusType, QuizStatus};
 use crate::icons::{Icon, IconName, wallet_icon_name};
 use crate::utils::{escape_html, orb_nft_url};
 
@@ -35,7 +33,8 @@ pub fn Claim() -> impl IntoView {
     let (wallet_input, set_wallet_input) = signal(String::new());
 
     // Quiz state — selected answer text per question (question_id → option text)
-    let (quiz_answers, set_quiz_answers): (ReadSignal<QuizAnswers>, WriteSignal<QuizAnswers>) = signal(QuizAnswers::new());
+    let (quiz_answers, set_quiz_answers): (ReadSignal<QuizAnswers>, WriteSignal<QuizAnswers>) =
+        signal(QuizAnswers::new());
 
     // Dynamic event config (fetched from backend, replaces hardcoded values)
     let (evt_name, set_evt_name) = signal(String::new());
@@ -175,26 +174,34 @@ pub fn Claim() -> impl IntoView {
                         let claim_data_for_adventure = data.clone();
                         let token_for_adventure = token.clone();
                         leptos::task::spawn_local(async move {
-                            match api::get_adventure_status(&token_for_adventure, Some(&claim_data_for_adventure.event_id)).await {
-                                Ok(status_data) => {
-                                    match status_data.status {
-                                        AdventureStatusType::NotRequired => {
-                                            set_state.set(ClaimState::Ready(claim_data_for_adventure));
-                                        }
-                                        AdventureStatusType::Passed => {
-                                            set_state.set(ClaimState::Ready(claim_data_for_adventure));
-                                        }
-                                        AdventureStatusType::NotStarted | AdventureStatusType::InProgress => {
-                                            log::info!("[claim] adventure required but not passed, showing adventure gate");
-                                            set_state.set(ClaimState::Adventure(
-                                                claim_data_for_adventure,
-                                                status_data.status,
-                                            ));
-                                        }
+                            match api::get_adventure_status(
+                                &token_for_adventure,
+                                Some(&claim_data_for_adventure.event_id),
+                            )
+                            .await
+                            {
+                                Ok(status_data) => match status_data.status {
+                                    AdventureStatusType::NotRequired => {
+                                        set_state.set(ClaimState::Ready(claim_data_for_adventure));
                                     }
-                                }
+                                    AdventureStatusType::Passed => {
+                                        set_state.set(ClaimState::Ready(claim_data_for_adventure));
+                                    }
+                                    AdventureStatusType::NotStarted
+                                    | AdventureStatusType::InProgress => {
+                                        log::info!(
+                                            "[claim] adventure required but not passed, showing adventure gate"
+                                        );
+                                        set_state.set(ClaimState::Adventure(
+                                            claim_data_for_adventure,
+                                            status_data.status,
+                                        ));
+                                    }
+                                },
                                 Err(e) => {
-                                    log::warn!("[claim] failed to check adventure status: {e}, proceeding to Ready");
+                                    log::warn!(
+                                        "[claim] failed to check adventure status: {e}, proceeding to Ready"
+                                    );
                                     // Fallback to Ready so attendee isn't stuck
                                     set_state.set(ClaimState::Ready(claim_data_for_adventure));
                                 }
@@ -244,7 +251,11 @@ pub fn Claim() -> impl IntoView {
         let current_data_clone = current_data.clone();
         leptos::task::spawn_local(async move {
             let start = js_sys::Date::now();
-            let arg = if use_linked { None } else { Some(wallet.as_str()) };
+            let arg = if use_linked {
+                None
+            } else {
+                Some(wallet.as_str())
+            };
             let result = api::post_claim(&token, arg, use_linked).await;
             // Ensure spinner displays for at least 1.5s for smooth UX
             let elapsed = js_sys::Date::now() - start;

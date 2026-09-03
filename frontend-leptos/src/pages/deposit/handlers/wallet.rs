@@ -7,7 +7,6 @@ use crate::components::{self as app_components, ToastType};
 use crate::pages::deposit::js_interop;
 use crate::pages::deposit::types::*;
 
-
 // ---------------------------------------------------------------------------
 // Connect wallet (deposit flow)
 // ---------------------------------------------------------------------------

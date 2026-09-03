@@ -2,8 +2,8 @@
 
 use serde::Deserialize;
 
-use super::types::{ApiError, ApiResponse};
 use super::fetch::response_json;
+use super::types::{ApiError, ApiResponse};
 
 /// Response from POST /api/privacy/delete-request
 #[derive(Debug, Clone, Deserialize, Default)]

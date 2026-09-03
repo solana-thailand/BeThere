@@ -2,7 +2,6 @@
 
 use leptos::prelude::*;
 
-
 use super::helpers::*;
 
 // ---------------------------------------------------------------------------
@@ -25,9 +24,12 @@ pub(super) fn HeartsWidget() -> impl IntoView {
 
         // Remove heart after animation (3 seconds)
         let set_h = set_hearts;
-        set_timeout(move || {
-            set_h.update(|h| h.retain(|&x| x != id));
-        }, std::time::Duration::from_secs(3));
+        set_timeout(
+            move || {
+                set_h.update(|h| h.retain(|&x| x != id));
+            },
+            std::time::Duration::from_secs(3),
+        );
     };
 
     view! {
@@ -123,9 +125,12 @@ pub(super) fn ParticipantAvatar(name: String) -> impl IntoView {
 
     let grid = build_face_grid(eye_style, mouth_style, has_blush);
 
-    let svg_cells = grid.iter().enumerate().flat_map(|(row, cells)| {
-        let fc = face_color.clone();
-        cells.iter().enumerate().filter_map(move |(col, &cell)| {
+    let svg_cells = grid
+        .iter()
+        .enumerate()
+        .flat_map(|(row, cells)| {
+            let fc = face_color.clone();
+            cells.iter().enumerate().filter_map(move |(col, &cell)| {
             if cell == 0 { return None; }
             let color = match cell {
                 1 => fc.clone(),
@@ -141,7 +146,9 @@ pub(super) fn ParticipantAvatar(name: String) -> impl IntoView {
                 color = color
             ))
         }).collect::<Vec<_>>()
-    }).collect::<Vec<_>>().join("");
+        })
+        .collect::<Vec<_>>()
+        .join("");
 
     view! {
         <div class="participant-avatar-pixel" style=format!("background:{bg_color};")>
@@ -188,30 +195,65 @@ pub(super) fn NftBadgePreview() -> impl IntoView {
 /// Build an 8x8 face grid with symmetric features.
 pub(super) fn build_face_grid(eye_style: u32, mouth_style: u32, has_blush: bool) -> [[u8; 8]; 8] {
     let mut grid: [[u8; 8]; 8] = [
-        [0,0,1,1,1,1,0,0],
-        [0,1,1,1,1,1,1,0],
-        [1,1,1,1,1,1,1,1],
-        [1,1,1,1,1,1,1,1],
-        [1,1,1,1,1,1,1,1],
-        [1,1,1,1,1,1,1,1],
-        [0,1,1,1,1,1,1,0],
-        [0,0,1,1,1,1,0,0],
+        [0, 0, 1, 1, 1, 1, 0, 0],
+        [0, 1, 1, 1, 1, 1, 1, 0],
+        [1, 1, 1, 1, 1, 1, 1, 1],
+        [1, 1, 1, 1, 1, 1, 1, 1],
+        [1, 1, 1, 1, 1, 1, 1, 1],
+        [1, 1, 1, 1, 1, 1, 1, 1],
+        [0, 1, 1, 1, 1, 1, 1, 0],
+        [0, 0, 1, 1, 1, 1, 0, 0],
     ];
 
     // Eyes (symmetric)
     match eye_style {
-        0 => { grid[3][2] = 2; grid[3][5] = 2; }           // dot eyes
-        1 => { grid[2][2] = 2; grid[2][5] = 2; grid[3][2] = 2; grid[3][5] = 2; } // tall eyes
-        2 => { grid[3][2] = 2; grid[3][3] = 2; grid[3][4] = 2; grid[3][5] = 2; } // wide eyes
-        _ => { grid[2][2] = 2; grid[3][3] = 2; grid[2][5] = 2; grid[3][4] = 2; } // anime eyes
+        0 => {
+            grid[3][2] = 2;
+            grid[3][5] = 2;
+        } // dot eyes
+        1 => {
+            grid[2][2] = 2;
+            grid[2][5] = 2;
+            grid[3][2] = 2;
+            grid[3][5] = 2;
+        } // tall eyes
+        2 => {
+            grid[3][2] = 2;
+            grid[3][3] = 2;
+            grid[3][4] = 2;
+            grid[3][5] = 2;
+        } // wide eyes
+        _ => {
+            grid[2][2] = 2;
+            grid[3][3] = 2;
+            grid[2][5] = 2;
+            grid[3][4] = 2;
+        } // anime eyes
     }
 
     // Mouth (centered)
     match mouth_style {
-        0 => { grid[5][3] = 3; grid[5][4] = 3; }           // small smile
-        1 => { grid[5][2] = 3; grid[5][3] = 3; grid[5][4] = 3; grid[5][5] = 3; } // wide smile
-        2 => { grid[5][3] = 3; grid[5][4] = 3; grid[6][3] = 3; grid[6][4] = 3; } // open mouth
-        _ => { grid[4][4] = 3; grid[5][3] = 3; grid[5][4] = 3; } // smirk
+        0 => {
+            grid[5][3] = 3;
+            grid[5][4] = 3;
+        } // small smile
+        1 => {
+            grid[5][2] = 3;
+            grid[5][3] = 3;
+            grid[5][4] = 3;
+            grid[5][5] = 3;
+        } // wide smile
+        2 => {
+            grid[5][3] = 3;
+            grid[5][4] = 3;
+            grid[6][3] = 3;
+            grid[6][4] = 3;
+        } // open mouth
+        _ => {
+            grid[4][4] = 3;
+            grid[5][3] = 3;
+            grid[5][4] = 3;
+        } // smirk
     }
 
     // Blush

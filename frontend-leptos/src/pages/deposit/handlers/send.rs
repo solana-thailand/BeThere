@@ -2,14 +2,11 @@
 
 use leptos::prelude::*;
 
-use crate::api::{
-    self, UsdcDepositRequest,
-};
+use crate::api::{self, UsdcDepositRequest};
 use crate::components::{self as app_components, ToastType};
 
 use crate::pages::deposit::js_interop;
 use crate::pages::deposit::types::*;
-
 
 // ---------------------------------------------------------------------------
 // Send deposit TX
@@ -80,25 +77,23 @@ pub fn make_send_deposit(
 
             // SEC-014: Verify wallet cluster matches expected network
             let expected_cluster = crate::utils::get_cluster();
-            if let Err(cluster_err) =
-                crate::pages::escrow_init::check_wallet_cluster(&wallet_name_for_tx, &expected_cluster).await
+            if let Err(cluster_err) = crate::pages::escrow_init::check_wallet_cluster(
+                &wallet_name_for_tx,
+                &expected_cluster,
+            )
+            .await
             {
                 log::error!("[deposit] cluster mismatch: {cluster_err}");
                 app_components::show_toast(&set_toast, &cluster_err, ToastType::Error);
                 return;
             }
 
-            match crate::pages::escrow_init::simulate_transaction_js(
-                &wallet_name_for_tx,
-                &tx_b64,
-            )
-            .await
+            match crate::pages::escrow_init::simulate_transaction_js(&wallet_name_for_tx, &tx_b64)
+                .await
             {
                 Ok(sim) if sim.ok => {}
                 Ok(sim) => {
-                    let err_msg = sim
-                        .error
-                        .unwrap_or_else(|| "Simulation failed".to_string());
+                    let err_msg = sim.error.unwrap_or_else(|| "Simulation failed".to_string());
                     log::error!("[deposit] simulation failed: {err_msg}");
                     app_components::show_toast(
                         &set_toast,

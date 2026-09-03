@@ -299,8 +299,7 @@ pub fn Admin() -> impl IntoView {
     // — the modal opens itself, pre-fills the field, then clears the signal.
     // Owned here (not inside AdminDeposits) so the Attendees section can
     // write it even while AdminDeposits is unmounted.
-    let (pending_record_slip_attendee, set_pending_record_slip_attendee) =
-        signal(None::<String>);
+    let (pending_record_slip_attendee, set_pending_record_slip_attendee) = signal(None::<String>);
 
     // Load events list on mount
     Effect::new(move |_| {
@@ -309,7 +308,10 @@ pub fn Admin() -> impl IntoView {
             match api::list_events().await {
                 Ok(data) => {
                     // Auto-select first active event
-                    let active = data.events.iter().find(|e| e.status == api::EventStatus::Active);
+                    let active = data
+                        .events
+                        .iter()
+                        .find(|e| e.status == api::EventStatus::Active);
                     if let Some(e) = active {
                         set_active_event_id.set(Some(e.id.clone()));
                     }
@@ -436,16 +438,48 @@ pub fn Admin() -> impl IntoView {
             move |ev: web_sys::KeyboardEvent| {
                 if ev.alt_key() {
                     match ev.key().as_str() {
-                        "1" => { ev.prevent_default(); set_active_section.set(AdminSection::Events); }
-                        "2" => { ev.prevent_default(); set_active_section.set(AdminSection::Campaigns); }
-                        "3" => { ev.prevent_default(); set_active_section.set(AdminSection::Quiz); }
-                        "4" => { ev.prevent_default(); set_active_section.set(AdminSection::FormBuilder); }
-                        "5" => { ev.prevent_default(); set_active_section.set(AdminSection::Adventure); }
-                        "6" => { ev.prevent_default(); set_active_section.set(AdminSection::Attendance); set_active_tab.set(DashboardTab::InPerson); }
-                        "7" => { ev.prevent_default(); set_active_section.set(AdminSection::Attendance); set_active_tab.set(DashboardTab::Online); }
-                        "8" => { ev.prevent_default(); set_active_section.set(AdminSection::Deposits); }
-                        "9" => { ev.prevent_default(); set_active_section.set(AdminSection::Escrow); }
-                        "0" => { ev.prevent_default(); set_active_section.set(AdminSection::Cancellation); }
+                        "1" => {
+                            ev.prevent_default();
+                            set_active_section.set(AdminSection::Events);
+                        }
+                        "2" => {
+                            ev.prevent_default();
+                            set_active_section.set(AdminSection::Campaigns);
+                        }
+                        "3" => {
+                            ev.prevent_default();
+                            set_active_section.set(AdminSection::Quiz);
+                        }
+                        "4" => {
+                            ev.prevent_default();
+                            set_active_section.set(AdminSection::FormBuilder);
+                        }
+                        "5" => {
+                            ev.prevent_default();
+                            set_active_section.set(AdminSection::Adventure);
+                        }
+                        "6" => {
+                            ev.prevent_default();
+                            set_active_section.set(AdminSection::Attendance);
+                            set_active_tab.set(DashboardTab::InPerson);
+                        }
+                        "7" => {
+                            ev.prevent_default();
+                            set_active_section.set(AdminSection::Attendance);
+                            set_active_tab.set(DashboardTab::Online);
+                        }
+                        "8" => {
+                            ev.prevent_default();
+                            set_active_section.set(AdminSection::Deposits);
+                        }
+                        "9" => {
+                            ev.prevent_default();
+                            set_active_section.set(AdminSection::Escrow);
+                        }
+                        "0" => {
+                            ev.prevent_default();
+                            set_active_section.set(AdminSection::Cancellation);
+                        }
                         _ => {}
                     }
                 }
@@ -453,7 +487,8 @@ pub fn Admin() -> impl IntoView {
         );
         let window = web_sys::window().expect("no window");
         use wasm_bindgen::JsCast;
-        let _ = window.add_event_listener_with_callback("keydown", handler.as_ref().unchecked_ref());
+        let _ =
+            window.add_event_listener_with_callback("keydown", handler.as_ref().unchecked_ref());
         handler.forget();
     });
 
@@ -855,7 +890,9 @@ pub fn Admin() -> impl IntoView {
                     } else {
                         format!(
                             "Synced {} of {} walk-ins ({} errors)",
-                            data.synced, data.total_walkins, data.errors.len()
+                            data.synced,
+                            data.total_walkins,
+                            data.errors.len()
                         )
                     };
                     let toast_type = if data.errors.is_empty() {
@@ -2172,7 +2209,7 @@ fn render_qr_result(data: &Option<GenerateQrData>) -> AnyView {
                     </div>
                 </div>
             }
-                .into_any()
+            .into_any()
         }
         None => view! { <div></div> }.into_any(),
     }
@@ -2223,7 +2260,7 @@ fn render_recent_check_ins(
                         </div>
                     </div>
                 }
-                    .into_any();
+                .into_any();
             }
 
             view! {

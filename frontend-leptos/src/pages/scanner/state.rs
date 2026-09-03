@@ -1,8 +1,6 @@
 //! Check-in state types.
 
-
 use crate::api::{AttendeeData, CheckInData};
-
 
 // ===== State Types =====
 
@@ -45,9 +43,7 @@ pub(super) enum CheckInState {
         public_key: String,
     },
     /// On-chain TX being signed/sent.
-    EscrowSigning {
-        wallet_name: String,
-    },
+    EscrowSigning { wallet_name: String },
     /// On-chain check-in confirmed.
     EscrowConfirmed {
         check_in_data: Box<CheckInData>,
@@ -64,10 +60,7 @@ pub(super) enum CheckInState {
     /// Walk-in registration request in progress.
     WalkinRegistering,
     /// Walk-in registration succeeded — show claim QR to attendee.
-    WalkinSuccess {
-        claim_url: String,
-        name: String,
-    },
+    WalkinSuccess { claim_url: String, name: String },
     /// Walk-in capacity reached — show warning dialog with override option.
     WalkinCapacityWarning {
         pending_name: String,

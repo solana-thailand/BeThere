@@ -1,8 +1,5 @@
 //! Escrow init state machine and form fields.
 
-
-
-
 // ===== State Machine =====
 
 /// State machine for the escrow lifecycle (init → deactivate → close).
@@ -16,9 +13,7 @@ pub enum EscrowInitState {
         public_key: String,
     },
     /// Escrow init TX being signed.
-    Initializing {
-        wallet_name: String,
-    },
+    Initializing { wallet_name: String },
     /// Escrow initialized on-chain — can deactivate.
     Done {
         escrow_address: String,
@@ -27,26 +22,18 @@ pub enum EscrowInitState {
         signature: String,
     },
     /// Deactivate TX being signed.
-    Deactivating {
-        wallet_name: String,
-    },
+    Deactivating { wallet_name: String },
     /// Escrow deactivated — vault still exists, can close.
     Deactivated {
         escrow_address: String,
         on_chain_event_id: u64,
     },
     /// Close event TX being signed.
-    Closing {
-        wallet_name: String,
-    },
+    Closing { wallet_name: String },
     /// Escrow closed — rent reclaimed, all on-chain accounts gone.
-    Closed {
-        signature: String,
-    },
+    Closed { signature: String },
     /// Error during any step.
-    Error {
-        message: String,
-    },
+    Error { message: String },
 }
 
 // ===== Form State (mirrors EventForm fields needed) =====

@@ -2,14 +2,11 @@
 
 use leptos::prelude::*;
 
-use crate::api::{
-    self, CloseDepositRequest,
-};
+use crate::api::{self, CloseDepositRequest};
 use crate::components::{self as app_components, ToastType};
 
 use crate::pages::deposit::js_interop;
 use crate::pages::deposit::types::*;
-
 
 // ---------------------------------------------------------------------------
 // Close deposit: connect wallet
@@ -147,25 +144,23 @@ pub fn make_close_deposit(
 
             // SEC-014
             let expected_cluster = crate::utils::get_cluster();
-            if let Err(cluster_err) =
-                crate::pages::escrow_init::check_wallet_cluster(&wallet_name_for_tx, &expected_cluster).await
+            if let Err(cluster_err) = crate::pages::escrow_init::check_wallet_cluster(
+                &wallet_name_for_tx,
+                &expected_cluster,
+            )
+            .await
             {
                 log::error!("[deposit] cluster mismatch (close): {cluster_err}");
                 app_components::show_toast(&set_toast, &cluster_err, ToastType::Error);
                 return;
             }
 
-            match crate::pages::escrow_init::simulate_transaction_js(
-                &wallet_name_for_tx,
-                &tx_b64,
-            )
-            .await
+            match crate::pages::escrow_init::simulate_transaction_js(&wallet_name_for_tx, &tx_b64)
+                .await
             {
                 Ok(sim) if sim.ok => {}
                 Ok(sim) => {
-                    let err_msg = sim
-                        .error
-                        .unwrap_or_else(|| "Simulation failed".to_string());
+                    let err_msg = sim.error.unwrap_or_else(|| "Simulation failed".to_string());
                     log::error!("[deposit] close simulation failed: {err_msg}");
                     app_components::show_toast(
                         &set_toast,
@@ -181,9 +176,7 @@ pub fn make_close_deposit(
 
             match js_interop::sign_and_send_tx(&wallet_name_for_tx, &tx_b64).await {
                 crate::wallet_error::WalletResult::Success(signature) => {
-                    log::info!(
-                        "[deposit] close-deposit TX sent, signature: {signature}",
-                    );
+                    log::info!("[deposit] close-deposit TX sent, signature: {signature}",);
                     set_state.set(DepositPageState::CloseDepositConfirmed(
                         deposit_data,
                         signature,

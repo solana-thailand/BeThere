@@ -2,13 +2,10 @@
 
 use leptos::prelude::*;
 
-use crate::api::{
-    self, UsdcDepositRequest,
-};
+use crate::api::{self, UsdcDepositRequest};
 use crate::components::{self as app_components, ToastType};
 
 use crate::pages::deposit::types::*;
-
 
 // ---------------------------------------------------------------------------
 // Pay USDC via QR

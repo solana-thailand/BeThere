@@ -12,8 +12,8 @@ use crate::components;
 use crate::utils;
 
 use super::event_form::{
-    default_form, form_from_detail, format_date_display, status_badge_class, status_label,
-    EventFormComponent,
+    EventFormComponent, default_form, form_from_detail, format_date_display, status_badge_class,
+    status_label,
 };
 
 // ===== View State =====
@@ -33,8 +33,7 @@ enum EventsView {
 pub fn EventsPage(
     #[prop(name = "set_toast")] set_toast: WriteSignal<Option<components::ToastMessage>>,
     #[prop(name = "active_event_id")] active_event_id: ReadSignal<Option<String>>,
-    #[prop(name = "set_pending_promote_event")]
-    set_pending_promote_event: WriteSignal<
+    #[prop(name = "set_pending_promote_event")] set_pending_promote_event: WriteSignal<
         Option<crate::pages::campaigns_page::PromoteEventPayload>,
     >,
 ) -> impl IntoView {
@@ -72,10 +71,8 @@ pub fn EventsPage(
         );
         let window = web_sys::window().expect("no window");
         use wasm_bindgen::JsCast;
-        let _ = window.add_event_listener_with_callback(
-            "keydown",
-            handler.as_ref().unchecked_ref(),
-        );
+        let _ =
+            window.add_event_listener_with_callback("keydown", handler.as_ref().unchecked_ref());
         handler.forget();
     });
 

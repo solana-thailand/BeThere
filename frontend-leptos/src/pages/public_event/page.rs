@@ -1,6 +1,6 @@
 use super::capacity_indicator::capacity_indicator;
-use super::details_card::details_card;
 use super::deposit_section::deposit_section;
+use super::details_card::details_card;
 use super::event_hero::event_hero;
 use super::registered_state::registered_state;
 use super::registration_form::registration_form;
@@ -81,11 +81,14 @@ pub fn PublicEvent() -> impl IntoView {
                             log::info!("[public_event] body length: {}", body.len());
                             match serde_json::from_str::<PublicEventResponse>(&body) {
                                 Ok(api_resp) => {
-                                    log::info!("[public_event] parsed OK, success={}", api_resp.success);
+                                    log::info!(
+                                        "[public_event] parsed OK, success={}",
+                                        api_resp.success
+                                    );
                                     if api_resp.success {
                                         if let Some(data) = api_resp.data {
-                                            let is_completed =
-                                                data.status == "completed" || data.status == "Completed";
+                                            let is_completed = data.status == "completed"
+                                                || data.status == "Completed";
                                             let start_ms = data.event_start_ms;
                                             let name = data.name.clone();
                                             set_event_name.set(name);
@@ -95,7 +98,8 @@ pub fn PublicEvent() -> impl IntoView {
                                             // Start countdown if event is in the future
                                             let now_ms = js_sys::Date::now() as i64;
                                             if !is_completed && start_ms > now_ms {
-                                                set_countdown.set(format_countdown(start_ms - now_ms));
+                                                set_countdown
+                                                    .set(format_countdown(start_ms - now_ms));
 
                                                 if let Ok(handle) = set_interval_with_handle(
                                                     move || {
@@ -104,7 +108,8 @@ pub fn PublicEvent() -> impl IntoView {
                                                         if remaining <= 0 {
                                                             set_countdown.set(String::new());
                                                         } else {
-                                                            set_countdown.set(format_countdown(remaining));
+                                                            set_countdown
+                                                                .set(format_countdown(remaining));
                                                         }
                                                     },
                                                     std::time::Duration::from_secs(1),
@@ -119,7 +124,9 @@ pub fn PublicEvent() -> impl IntoView {
                                         }
                                     } else {
                                         set_state.set(PublicEventState::Error(
-                                            api_resp.error.unwrap_or_else(|| "Unknown error".to_string()),
+                                            api_resp
+                                                .error
+                                                .unwrap_or_else(|| "Unknown error".to_string()),
                                         ));
                                     }
                                 }
@@ -133,13 +140,17 @@ pub fn PublicEvent() -> impl IntoView {
                         }
                         Err(e) => {
                             log::error!("[public_event] body read error: {e}");
-                            set_state.set(PublicEventState::Error("Failed to read response".to_string()));
+                            set_state.set(PublicEventState::Error(
+                                "Failed to read response".to_string(),
+                            ));
                         }
                     }
                 }
                 Err(e) => {
                     log::error!("[public_event] fetch error: {e}");
-                    set_state.set(PublicEventState::Error(format!("Failed to fetch event: {e}")));
+                    set_state.set(PublicEventState::Error(format!(
+                        "Failed to fetch event: {e}"
+                    )));
                 }
             }
         });
@@ -168,12 +179,18 @@ pub fn PublicEvent() -> impl IntoView {
                             if !email.is_empty() {
                                 log::info!("[public_event] user signed in: {email}");
                                 set_wallet_only.set(
-                                    api_resp.get("data").and_then(|d| d.get("wallet_only"))
-                                        .and_then(|v| v.as_bool()).unwrap_or(false),
+                                    api_resp
+                                        .get("data")
+                                        .and_then(|d| d.get("wallet_only"))
+                                        .and_then(|v| v.as_bool())
+                                        .unwrap_or(false),
                                 );
                                 set_wallet_addr.set(
-                                    api_resp.get("data").and_then(|d| d.get("wallet_address"))
-                                        .and_then(|v| v.as_str()).map(|s| s.to_string()),
+                                    api_resp
+                                        .get("data")
+                                        .and_then(|d| d.get("wallet_address"))
+                                        .and_then(|v| v.as_str())
+                                        .map(|s| s.to_string()),
                                 );
                                 set_auth_state.set(AuthState::SignedIn(email));
                             } else {
@@ -226,8 +243,10 @@ pub fn PublicEvent() -> impl IntoView {
                                     );
                                     set_reg_lookup.set(RegistrationLookup::NotRegistered);
                                 } else if resp.status() == 200 {
-                                    if let Ok(body) = crate::api::fetch::response_text(&resp).await {
-                                        match serde_json::from_str::<MyRegistrationResponse>(&body) {
+                                    if let Ok(body) = crate::api::fetch::response_text(&resp).await
+                                    {
+                                        match serde_json::from_str::<MyRegistrationResponse>(&body)
+                                        {
                                             Ok(api_resp) => {
                                                 if let Some(data) = api_resp.data {
                                                     log::info!(
@@ -236,14 +255,16 @@ pub fn PublicEvent() -> impl IntoView {
                                                     set_reg_lookup
                                                         .set(RegistrationLookup::Registered(data));
                                                 } else {
-                                                    set_reg_lookup.set(RegistrationLookup::NotRegistered);
+                                                    set_reg_lookup
+                                                        .set(RegistrationLookup::NotRegistered);
                                                 }
                                             }
                                             Err(e) => {
                                                 log::warn!(
                                                     "[public_event] my-registration parse error: {e}"
                                                 );
-                                                set_reg_lookup.set(RegistrationLookup::NotRegistered);
+                                                set_reg_lookup
+                                                    .set(RegistrationLookup::NotRegistered);
                                             }
                                         }
                                     } else {
@@ -262,9 +283,8 @@ pub fn PublicEvent() -> impl IntoView {
                             }
                             Err(e) => {
                                 log::warn!("[public_event] my-registration fetch error: {e}");
-                                set_reg_lookup.set(RegistrationLookup::Error(format!(
-                                    "Fetch error: {e}"
-                                )));
+                                set_reg_lookup
+                                    .set(RegistrationLookup::Error(format!("Fetch error: {e}")));
                             }
                         }
                     });
@@ -445,15 +465,14 @@ fn render_loaded_event(
     let has_nft_image = !data.nft_image_url.is_empty();
     let has_description = !data.description.is_empty();
     let has_link = !data.link.is_empty();
-    let has_deposit = data.deposit_enabled
-        && (data.deposit_amount_usdc > 0.0 || data.deposit_amount_thb > 0.0);
+    let has_deposit =
+        data.deposit_enabled && (data.deposit_amount_usdc > 0.0 || data.deposit_amount_thb > 0.0);
     let is_hybrid = data.event_format == crate::api::EventFormat::Hybrid;
     let is_online_only = data.event_format == crate::api::EventFormat::Online;
 
     let escrow_status = data.escrow_status.as_deref().unwrap_or("");
-    let escrow_closed = escrow_status == "closed"
-        || escrow_status == "cancelled"
-        || escrow_status == "deactivated";
+    let escrow_closed =
+        escrow_status == "closed" || escrow_status == "cancelled" || escrow_status == "deactivated";
 
     let name = data.name.clone();
     let tagline = data.tagline.clone();
@@ -509,7 +528,8 @@ fn render_loaded_event(
 
     // Dynamic form field values (Issue #049 Phase 2)
     // Key = field key, Value = serialized value (string for text/select, JSON array for multiselect)
-    let (dynamic_field_values, set_dynamic_field_values) = signal(std::collections::HashMap::<String, String>::new());
+    let (dynamic_field_values, set_dynamic_field_values) =
+        signal(std::collections::HashMap::<String, String>::new());
 
     let slug_for_signin = current_slug.clone();
     let slug_for_reg = data.slug.clone();

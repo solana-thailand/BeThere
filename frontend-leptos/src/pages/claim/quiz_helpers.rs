@@ -2,9 +2,7 @@
 
 use leptos::prelude::*;
 
-use crate::api::{
-    self, AdventureStatusType, ClaimLookupData,
-};
+use crate::api::{self, AdventureStatusType, ClaimLookupData};
 use crate::icons::{Icon, IconName};
 
 use super::interop::*;
@@ -31,11 +29,14 @@ pub(super) fn build_quiz_questions(
         if first_session || q.session_id != last_session_id {
             if let Some(ref title) = q.session_title {
                 let title_clone = title.clone();
-                views.push(view! {
-                    <div class="claim-quiz-session">
-                        <h4 class="claim-quiz-session-title">{title_clone}</h4>
-                    </div>
-                }.into_any());
+                views.push(
+                    view! {
+                        <div class="claim-quiz-session">
+                            <h4 class="claim-quiz-session-title">{title_clone}</h4>
+                        </div>
+                    }
+                    .into_any(),
+                );
             }
             last_session_id = q.session_id.clone();
             first_session = false;
@@ -80,16 +81,19 @@ pub(super) fn build_quiz_questions(
             }.into_any()
         }).collect();
 
-        views.push(view! {
-            <div class="card claim-quiz-question">
-                <div class="claim-quiz-q-header">
-                    <span class="claim-quiz-q-num">{format!("{q_num}")}</span>
-                    <span class="claim-quiz-q-of">"of "{total_q}</span>
+        views.push(
+            view! {
+                <div class="card claim-quiz-question">
+                    <div class="claim-quiz-q-header">
+                        <span class="claim-quiz-q-num">{format!("{q_num}")}</span>
+                        <span class="claim-quiz-q-of">"of "{total_q}</span>
+                    </div>
+                    <p class="claim-quiz-q-text">{q_text}</p>
+                    <div class="claim-quiz-options">{option_views}</div>
                 </div>
-                <p class="claim-quiz-q-text">{q_text}</p>
-                <div class="claim-quiz-options">{option_views}</div>
-            </div>
-        }.into_any());
+            }
+            .into_any(),
+        );
     }
 
     views
@@ -115,26 +119,36 @@ pub(super) fn build_quiz_explanations(
     for (idx, exp) in explanations.iter().enumerate() {
         // Resolve session info from the matching question
         let session_info = q_lookup.get(&exp.question_id).and_then(|q| {
-            q.session_title.as_ref().map(|t| (q.session_id.clone(), t.clone()))
+            q.session_title
+                .as_ref()
+                .map(|t| (q.session_id.clone(), t.clone()))
         });
 
         // Insert session header when session changes
         if let Some((ref sid, ref title)) = session_info
-            && (first_session || *sid != last_session_id) {
-                    let title_clone = title.clone();
-                    items.push(view! {
-                        <div class="claim-quiz-session">
-                            <h4 class="claim-quiz-session-title">{title_clone}</h4>
-                        </div>
-                    }.into_any());
-                last_session_id = sid.clone();
-                first_session = false;
-            }
+            && (first_session || *sid != last_session_id)
+        {
+            let title_clone = title.clone();
+            items.push(
+                view! {
+                    <div class="claim-quiz-session">
+                        <h4 class="claim-quiz-session-title">{title_clone}</h4>
+                    </div>
+                }
+                .into_any(),
+            );
+            last_session_id = sid.clone();
+            first_session = false;
+        }
 
-        let q_text = q_lookup.get(&exp.question_id)
+        let q_text = q_lookup
+            .get(&exp.question_id)
             .map(|q| q.text.clone())
             .unwrap_or_default();
-        let icon = match exp.correct { true => "✓", _ => "✗" };
+        let icon = match exp.correct {
+            true => "✓",
+            _ => "✗",
+        };
         let exp_class = match exp.correct {
             true => "claim-quiz-exp-correct",
             _ => "claim-quiz-exp-wrong",
@@ -142,18 +156,21 @@ pub(super) fn build_quiz_explanations(
         let exp_text = exp.explanation.clone();
         let num = idx + 1;
 
-        items.push(view! {
-            <div class="claim-quiz-exp-item">
-                <div class="claim-quiz-exp-header">
-                    <span class=exp_class>{icon}</span>
-                    <span class="claim-quiz-exp-q">{format!("{num}. {q_text}")}</span>
+        items.push(
+            view! {
+                <div class="claim-quiz-exp-item">
+                    <div class="claim-quiz-exp-header">
+                        <span class=exp_class>{icon}</span>
+                        <span class="claim-quiz-exp-q">{format!("{num}. {q_text}")}</span>
+                    </div>
+                    {match exp_text {
+                        Some(t) => view! { <p class="claim-quiz-exp-text">{t}</p> }.into_any(),
+                        None => view! { <div></div> }.into_any(),
+                    }}
                 </div>
-                {match exp_text {
-                    Some(t) => view! { <p class="claim-quiz-exp-text">{t}</p> }.into_any(),
-                    None => view! { <div></div> }.into_any(),
-                }}
-            </div>
-        }.into_any());
+            }
+            .into_any(),
+        );
     }
 
     view! {
@@ -161,7 +178,8 @@ pub(super) fn build_quiz_explanations(
             <h4>"Answer Review"</h4>
             {items}
         </div>
-    }.into_any()
+    }
+    .into_any()
 }
 
 /// Allowed quiz actions after submission.
@@ -204,7 +222,9 @@ pub(super) fn build_quiz_action(
                 let lw_c = lw.clone();
                 let ss_c = ss;
                 leptos::task::spawn_local(async move {
-                    match api::get_adventure_status(&token_adv, Some(&claim_data_adv.event_id)).await {
+                    match api::get_adventure_status(&token_adv, Some(&claim_data_adv.event_id))
+                        .await
+                    {
                         Ok(status_data) => {
                             match status_data.status {
                                 AdventureStatusType::NotRequired | AdventureStatusType::Passed => {
@@ -216,8 +236,11 @@ pub(super) fn build_quiz_action(
                                     }
                                     ss_c.set(ClaimState::Ready(claim_data_adv));
                                 }
-                                AdventureStatusType::NotStarted | AdventureStatusType::InProgress => {
-                                    log::info!("[claim] quiz passed but adventure required, showing adventure gate");
+                                AdventureStatusType::NotStarted
+                                | AdventureStatusType::InProgress => {
+                                    log::info!(
+                                        "[claim] quiz passed but adventure required, showing adventure gate"
+                                    );
                                     ss_c.set(ClaimState::Adventure(
                                         claim_data_adv,
                                         status_data.status,
@@ -226,7 +249,9 @@ pub(super) fn build_quiz_action(
                             }
                         }
                         Err(e) => {
-                            log::warn!("[claim] failed to check adventure status after quiz: {e}, proceeding to Ready");
+                            log::warn!(
+                                "[claim] failed to check adventure status after quiz: {e}, proceeding to Ready"
+                            );
                             if let Some(ref wallet) = lw_c
                                 && !wallet.is_empty()
                             {
@@ -269,14 +294,14 @@ pub(super) fn build_quiz_action(
                 >
                     "Try Again"
                 </button>
-            }.into_any()
+            }
+            .into_any()
         }
-        QuizAction::Exhausted => {
-            view! {
-                <div class="card claim-quiz-exhausted">
-                    <p>"You've used all your attempts. Please contact event staff for assistance."</p>
-                </div>
-            }.into_any()
+        QuizAction::Exhausted => view! {
+            <div class="card claim-quiz-exhausted">
+                <p>"You've used all your attempts. Please contact event staff for assistance."</p>
+            </div>
         }
+        .into_any(),
     }
 }

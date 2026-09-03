@@ -42,11 +42,12 @@ pub fn Deposit() -> impl IntoView {
             let url = format!("{origin}/api/auth/me");
             if let Ok(resp) = crate::api::fetch::get(&url, &[]).await
                 && resp.status() == 200
-                    && let Ok(data) = crate::api::fetch::response_json::<serde_json::Value>(&resp).await
-                        && let Some(email) = data["data"]["email"].as_str()
-                            && !email.is_empty() {
-                                set_signed_in_email.set(Some(email.to_string()));
-                            }
+                && let Ok(data) = crate::api::fetch::response_json::<serde_json::Value>(&resp).await
+                && let Some(email) = data["data"]["email"].as_str()
+                && !email.is_empty()
+            {
+                set_signed_in_email.set(Some(email.to_string()));
+            }
         });
     });
 
@@ -103,14 +104,8 @@ pub fn Deposit() -> impl IntoView {
                             // deposit (verified or carrying a signature) are
                             // genuine deposits.
                             let is_usdc_orphan = !status.verified
-                                && matches!(
-                                    status.method,
-                                    crate::api::DepositMethod::Usdc
-                                )
-                                && status
-                                    .tx_signature
-                                    .as_deref()
-                                    .is_none_or(|t| t.is_empty());
+                                && matches!(status.method, crate::api::DepositMethod::Usdc)
+                                && status.tx_signature.as_deref().is_none_or(|t| t.is_empty());
                             if is_usdc_orphan {
                                 set_state.set(DepositPageState::ChoosePayment(data));
                             } else {
@@ -166,17 +161,26 @@ pub fn Deposit() -> impl IntoView {
     let handle_connect_wallet = handlers::make_connect_wallet(state, set_state, set_toast);
     let handle_send_deposit = handlers::make_send_deposit(state, set_state, set_toast, params);
     let handle_poll_confirmation = handlers::make_poll_confirmation(state, set_state, set_toast);
-    let handle_pay_usdc_qr = handlers::make_pay_usdc_qr(state, set_state, set_toast, wallet_input, params);
+    let handle_pay_usdc_qr =
+        handlers::make_pay_usdc_qr(state, set_state, set_toast, wallet_input, params);
     let handle_upload_slip = handlers::make_upload_slip(
-        state, set_state, set_toast,
-        slip_url_input, bank_account_input, bank_name_input, account_name_input,
-        file_input_ref, params,
+        state,
+        set_state,
+        set_toast,
+        slip_url_input,
+        bank_account_input,
+        bank_name_input,
+        account_name_input,
+        file_input_ref,
+        params,
     );
     let handle_copy_url = handlers::make_copy_url(set_toast, set_pay_url_copied);
     let handle_qr_poll = handlers::make_qr_poll_confirmation(state, set_state, params);
-    let handle_refund_connect_wallet = handlers::make_refund_connect_wallet(state, set_state, set_toast);
+    let handle_refund_connect_wallet =
+        handlers::make_refund_connect_wallet(state, set_state, set_toast);
     let handle_claim_refund = handlers::make_claim_refund(state, set_state, set_toast, params);
-    let handle_close_deposit_connect_wallet = handlers::make_close_deposit_connect_wallet(state, set_state, set_toast);
+    let handle_close_deposit_connect_wallet =
+        handlers::make_close_deposit_connect_wallet(state, set_state, set_toast);
     let handle_close_deposit = handlers::make_close_deposit(state, set_state, set_toast, params);
 
     let has_wallets = move || !detected_wallets.get().is_empty();

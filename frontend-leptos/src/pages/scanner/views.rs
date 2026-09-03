@@ -126,7 +126,11 @@ where
                         format!(" by {}", utils::escape_html(by))
                     }
                 });
-            let claim_url = data.attendee.claim_token.as_ref().map(|t| build_claim_url(t));
+            let claim_url = data
+                .attendee
+                .claim_token
+                .as_ref()
+                .map(|t| build_claim_url(t));
             let qr_data_url = claim_url
                 .as_ref()
                 .and_then(|url| generate_qr_data_url(url, 240));
@@ -419,10 +423,19 @@ where
             }
             .into_any()
         }
-        CheckInState::EscrowWalletConnected { check_in_data, wallet_name, public_key, .. } => {
+        CheckInState::EscrowWalletConnected {
+            check_in_data,
+            wallet_name,
+            public_key,
+            ..
+        } => {
             let name = check_in_data.name.clone();
             let short_pk = if public_key.len() > 8 {
-                format!("{}...{}", &public_key[..4], &public_key[public_key.len()-4..])
+                format!(
+                    "{}...{}",
+                    &public_key[..4],
+                    &public_key[public_key.len() - 4..]
+                )
             } else {
                 public_key.clone()
             };
@@ -467,10 +480,17 @@ where
             </div>
         }
         .into_any(),
-        CheckInState::EscrowConfirmed { check_in_data, signature } => {
+        CheckInState::EscrowConfirmed {
+            check_in_data,
+            signature,
+        } => {
             let name = check_in_data.name.clone();
             let short_sig = if signature.len() > 16 {
-                format!("{}...{}", &signature[..8], &signature[signature.len()-8..])
+                format!(
+                    "{}...{}",
+                    &signature[..8],
+                    &signature[signature.len() - 8..]
+                )
             } else {
                 signature.clone()
             };
@@ -506,7 +526,10 @@ where
             }
             .into_any()
         }
-        CheckInState::EscrowError { check_in_data, message } => {
+        CheckInState::EscrowError {
+            check_in_data,
+            message,
+        } => {
             let name = check_in_data.name.clone();
             view! {
                 <div>

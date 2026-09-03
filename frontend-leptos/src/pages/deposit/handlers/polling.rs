@@ -2,13 +2,10 @@
 
 use leptos::prelude::*;
 
-use crate::api::{
-    self, ConfirmDepositResponse, DepositStatusResponse,
-};
+use crate::api::{self, ConfirmDepositResponse, DepositStatusResponse};
 use crate::components::{self as app_components, ToastType};
 
 use crate::pages::deposit::types::*;
-
 
 // ---------------------------------------------------------------------------
 // Shared confirmation polling
@@ -27,12 +24,20 @@ pub struct PollConfig {
 impl PollConfig {
     /// Wallet flow: fast polling (~60s).
     pub fn wallet() -> Self {
-        Self { max_attempts: 30, interval_ok_ms: 2000, interval_err_ms: 3000 }
+        Self {
+            max_attempts: 30,
+            interval_ok_ms: 2000,
+            interval_err_ms: 3000,
+        }
     }
 
     /// QR flow: long polling (~5min) with early-exit state check.
     pub fn qr() -> Self {
-        Self { max_attempts: 100, interval_ok_ms: 3000, interval_err_ms: 3000 }
+        Self {
+            max_attempts: 100,
+            interval_ok_ms: 3000,
+            interval_err_ms: 3000,
+        }
     }
 }
 
@@ -51,9 +56,10 @@ pub async fn poll_deposit_confirmation(
     let mut attempts = 0u32;
     while attempts < config.max_attempts {
         if let Some(check) = should_stop
-            && check() {
-                return PollOutcome::Cancelled;
-            }
+            && check()
+        {
+            return PollOutcome::Cancelled;
+        }
         match api::confirm_deposit(event_id, attendee_id).await {
             Ok(ConfirmDepositResponse {
                 confirmed: true,

@@ -215,7 +215,9 @@ pub fn AdminDeposits(
         set_clear_pending.set(Some(email.clone()));
 
         leptos::task::spawn_local(async move {
-            let body = ClearCreditRefundRequest { email: email.clone() };
+            let body = ClearCreditRefundRequest {
+                email: email.clone(),
+            };
             match api::clear_credit_refund_request(&body).await {
                 Ok(_) => {
                     components::show_toast(
@@ -282,7 +284,8 @@ pub fn AdminDeposits(
             let set_confirm = set_confirm_reject_id;
             gloo_timers::callback::Timeout::new(3000, move || {
                 set_confirm.set(None);
-            }).forget();
+            })
+            .forget();
             return;
         }
 
@@ -300,11 +303,7 @@ pub fn AdminDeposits(
             };
             match api::verify_thb_slip(&body).await {
                 Ok(_) => {
-                    components::show_toast(
-                        &set_toast,
-                        "Slip rejected",
-                        ToastType::Warning,
-                    );
+                    components::show_toast(&set_toast, "Slip rejected", ToastType::Warning);
                     refresh_data();
                 }
                 Err(e) => {
@@ -347,7 +346,10 @@ pub fn AdminDeposits(
         });
 
         leptos::task::spawn_local(async move {
-            let body = MarkRefundRequest { event_id, refund_proof_url };
+            let body = MarkRefundRequest {
+                event_id,
+                refund_proof_url,
+            };
             match api::mark_refund(&attendee_id, &body).await {
                 Ok(_) => {
                     components::show_toast(

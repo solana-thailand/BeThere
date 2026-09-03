@@ -3,10 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::api::types::ApiError;
-use crate::api::{
-    api_post_json, api_put_json,
-};
-
+use crate::api::{api_post_json, api_put_json};
 
 // ===== Post-Event Registration (Plan 008 — Phase 3) =====
 

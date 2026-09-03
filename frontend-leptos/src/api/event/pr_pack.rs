@@ -1,11 +1,7 @@
 //! PR pack (Plan 008 Phase 4).
 
-
 use crate::api::types::{ApiError, ApiResponse};
-use crate::api::{
-    api_get, fetch::response_json,
-};
-
+use crate::api::{api_get, fetch::response_json};
 
 // ===== PR Pack (Plan 008 Phase 4) =====
 

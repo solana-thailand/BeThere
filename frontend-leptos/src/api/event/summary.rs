@@ -1,11 +1,7 @@
 //! Event summary (Plan 008 Phase 1).
 
-
 use crate::api::types::{ApiError, ApiResponse};
-use crate::api::{
-    api_get, api_post, fetch::response_json,
-};
-
+use crate::api::{api_get, api_post, fetch::response_json};
 
 // ===== Event Summary (Plan 008 Phase 1) =====
 

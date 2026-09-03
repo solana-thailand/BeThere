@@ -56,11 +56,15 @@ pub(super) fn MyRegistrations() -> impl IntoView {
                 return;
             }
 
-            let auth_data: serde_json::Value = match crate::api::fetch::response_json(&auth_resp).await {
-                Ok(d) => d,
-                Err(_) => return,
-            };
-            let user_email = auth_data["data"]["email"].as_str().unwrap_or("").to_string();
+            let auth_data: serde_json::Value =
+                match crate::api::fetch::response_json(&auth_resp).await {
+                    Ok(d) => d,
+                    Err(_) => return,
+                };
+            let user_email = auth_data["data"]["email"]
+                .as_str()
+                .unwrap_or("")
+                .to_string();
             if user_email.is_empty() {
                 return;
             }
@@ -70,9 +74,10 @@ pub(super) fn MyRegistrations() -> impl IntoView {
             let regs_url = format!("{origin}/api/my-registrations");
             match crate::api::fetch::get(&regs_url, &[]).await {
                 Ok(resp) if resp.status() == 200 => {
-                    if let Ok(data) =
-                        crate::api::fetch::response_json::<ApiResponse<Vec<MyRegistrationItem>>>(&resp)
-                            .await
+                    if let Ok(data) = crate::api::fetch::response_json::<
+                        ApiResponse<Vec<MyRegistrationItem>>,
+                    >(&resp)
+                    .await
                     {
                         set_registrations.set(Some(data.data.unwrap_or_default()));
                     }

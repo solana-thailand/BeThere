@@ -1,8 +1,6 @@
 //! Small formatting and step-computation helpers.
 
-
 use crate::utils::format_timestamp;
-
 
 // ---------------------------------------------------------------------------
 // Helper functions

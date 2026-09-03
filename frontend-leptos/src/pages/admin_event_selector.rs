@@ -23,7 +23,7 @@
 //! the panel detach from the trigger.
 
 use leptos::prelude::*;
-use wasm_bindgen::{closure::Closure, JsCast};
+use wasm_bindgen::{JsCast, closure::Closure};
 use web_sys::Event;
 
 use crate::api::{EventMeta, EventStatus};
@@ -55,7 +55,10 @@ fn date_hint(start_ms: i64, now_ms: i64) -> String {
         let months = [
             "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
         ];
-        let m = months.get(date.get_month() as usize).copied().unwrap_or("?");
+        let m = months
+            .get(date.get_month() as usize)
+            .copied()
+            .unwrap_or("?");
         let day = date.get_date();
         let year = date.get_full_year();
         let cur_year = js_sys::Date::new(&(now_ms as f64).into()).get_full_year();
@@ -126,8 +129,7 @@ pub fn AdminEventSelector(
                 if q.is_empty() {
                     return true;
                 }
-                e.name.to_ascii_lowercase().contains(&q)
-                    || e.slug.to_ascii_lowercase().contains(&q)
+                e.name.to_ascii_lowercase().contains(&q) || e.slug.to_ascii_lowercase().contains(&q)
             })
             .collect();
         events.sort_by_key(|a| sort_key(a, now_ms));
@@ -183,9 +185,10 @@ pub fn AdminEventSelector(
             // Skip scrolls originating inside the dropdown panel itself.
             if let Some(target) = ev.target()
                 && let Some(el) = target.dyn_ref::<web_sys::Element>()
-                    && el.closest(".admin-evt-panel").ok().flatten().is_some() {
-                        return;
-                    }
+                && el.closest(".admin-evt-panel").ok().flatten().is_some()
+            {
+                return;
+            }
             set_open.set(false);
         });
         if let Some(window) = web_sys::window() {
@@ -217,11 +220,7 @@ pub fn AdminEventSelector(
                 closure.as_ref().unchecked_ref::<js_sys::Function>().clone();
             closure.forget();
             leptos::prelude::on_cleanup(move || {
-                let _ = window.remove_event_listener_with_callback_and_bool(
-                    "scroll",
-                    &func,
-                    true,
-                );
+                let _ = window.remove_event_listener_with_callback_and_bool("scroll", &func, true);
             });
         }
     }

@@ -86,13 +86,10 @@ pub fn EscrowInitPanel(
     let is_idle = move || matches!(state.get(), EscrowInitState::Idle);
     let is_wallet_connected =
         move || matches!(state.get(), EscrowInitState::WalletConnected { .. });
-    let is_initializing =
-        move || matches!(state.get(), EscrowInitState::Initializing { .. });
+    let is_initializing = move || matches!(state.get(), EscrowInitState::Initializing { .. });
     let is_done = move || matches!(state.get(), EscrowInitState::Done { .. });
-    let is_deactivating =
-        move || matches!(state.get(), EscrowInitState::Deactivating { .. });
-    let is_deactivated =
-        move || matches!(state.get(), EscrowInitState::Deactivated { .. });
+    let is_deactivating = move || matches!(state.get(), EscrowInitState::Deactivating { .. });
+    let is_deactivated = move || matches!(state.get(), EscrowInitState::Deactivated { .. });
     let is_closing = move || matches!(state.get(), EscrowInitState::Closing { .. });
     let is_closed = move || matches!(state.get(), EscrowInitState::Closed { .. });
     let is_error = move || matches!(state.get(), EscrowInitState::Error { .. });

@@ -2,10 +2,7 @@
 
 use leptos::prelude::*;
 
-use crate::api::{
-    self, ClaimLookupData, QuizQuestionsData,
-    QuizSubmitData,
-};
+use crate::api::{self, ClaimLookupData, QuizQuestionsData, QuizSubmitData};
 use crate::utils::escape_html;
 
 use super::helpers::*;
@@ -29,7 +26,8 @@ pub(super) fn QuizView(
     set_quiz_answers: WriteSignal<QuizAnswers>,
     set_state: WriteSignal<ClaimState>,
 ) -> impl IntoView {
-    let checked_in_display = checked_in_label(&claim_data.checked_in_at, &claim_data.participation_type);
+    let checked_in_display =
+        checked_in_label(&claim_data.checked_in_at, &claim_data.participation_type);
     let total_q = quiz_data.questions.len();
     let answered = move || quiz_answers.get().len();
     let all_answered = move || quiz_answers.get().len() == total_q;
@@ -41,7 +39,10 @@ pub(super) fn QuizView(
 
     // Pre-render question cards to avoid nested view! macro issues
     let question_views = build_quiz_questions(
-        &quiz_data.questions, total_q, quiz_answers, set_quiz_answers,
+        &quiz_data.questions,
+        total_q,
+        quiz_answers,
+        set_quiz_answers,
     );
 
     view! {
@@ -150,7 +151,8 @@ pub(super) fn QuizSubmittedView(
     set_wallet_input: WriteSignal<String>,
     set_state: WriteSignal<ClaimState>,
 ) -> impl IntoView {
-    let checked_in_display = checked_in_label(&claim_data.checked_in_at, &claim_data.participation_type);
+    let checked_in_display =
+        checked_in_label(&claim_data.checked_in_at, &claim_data.participation_type);
     let passed = submit_result.passed;
     let score = submit_result.score_percent;
     let remaining = submit_result.remaining_attempts;
@@ -210,16 +212,21 @@ pub(super) fn QuizSubmittedView(
         }.into_any(),
     };
 
-    let result_title: &str = match passed { true => "Quiz Passed!", false => "Not Quite..." };
+    let result_title: &str = match passed {
+        true => "Quiz Passed!",
+        false => "Not Quite...",
+    };
 
     let retry_info_view: AnyView = match passed {
         true => view! { <div></div> }.into_any(),
         false => view! {
             <p class="claim-quiz-retry-info">{retry_info}</p>
-        }.into_any(),
+        }
+        .into_any(),
     };
 
-    let explanations_view = build_quiz_explanations(&submit_result.explanations, &quiz_data.questions);
+    let explanations_view =
+        build_quiz_explanations(&submit_result.explanations, &quiz_data.questions);
 
     let action_view = build_quiz_action(
         action,

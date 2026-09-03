@@ -19,7 +19,10 @@ thread_local! {
 /// Returns "devnet" as fallback if the fetch fails.
 pub async fn fetch_cluster() -> String {
     let window = web_sys::window().expect("no window");
-    let origin = window.location().origin().unwrap_or_else(|_| "http://localhost:8787".to_string());
+    let origin = window
+        .location()
+        .origin()
+        .unwrap_or_else(|_| "http://localhost:8787".to_string());
     let url = format!("{origin}/api/health");
 
     let cluster = async {
@@ -39,11 +42,7 @@ pub async fn fetch_cluster() -> String {
 /// Get the cached cluster, or "devnet" as fallback.
 /// Call `fetch_cluster()` first (in `spawn_local`) before using this.
 pub fn get_cluster() -> String {
-    CACHED_CLUSTER.with(|c| {
-        c.borrow()
-            .clone()
-            .unwrap_or_else(|| "devnet".to_string())
-    })
+    CACHED_CLUSTER.with(|c| c.borrow().clone().unwrap_or_else(|| "devnet".to_string()))
 }
 
 /// Build a cluster-aware Solscan transaction URL.
@@ -247,8 +246,7 @@ pub fn capitalize_name(name: &str) -> String {
             match chars.next() {
                 None => String::new(),
                 Some(first) => {
-                    first.to_uppercase().collect::<String>()
-                        + &chars.as_str().to_lowercase()
+                    first.to_uppercase().collect::<String>() + &chars.as_str().to_lowercase()
                 }
             }
         })

@@ -6,7 +6,6 @@ use serde::Deserialize;
 use crate::api::ApiResponse;
 use crate::icons::{Icon, IconName};
 
-
 /// Lightweight event item from the public events API.
 #[derive(Clone, Deserialize)]
 struct PublicEventItem {
@@ -24,8 +23,7 @@ struct PublicEventItem {
     nft_image_url: String,
 }
 
-#[derive(Clone, Deserialize)]
-#[derive(Default)]
+#[derive(Clone, Deserialize, Default)]
 struct PublicEventsResponse {
     events: Vec<PublicEventItem>,
 }
@@ -48,7 +46,11 @@ pub(super) fn UpcomingEvents() -> impl IntoView {
 
             match crate::api::fetch::get(&url, &[]).await {
                 Ok(resp) if resp.status() == 200 => {
-                    match crate::api::fetch::response_json::<ApiResponse<PublicEventsResponse>>(&resp).await {
+                    match crate::api::fetch::response_json::<ApiResponse<PublicEventsResponse>>(
+                        &resp,
+                    )
+                    .await
+                    {
                         Ok(wrapper) => {
                             if let Some(data) = wrapper.data {
                                 set_events.set(data.events);

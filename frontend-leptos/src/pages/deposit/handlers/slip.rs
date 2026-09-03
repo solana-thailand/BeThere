@@ -2,15 +2,11 @@
 
 use leptos::prelude::*;
 
-use crate::api::{
-    self,
-    ThbSlipUploadRequest,
-};
+use crate::api::{self, ThbSlipUploadRequest};
 use crate::components::{self as app_components, ToastType};
 
 use crate::pages::deposit::js_interop;
 use crate::pages::deposit::types::*;
-
 
 // ---------------------------------------------------------------------------
 // Upload THB slip
@@ -62,9 +58,8 @@ pub fn make_upload_slip(
                         Some(data_url) => data_url,
                         None => {
                             if text_slip_url.trim().is_empty() {
-                                set_state.set(DepositPageState::ChoosePayment(
-                                    deposit_data_for_err,
-                                ));
+                                set_state
+                                    .set(DepositPageState::ChoosePayment(deposit_data_for_err));
                                 app_components::show_toast(
                                     &set_toast,
                                     "Please select a slip image or paste a URL.",

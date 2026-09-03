@@ -6,7 +6,9 @@ use crate::api::{self, QuizConfigAdmin, QuizQuestionAdmin};
 use crate::components::{self, ToastType};
 use crate::icons::{Icon, IconName};
 
-use super::helpers::{blank_question, default_config, export_json_download, format_attempts, generate_question_id};
+use super::helpers::{
+    blank_question, default_config, export_json_download, format_attempts, generate_question_id,
+};
 use super::preview::render_preview;
 
 /// Quiz editor component for the admin dashboard.
@@ -326,7 +328,9 @@ pub fn QuizEditor(
                     let max_num = c
                         .questions
                         .iter()
-                        .filter_map(|id| id.id.strip_prefix('q').and_then(|n| n.parse::<u32>().ok()))
+                        .filter_map(|id| {
+                            id.id.strip_prefix('q').and_then(|n| n.parse::<u32>().ok())
+                        })
                         .max()
                         .unwrap_or(0);
 
@@ -340,7 +344,11 @@ pub fn QuizEditor(
         });
 
         let total = config.get().map(|c| c.questions.len()).unwrap_or(0);
-        let mode_label = if import_mode.get() { "Replaced with" } else { "Imported" };
+        let mode_label = if import_mode.get() {
+            "Replaced with"
+        } else {
+            "Imported"
+        };
         components::show_toast(
             &set_toast,
             &format!("{mode_label} {count} questions. Total: {total}"),
@@ -354,7 +362,8 @@ pub fn QuizEditor(
     let has_event = move || active_event_id.get().is_some();
     let show_loading = move || loading.get() && has_event();
     let show_error = move || !loading.get() && error.get().is_some() && has_event();
-    let show_empty = move || !loading.get() && !configured.get() && error.get().is_none() && has_event();
+    let show_empty =
+        move || !loading.get() && !configured.get() && error.get().is_none() && has_event();
     let show_content = move || !loading.get() && configured.get() && config.get().is_some();
 
     view! {

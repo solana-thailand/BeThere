@@ -1,7 +1,5 @@
 //! Landing-page auth state (same pattern as public_event.rs).
 
-
-
 /// Tracks whether the user is signed in on the landing page.
 #[derive(Clone, Debug)]
 pub(super) enum AuthState {

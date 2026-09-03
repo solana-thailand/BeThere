@@ -407,9 +407,7 @@ pub fn Scanner() -> impl IntoView {
             };
             let events = data.events;
             // Auto-select the first active event
-            let first_active = events
-                .iter()
-                .find(|e| e.status == api::EventStatus::Active);
+            let first_active = events.iter().find(|e| e.status == api::EventStatus::Active);
             let selected_id = first_active.map(|e| e.id.clone());
             set_el.set(events);
             set_eid.set(selected_id.clone());
@@ -419,8 +417,8 @@ pub fn Scanner() -> impl IntoView {
             if let Some(ref event_id) = selected_id {
                 match api::get_event_detail(event_id).await {
                     Ok(detail) => {
-                        let enabled = detail.event.deposit_enabled
-                            && !detail.event.escrow_address.is_empty();
+                        let enabled =
+                            detail.event.deposit_enabled && !detail.event.escrow_address.is_empty();
                         log::info!(
                             "[scanner] event '{}' escrow_enabled={} format={:?}",
                             event_id,
@@ -452,8 +450,8 @@ pub fn Scanner() -> impl IntoView {
                 }
                 match api::get_event_detail(event_id).await {
                     Ok(detail) => {
-                        let enabled = detail.event.deposit_enabled
-                            && !detail.event.escrow_address.is_empty();
+                        let enabled =
+                            detail.event.deposit_enabled && !detail.event.escrow_address.is_empty();
                         log::info!(
                             "[scanner] event '{}' escrow_enabled={} format={:?}",
                             event_id,
@@ -497,7 +495,12 @@ pub fn Scanner() -> impl IntoView {
     // Handler: connect organizer wallet (from EscrowChooseWallet state)
     let handle_escrow_wallet_connect = move |wallet_name: String| {
         let state = check_in_state.get();
-        if let CheckInState::EscrowChooseWallet { check_in_data, attendee_id, event_id } = &state {
+        if let CheckInState::EscrowChooseWallet {
+            check_in_data,
+            attendee_id,
+            event_id,
+        } = &state
+        {
             let check_in_data = check_in_data.clone();
             let attendee_id = attendee_id.clone();
             let event_id = event_id.clone();
@@ -506,31 +509,31 @@ pub fn Scanner() -> impl IntoView {
             let set_t = set_toast;
             leptos::task::spawn_local(async move {
                 match connect_wallet_js(&wn).await {
-                        crate::wallet_error::WalletResult::Success(pk) => {
-                            log::info!("[scanner] organizer wallet connected: {} ({})", wn, pk);
-                            set_state.set(CheckInState::EscrowWalletConnected {
-                                check_in_data,
-                                attendee_id,
-                                event_id,
-                                wallet_name: wn,
-                                public_key: pk,
-                            });
-                        }
-                        crate::wallet_error::WalletResult::Error(e) => {
-                            components::show_toast(
-                                &set_t,
-                                &crate::wallet_error::user_friendly_message(&e),
-                                ToastType::Error,
-                            );
-                        }
-                        crate::wallet_error::WalletResult::UnknownFailure => {
-                            components::show_toast(
-                                &set_t,
-                                "Failed to connect wallet",
-                                ToastType::Error,
-                            );
-                        }
+                    crate::wallet_error::WalletResult::Success(pk) => {
+                        log::info!("[scanner] organizer wallet connected: {} ({})", wn, pk);
+                        set_state.set(CheckInState::EscrowWalletConnected {
+                            check_in_data,
+                            attendee_id,
+                            event_id,
+                            wallet_name: wn,
+                            public_key: pk,
+                        });
                     }
+                    crate::wallet_error::WalletResult::Error(e) => {
+                        components::show_toast(
+                            &set_t,
+                            &crate::wallet_error::user_friendly_message(&e),
+                            ToastType::Error,
+                        );
+                    }
+                    crate::wallet_error::WalletResult::UnknownFailure => {
+                        components::show_toast(
+                            &set_t,
+                            "Failed to connect wallet",
+                            ToastType::Error,
+                        );
+                    }
+                }
             });
         }
     };
@@ -577,7 +580,10 @@ pub fn Scanner() -> impl IntoView {
 
                 // SEC-014: Verify wallet cluster matches expected network.
                 let expected_cluster = crate::utils::get_cluster();
-                if let Err(cluster_err) = crate::pages::escrow_init::check_wallet_cluster(&wallet_name, &expected_cluster).await {
+                if let Err(cluster_err) =
+                    crate::pages::escrow_init::check_wallet_cluster(&wallet_name, &expected_cluster)
+                        .await
+                {
                     log::error!("[scanner] cluster mismatch: {cluster_err}");
                     set_state.set(CheckInState::EscrowError {
                         check_in_data,
@@ -587,15 +593,25 @@ pub fn Scanner() -> impl IntoView {
                 }
 
                 // Pre-sign simulation.
-                match crate::pages::escrow_init::simulate_transaction_js(&wallet_name, &tx_resp.transaction).await {
+                match crate::pages::escrow_init::simulate_transaction_js(
+                    &wallet_name,
+                    &tx_resp.transaction,
+                )
+                .await
+                {
                     Ok(sim) if sim.ok => {}
                     Ok(sim) => {
                         let err_msg = sim.error.unwrap_or_else(|| "Simulation failed".to_string());
                         log::error!("[scanner] check-in simulation failed: {err_msg}");
-                        set_state.set(CheckInState::EscrowError { check_in_data, message: format!("Transaction would fail: {err_msg}") });
+                        set_state.set(CheckInState::EscrowError {
+                            check_in_data,
+                            message: format!("Transaction would fail: {err_msg}"),
+                        });
                         return;
                     }
-                    Err(e) => { log::warn!("[scanner] simulate error (not blocking): {e}"); }
+                    Err(e) => {
+                        log::warn!("[scanner] simulate error (not blocking): {e}");
+                    }
                 }
 
                 // Step 2: Sign and send the TX via the wallet
@@ -615,7 +631,11 @@ pub fn Scanner() -> impl IntoView {
                     }
                     crate::wallet_error::WalletResult::Error(e) => {
                         let msg = crate::wallet_error::user_friendly_message(&e);
-                        log::error!("[scanner] wallet sign+send error: code={:?} msg={}", e.code, e.raw_message);
+                        log::error!(
+                            "[scanner] wallet sign+send error: code={:?} msg={}",
+                            e.code,
+                            e.raw_message
+                        );
                         set_state.set(CheckInState::EscrowError {
                             check_in_data,
                             message: msg,
@@ -687,21 +707,29 @@ pub fn Scanner() -> impl IntoView {
         let set_state = set_check_in_state;
         let set_t = set_toast;
         let name_for_callback = name.clone();
-        let phone_for_warning = if phone.is_empty() { None } else { Some(phone.clone()) };
+        let phone_for_warning = if phone.is_empty() {
+            None
+        } else {
+            Some(phone.clone())
+        };
 
         leptos::task::spawn_local(async move {
             let req = WalkinRegisterRequest {
                 event_id,
                 name: name.clone(),
                 email: email.clone(),
-                phone: if phone_for_warning.is_some() { Some(phone_for_warning.clone().unwrap()) } else { None },
+                phone: if phone_for_warning.is_some() {
+                    Some(phone_for_warning.clone().unwrap())
+                } else {
+                    None
+                },
                 override_capacity: false,
             };
             match api::register_walkin(&req).await {
                 Ok(resp) => {
-                        log::info!("[scanner] walk-in registered: {}", resp.claim_url);
-                        feedback_success_js(); // Walk-in registered — vibration + beep
-                        set_state.set(CheckInState::WalkinSuccess {
+                    log::info!("[scanner] walk-in registered: {}", resp.claim_url);
+                    feedback_success_js(); // Walk-in registered — vibration + beep
+                    set_state.set(CheckInState::WalkinSuccess {
                         claim_url: resp.claim_url,
                         name: name_for_callback,
                     });
@@ -738,9 +766,15 @@ pub fn Scanner() -> impl IntoView {
     let handle_walkin_override = move |_: web_sys::MouseEvent| {
         let state = check_in_state.get();
         let (pending_name, pending_email, pending_phone) = match &state {
-            CheckInState::WalkinCapacityWarning { pending_name, pending_email, pending_phone } => {
-                (pending_name.clone(), pending_email.clone(), pending_phone.clone())
-            }
+            CheckInState::WalkinCapacityWarning {
+                pending_name,
+                pending_email,
+                pending_phone,
+            } => (
+                pending_name.clone(),
+                pending_email.clone(),
+                pending_phone.clone(),
+            ),
             _ => return,
         };
 

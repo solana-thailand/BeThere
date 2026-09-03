@@ -2,8 +2,6 @@
 
 use wasm_bindgen::prelude::*;
 
-
-
 // ===== Camera QR Scanner JS Interop =====
 // Uses wasm_bindgen module imports from /js/scanner.js instead of js_sys::eval().
 // This avoids requiring 'unsafe-eval' in the Content-Security-Policy.
@@ -84,7 +82,10 @@ extern "C" {
 
     /// Sign and send a base64-encoded serialized transaction.
     #[wasm_bindgen(js_name = "signAndSendTransaction")]
-    pub(super) fn sign_and_send_tx_js_raw(wallet_name: &str, transaction_b64: &str) -> js_sys::Promise;
+    pub(super) fn sign_and_send_tx_js_raw(
+        wallet_name: &str,
+        transaction_b64: &str,
+    ) -> js_sys::Promise;
 }
 
 /// Async wrapper: connect to a Solana wallet and return the public key (base58).
@@ -104,7 +105,10 @@ pub(super) async fn connect_wallet_js(wallet_name: &str) -> crate::wallet_error:
 }
 
 /// Async wrapper: sign and send a base64-encoded serialized transaction.
-pub(super) async fn sign_and_send_tx_js(wallet_name: &str, transaction_b64: &str) -> crate::wallet_error::WalletResult {
+pub(super) async fn sign_and_send_tx_js(
+    wallet_name: &str,
+    transaction_b64: &str,
+) -> crate::wallet_error::WalletResult {
     if wallet_name.is_empty() {
         log::warn!("[wasm] sign_and_send_tx_js: empty wallet name");
         return crate::wallet_error::WalletResult::UnknownFailure;

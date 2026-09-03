@@ -3,10 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::api::types::{ApiError, ApiResponse};
-use crate::api::{
-    api_get, api_put_json, fetch::response_json,
-};
-
+use crate::api::{api_get, api_put_json, fetch::response_json};
 
 // ===== Event Recap (Plan 008 Phase 2) =====
 

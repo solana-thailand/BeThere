@@ -1,10 +1,9 @@
 //! The built-in level registry.
 
-
 use crate::pages::adventure::types::*;
 
-use super::basics::*;
 use super::advanced::*;
+use super::basics::*;
 
 /// All built-in levels (for development — production loads from KV).
 pub fn default_levels() -> Vec<LevelData> {

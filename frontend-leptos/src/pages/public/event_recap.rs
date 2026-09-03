@@ -87,11 +87,11 @@ pub fn EventRecap() -> impl IntoView {
         });
     });
 
-    let is_loading = move || matches!(load_state.get(), RecapLoadState::Loading) && data.get().is_none();
+    let is_loading =
+        move || matches!(load_state.get(), RecapLoadState::Loading) && data.get().is_none();
     let is_not_found = move || matches!(load_state.get(), RecapLoadState::NotFound);
-    let is_hard_failure = move || {
-        matches!(load_state.get(), RecapLoadState::Failed(_)) && data.get().is_none()
-    };
+    let is_hard_failure =
+        move || matches!(load_state.get(), RecapLoadState::Failed(_)) && data.get().is_none();
 
     view! {
         <Title text="Event Recap — BeThere" />

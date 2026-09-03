@@ -15,10 +15,11 @@ use super::types::*;
 /// GET /api/events — list all events.
 pub async fn list_events() -> Result<EventsListData, ApiError> {
     let response = api_get("/events").await?;
-    let result: ApiResponse<EventsListData> = response_json(&response).await.map_err(|e| ApiError {
-        message: format!("Failed to parse events response: {e}"),
-        status: 0,
-    })?;
+    let result: ApiResponse<EventsListData> =
+        response_json(&response).await.map_err(|e| ApiError {
+            message: format!("Failed to parse events response: {e}"),
+            status: 0,
+        })?;
 
     if !result.success {
         return Err(ApiError {
@@ -37,10 +38,11 @@ pub async fn list_events() -> Result<EventsListData, ApiError> {
 pub async fn get_event_detail(id: &str) -> Result<EventDetailData, ApiError> {
     let path = format!("/events/{id}");
     let response = api_get(&path).await?;
-    let result: ApiResponse<EventDetailData> = response_json(&response).await.map_err(|e| ApiError {
-        message: format!("Failed to parse event detail response: {e}"),
-        status: 0,
-    })?;
+    let result: ApiResponse<EventDetailData> =
+        response_json(&response).await.map_err(|e| ApiError {
+            message: format!("Failed to parse event detail response: {e}"),
+            status: 0,
+        })?;
 
     if !result.success {
         return Err(ApiError {
@@ -95,7 +97,9 @@ pub async fn upload_poster(
             correlation_id: None,
         });
         return Err(ApiError {
-            message: body.error.unwrap_or_else(|| format!("HTTP {}", response.status())),
+            message: body
+                .error
+                .unwrap_or_else(|| format!("HTTP {}", response.status())),
             status: response.status(),
         });
     }
@@ -107,7 +111,9 @@ pub async fn upload_poster(
         })?;
 
     wrapper.data.ok_or_else(|| ApiError {
-        message: wrapper.error.unwrap_or_else(|| "No data in response".to_string()),
+        message: wrapper
+            .error
+            .unwrap_or_else(|| "No data in response".to_string()),
         status: response.status(),
     })
 }
@@ -125,7 +131,9 @@ pub async fn delete_poster(event_id: &str) -> Result<PosterMutationData, ApiErro
             correlation_id: None,
         });
         return Err(ApiError {
-            message: body.error.unwrap_or_else(|| format!("HTTP {}", response.status())),
+            message: body
+                .error
+                .unwrap_or_else(|| format!("HTTP {}", response.status())),
             status: response.status(),
         });
     }
@@ -137,7 +145,9 @@ pub async fn delete_poster(event_id: &str) -> Result<PosterMutationData, ApiErro
         })?;
 
     wrapper.data.ok_or_else(|| ApiError {
-        message: wrapper.error.unwrap_or_else(|| "No data in response".to_string()),
+        message: wrapper
+            .error
+            .unwrap_or_else(|| "No data in response".to_string()),
         status: response.status(),
     })
 }

@@ -4,7 +4,6 @@ use leptos::prelude::*;
 
 use crate::icons::{Icon, IconName};
 
-
 /// Waitlist signup form component.
 #[component]
 pub(super) fn WaitlistForm() -> impl IntoView {
@@ -28,7 +27,10 @@ pub(super) fn WaitlistForm() -> impl IntoView {
 
         leptos::task::spawn_local(async move {
             let window = web_sys::window().expect("no window");
-            let origin = window.location().origin().unwrap_or("http://localhost:8787".to_string());
+            let origin = window
+                .location()
+                .origin()
+                .unwrap_or("http://localhost:8787".to_string());
             let url = format!("{origin}/api/waitlist");
 
             let body = serde_json::json!({ "email": email_val });
@@ -60,7 +62,9 @@ pub(super) fn WaitlistForm() -> impl IntoView {
                             if (200..300).contains(&status) {
                                 set_submitted.set(true);
                             } else {
-                                set_error.set(Some("Something went wrong. Please try again.".to_string()));
+                                set_error.set(Some(
+                                    "Something went wrong. Please try again.".to_string(),
+                                ));
                             }
                         }
                     }

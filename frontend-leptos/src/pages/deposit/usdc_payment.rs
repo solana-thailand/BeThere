@@ -3,7 +3,7 @@
 use leptos::prelude::*;
 
 use crate::api::DepositStatusResponse;
-use crate::icons::{wallet_icon_name, Icon, IconName};
+use crate::icons::{Icon, IconName, wallet_icon_name};
 
 use super::components;
 use super::js_interop;
@@ -64,7 +64,7 @@ pub fn wallet_connected_view(
             </button>
         </div>
     }
-        .into_any()
+    .into_any()
 }
 
 /// Awaiting confirmation — polling for TX.
@@ -122,7 +122,7 @@ pub fn awaiting_confirmation_view(
             </div>
         </div>
     }
-        .into_any()
+    .into_any()
 }
 
 /// Deposit confirmed on-chain.
@@ -160,7 +160,7 @@ pub fn deposit_confirmed_view(
             <div class="dep2-receipt">
                 {
                     let status = &data_clone.status;
-                    
+
                     match status {
                         Some(s) if !s.refundable => view! {
                             <div class="dep2-receipt-row">

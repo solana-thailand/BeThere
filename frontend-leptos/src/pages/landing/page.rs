@@ -44,11 +44,10 @@ pub fn Landing() -> impl IntoView {
             let url = format!("{origin}/api/auth/me");
             match crate::api::fetch::get(&url, &[]).await {
                 Ok(resp) if resp.status() == 200 => {
-                    if let Ok(data) = crate::api::fetch::response_json::<serde_json::Value>(&resp).await {
-                        let email = data["data"]["email"]
-                            .as_str()
-                            .unwrap_or("")
-                            .to_string();
+                    if let Ok(data) =
+                        crate::api::fetch::response_json::<serde_json::Value>(&resp).await
+                    {
+                        let email = data["data"]["email"].as_str().unwrap_or("").to_string();
                         let role = data["data"]["role"]
                             .as_str()
                             .unwrap_or("attendee")

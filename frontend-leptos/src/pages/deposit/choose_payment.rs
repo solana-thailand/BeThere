@@ -6,7 +6,7 @@
 use leptos::prelude::*;
 
 use crate::api::DepositStatusResponse;
-use crate::icons::{wallet_icon_name, Icon};
+use crate::icons::{Icon, wallet_icon_name};
 
 use super::types::*;
 

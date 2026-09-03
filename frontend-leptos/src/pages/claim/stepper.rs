@@ -2,7 +2,6 @@
 
 use leptos::prelude::*;
 
-
 use super::state::*;
 
 // ---------------------------------------------------------------------------
@@ -40,16 +39,9 @@ pub(super) fn ClaimStepper(current: usize, total: usize, show_quiz: bool) -> imp
     // Build step labels based on whether quiz is shown
     let _ = total; // used for context, steps are hardcoded
     let steps: Vec<(&'static str, &'static str, usize)> = if show_quiz {
-        vec![
-            ("✓", "Verified", 1),
-            ("?", "Quiz", 2),
-            ("", "Claim", 3),
-        ]
+        vec![("✓", "Verified", 1), ("?", "Quiz", 2), ("", "Claim", 3)]
     } else {
-        vec![
-            ("✓", "Verified", 1),
-            ("", "Claim", 2),
-        ]
+        vec![("✓", "Verified", 1), ("", "Claim", 2)]
     };
 
     view! {

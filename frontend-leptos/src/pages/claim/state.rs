@@ -4,10 +4,8 @@ use leptos::prelude::*;
 use leptos_router::params::Params;
 
 use crate::api::{
-    AdventureStatusType, ClaimLookupData, ClaimMintData, QuizQuestionsData,
-    QuizSubmitData,
+    AdventureStatusType, ClaimLookupData, ClaimMintData, QuizQuestionsData, QuizSubmitData,
 };
-
 
 // ---------------------------------------------------------------------------
 // Route params

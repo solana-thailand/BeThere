@@ -1,6 +1,5 @@
 //! Levels 6–10 (ownership through traits).
 
-
 use crate::pages::adventure::types::*;
 
 /// Level 6: Ownership — learn move, borrow, clone.

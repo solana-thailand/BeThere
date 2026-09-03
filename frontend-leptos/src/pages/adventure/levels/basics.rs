@@ -1,6 +1,5 @@
 //! Test level and levels 1–5 (basics).
 
-
 use crate::pages::adventure::types::*;
 
 /// Built-in test level for development.

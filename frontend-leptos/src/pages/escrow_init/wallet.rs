@@ -2,8 +2,6 @@
 
 use wasm_bindgen::prelude::*;
 
-
-
 // ===== Solana Wallet JS Interop =====
 
 #[wasm_bindgen(module = "/js/solana_wallet.js")]
@@ -48,7 +46,10 @@ pub async fn connect_wallet_js(wallet_name: &str) -> crate::wallet_error::Wallet
     }
 }
 
-pub async fn sign_and_send_tx_js(wallet_name: &str, transaction_b64: &str) -> crate::wallet_error::WalletResult {
+pub async fn sign_and_send_tx_js(
+    wallet_name: &str,
+    transaction_b64: &str,
+) -> crate::wallet_error::WalletResult {
     if wallet_name.is_empty() {
         log::warn!("[escrow-init] sign_and_send_tx_js: empty wallet name");
         return crate::wallet_error::WalletResult::UnknownFailure;
@@ -132,10 +133,18 @@ pub struct SimulateResult {
 /// Simulate a transaction before requesting wallet signature.
 /// Follows Solana Foundation Security Checklist: "Simulate first."
 /// Returns Ok(SimulateResult) on success, or Err(msg) if simulation failed.
-pub async fn simulate_transaction_js(wallet_name: &str, transaction_b64: &str) -> Result<SimulateResult, String> {
+pub async fn simulate_transaction_js(
+    wallet_name: &str,
+    transaction_b64: &str,
+) -> Result<SimulateResult, String> {
     if wallet_name.is_empty() {
         log::warn!("[simulate] empty wallet name, skipping");
-        return Ok(SimulateResult { ok: true, skipped: true, error: None, logs: vec![] });
+        return Ok(SimulateResult {
+            ok: true,
+            skipped: true,
+            error: None,
+            logs: vec![],
+        });
     }
     let promise = simulate_tx_js_raw(wallet_name, transaction_b64);
     match wasm_bindgen_futures::JsFuture::from(promise).await {
@@ -144,7 +153,10 @@ pub async fn simulate_transaction_js(wallet_name: &str, transaction_b64: &str) -
             match serde_json::from_str::<SimulateResult>(&json_str) {
                 Ok(result) => {
                     if result.ok {
-                        log::info!("[simulate] TX simulation passed (skipped={})", result.skipped);
+                        log::info!(
+                            "[simulate] TX simulation passed (skipped={})",
+                            result.skipped
+                        );
                     } else {
                         log::warn!("[simulate] TX simulation failed: {:?}", result.error);
                     }
@@ -152,13 +164,23 @@ pub async fn simulate_transaction_js(wallet_name: &str, transaction_b64: &str) -
                 }
                 Err(e) => {
                     log::warn!("[simulate] failed to parse result: {e}, skipping");
-                    Ok(SimulateResult { ok: true, skipped: true, error: None, logs: vec![] })
+                    Ok(SimulateResult {
+                        ok: true,
+                        skipped: true,
+                        error: None,
+                        logs: vec![],
+                    })
                 }
             }
         }
         Err(e) => {
             log::warn!("[simulate] JS error: {e:?}, skipping");
-            Ok(SimulateResult { ok: true, skipped: true, error: None, logs: vec![] })
+            Ok(SimulateResult {
+                ok: true,
+                skipped: true,
+                error: None,
+                logs: vec![],
+            })
         }
     }
 }

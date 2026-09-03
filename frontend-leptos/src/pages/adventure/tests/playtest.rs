@@ -667,7 +667,10 @@ mod playtest {
                 assert!(
                     reachable.contains(&key.pos),
                     "Level {} ({}): key '{}' at {:?} unreachable even after solving reachable gates",
-                    i + 1, level.id, key.name, key.pos
+                    i + 1,
+                    level.id,
+                    key.name,
+                    key.pos
                 );
             }
         }
@@ -682,7 +685,10 @@ mod playtest {
                 assert!(
                     reachable.contains(&npc.pos),
                     "Level {} ({}): npc '{}' at {:?} unreachable even after solving reachable gates",
-                    i + 1, level.id, npc.name, npc.pos
+                    i + 1,
+                    level.id,
+                    npc.name,
+                    npc.pos
                 );
             }
         }

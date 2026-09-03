@@ -2,8 +2,6 @@
 
 use wasm_bindgen::prelude::*;
 
-
-
 // ---------------------------------------------------------------------------
 // Type aliases
 // ---------------------------------------------------------------------------
@@ -53,7 +51,10 @@ extern "C" {
     pub(super) fn connect_wallet_js_raw(wallet_name: &str) -> js_sys::Promise;
 
     #[wasm_bindgen(js_name = "signAndSendTransaction")]
-    pub(super) fn sign_and_send_tx_js_raw(wallet_name: &str, transaction_b64: &str) -> js_sys::Promise;
+    pub(super) fn sign_and_send_tx_js_raw(
+        wallet_name: &str,
+        transaction_b64: &str,
+    ) -> js_sys::Promise;
 
     #[wasm_bindgen(js_name = "isWalletAvailable")]
     pub(super) fn is_wallet_available_js(wallet_name: &str) -> bool;
@@ -74,7 +75,10 @@ pub(super) async fn connect_wallet_js(wallet_name: &str) -> crate::wallet_error:
 /// Currently unused after 1C simplification (refund moved to deposit page).
 /// Retained for potential future wallet operations on the claim page.
 #[allow(dead_code)]
-pub(super) async fn sign_and_send_tx_js(wallet_name: &str, transaction_b64: &str) -> crate::wallet_error::WalletResult {
+pub(super) async fn sign_and_send_tx_js(
+    wallet_name: &str,
+    transaction_b64: &str,
+) -> crate::wallet_error::WalletResult {
     let promise = sign_and_send_tx_js_raw(wallet_name, transaction_b64);
     match wasm_bindgen_futures::JsFuture::from(promise).await {
         Ok(val) => crate::wallet_error::parse_wallet_js_value(&val),
