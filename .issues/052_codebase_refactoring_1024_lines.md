@@ -97,10 +97,19 @@ every file it names has since been split or renamed.
   the only differences are removed section banners, the `mod tests { … }` wrapper, and the listed
   visibility widenings. Clippy clean under `-D warnings`, 481 workspace tests pass.
 
-  **No backend file over 1024 lines remains** (re-verified 2026-09-04: the largest are
-  `handlers/deposit/usdc/handlers.rs` at 1021, `bethere-escrow/src/tests/close.rs` at 976,
-  `handlers/campaigns.rs` at 970 and `db/event_summaries.rs` at 968).
-  **Watch `handlers/deposit/usdc/handlers.rs` — 3 lines from breaching the guideline.**
+  Also **`handlers/deposit/usdc/handlers.rs` ✅** (1021 — 3 lines from the guideline — → `handlers/`,
+  one module per route: status/initiate/tx/confirm/webhook + a `mod.rs` index that re-exports the five
+  handlers, so every `usdc::<handler>` path upstream resolves unchanged; largest submodule 350).
+  **Verbatim**: the concatenated submodules diff clean against the pre-split file except for the removed
+  section banners (each became the submodule's `//!` doc) and per-file `use` blocks. The five handlers were
+  already `pub`, so **no visibility was widened**; the `super::{…}` helper imports were re-qualified to
+  `crate::handlers::deposit::usdc::{…}` because the extra module level moved `super`. Clippy clean under
+  `-D warnings`, wasm32 release build green, 0 test failures.
+
+  **No backend file over 1024 lines remains, and none is now within 50 lines of it** (re-verified
+  2026-09-04 after the split: the largest are `handlers/campaigns.rs` at 970,
+  `db/event_summaries.rs` at 968, `bethere-escrow/src/tests/close.rs` at 976 and
+  `handlers/deposit/escrow/handlers.rs` at 937). No backend watch item remains.
 - [x] Phase 3: Frontend splits — **`pages/landing.rs` ✅** (1255 → `landing/`: auth/waitlist/upcoming/
   registrations/page) and **`pages/quiz_editor.rs` ✅** (1240 → `quiz_editor/`: helpers/editor/preview).
 - [~] Phase 5: Hard frontend — done so far, all **verbatim** (concatenated submodules diffed against the
