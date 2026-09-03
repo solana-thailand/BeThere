@@ -575,8 +575,8 @@ The `contacts.events_joined` CSV (`worker/src/db/contacts.rs#L22-31`) is overwri
 
 ### Manual
 
-**Status 2026-09-04:** all four remain open and all four are genuinely blocked on
-a browser + a real event — the API side of each is now verified against local D1
+**Status 2026-09-04 (second pass):** all four remain open and all four are
+genuinely blocked on a browser + a real event — the API side of each is now verified against local D1
 (see the Integration notes and the Phase 3 acceptance list), so what is left is
 specifically *rendering and copy*, not behaviour. Nothing here is owner-gated;
 it just cannot be done from a shell.
@@ -585,6 +585,10 @@ it just cannot be done from a shell.
 - [ ] Run Phase 2 publish flow. Visit `/events/{slug}/recap` in incognito. Confirm sanitized payload.
 - [ ] Run Phase 3 toggle + register flow. Verify a new row appears in `developer_profiles` with the post-event registrant's interests.
 - [ ] Run Phase 4 generator on an upcoming event. Copy each field, paste into actual social/email, sanity-check readability.
+      (The *generated text* was sanity-checked from a shell on 2026-09-04 via
+      `domain/examples/pr_pack_preview.rs`, which found and fixed two defects —
+      see Phase 4 above. What is left here is the paste-into-a-real-surface
+      check: line wrapping, link unfurls, emoji rendering in a real client.)
 
 ### CI
 
@@ -755,7 +759,33 @@ To keep this from becoming a surprise as the worker grows, this plan adds `worke
       (Verified 2026-07-09: delivered at `63270ac feat(event-lifecycle): Plan 008 Phase 4 — PR pack generator` (2026-07-09 08:53 +0700). Generator pure-fns in `domain/src/pr_pack.rs` (471 lines, 14 unit tests) + `domain/src/lib.rs` re-export; endpoint `worker/src/handlers/events/pr_pack.rs` (99 lines) + route `GET /api/events/{id}/pr-pack` in `handlers/mod.rs`; frontend page `frontend-leptos/src/pages/pr_pack.rs` (286 lines) + `api/event.rs` client + `lib.rs` route + `pages/mod.rs`. §3.4 sub-item checkboxes already `[x]` for all 4 details.)
 - [x] Same branch / PR flow.
       (Verified 2026-07-09: committed at `63270ac` on `feature/event_recap`, same feature-branch flow as Phases 1–3. No separate PR — Phase 4 landed directly on the feature branch per the project's single-branch convention for this plan.)
-- [ ] Validate: copy a generated social post → post to a test account → confirm readability.
+- [~] Validate: copy a generated social post → post to a test account → confirm readability.
+      **Readability half done 2026-09-04 (`7f3c0bf`); posting is still manual.**
+      `domain/examples/pr_pack_preview.rs` (`cargo run -p event-checkin-domain
+      --example pr_pack_preview`) prints every field of a full pack for two
+      fixtures modelled on real events from `.plans/018` §8 — the recurring
+      hybrid with a THB 500 deposit, and a no-deposit online session. Reading the
+      output found **two copy defects that all 17 existing unit tests missed**:
+
+      1. **`deposit_terms` advertised "$0" on every production event.**
+         `format_usdc(event.deposit_amount_usdc)` was emitted unconditionally,
+         and production deposits are THB-only (`deposit_amount_usdc == 0`), so a
+         real event's pack read *"A deposit is required to secure your spot: $0
+         (or 500 THB via PromptPay)"* — which a reader parses as "this is free".
+         The amount clause now branches on which currencies are actually set:
+         both, USDC-only, THB-only, or neither (deposits enabled with no amount
+         is a misconfiguration, so the copy states the requirement without
+         inventing a price). Now reads *"…your spot: 500 THB via PromptPay."*
+      2. **An empty tagline left a blank line mid-post.** `social_post` always
+         rendered the tagline line, so a tagline-less event produced
+         `🗓️ … @ Online\n\nhttps://…`. The line is now omitted, not emptied.
+
+      The existing suite passed throughout because it only ever exercised the
+      both-currencies, tagline-present fixture. Four regression tests added
+      (THB-only, USDC-only, no-amount, no-tagline); the suite is 17 → 21.
+
+      **Still manual:** actually posting to a test account. That is an
+      outward-facing publish, not something to do unprompted.
 
 ### Rollback
 
