@@ -205,6 +205,26 @@ Not exercised locally: registration and the Sheets sync, which need a real
 Google Sheet. Check-in was driven by seeding the attendee row directly into
 local D1.
 
+**Safety, learned the hard way (2026-09-04).** `--local` sandboxes D1, KV and R2
+— **not** Google Sheets: `worker/.dev.vars` holds live service-account
+credentials, and every request that resolves a role already reads the real staff
+sheet. Grep a handler for `sheets::` before firing it. The trap is that a
+handler can reach Sheets without saying so in its name: cleaning up fixture
+events via `DELETE /api/events/{id}/delete` runs
+`handlers::events::lifecycle::hard_delete_event`, which calls
+`sheets::events_tab::delete_event_tab`. That call is guarded by
+`if !resolved.sheet_id.is_empty()`, and `CONTACTS_SHEET_ID` is set in neither
+`wrangler.toml` nor `.dev.vars`, so it was skipped — confirmed by the absence of
+any `sheets/mod.rs` line in the dev log between "event hard-deleted" and "event
+permanently deleted". That was luck, not design. Prefer
+`wrangler d1 execute --local` for fixture teardown; if you do use the API,
+diff the dev log for `sheets::` afterwards.
+
+**`hard_delete_event` does not cascade.** It removes the KV entry and the
+`events` row only, so fixture teardown through the API leaves `event_summaries`,
+`attendees` and audit rows behind. Verify the tables you seeded are actually
+empty afterwards rather than assuming the delete was total.
+
 ### 4.5 Email validation — done
 
 The original claim here ("no email validator exists anywhere") was wrong: a

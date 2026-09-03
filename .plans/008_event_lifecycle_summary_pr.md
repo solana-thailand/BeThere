@@ -575,6 +575,12 @@ The `contacts.events_joined` CSV (`worker/src/db/contacts.rs#L22-31`) is overwri
 
 ### Manual
 
+**Status 2026-09-04:** all four remain open and all four are genuinely blocked on
+a browser + a real event — the API side of each is now verified against local D1
+(see the Integration notes and the Phase 3 acceptance list), so what is left is
+specifically *rendering and copy*, not behaviour. Nothing here is owner-gated;
+it just cannot be done from a shell.
+
 - [ ] Run through Phase 1 UI on a real completed event (e.g. an old dev event in the DB). Verify funnel numbers match the live dashboard's last-known values.
 - [ ] Run Phase 2 publish flow. Visit `/events/{slug}/recap` in incognito. Confirm sanitized payload.
 - [ ] Run Phase 3 toggle + register flow. Verify a new row appears in `developer_profiles` with the post-event registrant's interests.
@@ -582,8 +588,47 @@ The `contacts.events_joined` CSV (`worker/src/db/contacts.rs#L22-31`) is overwri
 
 ### CI
 
-- [ ] New tests must be wired into the worker `pnpm test` + `cargo test` flow.
-- [ ] No new clippy warnings on changed files (the wider 183-warning debt is documented elsewhere — plan 004 §7).
+- [x] New tests must be wired into the worker `pnpm test` + `cargo test` flow.
+      **Reworded on completion (2026-09-04): there is no `pnpm test`, and this
+      workstream added no new test *files*.** Both integration boxes above were
+      closed by exercising the real handlers against local D1 rather than by
+      adding host-target tests, so the only new automated coverage is unit
+      tests inside existing crates (`domain/src/pr_pack.rs` is now 17 tests).
+      Those run under `cargo test --workspace --locked`, which
+      `.github/workflows/ci.yml` (job `build-test`) already executes on every
+      push to `develop`/`main` and every PR. Verified locally at `cd49a11`:
+      **477 tests, 0 failed** across `domain` (121 lib + 5 integration files),
+      `worker` (210 lib + 5 integration files) and both doc-test targets.
+
+      `pnpm test` does not exist and never did — `worker/package.json` defines
+      only `test:e2e*` (Playwright). See the new box below for that gap.
+- [x] No new clippy warnings on changed files (the wider 183-warning debt is
+      documented elsewhere — plan 004 §7). Verified at `cd49a11`:
+      `cargo clippy --workspace --locked --all-targets -- -D warnings` is
+      **clean**, as is the frontend's separate gate
+      (`cd frontend-leptos && cargo clippy --locked --target wasm32-unknown-unknown -- -D warnings`).
+
+      **Defect found by running the real CI invocation (fixed, `cd49a11`).**
+      The gate this workstream had been using day to day —
+      `cargo clippy -p event-checkin-worker --target wasm32-unknown-unknown -- -D warnings`
+      — omits `--all-targets`, so it never lints `#[cfg(test)]` code. CI's
+      invocation does. A `useless_vec` in `worker/src/handlers/contacts.rs:693`
+      (introduced 2026-08-21 by `9388ddf`, i.e. **pre-existing**, not from this
+      plan) therefore sat red on the branch: `cargo clippy --workspace
+      --all-targets` failed with `could not compile event-checkin-worker (lib
+      test)`. Any PR from this branch would have gone red on the `build-test`
+      job. Use `--all-targets` when checking clippy locally.
+- [ ] **New gap — the Playwright e2e suite is not in CI at all.** `e2e/` holds 5
+      smoke specs (`auth-guards`, `claim`, `landing`, `login`, `routes`; 95
+      lines total) driven by `worker/playwright.config.ts`, whose `testDir` is
+      `../e2e` and whose `baseURL` defaults to `http://localhost:3001`. The
+      config has **no `webServer` block**, so the specs assume something is
+      already serving; nothing in `.github/workflows/ci.yml` runs them, and
+      `worker/package.json` has no plain `test` script to hang them off.
+      Wiring them would need a `trunk` frontend build plus a `wrangler dev`
+      (or a `webServer` entry doing both) inside the runner — a real job, not a
+      one-line addition, and out of scope for plan 008. Filed here so it is not
+      lost; it belongs to whoever next touches CI.
 
 ---
 
@@ -806,13 +851,73 @@ To keep this from becoming a surprise as the worker grows, this plan adds `worke
 
 ### Phase 3 — Post-Event Registration
 
-- [ ] An organizer can toggle post-event registration on a Completed event, with an optional deadline.
-- [ ] A signed-in user can register post-event; the form captures developer-profile fields.
-- [ ] The new `attendees` row has `registration_phase = 'post_event'` and `approval_status = 'post_event_registered'`.
-- [ ] The registrant's `developer_profiles` row is upserted with submitted fields.
-- [ ] Post-event registrants are NOT counted in capacity, check-in, or normal-attendance queries.
-- [ ] The summary page's "post-event registrations" tile increments correctly.
-- [ ] When the deadline passes (or the toggle is flipped off), the public form 404s/410s.
+All API-level criteria below were exercised against **local D1** under
+`wrangler dev --local` on 2026-09-04 (harness: `.plans/020_sql_parameter_binding.md`).
+The two boxes that need a *browser* rather than an API call are marked `[~]` and
+belong to the Manual section.
+
+- [x] An organizer can toggle post-event registration on a Completed event, with an optional deadline.
+      (Verified 2026-09-04 against local D1, `PUT /api/events/{id}/post-event-registration`
+      as the organizer: open + future deadline → `200 {"open":true,"until_ms":…}` and the
+      `events` row carries both; open + past deadline → **400** `"deadline … must be in the
+      future"`; open on a KV-cold `active` event → **400** `"can only be opened for completed
+      events (current status: active)"`; close → `200` and the deadline is cleared to `NULL`.
+      Closing is deliberately allowed in any status. Frontend toggle control itself is UI —
+      see Manual.)
+
+      **Harness note, not a defect.** `events::common::load_event` is KV-first, so the
+      status gate reads the *cached* config. Editing `events.status` straight in D1 (as a
+      seed script does) is invisible to this handler until KV is refreshed — every
+      in-app status change mirrors to KV, so this only bites out-of-band writes. Seed a
+      fresh event id when you need a KV-cold read.
+- [~] A signed-in user can register post-event; the form captures developer-profile fields.
+      (API half verified 2026-09-04 — see the `post_event_registration.rs` integration note
+      above, which also found and fixed two defects. Rendering the form is Manual.)
+- [x] The new `attendees` row has `registration_phase = 'post_event'` and `approval_status = 'post_event_registered'`.
+      (Verified against local D1 2026-09-04 — integration note above.)
+- [x] The registrant's `developer_profiles` row is upserted with submitted fields.
+      (Verified against local D1 2026-09-04 — integration note above; the consent-divergence
+      defect found there is fixed in `2f25910`.)
+- [x] Post-event registrants are NOT counted in capacity, check-in, or normal-attendance queries.
+      (Verified against local D1 2026-09-04. Holds *by construction*: `count_registered`
+      selects `approval_status = 'approved'` (`db/dashboard.rs:57`) and post-event rows are
+      never written to Sheets, so neither the dashboard nor the Sheets capacity check can
+      see them. `post_event_registered` appears in exactly two files repo-wide.)
+- [x] The summary page's "post-event registrations" tile increments correctly.
+      (Verified against local D1 2026-09-04 during the freeze run: a seeded
+      `post_event_registered` row was excluded from `registered_count` and counted by
+      `post_event_reg_count` in the same snapshot. The tile renders that field.)
+- [x] When the deadline passes (or the toggle is flipped off), the public form 404s/410s.
+      (Verified 2026-09-04 against local D1 on `POST /api/public/event/{slug}/register-post-event`:
+      past deadline → **410** `"post-event registration for this event has closed"`;
+      toggle off → **409** `"post-event registration is not open for this event"`.)
+
+      **Defect — the recap page kept advertising a closed form (fixed, `3cee479`).**
+      `GET /api/public/event/{slug}/recap` returned the raw
+      `post_event_registration_open` flag, and `pages/public/event_recap.rs:304` renders the
+      "Missed this event? / Join the community" CTA straight from it. The flag stays `true`
+      after the deadline lapses — only the *submit* endpoint checks the deadline — so a
+      visitor arriving one minute late was invited to sign in with Google, fill the whole
+      form, and only then be told `410 Gone`. The public payload now reports whether
+      registration **accepts a submission now**, computed on the server clock (the same
+      clock the submit endpoint compares against) rather than the browser's.
+
+      The comparison itself is now shared: `EventConfig::post_event_registration_accepting`
+      / `post_event_registration_deadline_passed` in `domain/src/models/event.rs`, used by
+      both the payload and `register::post_event` — so the CTA cannot disappear while the
+      endpoint still accepts, or vice versa. The two error branches stay separate because
+      the codes differ (never-opened is a 409, opened-then-lapsed a 410). 4 new unit tests
+      cover the `now_ms >= until` boundary, the `None` = indefinite case, and toggle-off
+      beating a future deadline. Verified end-to-end: past deadline → payload flag `false`
+      *and* submit `410`; future deadline → `true` *and* the form accepts; toggle off →
+      `false` *and* `409`.
+
+      **Out of scope, flagged not fixed:** `hard_delete_event` removes the KV entry and the
+      `events` row only (`event_store::write::index::sync_delete_event_from_d1` →
+      `db::events::delete_event`). `event_summaries` has no FK to `events` and no cascade,
+      so permanently deleting an event leaves its frozen funnel snapshot behind — observed
+      while cleaning up the fixtures above. `attendees` and the audit rows survive too, which
+      may well be intentional for record-keeping; the orphan summary probably is not.
 
 ### Phase 4 — PR Pack
 
