@@ -87,11 +87,6 @@ pub async fn upsert_summary(
     let f = &summary.funnel;
     let fin = &summary.financials;
 
-    // Escape single quotes in text fields to keep the interpolated SQL valid.
-    // These values are never attacker-controlled (actor email / event id), but
-    // defensive escaping is cheap and matches good hygiene.
-    let esc = |s: &str| s.replace('"', "''");
-
     let sql = format!(
         "INSERT INTO event_summaries (\
             event_id, registered_count, deposited_count, checked_in_count, no_show_count, \
@@ -100,11 +95,11 @@ pub async fn upsert_summary(
             usdc_deposited_total, usdc_refunded_total, thb_deposited_total, thb_refunded_total, \
             event_start_ms, event_end_ms, frozen_at, frozen_by, updated_at\
          ) VALUES (\
-            '{event_id}', {registered}, {deposited}, {checked_in}, {no_show}, \
+            ?, {registered}, {deposited}, {checked_in}, {no_show}, \
             {claimed}, {refunded}, {post_event_reg}, \
             {in_person_reg}, {in_person_chk}, \
             {usdc_dep}, {usdc_ref}, {thb_dep}, {thb_ref}, \
-            {start_ms}, {end_ms}, '{frozen_at}', '{frozen_by}', datetime('now')\
+            {start_ms}, {end_ms}, ?, ?, datetime('now')\
          ) ON CONFLICT(event_id) DO UPDATE SET \
             registered_count=excluded.registered_count, deposited_count=excluded.deposited_count, \
             checked_in_count=excluded.checked_in_count, no_show_count=excluded.no_show_count, \
@@ -119,7 +114,6 @@ pub async fn upsert_summary(
             event_start_ms=excluded.event_start_ms, event_end_ms=excluded.event_end_ms, \
             frozen_at=excluded.frozen_at, frozen_by=excluded.frozen_by, \
             updated_at=datetime('now')",
-        event_id = esc(&summary.event_id),
         registered = f.registered_count,
         deposited = f.deposited_count,
         checked_in = f.checked_in_count,
@@ -135,11 +129,18 @@ pub async fn upsert_summary(
         thb_ref = fin.thb_refunded_total,
         start_ms = summary.event_start_ms,
         end_ms = summary.event_end_ms,
-        frozen_at = esc(&frozen_at),
-        frozen_by = esc(frozen_by),
     );
 
+    // Order MUST match the `?` placeholders in the VALUES clause above.
+    let args = [
+        D1Type::Text(&summary.event_id),
+        D1Type::Text(&frozen_at),
+        D1Type::Text(frozen_by),
+    ];
+
     db.prepare(&sql)
+        .bind_refs(&args)
+        .map_err(|e| format!("D1 upsert_summary bind: {e:?}"))?
         .run()
         .await
         .map_err(|e| format!("D1 upsert_summary run: {e:?}"))?;

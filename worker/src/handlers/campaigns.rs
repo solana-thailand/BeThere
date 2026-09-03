@@ -459,9 +459,10 @@ pub async fn delete_campaign(
         .map_err(|e| AppError::Internal(format!("failed to clear campaign events: {e}")))?;
 
     // Delete progress for this campaign
-    let delete_progress_sql =
-        format!("DELETE FROM developer_campaign_progress WHERE campaign_id = '{id}'");
-    d1.exec(&delete_progress_sql)
+    d1.prepare("DELETE FROM developer_campaign_progress WHERE campaign_id = ?")
+        .bind_refs(&[worker::d1::D1Type::Text(&id)])
+        .map_err(|e| AppError::Internal(format!("D1 delete campaign progress bind: {e:?}")))?
+        .run()
         .await
         .map_err(|e| format!("D1 delete campaign progress: {e:?}"))
         .map_err(AppError::Internal)?;

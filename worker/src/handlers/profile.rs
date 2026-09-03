@@ -212,9 +212,9 @@ pub async fn update_my_profile(
           primary_role, tech_stack, interests, learning_goals, company_org, \
           location_city, consent_outreach, first_seen_at, last_active_at, \
           total_events, updated_at) \
-         VALUES ('{email}', '{display_name}', '{github}', '{discord}', '{twitter}', '{telegram}', \
-          '{primary_role}', '{tech_stack}', '{interests}', '{learning_goals}', \
-          '{company_org}', '{location_city}', {consent_val}, \
+         VALUES (?, ?, ?, ?, ?, ?, \
+          ?, ?, ?, ?, \
+          ?, ?, {consent_val}, \
           datetime('now'), datetime('now'), 0, datetime('now')) \
          ON CONFLICT (email) DO UPDATE SET \
           display_name = excluded.display_name, \
@@ -230,22 +230,28 @@ pub async fn update_my_profile(
           location_city = excluded.location_city, \
           consent_outreach = excluded.consent_outreach, \
           updated_at = datetime('now')",
-        email = claims.email.replace('\'', "''"),
-        display_name = body.display_name.replace('\'', "''"),
-        github = body.github_handle.replace('\'', "''"),
-        discord = body.discord_handle.replace('\'', "''"),
-        twitter = body.twitter_handle.replace('\'', "''"),
-        telegram = body.telegram_handle.replace('\'', "''"),
-        primary_role = body.primary_role.replace('\'', "''"),
-        tech_stack = tech_stack_json.replace('\'', "''"),
-        interests = interests_json.replace('\'', "''"),
-        learning_goals = body.learning_goals.replace('\'', "''"),
-        company_org = body.company_org.replace('\'', "''"),
-        location_city = body.location_city.replace('\'', "''"),
         consent_val = consent_val,
     );
 
+    // Order MUST match the `?` placeholders in the VALUES clause above.
+    let args = [
+        worker::d1::D1Type::Text(&claims.email),
+        worker::d1::D1Type::Text(&body.display_name),
+        worker::d1::D1Type::Text(&body.github_handle),
+        worker::d1::D1Type::Text(&body.discord_handle),
+        worker::d1::D1Type::Text(&body.twitter_handle),
+        worker::d1::D1Type::Text(&body.telegram_handle),
+        worker::d1::D1Type::Text(&body.primary_role),
+        worker::d1::D1Type::Text(&tech_stack_json),
+        worker::d1::D1Type::Text(&interests_json),
+        worker::d1::D1Type::Text(&body.learning_goals),
+        worker::d1::D1Type::Text(&body.company_org),
+        worker::d1::D1Type::Text(&body.location_city),
+    ];
+
     worker::D1Database::prepare(d1, &sql)
+        .bind_refs(&args)
+        .map_err(|e| AppError::Internal(format!("D1 update_my_profile bind: {e:?}")))?
         .run()
         .await
         .map_err(|e| AppError::Internal(format!("Failed to update profile: {e:?}")))?;

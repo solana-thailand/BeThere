@@ -187,9 +187,12 @@ pub async fn run_cleanup(kv: &KvStore, d1: Option<&worker::D1Database>) -> Clean
             }
 
             // D1: delete onchain events for this event
-            if let Some(db) = d1 {
-                let sql = format!("DELETE FROM onchain_events WHERE event_id = '{event_id}'");
-                let _ = db.exec(&sql).await;
+            if let Some(db) = d1
+                && let Ok(stmt) = db
+                    .prepare("DELETE FROM onchain_events WHERE event_id = ?")
+                    .bind_refs(&[worker::d1::D1Type::Text(event_id)])
+            {
+                let _ = stmt.run().await;
             }
         }
     }

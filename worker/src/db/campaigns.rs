@@ -162,8 +162,9 @@ pub(crate) async fn update_campaign(
 
 #[allow(dead_code)]
 pub(crate) async fn get_campaign(db: &D1Database, id: &str) -> Result<Option<CampaignRow>, String> {
-    let sql = format!("SELECT * FROM campaigns WHERE id = '{id}' LIMIT 1");
-    db.prepare(&sql)
+    db.prepare("SELECT * FROM campaigns WHERE id = ? LIMIT 1")
+        .bind_refs(&[D1Type::Text(id)])
+        .map_err(|e| format!("D1 get_campaign bind: {e:?}"))?
         .first::<CampaignRow>(None)
         .await
         .map_err(|e| format!("D1 get_campaign query: {e:?}"))
@@ -180,9 +181,10 @@ pub(crate) async fn get_campaign(db: &D1Database, id: &str) -> Result<Option<Cam
 /// the query is interpolated rather than bound, so an unvalidated id would be
 /// an injection vector.
 pub(crate) async fn campaign_exists(db: &D1Database, id: &str) -> Result<bool, String> {
-    let sql = format!("SELECT 1 AS present FROM campaigns WHERE id = '{id}' LIMIT 1");
     let row = db
-        .prepare(&sql)
+        .prepare("SELECT 1 AS present FROM campaigns WHERE id = ? LIMIT 1")
+        .bind_refs(&[D1Type::Text(id)])
+        .map_err(|e| format!("D1 campaign_exists bind: {e:?}"))?
         .first::<ExistsRow>(None)
         .await
         .map_err(|e| format!("D1 campaign_exists query: {e:?}"))?;
@@ -227,12 +229,16 @@ pub(crate) async fn list_campaigns(
     organization_id: Option<&str>,
     status: Option<&str>,
 ) -> Result<Vec<CampaignRow>, String> {
+    // Placeholders and args are pushed together so the two lists cannot drift.
     let mut clauses = Vec::new();
+    let mut args = Vec::new();
     if let Some(org) = organization_id {
-        clauses.push(format!("organization_id = '{org}'"));
+        clauses.push("organization_id = ?");
+        args.push(D1Type::Text(org));
     }
     if let Some(s) = status {
-        clauses.push(format!("status = '{s}'"));
+        clauses.push("status = ?");
+        args.push(D1Type::Text(s));
     }
     let where_clause = if clauses.is_empty() {
         String::new()
@@ -242,6 +248,8 @@ pub(crate) async fn list_campaigns(
     let sql = format!("SELECT * FROM campaigns {where_clause} ORDER BY created_at DESC");
     let result = db
         .prepare(&sql)
+        .bind_refs(&args)
+        .map_err(|e| format!("D1 list_campaigns bind: {e:?}"))?
         .all()
         .await
         .map_err(|e| format!("D1 list_campaigns: {e:?}"))?;
@@ -255,11 +263,11 @@ pub(crate) async fn update_campaign_status(
     id: &str,
     status: &str,
 ) -> Result<(), String> {
-    let sql = format!(
-        "UPDATE campaigns SET status = '{status}', updated_at = datetime('now') \
-         WHERE id = '{id}'"
-    );
-    db.exec(&sql)
+    let args = [D1Type::Text(status), D1Type::Text(id)];
+    db.prepare("UPDATE campaigns SET status = ?, updated_at = datetime('now') WHERE id = ?")
+        .bind_refs(&args)
+        .map_err(|e| format!("D1 update_campaign_status bind: {e:?}"))?
+        .run()
         .await
         .map_err(|e| format!("D1 update_campaign_status: {e:?}"))?;
     Ok(())
@@ -267,8 +275,10 @@ pub(crate) async fn update_campaign_status(
 
 #[allow(dead_code)]
 pub(crate) async fn delete_campaign(db: &D1Database, id: &str) -> Result<(), String> {
-    let sql = format!("DELETE FROM campaigns WHERE id = '{id}'");
-    db.exec(&sql)
+    db.prepare("DELETE FROM campaigns WHERE id = ?")
+        .bind_refs(&[D1Type::Text(id)])
+        .map_err(|e| format!("D1 delete_campaign bind: {e:?}"))?
+        .run()
         .await
         .map_err(|e| format!("D1 delete_campaign: {e:?}"))?;
     Ok(())
@@ -288,9 +298,13 @@ pub(crate) async fn add_campaign_event(
 ) -> Result<(), String> {
     let sql = format!(
         "INSERT INTO campaign_events (campaign_id, event_id, sequence_order, is_required) \
-         VALUES ('{campaign_id}', '{event_id}', {sequence_order}, {is_required})"
+         VALUES (?, ?, {sequence_order}, {is_required})"
     );
-    db.exec(&sql)
+    let args = [D1Type::Text(campaign_id), D1Type::Text(event_id)];
+    db.prepare(&sql)
+        .bind_refs(&args)
+        .map_err(|e| format!("D1 add_campaign_event bind: {e:?}"))?
+        .run()
         .await
         .map_err(|e| format!("D1 add_campaign_event: {e:?}"))?;
     Ok(())
@@ -302,11 +316,11 @@ pub(crate) async fn remove_campaign_event(
     campaign_id: &str,
     event_id: &str,
 ) -> Result<(), String> {
-    let sql = format!(
-        "DELETE FROM campaign_events \
-         WHERE campaign_id = '{campaign_id}' AND event_id = '{event_id}'"
-    );
-    db.exec(&sql)
+    let args = [D1Type::Text(campaign_id), D1Type::Text(event_id)];
+    db.prepare("DELETE FROM campaign_events WHERE campaign_id = ? AND event_id = ?")
+        .bind_refs(&args)
+        .map_err(|e| format!("D1 remove_campaign_event bind: {e:?}"))?
+        .run()
         .await
         .map_err(|e| format!("D1 remove_campaign_event: {e:?}"))?;
     Ok(())
@@ -316,13 +330,10 @@ pub(crate) async fn list_campaign_events(
     db: &D1Database,
     campaign_id: &str,
 ) -> Result<Vec<CampaignEventRow>, String> {
-    let sql = format!(
-        "SELECT * FROM campaign_events \
-         WHERE campaign_id = '{campaign_id}' \
-         ORDER BY sequence_order ASC"
-    );
     let result = db
-        .prepare(&sql)
+        .prepare("SELECT * FROM campaign_events WHERE campaign_id = ? ORDER BY sequence_order ASC")
+        .bind_refs(&[D1Type::Text(campaign_id)])
+        .map_err(|e| format!("D1 list_campaign_events bind: {e:?}"))?
         .all()
         .await
         .map_err(|e| format!("D1 list_campaign_events: {e:?}"))?;
@@ -337,17 +348,23 @@ pub(crate) async fn set_campaign_events(
     campaign_id: &str,
     events: &[(String, i64, i64)], // (event_id, sequence_order, is_required)
 ) -> Result<(), String> {
-    let delete_sql = format!("DELETE FROM campaign_events WHERE campaign_id = '{campaign_id}'");
-    db.exec(&delete_sql)
+    db.prepare("DELETE FROM campaign_events WHERE campaign_id = ?")
+        .bind_refs(&[D1Type::Text(campaign_id)])
+        .map_err(|e| format!("D1 set_campaign_events delete bind: {e:?}"))?
+        .run()
         .await
         .map_err(|e| format!("D1 set_campaign_events delete: {e:?}"))?;
 
     for (event_id, sequence_order, is_required) in events {
         let sql = format!(
             "INSERT INTO campaign_events (campaign_id, event_id, sequence_order, is_required) \
-             VALUES ('{campaign_id}', '{event_id}', {sequence_order}, {is_required})"
+             VALUES (?, ?, {sequence_order}, {is_required})"
         );
-        db.exec(&sql)
+        let args = [D1Type::Text(campaign_id), D1Type::Text(event_id)];
+        db.prepare(&sql)
+            .bind_refs(&args)
+            .map_err(|e| format!("D1 set_campaign_events insert bind: {e:?}"))?
+            .run()
             .await
             .map_err(|e| format!("D1 set_campaign_events insert: {e:?}"))?;
     }
@@ -365,13 +382,15 @@ pub(crate) async fn get_developer_progress(
     campaign_id: &str,
     developer_email: &str,
 ) -> Result<Option<DeveloperCampaignProgressRow>, String> {
-    let sql = format!(
+    let args = [D1Type::Text(campaign_id), D1Type::Text(developer_email)];
+    db.prepare(
         "SELECT * FROM developer_campaign_progress \
-         WHERE campaign_id = '{campaign_id}' AND developer_email = '{developer_email}' \
-         LIMIT 1"
-    );
-    db.prepare(&sql)
-        .first::<DeveloperCampaignProgressRow>(None)
+         WHERE campaign_id = ? AND developer_email = ? \
+         LIMIT 1",
+    )
+    .bind_refs(&args)
+    .map_err(|e| format!("D1 get_developer_progress bind: {e:?}"))?
+    .first::<DeveloperCampaignProgressRow>(None)
         .await
         .map_err(|e| format!("D1 get_developer_progress query: {e:?}"))
 }
@@ -394,7 +413,7 @@ pub(crate) async fn upsert_developer_progress(
         "INSERT INTO developer_campaign_progress \
          (campaign_id, developer_email, events_completed, total_required, is_complete, \
           completed_at, reward_claimed_at) \
-         VALUES ('{campaign_id}', '{developer_email}', {events_completed}, {total_required}, \
+         VALUES (?, ?, {events_completed}, {total_required}, \
          {is_complete}, {completed_at_expr}, NULL) \
          ON CONFLICT (campaign_id, developer_email) DO UPDATE SET \
          events_completed = excluded.events_completed, \
@@ -402,7 +421,11 @@ pub(crate) async fn upsert_developer_progress(
          is_complete = excluded.is_complete, \
          completed_at = CASE WHEN excluded.is_complete = 1 THEN datetime('now') ELSE developer_campaign_progress.completed_at END"
     );
-    db.exec(&sql)
+    let args = [D1Type::Text(campaign_id), D1Type::Text(developer_email)];
+    db.prepare(&sql)
+        .bind_refs(&args)
+        .map_err(|e| format!("D1 upsert_developer_progress bind: {e:?}"))?
+        .run()
         .await
         .map_err(|e| format!("D1 upsert_developer_progress: {e:?}"))?;
     Ok(())
@@ -413,13 +436,14 @@ pub(crate) async fn list_campaign_progress(
     db: &D1Database,
     campaign_id: &str,
 ) -> Result<Vec<DeveloperCampaignProgressRow>, String> {
-    let sql = format!(
-        "SELECT * FROM developer_campaign_progress \
-         WHERE campaign_id = '{campaign_id}' \
-         ORDER BY developer_email ASC"
-    );
     let result = db
-        .prepare(&sql)
+        .prepare(
+            "SELECT * FROM developer_campaign_progress \
+             WHERE campaign_id = ? \
+             ORDER BY developer_email ASC",
+        )
+        .bind_refs(&[D1Type::Text(campaign_id)])
+        .map_err(|e| format!("D1 list_campaign_progress bind: {e:?}"))?
         .all()
         .await
         .map_err(|e| format!("D1 list_campaign_progress: {e:?}"))?;
@@ -437,8 +461,7 @@ pub(crate) async fn list_campaign_attendance(
     db: &D1Database,
     campaign_id: &str,
 ) -> Result<Vec<DeveloperEventAttendanceRow>, String> {
-    let sql = format!(
-        "SELECT \
+    let sql = "SELECT \
          dcp.developer_email AS developer_email, \
          ce.event_id AS event_id, \
          e.name AS event_name, \
@@ -451,12 +474,13 @@ pub(crate) async fn list_campaign_attendance(
          LEFT JOIN attendees a ON a.event_id = ce.event_id \
          AND a.email = dcp.developer_email \
          AND a.checked_in_at IS NOT NULL \
-         WHERE dcp.campaign_id = '{campaign_id}' \
+         WHERE dcp.campaign_id = ? \
          GROUP BY dcp.developer_email, ce.event_id, e.name, ce.sequence_order, ce.is_required \
-         ORDER BY dcp.developer_email ASC, ce.sequence_order ASC"
-    );
+         ORDER BY dcp.developer_email ASC, ce.sequence_order ASC";
     let result = db
-        .prepare(&sql)
+        .prepare(sql)
+        .bind_refs(&[D1Type::Text(campaign_id)])
+        .map_err(|e| format!("D1 list_campaign_attendance bind: {e:?}"))?
         .all()
         .await
         .map_err(|e| format!("D1 list_campaign_attendance: {e:?}"))?;
@@ -470,13 +494,14 @@ pub(crate) async fn list_developer_campaigns(
     db: &D1Database,
     developer_email: &str,
 ) -> Result<Vec<DeveloperCampaignProgressRow>, String> {
-    let sql = format!(
-        "SELECT * FROM developer_campaign_progress \
-         WHERE developer_email = '{developer_email}' \
-         ORDER BY campaign_id ASC"
-    );
     let result = db
-        .prepare(&sql)
+        .prepare(
+            "SELECT * FROM developer_campaign_progress \
+             WHERE developer_email = ? \
+             ORDER BY campaign_id ASC",
+        )
+        .bind_refs(&[D1Type::Text(developer_email)])
+        .map_err(|e| format!("D1 list_developer_campaigns bind: {e:?}"))?
         .all()
         .await
         .map_err(|e| format!("D1 list_developer_campaigns: {e:?}"))?;
@@ -491,14 +516,17 @@ pub(crate) async fn mark_reward_claimed(
     campaign_id: &str,
     developer_email: &str,
 ) -> Result<(), String> {
-    let sql = format!(
+    let args = [D1Type::Text(campaign_id), D1Type::Text(developer_email)];
+    db.prepare(
         "UPDATE developer_campaign_progress \
          SET reward_claimed_at = datetime('now') \
-         WHERE campaign_id = '{campaign_id}' AND developer_email = '{developer_email}'"
-    );
-    db.exec(&sql)
-        .await
-        .map_err(|e| format!("D1 mark_reward_claimed: {e:?}"))?;
+         WHERE campaign_id = ? AND developer_email = ?",
+    )
+    .bind_refs(&args)
+    .map_err(|e| format!("D1 mark_reward_claimed bind: {e:?}"))?
+    .run()
+    .await
+    .map_err(|e| format!("D1 mark_reward_claimed: {e:?}"))?;
     Ok(())
 }
 
@@ -510,16 +538,24 @@ pub(crate) async fn mark_reward_claimed_with_mint(
     asset_id: &str,
     signature: &str,
 ) -> Result<(), String> {
-    let sql = format!(
+    let args = [
+        D1Type::Text(asset_id),
+        D1Type::Text(signature),
+        D1Type::Text(campaign_id),
+        D1Type::Text(developer_email),
+    ];
+    db.prepare(
         "UPDATE developer_campaign_progress \
          SET reward_claimed_at = datetime('now'), \
-             reward_asset_id = '{asset_id}', \
-             reward_signature = '{signature}' \
-         WHERE campaign_id = '{campaign_id}' AND developer_email = '{developer_email}'"
-    );
-    db.exec(&sql)
-        .await
-        .map_err(|e| format!("D1 mark_reward_claimed_with_mint: {e:?}"))?;
+             reward_asset_id = ?, \
+             reward_signature = ? \
+         WHERE campaign_id = ? AND developer_email = ?",
+    )
+    .bind_refs(&args)
+    .map_err(|e| format!("D1 mark_reward_claimed_with_mint bind: {e:?}"))?
+    .run()
+    .await
+    .map_err(|e| format!("D1 mark_reward_claimed_with_mint: {e:?}"))?;
     Ok(())
 }
 
@@ -542,14 +578,12 @@ struct EventDropOffRow {
 /// `TotalsRow::total_completed` (`i64`), so the whole stats call 500s. Every
 /// campaign has no enrolled developers at creation, so this fired on every new
 /// campaign until 2026-08-21.
-fn totals_sql(campaign_id: &str) -> String {
-    format!(
-        "SELECT \
-         COUNT(*) AS total_enrolled, \
-         COALESCE(SUM(CASE WHEN is_complete = 1 THEN 1 ELSE 0 END), 0) AS total_completed \
-         FROM developer_campaign_progress \
-         WHERE campaign_id = '{campaign_id}'"
-    )
+fn totals_sql() -> &'static str {
+    "SELECT \
+     COUNT(*) AS total_enrolled, \
+     COALESCE(SUM(CASE WHEN is_complete = 1 THEN 1 ELSE 0 END), 0) AS total_completed \
+     FROM developer_campaign_progress \
+     WHERE campaign_id = ?"
 }
 
 #[allow(dead_code)]
@@ -558,9 +592,10 @@ pub(crate) async fn campaign_completion_stats(
     campaign_id: &str,
 ) -> Result<CampaignCompletionStats, String> {
     // Total enrolled and completed from developer_campaign_progress.
-    let totals_sql = totals_sql(campaign_id);
     let totals = db
-        .prepare(&totals_sql)
+        .prepare(totals_sql())
+        .bind_refs(&[D1Type::Text(campaign_id)])
+        .map_err(|e| format!("D1 campaign_completion_stats totals bind: {e:?}"))?
         .first::<TotalsRow>(None)
         .await
         .map_err(|e| format!("D1 campaign_completion_stats totals: {e:?}"))?;
@@ -575,22 +610,22 @@ pub(crate) async fn campaign_completion_stats(
 
     // Per-event drop-off: for each campaign_event, count enrolled developers who
     // checked in to that event (attendees.checked_in_at IS NOT NULL).
-    let dropoff_sql = format!(
-        "SELECT ce.event_id, ce.sequence_order, \
+    let dropoff_sql = "SELECT ce.event_id, ce.sequence_order, \
          COUNT(a.id) AS attended \
          FROM campaign_events ce \
          LEFT JOIN attendees a ON a.event_id = ce.event_id \
          AND a.checked_in_at IS NOT NULL \
          AND a.email IN ( \
          SELECT developer_email FROM developer_campaign_progress \
-         WHERE campaign_id = '{campaign_id}' \
+         WHERE campaign_id = ? \
          ) \
-         WHERE ce.campaign_id = '{campaign_id}' \
+         WHERE ce.campaign_id = ? \
          GROUP BY ce.event_id, ce.sequence_order \
-         ORDER BY ce.sequence_order ASC"
-    );
+         ORDER BY ce.sequence_order ASC";
     let result = db
-        .prepare(&dropoff_sql)
+        .prepare(dropoff_sql)
+        .bind_refs(&[D1Type::Text(campaign_id), D1Type::Text(campaign_id)])
+        .map_err(|e| format!("D1 campaign_completion_stats dropoff bind: {e:?}"))?
         .all()
         .await
         .map_err(|e| format!("D1 campaign_completion_stats dropoff: {e:?}"))?;
@@ -637,9 +672,17 @@ struct TotalsRow {
 /// Non-blocking: errors are logged but don't affect check-in.
 pub(crate) async fn on_event_checkin(db: &D1Database, event_id: &str, developer_email: &str) {
     // 1. Find all campaigns that include this event
-    let campaigns_sql =
-        format!("SELECT DISTINCT campaign_id FROM campaign_events WHERE event_id = '{event_id}'");
-    let result = match db.prepare(&campaigns_sql).all().await {
+    let campaigns_stmt = match db
+        .prepare("SELECT DISTINCT campaign_id FROM campaign_events WHERE event_id = ?")
+        .bind_refs(&[D1Type::Text(event_id)])
+    {
+        Ok(stmt) => stmt,
+        Err(e) => {
+            tracing::warn!(event_id = %event_id, error = %e, "campaign auto-progress: failed to bind campaigns query");
+            return;
+        }
+    };
+    let result = match campaigns_stmt.all().await {
         Ok(r) => r,
         Err(e) => {
             tracing::warn!(event_id = %event_id, error = %e, "campaign auto-progress: failed to find campaigns");
@@ -659,10 +702,19 @@ pub(crate) async fn on_event_checkin(db: &D1Database, event_id: &str, developer_
         let campaign_id = &row.campaign_id;
 
         // 2. Count total required events for this campaign
-        let total_sql = format!(
-            "SELECT COUNT(*) AS cnt FROM campaign_events WHERE campaign_id = '{campaign_id}' AND is_required = 1"
-        );
-        let total_result = match db.prepare(&total_sql).first::<TotalCountRow>(None).await {
+        let total_sql =
+            "SELECT COUNT(*) AS cnt FROM campaign_events WHERE campaign_id = ? AND is_required = 1";
+        let total_stmt = match db
+            .prepare(total_sql)
+            .bind_refs(&[D1Type::Text(campaign_id)])
+        {
+            Ok(stmt) => stmt,
+            Err(e) => {
+                tracing::warn!(campaign_id = %campaign_id, error = %e, "campaign auto-progress: failed to bind total count");
+                continue;
+            }
+        };
+        let total_result = match total_stmt.first::<TotalCountRow>(None).await {
             Ok(Some(r)) => r,
             Ok(None) => {
                 tracing::warn!(campaign_id = %campaign_id, "campaign auto-progress: no total count");
@@ -675,18 +727,22 @@ pub(crate) async fn on_event_checkin(db: &D1Database, event_id: &str, developer_
         };
 
         // 3. Count events this developer has checked into for this campaign
-        let completed_sql = format!(
-            "SELECT COUNT(*) AS cnt FROM campaign_events ce \
+        let completed_sql = "SELECT COUNT(*) AS cnt FROM campaign_events ce \
              INNER JOIN attendees a ON a.event_id = ce.event_id \
-             WHERE ce.campaign_id = '{campaign_id}' \
-             AND a.email = '{developer_email}' \
-             AND a.checked_in_at IS NOT NULL"
-        );
-        let completed_result = match db
-            .prepare(&completed_sql)
-            .first::<TotalCountRow>(None)
-            .await
-        {
+             WHERE ce.campaign_id = ? \
+             AND a.email = ? \
+             AND a.checked_in_at IS NOT NULL";
+        let completed_stmt = match db.prepare(completed_sql).bind_refs(&[
+            D1Type::Text(campaign_id),
+            D1Type::Text(developer_email),
+        ]) {
+            Ok(stmt) => stmt,
+            Err(e) => {
+                tracing::warn!(campaign_id = %campaign_id, error = %e, "campaign auto-progress: failed to bind completed count");
+                continue;
+            }
+        };
+        let completed_result = match completed_stmt.first::<TotalCountRow>(None).await {
             Ok(Some(r)) => r,
             Ok(None) => {
                 tracing::warn!(campaign_id = %campaign_id, "campaign auto-progress: no completed count");
@@ -767,14 +823,15 @@ pub(crate) async fn get_campaign_for_event(
     db: &D1Database,
     event_id: &str,
 ) -> Result<Option<CampaignRow>, String> {
-    let sql = format!(
-        "SELECT c.* FROM campaigns c \
+    let sql = "SELECT c.* FROM campaigns c \
          INNER JOIN campaign_events ce ON ce.campaign_id = c.id \
-         WHERE ce.event_id = '{event_id}' \
-         LIMIT 1"
-    );
+         WHERE ce.event_id = ? \
+         LIMIT 1";
     // Bypass `.first::<T>()` — crashes on JsValue(null) when no row matches.
-    let stmt = db.prepare(&sql);
+    let stmt = db
+        .prepare(sql)
+        .bind_refs(&[D1Type::Text(event_id)])
+        .map_err(|e| format!("D1 get_campaign_for_event bind: {e:?}"))?;
     let raw_result = JsFuture::from(
         stmt.inner()
             .all()
@@ -803,16 +860,17 @@ pub(crate) async fn list_campaign_event_summaries(
     db: &D1Database,
     campaign_id: &str,
 ) -> Result<Vec<EventSeriesEntry>, String> {
-    let sql = format!(
-        "SELECT ce.event_id AS event_id, e.name AS name, e.slug AS slug, \
+    let sql = "SELECT ce.event_id AS event_id, e.name AS name, e.slug AS slug, \
                 COALESCE(e.event_start_ms, 0) AS event_start_ms, ce.sequence_order AS sequence_order \
          FROM campaign_events ce \
          LEFT JOIN events e ON e.id = ce.event_id \
-         WHERE ce.campaign_id = '{campaign_id}' \
-         ORDER BY ce.sequence_order ASC, e.event_start_ms ASC"
-    );
+         WHERE ce.campaign_id = ? \
+         ORDER BY ce.sequence_order ASC, e.event_start_ms ASC";
 
-    let stmt = db.prepare(&sql);
+    let stmt = db
+        .prepare(sql)
+        .bind_refs(&[D1Type::Text(campaign_id)])
+        .map_err(|e| format!("D1 list_campaign_event_summaries bind: {e:?}"))?;
     let raw_result = JsFuture::from(
         stmt.inner()
             .all()
@@ -906,14 +964,14 @@ mod tests {
     /// the COALESCE away and reintroducing a 500 on every new campaign.
     #[test]
     fn totals_sql_coalesces_the_sum() {
-        let sql = totals_sql("c1");
+        let sql = totals_sql();
         assert!(
             sql.contains("COALESCE(SUM(CASE WHEN is_complete = 1 THEN 1 ELSE 0 END), 0)"),
             "SUM must stay wrapped in COALESCE — an empty set yields NULL and 500s: {sql}"
         );
         assert!(sql.contains("COUNT(*) AS total_enrolled"));
         assert!(sql.contains("FROM developer_campaign_progress"));
-        assert!(sql.contains("WHERE campaign_id = 'c1'"));
+        assert!(sql.contains("WHERE campaign_id = ?"));
     }
 
     fn entry(id: &str, seq: i64) -> EventSeriesEntry {

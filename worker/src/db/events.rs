@@ -230,8 +230,11 @@ pub async fn get_form_config(
     db: &D1Database,
     event_id: &str,
 ) -> Result<Option<event_checkin_domain::models::event::RegistrationFormConfig>, String> {
-    let sql = format!("SELECT form_config FROM events WHERE id = '{event_id}' LIMIT 1");
-    let bound = db.prepare(&sql);
+    let sql = "SELECT form_config FROM events WHERE id = ? LIMIT 1";
+    let bound = db
+        .prepare(sql)
+        .bind_refs(&[D1Type::Text(event_id)])
+        .map_err(|e| format!("D1 get_form_config bind: {e:?}"))?;
 
     // Bypass worker crate's .first::<T>() — crashes on JsValue(null).
     let raw_first = JsFuture::from(
@@ -306,8 +309,11 @@ pub async fn set_recap_published_flag(
     published: bool,
 ) -> Result<(), String> {
     let value = if published { 1 } else { 0 };
-    let sql = format!("UPDATE events SET recap_published = {value} WHERE id = '{event_id}'");
-    db.exec(&sql)
+    let sql = format!("UPDATE events SET recap_published = {value} WHERE id = ?");
+    db.prepare(&sql)
+        .bind_refs(&[D1Type::Text(event_id)])
+        .map_err(|e| format!("D1 set_recap_published_flag bind: {e:?}"))?
+        .run()
         .await
         .map_err(|e| format!("D1 set_recap_published_flag: {e:?}"))?;
     Ok(())
@@ -333,9 +339,12 @@ pub async fn set_post_event_registration(
     };
     let sql = format!(
         "UPDATE events SET post_event_registration_open = {open_val}, \
-         post_event_registration_until_ms = {until_sql} WHERE id = '{event_id}'"
+         post_event_registration_until_ms = {until_sql} WHERE id = ?"
     );
-    db.exec(&sql)
+    db.prepare(&sql)
+        .bind_refs(&[D1Type::Text(event_id)])
+        .map_err(|e| format!("D1 set_post_event_registration bind: {e:?}"))?
+        .run()
         .await
         .map_err(|e| format!("D1 set_post_event_registration: {e:?}"))?;
     Ok(())
@@ -628,8 +637,10 @@ pub async fn upsert_event(
 
 /// Delete an event row from D1.
 pub async fn delete_event(db: &D1Database, event_id: &str) -> Result<(), String> {
-    let sql = format!("DELETE FROM events WHERE id = '{event_id}'");
-    db.exec(&sql)
+    db.prepare("DELETE FROM events WHERE id = ?")
+        .bind_refs(&[D1Type::Text(event_id)])
+        .map_err(|e| format!("D1 delete_event bind: {e:?}"))?
+        .run()
         .await
         .map_err(|e| format!("D1 delete_event: {e:?}"))?;
     Ok(())
