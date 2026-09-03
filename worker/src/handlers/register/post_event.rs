@@ -80,15 +80,17 @@ pub async fn register_post_event(
         .into());
     }
 
-    // 5. Validate the deadline (if set) has not passed.
-    if let Some(until) = config.post_event_registration_until_ms {
-        let now_ms = chrono::Utc::now().timestamp_millis();
-        if now_ms >= until {
-            return Err(AppError::Gone(
-                "post-event registration for this event has closed".to_string(),
-            )
-            .into());
-        }
+    // 5. Validate the deadline (if set) has not passed. Shares the comparison
+    //    with the public recap payload's CTA gate via
+    //    `EventConfig::post_event_registration_deadline_passed`, so the form
+    //    cannot disappear while this endpoint still accepts, or vice versa.
+    //    The two branches stay separate because the codes differ: never opened
+    //    is a 409, opened-then-lapsed is a 410.
+    if config.post_event_registration_deadline_passed(chrono::Utc::now().timestamp_millis()) {
+        return Err(AppError::Gone(
+            "post-event registration for this event has closed".to_string(),
+        )
+        .into());
     }
 
     let contact_channel = body

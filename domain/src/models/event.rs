@@ -537,6 +537,28 @@ impl EventConfig {
         }
     }
 
+    /// Whether the post-event registration deadline has passed at `now_ms`.
+    ///
+    /// `None` = open indefinitely, so it never passes. Plan 008 — Phase 3.
+    pub fn post_event_registration_deadline_passed(&self, now_ms: i64) -> bool {
+        match self.post_event_registration_until_ms {
+            Some(until) => now_ms >= until,
+            None => false,
+        }
+    }
+
+    /// Whether post-event registration actually accepts a submission at `now_ms`
+    /// — the organizer's toggle is on **and** the deadline has not passed.
+    ///
+    /// This is the value public surfaces should gate a "join the community" CTA
+    /// on: the raw `post_event_registration_open` flag stays `true` after the
+    /// deadline lapses, so rendering the CTA from it invites a visitor to sign
+    /// in and fill a form that `POST /api/public/events/{slug}/post-event-register`
+    /// answers `410 Gone`. Plan 008 — Phase 3.
+    pub fn post_event_registration_accepting(&self, now_ms: i64) -> bool {
+        self.post_event_registration_open && !self.post_event_registration_deadline_passed(now_ms)
+    }
+
     /// Resolve the NFT name, expanding `{event_name}` placeholder.
     /// Truncates to 32 characters (Bubblegum/Metaplex `MetadataNameTooLong` limit).
     /// Prefers keeping the prefix intact and truncating the event name portion.
@@ -1541,5 +1563,47 @@ mod tests {
         e.name = "Rust Day".to_string();
         e.nft_description_template = "You attended {event_name}!".to_string();
         assert_eq!(e.nft_description(), "You attended Rust Day!");
+    }
+
+    // ── Post-event registration deadline (Plan 008 — Phase 3) ──────────────
+
+    #[test]
+    fn post_event_registration_no_deadline_never_lapses() {
+        let mut e = make_event();
+        e.post_event_registration_open = true;
+        e.post_event_registration_until_ms = None;
+        assert!(!e.post_event_registration_deadline_passed(i64::MAX));
+        assert!(e.post_event_registration_accepting(i64::MAX));
+    }
+
+    #[test]
+    fn post_event_registration_deadline_is_exclusive_at_the_boundary() {
+        let mut e = make_event();
+        e.post_event_registration_open = true;
+        e.post_event_registration_until_ms = Some(1_000);
+        // Matches `register::post_event`'s `now_ms >= until` → the deadline
+        // instant itself is already closed.
+        assert!(!e.post_event_registration_deadline_passed(999));
+        assert!(e.post_event_registration_deadline_passed(1_000));
+        assert!(e.post_event_registration_deadline_passed(1_001));
+    }
+
+    #[test]
+    fn post_event_registration_accepting_is_false_once_the_deadline_lapses() {
+        let mut e = make_event();
+        e.post_event_registration_open = true;
+        e.post_event_registration_until_ms = Some(1_000);
+        assert!(e.post_event_registration_accepting(999));
+        assert!(!e.post_event_registration_accepting(1_000));
+    }
+
+    #[test]
+    fn post_event_registration_closed_toggle_beats_a_future_deadline() {
+        let mut e = make_event();
+        e.post_event_registration_open = false;
+        e.post_event_registration_until_ms = Some(i64::MAX);
+        assert!(!e.post_event_registration_accepting(0));
+        // The deadline itself has still not passed — the two are independent.
+        assert!(!e.post_event_registration_deadline_passed(0));
     }
 }

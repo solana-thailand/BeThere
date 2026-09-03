@@ -386,6 +386,14 @@ pub async fn get_public_recap(
 
     tracing::info!(slug = %slug, event_id = %config.id, "public recap served");
 
+    // The public payload reports whether registration *accepts a submission
+    // now*, not the raw organizer toggle: the flag stays `true` after the
+    // deadline lapses, and the recap page's CTA is rendered straight from this
+    // value. Gating on the raw flag would invite a visitor to sign in and fill
+    // a form that `post_event::register` then answers 410 Gone. The server
+    // clock decides — the same clock that endpoint checks against.
+    let accepting = config.post_event_registration_accepting(chrono::Utc::now().timestamp_millis());
+
     Ok(ApiOk::new(json!({
         "event": {
             "id": config.id,
@@ -398,7 +406,7 @@ pub async fn get_public_recap(
             "event_format": config.event_format.as_str(),
             "poster_url": config.poster_url,
             "nft_image_url": config.nft_image_url,
-            "post_event_registration_open": config.post_event_registration_open,
+            "post_event_registration_open": accepting,
         },
         "recap_markdown": recap.recap_markdown,
         "recap_image_url": recap.recap_image_url,
