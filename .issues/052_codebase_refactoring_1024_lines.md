@@ -68,8 +68,17 @@
   all 58 external `attendees::` call sites preserved via `pub(crate) use` globs; `D1AttendeeRow` widened to
   `pub(super)` for one cross-submodule reuse; no SQL/bind changes). Verbatim, clippy clean under `-D warnings`,
   254 tests pass.
-  **Only backend file left: `handlers/deposit/usdc/mod.rs` (1771)** — a ~1040-line on-chain verification region;
-  money-critical, split last with extra care.
+  Also **`handlers/deposit/usdc/mod.rs` ✅** (1813 → 7 submodules: types/gating/rpc/discovery/recover/confirm
+  + tests, alongside the pre-existing `handlers.rs`; `mod.rs` is now 32 lines of re-exports only).
+  Split **verbatim** — every code line is byte-identical to the original, proven by diffing the concatenated
+  submodules against the pre-split file: the only differences are the removed section banners and the
+  `mod tests { … }` wrapper. Deliberately **not** rustfmt'd: the pre-split file was already 141 lines of
+  rustfmt drift (as is much of the repo), so reformatting would have buried a money-critical split in
+  unrelated churn. `DISCOVERY_COOLDOWN_SECS` widened to `pub(super)` as the one cross-submodule necessity;
+  the test module imports its subjects from the owning submodules rather than a `super::*` glob.
+  Clippy clean under `-D warnings`, 481 workspace tests pass.
+
+  **No backend file over 1024 lines remains.**
 - [ ] Phase 3: Frontend splits (landing, quiz_editor)
 - [ ] Phase 5: Hard frontend (scanner, claim, event_form, admin)
 
