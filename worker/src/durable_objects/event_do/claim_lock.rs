@@ -78,14 +78,19 @@ impl EventDurableObject {
         signature: &str,
         claimed_at: &str,
     ) -> DoResponse {
+        // `expires_at` is NOT NULL in the DO schema too, so finalization moves
+        // it out to the 90-day retention horizon rather than nulling it; see
+        // `claim::finalized_expires_at`.
+        let expires_at = crate::claim::finalized_expires_at();
         let result = self.sql.exec(
             "UPDATE claim_locks \
-             SET asset_id = ?1, signature = ?2, claimed_at = ?3, expires_at = NULL \
-             WHERE event_id = ?4 AND token = ?5",
+             SET asset_id = ?1, signature = ?2, claimed_at = ?3, expires_at = ?4 \
+             WHERE event_id = ?5 AND token = ?6",
             Some(vec![
                 asset_id.into(),
                 signature.into(),
                 claimed_at.into(),
+                expires_at.as_str().into(),
                 event_id.into(),
                 token.into(),
             ]),

@@ -20,6 +20,20 @@ use crate::durable_objects::DoRequest;
 /// Auto-cleanup post-event; permanent records are not needed indefinitely.
 pub(crate) const CLAIM_LOCK_FINALIZE_TTL_SECS: u64 = 86400 * 90;
 
+/// Expiry stamp for a *finalized* claim lock row.
+///
+/// `claim_locks.expires_at` is `TEXT NOT NULL` in both the D1 migration
+/// (`0001_initial.sql`) and the DO schema (`event_do/schema.rs`), so
+/// finalization cannot null it out to "remove the TTL" — SQLite aborts the
+/// whole `UPDATE`. The row carries the same 90-day retention horizon as the
+/// finalized KV record instead, which keeps `idx_claim_locks_expires`
+/// meaningful for any future sweeper. `claimed_at IS NOT NULL` is the marker
+/// for "finalized"; `handle_acquire_claim_lock` already reads it that way.
+pub(crate) fn finalized_expires_at() -> String {
+    (chrono::Utc::now() + chrono::Duration::seconds(CLAIM_LOCK_FINALIZE_TTL_SECS as i64))
+        .to_rfc3339()
+}
+
 // ---------------------------------------------------------------------------
 // DO routing helpers (Issue #050 Phase 1)
 // ---------------------------------------------------------------------------
@@ -280,11 +294,17 @@ pub(crate) async fn finalize_claim_lock(
         )
         .await?;
 
-        if !resp.success {
-            return Err(resp
-                .error
-                .unwrap_or_else(|| "claim lock finalization failed (DO)".to_string()));
-        }
+        // The KV record is what the claim and attendee read paths use to show
+        // the attendee their asset_id / signature, so it is written even when
+        // the DO write failed: a failed durable write must not also cost the
+        // attendee their proof link. The DO error is reported after.
+        let do_err = match resp.success {
+            true => None,
+            false => Some(
+                resp.error
+                    .unwrap_or_else(|| "claim lock finalization failed (DO)".to_string()),
+            ),
+        };
 
         // Also finalize in KV for read compatibility
         let key = claim_lock_key(event_id, token);
@@ -302,15 +322,26 @@ pub(crate) async fn finalize_claim_lock(
             .await
             .map_err(|e| format!("claim lock finalize write failed: {e:?}"))?;
 
-        tracing::info!(claim_token = %token, "claim lock finalized (DO+KV)");
-        return Ok(());
+        return match do_err {
+            Some(e) => Err(e),
+            None => {
+                tracing::info!(claim_token = %token, "claim lock finalized (DO+KV)");
+                Ok(())
+            }
+        };
     }
 
-    // D1 path: UPDATE claim_locks
-    if let Some(db) = d1 {
-        let claimed_at = chrono::Utc::now().to_rfc3339();
-        db::finalize_claim_lock(db, event_id, token, asset_id, signature, &claimed_at).await?;
-    }
+    // D1 path: UPDATE claim_locks. Same ordering rule as the DO path — the
+    // error is held until after the KV record is written.
+    let d1_err = match d1 {
+        Some(db) => {
+            let claimed_at = chrono::Utc::now().to_rfc3339();
+            db::finalize_claim_lock(db, event_id, token, asset_id, signature, &claimed_at)
+                .await
+                .err()
+        }
+        None => None,
+    };
 
     // Always finalize in KV (dual-write for read compatibility)
     let key = claim_lock_key(event_id, token);
@@ -331,7 +362,10 @@ pub(crate) async fn finalize_claim_lock(
         .await
         .map_err(|e| format!("claim lock finalize write failed: {e:?}"))?;
 
-    Ok(())
+    match d1_err {
+        Some(e) => Err(e),
+        None => Ok(()),
+    }
 }
 
 /// Release the claim lock on failure (delete the key so attendee can retry).
@@ -431,6 +465,35 @@ mod tests {
     fn claim_lock_key_with_empty_inputs() {
         let key = claim_lock_key("", "");
         assert_eq!(key, "event::claim_lock:");
+    }
+
+    // ==========================================================================
+    // finalized_expires_at
+    // ==========================================================================
+
+    #[test]
+    fn finalized_expires_at_is_the_kv_retention_horizon() {
+        let stamp = finalized_expires_at();
+        let parsed = chrono::DateTime::parse_from_rfc3339(&stamp).expect(
+            "finalized expiry must be RFC3339 — the column is TEXT and is compared as text",
+        );
+        let delta = parsed.with_timezone(&chrono::Utc) - chrono::Utc::now();
+
+        // Same 90 days the finalized KV record gets, within a generous slack for
+        // the clock ticking between the two calls.
+        let expected = chrono::Duration::seconds(CLAIM_LOCK_FINALIZE_TTL_SECS as i64);
+        assert!(
+            (delta - expected).num_seconds().abs() < 60,
+            "expected ~{} days out, got {stamp}",
+            expected.num_days()
+        );
+    }
+
+    #[test]
+    fn finalized_expires_at_is_never_null_or_empty() {
+        // The whole point: `claim_locks.expires_at` is NOT NULL, so finalization
+        // must always have a real value to write.
+        assert!(!finalized_expires_at().is_empty());
     }
 
     // ==========================================================================
